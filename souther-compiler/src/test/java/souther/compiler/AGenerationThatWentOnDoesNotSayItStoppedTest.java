@@ -105,9 +105,9 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
         souther.compiler.partition.GenerationPlan plan =
                 souther.compiler.partition.GenerationPlan.of(subject(), List.of(), List.of(),
                         List.of(), List.of());
-        return new souther.compiler.partition.FillResult(plan, new LinkedHashMap<>(), List.of(),
+        return new souther.compiler.partition.FillResult(new LinkedHashMap<>(), List.of(),
                 List.of(why),
-                souther.compiler.partition.Discharge.NOTHING);
+                souther.compiler.partition.Discharge.nothingAskedOf(plan));
     }
 
     /**

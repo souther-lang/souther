@@ -200,10 +200,11 @@ class TwoRunsOfOnePlanThatDisagreeAboutWhatTheyReadAreRefusedTest {
 
     /** A run of a plan owing one class, which composed nothing for it. */
     private static FillResult nothingCameOfIt(GenerationPlan asked) {
-        return new FillResult(asked, new LinkedHashMap<>(), List.of(), List.of(),
-                new Discharge(Map.of(asked.classesOwed().getFirst(),
-                        new ClassDisposition.Unresolved(NO_CANDIDATE)),
-                        Map.of(), Map.of(), Map.of()));
+        ClassOfAPosition owed = asked.classesOwed().getFirst();
+        return new FillResult(new LinkedHashMap<>(), List.of(), List.of(),
+                Discharge.of(asked, List.of(new GenerationAnswer.Class(
+                        new GenerationObligation.Class(owed),
+                        new ClassDisposition.Unresolved(NO_CANDIDATE)))));
     }
 
     /**

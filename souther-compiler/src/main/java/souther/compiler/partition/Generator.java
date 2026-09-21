@@ -1822,8 +1822,23 @@ public final class Generator {
                 pairAnswers.put(asked, new ClassDisposition.Built(compose(composed, made.row())));
             }
         }
-        return new FillResult(plan, composed, unresolved, reasons,
-                new Discharge(classAnswers, armAnswers, pairAnswers, meetingAnswers));
+        // The four searches' own maps, closed back into one answer per obligation in the plan's
+        // order. A kind added to {@link GenerationObligation} without a case here does not compile,
+        // which is the one place a search's algorithm-local maps become the pipeline's value.
+        List<GenerationAnswer> discharged = new ArrayList<>();
+        for (GenerationObligation obligation : plan.obligations()) {
+            switch (obligation) {
+                case GenerationObligation.Class q -> discharged.add(
+                        new GenerationAnswer.Class(q, classAnswers.get(q.target())));
+                case GenerationObligation.Arm q -> discharged.add(
+                        new GenerationAnswer.Arm(q, armAnswers.get(q.target())));
+                case GenerationObligation.Pair q -> discharged.add(
+                        new GenerationAnswer.Pair(q, pairAnswers.get(q.target())));
+                case GenerationObligation.Meeting q -> discharged.add(
+                        new GenerationAnswer.Meeting(q, meetingAnswers.get(q.target())));
+            }
+        }
+        return new FillResult(composed, unresolved, reasons, Discharge.of(plan, discharged));
     }
 
     /**
