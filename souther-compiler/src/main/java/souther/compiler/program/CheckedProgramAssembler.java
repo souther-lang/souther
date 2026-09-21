@@ -7,6 +7,7 @@ import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.CoreBinders;
 import souther.compiler.check.Derived;
+import souther.compiler.check.EmittedDefinition;
 import souther.compiler.check.Lower;
 import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.Requirements;
@@ -717,9 +718,9 @@ final class CheckedProgramAssembler {
     /**
      * The helpers this module emits as definitions of their own.
      *
-     * <p>A helper's body is the check's; what it takes is the definition's, which the check did not
-     * rewrite. Both are read here so that a call reaching a helper reaches something the snapshot
-     * holds.
+     * <p>What a helper takes and its body are the check's, read whole from what it emitted; what
+     * the calls in this module reach it by is the definition's. Both are read here so that a call
+     * reaching a helper reaches something the snapshot holds.
      */
     private static List<CheckedHelper> helpersOf(String module, Hir.Module lowered,
                                                  Bodies.Elaborated checked) {
@@ -731,7 +732,7 @@ final class CheckedProgramAssembler {
             defined.put(fn.name(), fn);
         }
         List<CheckedHelper> helpers = new ArrayList<>();
-        checked.emittedHelpers().forEach((name, body) -> {
+        checked.emittedDefinitions().forEach((name, emitted) -> {
             Hir.FnDef fn = defined.get(name);
             if (fn == null) {
                 // A call in a body reaches this helper by name, so a snapshot without it hands an
@@ -741,9 +742,8 @@ final class CheckedProgramAssembler {
                         + "` has no definition to read what it takes from");
             }
             List<CheckedHelper.Parameter> parameters = new ArrayList<>();
-            for (Hir.FnParam parameter : fn.params()) {
-                parameters.add(new CheckedHelper.Parameter(CoreBinders.of(parameter.binder()),
-                        TypeOps.resolveParamType(parameter.type())));
+            for (EmittedDefinition.Parameter parameter : emitted.parameters()) {
+                parameters.add(new CheckedHelper.Parameter(parameter.binder(), parameter.type()));
             }
             // What the calls in this module reach it by. A definition this module took on says so
             // itself; one it declared it reaches as it stands. Neither is worked out from the name
@@ -751,7 +751,7 @@ final class CheckedProgramAssembler {
             // alias a library operation is carried under says nothing about who declared it.
             ReachName.Declaration reachedAs = fn.takenOnAs() != null ? fn.takenOnAs()
                     : new ReachName.Own(new ValueName.Helper(module, fn.name()));
-            helpers.add(new CheckedHelper(reachedAs, parameters, body));
+            helpers.add(new CheckedHelper(reachedAs, parameters, emitted.body()));
         });
         return helpers;
     }

@@ -120,7 +120,7 @@ final class BodyGen {
          * parameter slots and jumps to {@code tcoEntry} rather than recursing, so a self-tail-recursive
          * helper runs in constant stack. Null for any other body (a behavior never self-recurses). */
         private String tcoName;
-        private List<Hir.FnParam> tcoParams;
+        private List<Core.Binder> tcoParams;
         private Label tcoEntry;
         /** Members of this body's declared output union that reach it through a bridge case; empty
          * for every other body. @see #injectsInto */
@@ -480,7 +480,7 @@ final class BodyGen {
         /** Marks the entry of a self-tail-recursive helper. The parameters are already bound to their
          * slots; a later tail-position self-call jumps back here after reassigning them, so the helper
          * loops instead of recursing (see {@link #emitTail} and {@link #emitSelfTailCall}). */
-        void beginSelfRecursion(String name, List<Hir.FnParam> params) {
+        void beginSelfRecursion(String name, List<Core.Binder> params) {
             this.tcoName = name;
             this.tcoParams = params;
             this.tcoEntry = code.newLabel();
@@ -493,8 +493,8 @@ final class BodyGen {
          * read (e.g. {@code loop(acc + n, n - 1)} reads both {@code acc} and {@code n}). */
         private void emitSelfTailCall(Core.Call call) {
             List<Var> params = new ArrayList<>(tcoParams.size());
-            for (Hir.FnParam p : tcoParams) {
-                params.add(locals.get(p.binder().id()));
+            for (Core.Binder p : tcoParams) {
+                params.add(locals.get(p.binding()));
             }
             for (int i = 0; i < call.args().size(); i++) {
                 Type at = genExpr(call.args().get(i));
