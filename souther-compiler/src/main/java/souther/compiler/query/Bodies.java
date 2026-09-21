@@ -31,6 +31,8 @@ import souther.compiler.check.SignatureDeclarations;
 import souther.compiler.check.HelperEntry;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.Preserved;
+import souther.compiler.check.ValueEntries;
+import souther.compiler.core.CompleteSignature;
 import souther.compiler.check.Expansion;
 import souther.compiler.check.HelperGraph;
 import souther.compiler.check.HelperNames;
@@ -1465,8 +1467,15 @@ public final class Bodies {
             }
             Set<ReachName.Declaration> standing = new LinkedHashSet<>(reached.value());
             standing.addAll(lowered.value().standing());
+            Set<String> held = heldAt(standing);
+            // A value another module declares is named where the body reads it and is not among what
+            // an expansion left standing, since nothing of it is expanded or called from here.
+            for (ValueName.Helper named : HelperNames.helpersReached(
+                    lowered.value().value().writtenBody())) {
+                held.add(HelperNames.qualified(named.module(), named.name()));
+            }
             Map<String, DataChecker.Constructs> out = new LinkedHashMap<>();
-            for (String each : heldAt(standing)) {
+            for (String each : held) {
                 DataChecker.Constructs built = constructs.value().get(each);
                 if (built != null) {
                     out.put(each, built);
@@ -1593,18 +1602,24 @@ public final class Bodies {
      * What the modules this one imports publish to it, each closed where it was written and named by
      * the module that declares it.
      *
-     * <p>A definition another module publishes is expanded here like one of this module's own: a value
-     * is substituted at its references (ADR-0072), a helper at its call sites (spec §blocks). What
-     * arrives is closed — the body with its own module's definitions already substituted into it — so
-     * the only name of the declaring module that reaches this one is the definition's own. A body
-     * carrying those names would be read against the definitions here, and a reader that happens to
-     * spell one the same way would change what the definition means (ADR-0067).
+     * <p>A definition another module publishes is held here like one of this module's own: a value
+     * is one declaration that every reference to it reaches (ADR-0072), a helper is expanded at its
+     * call sites (spec §blocks). What arrives is closed over names — the helpers in the body are
+     * expanded and every name of the declaring module that remains is written under that module —
+     * so a reader that happens to spell one the same way reaches its own definition and not this one
+     * (ADR-0067).
      *
-     * <p>What a published body does not close over is a recursive helper, which is a method rather
-     * than an expression. Those come too, under the name of the module that declares them, and so does
-     * every recursive helper they reach in turn — a mutually-recursive group arrives whole, and one
-     * the reader never imported arrives because the body it was published inside calls it. The reader
-     * emits them as its own methods (see {@link Shapes.Prepared}).
+     * <p>What a published body cannot expand is a recursive helper, which is a method rather than an
+     * expression, and what it does not expand is a value, which is one definition however many bodies
+     * name it. Those come too, under the name of the module that declares them, and so does every
+     * one of them they reach in turn — a mutually-recursive group arrives whole, and one the reader
+     * never imported arrives because the body it was published inside names it. A recursive helper
+     * is carried so that the analyses can read the published definition, and the reader emits it as
+     * a method of its own only where its own executable tree reaches it (see {@link
+     * Shapes.Prepared}). A published value is not executed here: it runs in the module that
+     * declares it, together with any recursive helper it calls, and the reader calls the entry that
+     * module publishes for it. Its body comes for the analyses, which read a value by its
+     * template.
      *
      * <p>Read from the imports of the resolved module, which is the earliest answer carrying them.
      * What a module imports is written down and is not something desugaring or settling decides, so
@@ -1669,17 +1684,19 @@ public final class Bodies {
      * module.
      *
      * <p>Closing them there is what keeps a published definition meaning what it meant where it was
-     * written. It is substituted at its references, so a body still naming its module's own
-     * definitions would be read against the reader's, and a reader that spells one the same way would
-     * silently change it. Expanding it first leaves a body that names nothing of the declaring
-     * module — except a recursive helper, which is a method rather than an expression and so is left
-     * standing as a call under its declaring module's qualified name (see {@link
-     * HelperInliner#closeAcross}); the reader emits that method as its own.
+     * written. A body still naming its module's own definitions by a bare name would be read against
+     * the reader's, and a reader that spells one the same way would silently change it. Expanding
+     * the helpers first leaves a body that names nothing of the declaring module bare — except a
+     * recursive helper, which is a method rather than an expression, and a value, which is one
+     * definition and not a body to copy. Both are left standing under their declaring module's
+     * qualified name (see {@link HelperInliner#closeAcross}). A value is called through the entry
+     * of the module that declares it and a recursive helper is emitted by the reader only where its
+     * own executable tree reaches it.
      *
      * <p>The value and the helper are told apart by the one predicate that decides it anywhere — a
      * written parameter list — and not by a second record of the same line. What each becomes in the
-     * reader follows from the same shape: a definition with no parameters is substituted where it is
-     * named, one with parameters is expanded where it is called.
+     * reader follows from the same shape: a definition with no parameters is named where it is used
+     * and emitted once, one with parameters is expanded where it is called.
      */
     private static Map<String, Hir.FnDef> publishedDefinitions(Hir.Module from,
                                                                Collection<PublishedHelper> allowed,
@@ -1700,11 +1717,12 @@ public final class Bodies {
      * The definitions {@code from} publishes among {@code wanted}, together with every recursive
      * helper of {@code from} they reach.
      *
-     * <p>Closing a body removes every name of the declaring module from it except a recursive helper's,
-     * which is a method and stays a call. That call has to land on something, so the helper travels
-     * with the body that calls it — and, since a recursive helper may call another, so does everything
-     * it reaches in turn. A mutually-recursive group therefore arrives whole: each member is reached
-     * from the others, so following the calls collects all of them.
+     * <p>Closing a body leaves every name of the declaring module in it qualified, and the ones that
+     * stay are a recursive helper's, which is a method and stays a call, and a value's, which stays a
+     * reference. Each has to land on something, so it travels with the body that names it — and,
+     * since one may name another, so does everything it reaches in turn. A mutually-recursive group
+     * therefore arrives whole: each member is reached from the others, so following the names
+     * collects all of them.
      */
     public static Map<String, Hir.FnDef> publishedClosure(Hir.Module from,
                                                           Collection<PublishedHelper> allowed,
@@ -1868,20 +1886,24 @@ public final class Bodies {
     }
 
     /**
-     * The definitions a module's row operands are, by the name each is emitted under.
+     * The definitions this compilation mints for a module, by the name each is emitted under: the
+     * operand of each row and the entry of each value the module publishes.
      *
-     * <p>Their own family. A row's operand is a value this compilation writes for the row, reached
-     * from a row and from nothing a source can spell, so it is not a declaration a name resolves to
-     * — which is why it is not among what the module has as fns of its own and is not in the table a
-     * call expands against. It rode there once, to be carried through the passes a fn is carried
-     * through, and every rule keyed on what the module holds had a synthetic method among its
-     * subjects.
+     * <p>What they have in common is mechanism. No source declares them, they are made once for the
+     * module, they go through the passes a definition goes through, and each is emitted as a method.
+     * What each is for is its role's to say ({@link Hir.FnDef#role}), and a rule that differs
+     * between them asks that and not which family answered.
+     *
+     * <p>Their own family. None is a declaration a name resolves to — which is why it is not among
+     * what the module has as fns of its own and is not in the table a call expands against. Such a
+     * definition rode there once, to be carried through the passes a fn is carried through, and
+     * every rule keyed on what the module holds had a synthetic method among its subjects.
      *
      * <p>Read from the one walk that built them, which built the correspondence beside them
      * ({@link RowMethods}) — a second reading would be a second numbering, and a row would run the
      * operand beside the one it wrote.
      */
-    public record RowFixtureDefs(String name) implements Key<Map<String, Hir.FnDef>> {
+    public record MintedDefs(String name) implements Key<Map<String, Hir.FnDef>> {
         @Override
         public String module() {
             return name;
@@ -1894,7 +1916,7 @@ public final class Bodies {
                 return Answer.absent();
             }
             Map<String, Hir.FnDef> out = new LinkedHashMap<>();
-            for (Hir.FnDef def : surface.value().rowDefs()) {
+            for (Hir.FnDef def : surface.value().mintedDefs()) {
                 out.put(def.name(), def);
             }
             return Answer.of(Ordered.map(out));
@@ -1954,10 +1976,10 @@ public final class Bodies {
                     return Answer.of(candidate);
                 }
             }
-            // A definition minted for a row, which is no declaration and is in no table.
-            Answer<Map<String, Hir.FnDef>> rows = db.ask(new RowFixtureDefs(module));
-            if (rows.present() && rows.value().containsKey(fn)) {
-                return Answer.of(rows.value().get(fn));
+            // A definition this compilation minted, which is no declaration and is in no table.
+            Answer<Map<String, Hir.FnDef>> minted = db.ask(new MintedDefs(module));
+            if (minted.present() && minted.value().containsKey(fn)) {
+                return Answer.of(minted.value().get(fn));
             }
             // A declaration this module reaches and has not taken on. Its body is the declaring
             // module's and was settled there; what changes here is the name it answers to, which is
@@ -2014,7 +2036,7 @@ public final class Bodies {
                 // A value the backend emits a method for, as opposed to a behavior's implementation
                 // that takes no inputs: what tells them apart is whether a behavior declares it.
                 boolean aValue = !recursive && def.value().params().isEmpty()
-                        && def.value().standsAt() == null
+                        && def.value().standsAt() == null && !def.value().isAValueEntry()
                         && !db.ask(new Spec(module, fn.text())).present();
                 if (aValue) {
                     return Answer.of(Lower.valueMethod(def.value(),
@@ -2063,7 +2085,7 @@ public final class Bodies {
                 // implementation that takes no inputs: what tells them apart is whether a behavior
                 // declares it.
                 boolean aValue = !recursive && def.value().params().isEmpty()
-                        && def.value().standsAt() == null
+                        && def.value().standsAt() == null && !def.value().isAValueEntry()
                         && !db.ask(new Spec(module, fn)).present();
                 if (aValue) {
                     return Answer.of(Lower.valueTemplate(def.value(),
@@ -2208,13 +2230,14 @@ public final class Bodies {
                     beyond.add(def.value());
                 }
             }
-            // A row's operand is a definition minted for it, and it is emitted beside these for the
-            // same reason: nothing inlines it, because nothing calls it.
-            Answer<Map<String, Hir.FnDef>> rows = db.ask(new RowFixtureDefs(name));
-            if (!rows.present()) {
+            // What this compilation minted for the module — a row's operand, the entry of a value —
+            // is emitted beside these for the same reason: nothing inlines it, because nothing in
+            // this module calls it.
+            Answer<Map<String, Hir.FnDef>> minted = db.ask(new MintedDefs(name));
+            if (!minted.present()) {
                 return Answer.absent();
             }
-            beyond.addAll(rows.value().values());
+            beyond.addAll(minted.value().values());
             // Both, and each stays where it was: what becomes a method is one question and what this
             // module declared is another, and the backend reads the first while every rule about the
             // declaring module reads the second.
@@ -2226,7 +2249,8 @@ public final class Bodies {
                     // survives beside the behaviors is a recursion, which cannot be inlined, and a
                     // method a row's operand is, which is the row's value and has no call site.
                     if (!behaviors.contains(fn.name()) && !recursiveAt.contains(fn.name())
-                            && !rowMethods.value().contains(fn.name())) {
+                            && !rowMethods.value().contains(fn.name())
+                            && !minted.value().containsKey(fn.name())) {
                         continue;
                     }
                     if (!taken.add(fn.name())) {
@@ -2366,6 +2390,13 @@ public final class Bodies {
             }
             Set<String> behaviors = Names.behaviorNames(settled.value());
             Set<String> roots = new LinkedHashSet<>(rows.value());
+            // A value published for other modules to read is run from outside this one, so what its
+            // entry leaves standing is required whether or not anything here names it.
+            Answer<Map<String, Hir.FnDef>> minted = db.ask(new MintedDefs(name));
+            if (!minted.present()) {
+                return Answer.absent();
+            }
+            roots.addAll(minted.value().keySet());
             for (Hir.FnDef fn : settled.value().fns()) {
                 if (behaviors.contains(fn.name())) {
                     roots.add(fn.name());
@@ -2479,11 +2510,27 @@ public final class Bodies {
                 }
                 bodies.put(at.text(), body.value().value().writtenBody());
             }
+            // A value another module declares is called and not expanded, so what it constructs is
+            // not in any body here. What it constructs is read off the definition the module was
+            // handed for it, which carries its construction as the declaring module made it.
+            Answer<Map<String, Hir.FnDef>> handed = db.ask(new ImportedDefinitions(name));
+            if (!handed.present()) {
+                return Answer.absent();
+            }
+            Set<String> elsewhere = new LinkedHashSet<>();
+            handed.value().forEach((at, definition) -> {
+                if (definition.params().isEmpty() && definition.body() != null
+                        && definition.declaredIn() != null && !definition.declaredIn().equals(name)) {
+                    bodies.putIfAbsent(at, definition.writtenBody());
+                    elsewhere.add(at);
+                }
+            });
             try {
                 // At the addresses the bodies above were put under, which is what this walk is over.
                 Set<String> at = new LinkedHashSet<>();
                 required.value().forEach(
                         reference -> at.add(DefinitionName.of(reference).text()));
+                at.addAll(elsewhere);
                 return Answer.of(TypeChecker.recursiveHelperConstructs(at, bodies,
                         inliner.value(), scope.value()));
             } catch (CompileException e) {
@@ -2835,6 +2882,66 @@ public final class Bodies {
     }
 
     /**
+     * What each value another module declares was settled as, for the values this module reads.
+     *
+     * <p>The declaring module's own answer and no other. A value has one place it runs and one check
+     * of its body, so a module that reads it is told what that check came to rather than checking a
+     * copy. What is asked of the declaring module is what it answers for its values; nothing of how
+     * it came to it is read here.
+     */
+    public record ValuesDeclaredElsewhere(String name) implements Key<Preserved.SettledValues> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Preserved.SettledValues> compute(Db db) {
+            Answer<Map<String, Hir.FnDef>> published = db.ask(new ImportedDefinitions(name));
+            if (!published.present()) {
+                return Answer.absent();
+            }
+            Set<String> declaring = new LinkedHashSet<>();
+            for (Hir.FnDef definition : published.value().values()) {
+                if (definition.declaredIn() != null && !definition.declaredIn().equals(name)) {
+                    declaring.add(definition.declaredIn());
+                }
+            }
+            Map<ValueName, CompleteSignature> answers = new LinkedHashMap<>();
+            for (String declared : declaring) {
+                // One answer wherever the module came from: what its own check settled, read off
+                // that check where this compilation holds the module's source and off what it
+                // published where it does not.
+                Front.FromPath.OnThePath onThePath = Front.onThePath(db, declared);
+                Preserved.SettledValues settled;
+                if (onThePath != null) {
+                    settled = onThePath.valueAnswers();
+                } else {
+                    Answer<ModuleCheck.Of> checked = db.ask(new ModuleCheck(declared));
+                    if (!checked.present()) {
+                        continue;
+                    }
+                    settled = checked.value().settledValues();
+                }
+                // What the module publishes and nothing it settled for its own purposes: the
+                // definitions minted for its rows and entries are not values a reader can name.
+                Answer<Hir.Module> declarer = db.ask(new Settled(declared));
+                if (!declarer.present()) {
+                    continue;
+                }
+                Set<String> offered = ValueEntries.publishedValues(declarer.value());
+                settled.signatures().forEach((value, signature) -> {
+                    if (value instanceof ValueName.Helper helper && helper.module().equals(declared)
+                            && offered.contains(helper.name())) {
+                        answers.put(value, signature);
+                    }
+                });
+            }
+            return Answer.of(new Preserved.SettledValues(answers));
+        }
+    }
+
+    /**
      * What a module's own check found: its declarations, its helpers, its {@code exposing} line, its
      * compositions — everything that is not one behavior's body.
      *
@@ -2878,6 +2985,7 @@ public final class Bodies {
             Answer<Map<String, Type>> sigs = db.ask(new RecursiveCallSigs(name, InliningPolicy.FULL));
             Answer<Map<ValueName.Behavior, ReqSig>> calleeSigs = db.ask(new CalleeSigs(name));
             Answer<Map<String, Hir.FnDef>> published = db.ask(new ImportedDefinitions(name));
+            Answer<Preserved.SettledValues> elsewhere = db.ask(new ValuesDeclaredElsewhere(name));
             // Which of this module's declarations no value satisfies, asked for rather than worked
             // out here. What the check reads is that fact; the clauses it was read from are not
             // something a body's answer turns on, and depending on them would re-check every body
@@ -2887,7 +2995,7 @@ public final class Bodies {
             if (!lowering.present() || !scope.present()
                     || !injected.present() || !unwritten.present()
                     || !reqSigs.present() || !sigs.present() || !withNoValue.present()
-                    || !calleeSigs.present() || !published.present()) {
+                    || !calleeSigs.present() || !published.present() || !elsewhere.present()) {
                 return Answer.absent();
             }
             // What must hold of a value of each declared data, elaborated once. The check reads it
@@ -2917,7 +3025,8 @@ public final class Bodies {
                         signatures.present() ? signatures.value() : null,
                         injected.value(), unwritten.value(), lowering.value().lowered(),
                         reqSigs.value(), calleeSigs.value(), sigs.value(), published.value(),
-                        settled, shapes.present() ? shapes.value() : Map.of());
+                        settled, shapes.present() ? shapes.value() : Map.of(),
+                        elsewhere.value());
             } catch (CompileException e) {
                 return Answer.absent(e);
             }

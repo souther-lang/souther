@@ -194,6 +194,7 @@ public final class SoutherJvmAbi {
             case GeneratedClass.Ensures e -> nameOf(e.of()).binaryName() + "$Ensures";
             case GeneratedClass.ModuleDeclarations m -> m.module() + ".$Module";
             case GeneratedClass.Helpers h -> h.module() + ".$Fns";
+            case GeneratedClass.Values v -> v.module() + ".$Values";
             case GeneratedClass.Lambda l -> l.module() + ".$Fn" + l.id();
         });
     }

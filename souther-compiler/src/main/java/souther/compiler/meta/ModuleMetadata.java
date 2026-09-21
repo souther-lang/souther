@@ -4,6 +4,8 @@ import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.HelperInliner;
+import souther.compiler.check.Preserved;
+import souther.compiler.check.ValueEntries;
 import souther.compiler.check.Sig;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeReachName;
@@ -91,7 +93,7 @@ public final class ModuleMetadata {
     public static void stamp(Emissions out, Ast.Module module, Hir.Module resolved,
                              CstFrontend.Slices slices, Map<String, Sig> sigs,
                              Map<String, BehaviorImplementation> implementations,
-                             TypeReachName.Naming naming) {
+                             TypeReachName.Naming naming, Preserved.SettledValues settledValues) {
         List<String> types = new ArrayList<>();
         for (Ast.Def def : module.defs()) {
             types.add(def.name());
@@ -113,7 +115,9 @@ public final class ModuleMetadata {
                                     implementations.get(b.name()).written())));
         }
         out.put(new GeneratedClass.ModuleDeclarations(module.name()),
-                Backend.moduleClass(module.name(), moduleAnnotation(module, resolved, slices, types, behaviors)));
+                Backend.moduleClass(module.name(), moduleAnnotation(module, resolved, slices, types,
+                        behaviors, ValueAnswers.written(module.name(),
+                                ValueEntries.publishedValues(resolved), settledValues))));
     }
 
     /**
@@ -192,7 +196,8 @@ public final class ModuleMetadata {
 
     private static Annotation moduleAnnotation(Ast.Module module, Hir.Module resolved,
             CstFrontend.Slices slices,
-                                               List<String> types, List<String> behaviors) {
+                                               List<String> types, List<String> behaviors,
+                                               List<String> valueAnswers) {
         return Annotation.of(MODULE_ANN,
                 AnnotationElement.ofInt("compat", Backend.BOUNDARY_VERSION),
                 AnnotationElement.ofString("compiler", compilerVersion()),
@@ -201,7 +206,8 @@ public final class ModuleMetadata {
                 strings("imports", slices.imports()),
                 strings("types", types),
                 strings("behaviors", behaviors),
-                strings("invariantHelpers", invariantHelpers(module, resolved, slices)));
+                strings("invariantHelpers", invariantHelpers(module, resolved, slices)),
+                strings("valueAnswers", valueAnswers));
     }
 
     private static AnnotationElement strings(String name, List<String> values) {
@@ -218,9 +224,11 @@ public final class ModuleMetadata {
      *
      * <p>An invariant is part of what a type is, so it has to be readable where the type is imported,
      * and it cannot be read without the helpers it names. A published value or helper is the same: a
-     * value is substituted where it is named and a helper expanded where it is called (ADR-0072), so
-     * a reader needs the body, and the body's own workings with it. A {@code let} neither reaches is
-     * not carried — this publishes what the declarations need, not the module's implementation.
+     * value's body is read by the analyses of the reader and a helper is expanded where it is called
+     * (ADR-0072), so a reader needs the body, and the body's own workings with it. A value runs
+     * where it is declared and is not executed from what is carried here. A {@code let} neither
+     * reaches is not carried — this publishes what the declarations need, not the module's
+     * implementation.
      *
      * <p>What travels is the source as written, which the reader's compiler reads back. That makes
      * the meaning of a carried body part of what a jar promises, and it is {@link

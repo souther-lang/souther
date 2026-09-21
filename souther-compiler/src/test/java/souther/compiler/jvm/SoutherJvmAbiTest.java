@@ -71,6 +71,7 @@ class SoutherJvmAbiTest {
         // What belongs to a module rather than to anything in it.
         rows.add(new Object[] {new GeneratedClass.ModuleDeclarations("shop"), "shop.$Module"});
         rows.add(new Object[] {new GeneratedClass.Helpers("shop"), "shop.$Fns"});
+        rows.add(new Object[] {new GeneratedClass.Values("shop"), "shop.$Values"});
         rows.add(new Object[] {new GeneratedClass.Lambda("shop", 0), "shop.$Fn0"});
         rows.add(new Object[] {new GeneratedClass.Lambda("shop", 7), "shop.$Fn7"});
         return rows;

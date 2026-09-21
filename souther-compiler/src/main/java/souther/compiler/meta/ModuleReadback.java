@@ -4,6 +4,7 @@ import souther.compiler.stdlib.LibraryNames;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.DeclaredNames;
 import souther.compiler.check.Exposing;
+import souther.compiler.check.Preserved;
 import souther.compiler.check.Scoping;
 import souther.compiler.check.Registry;
 import souther.compiler.codegen.Backend;
@@ -225,9 +226,15 @@ public final class ModuleReadback {
             return unreadable(moduleName, new Readback.Failure.InvalidExposure(
                     crossed.get(0), crossed.subList(1, crossed.size())));
         }
+        // What each value it declares was settled as, which the reading of another module's value
+        // rests on. A line this cannot read is metadata of its name carrying something else.
+        Preserved.SettledValues answers = ValueAnswers.read(moduleName, m.valueAnswers());
+        if (answers == null) {
+            return unreadable(moduleName, new Readback.Failure.UnreadableMetadata());
+        }
         return new Readback.Ready<>(
                 new AsRead(checked.module(), declared.declarations(), declared.asDeclared(),
-                        implementations, checked.claims(), readBack.laidOut()));
+                        implementations, checked.claims(), readBack.laidOut(), answers));
     }
 
     /**
@@ -241,7 +248,8 @@ public final class ModuleReadback {
                   java.util.List<String> asDeclared,
                   Map<String, BehaviorImplementation> behaviorImplementations,
                   java.util.List<Scoping.Claim> libraryClaims,
-                  SourceLayout laidOutText) implements ReadableModule {
+                  SourceLayout laidOutText,
+                  Preserved.SettledValues valueAnswers) implements ReadableModule {
 
         /** Copied, because this is an answer a compilation remembers and an answer it remembers is
          *  a value. */

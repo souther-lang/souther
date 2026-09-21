@@ -581,10 +581,35 @@ class CompilePublishedHelperTest {
         assertTrue(e.getMessage().contains("taxed"), e.getMessage());
     }
 
-    /** A module that publishes nothing recursive emits no `$Fns` at all — the class appears because
-     * a method has to go somewhere, not because a helper was imported. */
+    /** A module that publishes nothing recursive and reaches no value emits no `$Fns` at all — the
+     * class appears because a method has to go somewhere, not because a helper was imported. */
     @Test
     void aReaderOfANonRecursiveHelperEmitsNoFnsClass() throws Exception {
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of("""
+                module pricing exposing ( Amount, taxed )
+
+                data Amount = Int
+
+                let taxed (a: Amount) = Amount(a.value * 2)
+                """, """
+                module order exposing ( Receipt, bill )
+
+                import pricing ( Amount, taxed )
+
+                data Receipt = { total: Amount }
+
+                behavior bill : (a: Amount) -> Receipt constructs Receipt
+                let bill (a) = Receipt { total = taxed(a) }
+                """));
+
+        assertFalse(classes.containsKey(Emitted.helpers("order")), classes.keySet().toString());
+    }
+
+    /** A helper is expanded into its reader together with what it names, so a value it names that
+     * the module does not expose is not something the module publishes: no class of the module
+     * offers it to be called, and the reader emits no method for it either. */
+    @Test
+    void aValueOnlyAPublishedHelperNamesIsExpandedWithTheHelperAndNotOffered() throws Exception {
         Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(PRICING, """
                 module order exposing ( Receipt, bill )
 
@@ -596,6 +621,7 @@ class CompilePublishedHelperTest {
                 let bill (a) = Receipt { total = taxed(a) }
                 """));
 
+        assertFalse(classes.containsKey("pricing.$Values"), classes.keySet().toString());
         assertFalse(classes.containsKey(Emitted.helpers("order")), classes.keySet().toString());
     }
 

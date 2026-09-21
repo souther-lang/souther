@@ -105,6 +105,8 @@ class WhatReadsADeclarationIntoASignatureIsWrittenDownTest {
                     "reads the library's own declarations, which state both halves"),
             new Licence("souther.compiler.check.OperationFactBinder.declaredSignature",
                     "the same declarations, read where a fact about an operation is held to them"),
+            new Licence("souther.compiler.meta.ValueAnswers.read",
+                    "what a module recorded a value as, read back as the answer its own check gave"),
             new Licence("souther.compiler.check.HelperTyping.checkHelpers",
                     "a value of this module, written with no parameters and just checked for what"
                             + " it answers"));

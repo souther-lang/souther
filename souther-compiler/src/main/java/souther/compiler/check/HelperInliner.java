@@ -108,6 +108,9 @@ public final class HelperInliner {
     private boolean valuesAreMethods = false;
     /** Whether a value this module declares is built as a reference to its template. */
     private boolean valuesAreTemplates = false;
+    /** Whether a reference to a value is left as the reference, for a body being closed to carry
+     *  the values it names along with it. */
+    private boolean valuesStayNamed = false;
     /** What each value folds to, empty where it is not a constant, by what it is reached by. */
     private final Map<ReachName.Declaration, Optional<Object>> constantOfValues = new HashMap<>();
     /** What the method emitted for each value takes, by what the value is reached by. */
@@ -687,12 +690,13 @@ public final class HelperInliner {
     /**
      * A definition {@code module} publishes, closed so that it means in a reader what it means here.
      *
-     * <p>Closing is expansion: the module's own values and non-recursive helpers are substituted into
-     * the body, so no bare name of this module is left for the reader to read against its own
-     * definitions (ADR-0067). A recursive helper is the one thing expansion cannot remove — it is
-     * lowered to a method, so the call stays a call — and it is qualified here instead, under the
-     * module that declares it. The reader emits that method as one of its own, exactly as it already
-     * does for a recursive prelude helper it reaches.
+     * <p>Closing is expansion of the helpers: the module's own non-recursive helpers are substituted
+     * into the body, so no bare name of this module is left for the reader to read against its own
+     * definitions (ADR-0067). A recursive helper cannot be expanded — it is lowered to a method, so
+     * the call stays a call — and a value is not expanded either, being one definition that every
+     * body naming it reaches. Both are qualified here instead, under the module that declares them.
+     * The reader emits a recursive helper as a method of its own, exactly as it already does for a
+     * recursive prelude helper it reaches, and calls a value's entry in its declaring module.
      *
      * <p>What comes back is named qualified too. The name is the definition's identity across
      * modules, and a bare one is only how a reader happens to write it: two modules may publish a
@@ -711,8 +715,18 @@ public final class HelperInliner {
         // Its own module is reading here, so it reaches its own declaration bare — which is the
         // reference the graph over that module's table is keyed by.
         ReachName.Declaration here = new ReachName.Own(new ValueName.Helper(module, fn.name()));
-        Hir.Expr closed = graph.recurses(here)
-                ? inlineRecursiveBody(fn) : inline(fn.writtenBody(), bodyOf(fn.name()));
+        // A value stays a reference to the values it names: it runs where it is declared, so what
+        // it names is built there and never copied. A helper is expanded into its reader, and what
+        // it names is expanded with it, as it always was.
+        boolean namedBefore = valuesStayNamed;
+        valuesStayNamed = fn.params().isEmpty();
+        Hir.Expr closed;
+        try {
+            closed = graph.recurses(here)
+                    ? inlineRecursiveBody(fn) : inline(fn.writtenBody(), bodyOf(fn.name()));
+        } finally {
+            valuesStayNamed = namedBefore;
+        }
         return fn.reachedAs(new ReachName.OfModule(new ValueName.Helper(module, fn.name())))
                 .withBody(new Hir.FnBody.Written(
                         HelperNames.publishedBy(HelperNames.qualifyHelpersOf(closed, module), module)));
@@ -2179,7 +2193,7 @@ public final class HelperInliner {
         if (value == null || value.body() == null || graph.recurses(reaches)) {
             return v;
         }
-        if (reading == ValueAtAReference.SHARED_PER_REGION) {
+        if (valuesStayNamed || reading == ValueAtAReference.SHARED_PER_REGION) {
             // Left standing here and read again by the walk that materialises it: which region the
             // body belongs at is a fact about where the reference stands, and an expansion in
             // progress is not yet at a region it can answer that with.
@@ -2357,6 +2371,11 @@ public final class HelperInliner {
             materialiseAsABuild(named, here, order, values, site);
             return;
         }
+        if (runsInItsDeclaringModule(named) && declarationArity(named).isEmpty()
+                && isAValueOfItsModule(named) && constantOf(named).isEmpty()) {
+            materialiseAsAPublishedValue(named, here, order, values, site);
+            return;
+        }
         if (emittedAsAMethod(named) && declarationArity(named).isEmpty()) {
             Handover handover = handoverOf(named, site.get());
             if (handover.callable()) {
@@ -2410,17 +2429,17 @@ public final class HelperInliner {
     }
 
     /**
-     * Whether {@code named} is a value this module declared, held once as a template.
+     * Whether {@code named} is a value, held once as a template.
      *
      * <p>The kind whose meaning is the same wherever it is built: it takes nothing, and names
-     * nothing but other values. A value another module declared is left to be copied, since the
-     * template of it is that module's to hold.
+     * nothing but other values. Which module declared it is not asked — a value another module
+     * declared is one definition here as it is there.
      */
     private boolean isATemplateValue(Hir.Var.Denoting named) {
         ReachName.Declaration reaches = named.reachesADeclaration();
         Hir.FnDef value = reaches == null ? null : table.reached(reaches);
         return value != null && value.body() != null && value.params().isEmpty()
-                && value.declaredBy(moduleName()) && !graph.recurses(reaches);
+                && !graph.recurses(reaches);
     }
 
     /**
@@ -2531,22 +2550,63 @@ public final class HelperInliner {
     /**
      * Whether {@code named} is a value this tree calls the method of rather than copying.
      *
-     * <p>Only in the tree the backend emits from, and only for a value this module declared: the
-     * signature a call to it is typed by is settled by the check of the module that wrote it. A
-     * value that names no other value at its root region has nothing to be handed, so the method
-     * takes nothing.
+     * <p>Only in the tree the backend emits from, and only a value this module declares. A value
+     * another module declares runs there ({@link #runsInItsDeclaringModule}). The signature a call
+     * is typed by is what the value's own check settled. A value that names no other value at its
+     * root region has nothing to be handed, so the method takes nothing.
      */
     private boolean emittedAsAMethod(Hir.Var.Denoting named) {
         return valuesAreMethods && isAMethodValue(named);
     }
 
-    /** Whether {@code named} is a value this module declared that does not fold to a constant,
-     *  which is the kind a method can be emitted for. */
+    /** Whether {@code named} is a value that does not fold to a constant, which is the kind a method
+     *  can be emitted for. */
     private boolean isAMethodValue(Hir.Var.Denoting named) {
         ReachName.Declaration reaches = named.reachesADeclaration();
         Hir.FnDef value = reaches == null ? null : table.reached(reaches);
-        return value != null && value.params().isEmpty() && value.declaredBy(moduleName())
-                && !graph.recurses(reaches) && constantOf(named).isEmpty();
+        return value != null && value.params().isEmpty() && value.body() != null
+                && !graph.recurses(reaches) && !runsInItsDeclaringModule(named)
+                && constantOf(named).isEmpty();
+    }
+
+    /** Whether {@code named} reaches a value, which is a definition with no parameters and a body
+     *  that no cycle passes through. */
+    private boolean isAValueOfItsModule(Hir.Var.Denoting named) {
+        ReachName.Declaration reaches = named.reachesADeclaration();
+        Hir.FnDef value = reaches == null ? null : table.reached(reaches);
+        return value != null && value.params().isEmpty() && value.body() != null
+                && !graph.recurses(reaches);
+    }
+
+    /**
+     * Binds {@code named} in the region being written as the read of a value another module runs.
+     *
+     * <p>Nothing of its body is put here and nothing is left standing for this module to emit: what
+     * the binding holds is the reference, which is what stands where the value was named and is
+     * called from the module that declares it. Bound once per region, as any value is, so two
+     * references in one region are one call.
+     */
+    private void materialiseAsAPublishedValue(Hir.Var.Denoting named, Map<String, Hir.Binder> here,
+                                              List<Hir.Binder> order, List<Hir.Expr> values,
+                                              Supplier<MaterialisationSite> site) {
+        Hir.Binder called = writing.binders()
+                .binder("$v" + next() + "_" + named.name(), named.pos());
+        here.put(named.reaches(), called);
+        order.add(called);
+        values.add(new Hir.Materialised(named.denotes(), site.get(), named, named.pos(),
+                named.region()));
+    }
+
+    /**
+     * Whether {@code named} is a value another module declares, in the tree the backend emits from.
+     *
+     * <p>Such a value has one place it runs, its declaring module, and a reference to it stays a
+     * reference: nothing of its body is copied here, and it is not a method this module holds. The
+     * analyses read a value by its template and are not asked.
+     */
+    private boolean runsInItsDeclaringModule(Hir.Var.Denoting named) {
+        return valuesAreMethods && named.reachesADeclaration() instanceof ReachName.OfModule of
+                && !of.denotes().module().equals(moduleName());
     }
 
     /**

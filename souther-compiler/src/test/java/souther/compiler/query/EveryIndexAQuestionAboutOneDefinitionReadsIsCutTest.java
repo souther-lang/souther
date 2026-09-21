@@ -371,7 +371,7 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
                 Edit.A_RECURSIVE_HELPER_BESIDE);
         metEitherWay(out,Bodies.RecursiveHelperConstructsForBody.class,
                 Bodies.RecursiveHelperConstructs.class, Edit.A_RECURSIVE_HELPER_BESIDE);
-        projection(out, Bodies.SettledFn.class, Bodies.RowFixtureDefs.class,
+        projection(out, Bodies.SettledFn.class, Bodies.MintedDefs.class,
                 Edit.A_ROW_WRITTEN_BESIDE);
         metEitherWay(out,Bodies.Stated.class, Bodies.StatedContracts.class,
                 Edit.A_BEHAVIOR_BESIDE_STATING_A_RULE);

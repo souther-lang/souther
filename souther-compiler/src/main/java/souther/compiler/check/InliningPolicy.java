@@ -18,7 +18,9 @@ package souther.compiler.check;
  */
 public enum InliningPolicy {
 
-    /** Expand everything expandable: what the backend emits from. */
+    /** Expand every helper that has no method of its own; a recursive helper and a value are
+     * definitions the backend emits, and a reference to one stays a call. What the backend emits
+     * from. */
     FULL,
 
     /** Expand a module's own helpers; leave the language's own operations standing. What the

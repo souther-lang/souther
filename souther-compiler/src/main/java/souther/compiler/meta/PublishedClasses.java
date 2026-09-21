@@ -79,5 +79,15 @@ public interface PublishedClasses {
      */
     record SoutherModuleView(int compat, String compiler, String header,
                              List<String> imports, List<String> types,
-                             List<String> behaviors, List<String> invariantHelpers) {}
+                             List<String> behaviors, List<String> invariantHelpers,
+                             List<String> valueAnswers) {
+
+        /** A module that records no answers for its values, which is what a writer that has none
+         *  to record wrote. */
+        public SoutherModuleView(int compat, String compiler, String header, List<String> imports,
+                                 List<String> types, List<String> behaviors,
+                                 List<String> invariantHelpers) {
+            this(compat, compiler, header, imports, types, behaviors, invariantHelpers, List.of());
+        }
+    }
 }

@@ -1285,10 +1285,21 @@ final class BodyGen {
             // emitter happens to hold, the answer was whichever table the rendered name hit first —
             // and a helper the module holds under a name this call renders differently was no
             // helper at all.
-            if (!(call.fn() instanceof Core.Reached.OfDeclaration reached)) {
-                throw new IllegalStateException("unknown function `" + call.name() + "`");
-            }
-            switch (reached.reaches()) {
+            Core.Reaches reaches = switch (call.fn()) {
+                case Core.Reached.OfDeclaration reached -> reached.reaches();
+                case Core.Reached.OfPublishedValue published -> published.reaches();
+                default -> throw new IllegalStateException("unknown function `" + call.name() + "`");
+            };
+            Core.Reached reached = (Core.Reached) call.fn();
+            switch (reaches) {
+                case Core.Reaches.APublishedValue(ValueName.Helper value) -> {
+                    // The value runs in the module that declares it. What is called is that module's
+                    // entry, which is public and takes nothing, so no type the value is built from
+                    // is named here.
+                    code.invokestatic(ctx.cd(new GeneratedClass.Values(value.module())), value.name(),
+                            MethodTypeDesc.of(CD_Object));
+                    castFromObject(code, call.type());
+                }
                 case Core.Reaches.AHelper _ -> {
                     // The one loop the language has is emitted where it stands, not called.
                     if (!ctx.symbols.theWalk().equals(reached.denotes()) || !folded(call)) {

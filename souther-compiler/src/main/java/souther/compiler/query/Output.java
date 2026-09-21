@@ -299,13 +299,17 @@ public final class Output {
             // in. Asked of the module rather than taken off the type: what a declaration is and
             // what this module calls it are two things, and only the second may be published.
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
+            // What each value this module declares was settled as, by its own check: the answer a
+            // reader of the value is given, so it is the same one the readers in this compilation
+            // are given.
+            Answer<Bodies.ModuleCheck.Of> checked = db.ask(new Bodies.ModuleCheck(name));
             if (written == null || !sigs.present() || implementations == null
-                    || !resolved.present() || !scope.present()) {
+                    || !resolved.present() || !scope.present() || !checked.present()) {
                 return;
             }
             ModuleMetadata.stamp(classes, written.module(), resolved.value(),
                     written.slices(), sigs.value(), implementations,
-                    scope.value().scope()::reach);
+                    scope.value().scope()::reach, checked.value().settledValues());
         }
 
     }

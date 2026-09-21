@@ -61,8 +61,8 @@ public final class Prepared {
      * reached from a row and from nothing a source can spell, and the walk that minted it is the one
      * that knows which method is whose.
      */
-    public List<Hir.FnDef> rowDefs() {
-        return surface.rowDefs();
+    public List<Hir.FnDef> mintedDefs() {
+        return surface.mintedDefs();
     }
 
     /**
