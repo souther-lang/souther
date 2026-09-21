@@ -1552,7 +1552,8 @@ public final class Elaborator {
      * own check settled it as.
      *
      * <p>Its body is not read here, and is not in the node. What the value means is its template,
-     * which is elaborated once for every build of it and carries no trace of which build asked.
+     * which is elaborated once for the value, whichever bodies build it, and carries no trace of which
+     * build asked.
      */
     private static Core materialisedValue(Hir.ValueBuild build, CheckContext ctx) {
         if (!ctx.preserved().valuesAreTemplates()) {

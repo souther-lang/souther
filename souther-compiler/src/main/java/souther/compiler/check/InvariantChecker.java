@@ -293,9 +293,10 @@ public final class InvariantChecker {
     /** What each value the body builds comes to. */
     private final ValueTemplates templates;
 
-    /** The templates this has already read the constructions of, by the tree that is the template.
-     *  A value means the same wherever it is built, so what is owed inside it is owed once. */
-    private final Set<Core> templatesRead = Collections.newSetFromMap(new IdentityHashMap<>());
+    /** Whether a run comes back from each template this has read, by the tree that is the template.
+     *  A value means the same wherever it is built, so what is owed inside it is owed once, and
+     *  whether it answers is one fact for every build of it. */
+    private final Map<Core, Boolean> templateAnswers = new IdentityHashMap<>();
 
     private InvariantChecker(RuleReadingContext reading) {
         this(reading, Map.of());
@@ -3754,10 +3755,18 @@ public final class InvariantChecker {
             case Core.Block _ -> k;
             case Core.MaterialisedValue build -> {
                 Core template = templates.bodyOf(build);
-                if (templatesRead.add(template)) {
-                    entering(template, Known.top(), engine.insideATemplate(), ONE_READING);
+                Boolean answers = templateAnswers.get(template);
+                if (answers == null) {
+                    Known left = entering(template, Known.top(), engine.insideATemplate(),
+                            ONE_READING);
+                    answers = !left.reachesNothing();
+                    templateAnswers.put(template, answers);
                 }
-                yield k;
+                // What the value constructs is judged once, where it is held, and what was learned
+                // there is not the caller's. Whether it comes back is: an evaluation no run carries
+                // a value on from is one nothing written after is reached from, whichever build
+                // asked.
+                yield answers ? k : k.reachingNothing();
             }
             default -> walk(value, k, at, copies);
         };

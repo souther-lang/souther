@@ -95,10 +95,13 @@ public final class ValueArrivals<P> {
     private final Map<Core, Comes> templateComes;
 
     /** Where there are no builds of values to answer for, which is every tree that runs. */
-    private static final Function<Core.MaterialisedValue, Core> NO_TEMPLATES = build -> {
+    private static final Function<Core.MaterialisedValue, Core> NO_TEMPLATES =
+            ValueArrivals::noTemplate;
+
+    private static Core noTemplate(Core.MaterialisedValue build) {
         throw new IllegalStateException("a build of " + build.value()
                 + " is in a tree that holds no templates");
-    };
+    }
 
     private ValueArrivals(Naming<P> naming, ValueArrivals<AnonymousPath> semantics,
                           WhereTheOperationsAre operations,
