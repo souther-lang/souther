@@ -584,12 +584,18 @@ public sealed interface Core {
                 throw new IllegalArgumentException(
                         "a call carries its settlement, `None` where there is none: " + fn.rendered());
             }
-            // A settled pattern is `String.matches`'s own fact, so only a call reaching that kernel
-            // may carry one, and one reaching it always does — the checker settles it as part of
-            // typing the call, not as a step a later pass might skip.
-            boolean matchesKernel = fn instanceof Reached.OfKernel k
-                    && k.kernel() == Kernel.STRING_MATCHES;
-            if (matchesKernel != settlement instanceof CallSettlement.StringMatches) {
+            // Which kernel owns a settlement is asked of the settlement, exhaustively and with no
+            // `default`: a case added later to `CallSettlement` without a line here is a compile
+            // error at this constructor, not a call this refuses to notice was ever handed one. An
+            // `instanceof` of one arm compared as a boolean would answer the same for every case this
+            // has not been told about yet, which is the failure mode this switch is here to refuse.
+            boolean agrees = switch (settlement) {
+                case CallSettlement.None _ ->
+                        !(fn instanceof Reached.OfKernel k && k.kernel() == Kernel.STRING_MATCHES);
+                case CallSettlement.StringMatches _ ->
+                        fn instanceof Reached.OfKernel k && k.kernel() == Kernel.STRING_MATCHES;
+            };
+            if (!agrees) {
                 throw new IllegalArgumentException("`" + fn.rendered() + "` and its settlement "
                         + settlement + " disagree about whether this call is `String.matches`");
             }
@@ -1220,6 +1226,12 @@ public sealed interface Core {
      *
      * <p>An operator per slot kind, so a rewrite cannot put an expression where the backend can only
      * load a binding, or something other than a construction where an attempt tests one.
+     *
+     * <p>A node that carries a fact the checker settled about it — a {@link Call}'s
+     * {@link CallSettlement} — keeps that fact across the rewrite this makes, which is right where
+     * the rewrite preserves what the node means and stale where it does not: a pass that changes what
+     * a slot evaluates to a different meaning owes that fact a rebuild of its own, not a rewrite that
+     * carries the old one forward unasked.
      */
     static Core mapChildren(Core e, java.util.function.UnaryOperator<Core> onExprSlot,
                             java.util.function.UnaryOperator<Read> onNameSlot,
