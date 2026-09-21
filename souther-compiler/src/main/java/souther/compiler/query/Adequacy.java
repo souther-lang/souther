@@ -4346,7 +4346,7 @@ public final class Adequacy {
                 return Answer.absent();
             }
             souther.compiler.partition.GenerationPlan asked =
-                    new souther.compiler.partition.GenerationPlan(subject, work.classes(),
+                    souther.compiler.partition.GenerationPlan.of(subject, work.classes(),
                             work.arms(), work.pairs(), work.meetings());
             // The meetings of this body, read once for the module. A behavior with no entry is one
             // whose body was not lowered, which is nothing to search in rather than a search that

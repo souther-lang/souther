@@ -20,6 +20,15 @@ import java.util.Set;
  * never asked what was owed. What a reader of such a result got was a reason about the run and no
  * word about the thing they were asking after. Made here, every way out holds the same list.
  *
+ * <p><b>One list, held as itself and not rebuilt from four kept beside it.</b> {@link
+ * #classesOwed}, {@link #armsOwed}, {@link #pairsOwed} and {@link #meetingsOwed} are projections
+ * of {@link #obligations}, read by whoever wants one kind on its own; {@link #obligations} is what
+ * this holds. A kind added beside these four used to be a list nobody carrying a plan had to touch
+ * to keep compiling — which is exactly how a search composing a row for it and an account reading
+ * what was asked for came apart. Sealed under {@link GenerationObligation}, a fifth kind is a
+ * permitted subtype nothing here can be written without a case for, so the same mistake does not
+ * compile a second time.
+ *
  * <p><b>Lists rather than sets, and the order is the contract.</b> What a row is composed for is
  * written out beside it, and the order those are written in is this order — so a plan handed over
  * as a set would leave the rows of one model coming out in whatever order a hash gave them, which
@@ -27,78 +36,101 @@ import java.util.Set;
  * gave.
  *
  * @param subject     the behavior a row would be written for
- * @param classesOwed one class of one position apiece, in the order they were gathered
- * @param armsOwed    one arm apiece, in the order the plan numbered them
- * @param pairsOwed   one combination of two classes apiece, where the pair space is the criterion
- *                    this behavior is held to. Beside the classes and not among them: a class is
- *                    met by a value falling in it, and one of these by two values falling in two —
- *                    so a row for each of two classes is two rows and neither shows what the
- *                    behavior does where both hold
- * @param meetingsOwed one combination of the body's decisions apiece, where those are the criterion
- *                    this behavior is held to. Beside the arms and not among them: an arm is a
- *                    place a run is at, and one of these is several decisions settling one value —
- *                    so rows through every arm can leave one of these unmade, which is the whole
- *                    reason it is asked about
+ * @param obligations every class, arm, combination of two classes and meeting of the body's
+ *                    decisions this run is asked for, in the order gathered — classes, then arms,
+ *                    then the combinations of two classes, then the meetings, which is the order
+ *                    {@link #of} takes them in and the order {@link #obligations()} hands them back
  */
-public record GenerationPlan(MeasuredInput subject, List<ClassOfAPosition> classesOwed,
-                             List<Generator.ArmOwed> armsOwed,
-                             List<ObligationIdentity.OfAFallbackPairCell> pairsOwed,
-                             List<ObligationIdentity.OfACombinationOfDecisions> meetingsOwed) {
+public record GenerationPlan(MeasuredInput subject, List<GenerationObligation> obligations) {
 
     public GenerationPlan {
-        classesOwed = List.copyOf(classesOwed);
-        armsOwed = List.copyOf(armsOwed);
-        pairsOwed = List.copyOf(pairsOwed);
-        meetingsOwed = List.copyOf(meetingsOwed);
+        obligations = List.copyOf(obligations);
         if (subject == null) {
             throw new IllegalArgumentException("a generation is asked for on behalf of a subject");
         }
-        onlyOnce("class", classesOwed);
-        onlyOnce("arm", armsOwed);
-        onlyOnce("combination", pairsOwed);
-        onlyOnce("meeting", meetingsOwed);
+        Set<GenerationObligation> seen = new LinkedHashSet<>(obligations);
+        if (seen.size() != obligations.size()) {
+            throw new IllegalArgumentException(
+                    "the same obligation is owed twice in one plan: " + obligations);
+        }
         // A class of another behavior, which is the same disagreement a measured input refuses among its
         // axes. Held here, one run would be answering for two behaviors and every sentence about
         // what it was asked for would be right about one of them.
-        for (ClassOfAPosition each : classesOwed) {
-            if (!each.at().behavior().equals(subject.behavior())) {
+        for (GenerationObligation each : obligations) {
+            if (each instanceof GenerationObligation.Class(var target)
+                    && !target.at().behavior().equals(subject.behavior())) {
                 throw new IllegalArgumentException(
-                        "a class of " + each.at().behavior() + " in the plan for "
-                                + subject.behavior() + ": " + each);
+                        "a class of " + target.at().behavior() + " in the plan for "
+                                + subject.behavior() + ": " + target);
             }
         }
     }
 
-    /** Whether anything at all is owed, which is what a run with nothing to do looks like. */
-    public boolean isEmpty() {
-        return classesOwed.isEmpty() && armsOwed.isEmpty() && pairsOwed.isEmpty()
-                && meetingsOwed.isEmpty();
-    }
-
     /**
-     * Every one of them, in the one list a reader standing on the far side of a search reads from.
+     * A plan over the four kinds an obligation is gathered as, in the order they were gathered.
      *
-     * <p>In this order and no other: classes, then arms, then the combinations of two classes, then
-     * the meetings of the body's decisions — the order {@link #classesOwed}, {@link #armsOwed},
-     * {@link #pairsOwed} and {@link #meetingsOwed} are already handed over in, put end to end. A
-     * reader answering for what this plan asks does it once here, over a sealed kind that a fifth
-     * list added beside the four above would leave nothing here to answer for — which is the whole
-     * reason this exists beside them rather than instead of them.
+     * <p>What every caller outside this file holds: a search gathers its classes, its arms, its
+     * combinations of two classes and its meetings apart, because each kind is looked for its own
+     * way, and this is where the four are put end to end into the one list {@link #obligations}
+     * holds.
      */
-    public List<GenerationObligation> obligations() {
+    public static GenerationPlan of(MeasuredInput subject, List<ClassOfAPosition> classesOwed,
+                                    List<Generator.ArmOwed> armsOwed,
+                                    List<ObligationIdentity.OfAFallbackPairCell> pairsOwed,
+                                    List<ObligationIdentity.OfACombinationOfDecisions>
+                                            meetingsOwed) {
         List<GenerationObligation> out = new ArrayList<>();
         classesOwed.forEach(each -> out.add(new GenerationObligation.Class(each)));
         armsOwed.forEach(each -> out.add(new GenerationObligation.Arm(each)));
         pairsOwed.forEach(each -> out.add(new GenerationObligation.Pair(each)));
         meetingsOwed.forEach(each -> out.add(new GenerationObligation.Meeting(each)));
-        return List.copyOf(out);
+        return new GenerationPlan(subject, out);
     }
 
-    private static void onlyOnce(String kind, List<?> owed) {
-        Set<Object> seen = new LinkedHashSet<>(owed);
-        if (seen.size() != owed.size()) {
-            throw new IllegalArgumentException(
-                    "the same " + kind + " is owed twice in one plan: " + owed);
+    /** Whether anything at all is owed, which is what a run with nothing to do looks like. */
+    public boolean isEmpty() {
+        return obligations.isEmpty();
+    }
+
+    /** One class of one position apiece, in the order they were gathered. */
+    public List<ClassOfAPosition> classesOwed() {
+        return kind(GenerationObligation.Class.class, GenerationObligation.Class::target);
+    }
+
+    /** One arm apiece, in the order the plan numbered them. */
+    public List<Generator.ArmOwed> armsOwed() {
+        return kind(GenerationObligation.Arm.class, GenerationObligation.Arm::target);
+    }
+
+    /**
+     * One combination of two classes apiece, where the pair space is the criterion this behavior
+     * is held to. Beside the classes and not among them: a class is met by a value falling in it,
+     * and one of these by two values falling in two — so a row for each of two classes is two rows
+     * and neither shows what the behavior does where both hold.
+     */
+    public List<ObligationIdentity.OfAFallbackPairCell> pairsOwed() {
+        return kind(GenerationObligation.Pair.class, GenerationObligation.Pair::target);
+    }
+
+    /**
+     * One combination of the body's decisions apiece, where those are the criterion this behavior
+     * is held to. Beside the arms and not among them: an arm is a place a run is at, and one of
+     * these is several decisions settling one value — so rows through every arm can leave one of
+     * these unmade, which is the whole reason it is asked about.
+     */
+    public List<ObligationIdentity.OfACombinationOfDecisions> meetingsOwed() {
+        return kind(GenerationObligation.Meeting.class, GenerationObligation.Meeting::target);
+    }
+
+    private <O extends GenerationObligation, T> List<T> kind(Class<O> of,
+                                                              java.util.function.Function<O, T>
+                                                                      target) {
+        List<T> out = new ArrayList<>();
+        for (GenerationObligation each : obligations) {
+            if (of.isInstance(each)) {
+                out.add(target.apply(of.cast(each)));
+            }
         }
+        return List.copyOf(out);
     }
 }
