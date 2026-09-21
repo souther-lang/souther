@@ -16,8 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A call carries what the checker settled about it (issue #1840) beside what it applies and what it
- * evaluates.
+ * A call carries what the checker settled about it beside what it applies and what it evaluates.
  *
  * <p>{@code String.matches}'s pattern is the case in point: the checker folds its first argument
  * under the bindings in force and asks {@code java.util.regex.Pattern} whether the composed text is

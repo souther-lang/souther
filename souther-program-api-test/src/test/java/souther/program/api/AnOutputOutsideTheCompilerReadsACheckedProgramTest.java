@@ -667,10 +667,10 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
     }
 
     /**
-     * A {@code String.matches} pattern composed under a local binding (issue #1840): {@code tail} is
-     * bound inside the body, so the composition is settled only where the checker folds it under the
-     * bindings in force — not by any walk that reads {@code Core} back after the fact, which finds a
-     * binding still a binding.
+     * A {@code String.matches} pattern composed under a local binding: {@code tail} is bound inside
+     * the body, so the composition is settled only where the checker folds it under the bindings in
+     * force — not by any walk that reads {@code Core} back after the fact, which finds a binding
+     * still a binding.
      */
     private static final String MATCHES_A_COMPOSED_LOCAL_PATTERN = """
             module wit
