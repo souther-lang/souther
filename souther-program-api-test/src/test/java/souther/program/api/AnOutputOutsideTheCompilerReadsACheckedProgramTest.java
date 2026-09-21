@@ -13,6 +13,7 @@ import souther.compiler.program.CheckedImplementation;
 import souther.compiler.program.CheckedModule;
 import souther.compiler.program.CheckedProgram;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.LanguageCaseId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -20,8 +21,10 @@ import souther.compiler.types.ValueName;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -149,9 +152,24 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
             let toCents (r) = Decimal.round(2, HALF_UP, r.value)
             """;
 
+    /**
+     * The checked fixtures below, built once per distinct source rather than once per test.
+     *
+     * <p>{@code CheckedProgram.of} reads the whole standard library and checks it beside whatever
+     * it is handed, and {@code StdlibLoader} memoizes none of that on purpose, leaving the choice to
+     * whoever calls it more than once. Several tests here ask different questions of the same
+     * fixture (a module compiled and read by four tests below, a fixture three tests check the
+     * result of), and a fresh program per test would pay that reading again for a source already
+     * checked in this class.
+     */
+    private static final Map<String, CheckedProgram> CHECKED = new HashMap<>();
+
+    private static CheckedProgram checked(String source) {
+        return CHECKED.computeIfAbsent(source, s -> CheckedProgram.of(List.of(s)));
+    }
+
     private static CheckedModule demo() {
-        CheckedProgram program = CheckedProgram.of(List.of(MODULE));
-        CheckedModule module = program.module("demo");
+        CheckedModule module = checked(MODULE).module("demo");
         assertNotNull(module, "the compile checked this module");
         return module;
     }
@@ -164,7 +182,7 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
 
     @Test
     void theProgramHoldsTheModulesItChecked() {
-        CheckedProgram program = CheckedProgram.of(List.of(MODULE));
+        CheckedProgram program = checked(MODULE);
 
         assertEquals(List.of("demo"), program.modules().stream().map(CheckedModule::name).toList());
     }
@@ -208,12 +226,12 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
                 assertFalse(composed.composition().stages().isEmpty());
                 yield "composed";
             }
-            case CheckedImplementation.Injected ignored -> "injected";
-            case CheckedImplementation.Unwritten ignored -> "unwritten";
+            case CheckedImplementation.Injected _ -> "injected";
+            case CheckedImplementation.Unwritten _ -> "unwritten";
             // Every behavior asked here is one this compile checked, and an implementation another
             // compile emitted belongs to a module this program does not hold. Answered with a word
             // of its own it would be a state this test reads as covered and never sees.
-            case CheckedImplementation.ImplementedElsewhere ignored ->
+            case CheckedImplementation.ImplementedElsewhere _ ->
                     fail("`" + behavior.name() + "` is a behavior of a checked module and its"
                             + " implementation is another compile's");
         };
@@ -380,7 +398,7 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
      */
     @Test
     void everyParameterReadInABodyResolvesToAParameter() {
-        CheckedModule demo = CheckedProgram.of(List.of(TAKES_TWO)).module("demo");
+        CheckedModule demo = checked(TAKES_TWO).module("demo");
         CheckedBehavior combine = named(demo, "combine");
         CheckedImplementation.Body body =
                 (CheckedImplementation.Body) combine.implementation();
@@ -405,7 +423,7 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
     @Test
     void theBindersAreInTheOrderTheInputsWereDeclared() {
         CheckedBehavior combine =
-                named(CheckedProgram.of(List.of(TAKES_TWO)).module("demo"), "combine");
+                named(checked(TAKES_TWO).module("demo"), "combine");
         CheckedImplementation.Body body = (CheckedImplementation.Body) combine.implementation();
 
         assertEquals(List.of("first", "second"),
@@ -523,7 +541,7 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
      */
     @Test
     void aCallReachingAKernelSaysWhichKernel() {
-        CheckedProgram program = CheckedProgram.of(List.of(CALLS_THE_LIBRARY));
+        CheckedProgram program = checked(CALLS_THE_LIBRARY);
         Core body = ((CheckedImplementation.Body)
                 named(program.module("demo"), "tidy").implementation()).body();
 
@@ -555,7 +573,7 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
      */
     @Test
     void andSoDoesAKernelWrittenWhereAValueGoes() {
-        CheckedProgram program = CheckedProgram.of(List.of(CALLS_THE_LIBRARY));
+        CheckedProgram program = checked(CALLS_THE_LIBRARY);
         Core body = ((CheckedImplementation.Body)
                 named(program.module("demo"), "counts").implementation()).body();
 
@@ -584,7 +602,7 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
      */
     @Test
     void andTheProgramSaysWhatThatKernelWasDeclaredToTake() {
-        CheckedProgram program = CheckedProgram.of(List.of(ROUNDS));
+        CheckedProgram program = checked(ROUNDS);
         Core body = ((CheckedImplementation.Body)
                 named(program.module("demo"), "toCents").implementation()).body();
         Core.Call rounds = null;
@@ -616,7 +634,7 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
      */
     @Test
     void andItSaysSoForEveryKernelTheLanguageHas() {
-        CheckedProgram program = CheckedProgram.of(List.of(ROUNDS));
+        CheckedProgram program = checked(ROUNDS);
 
         List<String> answered = new ArrayList<>();
         for (Kernel kernel : Kernel.values()) {
@@ -626,6 +644,26 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
 
         assertEquals(Kernel.values().length, answered.size(),
                 "every kernel the language has says what it answers");
+    }
+
+    /**
+     * And a case a kernel can answer with arrives as the member it is.
+     *
+     * <p>What an output needs of a departure is something to represent: a class to name, a
+     * descriptor to point at. Handed the member of the declared result, it has the identity the rest
+     * of the language uses for that case and represents it the way it represents any other. Handed a
+     * spelling, it would search the result for the member carrying it, and would be naming a case by
+     * a name the compiler is free to change.
+     */
+    @Test
+    void andACaseAKernelCanAnswerWithArrivesAsTheMemberItIs() {
+        CheckedProgram program = checked(ROUNDS);
+
+        assertEquals(Set.of(new TypeSymbol.LanguageCase(LanguageCaseId.DIVISION_BY_ZERO)),
+                program.kernelSignature(Kernel.INT_TRUNCATING_DIVIDE).languageCaseMembers(),
+                "the case a truncating quotient departs with, as the language's own identity");
+        assertEquals(Set.of(), program.kernelSignature(Kernel.DECIMAL_ROUND).languageCaseMembers(),
+                "while a kernel that cannot depart names none");
     }
 
     /** Every helper a call in {@code body} reaches, walking every node of it. */
