@@ -660,4 +660,25 @@ class CompileExposedValueTest {
 
         assertTrue(e.getMessage().contains("cap"), e.getMessage());
     }
+
+    /** A published value is emitted whether or not anything in its own module names it, so what
+     * it forks on has to be read for it: a module of values alone has no behavior whose check
+     * would have. */
+    @Test
+    void aPublishedValueThatForksIsCompiledInAModuleWithNoBehavior() {
+        String forking = """
+                module limits exposing ( ceiling, floor )
+
+                let inner = List.length([1, 2, 3]) > 2
+
+                let ceiling = if inner then 100 else 10
+
+                let floor = inner && (if List.length([1]) > 0 then inner else false)
+                """;
+
+        Map<String, ClassFileImage> compiled =
+                assertDoesNotThrow(() -> Compiler.compile(forking));
+
+        assertTrue(compiled.containsKey("limits.$Values"), compiled.keySet().toString());
+    }
 }

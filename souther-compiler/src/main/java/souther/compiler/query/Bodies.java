@@ -3785,7 +3785,29 @@ public final class Bodies {
             if (method != null && fn.params().isEmpty() && fn.standsAt() == null
                     && !behaviorNames.contains(fn.name())) {
                 methods.put(fn.name(), method);
+                // What a body is read with travels with the body. A behavior's check answers with
+                // the rules its calls were handed, and the expansion a value method was lowered
+                // from answers with the same; a value emitted for another module to call has no
+                // behavior whose check would have carried them.
+                Answer<Expansion<Hir.FnDef>> lowered = db.ask(new LoweredBody(name, fn.address()));
+                if (!lowered.present()) {
+                    throw new IllegalStateException("`" + name + "." + fn.name() + "` is emitted"
+                            + " as a method and its body did not come out");
+                }
+                supplied.putAll(lowered.value().supplied().byExpansion());
             }
+        }
+        // Who decides at each fork of these bodies is read for them as well, against what the
+        // module declares: the table holds its values, so a module with no behavior that names one
+        // still has each fork answered for.
+        if (!methods.isEmpty()) {
+            Answer<Expanding.Of> against = db.ask(new Expanding(name, InliningPolicy.FULL));
+            if (!against.present()) {
+                throw new IllegalStateException("`" + name + "` has value methods and no table its"
+                        + " declarations are read against");
+            }
+            decisions.putAll(DecisionSources.of(against.value().table().reachable(),
+                    Map.of()).byFork());
         }
         // What each body declares cannot arrive, held against what its input's own declarations
         // leave. Judged here rather than beside each body: it reads the signature, which is the
