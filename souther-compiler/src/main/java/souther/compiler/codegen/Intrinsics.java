@@ -376,6 +376,15 @@ final class Intrinsics {
         return TABLE.keySet();
     }
 
+    /** The kernels whose runtime method has a second overload taking a comparator ahead of what the
+     *  declaration names — the runtime ABI fact {@link #descriptorWithComparator} and {@link
+     *  #emitWithComparator} answer for. Which call actually reaches it is a checker fact ({@link
+     *  Core.CallSettlement.OrderingSubject}), settled once in {@code CallElaborator} and read off the
+     *  call in {@code BodyGen}; this set says only which runtime methods exist to be reached that
+     *  way, and does not decide that any particular call does. */
+    static final Set<Kernel> COMPARATOR_OVERLOADS = Set.of(
+            Kernel.LIST_SORT, Kernel.LIST_MAX, Kernel.LIST_MIN, Kernel.LIST_SORT_BY);
+
     /**
      * A kernel of the ordered family, over an element whose order lives on its sum: the runtime call
      * this table already holds for it, taking a comparator ahead of what it was already taking.
@@ -389,6 +398,16 @@ final class Intrinsics {
      * one applying a function takes the function too, as an {@code Fn}.
      */
     static void emitWithComparator(BodyGen g, Kernel kernel, Core.Call call) {
+        if (!COMPARATOR_OVERLOADS.contains(kernel)) {
+            // The caller read an OrderingSubject settlement and an enumeration off it, which only
+            // means the checker requires order of some Type for this call — never that this
+            // runtime has a comparator overload to reach for it. That is this set's fact, asked
+            // here rather than trusted, so a kernel gaining the settlement without gaining the
+            // overload fails at the call it would otherwise reach, not at bytecode verification.
+            throw new IllegalStateException("`" + kernel.key() + "` carries an ordering settlement"
+                    + " but is not in COMPARATOR_OVERLOADS — the runtime has no comparator overload"
+                    + " for it, or this set was not updated to say it does");
+        }
         KernelSignature declared = g.kernelSignature(kernel);
         ClassDesc owner;
         String method;

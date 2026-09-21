@@ -53,16 +53,17 @@ public final class CallElaborator {
             Kernel.LIST_MIN, OrderedElement.OF_THE_OPTION);
 
     /**
-     * Refuses an element with no natural order. An ordered primitive has one, and so does a newtype
-     * over one — it carries its ordering as {@code Comparable}. A product data does not and would
-     * throw at run time, so it is refused here. The empty-list literal (element {@code Nothing}) is
-     * fine: it sorts to itself and its max is {@code None}.
+     * Refuses an element with no natural order, and answers the element that was checked against —
+     * null where this kernel places no such constraint. An ordered primitive has one, and so does a
+     * newtype over one — it carries its ordering as {@code Comparable}. A product data does not and
+     * would throw at run time, so it is refused here. The empty-list literal (element {@code
+     * Nothing}) is fine: it sorts to itself and its max is {@code None}.
      */
-    private static void requiresOrdering(Kernel kernel, Hir.Apply call, Type result,
+    private static Type requiresOrdering(Kernel kernel, Hir.Apply call, Type result,
                                          CheckContext ctx) {
         OrderedElement where = ORDERED_ELEMENT.get(kernel);
         if (where == null) {
-            return;
+            return null;
         }
         boolean inOption = where == OrderedElement.OF_THE_OPTION;
         Type element = switch (result) {
@@ -70,10 +71,13 @@ public final class CallElaborator {
             case Type.ListOf l when !inOption -> l.element();
             default -> null;
         };
-        if (element == null || element instanceof Type.Nothing
+        if (element == null) {
+            return null;
+        }
+        if (element instanceof Type.Nothing
                 || TypeOps.supportsOrdering(element, ctx.inners(), ctx.symbols(), ctx.kinds(),
                         ctx.published())) {
-            return;
+            return element;
         }
         String name = call.written().substring(call.written().indexOf('.') + 1);
         throw needsOrdered(call.pos(), name, element,
@@ -83,20 +87,21 @@ public final class CallElaborator {
     }
 
     /**
-     * Refuses a sort key with no natural order. The constraint is on what the key answers, not on
+     * Refuses a sort key with no natural order, and answers what it was checked against — null
+     * where this kernel is not {@code sortBy}. The constraint is on what the key answers, not on
      * what the list holds, so it reads the binding the key's declared result took rather than the
      * call's result.
      */
-    private static void requiresOrderedKey(Kernel kernel, Hir.Apply call, Type.FnOf declaredKey,
+    private static Type requiresOrderedKey(Kernel kernel, Hir.Apply call, Type.FnOf declaredKey,
                                            Map<String, Type> bindings, CheckContext ctx) {
         if (kernel != Kernel.LIST_SORT_BY) {
-            return;
+            return null;
         }
         Type answered = TypeOps.substitute(declaredKey.result(), bindings);
         if (BottomInfer.isBottom(answered) || answered instanceof Type.Var
                 || TypeOps.supportsOrdering(answered, ctx.inners(), ctx.symbols(), ctx.kinds(),
                         ctx.published())) {
-            return;
+            return answered;
         }
         throw CompileException.of(Diagnostic
                         .at(call.pos())
@@ -619,12 +624,17 @@ public final class CallElaborator {
             // signature could not state, and the emitter's special cases. They read the settled
             // substitution and result — they are checks on what the application became, not part
             // of how an application is typed.
+            Type orderingSubject = null;
             for (Type param : intrinsic.parameters()) {
                 if (param instanceof Type.FnOf declaredStep) {
-                    requiresOrderedKey(kernel, call, declaredStep, applied.substitution(), ctx);
+                    orderingSubject = requiresOrderedKey(kernel, call, declaredStep,
+                            applied.substitution(), ctx);
                 }
             }
-            requiresOrdering(kernel, call, applied.result(), ctx);
+            Type orderedElement = requiresOrdering(kernel, call, applied.result(), ctx);
+            if (orderedElement != null) {
+                orderingSubject = orderedElement;
+            }
             if (kernel == Kernel.LIST_SUM || kernel == Kernel.LIST_PRODUCT) {
                 return new TypedCall(numericFold(call, applied.result(), expected));
             }
@@ -633,6 +643,10 @@ public final class CallElaborator {
                         new BoundExpr(args.get(0), env.values()), ctx.symbols());
                 return new TypedCall(applied.result(),
                         new Core.CallSettlement.StringMatches(pattern));
+            }
+            if (orderingSubject != null) {
+                return new TypedCall(applied.result(),
+                        new Core.CallSettlement.OrderingSubject(orderingSubject));
             }
             return new TypedCall(applied.result());
         }

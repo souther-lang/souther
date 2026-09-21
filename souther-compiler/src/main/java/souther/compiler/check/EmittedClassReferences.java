@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
-import souther.compiler.core.Kernel;
 import souther.compiler.types.Refinement;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -123,12 +122,13 @@ final class EmittedClassReferences {
         }
     }
 
-    /** The enumeration a sort, a maximum or a minimum takes its order from. */
+    /**
+     * The enumeration a sort, a maximum or a minimum takes its order from: what the checker settled
+     * the ordering was checked against, which is the emitter's own reading of the call.
+     */
     private void sortedBy(Core.Call call) {
-        if (call.fn() instanceof Core.Reached.OfKernel(_, Kernel kernel)
-                && Ordering.SORT_FAMILY.contains(kernel)) {
-            add(Ordering.sortEnumeration(kernel, call.args().get(0).type(), inners, symbols, kinds,
-                    published));
+        if (call.settlement() instanceof Core.CallSettlement.OrderingSubject ordered) {
+            add(Ordering.enumerationOfHeld(ordered.type(), inners, symbols, kinds, published));
         }
     }
 

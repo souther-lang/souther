@@ -807,6 +807,106 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
         }
     }
 
+    // --- an ordering-sensitive kernel's checked subject travels with the call, the way
+    // String.matches's pattern does (issue #1859) ---
+
+    // One module, one checked() call — CheckedProgram.of reads the whole standard library per
+    // distinct source (this class's own fixture-cost comment above), so the three cases below share
+    // a single compile rather than paying it three times over.
+    private static final String ORDERS_LISTS_THREE_WAYS = """
+            module demo
+
+            data In = { ns: List<Int> }
+            data Out = { sorted: List<Int>, furthest: Int?, nearest: Int? }
+            data Row = { weight: Int }
+            data RowsIn = { rows: List<Row> }
+            data RowsOut = { sorted: List<Row> }
+            data EmptyOut = { sorted: List<Int> }
+
+            behavior run : (i: In) -> Out constructs Out
+            behavior sortByRun : (i: RowsIn) -> RowsOut constructs RowsOut
+            behavior emptyRun : () -> EmptyOut constructs EmptyOut
+
+            let run (i) =
+                Out { sorted = List.sort(i.ns),
+                      furthest = List.max(i.ns),
+                      nearest = List.min(i.ns) }
+
+            let sortByRun (i) = RowsOut { sorted = List.sortBy(r -> r.weight, i.rows) }
+
+            let emptyRun = EmptyOut { sorted = List.sort([]) }
+            """;
+
+    /** The one call in {@code body} reaching {@code kernel} — a fixture is written to hold exactly
+     *  one, so a reader does not have to say which. */
+    private static Core.Call callTo(Kernel kernel, Core body) {
+        Core.Call found = null;
+        for (Core node : everyNodeOf(body)) {
+            if (node instanceof Core.Call call
+                    && call.fn() instanceof Core.Reached.OfKernel k && k.kernel() == kernel) {
+                assertEquals(null, found, kernel.name() + " is reached more than once");
+                found = call;
+            }
+        }
+        assertNotNull(found, "the body reaches " + kernel.name());
+        return found;
+    }
+
+    /**
+     * {@code sort} and the two extremes settle the list's element — not the {@code List<Int>} or
+     * {@code Int?} the call itself answers, which a comparator has no use for.
+     */
+    @Test
+    void sortMaxAndMinSettleTheListsElement() {
+        CheckedProgram program = checked(ORDERS_LISTS_THREE_WAYS);
+        Core body = ((CheckedImplementation.Body)
+                named(program.module("demo"), "run").implementation()).body();
+
+        for (Kernel kernel : List.of(Kernel.LIST_SORT, Kernel.LIST_MAX, Kernel.LIST_MIN)) {
+            Core.CallSettlement settlement = callTo(kernel, body).settlement();
+            assertInstanceOf(Core.CallSettlement.OrderingSubject.class, settlement,
+                    kernel.name() + " carries what the ordering requirement was checked against");
+            assertEquals(Type.INT, ((Core.CallSettlement.OrderingSubject) settlement).type(),
+                    kernel.name() + "'s subject is the element, not the call's own result");
+        }
+    }
+
+    /**
+     * {@code sortBy} settles the key function's result, not the list's element — the two differ for
+     * every row this fixture sorts.
+     */
+    @Test
+    void sortBySettlesTheKeysResultNotTheListsElement() {
+        CheckedProgram program = checked(ORDERS_LISTS_THREE_WAYS);
+        Core body = ((CheckedImplementation.Body)
+                named(program.module("demo"), "sortByRun").implementation()).body();
+
+        Core.CallSettlement settlement = callTo(Kernel.LIST_SORT_BY, body).settlement();
+        assertInstanceOf(Core.CallSettlement.OrderingSubject.class, settlement,
+                "sortBy carries what the ordering requirement was checked against");
+        assertEquals(Type.INT, ((Core.CallSettlement.OrderingSubject) settlement).type(),
+                "the subject is the key's result (Int), not the row it was read off");
+    }
+
+    /**
+     * An empty-list literal sorts to itself with no element to compare, so the ordering requirement
+     * is checked against {@code Nothing} rather than the settlement being dropped — {@code None}
+     * would say the requirement never ran, which is not what happened.
+     */
+    @Test
+    void sortingAnEmptyListLiteralSettlesNothingRatherThanNoSettlement() {
+        CheckedProgram program = checked(ORDERS_LISTS_THREE_WAYS);
+        Core body = ((CheckedImplementation.Body)
+                named(program.module("demo"), "emptyRun").implementation()).body();
+
+        Core.CallSettlement settlement = callTo(Kernel.LIST_SORT, body).settlement();
+        assertInstanceOf(Core.CallSettlement.OrderingSubject.class, settlement,
+                "the checker still settles a subject for an empty-list literal");
+        assertInstanceOf(Type.Nothing.class,
+                ((Core.CallSettlement.OrderingSubject) settlement).type(),
+                "the subject is Nothing, not an element this call never had");
+    }
+
     /** Every helper a call in {@code body} reaches, walking every node of it. */
     private static Set<ValueName.Helper> helpersCalledIn(Core body) {
         Set<ValueName.Helper> called = new LinkedHashSet<>();
