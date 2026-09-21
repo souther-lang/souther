@@ -6,6 +6,7 @@ import java.util.AbstractMap;
 import java.util.AbstractSet;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -20,7 +21,9 @@ import java.util.Set;
  * reader may keep one and ask it later. Extending an environment therefore returns a new one and
  * leaves the old one as it was. Doing that by copying the whole map makes a body of N bindings cost
  * N² to enter; here an extension shares everything it did not touch, so it costs what the hash
- * trie is deep — bounded by the width of the hash, not by how many bindings are held.
+ * trie is deep — bounded by the width of the hash, not by how many bindings are held. Two bindings
+ * whose hashes are equal in full share a bucket that is searched linearly, which is the one place
+ * the cost follows a count rather than the width.
  *
  * <p>Iteration is in the order bindings were first entered, which is the order a diagnostic offers
  * names in. Entering a binding already held replaces its value and keeps its place.
@@ -109,6 +112,41 @@ final class BindingMap<V> extends AbstractMap<BindingId, V> {
                 return size;
             }
         };
+    }
+
+    /**
+     * How many nodes of this environment are not nodes of {@code earlier} — what extending it from
+     * {@code earlier} had to make.
+     *
+     * <p>What an environment answers says nothing about how it was built, so a copy of the whole
+     * map and a shared trie answer alike. What separates them is how much of the old one the new
+     * one is made of, and that is read here, by identity, over the structure itself.
+     */
+    int nodesNotSharedWith(BindingMap<?> earlier) {
+        Set<Object> held = Collections.newSetFromMap(new IdentityHashMap<>());
+        collect(earlier.root, held);
+        for (Order at = earlier.order; at != null; at = at.before()) {
+            held.add(at);
+        }
+        Set<Object> mine = Collections.newSetFromMap(new IdentityHashMap<>());
+        collect(root, mine);
+        for (Order at = order; at != null; at = at.before()) {
+            mine.add(at);
+        }
+        mine.removeAll(held);
+        return mine.size();
+    }
+
+    private static void collect(Node at, Set<Object> into) {
+        if (at == null) {
+            return;
+        }
+        into.add(at);
+        if (at instanceof Branch branch) {
+            for (Node slot : branch.slots()) {
+                collect(slot, into);
+            }
+        }
     }
 
     private List<Map.Entry<BindingId, V>> entriesInOrder() {
