@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.carrier.Membership;
+import souther.compiler.check.AnalysisBody;
 import souther.compiler.core.Core;
 import souther.compiler.flow.Arrival;
 import souther.compiler.flow.Paths;
@@ -121,14 +122,19 @@ public record DecisionReading(String behavior, List<Ruled> found, Enumeration en
      *                     body draws on what one of them answered is a distinction a row can write
      *                     for, and the same call to anything else is a value the model computes
      */
-    public static DecisionReading of(String behavior, Core body, InputReading read,
+    public static DecisionReading of(String behavior, AnalysisBody analysis, InputReading read,
                                      InputReads reads, Set<ValueName.Behavior> dependencies) {
+        Core body = analysis.core();
         // The conditions of this body take their names here, and one register serves every scope: a
         // condition met under a binding and the same condition met outside it are one condition.
         ConditionNumbering numbering = new ConditionNumbering(read.symbols().module(), behavior);
+        // What a build of a value comes to is what its template does: a value that never answers
+        // leaves nothing after its build reached. What is inside the template is not counted as a
+        // way of this body — a value takes no input, so it is no rule a row can be written for.
         ValueArrivals<DecisionPath> arrivals = ValueArrivals.ofBodyWhereTheOperationsStand(body,
                 new DecisionNaming(meanings(read, dependencies), reads, numbering,
-                        PATHS_READ.maximum()));
+                        PATHS_READ.maximum()),
+                analysis.templates()::bodyOf);
         if (!(arrivals.waysAt(body) instanceof Paths.Held<DecisionPath> held)) {
             return new DecisionReading(behavior, List.of(),
                     new Enumeration.StoppedAtAFigure(PATHS_READ));

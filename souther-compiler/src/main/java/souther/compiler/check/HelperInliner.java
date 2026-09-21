@@ -1385,6 +1385,8 @@ public final class HelperInliner {
             // A build that is a call of the method its value is emitted as holds a reference and the
             // bindings it is handed, and there is no body in it to walk.
             case Hir.Materialised m when isACallOfItsValue(m) -> m;
+            // A build by reference holds no body, so there is nothing in it to walk.
+            case Hir.ValueBuild build -> build;
             // A build already kept as one: what it holds is walked like any other body, and what
             // says which build it is stays where the pass that made it put it.
             case Hir.Materialised m -> new Hir.Materialised(m.value(), m.site(),
@@ -2398,10 +2400,8 @@ public final class HelperInliner {
         if (e == null) {
             return;
         }
-        if (e instanceof Hir.Materialised build && isACallOfItsValue(build)
-                && build.body() instanceof Hir.Var.Denoting named
-                && named.reachesADeclaration() != null) {
-            out.add(named.reachesADeclaration());
+        if (e instanceof Hir.ValueBuild build) {
+            out.add(build.reaches());
             return;
         }
         Hir.forEachChild(e, child -> collectBuilds(child, out));
@@ -2435,8 +2435,8 @@ public final class HelperInliner {
                 .binder("$v" + next() + "_" + named.name(), named.pos());
         here.put(named.reaches(), built);
         order.add(built);
-        values.add(new Hir.Materialised(named.denotes(), site.get(), named, named.pos(),
-                named.region()));
+        values.add(new Hir.ValueBuild(named.denotes(), named.reachesADeclaration(), site.get(),
+                named.pos(), named.region()));
     }
 
     /**
@@ -2809,6 +2809,7 @@ public final class HelperInliner {
                         ex.pos(), ex.region());
             }
             case Hir.Materialised m when isACallOfItsValue(m) -> m;
+            case Hir.ValueBuild build -> build;
             case Hir.Materialised m -> new Hir.Materialised(m.value(), m.site(),
                     insideThisBuild(m.value(), m.site(), () -> read(m.body())), m.pos(),
                     m.region());
@@ -3298,6 +3299,9 @@ public final class HelperInliner {
             // is the source's answer and moves with no copy.
             case Hir.Materialised m -> new Hir.Materialised(m.value(), m.site(),
                     rename(m.body(), renaming), renaming.at(m.pos()), renaming.over(m.region()));
+            // Nothing in it to rename: it names no binding, only a value.
+            case Hir.ValueBuild build -> new Hir.ValueBuild(build.value(), build.reaches(),
+                    build.site(), renaming.at(build.pos()), renaming.over(build.region()));
             case Hir.ListLit lit -> new Hir.ListLit(renameList(lit.elements(), renaming),
                     lit.origin(), renaming.at(lit.pos()), renaming.over(lit.region()));
             case Hir.RowCollection row -> new Hir.RowCollection(renameList(row.elements(), renaming),

@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.SequencedSet;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * The ways an expression arrives at a value, read off the body it is written in.
@@ -78,11 +79,36 @@ public final class ValueArrivals<P> {
     /** Whether a call kept standing is a defect here or an operation the model names. */
     private final WhereTheOperationsAre operations;
 
+    /**
+     * What a value built in the tree means, for a tree that builds values it does not hold the
+     * bodies of.
+     */
+    private final Function<Core.MaterialisedValue, Core> templates;
+
+    /**
+     * What each template comes to, worked out once for every reading that shares this.
+     *
+     * <p>A value means the same wherever it is built, so what it comes to is not a fact about any
+     * one build of it. Shared with the readings made of the templates in turn, so a template built
+     * from several places is read once and a chain of them costs the links it has.
+     */
+    private final Map<Core, Comes> templateComes;
+
+    /** Where there are no builds of values to answer for, which is every tree that runs. */
+    private static final Function<Core.MaterialisedValue, Core> NO_TEMPLATES = build -> {
+        throw new IllegalStateException("a build of " + build.value()
+                + " is in a tree that holds no templates");
+    };
+
     private ValueArrivals(Naming<P> naming, ValueArrivals<AnonymousPath> semantics,
-                          WhereTheOperationsAre operations) {
+                          WhereTheOperationsAre operations,
+                          Function<Core.MaterialisedValue, Core> templates,
+                          Map<Core, Comes> templateComes) {
         this.naming = naming;
         this.semantics = semantics;
         this.operations = operations;
+        this.templates = templates;
+        this.templateComes = templateComes;
     }
 
     /** The reading of {@code body} against what the body's own text says of its comparisons. */
@@ -116,13 +142,58 @@ public final class ValueArrivals<P> {
      */
     public static <P> ValueArrivals<P> ofBody(Core body, Naming<P> naming, ComparisonWays ways,
                                               WhereTheOperationsAre operations) {
+        return ofBody(body, naming, ways, operations, NO_TEMPLATES, new IdentityHashMap<>());
+    }
+
+    /**
+     * The same, of a tree that builds values: {@code templates} says what each build is, and what a
+     * build comes to is what its template does — whether a run arrives at a value there, and which
+     * it is.
+     *
+     * <p>A build is not a leaf that always answers. The value it stands for may abort or answer
+     * nothing, and then nothing after the build is reached, exactly as when the value's body stood
+     * where it was named.
+     */
+    public static <P> ValueArrivals<P> ofBodyWhereTheOperationsStand(
+            Core body, Naming<P> naming, Function<Core.MaterialisedValue, Core> templates) {
+        return ofBody(body, naming, ComparisonWays.OF_THE_TREE, WhereTheOperationsAre.STAND_IN_IT,
+                templates, new IdentityHashMap<>());
+    }
+
+    private static <P> ValueArrivals<P> ofBody(Core body, Naming<P> naming, ComparisonWays ways,
+                                               WhereTheOperationsAre operations,
+                                               Function<Core.MaterialisedValue, Core> templates,
+                                               Map<Core, Comes> templateComes) {
         ValueArrivals<AnonymousPath> semantics = naming == Anonymous.NAMING
-                ? null : ofBody(body, Anonymous.NAMING, ways, operations);
-        ValueArrivals<P> reading = new ValueArrivals<>(naming, semantics, operations);
+                ? null : ofBody(body, Anonymous.NAMING, ways, operations, templates, templateComes);
+        ValueArrivals<P> reading =
+                new ValueArrivals<>(naming, semantics, operations, templates, templateComes);
         if (body != null) {
             reading.fill(body, naming, ways, Map.of());
         }
         return reading;
+    }
+
+    /** What the template {@code build} stands for comes to, worked out the first time it is asked. */
+    private Comes templateComes(Core.MaterialisedValue build) {
+        Core template = templates.apply(build);
+        Comes known = templateComes.get(template);
+        if (known == null) {
+            known = ofBody(template, Anonymous.NAMING, ComparisonWays.OF_THE_TREE, operations,
+                    templates, templateComes).comesAt(template);
+            templateComes.put(template, known);
+        }
+        return known;
+    }
+
+    /** The ways a build of a value arrives, which are the ways its template does. */
+    private Paths<P> aTemplateComes(Core.MaterialisedValue build) {
+        Comes comes = templateComes(build);
+        List<Arrival<P>> ways = new ArrayList<>();
+        for (Truth each : comes.truths()) {
+            ways.add(new Arrival<>(each, whole(naming.nowhere())));
+        }
+        return new Paths.Held<>(ways);
     }
 
     /**
@@ -315,6 +386,7 @@ public final class ValueArrivals<P> {
                             Map<BindingId, Bound<P>> bound) {
         return switch (e) {
             case Core.Unreachable _ -> new Paths.Held<>(List.of());
+            case Core.MaterialisedValue build -> aTemplateComes(build);
             case Core.Bool literal -> one(Truth.of(literal.value()), whole(naming.nowhere()));
             case Core.Read read when bound.containsKey(read.binding()) ->
                     bound.get(read.binding()).ways();

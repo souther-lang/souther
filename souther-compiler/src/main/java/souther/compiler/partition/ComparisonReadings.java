@@ -209,7 +209,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         // — a condition inside a helper spliced in from elsewhere is still one this reading met.
         ConditionNumbering numbering =
                 new ConditionNumbering(read.symbols().module(), behavior);
-        walk(body, new Body(behavior, read, souther.compiler.coverage.Arrivals.inTheTree(body),
+        walk(body, new Body(behavior, read,
+                        souther.compiler.coverage.Arrivals.inTheTree(body,
+                                analysis.templates()::bodyOf),
                         templates),
                 reads,
                 LiveFlow.of(body), List.of(), true, readings, forks, numbering);
@@ -221,7 +223,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             Entry entry = templates.joined(template);
             if (entry != null) {
                 walk(template, new Body(behavior, read,
-                                souther.compiler.coverage.Arrivals.inTheTree(template), templates),
+                                souther.compiler.coverage.Arrivals.inTheTree(template,
+                                        analysis.templates()::bodyOf),
+                        templates),
                         insideATemplate, LiveFlow.of(template), entry.assumed(), entry.live(),
                         readings, forks, numbering);
             }

@@ -200,7 +200,8 @@ record PredicateReadings(List<Reading> predicates, Set<Core> statedAt,
         // free, and a name bound to something that aborts is what makes the difference.
         return new PredicateReadings(predicates, statedAt, body == null
                 ? souther.compiler.coverage.Arrivals.inTheTree(null)
-                : souther.compiler.coverage.Arrivals.inTheTrees(treesOf(body)));
+                : souther.compiler.coverage.Arrivals.inTheTrees(treesOf(body),
+                        body.templates()::bodyOf));
     }
 
     /** The body and the template of every value it builds, each a tree of its own. */

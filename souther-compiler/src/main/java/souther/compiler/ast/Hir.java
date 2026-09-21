@@ -1583,7 +1583,7 @@ public interface Hir {
     sealed interface Expr extends Written
             permits IntLit, DecimalLit, StringLit, BoolLit, Var, FieldAccess, Apply, Binary, Neg,
                     NewData, Match, If, IfConstructed, ListLit, RowCollection, ListComp, LetIn,
-                    Expansion, Materialised, Block, Tuple, TupleGet, Unreachable {
+                    Expansion, Materialised, ValueBuild, Block, Tuple, TupleGet, Unreachable {
     }
 
     /**
@@ -1709,6 +1709,29 @@ public interface Hir {
                 at = build.body();
             }
             return at;
+        }
+    }
+
+    /**
+     * A build of a value the tree an analysis reads holds once, as a reference to it.
+     *
+     * <p>Where {@link Materialised} is a build that carries the body it computes, this carries none:
+     * what the value means is its template, held once for every build of it, and this says only
+     * which value and for which region. It has no children, so a walk that goes into the parts of an
+     * expression meets no body under it; the value is asked of the templates by what it reaches.
+     *
+     * @param value   which value this is a build of
+     * @param reaches the name the module reaches it by, which is what the template is held under
+     * @param site    the region it was built for
+     */
+    record ValueBuild(ValueName value, ReachName.Declaration reaches, MaterialisationSite site,
+                      SourcePos pos, Region region) implements Expr {
+
+        public ValueBuild {
+            if (value == null || reaches == null || site == null) {
+                throw new IllegalArgumentException(
+                        "a build is of some value, for some region: " + value + " for " + site);
+            }
         }
     }
 
@@ -2853,6 +2876,7 @@ public interface Hir {
                     x.given(),
                     x.declaredReturn(), x.body(), x.pos(), region);
             case Materialised x -> new Materialised(x.value(), x.site(), x.body(), x.pos(), region);
+            case ValueBuild x -> new ValueBuild(x.value(), x.reaches(), x.site(), x.pos(), region);
             case Block x ->
                     new Block(x.params(), x.body(), x.rule(), x.expandedFrom(), x.pos(), region);
             case ListLit x -> new ListLit(x.elements(), x.origin(), x.pos(), region);
@@ -2890,6 +2914,8 @@ public interface Hir {
             case BoolLit x -> x;
             case Var x -> x;
             case Unreachable x -> x;
+            // No slots: what the value means is its template's, and this says only which value.
+            case ValueBuild x -> x;
             case Neg n -> {
                 Expr operand = atExpr.apply(n.operand());
                 yield operand == n.operand() ? n : new Neg(operand, n.pos(), n.region());

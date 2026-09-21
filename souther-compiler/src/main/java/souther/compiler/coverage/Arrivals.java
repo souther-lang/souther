@@ -5,6 +5,7 @@ import souther.compiler.core.Core;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 /**
  * Whether an expression answers a value, for a reader that asks about more than one of them.
@@ -46,13 +47,22 @@ public interface Arrivals {
     }
 
     /**
+     * The same, of a tree that builds values: what a build comes to is what its template does, so a
+     * value that never answers leaves nothing after its build reached.
+     */
+    static Arrivals inTheTree(Core root, Function<Core.MaterialisedValue, Core> templates) {
+        NormalReturn answering = NormalReturn.lazilyWhereTheOperationsStand(root, templates);
+        return answering::at;
+    }
+
+    /**
      * The nodes of each of {@code roots}, each tree read as a tree of its own.
      *
      * <p>For a body that builds values, which is several trees: the body, and what each value it
      * builds is. A node is answered for by the tree it stands in, and one that stands in none of
      * them answers no.
      */
-    static Arrivals inTheTrees(List<Core> roots) {
+    static Arrivals inTheTrees(List<Core> roots, Function<Core.MaterialisedValue, Core> templates) {
         // Built when something first asks: most bodies are read for a few of their nodes, and the
         // whole of every tree is not worth holding for the ones that are not asked about.
         Map<Core, Arrivals> owners = new IdentityHashMap<>();
@@ -60,7 +70,7 @@ public interface Arrivals {
         return e -> {
             if (!built[0]) {
                 for (Core root : roots) {
-                    claim(root, inTheTree(root), owners);
+                    claim(root, inTheTree(root, templates), owners);
                 }
                 built[0] = true;
             }
