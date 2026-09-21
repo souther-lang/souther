@@ -79,4 +79,36 @@ class RequiredRecursiveDefsOrderIsPartOfTheAnswerTest {
                         + " which is what makes the reorder visible to Db's changedAt — a"
                         + " SequencedSet's equals would have called these the same");
     }
+
+    /**
+     * {@code Bodies.Expanding} — the dependency {@code RequiredRecursiveDefs} and
+     * {@code RecursiveCallSigs} both read the cycle's order off — has to see the same reorder in its
+     * own answer's {@code equals}, or a reader with no other order-sensitive dependency (unlike
+     * {@code RequiredRecursiveDefs}, which also reads {@code Settled} directly) would keep serving a
+     * build made against the cycle's old order. {@code HelperGraph.recursive} being a {@link List}
+     * and {@code HelperTable}'s own {@code equals} reading {@code reachable()}'s order are both
+     * needed for this: {@code HelperGraph} is a record, so a {@code List} component alone fixes its
+     * generated {@code equals}, but {@code HelperTable.byReference} is a plain field a record-style
+     * {@code equals} would still compare with {@code Map.equals}.
+     */
+    @Test
+    void expandingItselfSeesTheReorderNotOnlyRequiredRecursiveDefs() {
+        Compilation c = started(PING_FIRST);
+        Answer<Bodies.Expanding.Of> before = c.db().ask(
+                new Bodies.Expanding("demo", souther.compiler.check.InliningPolicy.FULL));
+        assertEquals(List.of("List.foldFrom", "ping", "pong"),
+                rendered(before.value().graph().recursive()));
+
+        c.update(Map.of("demo.sou", PONG_FIRST), Set.of());
+        c.answerEverything();
+        Answer<Bodies.Expanding.Of> after = c.db().ask(
+                new Bodies.Expanding("demo", souther.compiler.check.InliningPolicy.FULL));
+
+        assertEquals(List.of("List.foldFrom", "pong", "ping"),
+                rendered(after.value().graph().recursive()));
+        assertNotEquals(before.value(), after.value(),
+                "Expanding.Of wraps HelperTable and HelperGraph, both of which now carry order as"
+                        + " part of what they mean — this must not go stale under equals just"
+                        + " because it is nested a level below RequiredRecursiveDefs");
+    }
 }

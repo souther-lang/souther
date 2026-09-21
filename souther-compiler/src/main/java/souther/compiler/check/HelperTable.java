@@ -9,6 +9,7 @@ import souther.compiler.types.ValueName;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.SequencedMap;
 
@@ -266,7 +267,11 @@ public final class HelperTable {
 
     /**
      * Two tables are the same table when they hold the same declarations for the same module under
-     * the same policy.
+     * the same policy — {@code byReference} in the same order too, because {@link #reachable} makes
+     * that order part of what a table means (its own Javadoc says so, and {@link HelperGraph} and
+     * {@code Bodies.RequiredRecursiveDefs} fold it into answers of their own).
+     * {@link Map#equals} does not see order, so it is compared as the sequence of entries it is
+     * declared to be rather than handed to {@code Map.equals} directly.
      *
      * <p>Said outright because a query answer is compared this way: an answer that differed between
      * two readings of one source would make every edit look like a change to everything downstream.
@@ -275,15 +280,21 @@ public final class HelperTable {
     public boolean equals(Object other) {
         return other instanceof HelperTable t
                 && module.equals(t.module) && policy == t.policy
-                && byReference.equals(t.byReference) && byAddress.equals(t.byAddress)
+                && sameOrder(byReference, t.byReference) && byAddress.equals(t.byAddress)
                 && declared.equals(t.declared)
                 && emits.equals(t.emits) && stdlib.equals(t.stdlib);
     }
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(module, policy, byReference, byAddress, declared, emits,
-                stdlib);
+        return java.util.Objects.hash(module, policy, List.copyOf(byReference.entrySet()),
+                byAddress, declared, emits, stdlib);
+    }
+
+    /** Whether {@code a} and {@code b} hold the same entries in the same order. */
+    private static boolean sameOrder(SequencedMap<ReachName.Declaration, HelperEntry> a,
+                                     SequencedMap<ReachName.Declaration, HelperEntry> b) {
+        return List.copyOf(a.entrySet()).equals(List.copyOf(b.entrySet()));
     }
 
     @Override
