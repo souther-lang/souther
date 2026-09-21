@@ -815,6 +815,118 @@ class CompilePublishedHelperTest {
         assertEquals(5L, out.get("v"));
     }
 
+    /**
+     * An arm that binds nothing reads nothing. Opening an optional and casting what is under it would
+     * name the class of a value the arm never asked for, so a kept sum inside an optional stays
+     * unnamed, and the body still runs where it is expanded.
+     */
+    @Test
+    void anArmThatBindsNothingOfAnOptionalNamesNoClassAndRuns() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compileModules(List.of("""
+                module pricing exposing ( Won, f )
+
+                data Prospecting
+                data Won
+                data Stage = Prospecting | Won
+
+                let f (n: Int) = {
+                    let xs: List<Stage> = [Won]
+                    match List.get(0, xs) with
+                        | Some -> n
+                        | None -> 0
+                }
+                """, """
+                module order exposing ( In, Out, bill )
+
+                import pricing ( f )
+
+                data In = { n: Int }
+                data Out = { v: Int }
+
+                behavior bill : (i: In) -> Out constructs Out
+                let bill (i) = Out { v = f(i.n) }
+                """)), getClass().getClassLoader());
+
+        Object in = Codecs.decoded(loader, "order.In", Map.of("n", 5L));
+        Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "order.Out",
+                Codecs.apply(Emitted.behavior(loader, "order", "bill")
+                        .getConstructor().newInstance(), in));
+        assertEquals(5L, out.get("v"));
+    }
+
+    /**
+     * An arm that binds the subject as it stands casts nothing, so a kept sum the arm's alternatives
+     * add up to is not named: only the cases it tests are, and they are exposed.
+     */
+    @Test
+    void anArmThatBindsTheSubjectAsItStandsNamesNoClassAndRuns() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compileModules(List.of("""
+                module pricing exposing ( Won, Lost, f )
+
+                data Won
+                data Lost
+                data Stage = Won | Lost
+
+                let f (n: Int) = {
+                    let s: Stage = Won
+                    match s with
+                        | Won | Lost as x -> n
+                }
+                """, """
+                module order exposing ( In, Out, bill )
+
+                import pricing ( f )
+
+                data In = { n: Int }
+                data Out = { v: Int }
+
+                behavior bill : (i: In) -> Out constructs Out
+                let bill (i) = Out { v = f(i.n) }
+                """)), getClass().getClassLoader());
+
+        Object in = Codecs.decoded(loader, "order.In", Map.of("n", 5L));
+        Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "order.Out",
+                Codecs.apply(Emitted.behavior(loader, "order", "bill")
+                        .getConstructor().newInstance(), in));
+        assertEquals(5L, out.get("v"));
+    }
+
+    /**
+     * A step the emitter runs as the loop body makes no class, so what it closes over is read from the
+     * frame around it. A kept sum held in a local the step reads is not named, and the body runs.
+     */
+    @Test
+    void aFoldStepRunWhereItStandsCapturesALocalOfAKeptSumAndRuns() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compileModules(List.of("""
+                module pricing exposing ( Won, f )
+
+                data Prospecting
+                data Won
+                data Stage = Prospecting | Won
+
+                let f (xs: List<Int>, n: Int) = {
+                    let s: Stage = Won
+                    List.fold((acc, x) -> if s == Won then acc + x else acc, n, xs)
+                }
+                """, """
+                module order exposing ( In, Out, bill )
+
+                import pricing ( f )
+
+                data In = { n: Int }
+                data Out = { v: Int }
+
+                behavior bill : (i: In) -> Out constructs Out
+                let bill (i) = Out { v = f([1, 2], i.n) }
+                """)), getClass().getClassLoader());
+
+        Object in = Codecs.decoded(loader, "order.In", Map.of("n", 5L));
+        Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "order.Out",
+                Codecs.apply(Emitted.behavior(loader, "order", "bill")
+                        .getConstructor().newInstance(), in));
+        assertEquals(8L, out.get("v"));
+    }
+
     /** The order comes from the sum, not from the cases the helper writes, so an exposed sum is a
      * class the reader may name and the same body is published. */
     @Test

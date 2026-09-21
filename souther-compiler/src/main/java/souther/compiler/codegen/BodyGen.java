@@ -944,35 +944,37 @@ final class BodyGen {
             bindArm(c, sSlot, st);
         }
 
-        /** Reads the arm's value out of the carrier and binds it. A wrapping carrier is opened
-         *  whether or not the arm names what it holds, as it always was: opening it is how the value
-         *  under it is reached at all. */
+        /** Reads the arm's value out of the carrier and binds it, where the arm names it. An arm that
+         *  binds nothing reads nothing: opening the carrier and casting what is under it would name
+         *  the class of a value nobody asked for. */
         private void bindArm(Core.Case c, int sSlot, Type st) {
+            // What is cast is asked of the arm: the same question is asked of it wherever it matters
+            // which classes an emitted `match` names.
+            Type cast = c.castOnBinding(st);
             switch (c.pattern().binding()) {
                 case Refinement.OptionPresent wrapped -> {
-                    Type element = wrapped.bound();
-                    CaseGen.pushBound(code, wrapped, sSlot);
-                    int bslot = slot(element);
-                    unbox(code, element, bslot);
-                    if (c.binder() != null) {
-                        bind(c.binder(), bslot, element);
-                    }
-                }
-                case Refinement.Direct itself -> {
-                    Type bound = itself.bound();
-                    if (c.binder() == null || bound == null) {
+                    if (cast == null) {
                         return;
                     }
-                    if (bound.equals(st)) {
+                    CaseGen.pushBound(code, wrapped, sSlot);
+                    int bslot = slot(cast);
+                    unbox(code, cast, bslot);
+                    bind(c.binder(), bslot, cast);
+                }
+                case Refinement.Direct itself -> {
+                    if (c.binder() == null || itself.bound() == null) {
+                        return;
+                    }
+                    if (cast == null) {
                         // nothing narrowed it: the value is the subject, where it already is
                         bind(c.binder(), sSlot, st);
                         return;
                     }
                     // a data case binds the instance; a primitive case (e.g. Int) unboxes the value
                     CaseGen.pushBound(code, itself, sSlot);
-                    int bslot = slot(bound);
-                    unbox(code, bound, bslot);
-                    bind(c.binder(), bslot, bound);
+                    int bslot = slot(cast);
+                    unbox(code, cast, bslot);
+                    bind(c.binder(), bslot, cast);
                 }
                 case Refinement.OptionAbsent _ -> { }
             }
@@ -1397,7 +1399,7 @@ final class BodyGen {
          * {@code long} in its slot, and each walk is straight-line code the JIT sees on its own.
          */
         private boolean folded(Core.Call call) {
-            if (!(call.args().get(3) instanceof Core.Int from) || from.value() != 0) {
+            if (call.stepRunWhereItStands(ctx.symbols.theWalk()) == null) {
                 return false;
             }
             Core seed = call.args().get(1);
@@ -1432,10 +1434,11 @@ final class BodyGen {
         }
 
         private boolean walked(Core stepValue, Core walked, Runnable seed, Runnable answer) {
-            if (!(stepValue instanceof Core.Block step)
-                    || !(step.type() instanceof Type.FnOf fn) || stepNeverRuns(fn)) {
+            Core.Block step = Core.runsWhereItStands(stepValue);
+            if (step == null) {
                 return false;
             }
+            Type.FnOf fn = (Type.FnOf) step.type();
             Type accType = fn.params().get(0);
             Type elementType = fn.params().get(1);
 
@@ -1498,21 +1501,8 @@ final class BodyGen {
             }
         }
 
-        /**
-         * Whether a step closure would never be applied: one of its parameters is the bare bottom, so
-         * it is the element of an empty-literal list and there are no elements — {@code foldFrom} over
-         * {@code []} yields the seed. Such a step is passed as {@link souther.runtime.Fn#NEVER} rather
-         * than materialised, since materialising it would unbox the bottom element (as {@code acc + x}
-         * does with {@code x}) and crash. An empty *seed* (a {@code List<Nothing>} accumulator) is a
-         * reference and still materialises.
-         */
         private static boolean stepNeverRuns(Type.FnOf fn) {
-            for (Type p : fn.params()) {
-                if (p instanceof Type.Nothing) {
-                    return true;
-                }
-            }
-            return false;
+            return Core.neverRuns(fn);
         }
 
         private void invokeRecursiveHelper(Core.Call call) {

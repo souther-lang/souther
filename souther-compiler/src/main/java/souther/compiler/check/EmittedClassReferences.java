@@ -86,10 +86,8 @@ final class EmittedClassReferences {
                             add(selector.name());
                         }
                     });
-                    // What an arm binds is cast to the type it is bound as.
-                    if (arm.binder() != null) {
-                        add(arm.pattern().bindType());
-                    }
+                    // What an arm binds is cast to the type it is bound as, where it is cast at all.
+                    add(arm.castOnBinding(match.scrutinee().type()));
                 }
             }
             case Core.Binary bin -> comparedBy(bin);
@@ -102,11 +100,11 @@ final class EmittedClassReferences {
             case Core.TupleGet element -> add(element.type());
             // A field is read off the class of the value it is read from.
             case Core.FieldAccess access -> add(access.target().type());
-            // A function's parameters come in as objects and are cast to their types, and what it
-            // reaches of the body around it is a field and a constructor argument of its class. What
-            // it reaches is the one answer BlockReaches gives, whether or not this function escapes:
-            // whether it does is the emitter's own decision, and a captured value of a kept type is
-            // refused either way.
+            // A function handed over as a value is a class of its own: its parameters come in as
+            // objects and are cast to their types, and what it reaches of the body around it is a
+            // field and a constructor argument. What it reaches is the one answer BlockReaches gives.
+            // A step the emitter runs where it stands is not this: it is read by
+            // visitStepRunWhereItStands, from the same answer the emitter asks.
             case Core.Block block -> {
                 if (block.type() instanceof Type.FnOf fn) {
                     fn.params().forEach(this::add);
@@ -151,8 +149,28 @@ final class EmittedClassReferences {
                 visit(binding.value(), binding.value().type());
                 visit(binding.body(), expected);
             }
+            case Core.Call call -> {
+                Core.Block stepRunHere = call.stepRunWhereItStands(symbols.theWalk());
+                for (Core arg : call.args()) {
+                    if (arg == stepRunHere) {
+                        visitStepRunWhereItStands(stepRunHere);
+                    } else {
+                        visit(arg, null);
+                    }
+                }
+            }
             default -> Core.forEachChild(e, child -> visit(child, null));
         }
+    }
+
+    /**
+     * A step the emitter runs as the loop body: no class is made for it, so what it closes over is
+     * read from the frame around it and names nothing. What it is handed is the element of the list,
+     * cast to its type, and its body is emitted where it stands.
+     */
+    private void visitStepRunWhereItStands(Core.Block step) {
+        add(((Type.FnOf) step.type()).params().get(1));
+        visit(step.body(), null);
     }
 
     /** The enumeration a comparison that places a value on an order takes it from. */
