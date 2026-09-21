@@ -94,6 +94,17 @@ public final class Output {
             if (!runnable.present()) {
                 return Answer.absent(runnable.reports());
             }
+            // A module that imports one refused above is not emitted: the bodies it would expand
+            // from it are the ones that were refused, and emitting them would reach the emitter's
+            // own refusal, which says less than the one already reported.
+            List<String> reached = db.ask(new Reaches(name)).value();
+            for (String imported : reached == null ? List.<String>of() : reached) {
+                if (!imported.equals(name)
+                        && !db.ask(new Bodies.PublishedBodiesRunElsewhere(imported)).reports()
+                        .isEmpty()) {
+                    return Answer.absent();
+                }
+            }
             try {
                 Emissions emitted = Backend.generate(
                         shipped(in), in.scope(), in.published(), in.kinds(),

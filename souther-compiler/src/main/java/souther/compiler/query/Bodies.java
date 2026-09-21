@@ -1941,6 +1941,10 @@ public final class Bodies {
                     kept.add(def.declares().name());
                 }
             }
+            Set<String> published = new HashSet<>();
+            for (Hir.FnDef root : roots) {
+                published.add(HelperNames.qualified(name, root.name()));
+            }
             List<Report> reports = new ArrayList<>();
             for (Hir.FnDef carried : carriedClosure(from, roots, against.value()).values()) {
                 if (carried.params().isEmpty()) {
@@ -1949,9 +1953,13 @@ public final class Bodies {
                 for (TypeSymbol.AtModule built
                         : ExecutableDependencies.of(carried.writtenBody())) {
                     if (built.module().equals(name) && kept.contains(built.name())) {
+                        String helper = carried.written().canonical();
                         reports.add(Report.raised(Diagnostic.at(carried.pos())
-                                .say(new ModuleMessage.APublishedHelperBuildsWhatIsKept(
-                                        carried.written().canonical(), built.name()))
+                                .say(published.contains(carried.name())
+                                        ? new ModuleMessage.APublishedHelperBuildsWhatIsKept(
+                                                helper, built.name())
+                                        : new ModuleMessage.ACarriedHelperBuildsWhatIsKept(
+                                                helper, built.name()))
                                 .build()));
                     }
                 }

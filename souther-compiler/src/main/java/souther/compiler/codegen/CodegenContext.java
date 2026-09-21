@@ -497,7 +497,28 @@ final class CodegenContext {
     /** The descriptor of a generated class. What it is called is {@link SoutherJvmAbi}'s to say; this
      * only remembers the answer. */
     ClassDesc cd(GeneratedClass generated) {
+        if (generated instanceof GeneratedClass.Value value && !symbols.scope().isExposed(value.type())) {
+            throw new AClassEmittedHereIsOneAnotherModuleKeepsToItself(value.type());
+        }
         return descs.computeIfAbsent(generated, g -> SoutherJvmAbi.nameOf(g).classDesc());
+    }
+
+    /**
+     * The code being emitted names the class of a type its own module does not expose.
+     *
+     * <p>Such a class is package-private, so the JVM refuses the reference when the code runs. What
+     * a module publishes is held to this where it is published (E1628), and a compiler that gets
+     * here has emitted a reference that check did not know to ask about. It is a fault of this
+     * compiler and no author's to fix, so it is not a diagnostic.
+     */
+    static final class AClassEmittedHereIsOneAnotherModuleKeepsToItself
+            extends IllegalStateException {
+
+        private static final long serialVersionUID = 1L;
+
+        AClassEmittedHereIsOneAnotherModuleKeepsToItself(TypeSymbol type) {
+            super("the class of `" + type + "` is emitted into a module that cannot reach it");
+        }
     }
 
     /** The class of a type, from the module that declares it — nothing to look up, since a

@@ -546,6 +546,155 @@ class CompilePublishedHelperTest {
                 e.diagnostics().stream().map(d -> d.code().toString()).toList());
     }
 
+    /**
+     * Every way a published body comes to name a class its module keeps is refused where the module
+     * is compiled, and never reaches the reader's emission.
+     *
+     * <p>What refuses in the reader is the emitter itself, at the one place a class is named: it
+     * throws where the publisher's rule has not been told about a reference. So a shape the rule
+     * missed does not pass here as a compile, and does not pass as another failure either — the
+     * assertion is on the code, and the emitter's failure has none.
+     */
+    @Test
+    void everyHiddenClassAPublishedBodyNamesIsRefusedWherePublishedAndNotWhereEmitted() {
+        String cases = """
+                data Email
+                data Phone
+                data Contact = Email | Phone
+                """;
+        record Shape(String label, String pricing, String imports, String field, String call) {}
+        List<Shape> shapes = List.of(
+                new Shape("a construction", """
+                        module pricing exposing ( f )
+
+                        data Step = Int
+
+                        let f (n: Int) = Step(n).value
+                        """, "f", "n: Int", "f(i.n)"),
+                new Shape("a private value that builds", """
+                        module pricing exposing ( f )
+
+                        data Step = Int
+
+                        let s = Step(3)
+                        let f (n: Int) = n + s.value
+                        """, "f", "n: Int", "f(i.n)"),
+                new Shape("a unit data as a value", """
+                        module pricing exposing ( f )
+
+                        data Marker
+
+                        let f (n: Int) = if Marker == Marker then n else 0
+                        """, "f", "n: Int", "f(i.n)"),
+                new Shape("a match on hidden cases", """
+                        module pricing exposing ( Contact, f )
+
+                        %s
+                        let f (c: Contact) =
+                            match c with
+                                | Email -> 1
+                                | Phone -> 2
+                        """.formatted(cases), "Contact, f", "c: Contact", "f(i.c)"),
+                new Shape("a recursive helper the published one reaches", """
+                        module pricing exposing ( f )
+
+                        data Step = Int
+
+                        partial let walk (n: Int) : Int = if n == 0 then Step(1).value else walk(n - 1)
+                        partial let f (n: Int) = walk(n)
+                        """, "f", "n: Int", "f(i.n)"));
+
+        for (Shape shape : shapes) {
+            CompileException e = assertThrows(CompileException.class,
+                    () -> Compiler.compileModules(List.of(shape.pricing(), """
+                            module order exposing ( In, Out, bill )
+
+                            import pricing ( %s )
+
+                            data In = { %s }
+                            data Out = { v: Int }
+
+                            behavior bill : (i: In) -> Out constructs Out
+                            let bill (i) = Out { v = %s }
+                            """.formatted(shape.imports(), shape.field(), shape.call()))),
+                    shape.label());
+            assertEquals("E1628", e.code(), shape.label() + ": " + e.getMessage());
+        }
+    }
+
+    /** A helper that is carried and not published is said to be carried: it is not among what the
+     * module exposes, and saying it is published would send the author looking for it there. */
+    @Test
+    void aRecursiveHelperCarriedWithAPublishedOneIsSaidToBeCarried() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module pricing exposing ( f )
+
+                data Step = Int
+
+                partial let walk (n: Int) : Int = if n == 0 then Step(1).value else walk(n - 1)
+                partial let f (n: Int) = walk(n)
+                """));
+
+        assertTrue(e.getMessage().contains("walk"), e.getMessage());
+        assertTrue(e.getMessage().contains("carried"), e.getMessage());
+    }
+
+    /** A `match` tests the value against the class of each case it names, so a case the module keeps
+     * to itself is a reference to a class the reader cannot touch, though nothing in the helper's
+     * signature or its constructions names it. The sum may be exposed without its cases. */
+    @Test
+    void aPublishedHelperMayNotMatchACaseTheModuleKeepsToItself() {
+        for (String cases : List.of("""
+                data Email
+                data Phone
+                data Contact = Email | Phone
+                """, """
+                data Email = { address: String }
+                data Phone = { number: String }
+                data Contact = Email | Phone
+                """)) {
+            CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                    module pricing exposing ( Contact, kind )
+
+                    %s
+                    let kind (c: Contact) =
+                        match c with
+                            | Email -> 1
+                            | Phone -> 2
+                    """.formatted(cases)));
+
+            assertEquals("E1628", e.code(), e.getMessage());
+            assertTrue(e.getMessage().contains("Email"), e.getMessage());
+        }
+    }
+
+    /** And a case the module exposes is public, so the reader may test against it. */
+    @Test
+    void aPublishedHelperMayMatchACaseTheModuleExposes() {
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of("""
+                module pricing exposing ( Contact, Email, Phone, kind )
+
+                data Email
+                data Phone
+                data Contact = Email | Phone
+
+                let kind (c: Contact) =
+                    match c with
+                        | Email -> 1
+                        | Phone -> 2
+                """, """
+                module order exposing ( In, Out, bill )
+
+                import pricing ( Contact, kind )
+
+                data In = { c: Contact }
+                data Out = { v: Int }
+
+                behavior bill : (i: In) -> Out constructs Out
+                let bill (i) = Out { v = kind(i.c) }
+                """)));
+    }
+
     /** A unit data is read from the shared instance of its class, which is as much a reference to
      * that class as a construction is. */
     @Test
