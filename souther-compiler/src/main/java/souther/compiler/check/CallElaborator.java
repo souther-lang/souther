@@ -130,7 +130,7 @@ public final class CallElaborator {
         // A name written where a value goes, and no call written anywhere: reading a value's name
         // is running its body, so the call is this compiler's and there is none to send anybody to.
         return new Core.Call(reached(new ReachName.OfLibrary(lib), ctx),
-                List.of(), ConstructOccurrence.unwritten(),
+                List.of(), ConstructOccurrence.unwritten(), Core.CallSettlement.None.INSTANCE,
                 TypeOps.toBottom(TypeOps.substitute(declared, bindings)), v.pos());
     }
 
@@ -178,7 +178,8 @@ public final class CallElaborator {
                 handed.type(i);
             }
             return new Core.Call(reached(callee.reachesADeclaration(), ctx), handed.cores(),
-                    ConstructOccurrence.unwritten(), method.result(), call.pos());
+                    ConstructOccurrence.unwritten(), Core.CallSettlement.None.INSTANCE,
+                    method.result(), call.pos());
         }
         // A call this representation said it keeps standing, asked before anything tries to expand or
         // resolve it: what it names is settled, and the only question left is its signature. Asked of
@@ -200,7 +201,8 @@ public final class CallElaborator {
                 && library.constructs() instanceof Type.Prim kind) {
             return temporalLiteral(call, kind, ca);
         }
-        Type result = typeOfCall(ca, call, env, ctx, expected);
+        TypedCall typed = typeOfCall(ca, call, env, ctx, expected);
+        Type result = typed.type();
         // applying something this body binds is a different operation from calling something
         // declared elsewhere, and it is the only one that carries a binding into the emitted tree
         if (callee != null && callee.denotes() instanceof ValueName.Local local
@@ -235,8 +237,8 @@ public final class CallElaborator {
             throw new IllegalStateException("`" + call.written() + "` was elaborated as a call and"
                     + " reaches " + reaches + ", which no method is emitted for");
         }
-        return new Core.Call(reached(declaration, ctx), ca.cores(), wroteIt(call, ctx), result,
-                call.pos());
+        return new Core.Call(reached(declaration, ctx), ca.cores(), wroteIt(call, ctx),
+                typed.settlement(), result, call.pos());
     }
 
     /**
@@ -564,6 +566,19 @@ public final class CallElaborator {
     }
 
     /**
+     * What typing a call answers: the result type, together with whatever call-specific fact the
+     * checker settled along the way ({@link Core.CallSettlement}) — {@code None} for every kernel
+     * but {@code String.matches}, where settling the pattern is part of typing the call and not a
+     * separate walk.
+     */
+    record TypedCall(Type type, Core.CallSettlement settlement) {
+
+        TypedCall(Type type) {
+            this(type, Core.CallSettlement.None.INSTANCE);
+        }
+    }
+
+    /**
      * The type of a call, by what the name it applies denotes.
      *
      * <p>Which of these a name is was answered when the module's names were resolved, so the order
@@ -571,7 +586,8 @@ public final class CallElaborator {
      * the library, then a function-typed binding, then an injected behavior — and a name that could
      * be read two ways was whichever came first.
      */
-    static Type typeOfCall(CallArgs ca, Hir.Apply call, Scope env, CheckContext ctx, Type expected) {
+    static TypedCall typeOfCall(CallArgs ca, Hir.Apply call, Scope env, CheckContext ctx,
+                                        Type expected) {
         List<Hir.Expr> args = call.args();
         if (call.function() instanceof Hir.Var.Unanswered) {
             // reported where the name was written; this definition has no meaning to work out
@@ -623,12 +639,15 @@ public final class CallElaborator {
             }
             requiresOrdering(kernel, call, applied.result(), ctx);
             if (kernel == Kernel.LIST_SUM || kernel == Kernel.LIST_PRODUCT) {
-                return numericFold(call, applied.result(), expected);
+                return new TypedCall(numericFold(call, applied.result(), expected));
             }
             if (kernel == Kernel.STRING_MATCHES) {
-                validateRegexPattern(new BoundExpr(args.get(0), env.values()), ctx.symbols());
+                String pattern = validatedRegexPattern(
+                        new BoundExpr(args.get(0), env.values()), ctx.symbols());
+                return new TypedCall(applied.result(),
+                        new Core.CallSettlement.StringMatches(pattern));
             }
-            return applied.result();
+            return new TypedCall(applied.result());
         }
         // a function-typed value in scope (a helper's function parameter) applied to
         // arguments — f(x) (spec §fn-declaration). A newtype construction 金額(500) never
@@ -646,7 +665,7 @@ public final class CallElaborator {
                                 .at(call.appliedAt())
                                 .say(new DeclarationMessage.AppliedToAnotherNumberOfArguments(call.written(), String.valueOf(fn.params().size()), String.valueOf(args.size()))).build());
             }
-            return applySignature(call, fn, ca, expected, env, ctx).result();
+            return new TypedCall(applySignature(call, fn, ca, expected, env, ctx).result());
         }
         // A library name that matched no builtin or intrinsic above. Which of the two it is the
         // library says, and the two are not one report. A name it declares reached here without
@@ -709,7 +728,7 @@ public final class CallElaborator {
         for (int i = 0; i < required.params().size(); i++) {
             ca.require(i, required.params().get(i), "argument " + (i + 1) + " of " + call.written());
         }
-        return required.success();
+        return new TypedCall(required.success());
     }
 
     /**
@@ -731,8 +750,12 @@ public final class CallElaborator {
      * exception, and the value it constrains is proven at construction (spec §stdlib-string). A
      * literal is one such expression and so is a {@code ++} of literals and of a module's values,
      * which is what lets several formats share a part (issue #208). What is validated is the string
-     * the whole expression composes to, not the pieces it was written in. */
-    static void validateRegexPattern(BoundExpr e, Symbols symbols) {
+     * the whole expression composes to, not the pieces it was written in.
+     *
+     * <p>The settled text is returned rather than discarded: it is what {@link Core.CallSettlement
+     * .StringMatches} carries onto the call, so a reader below asks the checker's answer instead of
+     * folding the argument a second time. */
+    static String validatedRegexPattern(BoundExpr e, Symbols symbols) {
         String pattern = ConstEval.against(symbols).evalString(e).orElse(null);
         if (pattern == null) {
             throw CompileException.of(Diagnostic
@@ -748,6 +771,7 @@ public final class CallElaborator {
                             .at(e.expr().pos())
                             .say(new TypeMessage.ThePatternIsNotARegularExpression(ex.getDescription())).build());
         }
+        return pattern;
     }
 
     /** A stdlib argument-type error: {@code subject} (a function name) expects a container of kind

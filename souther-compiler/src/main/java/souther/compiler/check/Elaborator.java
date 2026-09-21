@@ -1591,7 +1591,8 @@ public final class Elaborator {
                 ? new Core.Reached.OfPublishedValue(of)
                 : new Core.Reached.OfDeclaration(declaration);
         return new Core.Call(callee, List.of(),
-                ConstructOccurrence.unwritten(), settled.result(), v.pos());
+                ConstructOccurrence.unwritten(), Core.CallSettlement.None.INSTANCE,
+                settled.result(), v.pos());
     }
 
     /**

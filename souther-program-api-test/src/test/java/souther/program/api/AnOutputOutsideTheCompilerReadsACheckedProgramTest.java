@@ -666,6 +666,73 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
                 "while a kernel that cannot depart names none");
     }
 
+    /**
+     * A {@code String.matches} pattern composed under a local binding (issue #1840): {@code tail} is
+     * bound inside the body, so the composition is settled only where the checker folds it under the
+     * bindings in force — not by any walk that reads {@code Core} back after the fact, which finds a
+     * binding still a binding.
+     */
+    private static final String MATCHES_A_COMPOSED_LOCAL_PATTERN = """
+            module wit
+
+            behavior looksRight : (s: String) -> Bool
+
+            let looksRight (s) = {
+                let tail = "[0-9]{4}"
+                String.matches("AB-" ++ tail, s)
+            }
+            """;
+
+    /**
+     * The settled pattern text travels with the call that was checked against it, so an output reads
+     * it off {@code Core.Call} instead of folding the argument a second time.
+     *
+     * <p>{@code "AB-" ++ tail} is settled only under the bindings {@code looksRight}'s body holds in
+     * force, which is what makes this the case a second, weaker constant evaluator misses: {@code
+     * tail} is still a binding in {@code Core}, and only the checker's own fold saw through it.
+     */
+    @Test
+    void theSettledPatternOfAStringMatchesCallTravelsWithTheCall() {
+        CheckedProgram program = CheckedProgram.of(List.of(MATCHES_A_COMPOSED_LOCAL_PATTERN));
+        Core body = ((CheckedImplementation.Body)
+                named(program.module("wit"), "looksRight").implementation()).body();
+
+        Core.Call matches = null;
+        for (Core node : everyNodeOf(body)) {
+            if (node instanceof Core.Call call
+                    && call.fn() instanceof Core.Reached.OfKernel kernel
+                    && kernel.kernel() == Kernel.STRING_MATCHES) {
+                matches = call;
+            }
+        }
+        assertNotNull(matches, "the body reaches String.matches");
+
+        assertInstanceOf(Core.CallSettlement.StringMatches.class, matches.settlement(),
+                "the checker settled this call's pattern, and the call carries it");
+        assertEquals("AB-[0-9]{4}", ((Core.CallSettlement.StringMatches) matches.settlement())
+                        .pattern(),
+                "settled under the binding the body holds in force, not read back from the argument");
+    }
+
+    /**
+     * And every other call carries {@code None}: a settlement is {@code String.matches}'s own fact,
+     * not something every kernel call is handed.
+     */
+    @Test
+    void aCallToAnyOtherKernelCarriesNoSettlement() {
+        CheckedProgram program = checked(CALLS_THE_LIBRARY);
+        Core body = ((CheckedImplementation.Body)
+                named(program.module("demo"), "tidy").implementation()).body();
+
+        for (Core node : everyNodeOf(body)) {
+            if (node instanceof Core.Call call
+                    && call.fn() instanceof Core.Reached.OfKernel kernel) {
+                assertEquals(Core.CallSettlement.None.INSTANCE, call.settlement(),
+                        kernel.rendered() + " settles nothing beyond its type");
+            }
+        }
+    }
+
     /** Every helper a call in {@code body} reaches, walking every node of it. */
     private static Set<ValueName.Helper> helpersCalledIn(Core body) {
         Set<ValueName.Helper> called = new LinkedHashSet<>();
