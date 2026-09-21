@@ -1057,7 +1057,7 @@ public final class Generator {
      */
     public static GenerationPlan planOver(MeasuredInput subject, List<ClassOfAPosition> classes,
                                           List<ArmProbe> arms) {
-        return new GenerationPlan(subject, classes, arms.stream().map(ArmOwed::new).toList(),
+        return GenerationPlan.of(subject, classes, arms.stream().map(ArmOwed::new).toList(),
                 List.of(), List.of());
     }
 

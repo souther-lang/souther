@@ -8,6 +8,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Place;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.ClassOfAPosition;
+import souther.compiler.partition.GenerationObligation;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.InputClassifications;
@@ -396,8 +397,7 @@ public record Settlements(List<ObligationIdentity> requested,
     private record OneBehavior(String behavior,
                                souther.compiler.partition.MeasuredInput subject, Sig sig,
                                BoundaryValues building, Generator.Trial trial,
-                               List<ClassOfAPosition> classes, List<Generator.ArmOwed> arms,
-                               List<ObligationIdentity.OfAFallbackPairCell> pairs,
+                               List<GenerationObligation> obligations,
                                Map<ArmProbe, CoverageSites.Obligation> armsOf,
                                Map<CoverageSites.Obligation, List<ArmProbe>> occurrencesOf,
                                RulesTaken rules,
@@ -518,9 +518,7 @@ public record Settlements(List<ObligationIdentity> requested,
                             : Adequacy.runningRowsOf(trials, behavior, sig,
                                     Adequacy.numberingOf(db, module),
                                     RequiredDependencies.of(db, module, behavior)),
-                    filling == null ? List.of() : filling.composed().plan().classesOwed(),
-                    filling == null ? List.of() : filling.composed().plan().armsOwed(),
-                    filling == null ? List.of() : filling.composed().plan().pairsOwed(),
+                    filling == null ? List.of() : filling.composed().plan().obligations(),
                     armsOf, occurrencesOf, rulesOf(db, module, behavior),
                     combinationsOf(db, module, behavior, subject),
                     filling == null ? Adequacy.Generated.RowsForRules.NOTHING : filling.rules(),
@@ -573,32 +571,50 @@ public record Settlements(List<ObligationIdentity> requested,
          * <p>Read off what the searches answered with and never off the rows. A row carries the
          * classes and arms it may be named after and never a line, so a walk from the rows would
          * have every line in the block composed for nothing.
+         *
+         * <p>One switch over every kind the plan can hold, rather than one loop apiece. A kind
+         * added to {@link GenerationObligation} without a case here does not compile, which is what
+         * keeps this in step with what a run was actually asked for — three loops agreeing with
+         * each other said nothing about whether either agreed with a fourth this held and never
+         * walked.
          */
         Map<ObligationIdentity, RowKey> composed(Adequacy.Filling filling) {
             Map<ObligationIdentity, RowKey> out = new LinkedHashMap<>();
-            for (ClassOfAPosition each : classes) {
-                if (filling.composed().discharge().at(each)
-                        instanceof souther.compiler.partition.ClassDisposition.Built built) {
-                    out.put(new ObligationIdentity.OfAClass(each),
-                            RowKey.of(behavior, filling.composed().rowFor(built.rowId())));
-                }
-            }
-            for (Generator.ArmOwed each : arms) {
-                CoverageSites.Obligation arm = armsOf.get(each.occurrences().getFirst());
-                if (arm != null && filling.composed().discharge().at(each)
-                        instanceof souther.compiler.partition.ArmDisposition.Built built) {
-                    out.put(new ObligationIdentity.OfAnArm(arm),
-                            RowKey.of(behavior, filling.composed().rowFor(built.rowId())));
-                }
-            }
-            // And the combinations of two classes, where the pair space is the criterion. The
-            // plan says which were asked for and the discharge says which got a row; read off the
-            // rows instead, a row that happens to sit in a combination nobody asked about would be
-            // published as having been composed for it.
-            for (ObligationIdentity.OfAFallbackPairCell each : pairs) {
-                if (filling.composed().discharge().at(each)
-                        instanceof souther.compiler.partition.ClassDisposition.Built built) {
-                    out.put(each, RowKey.of(behavior, filling.composed().rowFor(built.rowId())));
+            for (GenerationObligation each : obligations) {
+                switch (each) {
+                    case GenerationObligation.Class(var target) -> {
+                        if (filling.composed().discharge().at(target)
+                                instanceof souther.compiler.partition.ClassDisposition.Built built) {
+                            out.put(new ObligationIdentity.OfAClass(target),
+                                    RowKey.of(behavior, filling.composed().rowFor(built.rowId())));
+                        }
+                    }
+                    case GenerationObligation.Arm(var target) -> {
+                        CoverageSites.Obligation arm = armsOf.get(target.occurrences().getFirst());
+                        if (arm != null && filling.composed().discharge().at(target)
+                                instanceof souther.compiler.partition.ArmDisposition.Built built) {
+                            out.put(new ObligationIdentity.OfAnArm(arm),
+                                    RowKey.of(behavior, filling.composed().rowFor(built.rowId())));
+                        }
+                    }
+                    // The combination and not the space it sits in: the plan says which were
+                    // asked for and the discharge says which got a row; read off the rows
+                    // instead, a row that happens to sit in a combination nobody asked about
+                    // would be published as having been composed for it.
+                    case GenerationObligation.Pair(var target) -> {
+                        if (filling.composed().discharge().at(target)
+                                instanceof souther.compiler.partition.ClassDisposition.Built built) {
+                            out.put(target,
+                                    RowKey.of(behavior, filling.composed().rowFor(built.rowId())));
+                        }
+                    }
+                    case GenerationObligation.Meeting(var target) -> {
+                        if (filling.composed().discharge().at(target)
+                                instanceof souther.compiler.partition.ClassDisposition.Built built) {
+                            out.put(target,
+                                    RowKey.of(behavior, filling.composed().rowFor(built.rowId())));
+                        }
+                    }
                 }
             }
             filling.rules().byRule().forEach((rule, row) ->
@@ -639,29 +655,37 @@ public record Settlements(List<ObligationIdentity> requested,
         /**
          * What this behavior was asked to offer a row for.
          *
-         * <p>Its classes and its arms, and no point of a line. A row at a point is owed once
-         * however many readings there are, and it is offered from the module's account of them —
-         * so a behavior listing its own points here would put one piece of work into a run twice
-         * and let the two answer differently.
+         * <p>Every kind the plan can hold, in one switch, and no point of a line. A row at a point
+         * is owed once however many readings there are, and it is offered from the module's
+         * account of them — so a behavior listing its own points here would put one piece of work
+         * into a run twice and let the two answer differently.
          */
         List<ObligationIdentity> owed() {
             List<ObligationIdentity> out = new ArrayList<>();
-            classes.forEach(each -> out.add(new ObligationIdentity.OfAClass(each)));
-            // The arm and not the place a search steers a row to. A helper carrying a fork is
-            // spliced into each call site, so what the plan names is one of those occurrences —
-            // the one a run through this arm would be recorded at, chosen where the finding was
-            // made. What a row is offered for is the arm.
-            for (Generator.ArmOwed each : arms) {
-                CoverageSites.Obligation arm = armsOf.get(each.occurrences().getFirst());
-                if (arm == null) {
-                    continue;
+            for (GenerationObligation each : obligations) {
+                switch (each) {
+                    case GenerationObligation.Class(var target) ->
+                            out.add(new ObligationIdentity.OfAClass(target));
+                    // The arm and not the place a search steers a row to. A helper carrying a
+                    // fork is spliced into each call site, so what the plan names is one of
+                    // those occurrences — the one a run through this arm would be recorded at,
+                    // chosen where the finding was made. What a row is offered for is the arm.
+                    case GenerationObligation.Arm(var target) -> {
+                        CoverageSites.Obligation arm = armsOf.get(target.occurrences().getFirst());
+                        if (arm != null) {
+                            out.add(new ObligationIdentity.OfAnArm(arm));
+                        }
+                    }
+                    // The combination this run was asked about, which is the plan's answer: what
+                    // the criterion states is the account's, and a universe read off the space
+                    // here would hold what nobody asked for.
+                    case GenerationObligation.Pair(var target) -> out.add(target);
+                    // A meeting is not an arm — rows through every arm of a body can leave one
+                    // unmade — so it is owed in its own right and not reached through the arms
+                    // it claims.
+                    case GenerationObligation.Meeting(var target) -> out.add(target);
                 }
-                out.add(new ObligationIdentity.OfAnArm(arm));
             }
-            // And the combinations of two classes this run was asked about, which is the plan's
-            // answer: what the criterion states is the account's, and a universe read off the
-            // space here would hold what nobody asked for.
-            out.addAll(pairs);
             // And every rule of this behavior's decision a row was asked for, which is not the
             // rules a row was composed for. A row composed for a class may take a rule as well,
             // and a universe read off what this run managed to compose would leave such a rule

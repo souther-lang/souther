@@ -5,18 +5,30 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.partition.AdequacyPolicy;
 import souther.compiler.partition.Budgets;
+import souther.compiler.partition.ObligationIdentity;
+import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.BorderAccount;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.Composition;
+import souther.compiler.query.OfferingRequest;
+import souther.compiler.query.RowKey;
+import souther.compiler.query.Settlement;
+import souther.compiler.query.Settlements;
 import souther.compiler.query.UnderABudget;
+import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -81,12 +93,48 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
     private static String block(Compilation compilation) {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        return blockOf(compilation);
+    }
+
+    /** The same, for a caller whose compilation is measured and answered already. */
+    private static String blockOf(Compilation compilation) {
         Map<String, Adequacy.Filling> filling = Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(filling, "the model under test compiles");
         return GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         souther.compiler.query.OfferingRequest.overTheModule(
                                 compilation.modules().get(0))),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).text();
+    }
+
+    /** A fresh compilation, measured once, for a caller asking more than one question of it. */
+    private static Compilation measured(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        return compilation;
+    }
+
+    /** The offering's own table of what each row would settle, built the way an offering is. */
+    private static Settlements settlementsOf(Compilation compilation) {
+        OfferingRequest request = OfferingRequest.overTheModule(compilation.modules().get(0));
+        Map<String, Adequacy.Filling> generated =
+                Adequacy.generatedOf(compilation.db(), request.module());
+        BorderAccount account = Adequacy.accountFor(compilation.db(), request.module(),
+                request.scope());
+        Composition composed = Composition.composed(request, generated, account);
+        return Settlements.of(compilation.db(), composed);
+    }
+
+    /** The combinations of one behavior's decisions nothing has made, as the account states them. */
+    private static Set<ObligationIdentity.OfACombinationOfDecisions> meetingsOf(
+            Compilation compilation) {
+        Set<ObligationIdentity.OfACombinationOfDecisions> out = new LinkedHashSet<>();
+        for (Adequacy.Finding each : AdequacyReport.of(compilation).adequacyGaps()) {
+            if (each.about() instanceof About.ACombinationNoRowMakes(var combination)) {
+                out.add(combination);
+            }
+        }
+        return out;
     }
 
     @Test
@@ -298,22 +346,42 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
             """;
 
     /**
-     * And a body whose decisions sit inside an arm is offered nothing for their combinations.
+     * And a body whose decisions sit inside an arm is offered a row for each of their combinations.
      *
-     * <p>The eight ways the three decisions can come out used to be eight rows on the far side of
-     * the fork. They are not a thing anyone is owed: what the report names under a body is its arms,
-     * and this model has no `example` block, so nothing read its rows and no arm is established as
-     * unreached. Where one is — a model with rows — the row that takes it is what answers it, which
-     * is {@code EveryFindingHasAGenerationDispositionTest}.
+     * <p>The interaction measure is made from the body's own structure and not from reading rows,
+     * so the eight ways the three decisions can come out are owed a row whether or not this model
+     * has an {@code example} block: nothing having read a row is nothing having made any of them,
+     * which is the same news the measure gives a model with rows that miss a combination.
+     *
+     * <p>Checked twice over, and not only by the count the block writes. A row count that came out
+     * right while the obligation it answered was never requested is exactly what an offering's own
+     * reduction can no longer tell from a row genuinely owed — so this reads the requested/composed/
+     * settled bookkeeping directly before it reads the count the count alone cannot distinguish
+     * this from.
      */
     @Test
-    void aBodyWhoseDecisionsSitInsideAnArmIsOfferedNothingForTheirCombinations() {
-        String block = block(INSIDE_AN_ARM);
+    void aBodyWhoseDecisionsSitInsideAnArmIsOfferedRowsForTheirUnmadeMeetings() {
+        Compilation compilation = measured(INSIDE_AN_ARM);
 
+        Set<ObligationIdentity.OfACombinationOfDecisions> meetings = meetingsOf(compilation);
+        assertEquals(8, meetings.size(), () -> "the eight ways the three decisions under the B arm"
+                + " can come out, none of them made without a row: " + meetings);
+
+        Settlements table = settlementsOf(compilation);
+        for (ObligationIdentity.OfACombinationOfDecisions meeting : meetings) {
+            assertTrue(table.requested().contains(meeting),
+                    () -> meeting + " is requested: " + table.requested());
+            RowKey row = table.composedFor().get(meeting);
+            assertNotNull(row, () -> "a row was composed for " + meeting);
+            assertInstanceOf(Settlement.Settles.class, table.at(row, meeting),
+                    () -> "and it settles what it was composed for: " + meeting);
+        }
+
+        String block = blockOf(compilation);
         assertEquals(List.of(), names(block).stream().filter(name -> name.contains(" x ")).toList(),
                 "every row is named for one class, none for a combination of them: " + block);
-        assertEquals(4, rows(block),
-                "four rows for the eight classes: each row holds a class of every position, so the"
-                        + " ones nothing was composed for are answered where they stand: " + block);
+        assertEquals(9, rows(block),
+                "one row for the choice's other class and one apiece for the eight combinations"
+                        + " under this one, since none of them is made without a row: " + block);
     }
 }
