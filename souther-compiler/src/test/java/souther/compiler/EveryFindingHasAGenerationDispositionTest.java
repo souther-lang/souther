@@ -910,9 +910,9 @@ class EveryFindingHasAGenerationDispositionTest {
                 souther.compiler.partition.GenerationPlan.of(nothingIsDivided(), List.of(),
                         List.of(), List.of(), List.of());
         return why == null ? souther.compiler.partition.FillResult.nothingAskedOf(plan)
-                : new souther.compiler.partition.FillResult(plan, new java.util.LinkedHashMap<>(),
+                : new souther.compiler.partition.FillResult(new java.util.LinkedHashMap<>(),
                         List.of(), List.of(why),
-                        souther.compiler.partition.Discharge.NOTHING);
+                        souther.compiler.partition.Discharge.nothingAskedOf(plan));
     }
 
     /** The same at the boundaries, which nothing is owed at and which has no plan. */

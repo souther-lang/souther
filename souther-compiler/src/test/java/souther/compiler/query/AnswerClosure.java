@@ -633,7 +633,8 @@ final class AnswerClosure {
     /** Down to what a generation is asked for on behalf of. */
     private static final TypePath.Step[] A_SUBJECT = {
             part(Q + "Adequacy$Filling", "composed"),
-            part("souther.compiler.partition.FillResult", "plan"),
+            part("souther.compiler.partition.FillResult", "discharge"),
+            part("souther.compiler.partition.Discharge", "plan"),
             part("souther.compiler.partition.GenerationPlan", "subject")};
 
     /** The measurement a subject holds, down to the axes of one position. A subject is a reading

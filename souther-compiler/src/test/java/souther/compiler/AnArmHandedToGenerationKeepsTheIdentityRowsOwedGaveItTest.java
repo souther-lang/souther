@@ -4,6 +4,8 @@ import souther.compiler.coverage.Numberings;
 import souther.compiler.partition.ArmDisposition;
 import souther.compiler.partition.Discharge;
 import souther.compiler.partition.FillResult;
+import souther.compiler.partition.GenerationAnswer;
+import souther.compiler.partition.GenerationObligation;
 import souther.compiler.partition.GenerationPlan;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.ObligationIdentity;
@@ -115,12 +117,11 @@ class AnArmHandedToGenerationKeepsTheIdentityRowsOwedGaveItTest {
         Generator.ArmOwed phantom = new Generator.ArmOwed(Numberings.arm(1, 0));
         GenerationPlan tamperedPlan = GenerationPlan.of(real.composed().plan().subject(),
                 List.of(), List.of(phantom), List.of(), List.of());
-        FillResult tamperedFill = new FillResult(tamperedPlan, new LinkedHashMap<>(), List.of(),
-                List.of(), new Discharge(Map.of(),
-                        Map.of(phantom, new ArmDisposition.NoWayIn(
+        FillResult tamperedFill = new FillResult(new LinkedHashMap<>(), List.of(), List.of(),
+                Discharge.of(tamperedPlan, List.of(new GenerationAnswer.Arm(
+                        new GenerationObligation.Arm(phantom), new ArmDisposition.NoWayIn(
                                 new PathAccess.Unsupported(
-                                        PathAccess.Unsupported.Why.WAYS_NOT_ENUMERABLE))),
-                        Map.of(), Map.of()));
+                                        PathAccess.Unsupported.Why.WAYS_NOT_ENUMERABLE))))));
         Adequacy.Filling tampered = new Adequacy.Filling(tamperedFill,
                 Generator.GenerationResult.NONE, Adequacy.Generated.RowsForRules.NOTHING,
                 List.of());
