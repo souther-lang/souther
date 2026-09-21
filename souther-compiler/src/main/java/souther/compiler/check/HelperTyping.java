@@ -109,8 +109,9 @@ public final class HelperTyping {
             // binding of the type that value's own check settled. Those are checked first, so the
             // answer is here.
             List<Hir.FnParam> taken = elaborated.valueParams.get(h.name());
+            List<Type> takenTypes = null;
             if (taken != null) {
-                List<Type> takenTypes = new ArrayList<>();
+                takenTypes = new ArrayList<>();
                 for (Hir.FnParam p : taken) {
                     CompleteSignature carried = standing.valueKept(
                             carriedValue(HelperInliner.valueCarriedBy(p), inliner.moduleName()));
@@ -121,7 +122,6 @@ public final class HelperTyping {
                     env = env.with(p.binder(), carried.result());
                     takenTypes.add(carried.result());
                 }
-                elaborated.valueParamTypes.put(h.name(), takenTypes);
             }
             Elaborator.rejectBuiltinShadowing(h.writtenBody());
             // A definition the lowered module carries is one the backend emits — a recursive helper,
@@ -225,7 +225,8 @@ public final class HelperTyping {
                         .ifPresent(c -> settledConstants.put(settled, c));
             }
             if (emitted != null) {
-                elaborated.helpers.put(h.name(), elaboratedBody);   // the backend emits this
+                elaborated.helpers.put(h.name(),
+                        new EmittedDefinition(elaboratedBody, parameterTypesOf(h, takenTypes)));
             }
             // a declared return type — required on a recursive helper, allowed on any helper — must
             // match the body; a lying annotation is not silently ignored. What a row's operand
@@ -249,6 +250,25 @@ public final class HelperTyping {
                 }
             }
         }
+    }
+
+    /**
+     * What an emitted definition takes: the types the check settled for the values a lowered value
+     * method carries, and the declared type of every parameter of any other.
+     */
+    private static List<Type> parameterTypesOf(Hir.FnDef h, List<Type> takenTypes) {
+        if (takenTypes != null) {
+            return takenTypes;
+        }
+        List<Type> declared = new ArrayList<>();
+        for (Hir.FnParam p : h.params()) {
+            if (p.type() == null) {
+                throw new IllegalStateException("`" + h.name() + "` is emitted and its parameter `"
+                        + p.name() + "` has no type to take it from");
+            }
+            declared.add(TypeOps.resolveParamType(p.type()));
+        }
+        return declared;
     }
 
     /** The value a method's parameter carries, by the name it was reached by: bare where this
