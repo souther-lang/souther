@@ -88,6 +88,21 @@ public final class Output {
             if (in == null) {
                 return Answer.absent();
             }
+            // What this module hands over to run in another has to be runnable there. Asked before
+            // the classes are made, because what a reader is given is stamped onto them.
+            Answer<Boolean> runnable = db.ask(new Bodies.PublishedBodiesRunElsewhere(name));
+            if (!runnable.present()) {
+                return Answer.absent(runnable.reports());
+            }
+            // A module that imports one that failed is not emitted: the bodies it would expand from
+            // it are ones that were not settled, and emitting them would reach the emitter's own
+            // refusal, which says less than the failure already reported.
+            List<String> reached = db.ask(new Reaches(name)).value();
+            for (String imported : reached == null ? List.<String>of() : reached) {
+                if (!imported.equals(name) && failed(db, imported)) {
+                    return Answer.absent();
+                }
+            }
             try {
                 Emissions emitted = Backend.generate(
                         shipped(in), in.scope(), in.published(), in.kinds(),
@@ -102,6 +117,15 @@ public final class Output {
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
+        }
+
+        /** Whether {@code module}, one this compilation is making, did not come out. A module read
+         *  off the path was made elsewhere and is not asked. */
+        private static boolean failed(Db db, String module) {
+            List<String> declared = db.ask(new Front.Declared()).value();
+            return declared != null && declared.contains(module)
+                    && (!db.ask(new Bodies.Sound(module)).present()
+                    || !db.ask(new Bodies.PublishedBodiesRunElsewhere(module)).present());
         }
 
         /**

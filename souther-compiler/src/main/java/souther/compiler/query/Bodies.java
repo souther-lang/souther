@@ -33,6 +33,9 @@ import souther.compiler.check.HelperInliner;
 import souther.compiler.check.Preserved;
 import souther.compiler.check.ValueEntries;
 import souther.compiler.core.CompleteSignature;
+import souther.compiler.check.CarriedBodyDependencies;
+import souther.compiler.check.DeclarationKinds;
+import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.Expansion;
 import souther.compiler.check.HelperGraph;
 import souther.compiler.check.HelperNames;
@@ -61,6 +64,7 @@ import souther.compiler.core.GrowingFold;
 import souther.compiler.core.ValueShape;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.claims.ClaimDiagnostics;
 import souther.compiler.claims.Claims;
 import souther.compiler.claims.UnreachableClaims;
@@ -1700,11 +1704,11 @@ public final class Bodies {
      * and emitted once, one with parameters is expanded where it is called.
      */
     private static Map<String, Hir.FnDef> publishedDefinitions(Hir.Module from,
-                                                               Collection<PublishedHelper> allowed,
+                                                               Collection<Hir.FnDef> roots,
                                                                Expanding.Of against) {
         Map<String, Hir.FnDef> out = new LinkedHashMap<>();
         HelperInliner inliner = null;
-        for (Hir.FnDef fn : bodiesOf(from, allowed)) {
+        for (Hir.FnDef fn : roots) {
             if (inliner == null) {
                 inliner = HelperInliner.over(against.table(), against.graph());
             }
@@ -1728,7 +1732,22 @@ public final class Bodies {
     public static Map<String, Hir.FnDef> publishedClosure(Hir.Module from,
                                                           Collection<PublishedHelper> allowed,
                                                           Expanding.Of against) {
-        Map<String, Hir.FnDef> out = publishedDefinitions(from, allowed, against);
+        return carriedClosure(from, bodiesOf(from, allowed), against);
+    }
+
+    /**
+     * What travels with {@code roots}, which are definitions of {@code from} it hands over: each
+     * closed over its own module, and every recursive helper of {@code from} they reach.
+     *
+     * <p>The one computation of what a reader is given. The reader asks it for the definitions it
+     * holds leave to read ({@link #publishedClosure}); the module that publishes asks it for the
+     * ones it exposes, to hold what it ships to the question of whether another module can run it.
+     * Two computations of one set would agree only until the closing changed.
+     */
+    public static Map<String, Hir.FnDef> carriedClosure(Hir.Module from,
+                                                        Collection<Hir.FnDef> roots,
+                                                        Expanding.Of against) {
+        Map<String, Hir.FnDef> out = publishedDefinitions(from, roots, against);
         if (out.isEmpty()) {
             return out;
         }
@@ -1874,6 +1893,112 @@ public final class Bodies {
             HelperTable table = HelperTable.of(settled.value(), imported.value(), policy,
                     db.ask(new Front.Library()).value());
             return Answer.of(new Expanding.Of(table, HelperGraph.of(table)));
+        }
+    }
+
+    /**
+     * Whether what {@code name} hands over to run in another module can be run there.
+     *
+     * <p>A published helper is expanded into its reader, so the classes the reader generates name
+     * whatever the closed body builds. Only the types a module exposes are public, so a body that
+     * builds one the module keeps to itself is a class the reader cannot link against. This asks
+     * the set the reader is given ({@link #carriedClosure}), from the roots the module publishes,
+     * and holds each body in it to that.
+     *
+     * <p>A value is not among what is asked: it runs where it is declared, and its reader calls an
+     * entry there. It is one definition of the closure only because a helper may be closed over it.
+     */
+    public record PublishedBodiesRunElsewhere(String name) implements Key<Boolean> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Boolean> compute(Db db) {
+            Answer<Hir.Module> settled = db.ask(new Settled(name));
+            Answer<Expanding.Of> against = db.ask(new Expanding(name, InliningPolicy.FULL));
+            if (!settled.present() || !against.present()) {
+                return Answer.absent();
+            }
+            Hir.Module from = settled.value();
+            // A module that exposes nothing in particular exposes everything.
+            if (from.exposing().isEmpty()) {
+                return Answer.of(Boolean.TRUE);
+            }
+            Set<String> exposing = Set.copyOf(from.exposing());
+            // Every declaration of the module is a class of its own, whichever form it was written
+            // in, and only the ones `exposing` names are public.
+            Set<String> kept = new LinkedHashSet<>();
+            for (Hir.Def def : from.defs()) {
+                if (!exposing.contains(def.declares().name())) {
+                    kept.add(def.declares().name());
+                }
+            }
+            // A module that keeps no class to itself has nothing a body could name that its reader
+            // cannot reach, and typing every helper body to find that out is the cost of asking.
+            if (kept.isEmpty()) {
+                return Answer.of(Boolean.TRUE);
+            }
+            List<Hir.FnDef> roots = new ArrayList<>();
+            for (Hir.FnDef fn : HelperInliner.helpersOf(from).values()) {
+                if (fn.body() instanceof Hir.FnBody.Written && !fn.params().isEmpty()
+                        && exposing.contains(fn.name())) {
+                    roots.add(fn);
+                }
+            }
+            if (roots.isEmpty()) {
+                return Answer.of(Boolean.TRUE);
+            }
+            Answer<DerivedSymbols> symbols = Names.derivedSymbols(db, name);
+            Answer<Map<String, Type>> standing =
+                    db.ask(new RecursiveCallSigs(name, InliningPolicy.FULL));
+            Answer<ModuleCheck.Of> checked = db.ask(new ModuleCheck(name));
+            // A module that did not check has said why; what its helpers name is not asked of it.
+            if (!symbols.present() || !standing.present() || !checked.present()
+                    || !checked.value().sound()) {
+                return Answer.absent();
+            }
+            // A closed body names this module's own recursive helpers qualified, which is how a
+            // reader reaches them, so the calls left standing are typed under that spelling too.
+            Map<String, Type> standingCalls = new LinkedHashMap<>(standing.value());
+            standing.value().forEach((helper, type) ->
+                    standingCalls.putIfAbsent(HelperNames.qualified(name, helper), type));
+            Set<String> published = new HashSet<>();
+            for (Hir.FnDef root : roots) {
+                published.add(HelperNames.qualified(name, root.name()));
+            }
+            PublishedDeclarations declarations = Shapes.publishedDeclarations(db);
+            DeclarationKinds kinds = Shapes.declarationKinds(db);
+            List<Report> reports = new ArrayList<>();
+            for (Hir.FnDef carried : carriedClosure(from, roots, against.value()).values()) {
+                if (carried.params().isEmpty()) {
+                    continue;
+                }
+                // What this module emits as a method of its own is what its reader emits too, and
+                // the check has already settled it: it is read as that and not typed a second time.
+                String prefix = name + ".";
+                EmittedDefinition emitted = carried.name().startsWith(prefix)
+                        ? checked.value().emittedDefinitions()
+                        .get(carried.name().substring(prefix.length())) : null;
+                Set<TypeSymbol.AtModule> named = emitted != null
+                        ? CarriedBodyDependencies.of(emitted, symbols.value(), declarations, kinds)
+                        : CarriedBodyDependencies.of(carried, symbols.value(), declarations, kinds,
+                        standingCalls);
+                for (TypeSymbol.AtModule built : named) {
+                    if (built.module().equals(name) && kept.contains(built.name())) {
+                        String helper = carried.written().canonical();
+                        reports.add(Report.raised(Diagnostic.at(carried.pos())
+                                .say(published.contains(carried.name())
+                                        ? new ModuleMessage.APublishedHelperBuildsWhatIsKept(
+                                                helper, built.name())
+                                        : new ModuleMessage.ACarriedHelperBuildsWhatIsKept(
+                                                helper, built.name()))
+                                .build()));
+                    }
+                }
+            }
+            return reports.isEmpty() ? Answer.of(Boolean.TRUE) : Answer.absent(reports);
         }
     }
 
@@ -3051,6 +3176,27 @@ public final class Bodies {
             return Answer.of(new ModuleCheck.Of(definitions, sound, reported.stopped(),
                     reported.settledValues().snapshot()),
                     reports);
+        }
+    }
+
+    /**
+     * Whether the check of one module found nothing wrong with it.
+     *
+     * <p>Its own key so that what reads only this — whether to emit a module that imports this one —
+     * is recomputed when the answer changes and not when a body does. It carries no reports: they are
+     * {@link ModuleCheck}'s, said once where that is asked.
+     */
+    public record Sound(String name) implements Key<Boolean> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Boolean> compute(Db db) {
+            Answer<ModuleCheck.Of> checked = db.ask(new ModuleCheck(name));
+            return checked.present() && checked.value().sound()
+                    ? Answer.of(Boolean.TRUE) : Answer.absent();
         }
     }
 

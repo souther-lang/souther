@@ -34,15 +34,14 @@ class CompilePublishedHelperTest {
             module pricing exposing ( Amount, taxed )
 
             data Amount = Int
-            data Rate = Int
 
-            let rate = Rate(10)
+            let rate = 10
             let taxed (a: Amount) =
-                Amount(a.value + Rational.toInt(DOWN, a.value * rate.value / 100))
+                Amount(a.value + Rational.toInt(DOWN, a.value * rate / 100))
             """;
 
     /**
-     * The helper is called, and the reader writes nothing else about it: `Rate` is `pricing`'s and is
+     * The helper is called, and the reader writes nothing else about it: `rate` is `pricing`'s and is
      * not named here, and neither is the `Amount` the helper builds declared in `constructs` —
      * publishing `taxed` is what states that origination, and it was stated in `pricing`.
      */
@@ -105,7 +104,7 @@ class CompilePublishedHelperTest {
     @Test
     void aUnitDataAPublishedBodyBuildsIsCarriedToo() {
         assertDoesNotThrow(() -> Compiler.compileModules(List.of("""
-                module pricing exposing ( doubled )
+                module pricing exposing ( Marker, doubled )
 
                 data Marker
 
@@ -127,7 +126,7 @@ class CompilePublishedHelperTest {
     @Test
     void aCarriedUnitDataIsNotTheReadersUnitOfThatName() {
         assertDoesNotThrow(() -> Compiler.compileModules(List.of("""
-                module pricing exposing ( doubled )
+                module pricing exposing ( Marker, doubled )
 
                 data Marker
 
@@ -512,6 +511,662 @@ class CompilePublishedHelperTest {
                 """));
 
         assertTrue(e.getMessage().contains("Hidden"), e.getMessage());
+    }
+
+    /** A published helper's body runs in the module that calls it, so what the body builds has to be
+     * a type that module can reach. The signature names only `Amount`, and the body builds `Step`. */
+    @Test
+    void aPublishedHelperMayNotBuildATypeTheModuleKeepsToItself() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module pricing exposing ( Amount, taxed )
+
+                data Amount = Int
+                data Step = Int
+
+                let taxed (a: Amount) = Amount(a.value * Step(3).value)
+                """));
+
+        assertTrue(e.getMessage().contains("Step"), e.getMessage());
+        assertTrue(e.getMessage().contains("taxed"), e.getMessage());
+    }
+
+    /** A signature that rests on a type the module keeps is said by the rule about signatures alone.
+     * The body builds that type too, and saying it twice would be one mistake reported as two. */
+    @Test
+    void aHiddenTypeInTheSignatureIsNotAlsoReportedForTheBody() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module pricing exposing ( wrapped )
+
+                data Hidden = Int
+
+                let wrapped (n: Int) = Hidden(n)
+                """));
+
+        assertEquals(List.of("E1611"),
+                e.diagnostics().stream().map(d -> d.code().toString()).toList());
+    }
+
+    /**
+     * Every way a published body comes to name a class its module keeps is refused where the module
+     * is compiled, and never reaches the reader's emission.
+     *
+     * <p>What refuses in the reader is the emitter itself, at the one place a class is named: it
+     * throws where the publisher's rule has not been told about a reference. So a shape the rule
+     * missed does not pass here as a compile, and does not pass as another failure either — the
+     * assertion is on the code, and the emitter's failure has none.
+     */
+    @Test
+    void everyHiddenClassAPublishedBodyNamesIsRefusedWherePublishedAndNotWhereEmitted() {
+        String cases = """
+                data Email
+                data Phone
+                data Contact = Email | Phone
+                """;
+        record Shape(String label, String pricing, String imports, String field, String call) {}
+        List<Shape> shapes = List.of(
+                new Shape("a construction", """
+                        module pricing exposing ( f )
+
+                        data Step = Int
+
+                        let f (n: Int) = Step(n).value
+                        """, "f", "n: Int", "f(i.n)"),
+                new Shape("a private value that builds", """
+                        module pricing exposing ( f )
+
+                        data Step = Int
+
+                        let s = Step(3)
+                        let f (n: Int) = n + s.value
+                        """, "f", "n: Int", "f(i.n)"),
+                new Shape("a unit data as a value", """
+                        module pricing exposing ( f )
+
+                        data Marker
+
+                        let f (n: Int) = if Marker == Marker then n else 0
+                        """, "f", "n: Int", "f(i.n)"),
+                new Shape("a match on hidden cases", """
+                        module pricing exposing ( Contact, f )
+
+                        %s
+                        let f (c: Contact) =
+                            match c with
+                                | Email -> 1
+                                | Phone -> 2
+                        """.formatted(cases), "Contact, f", "c: Contact", "f(i.c)"),
+                new Shape("an order taken from a sum whose cases are exposed", """
+                        module pricing exposing ( Qualified, Won, before )
+
+                        data Prospecting
+                        data Qualified
+                        data Won
+                        data Stage = Prospecting | Qualified | Won
+
+                        let before (s: Qualified) = s < Won
+                        """, "Qualified, before", "s: Qualified", "if before(i.s) then 1 else 0"),
+                new Shape("a sort by the order of such a sum", """
+                        module pricing exposing ( Qualified, Won, ranked )
+
+                        data Prospecting
+                        data Qualified
+                        data Won
+                        data Stage = Prospecting | Qualified | Won
+
+                        let ranked (n: Int) = List.length(List.sort([Won, Qualified])) + n
+                        """, "ranked", "n: Int", "ranked(i.n)"),
+                new Shape("an order taken beside a parameter the body leaves open", """
+                        module pricing exposing ( Qualified, Won, f )
+
+                        data Prospecting
+                        data Qualified
+                        data Won
+                        data Stage = Prospecting | Qualified | Won
+
+                        let f (xs, s: Qualified) = if s < Won then List.length(xs) else 0
+                        """, "Qualified, f", "s: Qualified", "f([1, 2], i.s)"),
+                new Shape("a function taking the elements of a list of a sum kept by the module", """
+                        module pricing exposing ( Won, f )
+
+                        data Prospecting
+                        data Qualified
+                        data Won
+                        data Stage = Prospecting | Qualified | Won
+
+                        let f (n: Int) = {
+                            let xs: List<Stage> = [Won]
+                            List.length(List.map(x -> 1, xs)) + n
+                        }
+                        """, "f", "n: Int", "f(i.n)"),
+                new Shape("a function that captures a local of a sum kept by the module", """
+                        module pricing exposing ( Won, f )
+
+                        data Prospecting
+                        data Won
+                        data Stage = Prospecting | Won
+
+                        partial let apply (g: (Int) -> Int, n: Int) : Int =
+                            if n == 0 then 0 else apply(g, n - 1) + g(n)
+
+                        partial let f (n: Int) : Int = {
+                            let s: Stage = Won
+                            apply(x -> if s == Won then x else 0, n)
+                        }
+                        """, "f", "n: Int", "f(i.n)"),
+                new Shape("an abort in a branch beside cases of a sum kept by the module", """
+                        module pricing exposing ( Won, Qualified, f )
+
+                        data Prospecting
+                        data Qualified
+                        data Won
+                        data Stage = Prospecting | Qualified | Won
+
+                        let f (n: Int) = {
+                            let s: Stage = if n > 1 then Won else Qualified
+                            let t = if n > 0 then s else unreachable "no stage"
+                            if t == Won then n else 0
+                        }
+                        """, "f", "n: Int", "f(i.n)"),
+                new Shape("a recursive helper that takes a sum kept by the module", """
+                        module pricing exposing ( Qualified, f )
+
+                        data Prospecting
+                        data Qualified
+                        data Won
+                        data Stage = Prospecting | Qualified | Won
+
+                        partial let walk (s: Stage, n: Int) : Int =
+                            if n == 0 then 0 else walk(s, n - 1)
+                        partial let f (s: Qualified, n: Int) : Int = walk(s, n)
+                        """, "Qualified, f", "s: Qualified, n: Int", "f(i.s, i.n)"),
+                new Shape("a recursive helper whose kept sum is taken and never read", """
+                        module pricing exposing ( Won, f )
+
+                        data Prospecting
+                        data Qualified
+                        data Won
+                        data Stage = Prospecting | Qualified | Won
+
+                        partial let walk (s: Stage, n: Int) : Int =
+                            if n == 0 then 0 else walk(Won, n - 1)
+                        partial let f (n: Int) : Int = walk(Won, n)
+                        """, "f", "n: Int", "f(i.n)"),
+                new Shape("a recursive helper that answers a sum kept by the module", """
+                        module pricing exposing ( Won, f )
+
+                        data Prospecting
+                        data Qualified
+                        data Won
+                        data Stage = Prospecting | Qualified | Won
+
+                        partial let walk (n: Int) : Stage = if n == 0 then Won else walk(n - 1)
+                        partial let f (n: Int) : Int = List.length([walk(n)])
+                        """, "f", "n: Int", "f(i.n)"),
+                new Shape("a recursive helper the published one reaches", """
+                        module pricing exposing ( f )
+
+                        data Step = Int
+
+                        partial let walk (n: Int) : Int = if n == 0 then Step(1).value else walk(n - 1)
+                        partial let f (n: Int) = walk(n)
+                        """, "f", "n: Int", "f(i.n)"));
+
+        for (Shape shape : shapes) {
+            CompileException e = assertThrows(CompileException.class,
+                    () -> Compiler.compileModules(List.of(shape.pricing(), """
+                            module order exposing ( In, Out, bill )
+
+                            import pricing ( %s )
+
+                            data In = { %s }
+                            data Out = { v: Int }
+
+                            behavior bill : (i: In) -> Out constructs Out
+                            let bill (i) = Out { v = %s }
+                            """.formatted(shape.imports(), shape.field(), shape.call()))),
+                    shape.label());
+            assertEquals("E1628", e.code(), shape.label() + ": " + e.getMessage());
+        }
+    }
+
+    /**
+     * A module that fails for a reason of its own is reported for that reason, whoever imports it.
+     * The reader would otherwise be emitted against a body that was never settled, and what the
+     * emitter says of it is not what is wrong.
+     */
+    @Test
+    void aModuleThatImportsOneThatFailedIsReportedForTheFailureAndNotForWhatEmittingItReaches() {
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of("""
+                        module pricing exposing ( Won, Qualified, ranked )
+
+                        data Prospecting
+                        data Qualified
+                        data Won
+                        data Stage = Prospecting | Qualified | Won
+
+                        let ranked (xs) = List.length(List.sort(xs))
+                        """, """
+                        module order exposing ( In, Out, bill )
+
+                        import pricing ( Won, ranked )
+
+                        data In = { n: Int }
+                        data Out = { v: Int }
+
+                        behavior bill : (i: In) -> Out constructs Out
+                        let bill (i) = Out { v = ranked([Won, Won]) + i.n }
+                        """)));
+
+        assertEquals("E1816", e.code(), e.getMessage());
+    }
+
+    /** A helper that is carried and not published is said to be carried: it is not among what the
+     * module exposes, and saying it is published would send the author looking for it there. */
+    @Test
+    void aRecursiveHelperCarriedWithAPublishedOneIsSaidToBeCarried() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module pricing exposing ( f )
+
+                data Step = Int
+
+                partial let walk (n: Int) : Int = if n == 0 then Step(1).value else walk(n - 1)
+                partial let f (n: Int) = walk(n)
+                """));
+
+        assertTrue(e.getMessage().contains("walk"), e.getMessage());
+        assertTrue(e.getMessage().contains("carried"), e.getMessage());
+    }
+
+    /**
+     * That a body's node has a sum's type does not name the sum's class. A local that widens a case
+     * to its sum is held and compared as an object, so the sum may be kept by the module and the body
+     * still runs where it is expanded.
+     */
+    @Test
+    void aLocalThatWidensACaseToASumTheModuleKeepsNamesNoClassAndRuns() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compileModules(List.of("""
+                module pricing exposing ( Won, same )
+
+                data Prospecting
+                data Won
+                data Stage = Prospecting | Won
+
+                let same (n: Int) = {
+                    let s: Stage = Won
+                    if s == Won then n else 0
+                }
+                """, """
+                module order exposing ( In, Out, bill )
+
+                import pricing ( same )
+
+                data In = { n: Int }
+                data Out = { v: Int }
+
+                behavior bill : (i: In) -> Out constructs Out
+                let bill (i) = Out { v = same(i.n) }
+                """)), getClass().getClassLoader());
+
+        Object in = Codecs.decoded(loader, "order.In", Map.of("n", 5L));
+        Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "order.Out",
+                Codecs.apply(Emitted.behavior(loader, "order", "bill")
+                        .getConstructor().newInstance(), in));
+        assertEquals(5L, out.get("v"));
+    }
+
+    /**
+     * An arm that binds nothing reads nothing. Opening an optional and casting what is under it would
+     * name the class of a value the arm never asked for, so a kept sum inside an optional stays
+     * unnamed, and the body still runs where it is expanded.
+     */
+    @Test
+    void anArmThatBindsNothingOfAnOptionalNamesNoClassAndRuns() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compileModules(List.of("""
+                module pricing exposing ( Won, f )
+
+                data Prospecting
+                data Won
+                data Stage = Prospecting | Won
+
+                let f (n: Int) = {
+                    let xs: List<Stage> = [Won]
+                    match List.get(0, xs) with
+                        | Some -> n
+                        | None -> 0
+                }
+                """, """
+                module order exposing ( In, Out, bill )
+
+                import pricing ( f )
+
+                data In = { n: Int }
+                data Out = { v: Int }
+
+                behavior bill : (i: In) -> Out constructs Out
+                let bill (i) = Out { v = f(i.n) }
+                """)), getClass().getClassLoader());
+
+        Object in = Codecs.decoded(loader, "order.In", Map.of("n", 5L));
+        Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "order.Out",
+                Codecs.apply(Emitted.behavior(loader, "order", "bill")
+                        .getConstructor().newInstance(), in));
+        assertEquals(5L, out.get("v"));
+    }
+
+    /**
+     * What a body is emitted as is what it names, not what it would have named: a step that is never
+     * applied is replaced by `Fn.NEVER` and none of it is emitted, and a fold that runs as a loop calls
+     * no method and casts no result. Each of these holds a kept sum only where a class of it is never
+     * named, so each is published and each runs where it is expanded.
+     */
+    @Test
+    void aBodyThatEmitsNoClassOfAKeptSumIsPublishedAndRuns() throws Exception {
+        record Body(String label, String source, String call, long expected) {}
+        List<Body> bodies = List.of(
+                new Body("a fold step that is never applied", """
+                        module pricing exposing ( Won, Prospecting, f )
+
+                        data Won
+                        data Prospecting
+                        data Stage = Won | Prospecting
+
+                        let f (n: Int) = {
+                            let s: Stage = Won
+                            List.fold((acc, x) -> if s == Won then acc else acc, n, [])
+                        }
+                        """, "f(i.n)", 5L),
+                new Body("a map whose step is never applied", """
+                        module pricing exposing ( Won, Prospecting, f )
+
+                        data Won
+                        data Prospecting
+                        data Stage = Won | Prospecting
+
+                        let f (n: Int) = {
+                            let s: Stage = Won
+                            List.length(List.map(x -> if s == Won then x else x, [])) + n
+                        }
+                        """, "f(i.n)", 5L),
+                new Body("a fold that grows its accumulator into a kept sum", """
+                        module pricing exposing ( Won, Prospecting, f )
+
+                        data Won
+                        data Prospecting
+                        data Stage = Won | Prospecting
+
+                        let f (n: Int) = {
+                            let s: Stage = List.fold(
+                                (acc, x) -> if x > 0 then Prospecting else acc, Won, [n])
+                            if s == Won then n else 0
+                        }
+                        """, "f(i.n)", 0L));
+
+        for (Body body : bodies) {
+            BytesClassLoader loader = new BytesClassLoader(Compiler.compileModules(List.of(
+                    body.source(), """
+                            module order exposing ( In, Out, bill )
+
+                            import pricing ( f )
+
+                            data In = { n: Int }
+                            data Out = { v: Int }
+
+                            behavior bill : (i: In) -> Out constructs Out
+                            let bill (i) = Out { v = %s }
+                            """.formatted(body.call()))), getClass().getClassLoader());
+
+            Object in = Codecs.decoded(loader, "order.In", Map.of("n", 5L));
+            Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "order.Out",
+                    Codecs.apply(Emitted.behavior(loader, "order", "bill")
+                            .getConstructor().newInstance(), in));
+            assertEquals(body.expected(), out.get("v"), body.label());
+        }
+    }
+
+    /**
+     * An arm that binds the subject as it stands casts nothing, so a kept sum the arm's alternatives
+     * add up to is not named: only the cases it tests are, and they are exposed.
+     */
+    @Test
+    void anArmThatBindsTheSubjectAsItStandsNamesNoClassAndRuns() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compileModules(List.of("""
+                module pricing exposing ( Won, Lost, f )
+
+                data Won
+                data Lost
+                data Stage = Won | Lost
+
+                let f (n: Int) = {
+                    let s: Stage = Won
+                    match s with
+                        | Won | Lost as x -> n
+                }
+                """, """
+                module order exposing ( In, Out, bill )
+
+                import pricing ( f )
+
+                data In = { n: Int }
+                data Out = { v: Int }
+
+                behavior bill : (i: In) -> Out constructs Out
+                let bill (i) = Out { v = f(i.n) }
+                """)), getClass().getClassLoader());
+
+        Object in = Codecs.decoded(loader, "order.In", Map.of("n", 5L));
+        Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "order.Out",
+                Codecs.apply(Emitted.behavior(loader, "order", "bill")
+                        .getConstructor().newInstance(), in));
+        assertEquals(5L, out.get("v"));
+    }
+
+    /**
+     * A step the emitter runs as the loop body makes no class, so what it closes over is read from the
+     * frame around it. A kept sum held in a local the step reads is not named, and the body runs.
+     */
+    @Test
+    void aFoldStepRunWhereItStandsCapturesALocalOfAKeptSumAndRuns() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compileModules(List.of("""
+                module pricing exposing ( Won, f )
+
+                data Prospecting
+                data Won
+                data Stage = Prospecting | Won
+
+                let f (xs: List<Int>, n: Int) = {
+                    let s: Stage = Won
+                    List.fold((acc, x) -> if s == Won then acc + x else acc, n, xs)
+                }
+                """, """
+                module order exposing ( In, Out, bill )
+
+                import pricing ( f )
+
+                data In = { n: Int }
+                data Out = { v: Int }
+
+                behavior bill : (i: In) -> Out constructs Out
+                let bill (i) = Out { v = f([1, 2], i.n) }
+                """)), getClass().getClassLoader());
+
+        Object in = Codecs.decoded(loader, "order.In", Map.of("n", 5L));
+        Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "order.Out",
+                Codecs.apply(Emitted.behavior(loader, "order", "bill")
+                        .getConstructor().newInstance(), in));
+        assertEquals(8L, out.get("v"));
+    }
+
+    /** The order comes from the sum, not from the cases the helper writes, so an exposed sum is a
+     * class the reader may name and the same body is published. */
+    @Test
+    void aPublishedHelperMayTakeAnOrderFromASumTheModuleExposes() {
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of("""
+                module pricing exposing ( Stage, Qualified, Won, before )
+
+                data Prospecting
+                data Qualified
+                data Won
+                data Stage = Prospecting | Qualified | Won
+
+                let before (s: Qualified) = s < Won
+                """, """
+                module order exposing ( In, Out, bill )
+
+                import pricing ( Qualified, before )
+
+                data In = { s: Qualified }
+                data Out = { v: Int }
+
+                behavior bill : (i: In) -> Out constructs Out
+                let bill (i) = Out { v = if before(i.s) then 1 else 0 }
+                """)));
+    }
+
+    /** A `match` tests the value against the class of each case it names, so a case the module keeps
+     * to itself is a reference to a class the reader cannot touch, though nothing in the helper's
+     * signature or its constructions names it. The sum may be exposed without its cases. */
+    @Test
+    void aPublishedHelperMayNotMatchACaseTheModuleKeepsToItself() {
+        for (String cases : List.of("""
+                data Email
+                data Phone
+                data Contact = Email | Phone
+                """, """
+                data Email = { address: String }
+                data Phone = { number: String }
+                data Contact = Email | Phone
+                """)) {
+            CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                    module pricing exposing ( Contact, kind )
+
+                    %s
+                    let kind (c: Contact) =
+                        match c with
+                            | Email -> 1
+                            | Phone -> 2
+                    """.formatted(cases)));
+
+            assertEquals("E1628", e.code(), e.getMessage());
+            assertTrue(e.getMessage().contains("Email"), e.getMessage());
+        }
+    }
+
+    /** And a case the module exposes is public, so the reader may test against it. */
+    @Test
+    void aPublishedHelperMayMatchACaseTheModuleExposes() {
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of("""
+                module pricing exposing ( Contact, Email, Phone, kind )
+
+                data Email
+                data Phone
+                data Contact = Email | Phone
+
+                let kind (c: Contact) =
+                    match c with
+                        | Email -> 1
+                        | Phone -> 2
+                """, """
+                module order exposing ( In, Out, bill )
+
+                import pricing ( Contact, kind )
+
+                data In = { c: Contact }
+                data Out = { v: Int }
+
+                behavior bill : (i: In) -> Out constructs Out
+                let bill (i) = Out { v = kind(i.c) }
+                """)));
+    }
+
+    /** A unit data is read from the shared instance of its class, which is as much a reference to
+     * that class as a construction is. */
+    @Test
+    void aPublishedHelperMayNotNameAUnitDataTheModuleKeepsToItself() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module pricing exposing ( doubled )
+
+                data Marker
+
+                let doubled (n: Int) = if Marker == Marker then n * 2 else n
+                """));
+
+        assertEquals("E1628", e.code(), e.getMessage());
+        assertTrue(e.getMessage().contains("Marker"), e.getMessage());
+    }
+
+    /** And an exposed one is public, so the reader runs the body that reads it. */
+    @Test
+    void aPublishedHelperMayNameAUnitDataTheModuleExposesAndItRuns() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compileModules(List.of("""
+                module pricing exposing ( Marker, doubled )
+
+                data Marker
+
+                let doubled (n: Int) = if Marker == Marker then n * 2 else n
+                """, """
+                module order exposing ( In, Out, bill )
+
+                import pricing ( doubled )
+
+                data In = { n: Int }
+                data Out = { v: Int }
+
+                behavior bill : (i: In) -> Out constructs Out
+                let bill (i) = Out { v = doubled(i.n) }
+                """)), getClass().getClassLoader());
+
+        Object in = Codecs.decoded(loader, "order.In", Map.of("n", 5L));
+        Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "order.Out",
+                Codecs.apply(Emitted.behavior(loader, "order", "bill")
+                        .getConstructor().newInstance(), in));
+        assertEquals(10L, out.get("v"));
+    }
+
+    /** A private value a published helper names is expanded into the helper, so what that value
+     * builds is what the helper builds. */
+    @Test
+    void aPublishedHelperMayNotNameAValueThatBuildsATypeTheModuleKeepsToItself() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module pricing exposing ( Amount, taxed )
+
+                data Amount = Int
+                data Rate = Int
+
+                let rate = Rate(10)
+                let taxed (a: Amount) = Amount(a.value * rate.value)
+                """));
+
+        assertTrue(e.getMessage().contains("Rate"), e.getMessage());
+    }
+
+    /** A published value runs in the module that declares it, so what its body builds stays that
+     * module's and its reader is handed the answer. */
+    @Test
+    void aPublishedValueMayBuildATypeTheModuleKeepsToItself() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compileModules(List.of("""
+                module pricing exposing ( step )
+
+                data Step = Int
+
+                let step = Step(3).value
+                """, """
+                module order exposing ( In, Out, bill )
+
+                import pricing ( step )
+
+                data In = { n: Int }
+                data Out = { v: Int }
+
+                behavior bill : (i: In) -> Out constructs Out
+                let bill (i) = Out { v = i.n * step }
+                """)), getClass().getClassLoader());
+
+        Object in = Codecs.decoded(loader, "order.In", Map.of("n", 5L));
+        Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "order.Out",
+                Codecs.apply(Emitted.behavior(loader, "order", "bill")
+                        .getConstructor().newInstance(), in));
+        assertEquals(15L, out.get("v"));
     }
 
     /** The same holds of a value, which is the definition with no parameter list. */

@@ -639,6 +639,85 @@ public sealed interface Core {
         public SourceConstructOrigin origin() {
             return occurrence.origin();
         }
+
+        /** What emitting a call does with a function it is handed. */
+        public enum FunctionArgument {
+            /** Run as the loop body: no class is made for it, and what it closes over is read from
+             *  the frame around it. */
+            RUNS_WHERE_IT_STANDS,
+            /** Never applied, so {@code Fn.NEVER} is handed over in its place and none of it — no
+             *  class, no body — is emitted. */
+            NEVER_APPLIED,
+            /** Handed over as a value: a class with a field for each thing it closes over. */
+            HANDED_OVER
+        }
+
+        /**
+         * What emitting this call does with the function at {@code index}.
+         *
+         * <p>A method is handed a function that is never applied as {@code Fn.NEVER}, and a kernel's
+         * row hands the runtime the function it is given whatever it is. The one answer, read by the
+         * emitter and by whatever asks which classes an emitted call names, so the two do not come to
+         * disagree about which of the three a function is.
+         *
+         * @param theWalk what the standard library's one loop is called
+         */
+        public FunctionArgument functionArgument(int index, ValueName theWalk) {
+            if (!(args.get(index).type() instanceof Type.FnOf fnType)) {
+                throw new IllegalArgumentException("argument " + index + " of `" + fn.rendered()
+                        + "` is not a function");
+            }
+            if (index == 0 && stepRunWhereItStands(theWalk) != null) {
+                return FunctionArgument.RUNS_WHERE_IT_STANDS;
+            }
+            return !(fn instanceof Reached.OfKernel) && neverRuns(fnType)
+                    ? FunctionArgument.NEVER_APPLIED : FunctionArgument.HANDED_OVER;
+        }
+
+        /**
+         * The step this call runs where it stands, as the loop it is, or null where it does not: the
+         * step is handed over as a function, or replaced by {@code Fn.NEVER} because it is never
+         * applied ({@link #functionArgument} says which).
+         *
+         * <p>A walk that starts at the head of the list, and a build of a list or a map, run their
+         * step as the loop body, reading what it closes over from the frame around it: no class is
+         * made for it, and no method is called, so nothing comes back to be cast to the type the
+         * call answers.
+         *
+         * @param theWalk what the standard library's one loop is called
+         */
+        public Block stepRunWhereItStands(ValueName theWalk) {
+            boolean walks = fn == Emitted.BUILD_LIST || fn == Emitted.BUILD_MAP
+                    || (fn instanceof Reached reached && theWalk.equals(reached.denotes())
+                    && args.size() > 3 && args.get(3) instanceof Int from && from.value() == 0);
+            return walks ? runsWhereItStands(args.get(0)) : null;
+        }
+    }
+
+    /**
+     * {@code step} as a block that is run where it stands, or null where it is not one: not a block
+     * at all, or a step that would never be applied because an element of it has no type to be.
+     */
+    static Block runsWhereItStands(Core step) {
+        return step instanceof Block block && block.type() instanceof Type.FnOf fn
+                && !neverRuns(fn) ? block : null;
+    }
+
+    /**
+     * Whether a step closure would never be applied: one of its parameters is the bare bottom, so
+     * it is the element of an empty-literal list and there are no elements — {@code foldFrom} over
+     * {@code []} yields the seed. Such a step is passed as {@code Fn.NEVER} rather than materialised,
+     * since materialising it would unbox the bottom element (as {@code acc + x} does with {@code x})
+     * and crash. An empty *seed* (a {@code List<Nothing>} accumulator) is a reference and still
+     * materialises.
+     */
+    static boolean neverRuns(Type.FnOf step) {
+        for (Type p : step.params()) {
+            if (p instanceof Type.Nothing) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -1035,6 +1114,29 @@ public sealed interface Core {
             return pattern.caseTypes();
         }
 
+        /**
+         * The type the value this arm binds is cast to when it is bound, or null where binding it
+         * casts nothing: the arm binds nothing, or what it binds is the subject as it already stands.
+         *
+         * <p>The one answer, read by the emitter and by whatever asks which classes an emitted
+         * {@code match} names, so that they do not come to disagree about which arms cast.
+         *
+         * @param subject the type of the value the {@code match} is over
+         */
+        public Type castOnBinding(Type subject) {
+            if (binder == null) {
+                return null;
+            }
+            return switch (pattern.binding()) {
+                // What an optional holds is opened and cast to the type it was checked to hold.
+                case Refinement.OptionPresent wrapped -> wrapped.bound();
+                // A case is cast to its own type, unless nothing narrowed it: then it is the subject.
+                case Refinement.Direct itself ->
+                        itself.bound() == null || itself.bound().equals(subject) ? null : itself.bound();
+                case Refinement.OptionAbsent _ -> null;
+            };
+        }
+
         /** The one case this arm selects, as this compile resolved it, or empty where it selects no
          *  one case. */
         public Optional<ResolvedCase> selectedCase() {
@@ -1085,7 +1187,30 @@ public sealed interface Core {
 
     /** {@code unreachable "reason"}: the position it stands in gets no value, and the reason is the
      * message the abort carries. Its type is {@link Type.Never}, which fits whatever was expected. */
-    record Unreachable(String reason, Type type, SourcePos pos) implements Core {}
+    record Unreachable(String reason, Type type, SourcePos pos) implements Core {
+
+        /**
+         * The shape this leaves on the stack where its position asks for {@code expected}: what the
+         * position asked for, or — where it asked for nothing — its own type, which is {@link
+         * Type.Never} and is refused rather than emitted.
+         */
+        public Type shapeAt(Type expected) {
+            return expected != null ? expected : type;
+        }
+    }
+
+    /**
+     * The type the branches of {@code e} leave on the stack: what the position asked for, or — where
+     * it asked for nothing — the one the checker joined the branches at. A branch that answers
+     * {@code unreachable} has no type of its own to merge with the others, so it takes this one.
+     *
+     * <p>The one answer, read by the emitter and by whatever asks which classes an emitted branch
+     * names: the shape is what a value is cast to, so written out in each the two would agree only
+     * until one of them moved.
+     */
+    static Type shapeOf(Core e, Type expected) {
+        return expected != null ? expected : e.type();
+    }
 
     /**
      * {@code e} with each of its slots replaced by what the operator for that slot answers, the

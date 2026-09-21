@@ -835,12 +835,8 @@ final class BodyGen {
             return e.type();
         }
 
-        /** The type the branches of {@code e} leave on the stack: what the position asked for, or —
-         * where it asked for nothing — the one the checker joined the branches at. A branch that
-         * answers {@code unreachable} has no type of its own to merge with the others, so it takes
-         * this one. */
         private Type shapeOf(Core e, Type expected) {
-            return expected != null ? expected : e.type();
+            return Core.shapeOf(e, expected);
         }
 
         /**
@@ -853,7 +849,7 @@ final class BodyGen {
          * rather than emitted.
          */
         private void unreachable(Core.Unreachable u, Type expected) {
-            Type shape = expected != null ? expected : u.type();
+            Type shape = u.shapeAt(expected);
             if (shape instanceof Type.Never) {
                 throw CompileException.of(Diagnostic
                                 .at(u.pos(), "unreachable".length())
@@ -948,35 +944,37 @@ final class BodyGen {
             bindArm(c, sSlot, st);
         }
 
-        /** Reads the arm's value out of the carrier and binds it. A wrapping carrier is opened
-         *  whether or not the arm names what it holds, as it always was: opening it is how the value
-         *  under it is reached at all. */
+        /** Reads the arm's value out of the carrier and binds it, where the arm names it. An arm that
+         *  binds nothing reads nothing: opening the carrier and casting what is under it would name
+         *  the class of a value nobody asked for. */
         private void bindArm(Core.Case c, int sSlot, Type st) {
+            // What is cast is asked of the arm: the same question is asked of it wherever it matters
+            // which classes an emitted `match` names.
+            Type cast = c.castOnBinding(st);
             switch (c.pattern().binding()) {
                 case Refinement.OptionPresent wrapped -> {
-                    Type element = wrapped.bound();
-                    CaseGen.pushBound(code, wrapped, sSlot);
-                    int bslot = slot(element);
-                    unbox(code, element, bslot);
-                    if (c.binder() != null) {
-                        bind(c.binder(), bslot, element);
-                    }
-                }
-                case Refinement.Direct itself -> {
-                    Type bound = itself.bound();
-                    if (c.binder() == null || bound == null) {
+                    if (cast == null) {
                         return;
                     }
-                    if (bound.equals(st)) {
+                    CaseGen.pushBound(code, wrapped, sSlot);
+                    int bslot = slot(cast);
+                    unbox(code, cast, bslot);
+                    bind(c.binder(), bslot, cast);
+                }
+                case Refinement.Direct itself -> {
+                    if (c.binder() == null || itself.bound() == null) {
+                        return;
+                    }
+                    if (cast == null) {
                         // nothing narrowed it: the value is the subject, where it already is
                         bind(c.binder(), sSlot, st);
                         return;
                     }
                     // a data case binds the instance; a primitive case (e.g. Int) unboxes the value
                     CaseGen.pushBound(code, itself, sSlot);
-                    int bslot = slot(bound);
-                    unbox(code, bound, bslot);
-                    bind(c.binder(), bslot, bound);
+                    int bslot = slot(cast);
+                    unbox(code, cast, bslot);
+                    bind(c.binder(), bslot, cast);
                 }
                 case Refinement.OptionAbsent _ -> { }
             }
@@ -1325,12 +1323,16 @@ final class BodyGen {
             // The checker resolved this call's type variables when it typed it — the accumulator a
             // fold's step runs at, the result the caller casts to — and left the decision on the
             // nodes, so nothing is resolved a second time here (issue #81).
-            for (Core arg : call.args()) {
+            for (int i = 0; i < call.args().size(); i++) {
+                Core arg = call.args().get(i);
                 if (arg.type() instanceof Type.FnOf fn) {
-                    if (stepNeverRuns(fn)) {
-                        code.getstatic(CD_Fn, "NEVER", CD_Fn);
-                    } else {
-                        emitFunctionValue(arg, fn.params());
+                    switch (call.functionArgument(i, ctx.symbols.theWalk())) {
+                        case NEVER_APPLIED -> code.getstatic(CD_Fn, "NEVER", CD_Fn);
+                        case HANDED_OVER -> emitFunctionValue(arg, fn.params());
+                        // Run where it stands, the call is not emitted as a call at all.
+                        case RUNS_WHERE_IT_STANDS -> throw new IllegalStateException(
+                                "the step of `" + call.name() + "` runs where it stands and is not"
+                                        + " handed over");
                     }
                 } else {
                     box(code, genExpr(arg));
@@ -1350,7 +1352,7 @@ final class BodyGen {
             if (walked(call, CD_Lists, MTD_Lists_builder, MTD_Lists_sealed)) {
                 return;
             }
-            emitStep(call.args().get(0));
+            emitStep(call);
             genExpr(call.args().get(1));      // the list walked
             genExpr(call.args().get(2));      // the index walked from (a long)
             code.invokestatic(CD_Lists, "build", MTD_Lists_build);
@@ -1379,7 +1381,7 @@ final class BodyGen {
             if (walked(call, CD_Maps, MTD_Maps_builder, MTD_Maps_sealed)) {
                 return;
             }
-            emitStep(call.args().get(0));
+            emitStep(call);
             genExpr(call.args().get(1));      // the list walked
             genExpr(call.args().get(2));      // the index walked from (a long)
             code.invokestatic(CD_Maps, "build", MTD_Maps_build);
@@ -1401,7 +1403,7 @@ final class BodyGen {
          * {@code long} in its slot, and each walk is straight-line code the JIT sees on its own.
          */
         private boolean folded(Core.Call call) {
-            if (!(call.args().get(3) instanceof Core.Int from) || from.value() != 0) {
+            if (call.stepRunWhereItStands(ctx.symbols.theWalk()) == null) {
                 return false;
             }
             Core seed = call.args().get(1);
@@ -1436,10 +1438,11 @@ final class BodyGen {
         }
 
         private boolean walked(Core stepValue, Core walked, Runnable seed, Runnable answer) {
-            if (!(stepValue instanceof Core.Block step)
-                    || !(step.type() instanceof Type.FnOf fn) || stepNeverRuns(fn)) {
+            Core.Block step = Core.runsWhereItStands(stepValue);
+            if (step == null) {
                 return false;
             }
+            Type.FnOf fn = (Type.FnOf) step.type();
             Type accType = fn.params().get(0);
             Type elementType = fn.params().get(1);
 
@@ -1494,29 +1497,16 @@ final class BodyGen {
 
         /** The step of a build, as the fold it was rewritten from would have materialised it — an
          *  empty list still hands over {@code Fn.NEVER}. */
-        private void emitStep(Core step) {
-            if (step.type() instanceof Type.FnOf fn && !stepNeverRuns(fn)) {
-                emitFunctionValue(step, fn.params());
-            } else {
-                code.getstatic(CD_Fn, "NEVER", CD_Fn);
+        private void emitStep(Core.Call build) {
+            Core step = build.args().get(0);
+            switch (build.functionArgument(0, ctx.symbols.theWalk())) {
+                case NEVER_APPLIED -> code.getstatic(CD_Fn, "NEVER", CD_Fn);
+                case HANDED_OVER -> emitFunctionValue(step, ((Type.FnOf) step.type()).params());
+                // Run where it stands, `walked` has emitted it and the build is not emitted.
+                case RUNS_WHERE_IT_STANDS -> throw new IllegalStateException(
+                        "the step of `" + build.name() + "` runs where it stands and is not"
+                                + " handed over");
             }
-        }
-
-        /**
-         * Whether a step closure would never be applied: one of its parameters is the bare bottom, so
-         * it is the element of an empty-literal list and there are no elements — {@code foldFrom} over
-         * {@code []} yields the seed. Such a step is passed as {@link souther.runtime.Fn#NEVER} rather
-         * than materialised, since materialising it would unbox the bottom element (as {@code acc + x}
-         * does with {@code x}) and crash. An empty *seed* (a {@code List<Nothing>} accumulator) is a
-         * reference and still materialises.
-         */
-        private static boolean stepNeverRuns(Type.FnOf fn) {
-            for (Type p : fn.params()) {
-                if (p instanceof Type.Nothing) {
-                    return true;
-                }
-            }
-            return false;
         }
 
         private void invokeRecursiveHelper(Core.Call call) {
@@ -2021,27 +2011,9 @@ final class BodyGen {
         }
 
         /** The sum that answers for values of {@code t}, or null where the value carries its own
-         * order. Asked of the value as the runtime is handed it, so a newtype over an enumeration
-         * answers null and sorts by the {@code compareTo} its own class carries — the sum's
-         * {@code __order} would be handed the wrapper and not the case.
-         *
-         * <p>Every order is answered for rather than "everything but a {@code Places} sorts by
-         * natural order", so an order added to {@link Ordering} has to say which of the two it is
-         * instead of inheriting the answer that happens to be right for these three. */
+         * order. */
         private TypeSymbol sumOrdering(Type t) {
-            Ordering how = Ordering.of(t, ctx.inners, symbols, ctx.kinds, ctx.published);
-            if (how == null) {
-                return null;
-            }
-            return switch (how.asHeld()) {
-                case Ordering.Places places -> places.enumeration();
-                // A long boxes to a Comparable and a newtype's own class carries a compareTo, so
-                // for both of these the runtime's natural order is the order.
-                case Ordering.Longs _, Ordering.Natural _ -> null;
-                // `asHeld` answers for the value as its own type holds it, which is never wrapped.
-                case Ordering.Wrapped _ ->
-                        throw new IllegalStateException("a held order is never a wrapped one: " + t);
-            };
+            return Ordering.enumerationOfHeld(t, ctx.inners, symbols, ctx.kinds, ctx.published);
         }
 
         /**

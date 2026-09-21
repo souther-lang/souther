@@ -76,6 +76,35 @@ public sealed interface Ordering {
     Ordering NATURAL = new Natural();
 
     /**
+     * The sum that answers for values of {@code type}, or null where the value carries its own order.
+     *
+     * <p>Asked of the value as the runtime is handed it, so a newtype over an enumeration answers null
+     * and sorts by the {@code compareTo} its own class carries — the sum's {@code __order} would be
+     * handed the wrapper and not the case. The one answer to the question, read by the emitter and by
+     * whatever asks which classes an emitted call names: written out in each, the two would agree only
+     * until one of them moved.
+     *
+     * <p>Every order is answered for rather than "everything but a {@code Places} sorts by natural
+     * order", so an order added has to say which of the two it is.
+     */
+    static TypeSymbol enumerationOfHeld(Type type, NewtypeInners inners, Symbols symbols,
+                                        DeclarationKinds kinds, PublishedDeclarations published) {
+        Ordering how = of(type, inners, symbols, kinds, published);
+        if (how == null) {
+            return null;
+        }
+        return switch (how.asHeld()) {
+            // A long boxes to a Comparable and a newtype's own class carries a compareTo, so for both
+            // of these the runtime's natural order is the order.
+            case Places places -> places.enumeration();
+            case Longs _, Natural _ -> null;
+            // `asHeld` answers for the value as its own type holds it, which is never wrapped.
+            case Wrapped _ ->
+                    throw new IllegalStateException("a held order is never a wrapped one: " + type);
+        };
+    }
+
+    /**
      * How a value of this type, as the JVM holds it, is ordered — or null where it has no order.
      *
      * <p>Whether a type is ordered is this answer existing, which is what {@link

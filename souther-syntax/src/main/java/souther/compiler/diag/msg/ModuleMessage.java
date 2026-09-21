@@ -157,5 +157,11 @@ public sealed interface ModuleMessage extends Message {
     @Code(DiagnosticCode.E1611)
     record AnExposedValueRestsOnWhatIsKept(String exposed, String stands) implements ModuleMessage, Reported {}
 
+    @Code(DiagnosticCode.E1628)
+    record APublishedHelperBuildsWhatIsKept(String helper, String kept) implements ModuleMessage, Reported {}
+
+    @Code(DiagnosticCode.E1628)
+    record ACarriedHelperBuildsWhatIsKept(String helper, String kept) implements ModuleMessage, Reported {}
+
     record WhatReachesOutMayNotRestOnWhatIsKept(String kept, String exposed) implements ModuleMessage, Supporting {}
 }

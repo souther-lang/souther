@@ -431,6 +431,36 @@ public final class HelperTyping {
         }
     }
 
+    /**
+     * The scope {@code body} of {@code h} is read in: each parameter with the type it was written
+     * with, and each one that was not with the type the body settles for it (ADR-0092).
+     *
+     * <p>What the standalone check does with a helper's parameters, for a reader that has a body to
+     * type and not a helper to check: a parameter that takes its type from the body is one whichever
+     * of the helper's parameters are written, and is settled the same way.
+     *
+     * @throws CompileException where the body settles no type for a parameter
+     */
+    static Scope parameterScope(Hir.FnDef h, Hir.Expr body, Symbols symbols,
+                                PublishedDeclarations published, DeclarationKinds kinds,
+                                Map<String, Type> recursiveHelperFns) {
+        Scope env = Scope.NONE;
+        List<Integer> open = new ArrayList<>();
+        for (int i = 0; i < h.params().size(); i++) {
+            Hir.FnParam p = h.params().get(i);
+            if (p.type() == null) {
+                open.add(i);
+                continue;
+            }
+            env = env.with(p.binder(), TypeOps.resolveParamType(p.type()));
+        }
+        if (!open.isEmpty()) {
+            typeFromBody(h, open, env, body, symbols, published, kinds, Map.of(),
+                    recursiveHelperFns);
+        }
+        return env;
+    }
+
     /** A call in {@code body} to a behavior, which no helper reaches (spec [#calling-a-behavior]). */
     private static Optional<Hir.Apply> callToABehavior(Hir.Expr body) {
         if (body instanceof Hir.Apply call && call.answered() != null
