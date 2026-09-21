@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.values.InOneOrder;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -29,19 +30,29 @@ import java.util.Set;
  *
  * <p><b>{@link #answers} is the one canonical map; {@link #classes}, {@link #arms}, {@link #pairs}
  * and {@link #meetings} are projections of it, not a second representation kept in step by hand.</b>
- * Each is rebuilt from {@code answers} on every call rather than held apart, so there is nothing
- * for a kind added to {@link GenerationObligation} to fall out of step with — a new
- * {@link GenerationAnswer} variant either has a projection written for it here or is invisible to
- * every one of the four, and neither compiles a mismatch into two things claiming to be the same
- * map. See {@link GenerationAnswer} for why the values these project are not one shared disposition
- * type either.
+ * Each is built from {@code answers} once, in the constructor, and handed back — so there is
+ * nothing for a kind added to {@link GenerationObligation} to fall out of step with, and nothing
+ * that pays for the same walk of every obligation on every call a reader asking one arm at a time
+ * happens to make. See {@link GenerationAnswer} for why the values these project are not one
+ * shared disposition type either.
+ *
+ * <p>Not a record, for the same reason: what {@link #equals} and {@link #hashCode} answer with is
+ * {@link #plan} and {@link #answers} alone, held in no order — the derived views are computed from
+ * those two and add nothing a record's generated equality would need to see.
  */
-public record Discharge(GenerationPlan plan, Map<GenerationObligation, GenerationAnswer> answers) {
+public final class Discharge {
 
-    public Discharge {
+    private final GenerationPlan plan;
+    private final Map<GenerationObligation, GenerationAnswer> answers;
+    private final Map<ClassOfAPosition, ClassDisposition> classes;
+    private final Map<Generator.ArmOwed, ArmDisposition> arms;
+    private final Map<ObligationIdentity.OfAFallbackPairCell, ClassDisposition> pairs;
+    private final Map<ObligationIdentity.OfACombinationOfDecisions, ClassDisposition> meetings;
+
+    public Discharge(GenerationPlan plan, Map<GenerationObligation, GenerationAnswer> answers) {
         Objects.requireNonNull(plan, "a discharge answers a plan");
-        answers = Ordered.byKey(answers);
-        for (Map.Entry<GenerationObligation, GenerationAnswer> each : answers.entrySet()) {
+        Map<GenerationObligation, GenerationAnswer> validated = Ordered.byKey(answers);
+        for (Map.Entry<GenerationObligation, GenerationAnswer> each : validated.entrySet()) {
             if (!each.getKey().equals(each.getValue().obligation())) {
                 throw new IllegalArgumentException(
                         "an answer filed under an obligation it does not answer: " + each.getKey()
@@ -49,12 +60,38 @@ public record Discharge(GenerationPlan plan, Map<GenerationObligation, Generatio
             }
         }
         Set<GenerationObligation> asked = new LinkedHashSet<>(plan.obligations());
-        if (!answers.keySet().equals(asked)) {
+        if (!validated.keySet().equals(asked)) {
             throw new IllegalStateException(
                     "the obligations this run was asked for and the ones it answered for are not"
                             + " the same: asked " + InOneOrder.of(asked)
-                            + ", answered " + InOneOrder.of(answers.keySet()));
+                            + ", answered " + InOneOrder.of(validated.keySet()));
         }
+        this.plan = plan;
+        this.answers = validated;
+        // The four projections, walked once here rather than rebuilt on every call a reader
+        // taking one kind at a time makes — an arm found one at a time, over every finding of a
+        // behavior, is the walk this exists to spare.
+        Map<ClassOfAPosition, ClassDisposition> classes = new LinkedHashMap<>();
+        Map<Generator.ArmOwed, ArmDisposition> arms = new LinkedHashMap<>();
+        Map<ObligationIdentity.OfAFallbackPairCell, ClassDisposition> pairs = new LinkedHashMap<>();
+        Map<ObligationIdentity.OfACombinationOfDecisions, ClassDisposition> meetings =
+                new LinkedHashMap<>();
+        for (GenerationAnswer each : validated.values()) {
+            switch (each) {
+                case GenerationAnswer.Class(var obligation, var disposition) ->
+                        classes.put(obligation.target(), disposition);
+                case GenerationAnswer.Arm(var obligation, var disposition) ->
+                        arms.put(obligation.target(), disposition);
+                case GenerationAnswer.Pair(var obligation, var disposition) ->
+                        pairs.put(obligation.target(), disposition);
+                case GenerationAnswer.Meeting(var obligation, var disposition) ->
+                        meetings.put(obligation.target(), disposition);
+            }
+        }
+        this.classes = Collections.unmodifiableMap(classes);
+        this.arms = Collections.unmodifiableMap(arms);
+        this.pairs = Collections.unmodifiableMap(pairs);
+        this.meetings = Collections.unmodifiableMap(meetings);
     }
 
     /** The answers taken over the plan, one apiece and in the plan's order. */
@@ -71,6 +108,16 @@ public record Discharge(GenerationPlan plan, Map<GenerationObligation, Generatio
         return new Discharge(plan, Map.of());
     }
 
+    /** What this run was asked for. */
+    public GenerationPlan plan() {
+        return plan;
+    }
+
+    /** The answers, filed by the obligation each is to, held in no order. */
+    public Map<GenerationObligation, GenerationAnswer> answers() {
+        return answers;
+    }
+
     /** Every answer, in the plan's own order. */
     public List<GenerationAnswer> inPlanOrder() {
         return plan.obligations().stream().map(answers::get).toList();
@@ -82,73 +129,55 @@ public record Discharge(GenerationPlan plan, Map<GenerationObligation, Generatio
         return "answers " + InOneOrder.of(inPlanOrder());
     }
 
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof Discharge that
+                && plan.equals(that.plan) && answers.equals(that.answers);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(plan, answers);
+    }
+
     /** One class of one position apiece, or none where the plan named none. */
     public Map<ClassOfAPosition, ClassDisposition> classes() {
-        Map<ClassOfAPosition, ClassDisposition> out = new LinkedHashMap<>();
-        for (GenerationAnswer each : answers.values()) {
-            if (each instanceof GenerationAnswer.Class(var obligation, var disposition)) {
-                out.put(obligation.target(), disposition);
-            }
-        }
-        return out;
+        return classes;
     }
 
     /** One arm apiece, or none where the plan named none. */
     public Map<Generator.ArmOwed, ArmDisposition> arms() {
-        Map<Generator.ArmOwed, ArmDisposition> out = new LinkedHashMap<>();
-        for (GenerationAnswer each : answers.values()) {
-            if (each instanceof GenerationAnswer.Arm(var obligation, var disposition)) {
-                out.put(obligation.target(), disposition);
-            }
-        }
-        return out;
+        return arms;
     }
 
     /** One combination of two classes apiece, or none where the plan named none. */
     public Map<ObligationIdentity.OfAFallbackPairCell, ClassDisposition> pairs() {
-        Map<ObligationIdentity.OfAFallbackPairCell, ClassDisposition> out = new LinkedHashMap<>();
-        for (GenerationAnswer each : answers.values()) {
-            if (each instanceof GenerationAnswer.Pair(var obligation, var disposition)) {
-                out.put(obligation.target(), disposition);
-            }
-        }
-        return out;
+        return pairs;
     }
 
     /** One combination of the body's decisions apiece, or none where the plan named none. */
     public Map<ObligationIdentity.OfACombinationOfDecisions, ClassDisposition> meetings() {
-        Map<ObligationIdentity.OfACombinationOfDecisions, ClassDisposition> out =
-                new LinkedHashMap<>();
-        for (GenerationAnswer each : answers.values()) {
-            if (each instanceof GenerationAnswer.Meeting(var obligation, var disposition)) {
-                out.put(obligation.target(), disposition);
-            }
-        }
-        return out;
+        return meetings;
     }
 
     /** What became of one combination of the body's decisions, or null where nothing asked. */
     public ClassDisposition at(ObligationIdentity.OfACombinationOfDecisions owed) {
-        return answers.get(new GenerationObligation.Meeting(owed)) instanceof GenerationAnswer.Meeting m
-                ? m.disposition() : null;
+        return meetings.get(owed);
     }
 
     /** What became of one combination of two classes, or null where nothing asked about it. */
     public ClassDisposition at(ObligationIdentity.OfAFallbackPairCell owed) {
-        return answers.get(new GenerationObligation.Pair(owed)) instanceof GenerationAnswer.Pair p
-                ? p.disposition() : null;
+        return pairs.get(owed);
     }
 
     /** What became of one class, or null where this run was not asked about it. */
     public ClassDisposition at(ClassOfAPosition owed) {
-        return answers.get(new GenerationObligation.Class(owed)) instanceof GenerationAnswer.Class c
-                ? c.disposition() : null;
+        return classes.get(owed);
     }
 
     /** What became of one arm, or null where this run was not asked about it. */
     public ArmDisposition at(Generator.ArmOwed owed) {
-        return answers.get(new GenerationObligation.Arm(owed)) instanceof GenerationAnswer.Arm a
-                ? a.disposition() : null;
+        return arms.get(owed);
     }
 
     /**
@@ -172,7 +201,7 @@ public record Discharge(GenerationPlan plan, Map<GenerationObligation, Generatio
     public ArmDisposition at(souther.compiler.coverage.ArmProbe probe) {
         ArmDisposition only = null;
         int claiming = 0;
-        for (Map.Entry<Generator.ArmOwed, ArmDisposition> each : arms().entrySet()) {
+        for (Map.Entry<Generator.ArmOwed, ArmDisposition> each : arms.entrySet()) {
             if (each.getKey().recordedAt(probe)) {
                 claiming++;
                 only = each.getValue();
