@@ -17,6 +17,7 @@ import souther.compiler.types.ValueName;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -66,6 +67,25 @@ class BlockReachesTest {
         assertEquals(List.of(second, first), bindingIds(reaches),
                 "the scrutinee's binding and the read a sibling arm's body makes of the other arm's"
                         + " binder are both reaches; a binder's own arm reading it is not");
+    }
+
+    @Test
+    void anIfConstructedsBinderScopesOnlyItsSuccessArm() {
+        BindingId x = binding(0);
+        // if constructed x = ... then read(x) else read(x) — the binder scopes `then` alone, so
+        // the same binding read from a failure arm never entered its scope.
+        Core.IfConstructed attempted = new Core.IfConstructed(construction(),
+                new Core.Binder("x", x), read(x),
+                List.of(new Core.ElseArm(Optional.empty(), read(x))),
+                Core.ForkPlace.asWritten(ConstructOccurrence.unwritten()), Type.INT, POS);
+        Core.Block block = block(attempted);
+
+        BlockReaches reaches = BlockReaches.of(block, Set.of());
+
+        assertEquals(List.of(x), bindingIds(reaches),
+                "the binder scopes only the success arm: its own read there is not a reach, but the"
+                        + " same binding read from a failure arm is, since the binder never scoped"
+                        + " it");
     }
 
     @Test
@@ -160,5 +180,9 @@ class BlockReachesTest {
     private static Core.ResolvedPattern pattern() {
         return new Core.ResolvedPattern.Single(ResolvedCase.of(CaseSelector.direct(CASE),
                 List.of(CASE)));
+    }
+
+    private static Core.Construct construction() {
+        return new Core.Construct(CASE, List.of(), Type.ref(CASE), POS);
     }
 }
