@@ -97,4 +97,40 @@ class ACallCarriesTheSettlementTheCheckerProvedAboutItTest {
 
         assertSame(call, Core.mapChildren(call, c -> c, n -> n, b -> b));
     }
+
+    /** {@code TRIM} carries no ordering constraint of its own, but the invariant does not hold a
+     *  second table of which kernels may — that is CallElaborator's decision. It asks only that the
+     *  kernel is not {@code String.matches}, which has its own settlement and no other. */
+    @Test
+    void anOrderingSubjectSettlementIsAcceptedOnAKernelCallOtherThanStringMatches() {
+        Core.Call call = new Core.Call(TRIM, List.of(str("  x  ")), UNWRITTEN,
+                new Core.CallSettlement.OrderingSubject(Type.INT), Type.STRING, POS);
+
+        assertEquals(new Core.CallSettlement.OrderingSubject(Type.INT), call.settlement());
+    }
+
+    /** {@code String.matches} carries its own settlement and no other — the same exclusivity
+     *  {@code aStringMatchesCallIsRefusedNoSettlement} states from the other side, which an
+     *  {@code OrderingSubject} case added later must not quietly open a way around. */
+    @Test
+    void aStringMatchesCallIsRefusedAnOrderingSubjectSettlement() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new Core.Call(MATCHES, List.of(str("x"), str("x")), UNWRITTEN,
+                        new Core.CallSettlement.OrderingSubject(Type.INT), Type.BOOL, POS));
+    }
+
+    /** An {@code OrderingSubject} is a fact about a call this compilation reaches through a kernel —
+     *  a call to a declaration (a helper, a behavior) is refused one, the way a rewrite that turned a
+     *  kernel call into something else while leaving the settlement behind would be. */
+    @Test
+    void aCallToADeclarationIsRefusedAnOrderingSubjectSettlement() {
+        Core.Reached.OfDeclaration toAHelper = new Core.Reached.OfDeclaration(
+                new ReachName.Own(new ValueName.Helper("demo", "half")));
+
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> new Core.Call(toAHelper, List.of(str("x")), UNWRITTEN,
+                        new Core.CallSettlement.OrderingSubject(Type.INT), Type.STRING, POS));
+
+        assertTrue(e.getMessage().contains("half"), e.getMessage());
+    }
 }

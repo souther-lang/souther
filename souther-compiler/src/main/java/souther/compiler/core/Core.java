@@ -548,6 +548,22 @@ public sealed interface Core {
                 Objects.requireNonNull(pattern, "a settled pattern is settled to some text");
             }
         }
+
+        /** The {@link Type} an ordering requirement was checked against for one application of
+         * {@code List.sort}, {@code List.max}, {@code List.min}, or {@code List.sortBy} — the list's
+         * element for the first three, the sort key's result for the last. Not always a Type proved
+         * ordered: the requirement holds it just as readily where there was nothing yet to check —
+         * {@code Nothing} for an empty-list literal, a still-open type variable, or bottom — as where
+         * the Type does support ordering. A Type the requirement refused never reaches here; that is
+         * a compile error instead. Never a comparator, method symbol, or other backend
+         * representation: a backend reads {@link #type()} and decides its own representation from
+         * it. */
+        record OrderingSubject(Type type) implements CallSettlement {
+
+            public OrderingSubject {
+                Objects.requireNonNull(type, "a settled ordering subject is settled to some type");
+            }
+        }
     }
 
     /**
@@ -594,10 +610,21 @@ public sealed interface Core {
                         !(fn instanceof Reached.OfKernel k && k.kernel() == Kernel.STRING_MATCHES);
                 case CallSettlement.StringMatches _ ->
                         fn instanceof Reached.OfKernel k && k.kernel() == Kernel.STRING_MATCHES;
+                // Which kernels may carry this one is CallElaborator's decision, not a second table
+                // held here in agreement with it — this asks only that the settlement is attached
+                // to a kernel call at all, the way every settlement here is, and preserves the
+                // exclusivity the two cases above already hold: `String.matches` carries its own
+                // settlement and no other, the same fact the `None` and `StringMatches` arms state
+                // from their own sides. A rewrite that turned the call into something else (a
+                // helper, an injected behavior) while leaving the settlement behind is what the
+                // kernel check refuses; which kernel it is otherwise is not this constructor's to
+                // re-decide.
+                case CallSettlement.OrderingSubject _ ->
+                        fn instanceof Reached.OfKernel k && k.kernel() != Kernel.STRING_MATCHES;
             };
             if (!agrees) {
                 throw new IllegalArgumentException("`" + fn.rendered() + "` and its settlement "
-                        + settlement + " disagree about whether this call is `String.matches`");
+                        + settlement + " disagree about what kind of call this is");
             }
         }
 
