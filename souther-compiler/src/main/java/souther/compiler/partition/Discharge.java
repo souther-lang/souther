@@ -97,10 +97,10 @@ public final class Discharge {
     /**
      * The answers taken over the plan, one apiece and in the plan's order.
      *
-     * <p>Refuses two answers to the same obligation rather than letting the second overwrite the
-     * first: "exactly one answer" is what a total function over the plan means, and a caller
-     * handing over two would otherwise see the constructor's totality check pass on the strength of
-     * whichever answer happened to be put last.
+     * <p>Refuses two answers to the same obligation rather than silently keeping the first and
+     * dropping the second: "exactly one answer" is what a total function over the plan means, and
+     * an unchecked {@code putIfAbsent} would let the constructor's totality check pass on the
+     * strength of whichever one it kept.
      */
     public static Discharge of(GenerationPlan plan, List<GenerationAnswer> answers) {
         Map<GenerationObligation, GenerationAnswer> byObligation = new LinkedHashMap<>();

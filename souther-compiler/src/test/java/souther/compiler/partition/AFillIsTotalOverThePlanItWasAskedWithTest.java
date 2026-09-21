@@ -97,10 +97,10 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
      * Two answers to one obligation are refused rather than the second silently keeping the map.
      *
      * <p>{@link Discharge#of} is the one factory that turns a list of answers into the map
-     * {@link Discharge}'s constructor checks for totality against the plan — and {@code putIfAbsent}
-     * would let a second answer to an obligation already answered pass unnoticed, with the
-     * constructor's own check seeing only whichever answer was put last and finding the domain
-     * complete regardless.
+     * {@link Discharge}'s constructor checks for totality against the plan — and an unchecked
+     * {@code putIfAbsent} would let a second answer to an obligation already answered pass
+     * unnoticed, silently keeping the first, with the constructor's own check finding the domain
+     * complete regardless of which one it kept.
      */
     @Test
     void oneObligationAnsweredTwiceIsRefused() {
