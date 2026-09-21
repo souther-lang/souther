@@ -60,6 +60,9 @@ class WhoMayComposeAFixtureReferenceTest {
      * second numbering, and one naming the minter's is a second run inside a run.
      */
     private static final List<String> NAMING_A_MAKER = List.of(
+            // The reference a module's entry for a value is made of. It is the only reference in
+            // that definition, so it is not told apart from another by a number.
+            "souther/compiler/check/ValueEntries -> " + ORIGIN + "#<init>(I)V",
             "souther/compiler/partition/FixtureReferences -> " + ORIGIN + "#<init>(I)V",
             "souther/compiler/partition/Generator -> " + MINTER + "#<init>()V");
 

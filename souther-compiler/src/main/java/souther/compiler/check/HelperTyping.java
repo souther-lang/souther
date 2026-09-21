@@ -14,6 +14,7 @@ import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -76,11 +77,12 @@ public final class HelperTyping {
             // values written through helpers reaches every link exactly as one written without them
             // — and would copy every link, once per helper, for the same reason.
             //
-            // What settles one is narrower: a value of this module, which is what has an answer to
-            // read. A helper settles nothing, and neither does a value the module took on to emit.
-            boolean settles = h.params().isEmpty() && h.declaredBy(inliner.moduleName());
-            ValueName settled = settles
-                    ? new ValueName.Helper(inliner.moduleName(), h.name()) : null;
+            // What settles one is a value, whichever module declared it: it has an answer to read,
+            // and the answer is the declaration's. A helper settles nothing.
+            // A value emitted as a method takes the values its root region demands, so a value that
+            // was lowered has parameters and every one of them carries a value.
+            ValueName settled = h.params().stream().allMatch(p -> HelperInliner.valueCarriedBy(p) != null)
+                    ? declarationOf(h, inliner.moduleName()) : null;
             Scope env = Scope.NONE;
             List<Integer> inferred = new ArrayList<>();
             for (int i = 0; i < h.params().size(); i++) {
@@ -108,7 +110,7 @@ public final class HelperTyping {
                 List<Type> takenTypes = new ArrayList<>();
                 for (Hir.FnParam p : taken) {
                     CompleteSignature carried = standing.valueKept(
-                            new ValueName.Helper(inliner.moduleName(), HelperInliner.valueCarriedBy(p)));
+                            carriedValue(HelperInliner.valueCarriedBy(p), inliner.moduleName()));
                     if (carried == null) {
                         throw new IllegalStateException("`" + h.name() + "` takes `" + p.name()
                                 + "`, whose value was not settled before it");
@@ -244,6 +246,22 @@ public final class HelperTyping {
                 }
             }
         }
+    }
+
+    /** The value a method's parameter carries, by the name it was reached by: bare where this
+     *  module declared it, and under the module that did where it is another's. A definition's own
+     *  name has no dot in it, so the last one is where the module ends. */
+    private static ValueName carriedValue(String reached, String module) {
+        int dot = reached.lastIndexOf('.');
+        return dot < 0 ? new ValueName.Helper(module, reached)
+                : new ValueName.Helper(reached.substring(0, dot), reached.substring(dot + 1));
+    }
+
+    /** The declaration {@code h} is a definition of: what it reaches where another module declared
+     *  it, and this module's own where it did. */
+    private static ValueName declarationOf(Hir.FnDef h, String module) {
+        ReachName.Declaration taken = h.takenOnAs();
+        return taken != null ? taken.denotes() : new ValueName.Helper(module, h.name());
     }
 
     /**
@@ -868,6 +886,10 @@ public final class HelperTyping {
         // A build that is a call to the method its value is emitted as is an edge of the same graph.
         if (e instanceof Hir.Materialised build && build.body() instanceof Hir.Var.Denoting named
                 && names.contains(named.reaches())) {
+            out.add(named.reaches());
+        }
+        // A value another module declares, left where it is named.
+        if (e instanceof Hir.Var.Denoting named && names.contains(named.reaches())) {
             out.add(named.reaches());
         }
         TypeChecker.forEachChild(e, c -> collectCalls(c, out, names));

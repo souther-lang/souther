@@ -4,6 +4,7 @@ import souther.compiler.query.Bodies;
 
 import souther.compiler.check.ExpandedClauseLookup;
 import souther.compiler.check.InvariantStatements;
+import souther.compiler.check.ValueEntries;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.DeclarationKinds;
@@ -592,6 +593,13 @@ public final class Backend {
                         : asLimit(e, helper.written());
             }
         }
+        List<String> entries = recHelpers.values().stream()
+                .map(Hir.FnDef::name)
+                .filter(name -> name.startsWith(ValueEntries.methodFor("")))
+                .toList();
+        if (!entries.isEmpty()) {
+            out.put(new GeneratedClass.Values(module.name()), b.generateValues(entries));
+        }
         out.putAll(b.ctx.synthClasses());   // escaping lambdas compiled to Fn classes (spec §blocks)
         // Every site the plan numbered has to be in the bytecode. A missing arm comes back as an arm
         // no row goes through and a missing comparison as a line no row reached, and both read as the
@@ -712,6 +720,37 @@ public final class Backend {
                     gen.emitTail(elaborated(checked.emittedHelpers(), h.name()),
                             cdFns, Set.of(), Map.of(), helperReturn);
                 });
+            }
+        });
+    }
+
+    /**
+     * Emits the class another module reads this module's published values through: one public
+     * static method per value, named as the value is, that answers with what the value's entry on
+     * {@code $Fns} answers with.
+     *
+     * <p>The entry is where the value is built, in a region of its own that binds what the value
+     * needs once. This only hands it on across the module boundary, which is why it is the only
+     * public member: the class the bodies are on stays package-private.
+     */
+    private byte[] generateValues(List<String> entries) {
+        ClassDesc cdFns = ctx.cd(new GeneratedClass.Helpers(pkg));
+        ClassDesc cdValues = ctx.cd(new GeneratedClass.Values(pkg));
+        MethodTypeDesc desc = MethodTypeDesc.of(CD_Object);
+        return build(cdValues, cb -> {
+            cb.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER
+                    | ClassFile.ACC_SYNTHETIC);
+            for (String entry : entries) {
+                String published = entry.substring(ValueEntries.methodFor("").length());
+                // An entry exists only for a value another module calls: an exposed one, or one a
+                // published helper names, which is expanded into the reader.
+                int access = ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC
+                        | ClassFile.ACC_PUBLIC;
+                cb.withMethodBody(published, desc, access,
+                        code -> {
+                            code.invokestatic(cdFns, CodegenContext.helperMethod(entry), desc);
+                            code.areturn();
+                        });
             }
         });
     }
@@ -1311,8 +1350,15 @@ public final class Backend {
      * not there. One decision moving the number twice is what the number is for: it is not a name
      * for a decision but a statement that a jar and a runtime were built together, and the two
      * halves shipped apart.
+     *
+     * <p>Version 21 changes where a value another module publishes runs. It runs in the module that
+     * declares it, which now publishes a public {@code $Values} class holding one entry per value,
+     * and a reader calls that entry instead of copying the value's body into its own methods. A
+     * jar written before it has no entry to call. The module's metadata also records what each of
+     * its values was settled as, which is what a reader types a call to the entry by, so a reader
+     * of an older jar has no answer to type it with.
      */
-    public static final int BOUNDARY_VERSION = 20;
+    public static final int BOUNDARY_VERSION = 21;
 
     /** Emits the class a module's own declarations are published on, carrying {@code declarations}.
      * What it says is the caller's; that it is built like every other generated class — the same Java

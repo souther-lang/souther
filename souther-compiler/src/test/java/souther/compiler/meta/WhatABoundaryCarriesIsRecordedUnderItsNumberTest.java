@@ -51,7 +51,7 @@ class WhatABoundaryCarriesIsRecordedUnderItsNumberTest {
      * {@link #everyMemberOfTheRecordWasMeasured}, which refuses a record that could not read one.
      */
     private static final String MODULE = """
-            module shared.money exposing ( Amount, Receipt, charge, quote )
+            module shared.money exposing ( Amount, Receipt, ceiling, charge, quote )
             import String ( length )
 
             data Amount = Int
@@ -60,6 +60,8 @@ class WhatABoundaryCarriesIsRecordedUnderItsNumberTest {
             data Receipt = { paid: Amount }
 
             let withinCap (n: Int) = n <= 1000
+
+            let ceiling = Amount(1000)
 
             behavior charge : (a: Amount) -> Receipt
                 constructs Receipt

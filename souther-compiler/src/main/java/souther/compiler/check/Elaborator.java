@@ -253,7 +253,8 @@ public final class Elaborator {
                 // to learn that a name can stand for one.
                 case ValueName.Helper _ when ctx.preserved().valueKept(v.denotes()) != null ->
                         ctx.preserved().valuesAreMethods()
-                                ? calledValue(ctx.preserved().valueKept(v.denotes()), v)
+                                ? calledValue(ctx.preserved().valueKept(v.denotes()), v,
+                                        ctx.symbols().module())
                                 : keptValue(ctx.preserved().valueKept(v.denotes()), v.origin(),
                                         v.pos());
                 default -> throw notAValue(v, env);
@@ -1576,13 +1577,20 @@ public final class Elaborator {
      * <p>Nobody applied anything at the reference, so the call is no construct of the author's: it is
      * this representation's, in no copy, and there is nothing for a reader to be sent to.
      */
-    private static Core calledValue(CompleteSignature settled, Hir.Var.Denoting v) {
+    private static Core calledValue(CompleteSignature settled, Hir.Var.Denoting v,
+                                    String module) {
         ReachName.Declaration declaration = v.reachesADeclaration();
         if (declaration == null) {
             throw new IllegalStateException("`" + v.written() + "` is a value called as a method and"
                     + " reaches no declaration");
         }
-        return new Core.Call(new Core.Reached.OfDeclaration(declaration), List.of(),
+        // A value another module declares runs there: what this module calls is that module's entry
+        // for it, so the reference is to a published value and not to a method held here.
+        Core.Reached callee = declaration instanceof ReachName.OfModule of
+                && !of.denotes().module().equals(module)
+                ? new Core.Reached.OfPublishedValue(of)
+                : new Core.Reached.OfDeclaration(declaration);
+        return new Core.Call(callee, List.of(),
                 ConstructOccurrence.unwritten(), settled.result(), v.pos());
     }
 

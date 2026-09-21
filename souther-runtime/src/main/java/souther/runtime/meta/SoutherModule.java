@@ -55,4 +55,7 @@ public @interface SoutherModule {
      * what a type is, so it has to be readable where the type is imported, and it cannot be read
      * without the helpers it names. Helpers no invariant reaches are not carried. */
     String[] invariantHelpers() default {};
+
+    /** What each value the module declares was settled as, one {@code name=type} entry each. */
+    String[] valueAnswers() default {};
 }

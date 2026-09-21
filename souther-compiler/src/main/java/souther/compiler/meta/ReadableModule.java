@@ -2,6 +2,7 @@ package souther.compiler.meta;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.BehaviorImplementation;
+import souther.compiler.check.Preserved;
 import souther.compiler.check.Scoping;
 import souther.compiler.cst.SourceLayout;
 import java.util.List;
@@ -92,6 +93,11 @@ public sealed interface ReadableModule permits ModuleReadback.AsRead {
 
     /** What its library import lines brought in, which the module itself no longer says. */
     List<Scoping.Claim> libraryClaims();
+
+    /** What each value the module declares was settled as, by the module's own check. The one
+     *  answer a reader of one of its values has: the bodies it also carries are for the analyses
+     *  and are not asked what a value comes to. */
+    Preserved.SettledValues valueAnswers();
 
     /**
      * How the text this was read back from is laid out.

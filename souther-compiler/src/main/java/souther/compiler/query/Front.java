@@ -25,6 +25,7 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.meta.PublishedClasses;
 import souther.compiler.meta.ModuleReadback;
+import souther.compiler.check.Preserved;
 import souther.compiler.meta.ReadableModule;
 import souther.compiler.meta.Readback;
 import souther.compiler.meta.ReadbackReasons;
@@ -499,6 +500,11 @@ public final class Front {
 
             public List<Scoping.Claim> libraryClaims() {
                 return read.libraryClaims();
+            }
+
+            /** What each value it declares was settled as, as the module's own check answered. */
+            public Preserved.SettledValues valueAnswers() {
+                return read.valueAnswers();
             }
         }
 

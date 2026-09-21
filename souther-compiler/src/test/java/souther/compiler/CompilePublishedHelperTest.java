@@ -581,10 +581,34 @@ class CompilePublishedHelperTest {
         assertTrue(e.getMessage().contains("taxed"), e.getMessage());
     }
 
-    /** A module that publishes nothing recursive emits no `$Fns` at all — the class appears because
-     * a method has to go somewhere, not because a helper was imported. */
+    /** A module that publishes nothing recursive and reaches no value emits no `$Fns` at all — the
+     * class appears because a method has to go somewhere, not because a helper was imported. */
     @Test
     void aReaderOfANonRecursiveHelperEmitsNoFnsClass() throws Exception {
+        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of("""
+                module pricing exposing ( Amount, taxed )
+
+                data Amount = Int
+
+                let taxed (a: Amount) = Amount(a.value * 2)
+                """, """
+                module order exposing ( Receipt, bill )
+
+                import pricing ( Amount, taxed )
+
+                data Receipt = { total: Amount }
+
+                behavior bill : (a: Amount) -> Receipt constructs Receipt
+                let bill (a) = Receipt { total = taxed(a) }
+                """));
+
+        assertFalse(classes.containsKey(Emitted.helpers("order")), classes.keySet().toString());
+    }
+
+    /** A value a published helper reaches runs where it is declared. The reader calls the entry
+     * its declaring module publishes, so it emits no method for the value and copies none of it. */
+    @Test
+    void aReaderOfAHelperThatReachesAValueCallsTheEntryOfTheModuleThatDeclaresIt() throws Exception {
         Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(PRICING, """
                 module order exposing ( Receipt, bill )
 
@@ -596,6 +620,7 @@ class CompilePublishedHelperTest {
                 let bill (a) = Receipt { total = taxed(a) }
                 """));
 
+        assertTrue(classes.containsKey("pricing.$Values"), classes.keySet().toString());
         assertFalse(classes.containsKey(Emitted.helpers("order")), classes.keySet().toString());
     }
 

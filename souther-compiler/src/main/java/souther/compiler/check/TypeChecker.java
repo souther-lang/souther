@@ -102,8 +102,12 @@ public final class TypeChecker {
                                        Map<ValueName.Behavior, ReqSig> calleeSigs,
                                        Map<String, Type> recursiveHelperFns,
                                        Map<String, Hir.FnDef> imported, Set<String> settled,
-                                       Map<TypeSymbol.AtModule, ValueShape> shapes) {
+                                       Map<TypeSymbol.AtModule, ValueShape> shapes,
+                                       Preserved.SettledValues declaredElsewhere) {
         Elaborated elaborated = new Elaborated();
+        // What the modules that declare the values this one reads settled them as: their answer,
+        // which is the only one there is, and not a check of a copy of their bodies made here.
+        declaredElsewhere.signatures().values().forEach(elaborated.settledValues::settled);
         List<Unanswerable> abandoned = new ArrayList<>();
         List<CompileException> errors = new ArrayList<>();
         boolean stopped = false;
@@ -277,6 +281,9 @@ public final class TypeChecker {
         }
         for (Hir.FnDef fn : lowered.takenOn()) {
             loweredBodies.put(fn.name(), fn.writtenBody());
+            if (fn.params().stream().anyMatch(p -> HelperInliner.valueCarriedBy(p) != null)) {
+                elaborated.valueParams.put(fn.name(), fn.params());
+            }
         }
         // The imported definitions join the table this module's bodies are expanded against: a
         // published helper is expanded at its call sites here exactly as one of this module's own is,

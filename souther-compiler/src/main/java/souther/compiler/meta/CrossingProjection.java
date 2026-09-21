@@ -115,7 +115,7 @@ final class CrossingProjection {
      * A published helper, whole.
      *
      * <p>These are carried because a declaration cannot be read without them — an invariant calls
-     * them, a published value is substituted where it is named — so a helper that computes something
+     * them, a published value is a definition the reader's analyses read — so a helper that computes something
      * else makes the declaration carrying it admit something else. There is no part of one that a
      * crossing does not depend on.
      */

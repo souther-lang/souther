@@ -107,7 +107,7 @@ final class SoutherAnnotations {
                 moduleInt(a, "compat", -1), moduleString(a, "compiler", ""),
                 moduleString(a, "header", ""),
                 strings(a, "imports"), strings(a, "types"), strings(a, "behaviors"),
-                strings(a, "invariantHelpers"));
+                strings(a, "invariantHelpers"), strings(a, "valueAnswers"));
     }
 
     /**

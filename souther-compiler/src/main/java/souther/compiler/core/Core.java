@@ -360,6 +360,34 @@ public sealed interface Core {
         }
 
         /**
+         * A value another module publishes, read where it is named.
+         *
+         * <p>Its own family and not an {@link OfDeclaration}, because what is emitted for it is not a
+         * method this module holds. The value has one place it runs, which is the module that
+         * declares it, and this module calls that module's entry for it — so nothing of the value's
+         * body, and nothing of the types the body is built from, is this module's to know.
+         */
+        record OfPublishedValue(ReachName.OfModule name) implements Reached {
+
+            public OfPublishedValue {
+                if (!(name.denotes() instanceof ValueName.Helper)) {
+                    throw new IllegalArgumentException(
+                            "a published value is a helper of the module that declares it: " + name);
+                }
+            }
+
+            /** What running this call means: the entry its declaring module publishes. */
+            public Reaches reaches() {
+                return new Reaches.APublishedValue((ValueName.Helper) name.denotes());
+            }
+
+            @Override
+            public String toString() {
+                return rendered();
+            }
+        }
+
+        /**
          * A callee whose declaration is a kernel of the standard library, and which kernel it is.
          *
          * <p>Which kernel is the answer to a question this compiler settled: the checker typed the
@@ -420,6 +448,18 @@ public sealed interface Core {
          * how the call reaches it, and a reader emitting one works it out from the reference.
          */
         record AHelper(ValueName declaration) implements Reaches { }
+
+        /**
+         * A value another module declares, which runs there. What is emitted is a call to the
+         * public entry that module publishes for it, and never a method of the emitting module.
+         */
+        record APublishedValue(ValueName.Helper value) implements Reaches {
+
+            @Override
+            public ValueName declaration() {
+                return value;
+            }
+        }
 
         /**
          * A behavior, whose implementation is somewhere else — another module's, or supplied from

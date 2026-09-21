@@ -329,6 +329,202 @@ class CompileExposedValueTest {
         assertTrue(e.getMessage().contains("published"), e.getMessage());
     }
 
+    /** The reader having a value of the name a published value reaches changes nothing: what the
+     * published value names is the declaring module's, so the two never meet. The rows decide it,
+     * since a reader that read its own `base` would answer another number. */
+    @Test
+    void aCarriedValueIsNotTheReadersValueOfThatName() {
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of("""
+                module pricing exposing ( Amount, standard )
+
+                data Amount = Int
+                data Step = Int
+
+                let base = Step(10)
+                let standard = Amount(base.value * 100)
+                """, """
+                module order exposing ( In, Out, bill )
+
+                import pricing ( Amount, standard )
+
+                data In = { n: Int }
+                data Out = { v: Int }
+                data Step = Int
+
+                let base = Step(7)
+
+                behavior bill : (i: In) -> Out constructs Out
+                let bill (i) = Out { v = standard.value + base.value + i.n }
+
+                example bill
+                    | "the published value is the declaring module's" : (In { n = 1 })
+                        -> Out { v = 1008 }
+                """)));
+    }
+
+    /** A value runs in the module that declares it even when that module is only a jar. What it is
+     * built from stays there, so a type the jar does not expose is never named from the reader,
+     * and what the reader types the call by is what the jar recorded the value as. */
+    @Test
+    void aValueBuiltOfAHiddenTypeRunsAcrossAJarBoundary() throws Exception {
+        Map<String, ClassFileImage> jar = Compiler.compile("""
+                module pricing exposing ( Amount, cap )
+
+                data Amount = Int
+                data Step = Int
+
+                let base = Step(10)
+                let cap = Amount(base.value * 100)
+                """);
+        Map<String, ClassFileImage> reader = Compiler.compileModules(List.of("""
+                module order exposing ( In, Out, bill )
+
+                import pricing ( Amount, cap )
+
+                data In = { n: Int }
+                data Out = { v: Int }
+
+                behavior bill : (i: In) -> Out constructs Out
+                let bill (i) = Out { v = cap.value + i.n }
+                """), ModulePath.of(jar));
+        Map<String, ClassFileImage> both = new java.util.LinkedHashMap<>(jar);
+        both.putAll(reader);
+        BytesClassLoader loader = new BytesClassLoader(both, getClass().getClassLoader());
+
+        Object behavior = Emitted.behavior(loader, "order", "bill").getConstructor().newInstance();
+        Object out = Codecs.apply(behavior, Codecs.decoded(loader, "order.In", Map.of("n", 0L)));
+
+        assertEquals(1000L, ((Map<?, ?>) Codecs.encode(loader, "order.Out", out)).get("v"));
+    }
+
+    private static final String CHAINED = """
+            module pricing exposing ( Amount, cap )
+
+            data Amount = Int
+
+            let base = Amount(1000)
+            let middle = base
+            let cap = middle
+            """;
+
+    private static final String CHAIN_READER = """
+            module order exposing ( Out, bill )
+
+            import pricing ( Amount, cap )
+
+            data Out = { v: Int }
+
+            behavior bill : (a: Amount) -> Out constructs Out, Amount
+            let bill (a) = Out { v = cap.value }
+            """;
+
+    /** What a private value the published one rests on builds is still what the reader's
+     * behavior is held to, in the same run. */
+    @Test
+    void aConstructionBehindPrivateValuesIsCountedInTheSameRun() {
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of(CHAINED, CHAIN_READER)));
+    }
+
+    /** And from a jar, where only what the module recorded and carried is there. */
+    @Test
+    void aConstructionBehindPrivateValuesIsCountedAcrossAJar() {
+        ModulePath path = ModulePath.of(Compiler.compile(CHAINED));
+
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of(CHAIN_READER), path));
+    }
+
+    /** A published helper that reaches a private value still runs from another module. */
+    @Test
+    void aPublishedHelperReachingAPrivateValueRunsInAnotherModule() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compileModules(List.of("""
+                module pricing exposing ( Amount, taxed )
+
+                data Amount = Int
+
+                let rate = Amount(3)
+                let taxed (a: Amount) = Amount(a.value * rate.value)
+                """, """
+                module order exposing ( In, Out, bill )
+
+                import pricing ( Amount, taxed )
+
+                data In = { n: Int }
+                data Out = { v: Int }
+
+                behavior bill : (i: In) -> Out constructs Out, Amount
+                let bill (i) = Out { v = taxed(Amount(i.n)).value }
+                """)), getClass().getClassLoader());
+
+        Object behavior = Emitted.behavior(loader, "order", "bill").getConstructor().newInstance();
+        Object out = Codecs.apply(behavior, Codecs.decoded(loader, "order.In", Map.of("n", 2L)));
+
+        assertEquals(6L, ((Map<?, ?>) Codecs.encode(loader, "order.Out", out)).get("v"));
+    }
+
+    /** The JVM surface of `$Values` is the exposed surface: a value the module keeps to itself is
+     * not public. */
+    @Test
+    void onlyAnExposedValueHasAPublicEntry() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compileModules(List.of(CHAINED)),
+                getClass().getClassLoader());
+
+        Class<?> values = loader.loadClass("pricing.$Values");
+
+        assertTrue(java.lang.reflect.Modifier.isPublic(values.getMethod("cap").getModifiers()));
+        assertTrue(java.util.Arrays.stream(values.getDeclaredMethods())
+                .filter(m -> !m.getName().equals("cap"))
+                .noneMatch(m -> java.lang.reflect.Modifier.isPublic(m.getModifiers())));
+    }
+
+    /** A published value is read through a public method of its declaring module that builds it
+     * there, so a type that module does not expose is never named from outside it. */
+    @Test
+    void aPublishedValueIsReadThroughItsDeclaringModulesEntry() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compileModules(List.of("""
+                module pricing exposing ( Amount, cap )
+
+                data Amount = Int
+                data Step = Int
+
+                let base = Step(10)
+                let cap = Amount(base.value * 100)
+                """)), getClass().getClassLoader());
+
+        Class<?> values = loader.loadClass("pricing.$Values");
+        Object cap = values.getMethod("cap").invoke(null);
+
+        assertTrue(java.lang.reflect.Modifier.isPublic(values.getModifiers()));
+        assertEquals(1000L, Codecs.encode(loader, "pricing.Amount", cap));
+    }
+
+    /** A value published by name and also reached by another published value is one definition in
+     * the reader, and both routes to it answer alike. */
+    @Test
+    void aValueReachedByNameAndThroughAnotherPublishedValueIsOneDefinition() {
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of("""
+                module pricing exposing ( Amount, cap, standard )
+
+                data Amount = Int
+
+                let cap = Amount(1000)
+                let standard = Amount(cap.value + 1)
+                """, """
+                module order exposing ( In, Out, bill )
+
+                import pricing ( Amount, cap, standard )
+
+                data In = { n: Int }
+                data Out = { v: Int }
+
+                behavior bill : (i: In) -> Out constructs Out
+                let bill (i) = Out { v = cap.value + standard.value + i.n }
+
+                example bill
+                    | "both routes reach the same value" : (In { n = 1 })
+                        -> Out { v = 2002 }
+                """)));
+    }
+
     /** A value another module keeps to itself has no name here, as any unexposed name has. */
     @Test
     void anUnpublishedValueCannotBeImported() {

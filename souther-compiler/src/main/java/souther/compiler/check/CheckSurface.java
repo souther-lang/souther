@@ -162,9 +162,16 @@ public final class CheckSurface implements Assembly {
         // in the program the behavior it is about is applied in. Which method is whose is kept with
         // the assembly: it is decided here and read wherever a row is run, never counted out again.
         RowFixtures.Emitted rows = RowFixtures.emitted(written, newtypes, signatures);
-        return rows.defs().isEmpty() ? written
-                : new CheckSurface(settling, declarations, fns, desugaredFrom, examples, fakes,
-                        List.copyOf(rows.defs().values()), rows.methods());
+        // And what another module reads a value it publishes through: a definition of the same
+        // family, emitted for the same reason, and kept apart from the rows in that no row runs it.
+        Map<String, Hir.FnDef> entries = ValueEntries.emitted(written, newtypes);
+        if (rows.defs().isEmpty() && entries.isEmpty()) {
+            return written;
+        }
+        List<Hir.FnDef> minted = new ArrayList<>(rows.defs().values());
+        minted.addAll(entries.values());
+        return new CheckSurface(settling, declarations, fns, desugaredFrom, examples, fakes,
+                minted, rows.methods());
     }
 
     /** What the module is called. */
