@@ -22,6 +22,7 @@ import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A value built for two regions is two builds of one written body, and they are two occurrences.
@@ -113,6 +114,28 @@ class AValueBuiltForTwoRegionsIsTwoOccurrencesTest {
                 buildsOfInner(loweredBody(source, "f")));
         assertEquals(List.of(new MaterialisationSite.Body(new WrittenOwner.Body("m", "g"))),
                 buildsOfInner(loweredBody(source, "g")));
+    }
+
+    /** A value the root region demands and a fork inside it names as well is one build, at the
+     * root: the template the analysis reads takes it once and the fork reads that, rather than
+     * building it a second time for the region it names it in. */
+    @Test
+    void aValueNamedAtTheRootAndInsideAForkIsBuiltOnceAtTheRoot() {
+        String source = """
+                module m exposing (f)
+
+                let inner = List.length([1, 2, 3]) > 2
+
+                let outer = inner && (if List.length([1]) > 0 then inner else false)
+
+                behavior f : (n: Int) -> Bool
+                let f (n) = outer
+                """;
+
+        List<MaterialisationSite> builds = buildsOfInner(analysisBody(source, "outer"));
+
+        assertEquals(1, builds.size(), builds.toString());
+        assertTrue(builds.getFirst() instanceof MaterialisationSite.Body, builds.toString());
     }
 
     @Test

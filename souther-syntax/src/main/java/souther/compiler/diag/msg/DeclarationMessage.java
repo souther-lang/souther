@@ -172,10 +172,6 @@ public sealed interface DeclarationMessage extends Message {
     record SubstitutingAValueIsMoreStructureThanIsHeld(String value, int holds)
             implements DeclarationMessage, Reported {}
 
-    @Code(DiagnosticCode.E2107)
-    record TheAnalysisOfAValueIsLargerThanIsHeld(String value, String holds)
-            implements DeclarationMessage, Reported {}
-
     record WriteItAsABehaviorOfItsOwn() implements DeclarationMessage, Supporting {}
 
     @Code(DiagnosticCode.E2302)
