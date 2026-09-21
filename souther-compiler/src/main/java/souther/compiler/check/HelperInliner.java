@@ -2258,9 +2258,7 @@ public final class HelperInliner {
         List<Hir.Expr> values = new ArrayList<>();
         materialised.add(here);
         try {
-            Map<String, Hir.Var.Denoting> demanded = new LinkedHashMap<>();
-            demandedHere(e, demanded);
-            for (Hir.Var.Denoting each : List.copyOf(demanded.values())) {
+            for (Hir.Var.Denoting each : List.copyOf(demandedHere(e).values())) {
                 materialise(each, here, order, values, site);
             }
             Hir.Expr inner = read(e);
@@ -2350,9 +2348,7 @@ public final class HelperInliner {
         MaterialisationSite where = site.get();
         Hir.Expr calls = insideThisBuild(named.denotes(), where, () -> inline(body));
         spendOnACopyOf(named, calls);
-        Map<String, Hir.Var.Denoting> under = new LinkedHashMap<>();
-        demandedHere(calls, under);
-        for (Hir.Var.Denoting each : List.copyOf(under.values())) {
+        for (Hir.Var.Denoting each : List.copyOf(demandedHere(calls).values())) {
             materialise(each, here, order, values, site);
         }
         Hir.Binder binder = writing.binders()
@@ -2504,8 +2500,7 @@ public final class HelperInliner {
                 known = new Handover(false, List.of());
             } else {
                 Hir.Expr calls = insideThisBuild(named.denotes(), where, () -> inline(body));
-                Map<String, Hir.Var.Denoting> under = new LinkedHashMap<>();
-                demandedHere(calls, under);
+                Map<String, Hir.Var.Denoting> under = demandedHere(calls);
                 List<Hir.Var.Denoting> taken = takenByTheMethod(under);
                 known = new Handover(taken.size() == under.size(), taken);
             }
@@ -2577,8 +2572,7 @@ public final class HelperInliner {
         Hir.Expr body = writing(bodyOf(fn.name()), Set.of(), () -> {
             heldToTheBound(fn.writtenBody());
             Hir.Expr calls = inline(fn.writtenBody());
-            Map<String, Hir.Var.Denoting> demanded = new LinkedHashMap<>();
-            demandedHere(calls, demanded);
+            Map<String, Hir.Var.Denoting> demanded = demandedHere(calls);
             Map<String, Hir.Binder> handed = new LinkedHashMap<>();
             for (Hir.Var.Denoting each : takenByTheMethod(demanded)) {
                 Hir.Binder binder = writing.binders()
@@ -2647,83 +2641,9 @@ public final class HelperInliner {
         return null;
     }
 
-    /** The values {@code e} names without crossing into a region, first reference of each, and
-     *  those every way out of a fork here names ({@link #onEveryWayOut}). */
-    private void demandedHere(Hir.Expr e, Map<String, Hir.Var.Denoting> out) {
-        if (e == null) {
-            return;
-        }
-        switch (e) {
-            case Hir.Var.Denoting named when materialisable(named) != null ->
-                    out.putIfAbsent(named.reaches(), named);
-            case Hir.If iff -> {
-                demandedHere(iff.cond(), out);
-                onEveryWayOut(List.of(iff.then(), iff.els()), out);
-            }
-            case Hir.IfConstructed ic -> {
-                demandedHere(ic.construct(), out);
-                List<Hir.Expr> ways = new ArrayList<>();
-                ways.add(ic.then());
-                for (Hir.ElseArm arm : ic.els()) {
-                    ways.add(arm.body());
-                }
-                onEveryWayOut(ways, out);
-            }
-            case Hir.Match m -> {
-                demandedHere(m.scrutinee(), out);
-                List<Hir.Expr> ways = new ArrayList<>();
-                for (Hir.Case each : m.cases()) {
-                    ways.add(each.body());
-                }
-                onEveryWayOut(ways, out);
-            }
-            case Hir.Binary b when isShortCircuit(b) -> demandedHere(b.left(), out);
-            case Hir.Block _ -> { }
-            case Hir.ListComp _ -> { }
-            default -> Hir.forEachChild(e, child -> demandedHere(child, out));
-        }
-    }
-
-    /**
-     * The values every one of {@code ways} names, added to what the region around them demands.
-     *
-     * <p>A fork's arms are ways out of one place: whichever is taken, one of them is. So a value
-     * every arm names is named on every path through here, and binding it around the fork
-     * evaluates it exactly where some reference to it is evaluated — which is the whole of what
-     * keeps the region rule from moving work onto a path that had none.
-     *
-     * <p>Only the forks that are ways out. The right of a short-circuit is reached for some of what
-     * reaches the left, a block's body for each application of it and a comprehension's element for
-     * each item, and none of those is a way the code has to go.
-     *
-     * <p>Which says nothing about how often the fork runs, only about whether it does. A value
-     * bound here and read in one arm is built once whichever arm runs, where arm-local bindings
-     * would each build it — one materialisation per region, told of a place that is one region.
-     */
-    private void onEveryWayOut(List<Hir.Expr> ways, Map<String, Hir.Var.Denoting> out) {
-        Map<String, Hir.Var.Denoting> shared = null;
-        for (Hir.Expr way : ways) {
-            Map<String, Hir.Var.Denoting> named = new LinkedHashMap<>();
-            demandedHere(way, named);
-            if (shared == null) {
-                shared = named;
-            } else {
-                shared.keySet().retainAll(named.keySet());
-            }
-            if (shared.isEmpty()) {
-                return;
-            }
-        }
-        if (shared != null) {
-            shared.forEach(out::putIfAbsent);
-        }
-    }
-
-    /** Whether what stands on the right of this is reached only for some of what reaches the
-     *  left. */
-    private static boolean isShortCircuit(Hir.Binary b) {
-        return b.op() == souther.compiler.types.BinOp.AND
-                || b.op() == souther.compiler.types.BinOp.OR;
+    /** What {@code e} demands where it stands, the values a region binds at its head. */
+    private Map<String, Hir.Var.Denoting> demandedHere(Hir.Expr e) {
+        return ValuePlan.of(e, named -> materialisable(named) != null).rootDemands();
     }
 
     /** {@code e} with each value reference the region bound read as that binding, and each region
@@ -2763,7 +2683,7 @@ public final class HelperInliner {
                 }
                 yield new Hir.Match(read(m.scrutinee()), cases, m.origin(), m.pos(), m.region());
             }
-            case Hir.Binary b when isShortCircuit(b) -> new Hir.Binary(b.op(), read(b.left()),
+            case Hir.Binary b when ValuePlan.isShortCircuit(b) -> new Hir.Binary(b.op(), read(b.left()),
                     region(b.right(), slot(b.origin(), new RegionSlot.ShortCircuitRight())),
                     b.origin(), b.pos(), b.region());
             case Hir.Block bl -> new Hir.Block(bl.params(), region(bl.body(), siteOfBlock(bl)),
