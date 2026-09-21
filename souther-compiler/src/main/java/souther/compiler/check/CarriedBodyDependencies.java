@@ -24,6 +24,9 @@ public final class CarriedBodyDependencies {
     private CarriedBodyDependencies() {}
 
     /**
+     * The classes of declared types that emitting {@code closed} names, whichever module they are
+     * of.
+     *
      * @param closed        a definition as it is handed to a reader
      * @param standingCalls what the calls it leaves standing are typed against
      */
