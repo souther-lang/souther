@@ -1938,7 +1938,10 @@ public final class Bodies {
             Answer<DerivedSymbols> symbols = Names.derivedSymbols(db, name);
             Answer<Map<String, Type>> standing =
                     db.ask(new RecursiveCallSigs(name, InliningPolicy.FULL));
-            if (!symbols.present() || !standing.present()) {
+            Answer<ModuleCheck.Of> checked = db.ask(new ModuleCheck(name));
+            // A module that did not check has said why; what its helpers name is not asked of it.
+            if (!symbols.present() || !standing.present() || !checked.present()
+                    || !checked.value().sound()) {
                 return Answer.absent();
             }
             // A closed body names this module's own recursive helpers qualified, which is how a
@@ -1963,9 +1966,19 @@ public final class Bodies {
                 if (carried.params().isEmpty()) {
                     continue;
                 }
-                for (TypeSymbol.AtModule built : CarriedBodyDependencies.of(carried,
-                        symbols.value(), Shapes.publishedDeclarations(db),
-                        Shapes.declarationKinds(db), standingCalls)) {
+                // What this module emits as a method of its own is what its reader emits too, and
+                // the check has already settled it: it is read as that and not typed a second time.
+                String prefix = name + ".";
+                EmittedDefinition emitted = carried.name().startsWith(prefix)
+                        ? checked.value().emittedDefinitions()
+                        .get(carried.name().substring(prefix.length())) : null;
+                Set<TypeSymbol.AtModule> named = emitted != null
+                        ? CarriedBodyDependencies.of(emitted, symbols.value(),
+                        Shapes.publishedDeclarations(db), Shapes.declarationKinds(db))
+                        : CarriedBodyDependencies.of(carried, symbols.value(),
+                        Shapes.publishedDeclarations(db), Shapes.declarationKinds(db),
+                        standingCalls);
+                for (TypeSymbol.AtModule built : named) {
                     if (built.module().equals(name) && kept.contains(built.name())) {
                         String helper = carried.written().canonical();
                         reports.add(Report.raised(Diagnostic.at(carried.pos())

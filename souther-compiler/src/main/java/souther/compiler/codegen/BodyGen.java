@@ -1230,16 +1230,10 @@ final class BodyGen {
             Intrinsics.emit(this, kernel, call);
         }
 
-        /** The sum an ordered kernel takes its comparator off, or null where there is none.
-         *
-         * <p>{@code sortBy} orders by what its key answers, not by what the list holds, so its
-         * comparator is read off the key's result type; the rest order the elements themselves. */
+        /** The sum an ordered kernel takes its comparator off, or null where there is none. */
         private TypeSymbol orderingFor(Kernel kernel, Core.Call call) {
-            if (kernel == Kernel.LIST_SORT_BY) {
-                return call.args().get(0).type() instanceof Type.FnOf key
-                        ? sumOrdering(key.result()) : null;
-            }
-            return elementOrdering(call.args().get(0));
+            return Ordering.sortEnumeration(kernel, call.args().get(0).type(), ctx.inners, symbols,
+                    ctx.kinds, ctx.published);
         }
 
         /** The kernels whose runtime method takes a comparator ahead of what the declaration names,
@@ -1247,8 +1241,7 @@ final class BodyGen {
          *  written out in it, so that the kernels routed there are the kernels this names — what
          *  holds the derived boundary form of one is a test, and a test can only reach the ones it
          *  can be told about. */
-        static final Set<Kernel> ORDERED_BY_COMPARATOR = Set.of(
-                Kernel.LIST_SORT, Kernel.LIST_MAX, Kernel.LIST_MIN, Kernel.LIST_SORT_BY);
+        static final Set<Kernel> ORDERED_BY_COMPARATOR = Ordering.SORT_FAMILY;
 
         /** The kernels this emits itself, which are the kernels {@link Intrinsics}' table has no row
          *  for. Named rather than left to be read off the arms above, so the two sets can be held
@@ -2039,36 +2032,6 @@ final class BodyGen {
                 code.iconst_1();
                 code.ixor();
             }
-        }
-
-        /** The enumeration a list's elements are ordered by, or null when they are ordered otherwise
-         * (an ordered primitive or a newtype over one, which carry their own {@code Comparable}). */
-        private TypeSymbol elementOrdering(Core arg) {
-            return arg.type() instanceof Type.ListOf lo ? sumOrdering(lo.element()) : null;
-        }
-
-        /** The sum that answers for values of {@code t}, or null where the value carries its own
-         * order. Asked of the value as the runtime is handed it, so a newtype over an enumeration
-         * answers null and sorts by the {@code compareTo} its own class carries — the sum's
-         * {@code __order} would be handed the wrapper and not the case.
-         *
-         * <p>Every order is answered for rather than "everything but a {@code Places} sorts by
-         * natural order", so an order added to {@link Ordering} has to say which of the two it is
-         * instead of inheriting the answer that happens to be right for these three. */
-        private TypeSymbol sumOrdering(Type t) {
-            Ordering how = Ordering.of(t, ctx.inners, symbols, ctx.kinds, ctx.published);
-            if (how == null) {
-                return null;
-            }
-            return switch (how.asHeld()) {
-                case Ordering.Places places -> places.enumeration();
-                // A long boxes to a Comparable and a newtype's own class carries a compareTo, so
-                // for both of these the runtime's natural order is the order.
-                case Ordering.Longs _, Ordering.Natural _ -> null;
-                // `asHeld` answers for the value as its own type holds it, which is never wrapped.
-                case Ordering.Wrapped _ ->
-                        throw new IllegalStateException("a held order is never a wrapped one: " + t);
-            };
         }
 
         /**

@@ -10,21 +10,22 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 /**
- * The classes of declared types that emitting a typed body names, read off the tree the emitter reads.
+ * The classes of declared types that emitting a typed definition names, read off the tree the
+ * emitter reads.
  *
- * <p>A construction, a unit data written as a value, the case a {@code match} tests against, the
- * type whose fields are read, and the enumeration a comparison or a sort takes its order from are
- * each a class the emitted method refers to. The last is the reason this is read off a typed body
- * and not the written one: {@code Qualified < Won} names two cases, and the class the order comes
- * from is the sum they belong to, which only the types say.
+ * <p>Two kinds of thing name a class. What the emitter decides from a form and its types — a
+ * construction, a unit data written as a value, the case a {@code match} tests against, the type
+ * whose fields are read, and the enumeration a comparison or a sort takes its order from — is asked
+ * of the same questions the emitter asks ({@link Ordering}, {@link Comparison}). The enumeration is
+ * the reason this is read off a typed body and not the written one: {@code Qualified < Won} names two
+ * cases, and the class the order comes from is the sum they belong to, which only the types say.
  *
- * <p>Each answer here is the one the emitter arrives at, by asking what it asks — {@link Ordering},
- * {@link Comparison} — and not by a second reading of the same tree.
+ * <p>And a value of a declared type is cast to its class wherever it comes out of something the JVM
+ * holds as an object: a method's parameter, a call's result, an element of a collection. So a node
+ * whose type is a declared type, and a parameter of one, are counted as they stand and not by asking
+ * each place that casts, of which there are several and more may be added.
  */
 final class EmittedClassReferences {
-
-    private static final Set<Kernel> ORDERED_BY_COMPARATOR =
-            Set.of(Kernel.LIST_SORT, Kernel.LIST_MAX, Kernel.LIST_MIN, Kernel.LIST_SORT_BY);
 
     private final NewtypeInners inners;
     private final Symbols symbols;
@@ -40,6 +41,7 @@ final class EmittedClassReferences {
         this.published = published;
     }
 
+    /** What a body emitted inline names. */
     static Set<TypeSymbol.AtModule> of(Core body, NewtypeInners inners, Symbols symbols,
                                        DeclarationKinds kinds, PublishedDeclarations published) {
         EmittedClassReferences walk = new EmittedClassReferences(inners, symbols, kinds, published);
@@ -47,7 +49,20 @@ final class EmittedClassReferences {
         return walk.found;
     }
 
+    /** What a definition emitted as a method of its own names: what it takes, and its body. */
+    static Set<TypeSymbol.AtModule> of(EmittedDefinition definition, NewtypeInners inners,
+                                       Symbols symbols, DeclarationKinds kinds,
+                                       PublishedDeclarations published) {
+        EmittedClassReferences walk = new EmittedClassReferences(inners, symbols, kinds, published);
+        for (EmittedDefinition.Parameter parameter : definition.parameters()) {
+            walk.add(parameter.type());
+        }
+        walk.visit(definition.body());
+        return walk.found;
+    }
+
     private void visit(Core e) {
+        add(e.type());
         switch (e) {
             case Core.Construct built -> add(built.typeName());
             case Core.UnitValue unit -> add(unit.data());
@@ -58,11 +73,6 @@ final class EmittedClassReferences {
                             add(selector.name());
                         }
                     });
-                }
-            }
-            case Core.FieldAccess access -> {
-                if (access.target().type() instanceof Type.Ref owner) {
-                    add(owner.name());
                 }
             }
             case Core.Binary bin -> comparedBy(bin);
@@ -86,16 +96,16 @@ final class EmittedClassReferences {
 
     /** The enumeration a sort, a maximum or a minimum takes its order from. */
     private void sortedBy(Core.Call call) {
-        if (!(call.fn() instanceof Core.Reached.OfKernel(_, Kernel kernel))
-                || !ORDERED_BY_COMPARATOR.contains(kernel)) {
-            return;
+        if (call.fn() instanceof Core.Reached.OfKernel(_, Kernel kernel)
+                && Ordering.SORT_FAMILY.contains(kernel)) {
+            add(Ordering.sortEnumeration(kernel, call.args().get(0).type(), inners, symbols, kinds,
+                    published));
         }
-        Type ordered = kernel == Kernel.LIST_SORT_BY
-                ? (call.args().get(0).type() instanceof Type.FnOf key ? key.result() : null)
-                : (call.args().get(0).type() instanceof Type.ListOf list ? list.element() : null);
-        Ordering how = ordered == null ? null : Ordering.of(ordered, inners, symbols, kinds, published);
-        if (how != null && how.asHeld() instanceof Ordering.Places places) {
-            add(places.enumeration());
+    }
+
+    private void add(Type type) {
+        if (type instanceof Type.Ref ref) {
+            add(ref.name());
         }
     }
 

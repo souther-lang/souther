@@ -10,22 +10,37 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * The classes of declared types that a helper's closed body names once a module that imports it
- * emits it.
+ * The classes of declared types that a helper handed to another module names once that module emits
+ * it.
  *
- * <p>Read off the body typed as its reader types it, because what an order or a field read names is
- * a fact about types and the written tree has none. A body whose parameters take their types from
- * where it is called has no types to be read against here, so it is read as written
- * ({@link ExecutableDependencies}), which lists the forms that name a class without one; the
- * emitter refuses what either reading missed.
+ * <p>Read off the definition typed as its reader types it, because what an order or a cast names is a
+ * fact about types and the written tree has none. A helper that is emitted as a method of its own is
+ * read as the check settled it, which is the definition the reader emits; one that is expanded where
+ * it is called is typed here, as the reader types it.
  */
 public final class CarriedBodyDependencies {
 
     private CarriedBodyDependencies() {}
 
     /**
-     * The classes of declared types that emitting {@code closed} names, whichever module they are
-     * of.
+     * The classes emitting a definition that is a method of its own names: what it takes, and its
+     * body.
+     */
+    public static Set<TypeSymbol.AtModule> of(EmittedDefinition emitted, DerivedSymbols symbols,
+                                              PublishedDeclarations published,
+                                              DeclarationKinds kinds) {
+        return EmittedClassReferences.of(emitted, NewtypeInners.asWritten(symbols), symbols, kinds,
+                published);
+    }
+
+    /**
+     * The classes emitting {@code closed} inline names, whichever module they are of.
+     *
+     * <p>A helper whose parameters take their types from where it is called has none to be read
+     * against here, so it is read as written ({@link ExecutableDependencies}); the emitter refuses
+     * what that reading cannot see. A helper that has types and cannot be typed is not that case: it
+     * checked on its own, so failing to type it as a reader does is this compiler disagreeing with
+     * itself, and is said so.
      *
      * @param closed        a definition as it is handed to a reader
      * @param standingCalls what the calls it leaves standing are typed against
@@ -44,17 +59,17 @@ public final class CarriedBodyDependencies {
         NewtypeInners inners = NewtypeInners.asWritten(symbols);
         Type declared = closed.declaredReturn() == null
                 ? null : TypeOps.successType(closed.declaredReturn());
+        Core typed;
         try {
-            Core typed = Elaborator.elaborate(closed.writtenBody(), env.reaching(standingCalls),
+            typed = Elaborator.elaborate(closed.writtenBody(), env.reaching(standingCalls),
                     new CheckContext(symbols, published, kinds, inners,
                             EffectiveFieldTypes.asWritten(symbols), FieldLayout.asWritten(symbols),
                             null, Map.of(), Map.of(), false, Preserved.NONE),
                     declared);
-            return EmittedClassReferences.of(typed, inners, symbols, kinds, published);
         } catch (CompileException e) {
-            // Not a body this can type on its own, which is a fact about the body and no finding:
-            // whatever is wrong with it is reported where it is written.
-            return ExecutableDependencies.of(closed.writtenBody());
+            throw new IllegalStateException("`" + closed.name() + "` was typed on its own and could"
+                    + " not be typed as its reader types it: " + e.getMessage(), e);
         }
+        return EmittedClassReferences.of(typed, inners, symbols, kinds, published);
     }
 }

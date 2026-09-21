@@ -15,10 +15,11 @@ import java.util.Set;
  * other than the one that declares it has to find each of these reachable from there.
  *
  * <p>Read off the tree as written, which is all there is for a body whose parameters take their
- * types from where it is called. What a typed body says is {@link CarriedBodyDependencies}', which
- * reads what the emitter reads and so also answers what only types decide, such as the enumeration a
- * comparison takes its order from. This lists the forms that name a class without a type: a
- * construction, a unit data written as a value, and a case a {@code match} tests against.
+ * types from where it is called, and used for nothing else. What a typed definition says is
+ * {@link CarriedBodyDependencies}', which reads what the emitter reads and so also answers what only
+ * types decide, such as the enumeration a comparison takes its order from. This lists the forms that
+ * name a class without a type: a construction, a unit data written as a value, and a case a
+ * {@code match} tests against.
  *
  * <p>Either is the publishing module's early answer to a question the emitter settles. The emitter
  * names the class of a declared type at one place, {@code CodegenContext.cd}, and refuses to name one

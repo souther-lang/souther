@@ -615,6 +615,41 @@ class CompilePublishedHelperTest {
 
                         let ranked (n: Int) = List.length(List.sort([Won, Qualified])) + n
                         """, "ranked", "n: Int", "ranked(i.n)"),
+                new Shape("a recursive helper that takes a sum kept by the module", """
+                        module pricing exposing ( Qualified, f )
+
+                        data Prospecting
+                        data Qualified
+                        data Won
+                        data Stage = Prospecting | Qualified | Won
+
+                        partial let walk (s: Stage, n: Int) : Int =
+                            if n == 0 then 0 else walk(s, n - 1)
+                        partial let f (s: Qualified, n: Int) : Int = walk(s, n)
+                        """, "Qualified, f", "s: Qualified, n: Int", "f(i.s, i.n)"),
+                new Shape("a recursive helper whose kept sum is taken and never read", """
+                        module pricing exposing ( Won, f )
+
+                        data Prospecting
+                        data Qualified
+                        data Won
+                        data Stage = Prospecting | Qualified | Won
+
+                        partial let walk (s: Stage, n: Int) : Int =
+                            if n == 0 then 0 else walk(Won, n - 1)
+                        partial let f (n: Int) : Int = walk(Won, n)
+                        """, "f", "n: Int", "f(i.n)"),
+                new Shape("a recursive helper that answers a sum kept by the module", """
+                        module pricing exposing ( Won, f )
+
+                        data Prospecting
+                        data Qualified
+                        data Won
+                        data Stage = Prospecting | Qualified | Won
+
+                        partial let walk (n: Int) : Stage = if n == 0 then Won else walk(n - 1)
+                        partial let f (n: Int) : Int = List.length([walk(n)])
+                        """, "f", "n: Int", "f(i.n)"),
                 new Shape("a recursive helper the published one reaches", """
                         module pricing exposing ( f )
 

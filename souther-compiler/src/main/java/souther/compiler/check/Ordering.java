@@ -1,7 +1,10 @@
 package souther.compiler.check;
 
+import souther.compiler.core.Kernel;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+
+import java.util.Set;
 
 /**
  * How the values of a type are ordered: whether they are ordered at all, and by what.
@@ -74,6 +77,55 @@ public sealed interface Ordering {
 
     Ordering LONGS = new Longs();
     Ordering NATURAL = new Natural();
+
+    /**
+     * The kernels whose runtime method takes a comparator ahead of what the declaration names, where
+     * the element has a sum to take an ordering off.
+     */
+    Set<Kernel> SORT_FAMILY = Set.of(
+            Kernel.LIST_SORT, Kernel.LIST_MAX, Kernel.LIST_MIN, Kernel.LIST_SORT_BY);
+
+    /**
+     * The sum a call to one of the {@link #SORT_FAMILY} takes its comparator off, or null where there
+     * is none: an element the JVM already compares, or a {@code sortBy} whose key answers something
+     * with no sum to take an ordering from.
+     *
+     * <p>{@code sortBy} orders by what its key answers and not by what the list holds, so its
+     * comparator is read off the key's result type; the rest order the elements themselves. Asked of
+     * the value as the runtime is handed it, so a newtype over an enumeration answers null and sorts
+     * by the {@code compareTo} its own class carries.
+     *
+     * <p>The one answer to the question, read by the emitter and by whatever asks which classes an
+     * emitted call names. Written out in each, the two would agree only until one of them moved.
+     *
+     * @param firstArgument the type of the call's first argument: the list, or for {@code sortBy}
+     *                      the key
+     */
+    static TypeSymbol sortEnumeration(Kernel kernel, Type firstArgument, NewtypeInners inners,
+                                      Symbols symbols, DeclarationKinds kinds,
+                                      PublishedDeclarations published) {
+        if (!SORT_FAMILY.contains(kernel)) {
+            return null;
+        }
+        Type ordered;
+        if (kernel == Kernel.LIST_SORT_BY) {
+            ordered = firstArgument instanceof Type.FnOf key ? key.result() : null;
+        } else {
+            ordered = firstArgument instanceof Type.ListOf list ? list.element() : null;
+        }
+        Ordering how = ordered == null ? null : of(ordered, inners, symbols, kinds, published);
+        if (how == null) {
+            return null;
+        }
+        // Every order is answered for rather than "everything but a Places sorts by natural order",
+        // so an order added has to say which of the two it is.
+        return switch (how.asHeld()) {
+            case Places places -> places.enumeration();
+            case Longs _, Natural _ -> null;
+            case Wrapped _ ->
+                    throw new IllegalStateException("a held order is never a wrapped one: " + ordered);
+        };
+    }
 
     /**
      * How a value of this type, as the JVM holds it, is ordered — or null where it has no order.
