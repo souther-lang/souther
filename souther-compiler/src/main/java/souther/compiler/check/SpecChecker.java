@@ -726,6 +726,9 @@ public final class SpecChecker {
                 continue;
             }
             for (Hir.FnParam p : fn.params()) {
+                if (p.type() == null) {
+                    continue;   // the body did not settle it; the helper's own check reports that
+                }
                 refuseHidden(TypeOps.resolveParamType(p.type()),
                         hidden -> Diagnostic
                                 .say(new ModuleMessage.AnExposedArgumentRestsOnWhatIsKept(fn.name(),
