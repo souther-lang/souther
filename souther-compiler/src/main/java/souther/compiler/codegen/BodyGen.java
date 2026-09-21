@@ -835,12 +835,8 @@ final class BodyGen {
             return e.type();
         }
 
-        /** The type the branches of {@code e} leave on the stack: what the position asked for, or —
-         * where it asked for nothing — the one the checker joined the branches at. A branch that
-         * answers {@code unreachable} has no type of its own to merge with the others, so it takes
-         * this one. */
         private Type shapeOf(Core e, Type expected) {
-            return expected != null ? expected : e.type();
+            return Core.shapeOf(e, expected);
         }
 
         /**
@@ -853,7 +849,7 @@ final class BodyGen {
          * rather than emitted.
          */
         private void unreachable(Core.Unreachable u, Type expected) {
-            Type shape = expected != null ? expected : u.type();
+            Type shape = u.shapeAt(expected);
             if (shape instanceof Type.Never) {
                 throw CompileException.of(Diagnostic
                                 .at(u.pos(), "unreachable".length())

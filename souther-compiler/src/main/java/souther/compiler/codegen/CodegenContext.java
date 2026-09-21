@@ -497,12 +497,16 @@ final class CodegenContext {
     /** The descriptor of a generated class. What it is called is {@link SoutherJvmAbi}'s to say; this
      * only remembers the answer. */
     ClassDesc cd(GeneratedClass generated) {
-        if (generated instanceof GeneratedClass.Value value
-                && value.type() instanceof TypeSymbol.AtModule declared
-                && !symbols.scope().isExposed(declared)) {
-            throw new AClassEmittedHereIsOneAnotherModuleKeepsToItself(declared);
-        }
-        return descs.computeIfAbsent(generated, g -> SoutherJvmAbi.nameOf(g).classDesc());
+        // Asked when a class is first named and not at each reference to it: the answer does not
+        // change, and a reference to a class of another module reads that module's exposing.
+        return descs.computeIfAbsent(generated, g -> {
+            if (g instanceof GeneratedClass.Value value
+                    && value.type() instanceof TypeSymbol.AtModule declared
+                    && !symbols.scope().isExposed(declared)) {
+                throw new AClassEmittedHereIsOneAnotherModuleKeepsToItself(declared);
+            }
+            return SoutherJvmAbi.nameOf(g).classDesc();
+        });
     }
 
     /**

@@ -1085,7 +1085,30 @@ public sealed interface Core {
 
     /** {@code unreachable "reason"}: the position it stands in gets no value, and the reason is the
      * message the abort carries. Its type is {@link Type.Never}, which fits whatever was expected. */
-    record Unreachable(String reason, Type type, SourcePos pos) implements Core {}
+    record Unreachable(String reason, Type type, SourcePos pos) implements Core {
+
+        /**
+         * The shape this leaves on the stack where its position asks for {@code expected}: what the
+         * position asked for, or — where it asked for nothing — its own type, which is {@link
+         * Type.Never} and is refused rather than emitted.
+         */
+        public Type shapeAt(Type expected) {
+            return expected != null ? expected : type;
+        }
+    }
+
+    /**
+     * The type the branches of {@code e} leave on the stack: what the position asked for, or — where
+     * it asked for nothing — the one the checker joined the branches at. A branch that answers
+     * {@code unreachable} has no type of its own to merge with the others, so it takes this one.
+     *
+     * <p>The one answer, read by the emitter and by whatever asks which classes an emitted branch
+     * names: the shape is what a value is cast to, so written out in each the two would agree only
+     * until one of them moved.
+     */
+    static Type shapeOf(Core e, Type expected) {
+        return expected != null ? expected : e.type();
+    }
 
     /**
      * {@code e} with each of its slots replaced by what the operator for that slot answers, the

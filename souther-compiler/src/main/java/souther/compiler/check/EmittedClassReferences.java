@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.core.BlockReaches;
 import souther.compiler.core.Core;
 import souther.compiler.types.Refinement;
 import souther.compiler.types.Type;
@@ -45,7 +46,7 @@ final class EmittedClassReferences {
     static Set<TypeSymbol.AtModule> of(Core body, NewtypeInners inners, Symbols symbols,
                                        DeclarationKinds kinds, PublishedDeclarations published) {
         EmittedClassReferences walk = new EmittedClassReferences(inners, symbols, kinds, published);
-        walk.visit(body);
+        walk.visit(body, null);
         return walk.found;
     }
 
@@ -57,7 +58,7 @@ final class EmittedClassReferences {
         for (EmittedDefinition.Parameter parameter : definition.parameters()) {
             walk.add(parameter.type());
         }
-        walk.visit(definition.body());
+        walk.visit(definition.body(), null);
         return walk.found;
     }
 
@@ -65,11 +66,16 @@ final class EmittedClassReferences {
      * What each kind of node has the emitter do with a declared type's class. A type held in a local,
      * passed along, or compared for equality is held as an object and names no class, so a node's
      * type is counted only where the emitter casts to it: a value that comes out of a method's result,
-     * an element of a tuple, a function's parameter, the bound value of an arm. Listed for every kind
+     * an element of a tuple, a function's parameter, the bound value of an arm, what a function
+     * captures, and the shape a position asks an {@code unreachable} to leave. Listed for every kind
      * rather than left to a default, so that a kind of node added to Core stops compiling here until
      * it is said which it is.
+     *
+     * @param expected the shape the position this stands in asks for, or null where it asks for
+     *                 nothing — which is what the top of an expanded body is asked, its reader's own
+     *                 positions naming only what its reader can
      */
-    private void visit(Core e) {
+    private void visit(Core e, Type expected) {
         switch (e) {
             case Core.Construct built -> add(built.typeName());
             case Core.UnitValue unit -> add(unit.data());
@@ -96,18 +102,57 @@ final class EmittedClassReferences {
             case Core.TupleGet element -> add(element.type());
             // A field is read off the class of the value it is read from.
             case Core.FieldAccess access -> add(access.target().type());
-            // A function's parameters come in as objects and are cast to their types.
+            // A function's parameters come in as objects and are cast to their types, and what it
+            // reaches of the body around it is a field and a constructor argument of its class. What
+            // it reaches is the one answer BlockReaches gives, whether or not this function escapes:
+            // whether it does is the emitter's own decision, and a captured value of a kept type is
+            // refused either way.
             case Core.Block block -> {
                 if (block.type() instanceof Type.FnOf fn) {
                     fn.params().forEach(this::add);
                 }
+                BlockReaches.of(block, Set.of()).bindings().forEach(read -> add(read.type()));
             }
+            // The abort leaves a value of the shape its position asks for, cast to it.
+            case Core.Unreachable abort -> add(abort.shapeAt(expected));
             case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
                  Core.Read _, Core.MaterialisedValue _, Core.Neg _, Core.PreservedCall _,
                  Core.If _, Core.IfConstructed _, Core.LetIn _, Core.ListLit _,
-                 Core.OptionSome _, Core.OptionNone _, Core.Tuple _, Core.Unreachable _ -> { }
+                 Core.OptionSome _, Core.OptionNone _, Core.Tuple _ -> { }
         }
-        Core.forEachChild(e, this::visit);
+        visitChildren(e, expected);
+    }
+
+    /**
+     * The children of {@code e}, each asked for what the emitter asks it for. Only a branch, an arm
+     * and the body of a {@code let} are asked for the shape their position holds, and a {@code let}
+     * asks its value for that value's own type; every other slot asks for nothing.
+     */
+    private void visitChildren(Core e, Type expected) {
+        switch (e) {
+            case Core.If iff -> {
+                Type want = Core.shapeOf(iff, expected);
+                visit(iff.cond(), null);
+                visit(iff.then(), want);
+                visit(iff.els(), want);
+            }
+            case Core.IfConstructed attempt -> {
+                Type want = Core.shapeOf(attempt, expected);
+                visit(attempt.construct(), null);
+                visit(attempt.then(), want);
+                attempt.els().forEach(arm -> visit(arm.body(), want));
+            }
+            case Core.Match match -> {
+                Type want = Core.shapeOf(match, expected);
+                visit(match.scrutinee(), null);
+                match.cases().forEach(arm -> visit(arm.body(), want));
+            }
+            case Core.LetIn binding -> {
+                visit(binding.value(), binding.value().type());
+                visit(binding.body(), expected);
+            }
+            default -> Core.forEachChild(e, child -> visit(child, null));
+        }
     }
 
     /** The enumeration a comparison that places a value on an order takes it from. */

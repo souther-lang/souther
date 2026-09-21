@@ -638,6 +638,35 @@ class CompilePublishedHelperTest {
                             List.length(List.map(x -> 1, xs)) + n
                         }
                         """, "f", "n: Int", "f(i.n)"),
+                new Shape("a function that captures a local of a sum kept by the module", """
+                        module pricing exposing ( Won, f )
+
+                        data Prospecting
+                        data Won
+                        data Stage = Prospecting | Won
+
+                        partial let apply (g: (Int) -> Int, n: Int) : Int =
+                            if n == 0 then 0 else apply(g, n - 1) + g(n)
+
+                        partial let f (n: Int) : Int = {
+                            let s: Stage = Won
+                            apply(x -> if s == Won then x else 0, n)
+                        }
+                        """, "f", "n: Int", "f(i.n)"),
+                new Shape("an abort in a branch beside cases of a sum kept by the module", """
+                        module pricing exposing ( Won, Qualified, f )
+
+                        data Prospecting
+                        data Qualified
+                        data Won
+                        data Stage = Prospecting | Qualified | Won
+
+                        let f (n: Int) = {
+                            let s: Stage = if n > 1 then Won else Qualified
+                            let t = if n > 0 then s else unreachable "no stage"
+                            if t == Won then n else 0
+                        }
+                        """, "f", "n: Int", "f(i.n)"),
                 new Shape("a recursive helper that takes a sum kept by the module", """
                         module pricing exposing ( Qualified, f )
 

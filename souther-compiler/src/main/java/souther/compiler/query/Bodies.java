@@ -34,6 +34,8 @@ import souther.compiler.check.Preserved;
 import souther.compiler.check.ValueEntries;
 import souther.compiler.core.CompleteSignature;
 import souther.compiler.check.CarriedBodyDependencies;
+import souther.compiler.check.DeclarationKinds;
+import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.Expansion;
 import souther.compiler.check.HelperGraph;
 import souther.compiler.check.HelperNames;
@@ -1925,6 +1927,19 @@ public final class Bodies {
                 return Answer.of(Boolean.TRUE);
             }
             Set<String> exposing = Set.copyOf(from.exposing());
+            // Every declaration of the module is a class of its own, whichever form it was written
+            // in, and only the ones `exposing` names are public.
+            Set<String> kept = new LinkedHashSet<>();
+            for (Hir.Def def : from.defs()) {
+                if (!exposing.contains(def.declares().name())) {
+                    kept.add(def.declares().name());
+                }
+            }
+            // A module that keeps no class to itself has nothing a body could name that its reader
+            // cannot reach, and typing every helper body to find that out is the cost of asking.
+            if (kept.isEmpty()) {
+                return Answer.of(Boolean.TRUE);
+            }
             List<Hir.FnDef> roots = new ArrayList<>();
             for (Hir.FnDef fn : HelperInliner.helpersOf(from).values()) {
                 if (fn.body() instanceof Hir.FnBody.Written && !fn.params().isEmpty()
@@ -1949,18 +1964,12 @@ public final class Bodies {
             Map<String, Type> standingCalls = new LinkedHashMap<>(standing.value());
             standing.value().forEach((helper, type) ->
                     standingCalls.putIfAbsent(HelperNames.qualified(name, helper), type));
-            // Every declaration of the module is a class of its own, whichever form it was written
-            // in, and only the ones `exposing` names are public.
-            Set<String> kept = new LinkedHashSet<>();
-            for (Hir.Def def : from.defs()) {
-                if (!exposing.contains(def.declares().name())) {
-                    kept.add(def.declares().name());
-                }
-            }
             Set<String> published = new HashSet<>();
             for (Hir.FnDef root : roots) {
                 published.add(HelperNames.qualified(name, root.name()));
             }
+            PublishedDeclarations declarations = Shapes.publishedDeclarations(db);
+            DeclarationKinds kinds = Shapes.declarationKinds(db);
             List<Report> reports = new ArrayList<>();
             for (Hir.FnDef carried : carriedClosure(from, roots, against.value()).values()) {
                 if (carried.params().isEmpty()) {
@@ -1973,10 +1982,8 @@ public final class Bodies {
                         ? checked.value().emittedDefinitions()
                         .get(carried.name().substring(prefix.length())) : null;
                 Set<TypeSymbol.AtModule> named = emitted != null
-                        ? CarriedBodyDependencies.of(emitted, symbols.value(),
-                        Shapes.publishedDeclarations(db), Shapes.declarationKinds(db))
-                        : CarriedBodyDependencies.of(carried, symbols.value(),
-                        Shapes.publishedDeclarations(db), Shapes.declarationKinds(db),
+                        ? CarriedBodyDependencies.of(emitted, symbols.value(), declarations, kinds)
+                        : CarriedBodyDependencies.of(carried, symbols.value(), declarations, kinds,
                         standingCalls);
                 for (TypeSymbol.AtModule built : named) {
                     if (built.module().equals(name) && kept.contains(built.name())) {
