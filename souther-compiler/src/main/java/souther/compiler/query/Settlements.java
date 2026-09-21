@@ -472,14 +472,23 @@ public record Settlements(List<ObligationIdentity> requested,
             // of the body: worked out again here, from whatever this module's bodies happen to
             // elaborate to, it would be a second answer that a partial elaboration elsewhere in the
             // module could disagree with.
-            RowWork owed = db.ask(new Adequacy.RowsOwed(module, behavior)).value();
+            //
+            // Asked only where something was asked of this behavior, for the reason the lines
+            // below are: a carrier with no filling owns no arm of its own — {@link #owed} and
+            // {@link #composed} read no arm off an empty obligation list, and {@link #throughArm}
+            // never reaches this behavior's own binding for an arm behind another behavior's item —
+            // so asking here for a behavior nothing was asked of would be a search this run decided
+            // not to make, paid for a map neither method would ever read.
             Map<Generator.ArmOwed, ObligationIdentity.OfAnArm> identityOfArm = new LinkedHashMap<>();
             Map<ObligationIdentity.OfAnArm, Generator.ArmOwed> targetOfArm = new LinkedHashMap<>();
-            if (owed != null) {
-                owed.arms().forEach((identity, target) -> {
-                    identityOfArm.put(target, identity);
-                    targetOfArm.put(identity, target);
-                });
+            if (filling != null) {
+                RowWork owed = db.ask(new Adequacy.RowsOwed(module, behavior)).value();
+                if (owed != null) {
+                    owed.arms().forEach((identity, target) -> {
+                        identityOfArm.put(target, identity);
+                        targetOfArm.put(identity, target);
+                    });
+                }
             }
             // And the lines of this behavior that the rows do not tell from the lines beside them,
             // which are the lines a row is offered for as whole lines rather than at a point.
