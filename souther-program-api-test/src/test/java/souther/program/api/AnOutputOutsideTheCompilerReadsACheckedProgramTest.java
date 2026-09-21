@@ -13,6 +13,7 @@ import souther.compiler.program.CheckedImplementation;
 import souther.compiler.program.CheckedModule;
 import souther.compiler.program.CheckedProgram;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.LanguageCaseId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -208,12 +209,12 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
                 assertFalse(composed.composition().stages().isEmpty());
                 yield "composed";
             }
-            case CheckedImplementation.Injected ignored -> "injected";
-            case CheckedImplementation.Unwritten ignored -> "unwritten";
+            case CheckedImplementation.Injected _ -> "injected";
+            case CheckedImplementation.Unwritten _ -> "unwritten";
             // Every behavior asked here is one this compile checked, and an implementation another
             // compile emitted belongs to a module this program does not hold. Answered with a word
             // of its own it would be a state this test reads as covered and never sees.
-            case CheckedImplementation.ImplementedElsewhere ignored ->
+            case CheckedImplementation.ImplementedElsewhere _ ->
                     fail("`" + behavior.name() + "` is a behavior of a checked module and its"
                             + " implementation is another compile's");
         };
@@ -626,6 +627,26 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
 
         assertEquals(Kernel.values().length, answered.size(),
                 "every kernel the language has says what it answers");
+    }
+
+    /**
+     * And a case a kernel can answer with arrives as the member it is.
+     *
+     * <p>What an output needs of a departure is something to represent: a class to name, a
+     * descriptor to point at. Handed the member of the declared result, it has the identity the rest
+     * of the language uses for that case and represents it the way it represents any other. Handed a
+     * spelling, it would search the result for the member carrying it, and would be naming a case by
+     * a name the compiler is free to change.
+     */
+    @Test
+    void andACaseAKernelCanAnswerWithArrivesAsTheMemberItIs() {
+        CheckedProgram program = CheckedProgram.of(List.of(ROUNDS));
+
+        assertEquals(Set.of(new TypeSymbol.LanguageCase(LanguageCaseId.DIVISION_BY_ZERO)),
+                program.kernelSignature(Kernel.INT_TRUNCATING_DIVIDE).languageCaseMembers(),
+                "the case a truncating quotient departs with, as the language's own identity");
+        assertEquals(Set.of(), program.kernelSignature(Kernel.DECIMAL_ROUND).languageCaseMembers(),
+                "while a kernel that cannot depart names none");
     }
 
     /** Every helper a call in {@code body} reaches, walking every node of it. */
