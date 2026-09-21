@@ -46,8 +46,9 @@ public final class TypeChecker {
          * readers that stand a call to the value's method where the value was named, which are
          * typed by it. */
         final Preserved.Settling settledValues = new Preserved.Settling();
-        /** What each value emitted as a method takes, by the name of the value. */
-        final Map<String, List<Hir.FnParam>> valueParams = new LinkedHashMap<>();
+        /** What each definition the lowered module carries takes, by name: the parameters the
+         * method is emitted with, which are the ones a lowering added as well as the ones written. */
+        final Map<String, List<Hir.FnParam>> loweredParams = new LinkedHashMap<>();
     }
 
     /**
@@ -267,17 +268,11 @@ public final class TypeChecker {
         toCheck.putAll(HelperInliner.takenOnBy(lowered));
         for (Hir.FnDef fn : lowered.fns()) {
             loweredBodies.put(fn.name(), fn.writtenBody());
-            // A value emitted as a method takes the values its root region demands, and its check
-            // reads them as bindings of the types those values were settled as.
-            if (fn.params().stream().anyMatch(p -> HelperInliner.valueCarriedBy(p) != null)) {
-                elaborated.valueParams.put(fn.name(), fn.params());
-            }
+            elaborated.loweredParams.put(fn.name(), fn.params());
         }
         for (Hir.FnDef fn : lowered.takenOn()) {
             loweredBodies.put(fn.name(), fn.writtenBody());
-            if (fn.params().stream().anyMatch(p -> HelperInliner.valueCarriedBy(p) != null)) {
-                elaborated.valueParams.put(fn.name(), fn.params());
-            }
+            elaborated.loweredParams.put(fn.name(), fn.params());
         }
         // The imported definitions join the table this module's bodies are expanded against: a
         // published helper is expanded at its call sites here exactly as one of this module's own is,

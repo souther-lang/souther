@@ -3047,7 +3047,7 @@ public final class Bodies {
             reported.emittedDefinitions().forEach((h, definition) ->
                     definitions.put(h, new EmittedDefinition(
                             GrowingFold.rewrite(definition.body(), scope.value().theWalk()),
-                            definition.parameterTypes())));
+                            definition.parameters())));
             return Answer.of(new ModuleCheck.Of(definitions, sound, reported.stopped(),
                     reported.settledValues().snapshot()),
                     reports);

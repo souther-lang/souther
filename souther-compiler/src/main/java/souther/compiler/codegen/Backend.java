@@ -694,7 +694,9 @@ public final class Backend {
         return build(cdFns, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);   // package-private, not exposed
             for (Hir.FnDef h : helpers.values()) {
-                int n = h.params().size();
+                EmittedDefinition definition = emittedDefinition(checked.emittedDefinitions(),
+                        h.name());
+                int n = definition.parameters().size();
                 ClassDesc[] params = new ClassDesc[n];
                 java.util.Arrays.fill(params, CD_Object);
                 MethodTypeDesc desc = MethodTypeDesc.of(CD_Object, params);
@@ -712,21 +714,21 @@ public final class Backend {
                 cb.withMethodBody(emitted, desc, ClassFile.ACC_STATIC,
                         code -> {
                     BodyGen gen = new BodyGen(ctx, code, null, cdFns, n);
-                    EmittedDefinition definition = emittedDefinition(checked.emittedDefinitions(),
-                            h.name());
                     for (int i = 0; i < n; i++) {
                         // a function parameter arrives as an Fn value (a closure); every other parameter
                         // as its boxed value. The type is the one the check settled for it.
-                        Type pt = definition.parameterTypes().get(i);
+                        EmittedDefinition.Parameter parameter = definition.parameters().get(i);
+                        Type pt = parameter.type();
                         code.aload(i);
                         int slot = gen.slot(pt);
                         unbox(code, pt, slot);
-                        gen.bind(h.params().get(i).binder().binding(), h.params().get(i).binder().name(),
-                                slot, pt);
+                        gen.bind(parameter.binder(), slot, pt);
                     }
                     // A tail-position call to this same helper loops back here instead of recursing,
                     // so a self-tail-recursive helper runs in constant stack.
-                    gen.beginSelfRecursion(h.name(), h.params());
+                    gen.beginSelfRecursion(h.name(),
+                            definition.parameters().stream()
+                                    .map(EmittedDefinition.Parameter::binder).toList());
                     // a recursive helper declares its return type; thread it so a tail-position fold
                     // over an empty seed materialises its step at the declared type, not a bottom (#70)
                     Type helperReturn = h.declaredReturn() == null ? null : successType(h.declaredReturn());

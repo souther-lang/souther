@@ -108,19 +108,31 @@ public final class HelperTyping {
             // What a value emitted as a method takes: the values its root region demands, each a
             // binding of the type that value's own check settled. Those are checked first, so the
             // answer is here.
-            List<Hir.FnParam> taken = elaborated.valueParams.get(h.name());
-            List<Type> takenTypes = null;
-            if (taken != null) {
-                takenTypes = new ArrayList<>();
-                for (Hir.FnParam p : taken) {
-                    CompleteSignature carried = standing.valueKept(
-                            carriedValue(HelperInliner.valueCarriedBy(p), inliner.moduleName()));
-                    if (carried == null) {
-                        throw new IllegalStateException("`" + h.name() + "` takes `" + p.name()
-                                + "`, whose value was not settled before it");
+            // What the emitted method takes is read off the parameters the lowered module gives it,
+            // which are not always the ones `h` was written with: a value was written with none.
+            List<EmittedDefinition.Parameter> takes = null;
+            List<Hir.FnParam> loweredParams = elaborated.loweredParams.get(h.name());
+            if (loweredParams != null) {
+                takes = new ArrayList<>();
+                for (Hir.FnParam p : loweredParams) {
+                    String carries = HelperInliner.valueCarriedBy(p);
+                    Type type;
+                    if (carries != null) {
+                        CompleteSignature carried = standing.valueKept(
+                                carriedValue(carries, inliner.moduleName()));
+                        if (carried == null) {
+                            throw new IllegalStateException("`" + h.name() + "` takes `" + p.name()
+                                    + "`, whose value was not settled before it");
+                        }
+                        env = env.with(p.binder(), carried.result());
+                        type = carried.result();
+                    } else if (p.type() == null) {
+                        throw new IllegalStateException("`" + h.name() + "` is emitted and its"
+                                + " parameter `" + p.name() + "` has no type to take it from");
+                    } else {
+                        type = TypeOps.resolveParamType(p.type());
                     }
-                    env = env.with(p.binder(), carried.result());
-                    takenTypes.add(carried.result());
+                    takes.add(new EmittedDefinition.Parameter(CoreBinders.of(p.binder()), type));
                 }
             }
             Elaborator.rejectBuiltinShadowing(h.writtenBody());
@@ -225,8 +237,7 @@ public final class HelperTyping {
                         .ifPresent(c -> settledConstants.put(settled, c));
             }
             if (emitted != null) {
-                elaborated.helpers.put(h.name(),
-                        new EmittedDefinition(elaboratedBody, parameterTypesOf(h, takenTypes)));
+                elaborated.helpers.put(h.name(), new EmittedDefinition(elaboratedBody, takes));
             }
             // a declared return type — required on a recursive helper, allowed on any helper — must
             // match the body; a lying annotation is not silently ignored. What a row's operand
@@ -250,25 +261,6 @@ public final class HelperTyping {
                 }
             }
         }
-    }
-
-    /**
-     * What an emitted definition takes: the types the check settled for the values a lowered value
-     * method carries, and the declared type of every parameter of any other.
-     */
-    private static List<Type> parameterTypesOf(Hir.FnDef h, List<Type> takenTypes) {
-        if (takenTypes != null) {
-            return takenTypes;
-        }
-        List<Type> declared = new ArrayList<>();
-        for (Hir.FnParam p : h.params()) {
-            if (p.type() == null) {
-                throw new IllegalStateException("`" + h.name() + "` is emitted and its parameter `"
-                        + p.name() + "` has no type to take it from");
-            }
-            declared.add(TypeOps.resolveParamType(p.type()));
-        }
-        return declared;
     }
 
     /** The value a method's parameter carries, by the name it was reached by: bare where this

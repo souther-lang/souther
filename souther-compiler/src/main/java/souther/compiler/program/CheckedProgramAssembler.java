@@ -6,6 +6,7 @@ import souther.compiler.check.AtomSpace;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.CoreBinders;
 import souther.compiler.check.Derived;
+import souther.compiler.check.EmittedDefinition;
 import souther.compiler.check.Lower;
 import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.Sig;
@@ -695,9 +696,9 @@ final class CheckedProgramAssembler {
     /**
      * The helpers this module emits as definitions of their own.
      *
-     * <p>A helper's body and the types of what it takes are the check's; the binders it takes them
-     * under are the definition's. Both are read here so that a call reaching a helper reaches
-     * something the snapshot holds.
+     * <p>What a helper takes and its body are the check's, read whole from what it emitted; what
+     * the calls in this module reach it by is the definition's. Both are read here so that a call
+     * reaching a helper reaches something the snapshot holds.
      */
     private static List<CheckedHelper> helpersOf(String module, Hir.Module lowered,
                                                  Bodies.Elaborated checked) {
@@ -718,16 +719,9 @@ final class CheckedProgramAssembler {
                 throw new IllegalStateException("the checked helper `" + module + "." + name
                         + "` has no definition to read what it takes from");
             }
-            if (emitted.parameterTypes().size() != fn.params().size()) {
-                throw new IllegalStateException("the checked helper `" + module + "." + name
-                        + "` settled " + emitted.parameterTypes().size() + " parameter types for "
-                        + fn.params().size() + " parameters");
-            }
             List<CheckedHelper.Parameter> parameters = new ArrayList<>();
-            for (int i = 0; i < fn.params().size(); i++) {
-                parameters.add(new CheckedHelper.Parameter(
-                        CoreBinders.of(fn.params().get(i).binder()),
-                        emitted.parameterTypes().get(i)));
+            for (EmittedDefinition.Parameter parameter : emitted.parameters()) {
+                parameters.add(new CheckedHelper.Parameter(parameter.binder(), parameter.type()));
             }
             // What the calls in this module reach it by. A definition this module took on says so
             // itself; one it declared it reaches as it stands. Neither is worked out from the name

@@ -4,13 +4,13 @@ import souther.compiler.program.CheckedHelper;
 import souther.compiler.program.CheckedModule;
 import souther.compiler.program.CheckedProgram;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * A value emitted as a method that takes another value crosses with the type that value settled as.
@@ -36,13 +36,9 @@ class AValueThatReadsAnotherValueCrossesWithTheTypesItTakesTest {
     void theMethodOfAValueThatReadsAValueTakesTheTypeThatValueSettledAs() {
         CheckedModule module = CheckedProgram.of(List.of(MODULE)).module("m");
 
-        List<List<Type>> taken = module.helpers().stream()
-                .filter(helper -> !helper.parameters().isEmpty())
-                .map(helper -> helper.parameters().stream()
-                        .map(CheckedHelper.Parameter::type).toList())
-                .toList();
+        CheckedHelper ys = module.helper(new ValueName.Helper("m", "ys"));
 
-        assertFalse(taken.isEmpty(), "the module carries a method that takes a value");
-        assertEquals(List.of(List.of(Type.list(Type.INT))), taken);
+        assertEquals(List.of(Type.list(Type.INT)),
+                ys.parameters().stream().map(CheckedHelper.Parameter::type).toList());
     }
 }
