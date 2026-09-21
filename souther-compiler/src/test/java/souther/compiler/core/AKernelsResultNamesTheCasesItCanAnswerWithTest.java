@@ -67,17 +67,16 @@ class AKernelsResultNamesTheCasesItCanAnswerWithTest {
     }
 
     /**
-     * {@code Option}'s cases are not among them.
+     * A declared {@code Option} names none.
      *
-     * <p>They are cases of the language and are named in an arm over an {@code Option}, where the
-     * name resolves to that type's own case and denotes nothing the language declares. An output
-     * handed one would be looking for a representation of a name that never had one.
+     * <p>{@code Some} and {@code None} are cases of the language, but a declared result never holds
+     * them as union members to be excluded: {@code Option<T>} is {@link Type.OptionOf}, not a union
+     * of the two, and a written {@code Some} or {@code None} outside a match arm resolves to neither
+     * — name resolution answers that question before a result reaches here at all.
      */
     @Test
-    void andOptionsOwnCasesAreNotAmongThem() {
-        Type result = union(INT, TypeSymbol.SOME, DIVISION_BY_ZERO);
-
-        assertEquals(Set.of(DIVISION_BY_ZERO), answering(result).languageCaseMembers());
+    void aDeclaredOptionNamesNone() {
+        assertEquals(Set.of(), answering(Type.option(Type.INT)).languageCaseMembers());
     }
 
     /**

@@ -1,6 +1,5 @@
 package souther.compiler.core;
 
-import souther.compiler.types.LanguageCaseId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
@@ -69,21 +68,22 @@ public record KernelSignature(List<Type> parameters, Type result) {
      * in the order they are shown, which is this compiler's own way of writing a union down and no
      * calling convention.
      *
-     * <p>{@code Option}'s two cases are not among these: an arm naming one dispatches on the
-     * option's own cases and names nothing the language declares
-     * ({@link LanguageCaseId#isNamedAsALanguageCase}).
+     * <p>{@code Option} never puts one of its own cases here to be excluded: {@code Some} and
+     * {@code None} exist as {@link TypeSymbol.LanguageCase} only for a match arm to resolve to, and
+     * name resolution refuses that spelling everywhere else a case is written — a declared result is
+     * {@link Type.OptionOf} rather than a union naming them, so the member this reads off it is
+     * never one of theirs to ask apart.
      */
     public Set<TypeSymbol.LanguageCase> languageCaseMembers() {
         if (result instanceof Type.Ref(TypeSymbol.LanguageCase only)) {
-            return only.id().isNamedAsALanguageCase() ? Set.of(only) : Set.of();
+            return Set.of(only);
         }
         if (!(result instanceof Type.Union union)) {
             return Set.of();
         }
         Set<TypeSymbol.LanguageCase> named = new LinkedHashSet<>();
         for (TypeSymbol member : union.members()) {
-            if (member instanceof TypeSymbol.LanguageCase given
-                    && given.id().isNamedAsALanguageCase()) {
+            if (member instanceof TypeSymbol.LanguageCase given) {
                 named.add(given);
             }
         }
