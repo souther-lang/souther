@@ -595,6 +595,26 @@ class CompilePublishedHelperTest {
                                 | Email -> 1
                                 | Phone -> 2
                         """.formatted(cases), "Contact, f", "c: Contact", "f(i.c)"),
+                new Shape("an order taken from a sum whose cases are exposed", """
+                        module pricing exposing ( Qualified, Won, before )
+
+                        data Prospecting
+                        data Qualified
+                        data Won
+                        data Stage = Prospecting | Qualified | Won
+
+                        let before (s: Qualified) = s < Won
+                        """, "Qualified, before", "s: Qualified", "if before(i.s) then 1 else 0"),
+                new Shape("a sort by the order of such a sum", """
+                        module pricing exposing ( Qualified, Won, ranked )
+
+                        data Prospecting
+                        data Qualified
+                        data Won
+                        data Stage = Prospecting | Qualified | Won
+
+                        let ranked (n: Int) = List.length(List.sort([Won, Qualified])) + n
+                        """, "ranked", "n: Int", "ranked(i.n)"),
                 new Shape("a recursive helper the published one reaches", """
                         module pricing exposing ( f )
 
@@ -637,6 +657,32 @@ class CompilePublishedHelperTest {
 
         assertTrue(e.getMessage().contains("walk"), e.getMessage());
         assertTrue(e.getMessage().contains("carried"), e.getMessage());
+    }
+
+    /** The order comes from the sum, not from the cases the helper writes, so an exposed sum is a
+     * class the reader may name and the same body is published. */
+    @Test
+    void aPublishedHelperMayTakeAnOrderFromASumTheModuleExposes() {
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of("""
+                module pricing exposing ( Stage, Qualified, Won, before )
+
+                data Prospecting
+                data Qualified
+                data Won
+                data Stage = Prospecting | Qualified | Won
+
+                let before (s: Qualified) = s < Won
+                """, """
+                module order exposing ( In, Out, bill )
+
+                import pricing ( Qualified, before )
+
+                data In = { s: Qualified }
+                data Out = { v: Int }
+
+                behavior bill : (i: In) -> Out constructs Out
+                let bill (i) = Out { v = if before(i.s) then 1 else 0 }
+                """)));
     }
 
     /** A `match` tests the value against the class of each case it names, so a case the module keeps

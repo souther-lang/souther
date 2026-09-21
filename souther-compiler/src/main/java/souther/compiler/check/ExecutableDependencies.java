@@ -14,14 +14,16 @@ import java.util.Set;
  * mentions: a type that only annotates a binding is gone by then. A body that runs in a module
  * other than the one that declares it has to find each of these reachable from there.
  *
- * <p>This is the publishing module's early answer to a question the emitter settles. The emitter
- * names the class of a declared type at one place, {@code CodegenContext.cd}, and refuses to name one
- * the module it emits into cannot reach. So a form of the tree that reaches that place is listed
- * here to be refused where the module is published; one that is not listed is refused at emission,
- * as a fault of the compiler and not of the author's code.
+ * <p>Read off the tree as written, which is all there is for a body whose parameters take their
+ * types from where it is called. What a typed body says is {@link CarriedBodyDependencies}', which
+ * reads what the emitter reads and so also answers what only types decide, such as the enumeration a
+ * comparison takes its order from. This lists the forms that name a class without a type: a
+ * construction, a unit data written as a value, and a case a {@code match} tests against.
  *
- * <p>The forms that reach it: a construction, a unit data written as a value, and a case a
- * {@code match} tests against.
+ * <p>Either is the publishing module's early answer to a question the emitter settles. The emitter
+ * names the class of a declared type at one place, {@code CodegenContext.cd}, and refuses to name one
+ * the module it emits into cannot reach; what neither reading lists is refused there, as a fault of
+ * the compiler and not of the author's code.
  */
 public final class ExecutableDependencies {
 

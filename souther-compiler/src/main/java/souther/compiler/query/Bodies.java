@@ -33,7 +33,7 @@ import souther.compiler.check.HelperInliner;
 import souther.compiler.check.Preserved;
 import souther.compiler.check.ValueEntries;
 import souther.compiler.core.CompleteSignature;
-import souther.compiler.check.ExecutableDependencies;
+import souther.compiler.check.CarriedBodyDependencies;
 import souther.compiler.check.Expansion;
 import souther.compiler.check.HelperGraph;
 import souther.compiler.check.HelperNames;
@@ -1934,10 +1934,22 @@ public final class Bodies {
             if (roots.isEmpty()) {
                 return Answer.of(Boolean.TRUE);
             }
+            Answer<DerivedSymbols> symbols = Names.derivedSymbols(db, name);
+            Answer<Map<String, Type>> standing =
+                    db.ask(new RecursiveCallSigs(name, InliningPolicy.FULL));
+            if (!symbols.present() || !standing.present()) {
+                return Answer.absent();
+            }
+            // A closed body names this module's own recursive helpers qualified, which is how a
+            // reader reaches them, so the calls left standing are typed under that spelling too.
+            Map<String, Type> standingCalls = new LinkedHashMap<>(standing.value());
+            standing.value().forEach((helper, type) ->
+                    standingCalls.putIfAbsent(HelperNames.qualified(name, helper), type));
+            // Every declaration of the module is a class of its own, whichever form it was written
+            // in, and only the ones `exposing` names are public.
             Set<String> kept = new LinkedHashSet<>();
             for (Hir.Def def : from.defs()) {
-                if ((def instanceof Hir.Data || def instanceof Hir.UnitData)
-                        && !exposing.contains(def.declares().name())) {
+                if (!exposing.contains(def.declares().name())) {
                     kept.add(def.declares().name());
                 }
             }
@@ -1950,8 +1962,9 @@ public final class Bodies {
                 if (carried.params().isEmpty()) {
                     continue;
                 }
-                for (TypeSymbol.AtModule built
-                        : ExecutableDependencies.of(carried.writtenBody())) {
+                for (TypeSymbol.AtModule built : CarriedBodyDependencies.of(carried,
+                        symbols.value(), Shapes.publishedDeclarations(db),
+                        Shapes.declarationKinds(db), standingCalls)) {
                     if (built.module().equals(name) && kept.contains(built.name())) {
                         String helper = carried.written().canonical();
                         reports.add(Report.raised(Diagnostic.at(carried.pos())
