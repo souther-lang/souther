@@ -1589,7 +1589,8 @@ public interface Hir {
     sealed interface Expr extends Written
             permits IntLit, DecimalLit, StringLit, BoolLit, Var, FieldAccess, Apply, Binary, Neg,
                     NewData, Match, If, IfConstructed, ListLit, RowCollection, ListComp, LetIn,
-                    Expansion, Materialised, ValueBuild, Block, Tuple, TupleGet, Unreachable {
+                    Expansion, Materialised, ValueBuild, ValueInvocation, Block, Tuple, TupleGet,
+                    Unreachable {
     }
 
     /**
@@ -1738,6 +1739,47 @@ public interface Hir {
                 throw new IllegalArgumentException(
                         "a build is of some value, for some region: " + value + " for " + site);
             }
+        }
+    }
+
+    /**
+     * A build of a value the emitted tree gets by calling the method the value is emitted as.
+     *
+     * <p>Where {@link Materialised} carries the body a build computes, this carries none: the value
+     * is run where its method is, and what stands here is the call. {@code arguments} are the
+     * bindings the method takes, each already bound in the region that builds this. They are
+     * references this node carries and not expressions to evaluate, so they are no children of it:
+     * a walk that goes into the parts of an expression does not descend into them. A reader that
+     * follows references, such as the value graph, reads {@code target} and {@code arguments} of
+     * this node itself.
+     *
+     * @param target    the declaration the value is run from, which is another module's where the
+     *                  value is declared there
+     * @param site      the region it was built for
+     * @param arguments what the method takes, in order; empty where it takes nothing
+     */
+    record ValueInvocation(ReachName.Declaration target, MaterialisationSite site,
+                           List<Var.Denoting> arguments, SourcePos pos, Region region)
+            implements Expr {
+
+        public ValueInvocation {
+            if (target == null || site == null) {
+                throw new IllegalArgumentException(
+                        "a call is of some value's method, for some region: " + target
+                                + " for " + site);
+            }
+            arguments = List.copyOf(arguments);
+        }
+
+        /** The value this is a build of. */
+        public ValueName value() {
+            return target.denotes();
+        }
+
+        /** {@link #target} rendered, which is what a table keyed by a declaration's name is looked
+         *  up with. */
+        public String reaches() {
+            return target.rendered();
         }
     }
 
@@ -2286,7 +2328,7 @@ public interface Hir {
          * a reader to work out, so it is given the binder it is reading and answers with that
          * binding. There is no way to write one of these without having the binding in hand.
          */
-        static Var local(Binder binder, SourcePos pos) {
+        static Denoting local(Binder binder, SourcePos pos) {
             ValueName.Local local = new ValueName.Local(binder.name(), binder.id());
             WrittenName written = WrittenName.synthetic(binder.name(), pos);
             // No source wrote it: what a pass reads here is a binding that pass put there.
@@ -2883,6 +2925,8 @@ public interface Hir {
                     x.declaredReturn(), x.body(), x.pos(), region);
             case Materialised x -> new Materialised(x.value(), x.site(), x.body(), x.pos(), region);
             case ValueBuild x -> new ValueBuild(x.value(), x.reaches(), x.site(), x.pos(), region);
+            case ValueInvocation x ->
+                    new ValueInvocation(x.target(), x.site(), x.arguments(), x.pos(), region);
             case Block x ->
                     new Block(x.params(), x.body(), x.rule(), x.expandedFrom(), x.pos(), region);
             case ListLit x -> new ListLit(x.elements(), x.origin(), x.pos(), region);
@@ -2922,6 +2966,8 @@ public interface Hir {
             case Unreachable x -> x;
             // No slots: what the value means is its template's, and this says only which value.
             case ValueBuild x -> x;
+            // No slots: what it takes are reads of bindings already made, not parts to evaluate.
+            case ValueInvocation x -> x;
             case Neg n -> {
                 Expr operand = atExpr.apply(n.operand());
                 yield operand == n.operand() ? n : new Neg(operand, n.pos(), n.region());

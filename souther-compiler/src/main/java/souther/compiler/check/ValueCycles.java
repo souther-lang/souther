@@ -158,6 +158,14 @@ public final class ValueCycles {
                 out.add(at.text());
             }
         }
+        // A call of a value's method reads that value, and holds nothing under it to walk into.
+        if (e instanceof Hir.ValueInvocation call) {
+            DefinitionName at = heldAt.of(call.target());
+            Hir.FnDef d = at == null ? null : reachable.get(at.text());
+            if (d != null && d.params().isEmpty()) {
+                out.add(at.text());
+            }
+        }
         Hir.forEachChild(e, c -> valuesRead(c, reachable, heldAt, out));
     }
 

@@ -252,7 +252,6 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
     private static final List<String> SETTLING = List.of(
             SYNTHETIC_OF_A_SPELLING.spelt() + " -> Apply.synthetic(Expr) x1",
             "souther/compiler/check/Elaborator#fromList -> Apply.synthetic(String) x1",
-            "souther/compiler/check/HelperInliner#callOf -> Apply.synthetic(Expr) x1",
             "souther/compiler/check/HelperInliner#etaExpand -> Apply.synthetic(Expr) x1",
             "souther/compiler/check/HelperInliner#rename -> Apply.with x1",
             "souther/compiler/check/HelperNames#carriedByValue -> Apply.carriedByValue x1",

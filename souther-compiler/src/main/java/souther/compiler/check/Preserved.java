@@ -96,7 +96,6 @@ public final class Preserved {
 
     private final Map<ValueName, CompleteSignature> operations;
     private final Settling values;
-    private final boolean valuesAreMethods;
     private final boolean valuesAreTemplates;
 
     private Preserved(Map<ValueName, CompleteSignature> operations, Settling values) {
@@ -104,15 +103,9 @@ public final class Preserved {
     }
 
     private Preserved(Map<ValueName, CompleteSignature> operations, Settling values,
-                      boolean valuesAreMethods) {
-        this(operations, values, valuesAreMethods, false);
-    }
-
-    private Preserved(Map<ValueName, CompleteSignature> operations, Settling values,
-                      boolean valuesAreMethods, boolean valuesAreTemplates) {
+                      boolean valuesAreTemplates) {
         this.operations = Map.copyOf(operations);
         this.values = values;
-        this.valuesAreMethods = valuesAreMethods;
         this.valuesAreTemplates = valuesAreTemplates;
     }
 
@@ -154,26 +147,9 @@ public final class Preserved {
         return new Preserved(Map.of(), settled);
     }
 
-    /**
-     * A representation the backend emits from, where a value left standing is a method the emitted
-     * tree calls.
-     *
-     * <p>The same references {@link #valuesAlreadySettled} keeps, read differently: there the
-     * reference is for a reader that needs nothing from the body and emits nothing, and here it is
-     * the call the emitted tree makes, typed by the signature the value's own check settled.
-     */
-    public static Preserved valuesCalledAsMethods(Settling settled) {
-        return new Preserved(Map.of(), settled, true);
-    }
-
     /** The same, over values a module's check has already settled. */
-    public static Preserved valuesCalledAsMethods(SettledValues settled) {
-        return new Preserved(Map.of(), Settling.over(settled), true);
-    }
-
-    /** Whether a value this keeps standing is a call to the method it is emitted as. */
-    public boolean valuesAreMethods() {
-        return valuesAreMethods;
+    public static Preserved valuesAlreadySettled(SettledValues settled) {
+        return new Preserved(Map.of(), Settling.over(settled));
     }
 
     /**
@@ -184,7 +160,7 @@ public final class Preserved {
      * analysis keeps standing, since it reads both.
      */
     public Preserved withValuesBuiltAsTemplates(SettledValues settled) {
-        return new Preserved(operations, Settling.over(settled), valuesAreMethods, true);
+        return new Preserved(operations, Settling.over(settled), true);
     }
 
     /** Whether a build of a value is what stands for it in the tree, its body being the template's. */

@@ -190,9 +190,7 @@ public final class HelperTyping {
                             NewtypeInners.asWritten(symbols),
                             EffectiveFieldTypes.asWritten(symbols),
                             FieldLayout.asWritten(symbols), null, reachable)
-                            .preserving(emitted != null
-                                    ? Preserved.valuesCalledAsMethods(settledSignatures)
-                                    : reading ? standing : Preserved.NONE),
+                            .preserving(emitted != null || reading ? standing : Preserved.NONE),
                     declaredReturn);
             Type bodyType = elaboratedBody.type();
             // A definition standing at a row's position computes what the row writes there, and a
@@ -886,10 +884,9 @@ public final class HelperTyping {
                 && names.contains(call.answered().reaches())) {
             out.add(call.answered().reaches());
         }
-        // A build that is a call to the method its value is emitted as is an edge of the same graph.
-        if (e instanceof Hir.Materialised build && build.body() instanceof Hir.Var.Denoting named
-                && names.contains(named.reaches())) {
-            out.add(named.reaches());
+        // A call to the method a value is emitted as is an edge of the same graph.
+        if (e instanceof Hir.ValueInvocation call && names.contains(call.reaches())) {
+            out.add(call.reaches());
         }
         // A value another module declares, left where it is named.
         if (e instanceof Hir.Var.Denoting named && names.contains(named.reaches())) {

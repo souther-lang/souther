@@ -311,6 +311,7 @@ public final class HelperNames {
         ValueName denotes = switch (e) {
             case Hir.Apply call when call.answered() != null -> call.answered().denotes();
             case Hir.Var.Denoting v -> v.denotes();
+            case Hir.ValueInvocation call -> call.value();
             default -> null;
         };
         if (denotes instanceof ValueName.Helper helper) {

@@ -194,15 +194,14 @@ public final class DataChecker {
                 collectConstructs(li.body(), out, symbols, recConstructs);
             }
             // A build constructs what the value's body does, and being a build adds nothing.
-            case Hir.Materialised m -> {
-                // A build that is a call to the method its value is emitted as constructs what that
-                // method does, as a value's construction always is: carried by the value.
-                Constructs viaValue = m.body() instanceof Hir.Var.Denoting named
-                        ? recConstructs.get(named.reaches()) : null;
+            case Hir.Materialised m -> collectConstructs(m.body(), out, symbols, recConstructs);
+            // A call to the method a value is emitted as constructs what that method does, as a
+            // value's construction always is: carried by the value.
+            case Hir.ValueInvocation call -> {
+                Constructs viaValue = recConstructs.get(call.reaches());
                 if (viaValue != null) {
                     out.absorb(viaValue.allCarried());
                 }
-                collectConstructs(m.body(), out, symbols, recConstructs);
             }
             // A build by reference holds no body, and what the value constructs is counted from the
             // tree that runs, where the value is a method called.

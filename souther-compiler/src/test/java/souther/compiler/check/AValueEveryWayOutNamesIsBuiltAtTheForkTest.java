@@ -61,7 +61,7 @@ class AValueEveryWayOutNamesIsBuiltAtTheForkTest {
     /** A build of `over`: the body the backend emits from calls the method the value is emitted as,
      *  so what stands in it is one reference per build and not the value's comparison. */
     private static boolean written(Hir.Expr e) {
-        return e instanceof Hir.Materialised build && build.value().toString().endsWith("over");
+        return e instanceof Hir.ValueInvocation call && call.value().toString().endsWith("over");
     }
 
     @Test

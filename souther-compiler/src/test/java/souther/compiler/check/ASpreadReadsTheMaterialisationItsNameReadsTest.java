@@ -54,7 +54,7 @@ class ASpreadReadsTheMaterialisationItsNameReadsTest {
         if (e == null) {
             return 0;
         }
-        int[] held = {e instanceof Hir.Materialised ? 1 : 0};
+        int[] held = {e instanceof Hir.Materialised || e instanceof Hir.ValueInvocation ? 1 : 0};
         Hir.forEachChild(e, child -> held[0] += builds(child));
         return held[0];
     }

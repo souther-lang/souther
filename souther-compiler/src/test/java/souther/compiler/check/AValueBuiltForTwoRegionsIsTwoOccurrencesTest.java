@@ -85,6 +85,10 @@ class AValueBuiltForTwoRegionsIsTwoOccurrencesTest {
         if (e instanceof Hir.Materialised built && of.test(built.value().toString())) {
             out.add(built.site());
         }
+        // A build that calls the method its value is emitted as is a build all the same.
+        if (e instanceof Hir.ValueInvocation call && of.test(call.value().toString())) {
+            out.add(call.site());
+        }
         // A build the tree an analysis reads holds by reference is a build all the same.
         if (e instanceof Hir.ValueBuild built && of.test(built.value().toString())) {
             out.add(built.site());
