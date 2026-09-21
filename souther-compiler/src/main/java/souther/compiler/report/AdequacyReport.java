@@ -2292,7 +2292,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // positions — telling a reader that this behavior is held to the neighbouring technique,
         // which is a statement about the model that nothing measured.
         switch (behavior.evidence().combinations()) {
-        case CombinationCriterion.Interactions(var meetings) -> interaction(out, meetings);
+        case CombinationCriterion.Interactions(var meetings) -> interaction(out, behavior, meetings);
         case null -> { }
         case CombinationCriterion.PairFallback _ -> {
             if (partitioned.counted()) {
@@ -2798,8 +2798,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * <p>The meetings the measure would not walk are said beside the count rather than folded into
      * it. What they hold is combinations nobody counted, and a reader told only the ratio would
      * take a behavior measured in part for one measured in full.
+     *
+     * <p>Every meeting the count holds and no row makes, said one to a line under it the way an
+     * arm or a decision rule with no row is. What a combination is of stays unsaid for the reason
+     * the count above does: the decisions are held in the terms the account keys on, and a line
+     * spelling them out would show an author comparisons they did not write.
      */
-    private void interaction(StringBuilder out, InteractionEvidence meetings) {
+    private void interaction(StringBuilder out, BehaviorReport behavior,
+                             InteractionEvidence meetings) {
         Optional<InteractionEvidence.RowsMeeting> made = meetings.made().made();
         String held = meetings.asked().notMeasured().isEmpty() ? ""
                 : String.format("   %d meetings not walked", meetings.asked().notMeasured().size());
@@ -2809,6 +2815,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 .orElseGet(() -> String.format("    interaction combinations %d   %s%s%n",
                         meetings.counted(),
                         ReasonProse.of(meetings.made().why()).sentence(), held)));
+        for (ReportedFinding f : behavior.reported()) {
+            if (f.finding().about() instanceof About.ACombinationNoRowMakes) {
+                out.append(String.format("      %s no row makes this combination of the decisions%n",
+                        mark(f.finding())));
+            }
+        }
     }
 
     /**

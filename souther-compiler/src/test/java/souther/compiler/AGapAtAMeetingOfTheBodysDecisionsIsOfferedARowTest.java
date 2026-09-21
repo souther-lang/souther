@@ -1,9 +1,16 @@
 package souther.compiler;
 
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.partition.ObligationIdentity;
+import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.BorderAccount;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.Composition;
 import souther.compiler.query.OfferingRequest;
+import souther.compiler.query.RowKey;
+import souther.compiler.query.Settlement;
+import souther.compiler.query.Settlements;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 
@@ -11,9 +18,12 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -93,6 +103,94 @@ class AGapAtAMeetingOfTheBodysDecisionsIsOfferedARowTest {
                 () -> "and they answer the combinations: " + report(after));
         assertTrue(rowsOf(block(after)).isEmpty(),
                 () -> "so nothing is offered a second time: " + block(after));
+    }
+
+    /**
+     * Every arm is already covered, and each of the two meetings is requested, has a row composed
+     * for it, and is settled by that row.
+     *
+     * <p>Not "a row is offered somewhere": which obligation asked for it and which row answers it,
+     * read off the same table the offering itself reduces from. A meeting composed a row and never
+     * requested would be reduced away as redundant before an author ever saw it, which is the
+     * defect this pins against reappearing.
+     */
+    @Test
+    void theSettlementsForEachMeetingHoldItsOwnRow() {
+        Compilation before = measured(MODEL);
+
+        souther.compiler.query.ArmSummary arms = armsOf(before);
+        assertEquals(arms.counted(), arms.covered(), "every arm is already covered");
+
+        Set<ObligationIdentity.OfACombinationOfDecisions> meetings = meetingsOf(before);
+        assertEquals(2, meetings.size(), () -> "the two unmade combinations: " + meetings);
+
+        Settlements table = settlementsOf(before);
+        for (ObligationIdentity.OfACombinationOfDecisions meeting : meetings) {
+            assertTrue(table.requested().contains(meeting),
+                    () -> meeting + " is requested: " + table.requested());
+            RowKey row = table.composedFor().get(meeting);
+            assertNotNull(row, () -> "a row was composed for " + meeting);
+            assertInstanceOf(Settlement.Settles.class, table.at(row, meeting),
+                    () -> "and it settles what it was composed for: " + meeting);
+        }
+    }
+
+    /**
+     * The count the report writes over a gap and the marks it prints for one agree.
+     *
+     * <p>The two are written by different lines of the report, over the same findings — a mismatch
+     * is one of them forgetting a kind the other still counts, which is what a meeting's mark going
+     * unprinted looked like before it was offered one.
+     */
+    @Test
+    void theHumanReportMarksEachMeetingGapItCounts() {
+        Compilation before = measured(MODEL);
+        String report = report(before);
+
+        assertEquals(gapsMarked(report), markedGapLines(report).size(),
+                () -> "the count over a strict build's gaps and the marks under them: " + report);
+        assertEquals(2, markedGapLines(report).stream()
+                        .filter(line -> line.contains("no row makes this combination of the"
+                                + " decisions"))
+                        .count(),
+                () -> "one mark per meeting nothing made: " + report);
+    }
+
+    /** The number a strict build's own line says it refuses over, or -1 where it says none. */
+    private static int gapsMarked(String report) {
+        return report.lines()
+                .filter(line -> line.endsWith("marked `!`: what a strict build refuses over."))
+                .map(line -> line.strip().split(" ", 2)[0])
+                .mapToInt(Integer::parseInt)
+                .findFirst().orElse(-1);
+    }
+
+    /** Every line the report prints a finding under with the `!` mark a strict build refuses over. */
+    private static List<String> markedGapLines(String report) {
+        return report.lines().filter(line -> line.strip().startsWith("! ")).toList();
+    }
+
+    /** The combinations of this body's decisions nothing has made, as the account states them. */
+    private static Set<ObligationIdentity.OfACombinationOfDecisions> meetingsOf(
+            Compilation compilation) {
+        Set<ObligationIdentity.OfACombinationOfDecisions> out = new java.util.LinkedHashSet<>();
+        for (Adequacy.Finding each : AdequacyReport.of(compilation).adequacyGaps()) {
+            if (each.about() instanceof About.ACombinationNoRowMakes(var combination)) {
+                out.add(combination);
+            }
+        }
+        return out;
+    }
+
+    /** The offering's own table of what each row would settle, built the way an offering is. */
+    private static Settlements settlementsOf(Compilation compilation) {
+        OfferingRequest request = OfferingRequest.overTheModule("example.meeting");
+        Map<String, Adequacy.Filling> generated =
+                Adequacy.generatedOf(compilation.db(), request.module());
+        BorderAccount account = Adequacy.accountFor(compilation.db(), request.module(),
+                request.scope());
+        Composition composed = Composition.composed(request, generated, account);
+        return Settlements.of(compilation.db(), composed);
     }
 
     /** The rows of an offered block, as a person pastes them under the example already written. */
