@@ -174,7 +174,7 @@ final class TotalityChecker {
                 idxOf.put(params.get(i).binder().id(), i);
             }
             List<RecCall> calls = new ArrayList<>();
-            walk(def.writtenBody(), group, paramNames, Map.of(), Map.of(), calls);
+            walk(def.writtenBody(), group, paramNames, null, null, calls);
             for (RecCall rc : calls) {
                 firstCall.putIfAbsent(f, rc.call());
                 int toArity = own.get(rc.callee()).params().size();
@@ -281,11 +281,35 @@ final class TotalityChecker {
         return true;
     }
 
+    /**
+     * A binding relation layered over a parent, so extending it by one entry costs a link rather
+     * than a copy of everything already known. {@code null} is the empty relation.
+     *
+     * <p>A {@link RecCall} keeps the layer live at the moment its call was recorded, read back long
+     * after {@link #walk} has moved past it ({@link #buildScgs}). Nothing beneath a layer is ever
+     * mutated once made, so holding one after the walk that made it has moved on reads exactly what
+     * was in scope there — a shared, mutated map instead would have read whatever scope the walk was
+     * in by the time something finally asked.
+     */
+    private record Layered(BindingId key, Set<BindingId> value, Layered parent) {
+
+        private static Set<BindingId> get(Layered env, BindingId id) {
+            for (Layered l = env; l != null; l = l.parent) {
+                if (l.key.equals(id)) {
+                    return l.value;
+                }
+            }
+            return Set.of();
+        }
+
+        private static Layered with(Layered env, BindingId key, Set<BindingId> value) {
+            return new Layered(key, value, env);
+        }
+    }
+
     /** A recorded recursive call to a group member, with the callee and the smaller-than / equal-to
      * relations ({@code lt} / {@code eq}) in scope where it appears. */
-    private record RecCall(String callee, Hir.Apply call,
-                           Map<BindingId, Set<BindingId>> lt,
-                           Map<BindingId, Set<BindingId>> eq) {}
+    private record RecCall(String callee, Hir.Apply call, Layered lt, Layered eq) {}
 
     /**
      * Walks {@code e}, threading {@code lt} (each local -&gt; the parameters it is a strictly smaller
@@ -295,16 +319,15 @@ final class TotalityChecker {
      * strict or equal relation of its value forward.
      */
     private static void walk(Hir.Expr e, Set<String> group, Set<BindingId> paramNames,
-                             Map<BindingId, Set<BindingId>> lt, Map<BindingId, Set<BindingId>> eq,
-                             List<RecCall> calls) {
+                             Layered lt, Layered eq, List<RecCall> calls) {
         switch (e) {
             case Hir.Match m -> {
                 walk(m.scrutinee(), group, paramNames, lt, eq, calls);
                 Set<BindingId> rooted = rootParams(m.scrutinee(), lt, eq, paramNames);
                 for (Hir.Case c : m.cases()) {
-                    Map<BindingId, Set<BindingId>> inner = lt;
+                    Layered inner = lt;
                     if (c.binding() != null && !rooted.isEmpty()) {
-                        inner = with(lt, c.binding().id(), rooted);   // the bound value is smaller than each root
+                        inner = Layered.with(lt, c.binding().id(), rooted);   // smaller than each root
                     }
                     walk(c.body(), group, paramNames, inner, eq, calls);
                 }
@@ -313,10 +336,8 @@ final class TotalityChecker {
                 walk(li.value(), group, paramNames, lt, eq, calls);
                 Set<BindingId> smaller = strictSmaller(li.value(), lt, eq, paramNames);
                 Set<BindingId> equal = eqRoots(li.value(), eq, paramNames);
-                Map<BindingId, Set<BindingId>> ltInner =
-                        smaller.isEmpty() ? lt : with(lt, li.binder().id(), smaller);
-                Map<BindingId, Set<BindingId>> eqInner =
-                        equal.isEmpty() ? eq : with(eq, li.binder().id(), equal);
+                Layered ltInner = smaller.isEmpty() ? lt : Layered.with(lt, li.binder().id(), smaller);
+                Layered eqInner = equal.isEmpty() ? eq : Layered.with(eq, li.binder().id(), equal);
                 walk(li.body(), group, paramNames, ltInner, eqInner, calls);
             }
             case Hir.Apply call -> {
@@ -344,9 +365,9 @@ final class TotalityChecker {
                     // freshly-constructed container (`Some(p)`) roots at no parameter, so its payload
                     // is not credited as smaller either.
                     Set<BindingId> elemRoots = rootParams(handed.container(), lt, eq, paramNames);
-                    Map<BindingId, Set<BindingId>> inner = elemRoots.isEmpty()
+                    Layered inner = elemRoots.isEmpty()
                             ? lt
-                            : with(lt, handed.element().id(), elemRoots);
+                            : Layered.with(lt, handed.element().id(), elemRoots);
                     walk(handed.step().body(), group, paramNames, inner, eq, calls);
                 }
             }
@@ -358,16 +379,16 @@ final class TotalityChecker {
      * alias of one (through {@code eq}), a field chain rooted at one, or a local already known to be
      * smaller than one. Used for a {@code match} scrutinee: unwrapping a case of such a value yields a
      * strictly smaller part. */
-    private static Set<BindingId> rootParams(Hir.Expr e, Map<BindingId, Set<BindingId>> lt,
-                                          Map<BindingId, Set<BindingId>> eq, Set<BindingId> paramNames) {
+    private static Set<BindingId> rootParams(Hir.Expr e, Layered lt, Layered eq,
+                                          Set<BindingId> paramNames) {
         return switch (e) {
             case Hir.Var.Denoting v when v.denotes() instanceof ValueName.Local local -> {
                 Set<BindingId> s = new HashSet<>();
                 if (paramNames.contains(local.id())) {
                     s.add(local.id());
                 }
-                s.addAll(lt.getOrDefault(local.id(), Set.of()));
-                s.addAll(eq.getOrDefault(local.id(), Set.of()));
+                s.addAll(Layered.get(lt, local.id()));
+                s.addAll(Layered.get(eq, local.id()));
                 yield s;
             }
             case Hir.FieldAccess fa -> rootParams(fa.target(), lt, eq, paramNames);
@@ -378,11 +399,11 @@ final class TotalityChecker {
     /** The parameters {@code e} is a <em>strictly</em> smaller part of — a field access (a field is
      * strictly smaller than its target), or a local already known to be smaller. A bare parameter, or
      * an exact alias of one, is not strictly smaller than itself. */
-    private static Set<BindingId> strictSmaller(Hir.Expr e, Map<BindingId, Set<BindingId>> lt,
-                                             Map<BindingId, Set<BindingId>> eq, Set<BindingId> paramNames) {
+    private static Set<BindingId> strictSmaller(Hir.Expr e, Layered lt, Layered eq,
+                                             Set<BindingId> paramNames) {
         return switch (e) {
             case Hir.Var.Denoting v when v.denotes() instanceof ValueName.Local local ->
-                    lt.getOrDefault(local.id(), Set.of());
+                    Layered.get(lt, local.id());
             case Hir.FieldAccess fa -> rootParams(fa.target(), lt, eq, paramNames);
             default -> Set.of();
         };
@@ -390,24 +411,16 @@ final class TotalityChecker {
 
     /** The parameters {@code e} is <em>exactly equal</em> to — a bare parameter or an alias of one. A
      * field access is strictly smaller, not equal, so it is not here (it is in {@link #strictSmaller}). */
-    private static Set<BindingId> eqRoots(Hir.Expr e, Map<BindingId, Set<BindingId>> eq,
-                                          Set<BindingId> paramNames) {
+    private static Set<BindingId> eqRoots(Hir.Expr e, Layered eq, Set<BindingId> paramNames) {
         if (e instanceof Hir.Var.Denoting v && v.denotes() instanceof ValueName.Local local) {
             Set<BindingId> s = new HashSet<>();
             if (paramNames.contains(local.id())) {
                 s.add(local.id());
             }
-            s.addAll(eq.getOrDefault(local.id(), Set.of()));
+            s.addAll(Layered.get(eq, local.id()));
             return s;
         }
         return Set.of();
-    }
-
-    private static Map<BindingId, Set<BindingId>> with(Map<BindingId, Set<BindingId>> env,
-                                                       BindingId binding, Set<BindingId> params) {
-        Map<BindingId, Set<BindingId>> copy = new HashMap<>(env);
-        copy.put(binding, params);
-        return copy;
     }
 
     private static String backtickJoin(Set<String> names) {

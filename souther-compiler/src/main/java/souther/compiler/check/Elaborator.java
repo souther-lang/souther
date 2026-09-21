@@ -1144,7 +1144,7 @@ public final class Elaborator {
     static List<Type> inferFnParamTypes(Hir.Binder binder, Hir.Expr body, Scope env,
                                                 CheckContext ctx) {
         List<List<Type>> uses = new ArrayList<>();
-        collectApplications(binder, body, env, ctx, uses, Set.of());
+        collectApplications(binder, body, env, ctx, uses, new HashSet<>());
         if (uses.isEmpty()) {
             throw CompileException.of(Diagnostic.at(body.pos())
                     .say(new HelperMessage.TheFunctionsTypeCannotBeRead(binder.name()))
@@ -1197,11 +1197,18 @@ public final class Elaborator {
             out.add(argTypes);
         }
         switch (e) {
-            case Hir.Block b -> collectApplications(binder, b.body(), env, ctx, out,
-                    with(inner, b.params()));
+            case Hir.Block b -> {
+                List<BindingId> added = b.params().stream().map(Hir.Binder::id).toList();
+                added.forEach(inner::add);
+                collectApplications(binder, b.body(), env, ctx, out, inner);
+                added.forEach(inner::remove);
+            }
             case Hir.LetIn li -> {
                 collectApplications(binder, li.value(), env, ctx, out, inner);
-                collectApplications(binder, li.body(), env, ctx, out, with(inner, List.of(li.binder())));
+                BindingId added = li.binder().id();
+                inner.add(added);
+                collectApplications(binder, li.body(), env, ctx, out, inner);
+                inner.remove(added);
                 // A name given to this function is this function: what the second name is used for is
                 // what the first one is used for. Followed rather than left to the applications alone,
                 // because an alias may be the only thing that is ever applied or handed over.
@@ -1213,8 +1220,10 @@ public final class Elaborator {
             }
             case Hir.IfConstructed ic -> {
                 collectApplications(binder, ic.construct(), env, ctx, out, inner);
-                collectApplications(binder, ic.then(), env, ctx, out,
-                        with(inner, List.of(ic.binder())));
+                BindingId added = ic.binder().id();
+                inner.add(added);
+                collectApplications(binder, ic.then(), env, ctx, out, inner);
+                inner.remove(added);
                 for (Hir.ElseArm arm : ic.els()) {
                     collectApplications(binder, arm.body(), env, ctx, out, inner);
                 }
@@ -1222,8 +1231,14 @@ public final class Elaborator {
             case Hir.Match m -> {
                 collectApplications(binder, m.scrutinee(), env, ctx, out, inner);
                 for (Hir.Case c : m.cases()) {
-                    collectApplications(binder, c.body(), env, ctx, out,
-                            c.binding() == null ? inner : with(inner, List.of(c.binding())));
+                    if (c.binding() == null) {
+                        collectApplications(binder, c.body(), env, ctx, out, inner);
+                        continue;
+                    }
+                    BindingId added = c.binding().id();
+                    inner.add(added);
+                    collectApplications(binder, c.body(), env, ctx, out, inner);
+                    inner.remove(added);
                 }
             }
             default -> TypeChecker.forEachChild(e,
@@ -1269,16 +1284,6 @@ public final class Elaborator {
                 out.add(settled.params());
             }
         }
-    }
-
-    /** {@code bindings} with what {@code added} introduces. */
-    private static Set<BindingId> with(Set<BindingId> bindings, List<Hir.Binder> added) {
-        if (added.isEmpty()) {
-            return bindings;
-        }
-        Set<BindingId> out = new HashSet<>(bindings);
-        added.forEach(binder -> out.add(binder.id()));
-        return out;
     }
 
     /**

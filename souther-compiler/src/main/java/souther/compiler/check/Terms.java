@@ -1883,13 +1883,13 @@ final class Terms {
     /** An expression's canonical key: a location names itself, and everything else is read
      * structurally. */
     Term bodyKey(Core e, Denotations at) {
-        return termKey(e, at, Map.of(), 0, Leaf.SYMBOLIC);
+        return termKey(e, at, new HashMap<>(), 0, Leaf.SYMBOLIC);
     }
 
     /** The identity a fact about {@code e} is filed under: the same algebra, taking an atom of its
      * own where the grammar runs out rather than answering nothing. */
     private Term identityOf(Core e, Denotations at) {
-        return termKey(e, at, Map.of(), 0, Leaf.AN_EVALUATION);
+        return termKey(e, at, new HashMap<>(), 0, Leaf.AN_EVALUATION);
     }
 
     /**
@@ -2289,7 +2289,7 @@ final class Terms {
                         _ -> new IdentityHashMap<>());
                 Naming known = named.get(template);
                 if (known == null) {
-                    known = naming(template, insideATemplate, Map.of(), 0, leaf);
+                    known = naming(template, insideATemplate, new HashMap<>(), 0, leaf);
                     named.put(template, known);
                 }
                 yield known;
@@ -2307,9 +2307,14 @@ final class Terms {
                     ps -> interned.some(ps.get(0)));
             case Core.OptionNone none -> new Naming.Named(interned.none(none.type()));
             case Core.Block b -> {
-                Map<BindingId, Term> inner = binding(bound, b.params(), depth);
-                yield named(naming(b.body(), at, inner, depth + 1, leaf),
-                        body -> interned.closure(b.params().size(), body));
+                List<Core.Binder> params = b.params();
+                for (int i = 0; i < params.size(); i++) {
+                    bound.put(params.get(i).binding(), interned.bound(depth, i));
+                }
+                Naming result = named(naming(b.body(), at, bound, depth + 1, leaf),
+                        body -> interned.closure(params.size(), body));
+                params.forEach(p -> bound.remove(p.binding()));
+                yield result;
             }
             // A binding is named by what its body is named, read inside it. What a name means is the
             // environment's answer (ADR-0106), and {@link #inside} is where that is settled — so
@@ -2333,9 +2338,11 @@ final class Terms {
                 if (value instanceof Naming.Unnamed absent) {
                     yield absent;
                 }
-                Map<BindingId, Term> inner = new HashMap<>(bound);
-                inner.put(li.binder().binding(), value.term());
-                yield naming(li.body(), inside(li, at), inner, depth, leaf);
+                BindingId binder = li.binder().binding();
+                bound.put(binder, value.term());
+                Naming result = naming(li.body(), inside(li, at), bound, depth, leaf);
+                bound.remove(binder);
+                yield result;
             }
             // A construction is a pure function of its fields, and a closure that builds one is what a
             // mapping usually is. The fields are held in declaration order, so two sites writing them
@@ -2345,12 +2352,16 @@ final class Terms {
                     ps -> interned.built(nd.typeName(),
                             nd.values().stream().map(Core.FieldValue::field).toList(), ps));
             case Core.Match m -> {
-                Map<BindingId, Term> outer = bound;
                 List<Naming> answers = new ArrayList<>();
                 for (Core.Case arm : m.cases()) {
-                    Map<BindingId, Term> inner = arm.binder() == null ? outer
-                            : binding(outer, List.of(arm.binder()), depth);
-                    answers.add(naming(arm.body(), at, inner, depth + 1, leaf));
+                    if (arm.binder() == null) {
+                        answers.add(naming(arm.body(), at, bound, depth + 1, leaf));
+                        continue;
+                    }
+                    BindingId binder = arm.binder().binding();
+                    bound.put(binder, interned.bound(depth, 0));
+                    answers.add(naming(arm.body(), at, bound, depth + 1, leaf));
+                    bound.remove(binder);
                 }
                 Naming scrutinee = naming(m.scrutinee(), at, bound, depth, leaf);
                 yield joined(scrutinee, answers,
@@ -2360,9 +2371,11 @@ final class Terms {
             }
             case Core.IfConstructed ic -> {
                 Naming built = naming(ic.construct(), at, bound, depth, leaf);
-                Map<BindingId, Term> inner = binding(bound, List.of(ic.binder()), depth);
+                BindingId binder = ic.binder().binding();
+                bound.put(binder, interned.bound(depth, 0));
                 List<Naming> answers = new ArrayList<>();
-                answers.add(naming(ic.then(), at, inner, depth + 1, leaf));
+                answers.add(naming(ic.then(), at, bound, depth + 1, leaf));
+                bound.remove(binder);
                 for (Core.ElseArm arm : ic.els()) {
                     answers.add(naming(arm.body(), at, bound, depth, leaf));
                 }
@@ -2502,16 +2515,6 @@ final class Terms {
             terms.add(one.term());
         }
         return new Naming.Named(made.apply(terms));
-    }
-
-    /** {@code bound} with each of {@code binders} keyed by where it is bound rather than by which
-     * binding it is, so two expressions that differ only in what they bound are one term. */
-    Map<BindingId, Term> binding(Map<BindingId, Term> bound, List<Core.Binder> binders, int depth) {
-        Map<BindingId, Term> inner = new HashMap<>(bound);
-        for (int i = 0; i < binders.size(); i++) {
-            inner.put(binders.get(i).binding(), interned.bound(depth, i));
-        }
-        return inner;
     }
 
     /** The binding at the head of a {@code x}/{@code x.a.b} chain, or {@code null} if {@code e} is not
@@ -2743,7 +2746,7 @@ final class Terms {
      * naming it at a construction site would ask for.
      */
     static boolean isWritten(Core e) {
-        return isWritten(e, Set.of());
+        return isWritten(e, new HashSet<>());
     }
 
     /** The same, where {@code written} names the bindings an expansion introduced for values that
@@ -2769,9 +2772,11 @@ final class Terms {
                 if (!isWritten(li.value(), written)) {
                     yield false;
                 }
-                Set<BindingId> inner = new HashSet<>(written);
-                inner.add(li.binder().binding());
-                yield isWritten(li.body(), inner);
+                BindingId binder = li.binder().binding();
+                written.add(binder);
+                boolean result = isWritten(li.body(), written);
+                written.remove(binder);
+                yield result;
             }
             default -> false;
         };
@@ -2880,7 +2885,7 @@ final class Terms {
      * question.
      */
     static Hir.Expr writtenSyntaxOf(Core e, Denotations at) {
-        return writtenSyntaxOf(e, at, Map.of());
+        return writtenSyntaxOf(e, at, new HashMap<>());
     }
 
     /**
@@ -2902,13 +2907,6 @@ final class Terms {
                 ApplicationDerivationCause.ApplicationWrittenBack::new);
     }
 
-    /** {@code given} with {@code li}'s binder standing for what it was given. */
-    private static Map<BindingId, Core> withGiven(Map<BindingId, Core> given, Core.LetIn li) {
-        Map<BindingId, Core> out = new HashMap<>(given);
-        out.put(li.binder().binding(), li.value());
-        return out;
-    }
-
     private static Hir.Expr writtenSyntaxOf(Core e, Denotations at, Map<BindingId, Core> given) {
         // Written over nothing, every one of them. A value rendered back out of what was computed is
         // the value and not the characters any of it came from: the fold has already been over them,
@@ -2916,7 +2914,13 @@ final class Terms {
         return switch (e) {
             // A binding is the value its body is, with the binder standing for what it was given.
             // A binding is the value its body is, with the binder standing for what it was given.
-            case Core.LetIn li -> writtenSyntaxOf(li.body(), at, withGiven(given, li));
+            case Core.LetIn li -> {
+                BindingId binder = li.binder().binding();
+                given.put(binder, li.value());
+                Hir.Expr result = writtenSyntaxOf(li.body(), at, given);
+                given.remove(binder);
+                yield result;
+            }
             // And a name whose binding the clause's shape already consumed stands for what the
             // environment says it was given — which is the same rule, asked where the binding is no
             // longer in the tree ({@link ClauseExpr.Scoped}).
