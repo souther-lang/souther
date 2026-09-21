@@ -855,6 +855,76 @@ class CompilePublishedHelperTest {
     }
 
     /**
+     * What a body is emitted as is what it names, not what it would have named: a step that is never
+     * applied is replaced by `Fn.NEVER` and none of it is emitted, and a fold that runs as a loop calls
+     * no method and casts no result. Each of these holds a kept sum only where a class of it is never
+     * named, so each is published and each runs where it is expanded.
+     */
+    @Test
+    void aBodyThatEmitsNoClassOfAKeptSumIsPublishedAndRuns() throws Exception {
+        record Body(String label, String source, String call, long expected) {}
+        List<Body> bodies = List.of(
+                new Body("a fold step that is never applied", """
+                        module pricing exposing ( Won, Prospecting, f )
+
+                        data Won
+                        data Prospecting
+                        data Stage = Won | Prospecting
+
+                        let f (n: Int) = {
+                            let s: Stage = Won
+                            List.fold((acc, x) -> if s == Won then acc else acc, n, [])
+                        }
+                        """, "f(i.n)", 5L),
+                new Body("a map whose step is never applied", """
+                        module pricing exposing ( Won, Prospecting, f )
+
+                        data Won
+                        data Prospecting
+                        data Stage = Won | Prospecting
+
+                        let f (n: Int) = {
+                            let s: Stage = Won
+                            List.length(List.map(x -> if s == Won then x else x, [])) + n
+                        }
+                        """, "f(i.n)", 5L),
+                new Body("a fold that grows its accumulator into a kept sum", """
+                        module pricing exposing ( Won, Prospecting, f )
+
+                        data Won
+                        data Prospecting
+                        data Stage = Won | Prospecting
+
+                        let f (n: Int) = {
+                            let s: Stage = List.fold(
+                                (acc, x) -> if x > 0 then Prospecting else acc, Won, [n])
+                            if s == Won then n else 0
+                        }
+                        """, "f(i.n)", 0L));
+
+        for (Body body : bodies) {
+            BytesClassLoader loader = new BytesClassLoader(Compiler.compileModules(List.of(
+                    body.source(), """
+                            module order exposing ( In, Out, bill )
+
+                            import pricing ( f )
+
+                            data In = { n: Int }
+                            data Out = { v: Int }
+
+                            behavior bill : (i: In) -> Out constructs Out
+                            let bill (i) = Out { v = %s }
+                            """.formatted(body.call()))), getClass().getClassLoader());
+
+            Object in = Codecs.decoded(loader, "order.In", Map.of("n", 5L));
+            Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "order.Out",
+                    Codecs.apply(Emitted.behavior(loader, "order", "bill")
+                            .getConstructor().newInstance(), in));
+            assertEquals(body.expected(), out.get("v"), body.label());
+        }
+    }
+
+    /**
      * An arm that binds the subject as it stands casts nothing, so a kept sum the arm's alternatives
      * add up to is not named: only the cases it tests are, and they are exposed.
      */

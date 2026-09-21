@@ -1323,12 +1323,16 @@ final class BodyGen {
             // The checker resolved this call's type variables when it typed it — the accumulator a
             // fold's step runs at, the result the caller casts to — and left the decision on the
             // nodes, so nothing is resolved a second time here (issue #81).
-            for (Core arg : call.args()) {
+            for (int i = 0; i < call.args().size(); i++) {
+                Core arg = call.args().get(i);
                 if (arg.type() instanceof Type.FnOf fn) {
-                    if (stepNeverRuns(fn)) {
-                        code.getstatic(CD_Fn, "NEVER", CD_Fn);
-                    } else {
-                        emitFunctionValue(arg, fn.params());
+                    switch (call.functionArgument(i, ctx.symbols.theWalk())) {
+                        case NEVER_APPLIED -> code.getstatic(CD_Fn, "NEVER", CD_Fn);
+                        case HANDED_OVER -> emitFunctionValue(arg, fn.params());
+                        // Run where it stands, the call is not emitted as a call at all.
+                        case RUNS_WHERE_IT_STANDS -> throw new IllegalStateException(
+                                "the step of `" + call.name() + "` runs where it stands and is not"
+                                        + " handed over");
                     }
                 } else {
                     box(code, genExpr(arg));
@@ -1348,7 +1352,7 @@ final class BodyGen {
             if (walked(call, CD_Lists, MTD_Lists_builder, MTD_Lists_sealed)) {
                 return;
             }
-            emitStep(call.args().get(0));
+            emitStep(call);
             genExpr(call.args().get(1));      // the list walked
             genExpr(call.args().get(2));      // the index walked from (a long)
             code.invokestatic(CD_Lists, "build", MTD_Lists_build);
@@ -1377,7 +1381,7 @@ final class BodyGen {
             if (walked(call, CD_Maps, MTD_Maps_builder, MTD_Maps_sealed)) {
                 return;
             }
-            emitStep(call.args().get(0));
+            emitStep(call);
             genExpr(call.args().get(1));      // the list walked
             genExpr(call.args().get(2));      // the index walked from (a long)
             code.invokestatic(CD_Maps, "build", MTD_Maps_build);
@@ -1493,16 +1497,16 @@ final class BodyGen {
 
         /** The step of a build, as the fold it was rewritten from would have materialised it — an
          *  empty list still hands over {@code Fn.NEVER}. */
-        private void emitStep(Core step) {
-            if (step.type() instanceof Type.FnOf fn && !stepNeverRuns(fn)) {
-                emitFunctionValue(step, fn.params());
-            } else {
-                code.getstatic(CD_Fn, "NEVER", CD_Fn);
+        private void emitStep(Core.Call build) {
+            Core step = build.args().get(0);
+            switch (build.functionArgument(0, ctx.symbols.theWalk())) {
+                case NEVER_APPLIED -> code.getstatic(CD_Fn, "NEVER", CD_Fn);
+                case HANDED_OVER -> emitFunctionValue(step, ((Type.FnOf) step.type()).params());
+                // Run where it stands, `walked` has emitted it and the build is not emitted.
+                case RUNS_WHERE_IT_STANDS -> throw new IllegalStateException(
+                        "the step of `" + build.name() + "` runs where it stands and is not"
+                                + " handed over");
             }
-        }
-
-        private static boolean stepNeverRuns(Type.FnOf fn) {
-            return Core.neverRuns(fn);
         }
 
         private void invokeRecursiveHelper(Core.Call call) {

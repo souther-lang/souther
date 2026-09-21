@@ -91,9 +91,12 @@ final class EmittedClassReferences {
                 }
             }
             case Core.Binary bin -> comparedBy(bin);
-            // A result comes back as an object and is cast to the type the call answers.
+            // A result comes back as an object and is cast to the type the call answers — unless the
+            // call is the loop it stands for, which is emitted where it is and calls nothing.
             case Core.Call call -> {
-                add(call.type());
+                if (call.stepRunWhereItStands(symbols.theWalk()) == null) {
+                    add(call.type());
+                }
                 sortedBy(call);
             }
             case Core.Apply apply -> add(apply.type());
@@ -150,12 +153,18 @@ final class EmittedClassReferences {
                 visit(binding.body(), expected);
             }
             case Core.Call call -> {
-                Core.Block stepRunHere = call.stepRunWhereItStands(symbols.theWalk());
-                for (Core arg : call.args()) {
-                    if (arg == stepRunHere) {
-                        visitStepRunWhereItStands(stepRunHere);
-                    } else {
+                for (int i = 0; i < call.args().size(); i++) {
+                    Core arg = call.args().get(i);
+                    if (!(arg.type() instanceof Type.FnOf)) {
                         visit(arg, null);
+                        continue;
+                    }
+                    // What the emitter does with a function it is handed is asked of the call.
+                    switch (call.functionArgument(i, symbols.theWalk())) {
+                        case RUNS_WHERE_IT_STANDS -> visitStepRunWhereItStands((Core.Block) arg);
+                        // Replaced by `Fn.NEVER`: no class and no body of it is emitted.
+                        case NEVER_APPLIED -> { }
+                        case HANDED_OVER -> visit(arg, null);
                     }
                 }
             }

@@ -640,15 +640,49 @@ public sealed interface Core {
             return occurrence.origin();
         }
 
+        /** What emitting a call does with a function it is handed. */
+        public enum FunctionArgument {
+            /** Run as the loop body: no class is made for it, and what it closes over is read from
+             *  the frame around it. */
+            RUNS_WHERE_IT_STANDS,
+            /** Never applied, so {@code Fn.NEVER} is handed over in its place and none of it — no
+             *  class, no body — is emitted. */
+            NEVER_APPLIED,
+            /** Handed over as a value: a class with a field for each thing it closes over. */
+            HANDED_OVER
+        }
+
         /**
-         * The step this call runs where it stands, as the loop it is, or null where it is handed to
-         * the runtime as a function value of its own.
+         * What emitting this call does with the function at {@code index}.
+         *
+         * <p>A method is handed a function that is never applied as {@code Fn.NEVER}, and a kernel's
+         * row hands the runtime the function it is given whatever it is. The one answer, read by the
+         * emitter and by whatever asks which classes an emitted call names, so the two do not come to
+         * disagree about which of the three a function is.
+         *
+         * @param theWalk what the standard library's one loop is called
+         */
+        public FunctionArgument functionArgument(int index, ValueName theWalk) {
+            if (!(args.get(index).type() instanceof Type.FnOf fnType)) {
+                throw new IllegalArgumentException("argument " + index + " of `" + fn.rendered()
+                        + "` is not a function");
+            }
+            if (index == 0 && stepRunWhereItStands(theWalk) != null) {
+                return FunctionArgument.RUNS_WHERE_IT_STANDS;
+            }
+            return !(fn instanceof Reached.OfKernel) && neverRuns(fnType)
+                    ? FunctionArgument.NEVER_APPLIED : FunctionArgument.HANDED_OVER;
+        }
+
+        /**
+         * The step this call runs where it stands, as the loop it is, or null where it does not: the
+         * step is handed over as a function, or replaced by {@code Fn.NEVER} because it is never
+         * applied ({@link #functionArgument} says which).
          *
          * <p>A walk that starts at the head of the list, and a build of a list or a map, run their
          * step as the loop body, reading what it closes over from the frame around it: no class is
-         * made for it. What is handed over as a value is a class with a field for each thing it
-         * closes over. The one answer, read by the emitter and by whatever asks which classes an
-         * emitted call names, so the two do not come to disagree about which of them a step is.
+         * made for it, and no method is called, so nothing comes back to be cast to the type the
+         * call answers.
          *
          * @param theWalk what the standard library's one loop is called
          */
