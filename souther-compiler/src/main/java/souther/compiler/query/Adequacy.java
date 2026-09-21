@@ -4173,8 +4173,16 @@ public final class Adequacy {
             // keeps and the list is what says. The same arrangement the classes are gathered in,
             // and for the reason the four beside them are lists: what is owed is handed on in the
             // order it is handed on in, and a set would leave that to whoever copied it.
-            return Answer.of(new RowWork(classesOwed(measured),
-                    arms.values().stream().map(Generator.ArmOwed::new).toList(),
+            //
+            // Bound here and nowhere else: this is the one place a fork's occurrences and the
+            // account identity a row is offered under are both already in hand, and both are kept
+            // rather than one of them being dropped for a reader downstream to work out again from
+            // a different derivation.
+            LinkedHashMap<ObligationIdentity.OfAnArm, Generator.ArmOwed> armsOwed =
+                    new LinkedHashMap<>();
+            arms.forEach((obligation, occurrences) -> armsOwed.put(
+                    new ObligationIdentity.OfAnArm(obligation), new Generator.ArmOwed(occurrences)));
+            return Answer.of(new RowWork(classesOwed(measured), armsOwed,
                     pairs, meetings, List.copyOf(rules), pointsOwed(db, name, behavior)));
         }
 
@@ -4347,7 +4355,7 @@ public final class Adequacy {
             }
             souther.compiler.partition.GenerationPlan asked =
                     souther.compiler.partition.GenerationPlan.of(subject, work.classes(),
-                            work.arms(), work.pairs(), work.meetings());
+                            List.copyOf(work.arms().values()), work.pairs(), work.meetings());
             // The meetings of this body, read once for the module. A behavior with no entry is one
             // whose body was not lowered, which is nothing to search in rather than a search that
             // found nothing — and is the same condition the guards above answer for.

@@ -1,8 +1,6 @@
 package souther.compiler.query;
 
 import souther.compiler.check.Sig;
-import souther.compiler.coverage.ArmProbe;
-import souther.compiler.coverage.CoverageSites;
 import souther.compiler.execute.BoundaryValues;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Place;
@@ -398,8 +396,8 @@ public record Settlements(List<ObligationIdentity> requested,
                                souther.compiler.partition.MeasuredInput subject, Sig sig,
                                BoundaryValues building, Generator.Trial trial,
                                List<GenerationObligation> obligations,
-                               Map<ArmProbe, CoverageSites.Obligation> armsOf,
-                               Map<CoverageSites.Obligation, List<ArmProbe>> occurrencesOf,
+                               Map<Generator.ArmOwed, ObligationIdentity.OfAnArm> identityOfArm,
+                               Map<ObligationIdentity.OfAnArm, Generator.ArmOwed> targetOfArm,
                                RulesTaken rules,
                                souther.compiler.partition.InteractionRequirements combinations,
                                Adequacy.Generated.RowsForRules ruleRows,
@@ -468,21 +466,20 @@ public record Settlements(List<ObligationIdentity> requested,
                     }
                 }
             });
-            // Which arm each place a run is recorded at is one of, both ways round. A search names
-            // an occurrence because that is where a run is recorded; what a row is owed for is the
-            // arm the author wrote, and one arm has as many occurrences as there are call sites of
-            // the helper carrying it. Read off the plan that numbered them, which is where the two
-            // are already related — worked out here, it would be a second answer to which arm a
-            // probe is one of.
-            Map<ArmProbe, CoverageSites.Obligation> armsOf = new LinkedHashMap<>();
-            Map<CoverageSites.Obligation, List<ArmProbe>> occurrencesOf = new LinkedHashMap<>();
-            Bodies.Elaborated checked = db.ask(new Bodies.Checked(module)).value();
-            CoverageSites.Plan plan =
-                    checked == null ? CoverageSites.Plan.NONE : checked.plan();
-            for (CoverageSites.ArmSite site : plan.arms(behavior)) {
-                armsOf.put(site.index(), site.obligation());
-                occurrencesOf.computeIfAbsent(site.obligation(), _ -> new ArrayList<>())
-                        .add(site.index());
+            // Which occurrence each arm's search target is, both ways round. Read off
+            // {@link Adequacy.RowsOwed} — the one place a fork's occurrences and the account
+            // identity a row is offered under were bound together — and not off a second reading
+            // of the body: worked out again here, from whatever this module's bodies happen to
+            // elaborate to, it would be a second answer that a partial elaboration elsewhere in the
+            // module could disagree with.
+            RowWork owed = db.ask(new Adequacy.RowsOwed(module, behavior)).value();
+            Map<Generator.ArmOwed, ObligationIdentity.OfAnArm> identityOfArm = new LinkedHashMap<>();
+            Map<ObligationIdentity.OfAnArm, Generator.ArmOwed> targetOfArm = new LinkedHashMap<>();
+            if (owed != null) {
+                owed.arms().forEach((identity, target) -> {
+                    identityOfArm.put(target, identity);
+                    targetOfArm.put(identity, target);
+                });
             }
             // And the lines of this behavior that the rows do not tell from the lines beside them,
             // which are the lines a row is offered for as whole lines rather than at a point.
@@ -519,7 +516,7 @@ public record Settlements(List<ObligationIdentity> requested,
                                     Adequacy.numberingOf(db, module),
                                     RequiredDependencies.of(db, module, behavior)),
                     filling == null ? List.of() : filling.composed().plan().obligations(),
-                    armsOf, occurrencesOf, rulesOf(db, module, behavior),
+                    identityOfArm, targetOfArm, rulesOf(db, module, behavior),
                     combinationsOf(db, module, behavior, subject),
                     filling == null ? Adequacy.Generated.RowsForRules.NOTHING : filling.rules(),
                     reads, besides);
@@ -590,10 +587,15 @@ public record Settlements(List<ObligationIdentity> requested,
                         }
                     }
                     case GenerationObligation.Arm(var target) -> {
-                        CoverageSites.Obligation arm = armsOf.get(target.occurrences().getFirst());
-                        if (arm != null && filling.composed().discharge().at(target)
+                        ObligationIdentity.OfAnArm identity = identityOfArm.get(target);
+                        if (identity == null) {
+                            throw new IllegalStateException(
+                                    "the generation plan asks for an arm RowsOwed did not bind: "
+                                            + target);
+                        }
+                        if (filling.composed().discharge().at(target)
                                 instanceof souther.compiler.partition.ArmDisposition.Built built) {
-                            out.put(new ObligationIdentity.OfAnArm(arm),
+                            out.put(identity,
                                     RowKey.of(behavior, filling.composed().rowFor(built.rowId())));
                         }
                     }
@@ -671,10 +673,13 @@ public record Settlements(List<ObligationIdentity> requested,
                     // those occurrences — the one a run through this arm would be recorded at,
                     // chosen where the finding was made. What a row is offered for is the arm.
                     case GenerationObligation.Arm(var target) -> {
-                        CoverageSites.Obligation arm = armsOf.get(target.occurrences().getFirst());
-                        if (arm != null) {
-                            out.add(new ObligationIdentity.OfAnArm(arm));
+                        ObligationIdentity.OfAnArm identity = identityOfArm.get(target);
+                        if (identity == null) {
+                            throw new IllegalStateException(
+                                    "the generation plan asks for an arm RowsOwed did not bind: "
+                                            + target);
                         }
+                        out.add(identity);
                     }
                     // The combination this run was asked about, which is the plan's answer: what
                     // the criterion states is the account's, and a universe read off the space
@@ -744,7 +749,7 @@ public record Settlements(List<ObligationIdentity> requested,
                      ObligationIdentity.OfARow _ -> throw new IllegalStateException(
                         "no row is offered for " + item + ", so none is weighed against it");
                 case ObligationIdentity.OfABorder at -> tellingTheLinesApart(asRead, at).said();
-                case ObligationIdentity.OfAnArm(var owed) -> throughArm(asRead, owed);
+                case ObligationIdentity.OfAnArm owed -> throughArm(asRead, owed);
                 case ObligationIdentity.OfALine at -> atThePoint(asRead, at);
                 case ObligationIdentity.OfADecisionRule owed -> takingTheRule(asRead, owed);
                 case ObligationIdentity.OfACombinationOfDecisions owed ->
@@ -872,13 +877,25 @@ public record Settlements(List<ObligationIdentity> requested,
          * — and where there is none, this says so rather than reading the absence as a row that
          * missed.
          */
-        private Settlement throughArm(RowAsRead asRead, CoverageSites.Obligation owed) {
+        private Settlement throughArm(RowAsRead asRead, ObligationIdentity.OfAnArm owed) {
+            // The whole table asks every row about every item, including an arm of a behavior
+            // other than the one the row was composed for — and this behavior's own binding has
+            // nothing to say about such an arm, which is not the same as this behavior having lost
+            // track of one of its own.
+            if (!behavior.equals(owed.arm().behavior())) {
+                return new Settlement.DoesNotSettle();
+            }
+            Generator.ArmOwed target = targetOfArm.get(owed);
+            if (target == null) {
+                throw new IllegalStateException(
+                        "this behavior is asked about an arm with no search target: " + owed);
+            }
             return switch (asRead.watched()) {
                 // Any occurrence of it. The arm is what the author wrote and a helper carrying it
                 // stands in the running tree once per call site, so a run through any of those is
                 // a run through the arm — which is the reading the arm account already takes.
                 case Generator.Watched.Ran(var account) ->
-                        occurrencesOf.getOrDefault(owed, List.of()).stream().anyMatch(account::lit)
+                        target.occurrences().stream().anyMatch(account::lit)
                                 ? new Settlement.Settles() : new Settlement.DoesNotSettle();
                 case Generator.Watched.NoAccount _ ->
                         new Settlement.Undetermined(Settlement.Reason.NO_ACCOUNT_OF_THE_RUN);

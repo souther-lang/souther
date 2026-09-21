@@ -5,7 +5,10 @@ import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.ObligationIdentity;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.SequencedMap;
 
 /**
  * Why a generation of one behavior would be worth making, for a caller that has not made one.
@@ -34,7 +37,9 @@ import java.util.List;
  *
  * @param classes  one class of one position apiece, off the partition measure's own reading
  * @param arms     the arms of the body nothing reaches, each with every place a run through it is
- *                 recorded at
+ *                 recorded at, keyed on the account identity the finding was raised against — the
+ *                 one place that pairing is made, so nothing downstream reads it back off a search
+ *                 target and nothing rebuilds it from a second derivation
  * @param pairs    the combinations of two classes no row sits in, where the pair space is what the
  *                 behavior is held to
  * @param meetings the combinations of the body's decisions no row makes
@@ -46,19 +51,20 @@ import java.util.List;
  *                 them is that there are some: the rows at a line are the boundary search's to
  *                 compose
  */
-public record RowWork(List<ClassOfAPosition> classes, List<Generator.ArmOwed> arms,
+public record RowWork(List<ClassOfAPosition> classes,
+                      SequencedMap<ObligationIdentity.OfAnArm, Generator.ArmOwed> arms,
                       List<ObligationIdentity.OfAFallbackPairCell> pairs,
                       List<ObligationIdentity.OfACombinationOfDecisions> meetings,
                       List<DecisionRule> rules,
                       List<BorderObligationPointAssessment> points) {
 
     /** Nothing at all, which is what a behavior no row is owed for comes to. */
-    public static final RowWork NONE = new RowWork(List.of(), List.of(), List.of(), List.of(),
-            List.of(), List.of());
+    public static final RowWork NONE = new RowWork(List.of(), new LinkedHashMap<>(), List.of(),
+            List.of(), List.of(), List.of());
 
     public RowWork {
         classes = List.copyOf(classes);
-        arms = List.copyOf(arms);
+        arms = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(arms));
         pairs = List.copyOf(pairs);
         meetings = List.copyOf(meetings);
         rules = List.copyOf(rules);
