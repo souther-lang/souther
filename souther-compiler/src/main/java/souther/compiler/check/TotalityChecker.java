@@ -174,16 +174,16 @@ final class TotalityChecker {
                 idxOf.put(params.get(i).binder().id(), i);
             }
             List<RecCall> calls = new ArrayList<>();
-            walk(def.writtenBody(), group, paramNames, Map.of(), Map.of(), calls);
+            walk(def.writtenBody(), group, paramNames, new HashMap<>(), new HashMap<>(), calls);
             for (RecCall rc : calls) {
                 firstCall.putIfAbsent(f, rc.call());
                 int toArity = own.get(rc.callee()).params().size();
                 Rel[][] m = new Rel[params.size()][toArity];
-                int cols = Math.min(toArity, rc.call().args().size());
+                int cols = Math.min(toArity, rc.args().size());
                 for (int j = 0; j < cols; j++) {
-                    Hir.Expr arg = rc.call().args().get(j);
-                    Set<BindingId> strict = strictSmaller(arg, rc.lt(), rc.eq(), paramNames);
-                    Set<BindingId> root = rootParams(arg, rc.lt(), rc.eq(), paramNames);
+                    ArgRelation rel = rc.args().get(j);
+                    Set<BindingId> strict = rel.strict();
+                    Set<BindingId> root = rel.roots();
                     for (BindingId p : strict) {
                         m[idxOf.get(p)][j] = Rel.LT;
                     }
@@ -281,11 +281,16 @@ final class TotalityChecker {
         return true;
     }
 
-    /** A recorded recursive call to a group member, with the callee and the smaller-than / equal-to
-     * relations ({@code lt} / {@code eq}) in scope where it appears. */
-    private record RecCall(String callee, Hir.Apply call,
-                           Map<BindingId, Set<BindingId>> lt,
-                           Map<BindingId, Set<BindingId>> eq) {}
+    /** What one argument of a recorded call is, relative to the caller's parameters: the parameters
+     * it is strictly smaller than, and the parameters it is a (possibly-improper) descendant of.
+     * Settled where the call is found, from the {@code lt}/{@code eq} relations in scope there —
+     * not carried past that point, since nothing later asks a scope-dependent question, only this
+     * one, already-settled answer for this one argument. */
+    private record ArgRelation(Set<BindingId> strict, Set<BindingId> roots) {}
+
+    /** A recorded recursive call to a group member, with each argument's relation to the caller's
+     * parameters already settled at the call. */
+    private record RecCall(String callee, Hir.Apply call, List<ArgRelation> args) {}
 
     /**
      * Walks {@code e}, threading {@code lt} (each local -&gt; the parameters it is a strictly smaller
@@ -293,6 +298,12 @@ final class TotalityChecker {
      * alias), and records every call to a member of {@code group}. A {@code match} case binding is a
      * strictly smaller part of the parameters the scrutinee is rooted at; a {@code let} carries the
      * strict or equal relation of its value forward.
+     *
+     * <p>{@code lt} and {@code eq} are one shared, mutable map apiece for the whole walk: a scope
+     * entered here is left the same way — add before recursing into it, remove after — rather than
+     * copied, since nothing keeps either map past this walk (a {@link RecCall} keeps only the
+     * {@link ArgRelation}s it already asked for). A DFS backtracks, so no branch this returns to
+     * ever needed a binding another branch added.
      */
     private static void walk(Hir.Expr e, Set<String> group, Set<BindingId> paramNames,
                              Map<BindingId, Set<BindingId>> lt, Map<BindingId, Set<BindingId>> eq,
@@ -302,22 +313,34 @@ final class TotalityChecker {
                 walk(m.scrutinee(), group, paramNames, lt, eq, calls);
                 Set<BindingId> rooted = rootParams(m.scrutinee(), lt, eq, paramNames);
                 for (Hir.Case c : m.cases()) {
-                    Map<BindingId, Set<BindingId>> inner = lt;
-                    if (c.binding() != null && !rooted.isEmpty()) {
-                        inner = with(lt, c.binding().id(), rooted);   // the bound value is smaller than each root
+                    if (c.binding() == null || rooted.isEmpty()) {
+                        walk(c.body(), group, paramNames, lt, eq, calls);
+                        continue;
                     }
-                    walk(c.body(), group, paramNames, inner, eq, calls);
+                    BindingId added = c.binding().id();
+                    lt.put(added, rooted);   // the bound value is smaller than each root
+                    walk(c.body(), group, paramNames, lt, eq, calls);
+                    lt.remove(added);
                 }
             }
             case Hir.LetIn li -> {
                 walk(li.value(), group, paramNames, lt, eq, calls);
                 Set<BindingId> smaller = strictSmaller(li.value(), lt, eq, paramNames);
                 Set<BindingId> equal = eqRoots(li.value(), eq, paramNames);
-                Map<BindingId, Set<BindingId>> ltInner =
-                        smaller.isEmpty() ? lt : with(lt, li.binder().id(), smaller);
-                Map<BindingId, Set<BindingId>> eqInner =
-                        equal.isEmpty() ? eq : with(eq, li.binder().id(), equal);
-                walk(li.body(), group, paramNames, ltInner, eqInner, calls);
+                BindingId binder = li.binder().id();
+                if (!smaller.isEmpty()) {
+                    lt.put(binder, smaller);
+                }
+                if (!equal.isEmpty()) {
+                    eq.put(binder, equal);
+                }
+                walk(li.body(), group, paramNames, lt, eq, calls);
+                if (!smaller.isEmpty()) {
+                    lt.remove(binder);
+                }
+                if (!equal.isEmpty()) {
+                    eq.remove(binder);
+                }
             }
             case Hir.Apply call -> {
                 // Named by what it reaches, which is what the group holds and what the definitions
@@ -325,7 +348,12 @@ final class TotalityChecker {
                 // written qualified where a reader reaches it and bare where its author wrote it,
                 // and the same call answers both.
                 if (call.answered() != null && group.contains(call.answered().reaches())) {
-                    calls.add(new RecCall(call.answered().reaches(), call, lt, eq));
+                    List<ArgRelation> args = new ArrayList<>();
+                    for (Hir.Expr arg : call.args()) {
+                        args.add(new ArgRelation(strictSmaller(arg, lt, eq, paramNames),
+                                rootParams(arg, lt, eq, paramNames)));
+                    }
+                    calls.add(new RecCall(call.answered().reaches(), call, args));
                 }
                 Combinators.Written handed = Combinators.handedTo(call);
                 for (Hir.Expr arg : call.args()) {
@@ -344,10 +372,14 @@ final class TotalityChecker {
                     // freshly-constructed container (`Some(p)`) roots at no parameter, so its payload
                     // is not credited as smaller either.
                     Set<BindingId> elemRoots = rootParams(handed.container(), lt, eq, paramNames);
-                    Map<BindingId, Set<BindingId>> inner = elemRoots.isEmpty()
-                            ? lt
-                            : with(lt, handed.element().id(), elemRoots);
-                    walk(handed.step().body(), group, paramNames, inner, eq, calls);
+                    BindingId element = handed.element().id();
+                    if (!elemRoots.isEmpty()) {
+                        lt.put(element, elemRoots);
+                    }
+                    walk(handed.step().body(), group, paramNames, lt, eq, calls);
+                    if (!elemRoots.isEmpty()) {
+                        lt.remove(element);
+                    }
                 }
             }
             default -> forEachChild(e, child -> walk(child, group, paramNames, lt, eq, calls));
@@ -401,13 +433,6 @@ final class TotalityChecker {
             return s;
         }
         return Set.of();
-    }
-
-    private static Map<BindingId, Set<BindingId>> with(Map<BindingId, Set<BindingId>> env,
-                                                       BindingId binding, Set<BindingId> params) {
-        Map<BindingId, Set<BindingId>> copy = new HashMap<>(env);
-        copy.put(binding, params);
-        return copy;
     }
 
     private static String backtickJoin(Set<String> names) {
