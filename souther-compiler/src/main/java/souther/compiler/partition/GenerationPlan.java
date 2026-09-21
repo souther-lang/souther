@@ -94,12 +94,24 @@ public record GenerationPlan(MeasuredInput subject, List<GenerationObligation> o
 
     /** One class of one position apiece, in the order they were gathered. */
     public List<ClassOfAPosition> classesOwed() {
-        return kind(GenerationObligation.Class.class, GenerationObligation.Class::target);
+        List<ClassOfAPosition> out = new ArrayList<>();
+        for (GenerationObligation each : obligations) {
+            if (each instanceof GenerationObligation.Class(var target)) {
+                out.add(target);
+            }
+        }
+        return List.copyOf(out);
     }
 
     /** One arm apiece, in the order the plan numbered them. */
     public List<Generator.ArmOwed> armsOwed() {
-        return kind(GenerationObligation.Arm.class, GenerationObligation.Arm::target);
+        List<Generator.ArmOwed> out = new ArrayList<>();
+        for (GenerationObligation each : obligations) {
+            if (each instanceof GenerationObligation.Arm(var target)) {
+                out.add(target);
+            }
+        }
+        return List.copyOf(out);
     }
 
     /**
@@ -109,7 +121,13 @@ public record GenerationPlan(MeasuredInput subject, List<GenerationObligation> o
      * and neither shows what the behavior does where both hold.
      */
     public List<ObligationIdentity.OfAFallbackPairCell> pairsOwed() {
-        return kind(GenerationObligation.Pair.class, GenerationObligation.Pair::target);
+        List<ObligationIdentity.OfAFallbackPairCell> out = new ArrayList<>();
+        for (GenerationObligation each : obligations) {
+            if (each instanceof GenerationObligation.Pair(var target)) {
+                out.add(target);
+            }
+        }
+        return List.copyOf(out);
     }
 
     /**
@@ -119,16 +137,10 @@ public record GenerationPlan(MeasuredInput subject, List<GenerationObligation> o
      * these unmade, which is the whole reason it is asked about.
      */
     public List<ObligationIdentity.OfACombinationOfDecisions> meetingsOwed() {
-        return kind(GenerationObligation.Meeting.class, GenerationObligation.Meeting::target);
-    }
-
-    private <O extends GenerationObligation, T> List<T> kind(Class<O> of,
-                                                              java.util.function.Function<O, T>
-                                                                      target) {
-        List<T> out = new ArrayList<>();
+        List<ObligationIdentity.OfACombinationOfDecisions> out = new ArrayList<>();
         for (GenerationObligation each : obligations) {
-            if (of.isInstance(each)) {
-                out.add(target.apply(of.cast(each)));
+            if (each instanceof GenerationObligation.Meeting(var target)) {
+                out.add(target);
             }
         }
         return List.copyOf(out);
