@@ -18,6 +18,8 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What a kernel's declaration says it takes, the runtime has a method for.
@@ -139,6 +141,22 @@ class TheRuntimeAnswersEveryKernelAtItsDeclaredAbiTest {
                 EnumSet.copyOf(Intrinsics.COMPARATOR_OVERLOADS),
                 "which kernels have a runtime method taking a comparator — each wants a case in"
                         + " CompileEnumerationOrderTest that runs it over an enumeration");
+    }
+
+    /**
+     * And the comparator path itself asks this set, rather than trusting whatever set the caller
+     * happened to gate on — {@code BodyGen} reads {@code Core.CallSettlement.OrderingSubject}, a
+     * semantic fact with no idea whether this runtime has a comparator overload for the kernel it
+     * names. A kernel could gain the settlement without gaining the overload (or without this set
+     * being updated to say so), and this is what catches that at the call it would otherwise wrongly
+     * reach, rather than at bytecode verification or a runtime {@code NoSuchMethodError}.
+     */
+    @Test
+    void emitWithComparatorRefusesAKernelOutsideTheOverloadSet() {
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> Intrinsics.emitWithComparator(null, Kernel.STRING_TRIM, null));
+
+        assertTrue(e.getMessage().contains(Kernel.STRING_TRIM.key()), e.getMessage());
     }
 
     /**

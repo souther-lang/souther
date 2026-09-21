@@ -549,12 +549,15 @@ public sealed interface Core {
             }
         }
 
-        /** The exact {@link Type} the checker proved ordered for one application of {@code
-         * List.sort}, {@code List.max}, {@code List.min}, or {@code List.sortBy} — the list's
-         * element for the first three, the sort key's result for the last. {@code Nothing} where the
-         * call has nothing to compare (an empty-list literal). Never a comparator, method symbol, or
-         * other backend representation of that proof: a backend reads {@link #type()} and decides its
-         * own representation from it. */
+        /** The {@link Type} an ordering requirement was checked against for one application of
+         * {@code List.sort}, {@code List.max}, {@code List.min}, or {@code List.sortBy} — the list's
+         * element for the first three, the sort key's result for the last. Not always a Type proved
+         * ordered: the requirement holds it just as readily where there was nothing yet to check —
+         * {@code Nothing} for an empty-list literal, a still-open type variable, or bottom — as where
+         * the Type does support ordering. A Type the requirement refused never reaches here; that is
+         * a compile error instead. Never a comparator, method symbol, or other backend
+         * representation: a backend reads {@link #type()} and decides its own representation from
+         * it. */
         record OrderingSubject(Type type) implements CallSettlement {
 
             public OrderingSubject {
@@ -608,13 +611,16 @@ public sealed interface Core {
                 case CallSettlement.StringMatches _ ->
                         fn instanceof Reached.OfKernel k && k.kernel() == Kernel.STRING_MATCHES;
                 // Which kernels may carry this one is CallElaborator's decision, not a second table
-                // held here in agreement with it — this asks only that the fact is attached to some
-                // call, which the settlement's own constructor already requires of its type.
-                case CallSettlement.OrderingSubject _ -> true;
+                // held here in agreement with it — this asks only that the settlement is attached
+                // to a kernel call at all, the way every settlement here is. A rewrite that turned
+                // the call into something else (a helper, an injected behavior) while leaving the
+                // settlement behind is what this refuses; which kernel is not this constructor's to
+                // re-decide.
+                case CallSettlement.OrderingSubject _ -> fn instanceof Reached.OfKernel;
             };
             if (!agrees) {
                 throw new IllegalArgumentException("`" + fn.rendered() + "` and its settlement "
-                        + settlement + " disagree about whether this call is `String.matches`");
+                        + settlement + " disagree about what kind of call this is");
             }
         }
 

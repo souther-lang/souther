@@ -97,4 +97,30 @@ class ACallCarriesTheSettlementTheCheckerProvedAboutItTest {
 
         assertSame(call, Core.mapChildren(call, c -> c, n -> n, b -> b));
     }
+
+    /** {@code TRIM} carries no ordering constraint of its own, but the invariant asks only that an
+     *  {@code OrderingSubject} lands on some kernel call — which kernel is CallElaborator's decision,
+     *  not a second table held here in agreement with it. */
+    @Test
+    void anOrderingSubjectSettlementIsAcceptedOnAnyKernelCall() {
+        Core.Call call = new Core.Call(TRIM, List.of(str("  x  ")), UNWRITTEN,
+                new Core.CallSettlement.OrderingSubject(Type.INT), Type.STRING, POS);
+
+        assertEquals(new Core.CallSettlement.OrderingSubject(Type.INT), call.settlement());
+    }
+
+    /** An {@code OrderingSubject} is a fact about a call this compilation reaches through a kernel —
+     *  a call to a declaration (a helper, a behavior) is refused one, the way a rewrite that turned a
+     *  kernel call into something else while leaving the settlement behind would be. */
+    @Test
+    void aCallToADeclarationIsRefusedAnOrderingSubjectSettlement() {
+        Core.Reached.OfDeclaration toAHelper = new Core.Reached.OfDeclaration(
+                new ReachName.Own(new ValueName.Helper("demo", "half")));
+
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> new Core.Call(toAHelper, List.of(str("x")), UNWRITTEN,
+                        new Core.CallSettlement.OrderingSubject(Type.INT), Type.STRING, POS));
+
+        assertTrue(e.getMessage().contains("half"), e.getMessage());
+    }
 }

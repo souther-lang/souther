@@ -398,6 +398,16 @@ final class Intrinsics {
      * one applying a function takes the function too, as an {@code Fn}.
      */
     static void emitWithComparator(BodyGen g, Kernel kernel, Core.Call call) {
+        if (!COMPARATOR_OVERLOADS.contains(kernel)) {
+            // The caller read an OrderingSubject settlement and an enumeration off it, which only
+            // means the checker requires order of some Type for this call — never that this
+            // runtime has a comparator overload to reach for it. That is this set's fact, asked
+            // here rather than trusted, so a kernel gaining the settlement without gaining the
+            // overload fails at the call it would otherwise reach, not at bytecode verification.
+            throw new IllegalStateException("`" + kernel.key() + "` carries an ordering settlement"
+                    + " but is not in COMPARATOR_OVERLOADS — the runtime has no comparator overload"
+                    + " for it, or this set was not updated to say it does");
+        }
         KernelSignature declared = g.kernelSignature(kernel);
         ClassDesc owner;
         String method;
