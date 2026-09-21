@@ -10,6 +10,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.SequencedMap;
 
 /**
  * Which declaration a name reaches where a body of one module is expanded.
@@ -62,7 +63,7 @@ public final class HelperTable {
 
     private final String module;
     private final InliningPolicy policy;
-    private final Map<ReachName.Declaration, HelperEntry> byReference;
+    private final SequencedMap<ReachName.Declaration, HelperEntry> byReference;
     private final Map<DefinitionName, HelperEntry> byAddress;
     private final Map<DefinitionName, HelperEntry> declared;
     private final Map<DefinitionName, HelperEntry> emits;
@@ -71,7 +72,7 @@ public final class HelperTable {
     private final Stdlib stdlib;
 
     private HelperTable(String module, InliningPolicy policy,
-                        Map<ReachName.Declaration, HelperEntry> byReference,
+                        SequencedMap<ReachName.Declaration, HelperEntry> byReference,
                         Map<DefinitionName, HelperEntry> declared,
                         Map<DefinitionName, HelperEntry> emits, Stdlib stdlib) {
         this.stdlib = stdlib;
@@ -120,7 +121,7 @@ public final class HelperTable {
             HelperEntry entry = HelperEntry.reached(takenOnAs(fn), fn);
             emits.put(entry.address(), entry);
         }
-        Map<ReachName.Declaration, HelperEntry> reached = new LinkedHashMap<>();
+        SequencedMap<ReachName.Declaration, HelperEntry> reached = new LinkedHashMap<>();
         if (policy == InliningPolicy.FULL) {
             stdlib.helpers().forEach((operation, body) -> {
                 HelperEntry entry =
@@ -135,7 +136,7 @@ public final class HelperTable {
         for (HelperEntry entry : emits.values()) {
             reached.put(entry.reachedAs(), entry);
         }
-        return new HelperTable(module, policy, Collections.unmodifiableMap(reached),
+        return new HelperTable(module, policy, Collections.unmodifiableSequencedMap(reached),
                 Collections.unmodifiableMap(own), Collections.unmodifiableMap(emits), stdlib);
     }
 
@@ -176,12 +177,12 @@ public final class HelperTable {
      * a narrowed table would find {@code foldFrom} non-recursive and expand its self-call forever.
      */
     public HelperTable hiding(Collection<ReachName.Declaration> references) {
-        Map<ReachName.Declaration, HelperEntry> narrowed = new LinkedHashMap<>(byReference);
+        SequencedMap<ReachName.Declaration, HelperEntry> narrowed = new LinkedHashMap<>(byReference);
         boolean any = false;
         for (ReachName.Declaration reference : references) {
             any |= narrowed.remove(reference) != null;
         }
-        return any ? new HelperTable(module, policy, Collections.unmodifiableMap(narrowed),
+        return any ? new HelperTable(module, policy, Collections.unmodifiableSequencedMap(narrowed),
                 declared, emits, stdlib) : this;
     }
 
@@ -212,8 +213,14 @@ public final class HelperTable {
     }
 
     /** Everything reachable, by the reference it is reached by — what the call graph is built
-     * over. */
-    public Map<ReachName.Declaration, HelperEntry> reachable() {
+     * over. In construction order and not the module's alone: the library's operations first (under
+     * {@link InliningPolicy#FULL}), then the imports, then what this module declared or took on —
+     * each source in the order it was handed to {@link #of}. Said in the type because a reader
+     * ({@link HelperGraph}, {@code souther.compiler.query.Bodies.RequiredRecursiveDefs}) folds this
+     * order into an answer whose own {@code equals} makes the order part of what it means; a map
+     * that promised only membership would make that answer flap on every read of a source no edit
+     * touched. */
+    public SequencedMap<ReachName.Declaration, HelperEntry> reachable() {
         return byReference;
     }
 
