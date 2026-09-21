@@ -93,6 +93,11 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
     private static String block(Compilation compilation) {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        return blockOf(compilation);
+    }
+
+    /** The same, for a caller whose compilation is measured and answered already. */
+    private static String blockOf(Compilation compilation) {
         Map<String, Adequacy.Filling> filling = Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(filling, "the model under test compiles");
         return GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
@@ -372,7 +377,7 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
                     () -> "and it settles what it was composed for: " + meeting);
         }
 
-        String block = block(compilation);
+        String block = blockOf(compilation);
         assertEquals(List.of(), names(block).stream().filter(name -> name.contains(" x ")).toList(),
                 "every row is named for one class, none for a combination of them: " + block);
         assertEquals(9, rows(block),
