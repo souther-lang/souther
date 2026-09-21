@@ -676,8 +676,9 @@ class CompileExposedValueTest {
                 let floor = inner && (if List.length([1]) > 0 then inner else false)
                 """;
 
-        assertDoesNotThrow(() -> Compiler.compile(forking));
-        Map<String, ClassFileImage> jar = Compiler.compile(forking);
-        assertTrue(jar.containsKey("limits.$Values"), jar.keySet().toString());
+        Map<String, ClassFileImage> compiled =
+                assertDoesNotThrow(() -> Compiler.compile(forking));
+
+        assertTrue(compiled.containsKey("limits.$Values"), compiled.keySet().toString());
     }
 }

@@ -3779,29 +3779,35 @@ public final class Bodies {
         // Held apart from the behaviors: it declares no rows and states no answer, and the places of
         // a behavior are its own and those of the methods it calls.
         SequencedMap<String, Core> methods = new LinkedHashMap<>();
-        Map<ReachName.Declaration, Hir.FnDef> methodDeclarations = new LinkedHashMap<>();
         Set<String> behaviorNames = Names.behaviorNames(settled);
         for (Hir.FnDef fn : settled.fns()) {
             Core method = module.emittedHelpers().get(fn.name());
             if (method != null && fn.params().isEmpty() && fn.standsAt() == null
                     && !behaviorNames.contains(fn.name())) {
                 methods.put(fn.name(), method);
-                methodDeclarations.put(
-                        new ReachName.Own(new ValueName.Helper(name, fn.name())), fn);
+                // What a body is read with travels with the body. A behavior's check answers with
+                // the rules its calls were handed, and the expansion a value method was lowered
+                // from answers with the same; a value emitted for another module to call has no
+                // behavior whose check would have carried them.
+                Answer<Expansion<Hir.FnDef>> lowered = db.ask(new LoweredBody(name, fn.address()));
+                if (!lowered.present()) {
+                    throw new IllegalStateException("`" + name + "." + fn.name() + "` is emitted"
+                            + " as a method and its body did not come out");
+                }
+                supplied.putAll(lowered.value().supplied().byExpansion());
             }
         }
-        // Who decides at each fork of these bodies is read for them, and not only through the
-        // behaviors that call them. A value is emitted whenever another module may call it, so a
-        // module with no behavior that names one still has a body that forks and a place to be
-        // counted at.
-        if (!methodDeclarations.isEmpty()) {
+        // Who decides at each fork of these bodies is read for them as well, against what the
+        // module declares: the table holds its values, so a module with no behavior that names one
+        // still has each fork answered for.
+        if (!methods.isEmpty()) {
             Answer<Expanding.Of> against = db.ask(new Expanding(name, InliningPolicy.FULL));
             if (!against.present()) {
                 throw new IllegalStateException("`" + name + "` has value methods and no table its"
                         + " declarations are read against");
             }
             decisions.putAll(DecisionSources.of(against.value().table().reachable(),
-                    methodDeclarations).byFork());
+                    Map.of()).byFork());
         }
         // What each body declares cannot arrive, held against what its input's own declarations
         // leave. Judged here rather than beside each body: it reads the signature, which is the
