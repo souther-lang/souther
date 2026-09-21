@@ -2913,7 +2913,6 @@ final class Terms {
         // and what it arrived at may be a number no line of the file spells.
         return switch (e) {
             // A binding is the value its body is, with the binder standing for what it was given.
-            // A binding is the value its body is, with the binder standing for what it was given.
             case Core.LetIn li -> {
                 BindingId binder = li.binder().binding();
                 given.put(binder, li.value());
