@@ -649,17 +649,16 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
     }
 
     /**
-     * And that holds for every operation the language tells a way of rounding, not only {@code
-     * round}.
+     * And the other two operations the language tells a way of rounding expose the same boundary.
      *
      * <p>The same invariant checked above for {@code Decimal.round} — the declaration says which
      * parameter is {@code RoundingMode}, the checked call carries the case that arrived there —
-     * holds wherever the language gives an operation that mode, whichever position it declares it
-     * at. An output that reads the declaration does not need to be told separately that
-     * {@code toInt} takes its mode first and {@code divide} takes its last.
+     * holds at {@code toInt}'s and {@code divide}'s own declared positions too. An output that reads
+     * the declaration does not need to be told separately that {@code toInt} takes its mode first
+     * and {@code divide} takes its last.
      */
     @Test
-    void andThatHoldsForEveryOperationTheLanguageTellsAWayOfRounding() {
+    void theOtherRoundingOperationsExposeTheSameDeclaredParameterActualCaseBoundary() {
         CheckedProgram program = checked(ROUNDING_OPERATIONS);
         CheckedModule demo = program.module("demo");
 
