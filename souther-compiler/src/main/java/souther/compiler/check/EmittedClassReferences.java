@@ -77,7 +77,16 @@ final class EmittedClassReferences {
             }
             case Core.Binary bin -> comparedBy(bin);
             case Core.Call call -> sortedBy(call);
-            default -> { }
+            // Every other node names a class, if it does, through its own type, which is counted
+            // above: a value a node answers is cast to the class of that type wherever it is held as
+            // an object, and a field is read off the class of the node it is read from. Listed
+            // rather than left to a default, so that a kind of node added to Core stops compiling
+            // here until it is said which of the two it is.
+            case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
+                 Core.Read _, Core.MaterialisedValue _, Core.Neg _, Core.FieldAccess _,
+                 Core.PreservedCall _, Core.Apply _, Core.If _, Core.IfConstructed _,
+                 Core.LetIn _, Core.Block _, Core.ListLit _, Core.OptionSome _, Core.OptionNone _,
+                 Core.Tuple _, Core.TupleGet _, Core.Unreachable _ -> { }
         }
         Core.forEachChild(e, this::visit);
     }
