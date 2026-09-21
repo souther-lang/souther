@@ -546,6 +546,48 @@ class CompilePublishedHelperTest {
                 e.diagnostics().stream().map(d -> d.code().toString()).toList());
     }
 
+    /** A parameter the body leaves open has no type for the surface to hold, and its own check says
+     * why; exposing the helper must not turn that into a crash. */
+    @Test
+    void anExposedHelperWithAnOpenParameterIsReportedAsThatAndNotAsACrash() {
+        for (String helper : List.of(
+                "let f (s, t) = s < t",
+                "let f (a) = a.v",
+                "let f (a, n: Int) = n")) {
+            CompileException e = assertThrows(CompileException.class,
+                    () -> Compiler.compile("module pricing exposing ( f )\n\n" + helper + "\n"),
+                    helper);
+            assertTrue(e.diagnostics().stream().anyMatch(d -> d.code().toString().equals("E1811")),
+                    helper);
+        }
+    }
+
+    @Test
+    void anExposedHelperWhoseParameterTheBodyDeterminesStillCompiles() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module pricing exposing ( f )
+
+                let f (xs) = List.length(xs)
+                """));
+    }
+
+    /** The open parameter is skipped, not the helper: a hidden type on another parameter is still
+     * the surface rule's to refuse. */
+    @Test
+    void anOpenParameterDoesNotHideAHiddenTypeOnAnother() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module pricing exposing ( f )
+
+                data Hidden = Int
+
+                let f (a, h: Hidden) = h.value
+                """));
+
+        List<String> codes = e.diagnostics().stream().map(d -> d.code().toString()).toList();
+        assertTrue(codes.contains("E1811"), codes.toString());
+        assertTrue(codes.contains("E1611"), codes.toString());
+    }
+
     /**
      * Every way a published body comes to name a class its module keeps is refused where the module
      * is compiled, and never reaches the reader's emission.
