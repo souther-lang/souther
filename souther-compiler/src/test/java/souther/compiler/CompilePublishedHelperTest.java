@@ -530,6 +530,22 @@ class CompilePublishedHelperTest {
         assertTrue(e.getMessage().contains("taxed"), e.getMessage());
     }
 
+    /** A signature that rests on a type the module keeps is said by the rule about signatures alone.
+     * The body builds that type too, and saying it twice would be one mistake reported as two. */
+    @Test
+    void aHiddenTypeInTheSignatureIsNotAlsoReportedForTheBody() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module pricing exposing ( wrapped )
+
+                data Hidden = Int
+
+                let wrapped (n: Int) = Hidden(n)
+                """));
+
+        assertEquals(List.of("E1611"),
+                e.diagnostics().stream().map(d -> d.code().toString()).toList());
+    }
+
     /** A unit data is read from the shared instance of its class, which is as much a reference to
      * that class as a construction is. */
     @Test
