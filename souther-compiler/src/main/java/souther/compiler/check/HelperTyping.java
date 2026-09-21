@@ -71,7 +71,10 @@ public final class HelperTyping {
             // compiled as is nullary and static, with nothing injected into it. Handed the same
             // requirement table a body gets, a call to a required behavior types here and reaches
             // no implementation at all.
-            Map<ValueName.Behavior, ReqSig> reachable = standsAt != null ? Map.of() : reqSigs;
+            // The entry a module publishes for a value is the same: it is nullary and static, called
+            // from another module, and has no dependency in force to reach a behavior through.
+            Map<ValueName.Behavior, ReqSig> reachable =
+                    standsAt != null || h.isAValueEntry() ? Map.of() : reqSigs;
             // A helper reads a settled value as a value does. A helper's body is expanded into
             // whoever calls it, and a value it names is expanded into that expansion, so a chain of
             // values written through helpers reaches every link exactly as one written without them

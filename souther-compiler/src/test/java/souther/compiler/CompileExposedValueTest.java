@@ -6,6 +6,7 @@ import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
@@ -492,6 +493,58 @@ class CompileExposedValueTest {
 
     private static String recorded(Map<String, ClassFileImage> classes) {
         return java.util.Arrays.toString(classes.get("pricing.$Module").bytes());
+    }
+
+    private static final String LIMITS = """
+            module up exposing ( Amount, ceiling, computed )
+
+            data Amount = Int
+
+            let ceiling = 1000
+            let computed = Amount(ceiling * 2)
+            """;
+
+    private static String readerOf(String name) {
+        return """
+                module down exposing ( In, Out, f )
+
+                import up ( %s )
+
+                data In = { n: Int }
+                data Out = { v: Int }
+
+                behavior f : (i: In) -> Out constructs Out
+                let f (i) = Out { v = i.n + %s }
+                """.formatted(name, name.equals("computed") ? "computed.value" : name);
+    }
+
+    private static boolean callsTheEntryOfUp(Map<String, ClassFileImage> classes) {
+        return classes.entrySet().stream()
+                .filter(e -> e.getKey().startsWith("down."))
+                .anyMatch(e -> new String(e.getValue().bytes(), StandardCharsets.ISO_8859_1)
+                        .contains("up/$Values"));
+    }
+
+    /** What a value is read as depends on what it is and never on where it was declared or how
+     * the reader got it. A value that has to be computed is computed where it is declared and
+     * called from there; a constant is known when the reader is compiled, is a literal wherever it
+     * is named — in its own module as in another — and so is called from nowhere. The same in one
+     * run and from a jar. */
+    @Test
+    void aValueIsCalledAndAConstantIsALiteralWhetherOrNotTheModuleIsAJar() {
+        Map<String, ClassFileImage> jar = Compiler.compile(LIMITS);
+
+        for (boolean fromAJar : List.of(false, true)) {
+            Map<String, ClassFileImage> constant = fromAJar
+                    ? Compiler.compileModules(List.of(readerOf("ceiling")), ModulePath.of(jar))
+                    : Compiler.compileModules(List.of(LIMITS, readerOf("ceiling")));
+            Map<String, ClassFileImage> computed = fromAJar
+                    ? Compiler.compileModules(List.of(readerOf("computed")), ModulePath.of(jar))
+                    : Compiler.compileModules(List.of(LIMITS, readerOf("computed")));
+
+            assertTrue(!callsTheEntryOfUp(constant), "a constant is read as a literal, from a jar: " + fromAJar);
+            assertTrue(callsTheEntryOfUp(computed), "a value is called, from a jar: " + fromAJar);
+        }
     }
 
     /** A published helper that reaches a private value still runs from another module. */

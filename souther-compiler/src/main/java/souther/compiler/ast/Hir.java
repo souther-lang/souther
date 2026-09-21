@@ -859,6 +859,12 @@ public interface Hir {
             return role instanceof DefinitionRole.RowValue(RowPosition at) ? at : null;
         }
 
+        /** Whether this is the entry its module publishes for one of its values, which is neither a
+         *  row's value nor a {@code let} the module wrote. */
+        public boolean isAValueEntry() {
+            return role instanceof DefinitionRole.PublishedValueEntry;
+        }
+
         /** What the fn is called — the text of {@link #address}, for a report to quote and for a
          *  method name to be built from. Never a key: what a definition is filed under is
          *  {@link #address}, and what it is a definition of is {@link #declaredIn} and its role. */

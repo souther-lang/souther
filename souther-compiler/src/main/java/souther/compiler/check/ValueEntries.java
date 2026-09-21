@@ -2,7 +2,6 @@ package souther.compiler.check;
 
 import souther.compiler.ast.DefinitionRole;
 import souther.compiler.ast.Hir;
-import souther.compiler.ast.RowPosition;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.types.FixtureReferenceOrigin;
 import souther.compiler.types.ReachName;
@@ -88,7 +87,8 @@ public final class ValueEntries {
             Hir.FnDef entry = new Hir.FnDef(WrittenName.synthetic(name, value.pos()), module.name(),
                     List.of(), null, new Hir.FnBody.Written(reference),
                     new Hir.Modifiers(true, true),
-                    new DefinitionRole.RowValue(new RowPosition.Supplies(null)), value.pos());
+                    new DefinitionRole.PublishedValueEntry(
+                            new ValueName.Helper(module.name(), value.name())), value.pos());
             out.put(name, Desugared.Fn.desugar(entry, newtypes).read());
         }
         return out;

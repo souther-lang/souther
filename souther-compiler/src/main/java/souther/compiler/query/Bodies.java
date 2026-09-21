@@ -2030,7 +2030,7 @@ public final class Bodies {
                 // A value the backend emits a method for, as opposed to a behavior's implementation
                 // that takes no inputs: what tells them apart is whether a behavior declares it.
                 boolean aValue = !recursive && def.value().params().isEmpty()
-                        && def.value().standsAt() == null
+                        && def.value().standsAt() == null && !def.value().isAValueEntry()
                         && !db.ask(new Spec(module, fn.text())).present();
                 if (aValue) {
                     return Answer.of(Lower.valueMethod(def.value(),
@@ -2079,7 +2079,7 @@ public final class Bodies {
                 // implementation that takes no inputs: what tells them apart is whether a behavior
                 // declares it.
                 boolean aValue = !recursive && def.value().params().isEmpty()
-                        && def.value().standsAt() == null
+                        && def.value().standsAt() == null && !def.value().isAValueEntry()
                         && !db.ask(new Spec(module, fn)).present();
                 if (aValue) {
                     return Answer.of(Lower.valueTemplate(def.value(),

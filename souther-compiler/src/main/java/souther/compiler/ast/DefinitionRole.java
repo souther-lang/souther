@@ -98,6 +98,32 @@ public sealed interface DefinitionRole extends RecordOfTheBuilding {
     }
 
     /**
+     * The entry a module publishes for one of its values, which another module calls in place of
+     * holding a copy of the value.
+     *
+     * <p>Not a row's value and not the module's own {@code let}: nothing wrote it, no row stands
+     * behind it and no position is read from it. It is the module's, since another module reaches
+     * the value through it, but it declares nothing a rule about declarations applies to — the
+     * value it enters is what is declared.
+     *
+     * <p>{@code of} is the value it enters. Carried here rather than read back out of the name the
+     * entry is emitted under, which says nothing a reader may rely on.
+     */
+    record PublishedValueEntry(souther.compiler.types.ValueName.Helper of) implements DefinitionRole {
+
+        public PublishedValueEntry {
+            if (of == null) {
+                throw new IllegalArgumentException("an entry is for a value");
+            }
+        }
+
+        @Override
+        public boolean isTheModels() {
+            return false;
+        }
+    }
+
+    /**
      * A definition another module declares, which this module emits as a method of its own because
      * a call to it was left standing.
      *
