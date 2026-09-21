@@ -2349,6 +2349,7 @@ public final class HelperInliner {
         }
         MaterialisationSite where = site.get();
         Hir.Expr calls = insideThisBuild(named.denotes(), where, () -> inline(body));
+        spendOnACopyOf(named, calls);
         Map<String, Hir.Var.Denoting> under = new LinkedHashMap<>();
         demandedHere(calls, under);
         for (Hir.Var.Denoting each : List.copyOf(under.values())) {
@@ -2362,6 +2363,48 @@ public final class HelperInliner {
                 insideThisBuild(named.denotes(), where, () -> read(calls)));
         values.add(new Hir.Materialised(named.denotes(), where, built, built.pos(),
                 built.region()));
+    }
+
+    /**
+     * How many nodes the copies of values made for the analysis may add up to, in one body.
+     *
+     * <p>A limit of how that reading is represented and not of what a model may say: a value is
+     * copied into every region that builds it, so values naming one another in several branches
+     * grow with each link. It sits well above what an ordinary model copies and well below what
+     * takes long to copy, and it means nothing beyond that. Temporary: it is not reached once the
+     * analysis shares a value's body instead of copying it.
+     */
+    static final long COPIED_FOR_THE_ANALYSIS = 50_000L;
+
+    /** How much of {@link #COPIED_FOR_THE_ANALYSIS} is left in this body. */
+    private long leftToCopy = COPIED_FOR_THE_ANALYSIS;
+
+    /**
+     * Takes the size of {@code copy}, a body of {@code named} put into a region, from what the
+     * analysis may copy, and refuses the body once that is gone.
+     *
+     * <p>Asked as each copy is made, so a body that would grow without end is refused when it has
+     * grown past the limit and not after it has been built. Only for the representation an analysis
+     * reads: the tree that is emitted holds a value once.
+     */
+    private void spendOnACopyOf(Hir.Var.Denoting named, Hir.Expr copy) {
+        if (table.policy() != InliningPolicy.DISCHARGE) {
+            return;
+        }
+        leftToCopy -= nodesIn(copy);
+        if (leftToCopy < 0) {
+            throw CompileException.of(Diagnostic
+                    .say(new DeclarationMessage.TheAnalysisOfAValueIsLargerThanIsHeld(
+                            named.name(), String.valueOf(COPIED_FOR_THE_ANALYSIS)))
+                    .at(named.pos())
+                    .build());
+        }
+    }
+
+    private static long nodesIn(Hir.Expr e) {
+        long[] count = {1};
+        Hir.forEachChild(e, child -> count[0] += nodesIn(child));
+        return count[0];
     }
 
     /**
