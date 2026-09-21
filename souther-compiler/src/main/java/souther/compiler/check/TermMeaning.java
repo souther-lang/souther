@@ -265,6 +265,7 @@ public final class TermMeaning {
             case Core.Call x -> {
                 out.add(Core.Call.class);
                 out.add(x.fn());
+                out.add(x.settlement());
                 out.add(x.type());
                 projectAll(x.args(), out);
             }

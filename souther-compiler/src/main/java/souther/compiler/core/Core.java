@@ -19,6 +19,7 @@ import souther.compiler.diag.SourcePos;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -514,6 +515,42 @@ public sealed interface Core {
     }
 
     /**
+     * A call-specific fact the checker settled beyond {@link KernelSignature}'s declaration-level
+     * ones, carried on the {@link Call} it was settled for rather than derived from its arguments a
+     * second time downstream.
+     *
+     * <p>{@code String.matches}'s pattern is the first of these: the checker folds the argument
+     * under the bindings in force and asks {@code java.util.regex.Pattern} whether the result is
+     * accepted, which settles the exact text the call means. An output used to recover that text by
+     * walking the argument a second time, capable of reading only the shapes its own walk knew —
+     * which is a second, weaker constant evaluator kept in sync with this compiler's by hand. What
+     * is here is what the checker already proved, so an output reads the answer instead of deriving
+     * one of its own.
+     *
+     * <p>Sealed on purpose: a fact belongs here because the checker settled it about one application
+     * and it became part of that application's meaning, not because some pass found it convenient to
+     * stash. A {@code Map<String, Object>} would accept whatever a later pass wanted to put there,
+     * and a reader could no longer tell a settlement the checker stands behind from one pass's scratch
+     * space.
+     */
+    sealed interface CallSettlement {
+
+        /** The checker settled nothing about this call beyond its type. */
+        enum None implements CallSettlement {
+            INSTANCE
+        }
+
+        /** The pattern text {@code String.matches}'s first argument folds to, proven acceptable to
+         * {@code java.util.regex.Pattern} where the call was checked. */
+        record StringMatches(String pattern) implements CallSettlement {
+
+            public StringMatches {
+                Objects.requireNonNull(pattern, "a settled pattern is settled to some text");
+            }
+        }
+    }
+
+    /**
      * A call to a builtin, an injected behavior, an intrinsic, or a recursive helper emitted as a
      * method — none of them bound by this body. A non-recursive helper is already inlined.
      *
@@ -523,9 +560,15 @@ public sealed interface Core {
      * the method it calls, and what the name denotes to know what kind of thing was called. Where
      * the callee turned out to be a kernel of the standard library, the call says which one
      * ({@link Reached.OfKernel}), so an output emitting it asks the call rather than this compiler.
+     *
+     * <p>{@code settlement} is a fact the checker proved about this one application beyond its type
+     * ({@link CallSettlement}) — never a rewrite of {@code args}. What a body evaluates at run time
+     * and what the checker proved about it at compile time are different questions, and folding the
+     * second into the first would lose the tree a rewrite, an occurrence or a coverage obligation
+     * still reads.
      */
-    record Call(CallTarget fn, List<Core> args, ConstructOccurrence occurrence, Type type,
-                SourcePos pos) implements Core {
+    record Call(CallTarget fn, List<Core> args, ConstructOccurrence occurrence,
+                CallSettlement settlement, Type type, SourcePos pos) implements Core {
 
         public Call {
             // A call is some call of the model, in some copy of the body that wrote it — or one no
@@ -534,6 +577,27 @@ public sealed interface Core {
             if (occurrence == null) {
                 throw new IllegalArgumentException(
                         "a call is some call of the model: " + fn.rendered());
+            }
+            // `None` where the checker settled nothing, rather than left unstated: a reader asking
+            // whether this call has a settlement gets one answer either way, never an absent field.
+            if (settlement == null) {
+                throw new IllegalArgumentException(
+                        "a call carries its settlement, `None` where there is none: " + fn.rendered());
+            }
+            // Which kernel owns a settlement is asked of the settlement, exhaustively and with no
+            // `default`: a case added later to `CallSettlement` without a line here is a compile
+            // error at this constructor, not a call this refuses to notice was ever handed one. An
+            // `instanceof` of one arm compared as a boolean would answer the same for every case this
+            // has not been told about yet, which is the failure mode this switch is here to refuse.
+            boolean agrees = switch (settlement) {
+                case CallSettlement.None _ ->
+                        !(fn instanceof Reached.OfKernel k && k.kernel() == Kernel.STRING_MATCHES);
+                case CallSettlement.StringMatches _ ->
+                        fn instanceof Reached.OfKernel k && k.kernel() == Kernel.STRING_MATCHES;
+            };
+            if (!agrees) {
+                throw new IllegalArgumentException("`" + fn.rendered() + "` and its settlement "
+                        + settlement + " disagree about whether this call is `String.matches`");
             }
         }
 
@@ -1049,7 +1113,7 @@ public sealed interface Core {
             case Call c -> {
                 List<Core> args = each(c.args(), atExpr);
                 yield args == c.args() ? c
-                        : new Call(c.fn(), args, c.occurrence(), c.type(), c.pos());
+                        : new Call(c.fn(), args, c.occurrence(), c.settlement(), c.type(), c.pos());
             }
             // Its arguments are children like any other, so a pass that asks what a body reads
             // reaches them without knowing what was kept standing over them.
@@ -1162,6 +1226,12 @@ public sealed interface Core {
      *
      * <p>An operator per slot kind, so a rewrite cannot put an expression where the backend can only
      * load a binding, or something other than a construction where an attempt tests one.
+     *
+     * <p>A node that carries a fact the checker settled about it — a {@link Call}'s
+     * {@link CallSettlement} — keeps that fact across the rewrite this makes, which is right where
+     * the rewrite preserves what the node means and stale where it does not: a pass that changes what
+     * a slot evaluates to a different meaning owes that fact a rebuild of its own, not a rewrite that
+     * carries the old one forward unasked.
      */
     static Core mapChildren(Core e, java.util.function.UnaryOperator<Core> onExprSlot,
                             java.util.function.UnaryOperator<Read> onNameSlot,

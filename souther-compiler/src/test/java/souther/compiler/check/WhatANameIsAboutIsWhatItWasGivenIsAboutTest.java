@@ -118,6 +118,7 @@ class WhatANameIsAboutIsWhatItWasGivenIsAboutTest {
     private static Core answer() {
         return new Core.Call(new Core.Reached.OfDeclaration(
                 new ReachName.Own(FIND)), List.of(),
-                ConstructOccurrence.unwritten(), Type.INT, POS);
+                ConstructOccurrence.unwritten(), Core.CallSettlement.None.INSTANCE,
+                Type.INT, POS);
     }
 }

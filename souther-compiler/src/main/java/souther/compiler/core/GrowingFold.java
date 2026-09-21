@@ -167,7 +167,8 @@ public final class GrowingFold {
         }
         Core joined = joined(new Core.Call(BUILD,
                 List.of(outer.args().get(0), inner, outer.args().get(2)),
-                ConstructOccurrence.unwritten(), outer.type(), outer.pos()));
+                ConstructOccurrence.unwritten(), Core.CallSettlement.None.INSTANCE,
+                outer.type(), outer.pos()));
         if (joined == null) {
             return null;
         }
@@ -201,7 +202,8 @@ public final class GrowingFold {
             return null;
         }
         return new Core.Call(build, List.of(step, call.args().get(2), call.args().get(3)),
-                ConstructOccurrence.unwritten(), call.type(), call.pos());
+                ConstructOccurrence.unwritten(), Core.CallSettlement.None.INSTANCE,
+                call.type(), call.pos());
     }
 
     /**
@@ -329,7 +331,8 @@ public final class GrowingFold {
         }
         Core step = new Core.Block(innerStep.params(), body, innerStep.type(), innerStep.pos());
         return new Core.Call(BUILD, List.of(step, inner.args().get(1), inner.args().get(2)),
-                ConstructOccurrence.unwritten(), build.type(), build.pos());
+                ConstructOccurrence.unwritten(), Core.CallSettlement.None.INSTANCE,
+                build.type(), build.pos());
     }
 
     /** How many places {@code e} adds to the builder of the walk it is the step of. A nested walk's
@@ -437,7 +440,8 @@ public final class GrowingFold {
             return null;
         }
         return new Core.Call(GROW, List.of(b.left(), b.right()),
-                ConstructOccurrence.unwritten(), b.type(), b.pos());
+                ConstructOccurrence.unwritten(), Core.CallSettlement.None.INSTANCE,
+                b.type(), b.pos());
     }
 
     /** {@code Map.insert(key, value, acc)} as a write into the builder. */
@@ -447,7 +451,8 @@ public final class GrowingFold {
             return null;
         }
         return new Core.Call(PUT, List.of(c.args().get(2), c.args().get(0), c.args().get(1)),
-                ConstructOccurrence.unwritten(), c.type(), c.pos());
+                ConstructOccurrence.unwritten(), Core.CallSettlement.None.INSTANCE,
+                c.type(), c.pos());
     }
 
     /**

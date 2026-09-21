@@ -106,7 +106,8 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
     void anArmOpeningAnAnswerOpensNoText() {
         Core answer = new Core.Call(new Core.Reached.OfDeclaration(
                 new ReachName.Own(FIND)), List.of(),
-                ConstructOccurrence.unwritten(), Type.ref(FOUND), POS);
+                ConstructOccurrence.unwritten(), Core.CallSettlement.None.INSTANCE,
+                Type.ref(FOUND), POS);
         Core.Binder x = CoreBinders.of(binders.binder("x", POS));
 
         Denotations at = engine.enteringArm(
