@@ -42,7 +42,10 @@ public final class CheckSurface implements Assembly {
     /** What the module declares a stand-in for, and how many blocks declare each: read once, where
      *  the names were, and carried rather than worked out again from the blocks. */
     private final FakeTables fakes;
-    private final List<Hir.FnDef> rowDefs;
+    /** What this compilation writes for its own purposes and no source declares: the definition of
+     *  each row operand and the entry of each value the module publishes. Each says which it is by
+     *  its role, and every rule that cares asks that. */
+    private final List<Hir.FnDef> mintedDefs;
     /**
      * The definitions this was joined from, as they were handed in.
      *
@@ -59,14 +62,14 @@ public final class CheckSurface implements Assembly {
     private CheckSurface(InvariantSettled settling, List<Normalized.Def> declarations,
                          List<Desugared.Fn> fns, List<Desugared.Fn> desugaredFrom,
                          List<Hir.Example> examples, FakeTables fakes,
-                         List<Hir.FnDef> rowDefs, Map<Hir.Expr, String> operandMethods) {
+                         List<Hir.FnDef> mintedDefs, Map<Hir.Expr, String> operandMethods) {
         this.settling = settling;
         this.declarations = List.copyOf(declarations);
         this.fns = List.copyOf(fns);
         this.desugaredFrom = List.copyOf(desugaredFrom);
         this.examples = List.copyOf(examples);
         this.fakes = fakes;
-        this.rowDefs = List.copyOf(rowDefs);
+        this.mintedDefs = List.copyOf(mintedDefs);
         this.operandMethods = operandMethods;
     }
 
@@ -242,9 +245,10 @@ public final class CheckSurface implements Assembly {
         return fakes;
     }
 
-    /** The definitions minted for this module's row operands, in the order they were emitted. */
-    public List<Hir.FnDef> rowDefs() {
-        return rowDefs;
+    /** The definitions this compilation minted for the module, in the order they were emitted: the
+     *  rows' operands and the entries of the values it publishes. */
+    public List<Hir.FnDef> mintedDefs() {
+        return mintedDefs;
     }
 
     /** Which method each row operand's value runs as, by the operand. */
@@ -298,7 +302,7 @@ public final class CheckSurface implements Assembly {
     @Override
     public boolean equals(Object o) {
         return o instanceof CheckSurface other && module().equals(other.module())
-                && rowDefs.equals(other.rowDefs) && desugaredFrom.equals(other.desugaredFrom);
+                && mintedDefs.equals(other.mintedDefs) && desugaredFrom.equals(other.desugaredFrom);
     }
 
     @Override

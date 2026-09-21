@@ -190,7 +190,7 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
         assertEquals(2, rowMethods.size(), "one input and one expectation, each emitted for the row");
         assertEquals(Set.of(), HelperInliner.takenOnBy(prepared).keySet(),
                 "`rules.doubled` is expanded into the operand, and nothing is taken on beside it");
-        assertEquals(rowMethods, db.ask(new Bodies.RowFixtureDefs("app")).value().keySet(),
+        assertEquals(rowMethods, db.ask(new Bodies.MintedDefs("app")).value().keySet(),
                 "the operands' methods are their own family");
         // And not in the table a call expands against. Nothing a source can write reaches one, so a
         // name has nothing to resolve to there — and every rule keyed on what that table holds had a
@@ -208,7 +208,7 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
                 db.ask(new Bodies.Lowering("app")).value().lowered().takenOn().stream()
                         .map(Hir.FnDef::name).collect(java.util.stream.Collectors.toSet()));
         // Each of them says what it is. The declaration cannot: this module is what declared them.
-        db.ask(new Bodies.RowFixtureDefs("app")).value().values().forEach(fn -> {
+        db.ask(new Bodies.MintedDefs("app")).value().values().forEach(fn -> {
             assertTrue(fn.declaredBy("app"), fn.name() + " is emitted into `app`'s own program");
             assertInstanceOf(DefinitionRole.RowValue.class, fn.role(), fn.name());
         });

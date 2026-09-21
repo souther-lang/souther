@@ -7,6 +7,8 @@ import net.unit8.raoh.Path;
 import net.unit8.raoh.Result;
 import net.unit8.raoh.decode.Decoder;
 import souther.compiler.diag.CompileException;
+import souther.compiler.jvm.ClassFileImage;
+import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -14,6 +16,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -134,6 +137,26 @@ class CompileComposedPatternTest {
                 behavior check : (i: In) -> Out constructs Out
                 let check (i) = Out(String.matches(prefix ++ "-[0-9]{4}", i.s))
                 """)));
+    }
+
+    /** The same from a jar. A constant is a literal wherever it is named, so a composition a
+     *  pattern needs before anything runs is available whether the module that declares the part
+     *  is compiled with this one or was published. */
+    @Test
+    void aPublishedValueFromAJarComposesInTheReadersPattern() {
+        Map<String, ClassFileImage> jar = Compiler.compile("""
+                module formats exposing ( prefix )
+                let prefix = "[0-9]{3}"
+                """);
+
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of("""
+                module ids exposing ( In, Out, check )
+                import formats ( prefix )
+                data In = { s: String }
+                data Out = Bool
+                behavior check : (i: In) -> Out constructs Out
+                let check (i) = Out(String.matches(prefix ++ "-[0-9]{4}", i.s))
+                """), ModulePath.of(jar)));
     }
 
     /** A helper's body is read where it is written, before it lands in the body that calls it, so a

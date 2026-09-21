@@ -1884,20 +1884,24 @@ public final class Bodies {
     }
 
     /**
-     * The definitions a module's row operands are, by the name each is emitted under.
+     * The definitions this compilation mints for a module, by the name each is emitted under: the
+     * operand of each row and the entry of each value the module publishes.
      *
-     * <p>Their own family. A row's operand is a value this compilation writes for the row, reached
-     * from a row and from nothing a source can spell, so it is not a declaration a name resolves to
-     * — which is why it is not among what the module has as fns of its own and is not in the table a
-     * call expands against. It rode there once, to be carried through the passes a fn is carried
-     * through, and every rule keyed on what the module holds had a synthetic method among its
-     * subjects.
+     * <p>What they have in common is mechanism. No source declares them, they are made once for the
+     * module, they go through the passes a definition goes through, and each is emitted as a method.
+     * What each is for is its role's to say ({@link Hir.FnDef#role}), and a rule that differs
+     * between them asks that and not which family answered.
+     *
+     * <p>Their own family. None is a declaration a name resolves to — which is why it is not among
+     * what the module has as fns of its own and is not in the table a call expands against. Such a
+     * definition rode there once, to be carried through the passes a fn is carried through, and
+     * every rule keyed on what the module holds had a synthetic method among its subjects.
      *
      * <p>Read from the one walk that built them, which built the correspondence beside them
      * ({@link RowMethods}) — a second reading would be a second numbering, and a row would run the
      * operand beside the one it wrote.
      */
-    public record RowFixtureDefs(String name) implements Key<Map<String, Hir.FnDef>> {
+    public record MintedDefs(String name) implements Key<Map<String, Hir.FnDef>> {
         @Override
         public String module() {
             return name;
@@ -1910,7 +1914,7 @@ public final class Bodies {
                 return Answer.absent();
             }
             Map<String, Hir.FnDef> out = new LinkedHashMap<>();
-            for (Hir.FnDef def : surface.value().rowDefs()) {
+            for (Hir.FnDef def : surface.value().mintedDefs()) {
                 out.put(def.name(), def);
             }
             return Answer.of(Ordered.map(out));
@@ -1970,10 +1974,10 @@ public final class Bodies {
                     return Answer.of(candidate);
                 }
             }
-            // A definition minted for a row, which is no declaration and is in no table.
-            Answer<Map<String, Hir.FnDef>> rows = db.ask(new RowFixtureDefs(module));
-            if (rows.present() && rows.value().containsKey(fn)) {
-                return Answer.of(rows.value().get(fn));
+            // A definition this compilation minted, which is no declaration and is in no table.
+            Answer<Map<String, Hir.FnDef>> minted = db.ask(new MintedDefs(module));
+            if (minted.present() && minted.value().containsKey(fn)) {
+                return Answer.of(minted.value().get(fn));
             }
             // A declaration this module reaches and has not taken on. Its body is the declaring
             // module's and was settled there; what changes here is the name it answers to, which is
@@ -2224,13 +2228,14 @@ public final class Bodies {
                     beyond.add(def.value());
                 }
             }
-            // A row's operand is a definition minted for it, and it is emitted beside these for the
-            // same reason: nothing inlines it, because nothing calls it.
-            Answer<Map<String, Hir.FnDef>> rows = db.ask(new RowFixtureDefs(name));
-            if (!rows.present()) {
+            // What this compilation minted for the module — a row's operand, the entry of a value —
+            // is emitted beside these for the same reason: nothing inlines it, because nothing in
+            // this module calls it.
+            Answer<Map<String, Hir.FnDef>> minted = db.ask(new MintedDefs(name));
+            if (!minted.present()) {
                 return Answer.absent();
             }
-            beyond.addAll(rows.value().values());
+            beyond.addAll(minted.value().values());
             // Both, and each stays where it was: what becomes a method is one question and what this
             // module declared is another, and the backend reads the first while every rule about the
             // declaring module reads the second.
@@ -2243,7 +2248,7 @@ public final class Bodies {
                     // method a row's operand is, which is the row's value and has no call site.
                     if (!behaviors.contains(fn.name()) && !recursiveAt.contains(fn.name())
                             && !rowMethods.value().contains(fn.name())
-                            && !rows.value().containsKey(fn.name())) {
+                            && !minted.value().containsKey(fn.name())) {
                         continue;
                     }
                     if (!taken.add(fn.name())) {
@@ -2383,13 +2388,13 @@ public final class Bodies {
             }
             Set<String> behaviors = Names.behaviorNames(settled.value());
             Set<String> roots = new LinkedHashSet<>(rows.value());
-            // A value published for other modules to read is run from outside this one, so what it
-            // leaves standing is required whether or not anything here names it.
-            Answer<Map<String, Hir.FnDef>> entries = db.ask(new RowFixtureDefs(name));
-            if (!entries.present()) {
+            // A value published for other modules to read is run from outside this one, so what its
+            // entry leaves standing is required whether or not anything here names it.
+            Answer<Map<String, Hir.FnDef>> minted = db.ask(new MintedDefs(name));
+            if (!minted.present()) {
                 return Answer.absent();
             }
-            roots.addAll(entries.value().keySet());
+            roots.addAll(minted.value().keySet());
             for (Hir.FnDef fn : settled.value().fns()) {
                 if (behaviors.contains(fn.name())) {
                     roots.add(fn.name());
