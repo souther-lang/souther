@@ -58,9 +58,11 @@ public final class ValueEntries {
                 declared.put(fn.name(), fn);
             }
         }
+        // Worked out once for the module and not once for each value asked about.
+        Set<String> reachable = reachableFromOutside(module, declared);
         Map<String, Hir.FnDef> out = new LinkedHashMap<>();
         for (Hir.FnDef value : declared.values()) {
-            if (!value.params().isEmpty() || !isReachableFromOutside(value.name(), module, declared)) {
+            if (!value.params().isEmpty() || !reachable.contains(value.name())) {
                 continue;
             }
             String name = methodFor(value.name());
@@ -77,15 +79,15 @@ public final class ValueEntries {
     }
 
     /**
-     * Whether another module calls the entry of {@code name}: it is exposed, or a helper that is exposed
-     * names it, directly or through the helpers that one names in turn.
+     * The names another module calls the entry of: what is exposed, and what a helper that is exposed
+     * names, directly or through the helpers that one names in turn.
      *
      * <p>A published helper is expanded into the module that calls it, and what it names of this
      * module's is named there. So a value that only a published definition reaches is read from
      * outside exactly as an exposed one is, and needs the same entry.
      */
-    private static boolean isReachableFromOutside(String name, Hir.Module module,
-                                     Map<String, Hir.FnDef> declared) {
+    private static Set<String> reachableFromOutside(Hir.Module module,
+                                                    Map<String, Hir.FnDef> declared) {
         Set<String> seen = new HashSet<>();
         ArrayDeque<String> work = new ArrayDeque<>();
         for (String exposed : module.exposing()) {
@@ -95,9 +97,6 @@ public final class ValueEntries {
         }
         while (!work.isEmpty()) {
             String next = work.poll();
-            if (next.equals(name)) {
-                return true;
-            }
             // A value runs where it is declared, so what it names is built there and needs no
             // entry. Only a helper is expanded into the reader, and only what it names is named
             // there.
@@ -111,6 +110,6 @@ public final class ValueEntries {
                 }
             }
         }
-        return false;
+        return seen;
     }
 }

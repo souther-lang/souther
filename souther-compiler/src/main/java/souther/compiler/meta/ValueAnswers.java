@@ -248,27 +248,22 @@ public final class ValueAnswers {
             }
             char kind = text.charAt(at++);
             String body = word();
-            switch (kind) {
+            return switch (kind) {
                 case '@' -> {
-                    if (!eat('#')) {
-                        return null;
-                    }
-                    String name = word();
-                    return body.isEmpty() || name.isEmpty()
+                    String name = eat('#') ? word() : "";
+                    yield body.isEmpty() || name.isEmpty()
                             ? null : TypeSymbols.declared(new TypeKey(body, name));
                 }
                 case '$' -> {
                     Type.Prim prim = Type.Prim.named(body);
-                    return prim == null ? null : TypeSymbol.primitive(prim);
+                    yield prim == null ? null : TypeSymbol.primitive(prim);
                 }
                 case '!' -> {
                     LanguageCaseId id = LanguageCaseId.named(body);
-                    return id == null ? null : new TypeSymbol.LanguageCase(id);
+                    yield id == null ? null : new TypeSymbol.LanguageCase(id);
                 }
-                default -> {
-                    return null;
-                }
-            }
+                default -> null;
+            };
         }
 
         private boolean opened() {
