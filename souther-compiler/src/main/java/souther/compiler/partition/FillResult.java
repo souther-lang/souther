@@ -62,21 +62,34 @@ public record FillResult(SequencedMap<RowId, ComposedRow> composed,
         // is one nobody was offered — it would come out of the projection below with nothing to
         // say it is for, which is not a row — and an answer pointing at a row that is not here is
         // an obligation reported as met by a line the offer does not hold. Read off one switch
-        // over the discharge's own answers, in the plan's order: a kind added to
-        // {@link GenerationAnswer} without a case here does not compile, which is what keeps this
-        // in step with what a run was actually asked for.
+        // over the discharge's own answers, in the plan's order, exhaustive over the subtype and
+        // not over the disposition: a kind added to {@link GenerationAnswer} without a case here
+        // does not compile, which a switch that fell through an unmatched disposition to a shared
+        // {@code default} would not have caught — a fifth subtype whose built case that default
+        // also matched would compile silently and drop the row it names.
         Set<RowId> answered = new LinkedHashSet<>();
         for (GenerationAnswer each : discharge.inPlanOrder()) {
             switch (each) {
-                case GenerationAnswer.Class(var _, ClassDisposition.Built built) ->
+                case GenerationAnswer.Class(var _, var disposition) -> {
+                    if (disposition instanceof ClassDisposition.Built built) {
                         answered.add(built.rowId());
-                case GenerationAnswer.Arm(var _, ArmDisposition.Built built) ->
+                    }
+                }
+                case GenerationAnswer.Arm(var _, var disposition) -> {
+                    if (disposition instanceof ArmDisposition.Built built) {
                         answered.add(built.rowId());
-                case GenerationAnswer.Pair(var _, ClassDisposition.Built built) ->
+                    }
+                }
+                case GenerationAnswer.Pair(var _, var disposition) -> {
+                    if (disposition instanceof ClassDisposition.Built built) {
                         answered.add(built.rowId());
-                case GenerationAnswer.Meeting(var _, ClassDisposition.Built built) ->
+                    }
+                }
+                case GenerationAnswer.Meeting(var _, var disposition) -> {
+                    if (disposition instanceof ClassDisposition.Built built) {
                         answered.add(built.rowId());
-                default -> { }
+                    }
+                }
             }
         }
         if (!answered.equals(composed.keySet())) {
@@ -352,43 +365,52 @@ public record FillResult(SequencedMap<RowId, ComposedRow> composed,
             throw new IllegalArgumentException("no row of this run is " + id);
         }
         List<Generator.Purpose> purposes = new ArrayList<>();
-        // One switch over every kind the plan can hold, in the plan's order, rather than one loop
-        // apiece. A kind added to {@link GenerationAnswer} without a case here does not compile,
-        // which is what keeps this in step with what a run was actually asked for.
+        // One switch over every kind the plan can hold, in the plan's order, exhaustive over the
+        // subtype and not over the disposition: a kind added to {@link GenerationAnswer} without a
+        // case here does not compile, which a switch that fell through an unmatched disposition to
+        // a shared {@code default} would not have caught.
         for (GenerationAnswer each : discharge.inPlanOrder()) {
             switch (each) {
-                case GenerationAnswer.Class(var obligation, ClassDisposition.Built built)
-                        when built.rowId().equals(id) -> {
-                    ClassOfAPosition owed = obligation.target();
-                    purposes.add(new Generator.Purpose.ForAClass(owed.at(), owed.classId(),
-                            Generator.labelOf(plan().subject(), owed)));
+                case GenerationAnswer.Class(var obligation, var disposition) -> {
+                    if (disposition instanceof ClassDisposition.Built built
+                            && built.rowId().equals(id)) {
+                        ClassOfAPosition owed = obligation.target();
+                        purposes.add(new Generator.Purpose.ForAClass(owed.at(), owed.classId(),
+                                Generator.labelOf(plan().subject(), owed)));
+                    }
                 }
-                case GenerationAnswer.Arm(var _, ArmDisposition.Built built)
-                        when built.rowId().equals(id) ->
-                        // The place the row was steered to, which is the one it was built at. Where
-                        // an arm stands in the body more than once, the row went through one of the
-                        // splices and a purpose naming another would say the row does what it does
-                        // not.
+                case GenerationAnswer.Arm(var _, var disposition) -> {
+                    // The place the row was steered to, which is the one it was built at. Where an
+                    // arm stands in the body more than once, the row went through one of the
+                    // splices and a purpose naming another would say the row does what it does not.
+                    if (disposition instanceof ArmDisposition.Built built
+                            && built.rowId().equals(id)) {
                         purposes.add(new Generator.Purpose.ForAnArm(built.at()));
+                    }
+                }
                 // And the combinations of two classes this row is in. A row composed for one may
                 // sit in others, and each of them points at it here — which is what makes one row
                 // the offer for as many requirements as it settles rather than one row apiece.
-                case GenerationAnswer.Pair(var obligation, ClassDisposition.Built built)
-                        when built.rowId().equals(id) -> {
-                    ObligationIdentity.OfAFallbackPairCell owed = obligation.target();
-                    purposes.add(new Generator.Purpose.ForAFallbackPairCell(owed.classes(),
-                            owed.classes().stream()
-                                    .map(each2 -> Generator.labelOf(plan().subject(), each2))
-                                    .sorted().toList()));
+                case GenerationAnswer.Pair(var obligation, var disposition) -> {
+                    if (disposition instanceof ClassDisposition.Built built
+                            && built.rowId().equals(id)) {
+                        ObligationIdentity.OfAFallbackPairCell owed = obligation.target();
+                        purposes.add(new Generator.Purpose.ForAFallbackPairCell(owed.classes(),
+                                owed.classes().stream()
+                                        .map(each2 -> Generator.labelOf(plan().subject(), each2))
+                                        .sorted().toList()));
+                    }
                 }
                 // And the combinations of the body's decisions this row makes. The same rule again:
                 // a row composed at one meeting may be watched making another, and each of them
                 // points at it.
-                case GenerationAnswer.Meeting(var obligation, ClassDisposition.Built built)
-                        when built.rowId().equals(id) ->
+                case GenerationAnswer.Meeting(var obligation, var disposition) -> {
+                    if (disposition instanceof ClassDisposition.Built built
+                            && built.rowId().equals(id)) {
                         purposes.add(new Generator.Purpose.ForACombinationOfDecisions(
                                 obligation.target().settled()));
-                default -> { }
+                    }
+                }
             }
         }
         return new Generator.GeneratedRow(purposes, row.inputs(), row.answers());

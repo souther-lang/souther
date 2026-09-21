@@ -94,11 +94,22 @@ public final class Discharge {
         this.meetings = Collections.unmodifiableMap(meetings);
     }
 
-    /** The answers taken over the plan, one apiece and in the plan's order. */
+    /**
+     * The answers taken over the plan, one apiece and in the plan's order.
+     *
+     * <p>Refuses two answers to the same obligation rather than letting the second overwrite the
+     * first: "exactly one answer" is what a total function over the plan means, and a caller
+     * handing over two would otherwise see the constructor's totality check pass on the strength of
+     * whichever answer happened to be put last.
+     */
     public static Discharge of(GenerationPlan plan, List<GenerationAnswer> answers) {
         Map<GenerationObligation, GenerationAnswer> byObligation = new LinkedHashMap<>();
         for (GenerationAnswer each : answers) {
-            byObligation.put(each.obligation(), each);
+            GenerationAnswer already = byObligation.putIfAbsent(each.obligation(), each);
+            if (already != null) {
+                throw new IllegalArgumentException(
+                        "one obligation answered twice: " + already + " and " + each);
+            }
         }
         return new Discharge(plan, byObligation);
     }

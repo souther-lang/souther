@@ -94,6 +94,25 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
     }
 
     /**
+     * Two answers to one obligation are refused rather than the second silently keeping the map.
+     *
+     * <p>{@link Discharge#of} is the one factory that turns a list of answers into the map
+     * {@link Discharge}'s constructor checks for totality against the plan — and {@code putIfAbsent}
+     * would let a second answer to an obligation already answered pass unnoticed, with the
+     * constructor's own check seeing only whichever answer was put last and finding the domain
+     * complete regardless.
+     */
+    @Test
+    void oneObligationAnsweredTwiceIsRefused() {
+        assertThrows(IllegalArgumentException.class,
+                () -> Discharge.of(planOver(List.of(A_CLASS), List.of()), List.of(
+                        new GenerationAnswer.Class(new GenerationObligation.Class(A_CLASS),
+                                new ClassDisposition.Unresolved(NOTHING_CAME_OF_IT)),
+                        new GenerationAnswer.Class(new GenerationObligation.Class(A_CLASS),
+                                new ClassDisposition.Built(new RowId(0))))));
+    }
+
+    /**
      * A key with nothing under it is not an answer.
      *
      * <p>The check is over the obligations and what became of them, and holding it over the keys
