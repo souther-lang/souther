@@ -42,42 +42,51 @@ import java.util.Set;
  *
  * @param templates what each value built in {@code core} comes to, and what each of those builds
  *                  in turn
+ * @param templatesAfterTheirBuilders the template of every value this body builds, and of every
+ *                  value those build, each once and after every template that builds it. The order
+ *                  a reader that carries something from a build into what is built needs: by the
+ *                  time a template comes up, everything that could have entered it has been read.
+ *                  Found from the tree by what it builds, so a template nothing builds is not here,
+ *                  and worked out once where the body is made and not by every reader
  */
-public record AnalysisBody(Core core, ElementProvenance elements, ValueTemplates templates) {
+public record AnalysisBody(Core core, ElementProvenance elements, ValueTemplates templates,
+                           List<Core> templatesAfterTheirBuilders) {
 
     public AnalysisBody {
-        if (core == null || elements == null || templates == null) {
+        if (core == null || elements == null || templates == null
+                || templatesAfterTheirBuilders == null) {
             throw new IllegalArgumentException(
                     "a body the analysis reads is some tree; a behavior with none has no reading"
                             + " rather than one holding nothing");
         }
+        templatesAfterTheirBuilders = List.copyOf(templatesAfterTheirBuilders);
     }
 
-    /**
-     * The template of every value this body builds, and of every value those build, each once and
-     * after every template that builds it.
-     *
-     * <p>The order a reader that carries something from a build into what is built needs: by the
-     * time a template comes up, everything that could have entered it has been read. Found from the
-     * tree by what it builds, so a template nothing builds is not here.
-     */
-    public List<Core> templatesAfterTheirBuilders() {
+    /** A body, with the order its templates are read in worked out from what it builds. */
+    public AnalysisBody(Core core, ElementProvenance elements, ValueTemplates templates) {
+        this(core, elements, templates, afterTheirBuilders(core, templates));
+    }
+
+    private static List<Core> afterTheirBuilders(Core core, ValueTemplates templates) {
         List<Core> afterTheirBuilt = new ArrayList<>();
         Set<Core> seen = Collections.newSetFromMap(new IdentityHashMap<>());
-        visit(core, seen, afterTheirBuilt);
+        visit(core, templates, seen, afterTheirBuilt);
         Collections.reverse(afterTheirBuilt);
         return afterTheirBuilt;
     }
 
-    private void visit(Core e, Set<Core> seen, List<Core> out) {
+    private static void visit(Core e, ValueTemplates templates, Set<Core> seen, List<Core> out) {
+        if (e == null) {
+            return;
+        }
         if (e instanceof Core.MaterialisedValue build) {
             Core template = templates.bodyOf(build);
             if (seen.add(template)) {
-                visit(template, seen, out);
+                visit(template, templates, seen, out);
                 out.add(template);
             }
             return;
         }
-        Core.forEachChild(e, child -> visit(child, seen, out));
+        Core.forEachChild(e, child -> visit(child, templates, seen, out));
     }
 }

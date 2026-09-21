@@ -53,12 +53,17 @@ public interface Arrivals {
      * them answers no.
      */
     static Arrivals inTheTrees(List<Core> roots) {
+        // Built when something first asks: most bodies are read for a few of their nodes, and the
+        // whole of every tree is not worth holding for the ones that are not asked about.
         Map<Core, Arrivals> owners = new IdentityHashMap<>();
-        for (Core root : roots) {
-            Arrivals of = inTheTree(root);
-            claim(root, of, owners);
-        }
+        boolean[] built = {false};
         return e -> {
+            if (!built[0]) {
+                for (Core root : roots) {
+                    claim(root, inTheTree(root), owners);
+                }
+                built[0] = true;
+            }
             Arrivals owner = owners.get(e);
             return owner != null && owner.at(e);
         };

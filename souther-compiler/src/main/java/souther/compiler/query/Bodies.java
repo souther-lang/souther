@@ -51,6 +51,7 @@ import souther.compiler.check.SpecChecker;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
+import souther.compiler.check.TemplateChecker;
 import souther.compiler.check.Unanswerable;
 import souther.compiler.core.Contract;
 import souther.compiler.core.Core;
@@ -2079,6 +2080,43 @@ public final class Bodies {
     }
 
     /**
+     * What the value {@code value} means as the analysis reads it, typed.
+     *
+     * <p>Asked of the value and not of the body that builds it, so it is typed once for the module
+     * however many behaviors build it, and a body that builds it is checked again only when the
+     * value's own template changes. Absent where the value's expansion or its check is.
+     */
+    public record AnalysisTemplate(String module, String value)
+            implements Key<InvariantChecker.Template> {
+
+        @Override
+        public Answer<InvariantChecker.Template> compute(Db db) {
+            Answer<Expansion<Hir.FnDef>> lowered =
+                    db.ask(new BodyForInvariantDischarge(module, value));
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, module);
+            Answer<Map<ValueName.Behavior, ReqSig>> reqSigs = db.ask(new ReqSigs(module));
+            Answer<Map<String, Type>> sigs = db.ask(new RecursiveCallSigsForBody(module, value));
+            Answer<ModuleCheck.Of> valuesChecked = db.ask(new ModuleCheck(module));
+            if (!lowered.present() || !scope.present() || !reqSigs.present() || !sigs.present()
+                    || !valuesChecked.present()) {
+                return Answer.absent();
+            }
+            try {
+                return Answer.of(TemplateChecker.check(
+                        lowered.value().value().writtenBody(), lowered.value().provenance(),
+                        scope.value(), Shapes.publishedDeclarations(db),
+                        Shapes.declarationKinds(db), Shapes.newtypeInners(db),
+                        Shapes.effectiveFieldTypes(db), Shapes.fieldLayout(db),
+                        reqSigs.value(), sigs.value(), valuesChecked.value().settledValues()));
+            } catch (Unanswerable _) {
+                return Answer.absent();
+            } catch (CompileException e) {
+                return Answer.absent(e);
+            }
+        }
+    }
+
+    /**
      * The template of every value the analysis of {@code body} builds, and of every value those
      * build in turn, each once.
      *
@@ -2101,14 +2139,17 @@ public final class Bodies {
                     continue;
                 }
                 Hir.FnDef value = against.value().table().reached(each);
-                Answer<Expansion<Hir.FnDef>> template =
+                // What is built inside a value is found off its expansion, which is asked for
+                // apart from its typing so that finding it does not wait on the check.
+                Answer<Expansion<Hir.FnDef>> lowered =
                         db.ask(new BodyForInvariantDischarge(module, value.name()));
-                if (!template.present()) {
+                Answer<InvariantChecker.Template> template =
+                        db.ask(new AnalysisTemplate(module, value.name()));
+                if (!lowered.present() || !template.present()) {
                     return Answer.absent();
                 }
-                Hir.Expr written = template.value().value().writtenBody();
-                out.put(each, new InvariantChecker.Template(written, template.value().provenance()));
-                toRead.add(written);
+                out.put(each, template.value());
+                toRead.add(lowered.value().value().writtenBody());
             }
         }
         return Answer.of(out);

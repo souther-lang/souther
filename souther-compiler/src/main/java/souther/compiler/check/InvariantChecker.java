@@ -235,13 +235,14 @@ public final class InvariantChecker {
     }
 
     /**
-     * What a value means as the analysis reads it: its body, with what its expansion said of the
-     * elements of the bindings that body writes.
+     * What a value means as the analysis reads it: its body as the checker typed it, with what its
+     * expansion said of the elements of the bindings that body writes.
      *
      * <p>One of these for each value the body builds, and for each value those build in turn. Its
-     * bindings are its own, so what is said of them is said of no other body's.
+     * bindings are its own, so what is said of them is said of no other body's. Typed once for the
+     * value, whichever bodies build it: it is the meaning of a value that takes nothing.
      */
-    public record Template(Hir.Expr body, ElementProvenance elements) { }
+    public record Template(Core body, ElementProvenance elements) { }
 
     /**
      * How far the splits down one path are opened, which this walk holds itself to and does not own.

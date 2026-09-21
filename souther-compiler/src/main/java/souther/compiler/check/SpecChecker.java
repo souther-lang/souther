@@ -467,11 +467,10 @@ public final class SpecChecker {
                         .withDependencies(dependsOn).forDischarge(settledValues);
         Core dischargeBody = discharge == null ? null
                 : Elaborator.elaborate(discharge.body(), tenv, dischargeContext, output);
-        // What each value the body builds means, elaborated once and in a scope of its own: a value
-        // names nothing of the body that builds it, so it is the same wherever it is built.
+        // What each value the body builds means, typed once for the value and not once for each
+        // body that builds it ({@link TemplateChecker}).
         ValueTemplates templates = discharge == null ? ValueTemplates.NONE
-                : elaborated(discharge.templates(), Scope.NONE.reaching(recursiveHelperFns),
-                        dischargeContext);
+                : valueTemplates(discharge.templates());
         InvariantChecker.Findings inv = discharge == null
                 ? InvariantChecker.Findings.notRun()
                 : InvariantChecker.analyze(dischargeBody, discharge.reading(),
@@ -485,13 +484,11 @@ public final class SpecChecker {
                 inv.warnings());
     }
 
-    /** The templates of the values a body builds, each elaborated once. */
-    private static ValueTemplates elaborated(
-            SequencedMap<ReachName.Declaration, InvariantChecker.Template> templates,
-            Scope scope, CheckContext context) {
+    /** The templates of the values a body builds, as what the analysis reads them by. */
+    private static ValueTemplates valueTemplates(
+            SequencedMap<ReachName.Declaration, InvariantChecker.Template> templates) {
         Map<ReachName.Declaration, Core> made = new LinkedHashMap<>();
-        templates.forEach((value, template) ->
-                made.put(value, Elaborator.elaborate(template.body(), scope, context, null)));
+        templates.forEach((value, template) -> made.put(value, template.body()));
         return new ValueTemplates(made);
     }
 

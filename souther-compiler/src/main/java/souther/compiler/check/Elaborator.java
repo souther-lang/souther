@@ -1560,9 +1560,14 @@ public final class Elaborator {
                                           CheckContext ctx) {
         ReachName.Declaration declaration = named.reachesADeclaration();
         CompleteSignature settled = ctx.preserved().valueKept(named.denotes());
-        if (declaration == null || settled == null) {
+        if (declaration == null) {
             throw new IllegalStateException("`" + named.written() + "` is built as a value of its"
-                    + " template and has no settled signature to build it by");
+                    + " template and reaches no declaration");
+        }
+        // A value whose own check found nothing to settle it as is reported at itself, and what
+        // builds it has nothing to be typed by: it is abandoned there rather than reported again.
+        if (settled == null) {
+            throw new Unanswerable(m.pos());
         }
         return new Core.MaterialisedValue(declaration, m.site(), settled.result(), m.pos());
     }
