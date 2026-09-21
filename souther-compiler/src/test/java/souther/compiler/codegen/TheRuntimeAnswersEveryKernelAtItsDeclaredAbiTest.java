@@ -39,7 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  *
  * <p>Both forms a kernel can be called at. The ordered family reaches its runtime method with a
  * comparator ahead of what the declaration names, and that is a second method — held here too, off
- * the kernels {@code BodyGen}'s arm is driven by.
+ * {@link Intrinsics#COMPARATOR_OVERLOADS}.
  */
 class TheRuntimeAnswersEveryKernelAtItsDeclaredAbiTest {
 
@@ -83,7 +83,7 @@ class TheRuntimeAnswersEveryKernelAtItsDeclaredAbiTest {
             }
             // And the ordered family's other method, which takes a comparator the declaration does
             // not name ahead of the arguments it does.
-            if (BodyGen.ORDERED_BY_COMPARATOR.contains(kernel)) {
+            if (Intrinsics.COMPARATOR_OVERLOADS.contains(kernel)) {
                 String ordered = whatTheRuntimeHasInstead(row.getValue(),
                         Intrinsics.descriptorWithComparator(declared, row.getValue()));
                 if (ordered != null) {
@@ -123,21 +123,21 @@ class TheRuntimeAnswersEveryKernelAtItsDeclaredAbiTest {
     }
 
     /**
-     * And these are the kernels reached through the comparator method.
+     * And these are the kernels whose runtime method has a comparator overload at all.
      *
-     * <p>The set the arm in {@code BodyGen} is driven by, so a kernel routed there is a kernel this
-     * asks the comparator descriptor of. Held here as well because membership is not decided by any
-     * of that: whether a kernel takes the enumeration's order is what a program answers, and the
+     * <p>Whether a given call reaches it is settled per call by {@code CallElaborator} and read off
+     * {@code Core.CallSettlement.OrderingSubject} in {@code BodyGen} — this set is the narrower,
+     * ABI-level fact underneath that: which runtime methods have such an overload to be reached. The
      * witness for each of these is a case in {@code CompileEnumerationOrderTest} that sorts, takes
      * the extremes of, or keys a list of cases and reads the result. A kernel added to the set and
      * to nothing else is emitted differently with nothing running it that way.
      */
     @Test
-    void andTheseAreTheKernelsReachedThroughTheComparator() {
+    void andTheseAreTheKernelsWithAComparatorOverload() {
         assertEquals(
                 EnumSet.of(Kernel.LIST_SORT, Kernel.LIST_SORT_BY, Kernel.LIST_MAX, Kernel.LIST_MIN),
-                EnumSet.copyOf(BodyGen.ORDERED_BY_COMPARATOR),
-                "which kernels reach a runtime method taking a comparator — each wants a case in"
+                EnumSet.copyOf(Intrinsics.COMPARATOR_OVERLOADS),
+                "which kernels have a runtime method taking a comparator — each wants a case in"
                         + " CompileEnumerationOrderTest that runs it over an enumeration");
     }
 

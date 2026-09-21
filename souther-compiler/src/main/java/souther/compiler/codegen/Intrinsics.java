@@ -376,6 +376,15 @@ final class Intrinsics {
         return TABLE.keySet();
     }
 
+    /** The kernels whose runtime method has a second overload taking a comparator ahead of what the
+     *  declaration names — the runtime ABI fact {@link #descriptorWithComparator} and {@link
+     *  #emitWithComparator} answer for. Which call actually reaches it is a checker fact ({@link
+     *  Core.CallSettlement.OrderingSubject}), settled once in {@code CallElaborator} and read off the
+     *  call in {@code BodyGen}; this set says only which runtime methods exist to be reached that
+     *  way, and does not decide that any particular call does. */
+    static final Set<Kernel> COMPARATOR_OVERLOADS = Set.of(
+            Kernel.LIST_SORT, Kernel.LIST_MAX, Kernel.LIST_MIN, Kernel.LIST_SORT_BY);
+
     /**
      * A kernel of the ordered family, over an element whose order lives on its sum: the runtime call
      * this table already holds for it, taking a comparator ahead of what it was already taking.

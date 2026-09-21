@@ -1199,17 +1199,16 @@ final class BodyGen {
          * a third: it is an ordinary kernel now, and its zero divisor is answered by the runtime
          * that owns the operation (ADR-0112).
          *
-         * <p>An ordered arm falls through to the table where its own condition does not hold — an
-         * element the JVM already compares, a {@code sortBy} whose key answers something with no sum
-         * to take an ordering off. What no arm and no row answers is this backend being behind the
-         * library, which {@link Intrinsics#emit} says.
+         * <p>An ordered arm falls through to the table where its own condition does not hold — the
+         * checker settled nothing to take a comparator off (an element the JVM already compares).
+         * What no arm and no row answers is this backend being behind the library, which {@link
+         * Intrinsics#emit} says.
          */
         private void kernel(Kernel kernel, Core.Call call) {
-            if (ORDERED_BY_COMPARATOR.contains(kernel)) {
-                TypeSymbol ordering = orderingFor(kernel, call);
-                // No sum to take an ordering off: an element the JVM already compares, or a `sortBy`
-                // whose key answers one. Those go to the table row, which is the same runtime method
-                // without the comparator.
+            if (call.settlement() instanceof Core.CallSettlement.OrderingSubject ordered) {
+                TypeSymbol ordering = sumOrdering(ordered.type());
+                // No sum to take an ordering off: an element the JVM already compares. That goes to
+                // the table row, which is the same runtime method without the comparator.
                 if (ordering != null) {
                     code.invokestatic(cd(ordering), ORDERING_METHOD, MTD_ordering, true);
                     Intrinsics.emitWithComparator(this, kernel, call);
@@ -1229,26 +1228,6 @@ final class BodyGen {
             }
             Intrinsics.emit(this, kernel, call);
         }
-
-        /** The sum an ordered kernel takes its comparator off, or null where there is none.
-         *
-         * <p>{@code sortBy} orders by what its key answers, not by what the list holds, so its
-         * comparator is read off the key's result type; the rest order the elements themselves. */
-        private TypeSymbol orderingFor(Kernel kernel, Core.Call call) {
-            if (kernel == Kernel.LIST_SORT_BY) {
-                return call.args().get(0).type() instanceof Type.FnOf key
-                        ? sumOrdering(key.result()) : null;
-            }
-            return elementOrdering(call.args().get(0));
-        }
-
-        /** The kernels whose runtime method takes a comparator ahead of what the declaration names,
-         *  where the element has a sum to take an ordering off. Read by the arm above rather than
-         *  written out in it, so that the kernels routed there are the kernels this names — what
-         *  holds the derived boundary form of one is a test, and a test can only reach the ones it
-         *  can be told about. */
-        static final Set<Kernel> ORDERED_BY_COMPARATOR = Set.of(
-                Kernel.LIST_SORT, Kernel.LIST_MAX, Kernel.LIST_MIN, Kernel.LIST_SORT_BY);
 
         /** The kernels this emits itself, which are the kernels {@link Intrinsics}' table has no row
          *  for. Named rather than left to be read off the arms above, so the two sets can be held
@@ -2039,12 +2018,6 @@ final class BodyGen {
                 code.iconst_1();
                 code.ixor();
             }
-        }
-
-        /** The enumeration a list's elements are ordered by, or null when they are ordered otherwise
-         * (an ordered primitive or a newtype over one, which carry their own {@code Comparable}). */
-        private TypeSymbol elementOrdering(Core arg) {
-            return arg.type() instanceof Type.ListOf lo ? sumOrdering(lo.element()) : null;
         }
 
         /** The sum that answers for values of {@code t}, or null where the value carries its own
