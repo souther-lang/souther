@@ -3,14 +3,15 @@ package souther.compiler.check;
 import souther.compiler.types.ReachName;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
-import java.util.SequencedSet;
 import java.util.Set;
 
 /**
@@ -26,10 +27,12 @@ import java.util.Set;
  * had to agree.
  *
  * <p>A helper recurses iff it can reach itself through helper calls; every member of a mutual cycle
- * is reached from itself, so all are marked. {@code recursive} is a {@link SequencedSet} because the
- * order is part of what it answers: a reader that reports one member of a cycle reports the one it
- * reaches first, and the order it reaches them in is the order they were declared. Said in the type
- * rather than in a comment, because a set that only promises membership may be copied into one whose
+ * is reached from itself, so all are marked. {@code recursive} is a {@link List} — not a set of any
+ * kind — because the order is part of what it answers: a reader that reports one member of a cycle
+ * reports the one it reaches first, and the order it reaches them in is the order they were declared.
+ * Said in the type rather than in a comment, because a {@code Set}'s {@code equals} answers about
+ * membership only — the very question issue #1835 asked of {@code RequiredRecursiveDefs}, whose
+ * changedAt this graph feeds. A set that only promises membership may also be copied into one whose
  * iteration order the JVM salts per run — which is how the same source came to name a different
  * helper on a different run. Both a module's own helpers and the shipped prelude ones
  * are walked: {@code List.foldFrom} is a recursive prelude helper and has to be left standing —
@@ -39,9 +42,13 @@ import java.util.Set;
  * <p>Built over the table as it stands. A table narrowed for an expansion ({@link HelperTable#hiding})
  * narrows what a call reaches and changes nothing here: a graph taken over the narrowed table would
  * find the very helper being expanded non-recursive.
+ *
+ * <p>{@link #recurses} is membership over the same list — a linear scan — because a module's
+ * recursive helpers are few; this reads a positional answer, it does not maintain a second index of
+ * one.
  */
 public record HelperGraph(Map<ReachName.Declaration, Set<ReachName.Declaration>> callsOf,
-                          SequencedSet<ReachName.Declaration> recursive) {
+                          List<ReachName.Declaration> recursive) {
 
     /** The graph of {@code table}: what each declaration in it calls, and which of them recurse. */
     public static HelperGraph of(HelperTable table) {
@@ -52,13 +59,13 @@ public record HelperGraph(Map<ReachName.Declaration, Set<ReachName.Declaration>>
                     table.reachable(), called);
             callsOf.put(e.getKey(), called);
         }
-        SequencedSet<ReachName.Declaration> recursive = new LinkedHashSet<>();
+        List<ReachName.Declaration> recursive = new ArrayList<>();
         for (ReachName.Declaration reference : table.reachable().keySet()) {
             if (reaches(callsOf, reference, reference, new HashSet<>())) {
                 recursive.add(reference);
             }
         }
-        return new HelperGraph(fixed(callsOf), Collections.unmodifiableSequencedSet(recursive));
+        return new HelperGraph(fixed(callsOf), List.copyOf(recursive));
     }
 
     /**

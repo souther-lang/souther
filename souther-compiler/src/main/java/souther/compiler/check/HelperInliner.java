@@ -547,20 +547,22 @@ public final class HelperInliner {
 
     /** Every recursion in reach, which is exactly what {@link #inline} leaves a call standing to —
      *  this module's own, what its imports publish to it, and the library underneath both. What a
-     *  standing call can be typed against, whatever this module turns out to reach. */
-    public java.util.SequencedSet<ReachName.Declaration> recursiveInReach() {
+     *  standing call can be typed against, whatever this module turns out to reach. In the graph's
+     *  own order, which is declaration order and is part of what this answers (see {@link
+     *  HelperGraph}). */
+    public java.util.List<ReachName.Declaration> recursiveInReach() {
         return graph.recursive();
     }
 
     /** The recursive helpers this module declares. A call to one of them is left standing by
      * {@link #inline}, as is a call to any recursion in reach — the graph's own {@code recursive}
-     * set is what {@code inline} asks, so one this module does not declare is left standing too and
+     * list is what {@code inline} asks, so one this module does not declare is left standing too and
      * is answered for by whoever collects what an expansion could not remove.
      *
      * <p>Answered in declaration order, which is the order a check reporting one of them reports in.
      * The order is the graph's and is carried, not rebuilt. */
-    public java.util.SequencedSet<ReachName.Declaration> recursiveHelpers() {
-        java.util.SequencedSet<ReachName.Declaration> result = new java.util.LinkedHashSet<>();
+    public java.util.List<ReachName.Declaration> recursiveHelpers() {
+        java.util.List<ReachName.Declaration> result = new java.util.ArrayList<>();
         for (ReachName.Declaration reference : graph.recursive()) {
             // Held here, which is asked at the address this module puts what it reaches that way —
             // the entry says both, so neither is worked out from the other.
@@ -568,7 +570,7 @@ public final class HelperInliner {
                 result.add(reference);
             }
         }
-        return result;
+        return List.copyOf(result);
     }
 
     /**
