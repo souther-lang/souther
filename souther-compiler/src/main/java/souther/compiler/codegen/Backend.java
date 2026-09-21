@@ -4,7 +4,6 @@ import souther.compiler.query.Bodies;
 
 import souther.compiler.check.ExpandedClauseLookup;
 import souther.compiler.check.InvariantStatements;
-import souther.compiler.check.ValueEntries;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.DeclarationKinds;
@@ -14,6 +13,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.ast.DefinitionRole;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.BehaviorRequirement;
@@ -593,10 +593,14 @@ public final class Backend {
                         : asLimit(e, helper.written());
             }
         }
-        List<String> entries = recHelpers.values().stream()
-                .map(Hir.FnDef::name)
-                .filter(name -> name.startsWith(ValueEntries.methodFor("")))
-                .toList();
+        // Which definition is the entry of which value is what its role says. The name it is emitted
+        // under is an address and is never read back for a meaning.
+        Map<String, ValueName.Helper> entries = new LinkedHashMap<>();
+        for (Hir.FnDef fn : recHelpers.values()) {
+            if (fn.role() instanceof DefinitionRole.PublishedValueEntry entry) {
+                entries.put(fn.name(), entry.of());
+            }
+        }
         if (!entries.isEmpty()) {
             out.put(new GeneratedClass.Values(module.name()), b.generateValues(entries));
         }
@@ -733,25 +737,22 @@ public final class Backend {
      * needs once. This only hands it on across the module boundary, which is why it is the only
      * public member: the class the bodies are on stays package-private.
      */
-    private byte[] generateValues(List<String> entries) {
+    private byte[] generateValues(Map<String, ValueName.Helper> entries) {
         ClassDesc cdFns = ctx.cd(new GeneratedClass.Helpers(pkg));
         ClassDesc cdValues = ctx.cd(new GeneratedClass.Values(pkg));
         MethodTypeDesc desc = MethodTypeDesc.of(CD_Object);
         return build(cdValues, cb -> {
             cb.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER
                     | ClassFile.ACC_SYNTHETIC);
-            for (String entry : entries) {
-                String published = entry.substring(ValueEntries.methodFor("").length());
-                // An entry exists only for a value another module calls: an exposed one, or one a
-                // published helper names, which is expanded into the reader.
-                int access = ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC
-                        | ClassFile.ACC_PUBLIC;
-                cb.withMethodBody(published, desc, access,
-                        code -> {
-                            code.invokestatic(cdFns, CodegenContext.helperMethod(entry), desc);
-                            code.areturn();
-                        });
-            }
+            // An entry exists only for a value the module exposes, so each is public: it is what
+            // another module calls. It is called by the value's own name and runs the definition
+            // the module emitted for it.
+            entries.forEach((method, value) -> cb.withMethodBody(value.name(), desc,
+                    ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC | ClassFile.ACC_PUBLIC,
+                    code -> {
+                        code.invokestatic(cdFns, CodegenContext.helperMethod(method), desc);
+                        code.areturn();
+                    }));
         });
     }
 

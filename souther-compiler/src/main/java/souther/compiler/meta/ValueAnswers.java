@@ -55,9 +55,15 @@ public final class ValueAnswers {
             if (value instanceof ValueName.Helper helper && helper.module().equals(module)
                     && published.contains(helper.name())) {
                 String type = encode(signature.result());
-                if (type != null) {
-                    byName.put(helper.name(), type);
+                if (type == null) {
+                    // What a check settled a published value as is a whole type. One that is still
+                    // open is a check that did not finish, and a module that omitted it would read
+                    // back as one whose value has no answer.
+                    throw new IllegalStateException("`" + helper + "` is published and was settled"
+                            + " as " + signature.result() + ", which is not a type a reader can be"
+                            + " given");
                 }
+                byName.put(helper.name(), type);
             }
         });
         List<String> lines = new ArrayList<>();

@@ -19,6 +19,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * What a module records a value as is read back as the same type, whatever the type is made of. A
@@ -85,6 +86,18 @@ class ValueAnswersTest {
 
         assertEquals(1, written.size(), written.toString());
         assertEquals(Set.of(cap), ValueAnswers.read("pricing", written).signatures().keySet());
+    }
+
+    /** A published value settled as a type still open is a check that did not finish, and it is
+     * said so rather than left out of what the module records. */
+    @Test
+    void aPublishedValueSettledAsAnOpenTypeIsAnInvariantViolation() {
+        ValueName.Helper open = new ValueName.Helper("pricing", "open");
+        Preserved.SettledValues settled = new Preserved.SettledValues(Map.of(
+                open, CompleteSignature.ofSettledValue(open, new Type.Var("a", false))));
+
+        assertThrows(IllegalStateException.class,
+                () -> ValueAnswers.written("pricing", Set.of("open"), settled));
     }
 
     @Test

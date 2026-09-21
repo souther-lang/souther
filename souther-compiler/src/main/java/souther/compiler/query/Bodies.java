@@ -1614,10 +1614,12 @@ public final class Bodies {
      * expression, and what it does not expand is a value, which is one definition however many bodies
      * name it. Those come too, under the name of the module that declares them, and so does every
      * one of them they reach in turn — a mutually-recursive group arrives whole, and one the reader
-     * never imported arrives because the body it was published inside names it. The reader emits a
-     * recursive helper as a method of its own (see {@link Shapes.Prepared}). A value it does not
-     * emit: the value runs in the module that declares it, and the reader calls the entry that
-     * module publishes for it. The body comes for the analyses, which read a value by its
+     * never imported arrives because the body it was published inside names it. A recursive helper
+     * is carried so that the analyses can read the published definition, and the reader emits it as
+     * a method of its own only where its own executable tree reaches it (see {@link
+     * Shapes.Prepared}). A published value is not executed here: it runs in the module that
+     * declares it, together with any recursive helper it calls, and the reader calls the entry that
+     * module publishes for it. Its body comes for the analyses, which read a value by its
      * template.
      *
      * <p>Read from the imports of the resolved module, which is the earliest answer carrying them.
@@ -1688,8 +1690,9 @@ public final class Bodies {
      * the helpers first leaves a body that names nothing of the declaring module bare — except a
      * recursive helper, which is a method rather than an expression, and a value, which is one
      * definition and not a body to copy. Both are left standing under their declaring module's
-     * qualified name (see {@link HelperInliner#closeAcross}); the reader emits a recursive helper as
-     * a method of its own and calls a value's entry in the module that declares it.
+     * qualified name (see {@link HelperInliner#closeAcross}). A value is called through the entry
+     * of the module that declares it and a recursive helper is emitted by the reader only where its
+     * own executable tree reaches it.
      *
      * <p>The value and the helper are told apart by the one predicate that decides it anywhere — a
      * written parameter list — and not by a second record of the same line. What each becomes in the
