@@ -33,6 +33,12 @@ public record BlockReaches(
         List<Core.Reached> declarations,
         List<ValueName.Behavior> requirements) {
 
+    public BlockReaches {
+        bindings = List.copyOf(bindings);
+        declarations = List.copyOf(declarations);
+        requirements = List.copyOf(requirements);
+    }
+
     /**
      * What {@code block}'s body reaches outside itself, given the behaviors {@code block}'s
      * enclosing construction requires injected.
