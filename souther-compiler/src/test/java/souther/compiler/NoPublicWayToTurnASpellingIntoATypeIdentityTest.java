@@ -218,7 +218,7 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
                         // The identity a module's metadata recorded for a type its values are
                         // answered with: the writer wrote the identity and this reads it back,
                         // where no declaration of the type is in hand.
-                        "ValueAnswers.java: new TypeKey(body, name)",
+                        "ValueAnswers.java: new TypeKey(module, text())",
                         // The library's own declarations, each under the module of the library that
                         // writes it. `souther.decimal` declares `RoundingMode`, and that is the
                         // identity — what a source may write it as is a separate answer, and

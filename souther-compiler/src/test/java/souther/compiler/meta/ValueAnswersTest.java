@@ -1,6 +1,9 @@
 package souther.compiler.meta;
 
+import souther.compiler.check.Preserved;
+import souther.compiler.core.CompleteSignature;
 import souther.compiler.types.LanguageCaseId;
+import souther.compiler.types.ValueName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -10,7 +13,9 @@ import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.SequencedSet;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -50,6 +55,36 @@ class ValueAnswersTest {
             assertEquals(type, ValueAnswers.decode(ValueAnswers.encode(type)),
                     () -> "written as " + ValueAnswers.encode(type));
         }
+    }
+
+    /** A name is counted and never lexed, so whatever the language lets a name hold is carried:
+     * a letter outside the basic plane, and a combining mark that only continues a name. */
+    @Test
+    void aNameTheLanguageAcceptsIsCarriedWhateverItHolds() {
+        for (String name : List.of("𝐀mount", "Café", "Ab_1", "金額")) {
+            Type type = new Type.ListOf(new Type.Ref(TypeSymbols.declared(
+                    new TypeKey("shared." + name, name))));
+
+            assertEquals(type, ValueAnswers.decode(ValueAnswers.encode(type)), name);
+        }
+    }
+
+    /** Only what the module publishes is recorded: a module settles more definitions than it
+     * offers, and the rest are no values a reader can name. */
+    @Test
+    void onlyWhatTheModulePublishesIsRecorded() {
+        ValueName.Helper cap = new ValueName.Helper("pricing", "cap");
+        ValueName.Helper entry = new ValueName.Helper("pricing", "$value.cap");
+        ValueName.Helper row = new ValueName.Helper("pricing", "$row.0");
+        Preserved.SettledValues settled = new Preserved.SettledValues(Map.of(
+                cap, CompleteSignature.ofSettledValue(cap, STEP),
+                entry, CompleteSignature.ofSettledValue(entry, STEP),
+                row, CompleteSignature.ofSettledValue(row, STEP)));
+
+        List<String> written = ValueAnswers.written("pricing", Set.of("cap"), settled);
+
+        assertEquals(1, written.size(), written.toString());
+        assertEquals(Set.of(cap), ValueAnswers.read("pricing", written).signatures().keySet());
     }
 
     @Test

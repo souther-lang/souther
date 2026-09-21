@@ -605,10 +605,11 @@ class CompilePublishedHelperTest {
         assertFalse(classes.containsKey(Emitted.helpers("order")), classes.keySet().toString());
     }
 
-    /** A value a published helper reaches runs where it is declared. The reader calls the entry
-     * its declaring module publishes, so it emits no method for the value and copies none of it. */
+    /** A helper is expanded into its reader together with what it names, so a value it names that
+     * the module does not expose is not something the module publishes: no class of the module
+     * offers it to be called, and the reader emits no method for it either. */
     @Test
-    void aReaderOfAHelperThatReachesAValueCallsTheEntryOfTheModuleThatDeclaresIt() throws Exception {
+    void aValueOnlyAPublishedHelperNamesIsExpandedWithTheHelperAndNotOffered() throws Exception {
         Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(PRICING, """
                 module order exposing ( Receipt, bill )
 
@@ -620,7 +621,7 @@ class CompilePublishedHelperTest {
                 let bill (a) = Receipt { total = taxed(a) }
                 """));
 
-        assertTrue(classes.containsKey("pricing.$Values"), classes.keySet().toString());
+        assertFalse(classes.containsKey("pricing.$Values"), classes.keySet().toString());
         assertFalse(classes.containsKey(Emitted.helpers("order")), classes.keySet().toString());
     }
 

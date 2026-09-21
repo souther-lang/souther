@@ -8,9 +8,9 @@ import souther.compiler.types.FixtureReferenceOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
-import java.util.ArrayDeque;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -27,6 +27,11 @@ import java.util.Set;
  *
  * <p>Minted like a row's operand and for the same reason: nothing inlines it, because nothing in
  * this module calls it. Unlike a row's it is shipped, since what calls it is another module.
+ *
+ * <p>Which values are published is answered once, by {@link #publishedValues}. The entries, the
+ * public methods of the class they are called through and the answers a module records for its
+ * values are all that set and nothing wider, so the module's surface for a value is the same
+ * whichever of them a reader looks at.
  */
 public final class ValueEntries {
 
@@ -39,30 +44,41 @@ public final class ValueEntries {
     }
 
     /**
-     * The entry of every value {@code surface}'s module exposes, by the name each is emitted under.
+     * The values {@code module} publishes: the definitions it wrote with no parameter list that
+     * implement no behavior, and that it exposes.
      *
-     * <p>A value is a definition with no parameters that is not a behavior's implementation and that
-     * the module wrote itself. What is exposed is what the module lists, which is the surface
-     * another module imports from.
+     * <p>What the module lists and no more, which is what another Souther module can import. A module
+     * that lists nothing is public to Java and offers no name to import, so nothing of it is called
+     * from another module. What a published helper names of this module's is not here either: a
+     * helper is expanded into its reader, so nothing of the module's is called from outside on its
+     * behalf.
      */
-    public static Map<String, Hir.FnDef> emitted(CheckSurface surface, DeclarationNewtypes newtypes) {
-        Hir.Module module = surface.module();
+    public static Set<String> publishedValues(Hir.Module module) {
         Set<String> behaviors = new HashSet<>();
         for (Hir.BehaviorDef behavior : module.behaviors()) {
             behaviors.add(behavior.name());
         }
-        Map<String, Hir.FnDef> declared = new LinkedHashMap<>();
+        Set<String> listed = new HashSet<>(module.exposing());
+        Set<String> published = new LinkedHashSet<>();
         for (Hir.FnDef fn : module.fns()) {
-            if (fn.body() != null && fn.role() instanceof DefinitionRole.Ordinary
-                    && !behaviors.contains(fn.name())) {
-                declared.put(fn.name(), fn);
+            if (fn.params().isEmpty() && fn.body() != null
+                    && fn.role() instanceof DefinitionRole.Ordinary
+                    && !behaviors.contains(fn.name())
+                    && listed.contains(fn.name())) {
+                published.add(fn.name());
             }
         }
-        // Worked out once for the module and not once for each value asked about.
-        Set<String> reachable = reachableFromOutside(module, declared);
+        return published;
+    }
+
+    /** The entry of every value {@code surface}'s module publishes, by the name each is emitted
+     *  under. */
+    public static Map<String, Hir.FnDef> emitted(CheckSurface surface, DeclarationNewtypes newtypes) {
+        Hir.Module module = surface.module();
+        Set<String> published = publishedValues(module);
         Map<String, Hir.FnDef> out = new LinkedHashMap<>();
-        for (Hir.FnDef value : declared.values()) {
-            if (!value.params().isEmpty() || !reachable.contains(value.name())) {
+        for (Hir.FnDef value : module.fns()) {
+            if (!published.contains(value.name())) {
                 continue;
             }
             String name = methodFor(value.name());
@@ -76,40 +92,5 @@ public final class ValueEntries {
             out.put(name, Desugared.Fn.desugar(entry, newtypes).read());
         }
         return out;
-    }
-
-    /**
-     * The names another module calls the entry of: what is exposed, and what a helper that is exposed
-     * names, directly or through the helpers that one names in turn.
-     *
-     * <p>A published helper is expanded into the module that calls it, and what it names of this
-     * module's is named there. So a value that only a published definition reaches is read from
-     * outside exactly as an exposed one is, and needs the same entry.
-     */
-    private static Set<String> reachableFromOutside(Hir.Module module,
-                                                    Map<String, Hir.FnDef> declared) {
-        Set<String> seen = new HashSet<>();
-        ArrayDeque<String> work = new ArrayDeque<>();
-        for (String exposed : module.exposing()) {
-            if (declared.containsKey(exposed) && seen.add(exposed)) {
-                work.add(exposed);
-            }
-        }
-        while (!work.isEmpty()) {
-            String next = work.poll();
-            // A value runs where it is declared, so what it names is built there and needs no
-            // entry. Only a helper is expanded into the reader, and only what it names is named
-            // there.
-            if (declared.get(next).params().isEmpty()) {
-                continue;
-            }
-            for (ValueName.Helper reached : HelperNames.helpersReached(declared.get(next).writtenBody())) {
-                if (reached.module().equals(module.name()) && declared.containsKey(reached.name())
-                        && seen.add(reached.name())) {
-                    work.add(reached.name());
-                }
-            }
-        }
-        return seen;
     }
 }

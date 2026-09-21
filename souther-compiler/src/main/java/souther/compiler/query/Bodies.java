@@ -31,6 +31,7 @@ import souther.compiler.check.SignatureDeclarations;
 import souther.compiler.check.HelperEntry;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.Preserved;
+import souther.compiler.check.ValueEntries;
 import souther.compiler.core.CompleteSignature;
 import souther.compiler.check.Expansion;
 import souther.compiler.check.HelperGraph;
@@ -2908,8 +2909,16 @@ public final class Bodies {
                     }
                     settled = checked.value().settledValues();
                 }
+                // What the module publishes and nothing it settled for its own purposes: the
+                // definitions minted for its rows and entries are not values a reader can name.
+                Answer<Hir.Module> declarer = db.ask(new Settled(declared));
+                if (!declarer.present()) {
+                    continue;
+                }
+                Set<String> offered = ValueEntries.publishedValues(declarer.value());
                 settled.signatures().forEach((value, signature) -> {
-                    if (value instanceof ValueName.Helper helper && helper.module().equals(declared)) {
+                    if (value instanceof ValueName.Helper helper && helper.module().equals(declared)
+                            && offered.contains(helper.name())) {
                         answers.put(value, signature);
                     }
                 });

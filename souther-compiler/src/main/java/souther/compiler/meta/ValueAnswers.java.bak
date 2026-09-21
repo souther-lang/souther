@@ -16,7 +16,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.SequencedSet;
 import java.util.Set;
-import java.util.function.Supplier;
 import java.util.TreeMap;
 
 /**
@@ -103,10 +102,7 @@ public final class ValueAnswers {
             case Type.FnOf fn -> {
                 String params = around("Params", fn.params());
                 String result = encode(fn.result());
-                if (params == null || result == null) {
-                    yield null;
-                }
-                yield "Fn(" + params + "," + result + ")";
+                yield params == null || result == null ? null : "Fn(" + params + "," + result + ")";
             }
             case Type.Union union -> {
                 List<String> members = new ArrayList<>();
@@ -158,8 +154,6 @@ public final class ValueAnswers {
 
     /** Text that is not what this format writes. Never leaves this class. */
     private static final class Unreadable extends RuntimeException {
-        private static final long serialVersionUID = 1L;
-
         Unreadable() {
             super(null, null, false, false);
         }
@@ -238,7 +232,7 @@ public final class ValueAnswers {
         }
 
         /** What is read between one pair of parentheses. */
-        private <T> T closed(Supplier<T> read) {
+        private <T> T closed(java.util.function.Supplier<T> read) {
             expect('(');
             T value = read.get();
             expect(')');
@@ -246,12 +240,12 @@ public final class ValueAnswers {
         }
 
         /** Each of a comma-separated run between one pair of parentheses. */
-        private <T> List<T> listed(Supplier<T> read) {
+        private <T> List<T> listed(java.util.function.Supplier<T> read) {
             expect('(');
             return untilClosed(read);
         }
 
-        private <T> List<T> untilClosed(Supplier<T> read) {
+        private <T> List<T> untilClosed(java.util.function.Supplier<T> read) {
             List<T> all = new ArrayList<>();
             if (eat(')')) {
                 return all;
@@ -316,7 +310,7 @@ public final class ValueAnswers {
         /** One of this format's own words, which are ASCII by construction. */
         private String word() {
             int from = at;
-            while (at < text.length() && Character.isLetter(text.charAt(at)) && text.charAt(at) < 128) {
+            while (at < text.length() && text.charAt(at) >= 'A' && text.charAt(at) <= 'z') {
                 at++;
             }
             if (at == from) {

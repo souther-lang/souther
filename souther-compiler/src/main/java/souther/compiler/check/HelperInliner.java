@@ -713,8 +713,11 @@ public final class HelperInliner {
         // Its own module is reading here, so it reaches its own declaration bare — which is the
         // reference the graph over that module's table is keyed by.
         ReachName.Declaration here = new ReachName.Own(new ValueName.Helper(module, fn.name()));
+        // A value stays a reference to the values it names: it runs where it is declared, so what
+        // it names is built there and never copied. A helper is expanded into its reader, and what
+        // it names is expanded with it, as it always was.
         boolean namedBefore = valuesStayNamed;
-        valuesStayNamed = true;
+        valuesStayNamed = fn.params().isEmpty();
         Hir.Expr closed;
         try {
             closed = graph.recurses(here)

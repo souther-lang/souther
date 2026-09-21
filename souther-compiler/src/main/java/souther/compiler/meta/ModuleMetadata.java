@@ -5,6 +5,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.Preserved;
+import souther.compiler.check.ValueEntries;
 import souther.compiler.check.Sig;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeReachName;
@@ -115,7 +116,8 @@ public final class ModuleMetadata {
         }
         out.put(new GeneratedClass.ModuleDeclarations(module.name()),
                 Backend.moduleClass(module.name(), moduleAnnotation(module, resolved, slices, types,
-                        behaviors, ValueAnswers.written(module.name(), settledValues))));
+                        behaviors, ValueAnswers.written(module.name(),
+                                ValueEntries.publishedValues(resolved), settledValues))));
     }
 
     /**

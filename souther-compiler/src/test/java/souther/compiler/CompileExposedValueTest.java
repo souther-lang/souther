@@ -269,8 +269,8 @@ class CompileExposedValueTest {
         assertTrue(e.getMessage().contains("now"), e.getMessage());
     }
 
-    /** A published value may reach a recursive helper: what closing leaves standing is a call, and the
-     * helper it calls comes along to be emitted as one of the reader's own methods. */
+    /** A published value may reach a recursive helper: what closing leaves standing is a call to the
+     * declaring module's own method, which never becomes the reader's. */
     @Test
     void aPublishedValueMayReachARecursiveHelper() {
         assertDoesNotThrow(() -> Compiler.compile("""
@@ -431,6 +431,67 @@ class CompileExposedValueTest {
         ModulePath path = ModulePath.of(Compiler.compile(CHAINED));
 
         assertDoesNotThrow(() -> Compiler.compileModules(List.of(CHAIN_READER), path));
+    }
+
+    private static final String OPEN = """
+            module pricing
+
+            data Amount = Int
+
+            let cap = Amount(base.value * 100)
+            let base = Amount(10)
+            """;
+
+    private static final String OPEN_READER = """
+            module order exposing ( In, Out, bill )
+
+            import pricing ( cap )
+
+            data In = { n: Int }
+            data Out = { v: Int }
+
+            behavior bill : (i: In) -> Out constructs Out
+            let bill (i) = Out { v = cap.value + i.n }
+            """;
+
+    /** A module that lists nothing is public to Java and offers no name to import, so another
+     * module cannot call a value of it and the module publishes no entry for one. */
+    @Test
+    void aModuleThatListsNothingOffersNoValueToImportAndPublishesNoEntry() {
+        CompileException refused = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of(OPEN, OPEN_READER)));
+        assertTrue(refused.getMessage().contains("not exposed"), refused.getMessage());
+
+        assertTrue(!Compiler.compile(OPEN).containsKey("pricing.$Values"));
+    }
+
+    /** What a module says it settled its values as is what it publishes and nothing more: the
+     * definitions written for an example row are not there, so adding an example does not change
+     * what the artifact declares. */
+    @Test
+    void anExampleRowDoesNotChangeWhatAModuleRecordsOfItsValues() {
+        String base = """
+                module pricing exposing ( Amount, cap, rate )
+
+                data Amount = Int
+
+                let cap = Amount(1000)
+                let rate (a: Amount) = Amount(a.value * 2)
+
+                behavior double : (a: Amount) -> Amount
+                let double (a) = rate(a)
+                """;
+        String withExample = base + """
+
+                example double
+                    | "twice" : (cap) -> Amount(2000)
+                """;
+
+        assertEquals(recorded(Compiler.compile(base)), recorded(Compiler.compile(withExample)));
+    }
+
+    private static String recorded(Map<String, ClassFileImage> classes) {
+        return java.util.Arrays.toString(classes.get("pricing.$Module").bytes());
     }
 
     /** A published helper that reaches a private value still runs from another module. */
