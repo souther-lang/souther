@@ -7,6 +7,7 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.MaterialisationSite;
 import souther.compiler.types.RegionSlot;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -59,30 +60,36 @@ class AValueBuiltMoreThanOnceKeepsWhichBuildEachIsTest {
                 .value().value().writtenBody();
     }
 
+    /** A build of a value, whether it carries the body or calls the method the value is emitted as. */
+    private record Build(ValueName value, MaterialisationSite site) { }
+
     /** Every build in the tree, outermost first and left to right. */
-    private static List<Hir.Materialised> builds(Hir.Expr e) {
-        List<Hir.Materialised> out = new ArrayList<>();
+    private static List<Build> builds(Hir.Expr e) {
+        List<Build> out = new ArrayList<>();
         collect(e, out);
         return out;
     }
 
-    private static void collect(Hir.Expr e, List<Hir.Materialised> out) {
+    private static void collect(Hir.Expr e, List<Build> out) {
         if (e == null) {
             return;
         }
         if (e instanceof Hir.Materialised built) {
-            out.add(built);
+            out.add(new Build(built.value(), built.site()));
+        }
+        if (e instanceof Hir.ValueInvocation call) {
+            out.add(new Build(call.value(), call.site()));
         }
         Hir.forEachChild(e, child -> collect(child, out));
     }
 
-    private static List<Hir.Materialised> buildsOf(String value, List<Hir.Materialised> all) {
+    private static List<Build> buildsOf(String value, List<Build> all) {
         return all.stream().filter(each -> each.value().toString().endsWith(value)).toList();
     }
 
     @Test
     void aValueBuiltForTheBodyIsBuiltForTheDefinitionThatIsWritten() {
-        List<Hir.Materialised> all = builds(lowered("""
+        List<Build>all = builds(lowered("""
                 behavior f : (n: Int) -> Bool
                 let f (n) = inner
                 """));
@@ -93,7 +100,7 @@ class AValueBuiltMoreThanOnceKeepsWhichBuildEachIsTest {
 
     @Test
     void aValueBuiltInAnArmIsBuiltForThatArm() {
-        List<Hir.Materialised> all = builds(lowered("""
+        List<Build>all = builds(lowered("""
                 behavior f : (n: Int) -> Bool
                 let f (n) = if n > 0 then inner else false
                 """));
@@ -110,13 +117,13 @@ class AValueBuiltMoreThanOnceKeepsWhichBuildEachIsTest {
                 behavior f : (n: Int) -> Bool
                 let f (n) = if n > 0 then outer else false
                 """;
-        List<Hir.Materialised> all = builds(lowered(source));
+        List<Build>all = builds(lowered(source));
 
         // The behavior calls the method `outer` is emitted as, and holds no build of `inner`: that
         // one is built where `outer` names it, inside `outer`'s own body.
         assertEquals(1, buildsOf("outer", all).size());
         assertEquals(0, buildsOf("inner", all).size());
-        List<Hir.Materialised> insideOuter =
+        List<Build>insideOuter =
                 buildsOf("inner", builds(loweredDefinition(source, "outer")));
         assertEquals(1, insideOuter.size());
         MaterialisationSite.Slot site = assertInstanceOf(MaterialisationSite.Slot.class,
@@ -135,9 +142,9 @@ class AValueBuiltMoreThanOnceKeepsWhichBuildEachIsTest {
                 behavior f : (n: Int) -> Bool
                 let f (n) = (if n > 0 then outer else false) || (if n > 1 then outer else false)
                 """;
-        List<Hir.Materialised> all = builds(lowered(source));
+        List<Build>all = builds(lowered(source));
 
-        List<Hir.Materialised> outer = buildsOf("outer", all);
+        List<Build>outer = buildsOf("outer", all);
         assertEquals(2, outer.size());
         assertNotEquals(outer.get(0).site(), outer.get(1).site());
         assertEquals(0, buildsOf("inner", all).size());
@@ -150,7 +157,7 @@ class AValueBuiltMoreThanOnceKeepsWhichBuildEachIsTest {
                 behavior f : (n: Int) -> Bool
                 let f (n) = viaCall
                 """;
-        List<Hir.Materialised> all = builds(lowered(source));
+        List<Build>all = builds(lowered(source));
 
         assertEquals(1, all.size());
         assertFalse(holdsAnExpansion(lowered(source)),
@@ -183,14 +190,14 @@ class AValueBuiltMoreThanOnceKeepsWhichBuildEachIsTest {
      */
     @Test
     void aRegionWrittenInsideAHelperIsTheSameSiteInEveryCopy() {
-        List<Hir.Materialised> all = builds(lowered("""
+        List<Build>all = builds(lowered("""
                 let named (n: Int) : Bool = n > 0 && inner
 
                 behavior f : (n: Int) -> Bool
                 let f (n) = named(n) || named(n + 1)
                 """));
 
-        List<Hir.Materialised> inner = buildsOf("inner", all);
+        List<Build>inner = buildsOf("inner", all);
         assertEquals(2, inner.size());
         MaterialisationSite.Slot site = assertInstanceOf(MaterialisationSite.Slot.class,
                 inner.get(0).site());
@@ -204,7 +211,7 @@ class AValueBuiltMoreThanOnceKeepsWhichBuildEachIsTest {
      */
     @Test
     void theBodyOfACallOpensNoRegion() {
-        List<Hir.Materialised> all = builds(lowered("""
+        List<Build>all = builds(lowered("""
                 let named (n: Int) : Bool = inner
 
                 behavior f : (n: Int) -> Bool

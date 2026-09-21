@@ -1589,7 +1589,8 @@ public interface Hir {
     sealed interface Expr extends Written
             permits IntLit, DecimalLit, StringLit, BoolLit, Var, FieldAccess, Apply, Binary, Neg,
                     NewData, Match, If, IfConstructed, ListLit, RowCollection, ListComp, LetIn,
-                    Expansion, Materialised, ValueBuild, Block, Tuple, TupleGet, Unreachable {
+                    Expansion, Materialised, ValueBuild, ValueInvocation, Block, Tuple, TupleGet,
+                    Unreachable {
     }
 
     /**
@@ -1738,6 +1739,56 @@ public interface Hir {
                 throw new IllegalArgumentException(
                         "a build is of some value, for some region: " + value + " for " + site);
             }
+        }
+    }
+
+    /**
+     * A build of a value the emitted tree gets by calling the method the value is emitted as.
+     *
+     * <p>Where {@link Materialised} carries the body a build computes, this carries none: the value
+     * is run where its method is, and what stands here is the call. {@code arguments} are the
+     * bindings the method takes, each already bound in the region that builds this. They are name
+     * slots: nothing there is evaluated, and a walk over the names of a tree meets them as it meets
+     * a spread's. {@code target} is a declaration and no slot, so what a reader follows through
+     * the value graph is read off this node.
+     *
+     * @param target    the declaration of the value the method is emitted for, which is another
+     *                  module's where the value is declared there
+     * @param site      the region it was built for
+     * @param arguments the bindings the method takes, in order; empty where it takes nothing
+     */
+    record ValueInvocation(ReachName.Declaration target, MaterialisationSite site,
+                           List<Var.Denoting> arguments, SourcePos pos, Region region)
+            implements Expr {
+
+        public ValueInvocation {
+            if (target == null || site == null) {
+                throw new IllegalArgumentException(
+                        "a call is of some value's method, for some region: " + target
+                                + " for " + site);
+            }
+            if (!(target.denotes() instanceof ValueName.Helper)) {
+                throw new IllegalArgumentException(
+                        "only a value has a method to call, and " + target + " is not one");
+            }
+            for (Var.Denoting each : arguments) {
+                if (!(each.denotes() instanceof ValueName.Local)) {
+                    throw new IllegalArgumentException("a method is handed bindings, and `"
+                            + each.written() + "` is not one");
+                }
+            }
+            arguments = List.copyOf(arguments);
+        }
+
+        /** The value this is a build of. */
+        public ValueName value() {
+            return target.denotes();
+        }
+
+        /** {@link #target} rendered, which is what a table keyed by a declaration's name is looked
+         *  up with. */
+        public String reaches() {
+            return target.rendered();
         }
     }
 
@@ -2286,7 +2337,7 @@ public interface Hir {
          * a reader to work out, so it is given the binder it is reading and answers with that
          * binding. There is no way to write one of these without having the binding in hand.
          */
-        static Var local(Binder binder, SourcePos pos) {
+        static Denoting local(Binder binder, SourcePos pos) {
             ValueName.Local local = new ValueName.Local(binder.name(), binder.id());
             WrittenName written = WrittenName.synthetic(binder.name(), pos);
             // No source wrote it: what a pass reads here is a binding that pass put there.
@@ -2883,6 +2934,8 @@ public interface Hir {
                     x.declaredReturn(), x.body(), x.pos(), region);
             case Materialised x -> new Materialised(x.value(), x.site(), x.body(), x.pos(), region);
             case ValueBuild x -> new ValueBuild(x.value(), x.reaches(), x.site(), x.pos(), region);
+            case ValueInvocation x ->
+                    new ValueInvocation(x.target(), x.site(), x.arguments(), x.pos(), region);
             case Block x ->
                     new Block(x.params(), x.body(), x.rule(), x.expandedFrom(), x.pos(), region);
             case ListLit x -> new ListLit(x.elements(), x.origin(), x.pos(), region);
@@ -2922,6 +2975,19 @@ public interface Hir {
             case Unreachable x -> x;
             // No slots: what the value means is its template's, and this says only which value.
             case ValueBuild x -> x;
+            // What it takes are names of bindings already made, so they are name slots: nothing
+            // there is evaluated, and a reader asking which bindings a tree reads finds them.
+            case ValueInvocation x -> {
+                List<Var.Denoting> arguments = each(x.arguments(), argument -> {
+                    if (!(atName.apply(argument) instanceof Var.Denoting named)) {
+                        throw new IllegalStateException("a value's method is handed a binding, and"
+                                + " `" + argument.written() + "` was made to name nothing");
+                    }
+                    return named;
+                });
+                yield arguments == x.arguments() ? x
+                        : new ValueInvocation(x.target(), x.site(), arguments, x.pos(), x.region());
+            }
             case Neg n -> {
                 Expr operand = atExpr.apply(n.operand());
                 yield operand == n.operand() ? n : new Neg(operand, n.pos(), n.region());

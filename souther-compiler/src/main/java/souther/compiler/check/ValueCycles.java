@@ -132,7 +132,9 @@ public final class ValueCycles {
 
     /**
      * The values of {@code reachable} that {@code e} reads, by the name it reaches each of them by. A
-     * value is written bare, so a reference to one is a {@code Var} and never reaches the call graph.
+     * value is written bare, so a reference to one is a {@code Var} and never reaches the call graph;
+     * where the tree calls the method a value is emitted as, that call is a {@link
+     * Hir.ValueInvocation} and names the value by its target.
      *
      * <p>Asked with the reach name the reference carries, which is what {@link
      * HelperInliner#helperCallsIn} asks a call with. The two are the two kinds of edge in one graph
@@ -153,6 +155,14 @@ public final class ValueCycles {
             // would be an edge to a node this graph has not got.
             ReachName.Declaration reaches = v.reachesADeclaration();
             DefinitionName at = reaches == null ? null : heldAt.of(reaches);
+            Hir.FnDef d = at == null ? null : reachable.get(at.text());
+            if (d != null && d.params().isEmpty()) {
+                out.add(at.text());
+            }
+        }
+        // A call of a value's method reads that value, and holds nothing under it to walk into.
+        if (e instanceof Hir.ValueInvocation call) {
+            DefinitionName at = heldAt.of(call.target());
             Hir.FnDef d = at == null ? null : reachable.get(at.text());
             if (d != null && d.params().isEmpty()) {
                 out.add(at.text());

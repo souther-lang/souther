@@ -522,7 +522,7 @@ final class HelperParams {
                 case Hir.Expansion ex -> visitExpansion(ex, env, target, expected);
                 case Hir.Materialised m -> visit(m.body(), env, target, expected);
                 // A value takes no parameter, so a build of one uses none.
-                case Hir.ValueBuild _ -> { }
+                case Hir.ValueBuild _, Hir.ValueInvocation _ -> { }
                 case Hir.Binary bin -> {
                     visitOperand(bin.left(), bin.right(), bin.op(), false, env, target);
                     visitOperand(bin.right(), bin.left(), bin.op(), true, env, target);

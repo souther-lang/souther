@@ -206,6 +206,7 @@ public final class Elaborator {
             // A build of a value elaborates as the value does, in the copy the build is: the walk
             // is where the copy it stands in is known, and the node says which build this is.
             case Hir.ValueBuild build -> materialisedValue(build, ctx);
+            case Hir.ValueInvocation call -> valueInvocation(call, env, ctx);
             case Hir.Materialised m ->
                     elaborate(m.body(), env, ctx.building(m.value(), m.site()), expected);
             // reached only where a block escapes: it may be passed as an argument, or bound to a
@@ -252,11 +253,7 @@ public final class Elaborator {
                 // the reference where the reference is written, so nothing downstream of this has
                 // to learn that a name can stand for one.
                 case ValueName.Helper _ when ctx.preserved().valueKept(v.denotes()) != null ->
-                        ctx.preserved().valuesAreMethods()
-                                ? calledValue(ctx.preserved().valueKept(v.denotes()), v,
-                                        ctx.symbols().module())
-                                : keptValue(ctx.preserved().valueKept(v.denotes()), v.origin(),
-                                        v.pos());
+                        keptValue(ctx.preserved().valueKept(v.denotes()), v.origin(), v.pos());
                 default -> throw notAValue(v, env);
             };
             case Hir.FieldAccess fa -> elaborateFieldAccess(fa, env, ctx);
@@ -1572,27 +1569,38 @@ public final class Elaborator {
     }
 
     /**
-     * A value the emitted tree reads by calling the method it is emitted as.
+     * A build the emitted tree makes by calling the method its value is emitted as, typed by the
+     * signature the value's own check settled.
      *
-     * <p>Nobody applied anything at the reference, so the call is no construct of the author's: it is
-     * this representation's, in no copy, and there is nothing for a reader to be sent to.
+     * <p>Nobody applied anything, so the call is no construct of the author's: it is this
+     * representation's, in no copy, and there is nothing for a reader to be sent to. What it is
+     * handed are bindings already made, so each is read as the binding it is.
      */
-    private static Core calledValue(CompleteSignature settled, Hir.Var.Denoting v,
-                                    String module) {
-        ReachName.Declaration declaration = v.reachesADeclaration();
-        if (declaration == null) {
-            throw new IllegalStateException("`" + v.written() + "` is a value called as a method and"
-                    + " reaches no declaration");
+    private static Core valueInvocation(Hir.ValueInvocation call, Scope env, CheckContext ctx) {
+        CompleteSignature settled = ctx.preserved().valueKept(call.value());
+        // A value whose own check found nothing to settle it as is reported at itself, and what
+        // calls it has nothing to be typed by: it is abandoned there rather than reported again.
+        if (settled == null) {
+            throw new Unanswerable(call.pos());
+        }
+        List<Core> handed = new ArrayList<>();
+        for (Hir.Var.Denoting each : call.arguments()) {
+            BindingId binding = ((ValueName.Local) each.denotes()).id();
+            Type type = env.typeOf(binding);
+            if (type == null) {
+                throw new IllegalStateException("`" + each.written() + "` is handed to the method of "
+                        + call.value() + " and is no binding in force");
+            }
+            handed.add(new Core.Read(each.name(), binding, type, each.pos()));
         }
         // A value another module declares runs there: what this module calls is that module's entry
         // for it, so the reference is to a published value and not to a method held here.
-        Core.Reached callee = declaration instanceof ReachName.OfModule of
-                && !of.denotes().module().equals(module)
+        Core.Reached callee = call.target() instanceof ReachName.OfModule of
+                && !of.denotes().module().equals(ctx.symbols().module())
                 ? new Core.Reached.OfPublishedValue(of)
-                : new Core.Reached.OfDeclaration(declaration);
-        return new Core.Call(callee, List.of(),
-                ConstructOccurrence.unwritten(), Core.CallSettlement.None.INSTANCE,
-                settled.result(), v.pos());
+                : new Core.Reached.OfDeclaration(call.target());
+        return new Core.Call(callee, handed, ConstructOccurrence.unwritten(),
+                Core.CallSettlement.None.INSTANCE, settled.result(), call.pos());
     }
 
     /**

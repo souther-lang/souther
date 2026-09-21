@@ -239,7 +239,7 @@ public record DeclaredTypeReading(DeclarationFacts facts,
                 case Hir.Materialised m -> of(m.body());
                 // A build by reference names no type: what the value is typed as is what its own
                 // check settled, which is the elaboration's to say.
-                case Hir.ValueBuild _ -> null;
+                case Hir.ValueBuild _, Hir.ValueInvocation _ -> null;
                 case Hir.LetIn let -> ofLet(let);
                 case Hir.Var v -> ofVar(v);
                 // It answers no value, which is a type and is this one.

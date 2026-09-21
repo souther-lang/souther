@@ -352,7 +352,7 @@ public final class SpecChecker {
                 new CheckContext(symbols, published, kinds, inners, fieldTypes, layout, null, reqSigs)
                         .withCallees(calleeSigs)
                         .withDependencies(dependsOn)
-                        .preserving(Preserved.valuesCalledAsMethods(settledValues)), output);
+                        .preserving(Preserved.valuesAlreadySettled(settledValues)), output);
         Type rt = elaboratedBody.type();
         if (!TypeOps.assignable(rt, output, published)) {
             throw CompileException.of(Diagnostic

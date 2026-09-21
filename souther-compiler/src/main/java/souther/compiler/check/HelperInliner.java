@@ -9,7 +9,6 @@ import souther.compiler.ast.StructuralCost;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.ApplicationDerivationCause;
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.EtaOrigin;
 import souther.compiler.types.ExpansionLineage;
@@ -1398,11 +1397,11 @@ public final class HelperInliner {
                         ex.declaredReturn(), insideThisExpansion(ex, () -> inline(ex.body())),
                         ex.pos(), ex.region());
             }
-            // A build that is a call of the method its value is emitted as holds a reference and the
-            // bindings it is handed, and there is no body in it to walk.
-            case Hir.Materialised m when isACallOfItsValue(m) -> m;
             // A build by reference holds no body, so there is nothing in it to walk.
             case Hir.ValueBuild build -> build;
+            // A call of a value's method holds a reference and the bindings it is handed, and
+            // there is no body in it to walk.
+            case Hir.ValueInvocation call -> call;
             // A build already kept as one: what it holds is walked like any other body, and what
             // says which build it is stays where the pass that made it put it.
             case Hir.Materialised m -> new Hir.Materialised(m.value(), m.site(),
@@ -2500,8 +2499,7 @@ public final class HelperInliner {
                 .binder("$v" + next() + "_" + named.name(), named.pos());
         here.put(named.reaches(), called);
         order.add(called);
-        values.add(new Hir.Materialised(named.denotes(), where, callOf(named, handed),
-                named.pos(), named.region()));
+        values.add(invocationOf(named, where, handed));
     }
 
     /**
@@ -2550,8 +2548,7 @@ public final class HelperInliner {
                 .binder("$v" + next() + "_" + named.name(), named.pos());
         here.put(named.reaches(), called);
         order.add(called);
-        values.add(new Hir.Materialised(named.denotes(), site.get(), named, named.pos(),
-                named.region()));
+        values.add(invocationOf(named, site.get(), List.of()));
     }
 
     /**
@@ -2621,29 +2618,18 @@ public final class HelperInliner {
         return known;
     }
 
-    /** Whether {@code build} is a call of the method its value is emitted as, which is a reference to
-     *  the value and not a copy of its body. */
-    private static boolean isACallOfItsValue(Hir.Materialised build) {
-        Hir.Expr called = build.body() instanceof Hir.Apply call ? call.function() : build.body();
-        return called instanceof Hir.Var.Denoting named && named.denotes().equals(build.value());
-    }
-
     /**
-     * The reference to {@code named} that stands for a build of it: the name alone where the method
-     * takes nothing, and the name applied to the bindings that hold what it takes where it does.
+     * The build of {@code named} that calls the method it is emitted as, handed the bindings that
+     * hold what the method takes.
      */
-    private Hir.Expr callOf(Hir.Var.Denoting named, List<Hir.Var.Denoting> handed) {
-        if (handed.isEmpty()) {
-            return named;
-        }
-        List<Hir.Expr> arguments = new ArrayList<>();
+    private Hir.ValueInvocation invocationOf(Hir.Var.Denoting named, MaterialisationSite where,
+                                             List<Hir.Var.Denoting> handed) {
+        List<Hir.Var.Denoting> arguments = new ArrayList<>();
         for (Hir.Var.Denoting each : handed) {
             arguments.add(Hir.Var.local(readAt(each.reaches()), named.pos()));
         }
-        return Hir.Apply.synthetic(named, arguments,
-                new ApplicationOrigin.Derived(
-                        new ApplicationDerivationCause.NameReadAsAValue(named.origin()), 0),
-                named.pos(), named.region());
+        return new Hir.ValueInvocation(named.reachesADeclaration(), where, arguments, named.pos(),
+                named.region());
     }
 
     /** What a method emitted for a value takes: the values its root region demands that are
@@ -2827,8 +2813,8 @@ public final class HelperInliner {
                         ex.declaredReturn(), insideThisExpansion(ex, () -> read(ex.body())),
                         ex.pos(), ex.region());
             }
-            case Hir.Materialised m when isACallOfItsValue(m) -> m;
             case Hir.ValueBuild build -> build;
+            case Hir.ValueInvocation call -> call;
             case Hir.Materialised m -> new Hir.Materialised(m.value(), m.site(),
                     insideThisBuild(m.value(), m.site(), () -> read(m.body())), m.pos(),
                     m.region());
@@ -3318,6 +3304,15 @@ public final class HelperInliner {
             // is the source's answer and moves with no copy.
             case Hir.Materialised m -> new Hir.Materialised(m.value(), m.site(),
                     rename(m.body(), renaming), renaming.at(m.pos()), renaming.over(m.region()));
+            // The bindings it is handed are this copy's, as any read of one is.
+            case Hir.ValueInvocation call -> {
+                List<Hir.Var.Denoting> arguments = new ArrayList<>();
+                for (Hir.Var.Denoting each : call.arguments()) {
+                    arguments.add((Hir.Var.Denoting) renameVar(each, renaming));
+                }
+                yield new Hir.ValueInvocation(call.target(), call.site(), arguments,
+                        renaming.at(call.pos()), renaming.over(call.region()));
+            }
             // Nothing in it to rename: it names no binding, only a value.
             case Hir.ValueBuild build -> new Hir.ValueBuild(build.value(), build.reaches(),
                     build.site(), renaming.at(build.pos()), renaming.over(build.region()));
@@ -3527,6 +3522,9 @@ public final class HelperInliner {
             if (fn != null && table.containsKey(fn)) {
                 out.add(fn);
             }
+        }
+        if (e instanceof Hir.ValueInvocation call && table.containsKey(call.target())) {
+            out.add(call.target());
         }
         forEachChild(e, c -> helperCallsIn(stdlib, c, table, out));
     }

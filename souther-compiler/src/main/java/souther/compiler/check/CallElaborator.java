@@ -168,19 +168,6 @@ public final class CallElaborator {
         // What this applies, as the name that names it — null where what is applied is not a name,
         // which the typing below refuses where it reads the callee.
         Hir.Var.Denoting callee = call.answered();
-        // A value applied to the bindings it is handed is a call to the method it is emitted as: what
-        // it takes is not a parameter list the author wrote, so nothing below has a signature for it.
-        CompleteSignature method = callee == null || !ctx.preserved().valuesAreMethods()
-                ? null : ctx.preserved().valueKept(callee.denotes());
-        if (method != null && callee.reachesADeclaration() != null) {
-            CallArgs handed = new CallArgs(call.args(), env, ctx);
-            for (int i = 0; i < call.args().size(); i++) {
-                handed.type(i);
-            }
-            return new Core.Call(reached(callee.reachesADeclaration(), ctx), handed.cores(),
-                    ConstructOccurrence.unwritten(), Core.CallSettlement.None.INSTANCE,
-                    method.result(), call.pos());
-        }
         // A call this representation said it keeps standing, asked before anything tries to expand or
         // resolve it: what it names is settled, and the only question left is its signature. Asked of
         // the representation and not of the operation — whether anything downstream has a rule about
