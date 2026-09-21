@@ -104,5 +104,5 @@ class WhichValuesAChoiceIsOneOfIsAskedInOnePlaceTest {
     private static final Set<String> NOT_A_CHOICE_BY_ITS_SHAPE = Set.of(
             "Int", "Decimal", "Str", "Bool", "Temporal", "Read", "UnitValue", "Neg", "FieldAccess",
             "Binary", "Call", "PreservedCall", "Apply", "LetIn", "Block", "ListLit", "OptionSome",
-            "OptionNone", "Tuple", "TupleGet", "Construct", "Unreachable");
+            "OptionNone", "Tuple", "TupleGet", "Construct", "Unreachable", "MaterialisedValue");
 }

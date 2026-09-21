@@ -196,6 +196,13 @@ public final class TermMeaning {
                 out.add(x.value());
                 out.add(x.type());
             }
+            // Which value is built and what it comes to; the region it is built in says where the
+            // node stands and is left out.
+            case Core.MaterialisedValue x -> {
+                out.add(Core.MaterialisedValue.class);
+                out.add(x.value());
+                out.add(x.type());
+            }
             case Core.Decimal x -> {
                 out.add(Core.Decimal.class);
                 out.add(x.value());

@@ -192,7 +192,8 @@ final class InputPath {
             // input holds.
             case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
                  Core.UnitValue _, Core.ListLit _, Core.Tuple _, Core.OptionSome _,
-                 Core.OptionNone _, Core.Construct _ -> new PathResolution.NotAPosition();
+                 Core.OptionNone _, Core.Construct _, Core.MaterialisedValue _ ->
+                    new PathResolution.NotAPosition();
             // A value made from others. What arithmetic and what an operation answered came from
             // positions and are not positions, which is a reading of its own
             // ({@link #cameFrom}).

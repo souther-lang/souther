@@ -366,4 +366,14 @@ public record CheckContext(Symbols symbols, PublishedDeclarations published, Dec
         return preserving(Preserved.byTheLanguagesOwnOperations());
     }
 
+    /**
+     * The same, where a value of the module is built and means what its template is.
+     *
+     * <p>Typed by what the value's own check settled, which is what a build is held to.
+     */
+    public CheckContext forDischarge(Preserved.SettledValues settledValues) {
+        return preserving(Preserved.byTheLanguagesOwnOperations()
+                .withValuesBuiltAsTemplates(settledValues));
+    }
+
 }

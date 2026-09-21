@@ -137,6 +137,12 @@ class EveryKindOfTermACorpusWritesIsReadForWhatItSaysTest {
                     if (checked != null && checked.body() != null) {
                         out.add(checked.body());
                     }
+                    // What an analysis reads is a term as well: the body, and the template of each
+                    // value it builds, which is where a build of one stands.
+                    if (checked != null && checked.analysis() != null) {
+                        out.add(checked.analysis().core());
+                        out.addAll(checked.analysis().templatesAfterTheirBuilders());
+                    }
                 }
                 Map<String, StatedContract> stated =
                         c.db().ask(new Bodies.StatedContracts(module)).value();

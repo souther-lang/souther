@@ -12,6 +12,7 @@ import souther.compiler.diag.msg.InjectionMessage;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.DiagnosticRenderer;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -23,6 +24,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedMap;
 import java.util.Set;
 
 /**
@@ -459,22 +461,45 @@ public final class SpecChecker {
         // own operations standing because that is what the analysis reading it has rules about. A
         // representation there is none of is not analyzed at all, rather than analyzed over the
         // emitted tree, whose operations are no longer operations.
+        CheckContext dischargeContext = discharge == null ? null
+                : new CheckContext(symbols, published, kinds, inners, fieldTypes, layout, null, reqSigs)
+                        .withCallees(calleeSigs)
+                        .withDependencies(dependsOn).forDischarge(settledValues);
         Core dischargeBody = discharge == null ? null
-                : Elaborator.elaborate(discharge.body(), tenv,
-                        new CheckContext(symbols, published, kinds, inners, fieldTypes, layout, null, reqSigs)
-                                .withCallees(calleeSigs)
-                                .withDependencies(dependsOn).forDischarge(), output);
+                : Elaborator.elaborate(discharge.body(), tenv, dischargeContext, output);
+        // What each value the body builds means, typed once for the value and not once for each
+        // body that builds it ({@link TemplateChecker}).
+        ValueTemplates templates = discharge == null ? ValueTemplates.NONE
+                : valueTemplates(discharge.templates());
         InvariantChecker.Findings inv = discharge == null
                 ? InvariantChecker.Findings.notRun()
                 : InvariantChecker.analyze(dischargeBody, discharge.reading(),
-                        discharge.contracts(), env);
+                        discharge.contracts(), env, templates);
         if (!inv.errors().isEmpty()) {
             throw inv.errors().get(0);
         }
         return new Checked(elaboratedBody,
                 dischargeBody == null ? null
-                        : new AnalysisBody(dischargeBody, discharge.elements()),
+                        : new AnalysisBody(dischargeBody, allTheElements(discharge), templates),
                 inv.warnings());
+    }
+
+    /** The templates of the values a body builds, as what the analysis reads them by. */
+    private static ValueTemplates valueTemplates(
+            SequencedMap<ReachName.Declaration, InvariantChecker.Template> templates) {
+        Map<ReachName.Declaration, Core> made = new LinkedHashMap<>();
+        templates.forEach((value, template) -> made.put(value, template.body()));
+        return new ValueTemplates(made);
+    }
+
+    /** What the expansions of the body and of every value it builds say of the elements of their
+     *  bindings, which are all bindings of different bodies. */
+    private static ElementProvenance allTheElements(InvariantChecker.Source discharge) {
+        ElementProvenance all = discharge.elements();
+        for (InvariantChecker.Template template : discharge.templates().values()) {
+            all = all.and(template.elements());
+        }
+        return all;
     }
 
     /**

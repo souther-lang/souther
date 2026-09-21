@@ -62,16 +62,18 @@ public final class Evaluated {
     /** The sub-expressions of {@code e} that run, in the order they run. */
     public static List<Step> inOrder(Core e) {
         return switch (e) {
-            case Core.Int ignored -> List.of();
-            case Core.Decimal ignored -> List.of();
-            case Core.Str ignored -> List.of();
-            case Core.Bool ignored -> List.of();
-            case Core.Temporal ignored -> List.of();
-            case Core.Read ignored -> List.of();
-            case Core.UnitValue ignored -> List.of();
-            case Core.OptionNone ignored -> List.of();
+            case Core.Int _ -> List.of();
+            case Core.Decimal _ -> List.of();
+            case Core.Str _ -> List.of();
+            case Core.Bool _ -> List.of();
+            case Core.Temporal _ -> List.of();
+            case Core.Read _ -> List.of();
+            case Core.UnitValue _ -> List.of();
+            case Core.OptionNone _ -> List.of();
             // Answers nothing and aborts, and evaluates nothing on its way there.
-            case Core.Unreachable ignored -> List.of();
+            case Core.Unreachable _ -> List.of();
+            // Evaluates the value's body, which is its template's and not a part of this node.
+            case Core.MaterialisedValue _ -> List.of();
             case Core.Neg neg -> always(neg.operand());
             case Core.FieldAccess access -> always(access.target());
             case Core.TupleGet get -> always(get.tuple());
@@ -100,7 +102,7 @@ public final class Evaluated {
             case Core.Tuple tuple -> always(tuple.elements());
             case Core.Construct construct ->
                     always(construct.values().stream().map(Core.FieldValue::value).toList());
-            case Core.Block ignored -> List.of();
+            case Core.Block _ -> List.of();
             // What decides which branch, which arm, or whether the value was built. The branches and
             // the arms are entered by whoever owns them, under what choosing one settles.
             case Core.If iff -> always(iff.cond());

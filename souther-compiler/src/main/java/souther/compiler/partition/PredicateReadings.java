@@ -7,6 +7,7 @@ import souther.compiler.check.RuleRef;
 import souther.compiler.check.StatedContract;
 import souther.compiler.check.StringPredicates;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.ValueTemplates;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.inputs.InputReading;
@@ -143,9 +144,20 @@ record PredicateReadings(List<Reading> predicates, Set<Core> statedAt,
         Set<Core> statedAt =
                 Collections.newSetFromMap(new IdentityHashMap<>());
         if (body != null) {
+            Builds builds = new Builds(body.templates());
             walk(body.core(), behavior, read,
                     InputReads.ofParametersWhereCallsStand(parameters, elements),
-                    LiveFlow.of(body.core()), true, predicates, reaches, statedAt);
+                    LiveFlow.of(body.core()), true, predicates, reaches, statedAt, builds);
+            // What each value the body builds states, read once and where nothing of the
+            // behavior's inputs is in force: a value takes none and names none.
+            for (Core template : body.templatesAfterTheirBuilders()) {
+                Boolean live = builds.read().get(template);
+                if (live != null) {
+                    walk(template, behavior, read,
+                            InputReads.ofParametersWhereCallsStand(Map.of(), elements),
+                            LiveFlow.of(template), live, predicates, reaches, statedAt, builds);
+                }
+            }
         }
         // And what the behavior states about its own answer, which is the same kind of rule written
         // somewhere else. Two walks and one list: a body and an `ensures` may write a rule about one
@@ -186,8 +198,18 @@ record PredicateReadings(List<Reading> predicates, Set<Core> statedAt,
         // Whether an expression answers a value, of this body. Rooted there and not at whatever a
         // reader happens to hand over: a subtree read as a body of its own has every name in it
         // free, and a name bound to something that aborts is what makes the difference.
-        return new PredicateReadings(predicates, statedAt, souther.compiler.coverage.Arrivals
-                .inTheTree(body == null ? null : body.core()));
+        return new PredicateReadings(predicates, statedAt, body == null
+                ? souther.compiler.coverage.Arrivals.inTheTree(null)
+                : souther.compiler.coverage.Arrivals.inTheTrees(treesOf(body),
+                        body.templates()::bodyOf));
+    }
+
+    /** The body and the template of every value it builds, each a tree of its own. */
+    private static List<Core> treesOf(AnalysisBody body) {
+        List<Core> trees = new ArrayList<>();
+        trees.add(body.core());
+        trees.addAll(body.templatesAfterTheirBuilders());
+        return trees;
     }
 
     /**
@@ -244,7 +266,8 @@ record PredicateReadings(List<Reading> predicates, Set<Core> statedAt,
      */
     private static void walk(Core e, String behavior, InputReading read, InputReads reads,
                              LiveFlow flow, boolean live, List<Reading> out,
-                             RuleReachNumbering reaches, Set<Core> statedAt) {
+                             RuleReachNumbering reaches, Set<Core> statedAt,
+                             Builds builds) {
         int before = out.size();
         if (live) {
             found(e, behavior, read, reads, out, reaches);
@@ -256,26 +279,56 @@ record PredicateReadings(List<Reading> predicates, Set<Core> statedAt,
             // What a `let` computes is read on the way to the answer only where the name is read;
             // everywhere else a value stands in a body it is consumed by what it stands in. And its
             // body is where the name stands for what was bound to it.
+            //
+            // A build of a value is not read here: it holds no body, and what the value states is
+            // read once, where the template is. What is recorded is whether this build is read,
+            // which is what decides whether the template is.
             case Core.LetIn let -> {
-                walk(let.value(), behavior, read, reads, flow, live && flow.reads(let), out,
-                        reaches, statedAt);
-                walk(let.body(), behavior, read, reads.and(let.binder(), let.value()), flow, live,
-                        out, reaches, statedAt);
+                Core given = let.value();
+                if (let.value() instanceof Core.MaterialisedValue build) {
+                    given = builds.held().bodyOf(build);
+                    builds.read(given, live && flow.reads(let));
+                } else {
+                    walk(let.value(), behavior, read, reads, flow, live && flow.reads(let), out,
+                            reaches, statedAt, builds);
+                }
+                walk(let.body(), behavior, read, reads.and(let.binder(), given), flow, live,
+                        out, reaches, statedAt, builds);
             }
             // And each arm under what the arm says the value it matched turned out to be. A name
             // the arm binds is the scrutinee's position narrowed to that case, so a predicate
             // written inside an arm is about a position the reading of the input has — read
             // without it, every rule an author writes inside a `match` was about nothing.
             case Core.Match match -> {
-                walk(match.scrutinee(), behavior, read, reads, flow, live, out, reaches, statedAt);
+                walk(match.scrutinee(), behavior, read, reads, flow, live, out, reaches, statedAt,
+                        builds);
                 for (Core.Case arm : match.cases()) {
                     walk(arm.body(), behavior, read,
                             reads.insideArm(match, arm, read.symbols(), read.newtypes()),
-                            flow, live, out, reaches, statedAt);
+                            flow, live, out, reaches, statedAt, builds);
                 }
             }
             default -> Core.forEachChild(e, child ->
-                    walk(child, behavior, read, reads, flow, live, out, reaches, statedAt));
+                    walk(child, behavior, read, reads, flow, live, out, reaches, statedAt,
+                            builds));
+        }
+    }
+
+    /**
+     * The builds of values this walk met, by the template each is a build of, and whether any of
+     * them is read on the way to what the behavior answers with.
+     *
+     * <p>A value is read wherever any build of it is, so the template is read once, live when one
+     * build is.
+     */
+    private record Builds(ValueTemplates held, Map<Core, Boolean> read) {
+
+        Builds(ValueTemplates held) {
+            this(held, new IdentityHashMap<>());
+        }
+
+        void read(Core template, boolean live) {
+            read.merge(template, live, Boolean::logicalOr);
         }
     }
 }

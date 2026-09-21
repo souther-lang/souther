@@ -106,6 +106,8 @@ public final class HelperInliner {
     private ValueAtAReference reading = ValueAtAReference.COPIED;
     /** Whether a value that needs nothing from its region is called as a method, not copied. */
     private boolean valuesAreMethods = false;
+    /** Whether a value this module declares is built as a reference to its template. */
+    private boolean valuesAreTemplates = false;
     /** What each value folds to, empty where it is not a constant, by what it is reached by. */
     private final Map<ReachName.Declaration, Optional<Object>> constantOfValues = new HashMap<>();
     /** What the method emitted for each value takes, by what the value is reached by. */
@@ -416,6 +418,19 @@ public final class HelperInliner {
     public HelperInliner callingValuesAsMethodsWhereEmitted(Symbols symbols) {
         this.valuesAreMethods = table.policy() == InliningPolicy.FULL;
         this.constEval = ConstEval.against(symbols, this::constantOf);
+        return this;
+    }
+
+    /**
+     * In the tree an analysis reads, a value this module declares is built where it is named and is
+     * held once as a template, and a build of it is a reference and not a copy of its body.
+     *
+     * <p>The other half of {@link #callingValuesAsMethodsWhereEmitted}: the tree that runs has a
+     * method to call and the tree an analysis reads has a meaning to refer to. What each of them
+     * builds where is {@link ValuePlan}'s, so the two cannot disagree about it.
+     */
+    public HelperInliner buildingValuesAsTemplatesWhereAnalysed() {
+        this.valuesAreTemplates = table.policy() == InliningPolicy.DISCHARGE;
         return this;
     }
 
@@ -1370,6 +1385,8 @@ public final class HelperInliner {
             // A build that is a call of the method its value is emitted as holds a reference and the
             // bindings it is handed, and there is no body in it to walk.
             case Hir.Materialised m when isACallOfItsValue(m) -> m;
+            // A build by reference holds no body, so there is nothing in it to walk.
+            case Hir.ValueBuild build -> build;
             // A build already kept as one: what it holds is walked like any other body, and what
             // says which build it is stays where the pass that made it put it.
             case Hir.Materialised m -> new Hir.Materialised(m.value(), m.site(),
@@ -2258,9 +2275,7 @@ public final class HelperInliner {
         List<Hir.Expr> values = new ArrayList<>();
         materialised.add(here);
         try {
-            Map<String, Hir.Var.Denoting> demanded = new LinkedHashMap<>();
-            demandedHere(e, demanded);
-            for (Hir.Var.Denoting each : List.copyOf(demanded.values())) {
+            for (Hir.Var.Denoting each : List.copyOf(demandedHere(e).values())) {
                 materialise(each, here, order, values, site);
             }
             Hir.Expr inner = read(e);
@@ -2336,6 +2351,10 @@ public final class HelperInliner {
         if (readAt(reached) != null) {
             return;
         }
+        if (valuesAreTemplates && declarationArity(named).isEmpty() && isATemplateValue(named)) {
+            materialiseAsABuild(named, here, order, values, site);
+            return;
+        }
         if (emittedAsAMethod(named) && declarationArity(named).isEmpty()) {
             Handover handover = handoverOf(named, site.get());
             if (handover.callable()) {
@@ -2350,9 +2369,7 @@ public final class HelperInliner {
         MaterialisationSite where = site.get();
         Hir.Expr calls = insideThisBuild(named.denotes(), where, () -> inline(body));
         spendOnACopyOf(named, calls);
-        Map<String, Hir.Var.Denoting> under = new LinkedHashMap<>();
-        demandedHere(calls, under);
-        for (Hir.Var.Denoting each : List.copyOf(under.values())) {
+        for (Hir.Var.Denoting each : List.copyOf(demandedHere(calls).values())) {
             materialise(each, here, order, values, site);
         }
         Hir.Binder binder = writing.binders()
@@ -2363,6 +2380,78 @@ public final class HelperInliner {
                 insideThisBuild(named.denotes(), where, () -> read(calls)));
         values.add(new Hir.Materialised(named.denotes(), where, built, built.pos(),
                 built.region()));
+    }
+
+    /**
+     * The values {@code e} builds as references to their templates, by the name each is reached by,
+     * in the order they are met and each once.
+     *
+     * <p>What a build holds of a value is the value's name, and what the value means is asked of the
+     * template. So this is what says which templates a body needs — and, asked of a template, which
+     * more.
+     */
+    public static SequencedSet<ReachName.Declaration> valuesBuiltIn(Hir.Expr e) {
+        SequencedSet<ReachName.Declaration> out = new LinkedHashSet<>();
+        collectBuilds(e, out);
+        return out;
+    }
+
+    private static void collectBuilds(Hir.Expr e, SequencedSet<ReachName.Declaration> out) {
+        if (e == null) {
+            return;
+        }
+        if (e instanceof Hir.ValueBuild build) {
+            out.add(build.reaches());
+            return;
+        }
+        Hir.forEachChild(e, child -> collectBuilds(child, out));
+    }
+
+    /**
+     * Whether {@code named} is a value this module declared, held once as a template.
+     *
+     * <p>The kind whose meaning is the same wherever it is built: it takes nothing, and names
+     * nothing but other values. A value another module declared is left to be copied, since the
+     * template of it is that module's to hold.
+     */
+    private boolean isATemplateValue(Hir.Var.Denoting named) {
+        ReachName.Declaration reaches = named.reachesADeclaration();
+        Hir.FnDef value = reaches == null ? null : table.reached(reaches);
+        return value != null && value.body() != null && value.params().isEmpty()
+                && value.declaredBy(moduleName()) && !graph.recurses(reaches);
+    }
+
+    /**
+     * Binds {@code named} in the region being written as a build of the value, which is a
+     * reference to it.
+     *
+     * <p>No body is put here. What the value comes to is its template's, so nothing under this
+     * binding is a copy, and what it names is built where the template names it.
+     */
+    private void materialiseAsABuild(Hir.Var.Denoting named, Map<String, Hir.Binder> here,
+                                     List<Hir.Binder> order, List<Hir.Expr> values,
+                                     Supplier<MaterialisationSite> site) {
+        Hir.Binder built = writing.binders()
+                .binder("$v" + next() + "_" + named.name(), named.pos());
+        here.put(named.reaches(), built);
+        order.add(built);
+        values.add(new Hir.ValueBuild(named.denotes(), named.reachesADeclaration(), site.get(),
+                named.pos(), named.region()));
+    }
+
+    /**
+     * The body of the value {@code fn} as its template: what it means, and the builds of the values
+     * it names in the regions it names them in.
+     *
+     * <p>Held once for every build of the value. Nothing of a region that builds it is in it, so it
+     * is written under no build and every reader of a build reads the same tree.
+     */
+    public Hir.FnDef valueTemplate(Hir.FnDef fn) {
+        Hir.Expr body = writing(bodyOf(fn.name()), Set.of(), () -> {
+            heldToTheBound(fn.writtenBody());
+            return region(inline(fn.writtenBody()), rootSite());
+        });
+        return fn.withBody(new Hir.FnBody.Written(body));
     }
 
     /**
@@ -2504,8 +2593,7 @@ public final class HelperInliner {
                 known = new Handover(false, List.of());
             } else {
                 Hir.Expr calls = insideThisBuild(named.denotes(), where, () -> inline(body));
-                Map<String, Hir.Var.Denoting> under = new LinkedHashMap<>();
-                demandedHere(calls, under);
+                Map<String, Hir.Var.Denoting> under = demandedHere(calls);
                 List<Hir.Var.Denoting> taken = takenByTheMethod(under);
                 known = new Handover(taken.size() == under.size(), taken);
             }
@@ -2577,8 +2665,7 @@ public final class HelperInliner {
         Hir.Expr body = writing(bodyOf(fn.name()), Set.of(), () -> {
             heldToTheBound(fn.writtenBody());
             Hir.Expr calls = inline(fn.writtenBody());
-            Map<String, Hir.Var.Denoting> demanded = new LinkedHashMap<>();
-            demandedHere(calls, demanded);
+            Map<String, Hir.Var.Denoting> demanded = demandedHere(calls);
             Map<String, Hir.Binder> handed = new LinkedHashMap<>();
             for (Hir.Var.Denoting each : takenByTheMethod(demanded)) {
                 Hir.Binder binder = writing.binders()
@@ -2647,83 +2734,9 @@ public final class HelperInliner {
         return null;
     }
 
-    /** The values {@code e} names without crossing into a region, first reference of each, and
-     *  those every way out of a fork here names ({@link #onEveryWayOut}). */
-    private void demandedHere(Hir.Expr e, Map<String, Hir.Var.Denoting> out) {
-        if (e == null) {
-            return;
-        }
-        switch (e) {
-            case Hir.Var.Denoting named when materialisable(named) != null ->
-                    out.putIfAbsent(named.reaches(), named);
-            case Hir.If iff -> {
-                demandedHere(iff.cond(), out);
-                onEveryWayOut(List.of(iff.then(), iff.els()), out);
-            }
-            case Hir.IfConstructed ic -> {
-                demandedHere(ic.construct(), out);
-                List<Hir.Expr> ways = new ArrayList<>();
-                ways.add(ic.then());
-                for (Hir.ElseArm arm : ic.els()) {
-                    ways.add(arm.body());
-                }
-                onEveryWayOut(ways, out);
-            }
-            case Hir.Match m -> {
-                demandedHere(m.scrutinee(), out);
-                List<Hir.Expr> ways = new ArrayList<>();
-                for (Hir.Case each : m.cases()) {
-                    ways.add(each.body());
-                }
-                onEveryWayOut(ways, out);
-            }
-            case Hir.Binary b when isShortCircuit(b) -> demandedHere(b.left(), out);
-            case Hir.Block _ -> { }
-            case Hir.ListComp _ -> { }
-            default -> Hir.forEachChild(e, child -> demandedHere(child, out));
-        }
-    }
-
-    /**
-     * The values every one of {@code ways} names, added to what the region around them demands.
-     *
-     * <p>A fork's arms are ways out of one place: whichever is taken, one of them is. So a value
-     * every arm names is named on every path through here, and binding it around the fork
-     * evaluates it exactly where some reference to it is evaluated — which is the whole of what
-     * keeps the region rule from moving work onto a path that had none.
-     *
-     * <p>Only the forks that are ways out. The right of a short-circuit is reached for some of what
-     * reaches the left, a block's body for each application of it and a comprehension's element for
-     * each item, and none of those is a way the code has to go.
-     *
-     * <p>Which says nothing about how often the fork runs, only about whether it does. A value
-     * bound here and read in one arm is built once whichever arm runs, where arm-local bindings
-     * would each build it — one materialisation per region, told of a place that is one region.
-     */
-    private void onEveryWayOut(List<Hir.Expr> ways, Map<String, Hir.Var.Denoting> out) {
-        Map<String, Hir.Var.Denoting> shared = null;
-        for (Hir.Expr way : ways) {
-            Map<String, Hir.Var.Denoting> named = new LinkedHashMap<>();
-            demandedHere(way, named);
-            if (shared == null) {
-                shared = named;
-            } else {
-                shared.keySet().retainAll(named.keySet());
-            }
-            if (shared.isEmpty()) {
-                return;
-            }
-        }
-        if (shared != null) {
-            shared.forEach(out::putIfAbsent);
-        }
-    }
-
-    /** Whether what stands on the right of this is reached only for some of what reaches the
-     *  left. */
-    private static boolean isShortCircuit(Hir.Binary b) {
-        return b.op() == souther.compiler.types.BinOp.AND
-                || b.op() == souther.compiler.types.BinOp.OR;
+    /** What {@code e} demands where it stands, the values a region binds at its head. */
+    private Map<String, Hir.Var.Denoting> demandedHere(Hir.Expr e) {
+        return ValuePlan.of(e, named -> materialisable(named) != null).rootDemands();
     }
 
     /** {@code e} with each value reference the region bound read as that binding, and each region
@@ -2763,7 +2776,7 @@ public final class HelperInliner {
                 }
                 yield new Hir.Match(read(m.scrutinee()), cases, m.origin(), m.pos(), m.region());
             }
-            case Hir.Binary b when isShortCircuit(b) -> new Hir.Binary(b.op(), read(b.left()),
+            case Hir.Binary b when ValuePlan.isShortCircuit(b) -> new Hir.Binary(b.op(), read(b.left()),
                     region(b.right(), slot(b.origin(), new RegionSlot.ShortCircuitRight())),
                     b.origin(), b.pos(), b.region());
             case Hir.Block bl -> new Hir.Block(bl.params(), region(bl.body(), siteOfBlock(bl)),
@@ -2796,6 +2809,7 @@ public final class HelperInliner {
                         ex.pos(), ex.region());
             }
             case Hir.Materialised m when isACallOfItsValue(m) -> m;
+            case Hir.ValueBuild build -> build;
             case Hir.Materialised m -> new Hir.Materialised(m.value(), m.site(),
                     insideThisBuild(m.value(), m.site(), () -> read(m.body())), m.pos(),
                     m.region());
@@ -3285,6 +3299,9 @@ public final class HelperInliner {
             // is the source's answer and moves with no copy.
             case Hir.Materialised m -> new Hir.Materialised(m.value(), m.site(),
                     rename(m.body(), renaming), renaming.at(m.pos()), renaming.over(m.region()));
+            // Nothing in it to rename: it names no binding, only a value.
+            case Hir.ValueBuild build -> new Hir.ValueBuild(build.value(), build.reaches(),
+                    build.site(), renaming.at(build.pos()), renaming.over(build.region()));
             case Hir.ListLit lit -> new Hir.ListLit(renameList(lit.elements(), renaming),
                     lit.origin(), renaming.at(lit.pos()), renaming.over(lit.region()));
             case Hir.RowCollection row -> new Hir.RowCollection(renameList(row.elements(), renaming),

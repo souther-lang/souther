@@ -198,7 +198,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.DecisionReading#<clinit>()V",
                     "how many paths through one body a decision is read for"),
             Map.entry("souther.compiler.partition.DecisionReading#of("
-                            + "Ljava/lang/String;Lsouther/compiler/core/Core;"
+                            + "Ljava/lang/String;Lsouther/compiler/check/AnalysisBody;"
                             + "Lsouther/compiler/inputs/InputReading;"
                             + "Lsouther/compiler/inputs/InputReads;Ljava/util/Set;)"
                             + "Lsouther/compiler/partition/DecisionReading;",

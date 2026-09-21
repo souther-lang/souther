@@ -93,6 +93,18 @@ public final class Lower {
                 inliner.leftStanding(), inliner.provenance(), inliner.suppliedRules());
     }
 
+    /**
+     * The body of the value {@code fn} as the template an analysis reads it by, which builds the
+     * values it names and takes nothing.
+     */
+    public static Expansion<Hir.FnDef> valueTemplate(Hir.FnDef fn, HelperInliner inliner) {
+        inliner.sharingOneMaterialisationPerRegion();
+        Hir.FnDef template = inliner.valueTemplate(fn);
+        return new Expansion<>(
+                template.withBody(new Hir.FnBody.Written(desugar(template.writtenBody()))),
+                inliner.leftStanding(), inliner.provenance(), inliner.suppliedRules());
+    }
+
     /** Which bindings the {@code depends on} names are: the trailing parameters that carry them. A
      * name in the body is one of them only when it was answered with that binding — a binding in force
      * wins over the declaration it shadows (spec §fn-rules), so the spelling alone does not say. */

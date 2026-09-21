@@ -25,6 +25,7 @@ import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.ChoiceToLift;
 import souther.compiler.inputs.RuleSite;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -224,12 +225,24 @@ public final class InvariantChecker {
      * reading made here is filed under cannot come from two places.
      */
     public record Source(Hir.Expr body, ElementProvenance elements, RuleReadingContext reading,
-                         Map<ValueName.Behavior, AssumedContract> contracts) {
+                         Map<ValueName.Behavior, AssumedContract> contracts,
+                         SequencedMap<ReachName.Declaration, Template> templates) {
 
         public Source {
             contracts = Map.copyOf(contracts);
+            templates = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(templates));
         }
     }
+
+    /**
+     * What a value means as the analysis reads it: its body as the checker typed it, with what its
+     * expansion said of the elements of the bindings that body writes.
+     *
+     * <p>One of these for each value the body builds, and for each value those build in turn. Its
+     * bindings are its own, so what is said of them is said of no other body's. Typed once for the
+     * value, whichever bodies build it: it is the meaning of a value that takes nothing.
+     */
+    public record Template(Core body, ElementProvenance elements) { }
 
     /**
      * How far the splits down one path are opened, which this walk holds itself to and does not own.
@@ -277,13 +290,28 @@ public final class InvariantChecker {
     private final List<CompileException> errors = new ArrayList<>();
     private final List<InvariantFinding> warnings = new ArrayList<>();
 
+    /** What each value the body builds comes to. */
+    private final ValueTemplates templates;
+
+    /** Whether a run comes back from each template this has read, by the tree that is the template.
+     *  A value means the same wherever it is built, so what is owed inside it is owed once, and
+     *  whether it answers is one fact for every build of it. */
+    private final Map<Core, Boolean> templateAnswers = new IdentityHashMap<>();
+
     private InvariantChecker(RuleReadingContext reading) {
         this(reading, Map.of());
     }
 
     private InvariantChecker(RuleReadingContext reading,
                              Map<ValueName.Behavior, AssumedContract> contracts) {
-        this.engine = new PathEngine(reading, contracts);
+        this(reading, contracts, ValueTemplates.NONE);
+    }
+
+    private InvariantChecker(RuleReadingContext reading,
+                             Map<ValueName.Behavior, AssumedContract> contracts,
+                             ValueTemplates templates) {
+        this.templates = templates;
+        this.engine = new PathEngine(reading, contracts, Terms.Of.THE_DISCHARGE_TREE, templates);
         // Borrowing nothing, since no declaration is being seeded yet, and knowing what the
         // revision knows: where a set stops is the same answer whoever met it.
         this.answers = StringMachineAnswers.unborrowed(reading.readings().extents());
@@ -3600,7 +3628,16 @@ public final class InvariantChecker {
     static Findings analyze(Core body, RuleReadingContext reading,
                             Map<ValueName.Behavior, AssumedContract> contracts,
                             Scope params) {
-        InvariantChecker c = new InvariantChecker(reading, contracts);
+        return analyze(body, reading, contracts, params, ValueTemplates.NONE);
+    }
+
+    /**
+     * The same, over a body that builds values whose bodies are held in {@code templates}.
+     */
+    static Findings analyze(Core body, RuleReadingContext reading,
+                            Map<ValueName.Behavior, AssumedContract> contracts,
+                            Scope params, ValueTemplates templates) {
+        InvariantChecker c = new InvariantChecker(reading, contracts, templates);
         if (body == null) {
             return new Findings(c.errors, c.warnings, Status.ABANDONED);
         }
@@ -3707,6 +3744,35 @@ public final class InvariantChecker {
     }
 
     /**
+     * What is known after the value a {@code let} is given has been evaluated.
+     *
+     * <p>A closure is read where it is applied, and a build of a value is read where the value is
+     * held: what a value comes to does not turn on where it is built, so the constructions in it
+     * are owed once, under nothing that was assumed on the way to any build of it.
+     */
+    private Known walkedValue(Core value, Known k, Denotations at, ContextMultiplicity copies) {
+        return switch (value) {
+            case Core.Block _ -> k;
+            case Core.MaterialisedValue build -> {
+                Core template = templates.bodyOf(build);
+                Boolean answers = templateAnswers.get(template);
+                if (answers == null) {
+                    Known left = entering(template, Known.top(), engine.insideATemplate(),
+                            ONE_READING);
+                    answers = !left.reachesNothing();
+                    templateAnswers.put(template, answers);
+                }
+                // What the value constructs is judged once, where it is held, and what was learned
+                // there is not the caller's. Whether it comes back is: an evaluation no run carries
+                // a value on from is one nothing written after is reached from, whichever build
+                // asked.
+                yield answers ? k : k.reachingNothing();
+            }
+            default -> walk(value, k, at, copies);
+        };
+    }
+
+    /**
      * One step of a region, over facts that already hold where the step begins — and what a
      * continuation of {@code e} inside this region may take out of it.
      *
@@ -3741,8 +3807,7 @@ public final class InvariantChecker {
             // the source would have written with a `let`, which is the tree the rest of this walk
             // already reads — so a construction moved into a helper reads the terms its caller's
             // guards settled, which is what the expansion is for.
-            Known held = standing.value() instanceof Core.Block ? k
-                    : walk(standing.value(), k, at, copies);
+            Known held = walkedValue(standing.value(), k, at, copies);
             Entered in = bindLet(standing, held, at);
             // The rebuilt tree is the whole of this expression, so it is the one way on. What it
             // settles is inside the binder the expansion introduced and does not come back out;
@@ -3859,8 +3924,7 @@ public final class InvariantChecker {
             case Core.LetIn li -> {
                 // A closure is read where it is applied: what its parameter holds is decided there,
                 // and reading it here would read every construction in it with the element unknown.
-                Known out = li.value() instanceof Core.Block ? k
-                        : walk(li.value(), k, at, copies);
+                Known out = walkedValue(li.value(), k, at, copies);
                 Entered in = bindLet(li, out, at);
                 // The body is the one way on: what a `let` answers is what its body answers, so a
                 // body no run leaves is a `let` no run leaves.

@@ -84,6 +84,10 @@ class AValueBuiltForTwoRegionsIsTwoOccurrencesTest {
         if (e instanceof Hir.Materialised built && of.test(built.value().toString())) {
             out.add(built.site());
         }
+        // A build the tree an analysis reads holds by reference is a build all the same.
+        if (e instanceof Hir.ValueBuild built && of.test(built.value().toString())) {
+            out.add(built.site());
+        }
         Hir.forEachChild(e, child -> collect(child, of, out));
     }
 

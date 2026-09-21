@@ -97,6 +97,7 @@ public final class Preserved {
     private final Map<ValueName, CompleteSignature> operations;
     private final Settling values;
     private final boolean valuesAreMethods;
+    private final boolean valuesAreTemplates;
 
     private Preserved(Map<ValueName, CompleteSignature> operations, Settling values) {
         this(operations, values, false);
@@ -104,9 +105,15 @@ public final class Preserved {
 
     private Preserved(Map<ValueName, CompleteSignature> operations, Settling values,
                       boolean valuesAreMethods) {
+        this(operations, values, valuesAreMethods, false);
+    }
+
+    private Preserved(Map<ValueName, CompleteSignature> operations, Settling values,
+                      boolean valuesAreMethods, boolean valuesAreTemplates) {
         this.operations = Map.copyOf(operations);
         this.values = values;
         this.valuesAreMethods = valuesAreMethods;
+        this.valuesAreTemplates = valuesAreTemplates;
     }
 
     /** Every representation that keeps nothing standing — the tree the backend emits from, and every
@@ -167,6 +174,22 @@ public final class Preserved {
     /** Whether a value this keeps standing is a call to the method it is emitted as. */
     public boolean valuesAreMethods() {
         return valuesAreMethods;
+    }
+
+    /**
+     * This, with a value of the module built where it is named and meaning what its template is.
+     *
+     * <p>What the tree an analysis reads holds of a value is where it is built and the type it
+     * comes to, and the type is what the value's own check settled. Kept beside the operations the
+     * analysis keeps standing, since it reads both.
+     */
+    public Preserved withValuesBuiltAsTemplates(SettledValues settled) {
+        return new Preserved(operations, Settling.over(settled), valuesAreMethods, true);
+    }
+
+    /** Whether a build of a value is what stands for it in the tree, its body being the template's. */
+    public boolean valuesAreTemplates() {
+        return valuesAreTemplates;
     }
 
     /**

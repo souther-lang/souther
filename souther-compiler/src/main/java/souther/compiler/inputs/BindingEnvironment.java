@@ -185,7 +185,8 @@ final class BindingEnvironment {
         }
         // The nearest binding wins, which is what being inside it means.
         int depth = newest == null ? 1 : newest.depth() + 1;
-        Layer inner = new Layer(binder.binding(), value, newest, depth);
+        // A name given a build of a value holds what the value is.
+        Layer inner = new Layer(binder.binding(), elements.dereferenced(value), newest, depth);
         if (depth <= KEPT_APART) {
             return new BindingEnvironment(roots, table, inner, elements, callsStand);
         }

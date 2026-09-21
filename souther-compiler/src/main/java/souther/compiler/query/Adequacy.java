@@ -1031,10 +1031,9 @@ public final class Adequacy {
                     continue;
                 }
                 out.put(spec.name(), souther.compiler.partition.DecisionReading.of(spec.name(),
-                        analysis.core(), read.reading(reading.value()),
+                        analysis, read.reading(reading.value()),
                         InputReads.ofParametersWhereCallsStand(read.parameterReads(),
-                                ElementBindings.of(analysis.core(), analysis.elements(),
-                                        reading.value().newtypes())),
+                                ElementBindings.of(analysis, reading.value().newtypes())),
                         spec.dependsOnBehaviors()));
             }
             return Answer.of(Ordered.map(out));

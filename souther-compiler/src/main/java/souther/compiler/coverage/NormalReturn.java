@@ -5,6 +5,8 @@ import souther.compiler.flow.Anonymous;
 import souther.compiler.flow.AnonymousPath;
 import souther.compiler.flow.ValueArrivals;
 
+import java.util.function.Function;
+
 /**
  * Whether evaluating an expression can answer a value.
  *
@@ -88,6 +90,16 @@ public final class NormalReturn {
     public static NormalReturn lazilyWhereTheOperationsStand(Core body) {
         return new NormalReturn(
                 () -> ValueArrivals.ofBodyWhereTheOperationsStand(body, Anonymous.NAMING));
+    }
+
+    /**
+     * The same, of a tree that builds values: what a build comes to is what {@code templates} says
+     * the value's template does.
+     */
+    public static NormalReturn lazilyWhereTheOperationsStand(
+            Core body, Function<Core.MaterialisedValue, Core> templates) {
+        return new NormalReturn(() -> ValueArrivals.ofBodyWhereTheOperationsStand(
+                body, Anonymous.NAMING, templates));
     }
 
     /** Whether {@code e}, standing where it stands in this body, can be evaluated to a value. */

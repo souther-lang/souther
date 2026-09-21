@@ -365,6 +365,18 @@ final class Terms {
      * of a declaration there is ({@link TypeGuarantees}).
      */
     Terms(Of reading, RuleReadingContext ruleReading) {
+        this(reading, ruleReading, ValueTemplates.NONE);
+    }
+
+    /**
+     * The same, over a tree that builds values it does not hold the bodies of.
+     *
+     * <p>What such a build is is what its template is, so this asks {@code templates} where a build
+     * is entered or named, and nowhere else: a reader of this class meets the meaning of a value and
+     * not the edge that stands for it.
+     */
+    Terms(Of reading, RuleReadingContext ruleReading, ValueTemplates templates) {
+        this.templates = templates;
         this.ruleReading = ruleReading;
         this.symbols = ruleReading.source().symbols();
         this.reading = reading;
@@ -399,6 +411,22 @@ final class Terms {
     }
 
     private final Of reading;
+
+    /** What a value built in the tree this reads comes to. */
+    private final ValueTemplates templates;
+
+    /** What each template is called, by the reading it was asked for: named once however many
+     *  builds of it there are. */
+    private final Map<Leaf, Map<Core, Naming>> namedTemplates = new HashMap<>();
+
+    /** The environment a template is read in: what a value means does not turn on where it is
+     *  built, so one environment answers for every build of it. */
+    private final Denotations insideATemplate = Denotations.none();
+
+    /** The environment a template is read in. */
+    Denotations insideATemplate() {
+        return insideATemplate;
+    }
 
     /**
      * Where a test in this package reads the shapes this had no term for, and null everywhere else.
@@ -654,10 +682,15 @@ final class Terms {
      * can be said about it later and not whether the binding may be entered at all.
      */
     Denotations inside(Core.LetIn li, Denotations at) {
+        // What the binder is given: the value, or where it is a build of one, what that value is.
+        // Asked once and handed to every question below, so the environment holds the body it
+        // answered about and not the edge that stood for it.
+        Core given = li.value() instanceof Core.MaterialisedValue build
+                ? templates.bodyOf(build) : li.value();
         // Entering a binding a walk is already inside is not a second binding of it. A branch is
         // read from where its conditional stood, which is inside these, over a tree that still holds
         // them.
-        if (at.valueOf(li.binder().binding()) == li.value()) {
+        if (at.valueOf(li.binder().binding()) == given) {
             return at;
         }
         Map<Denotations, Denotations> under =
@@ -666,14 +699,17 @@ final class Terms {
         if (had != null) {
             return had;
         }
+        // The names a value's body holds are its own, so it is read where nothing outside it is in
+        // force, and the same environment answers for every build of it.
+        Denotations reading = li.value() instanceof Core.MaterialisedValue ? insideATemplate : at;
         // What the name is about is what it was given is about. Where even the identity reading has
         // nothing to name — an expression answering nothing at all — the name is what there is, and
         // it is one value however many times it is read.
-        FactSubject about = subjectOf(li.value(), at);
-        Denotations made = at.binding(li.binder().binding(), li.value(),
+        FactSubject about = subjectOf(given, reading);
+        Denotations made = at.binding(li.binder().binding(), given,
                 about != null ? about : placeSubject(li.binder().binding()),
-                locationOf(li.value(), at), bodyKey(li.value(), at),
-                numericMeaningOf(li.value(), at));
+                locationOf(given, reading), bodyKey(given, reading),
+                numericMeaningOf(given, reading));
         under.put(at, made);
         return made;
     }
@@ -2244,6 +2280,20 @@ final class Terms {
                     ValueName.Stdlib.namespace(t.kind().shown()),
                     List.of(interned.written(t.text()))));
             case Core.UnitValue u -> new Naming.Named(interned.unit(u.data()));
+            // A build of a value is named as the value is: what it comes to does not turn on where
+            // it is built, so it is named once, from the template, in the environment a template
+            // is read in.
+            case Core.MaterialisedValue m -> {
+                Core template = templates.bodyOf(m);
+                Map<Core, Naming> named = namedTemplates.computeIfAbsent(leaf,
+                        _ -> new IdentityHashMap<>());
+                Naming known = named.get(template);
+                if (known == null) {
+                    known = naming(template, insideATemplate, Map.of(), 0, leaf);
+                    named.put(template, known);
+                }
+                yield known;
+            }
             case Core.Neg n -> over(List.of(n.operand()), at, bound, depth, leaf,
                     ps -> interned.negated(ps.get(0)));
             case Core.Binary b -> binary(b, at, bound, depth, leaf);
