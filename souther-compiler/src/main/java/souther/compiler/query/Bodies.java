@@ -3157,6 +3157,27 @@ public final class Bodies {
     }
 
     /**
+     * Whether the check of one module found nothing wrong with it.
+     *
+     * <p>Its own key so that what reads only this — whether to emit a module that imports this one —
+     * is recomputed when the answer changes and not when a body does. It carries no reports: they are
+     * {@link ModuleCheck}'s, said once where that is asked.
+     */
+    public record Sound(String name) implements Key<Boolean> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Boolean> compute(Db db) {
+            Answer<ModuleCheck.Of> checked = db.ask(new ModuleCheck(name));
+            return checked.present() && checked.value().sound()
+                    ? Answer.of(Boolean.TRUE) : Answer.absent();
+        }
+    }
+
+    /**
      * One body as the backend emits it, and what its operations handed their closures.
      *
      * <p>Together because the second cannot be read off the first. What handed a closure an element

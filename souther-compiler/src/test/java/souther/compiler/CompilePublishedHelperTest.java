@@ -642,6 +642,38 @@ class CompilePublishedHelperTest {
         }
     }
 
+    /**
+     * A module that fails for a reason of its own is reported for that reason, whoever imports it.
+     * The reader would otherwise be emitted against a body that was never settled, and what the
+     * emitter says of it is not what is wrong.
+     */
+    @Test
+    void aModuleThatImportsOneThatFailedIsReportedForTheFailureAndNotForWhatEmittingItReaches() {
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of("""
+                        module pricing exposing ( Won, Qualified, ranked )
+
+                        data Prospecting
+                        data Qualified
+                        data Won
+                        data Stage = Prospecting | Qualified | Won
+
+                        let ranked (xs) = List.length(List.sort(xs))
+                        """, """
+                        module order exposing ( In, Out, bill )
+
+                        import pricing ( Won, ranked )
+
+                        data In = { n: Int }
+                        data Out = { v: Int }
+
+                        behavior bill : (i: In) -> Out constructs Out
+                        let bill (i) = Out { v = ranked([Won, Won]) + i.n }
+                        """)));
+
+        assertEquals("E1816", e.code(), e.getMessage());
+    }
+
     /** A helper that is carried and not published is said to be carried: it is not among what the
      * module exposes, and saying it is published would send the author looking for it there. */
     @Test

@@ -497,8 +497,10 @@ final class CodegenContext {
     /** The descriptor of a generated class. What it is called is {@link SoutherJvmAbi}'s to say; this
      * only remembers the answer. */
     ClassDesc cd(GeneratedClass generated) {
-        if (generated instanceof GeneratedClass.Value value && !symbols.scope().isExposed(value.type())) {
-            throw new AClassEmittedHereIsOneAnotherModuleKeepsToItself(value.type());
+        if (generated instanceof GeneratedClass.Value value
+                && value.type() instanceof TypeSymbol.AtModule declared
+                && !symbols.scope().isExposed(declared)) {
+            throw new AClassEmittedHereIsOneAnotherModuleKeepsToItself(declared);
         }
         return descs.computeIfAbsent(generated, g -> SoutherJvmAbi.nameOf(g).classDesc());
     }
@@ -507,9 +509,10 @@ final class CodegenContext {
      * The code being emitted names the class of a type its own module does not expose.
      *
      * <p>Such a class is package-private, so the JVM refuses the reference when the code runs. What
-     * a module publishes is held to this where it is published (E1628), and a compiler that gets
-     * here has emitted a reference that check did not know to ask about. It is a fault of this
-     * compiler and no author's to fix, so it is not a diagnostic.
+     * a module publishes is held to this where it is published (E1628), and a module that imports
+     * one refused there is not emitted, so a compiler that gets here has emitted a reference that
+     * check did not know to ask about. It is a fault of this compiler and no author's to fix, so it
+     * is not a diagnostic.
      */
     static final class AClassEmittedHereIsOneAnotherModuleKeepsToItself
             extends IllegalStateException {

@@ -94,14 +94,12 @@ public final class Output {
             if (!runnable.present()) {
                 return Answer.absent(runnable.reports());
             }
-            // A module that imports one refused above is not emitted: the bodies it would expand
-            // from it are the ones that were refused, and emitting them would reach the emitter's
-            // own refusal, which says less than the one already reported.
+            // A module that imports one that failed is not emitted: the bodies it would expand from
+            // it are ones that were not settled, and emitting them would reach the emitter's own
+            // refusal, which says less than the failure already reported.
             List<String> reached = db.ask(new Reaches(name)).value();
             for (String imported : reached == null ? List.<String>of() : reached) {
-                if (!imported.equals(name)
-                        && !db.ask(new Bodies.PublishedBodiesRunElsewhere(imported)).reports()
-                        .isEmpty()) {
+                if (!imported.equals(name) && failed(db, imported)) {
                     return Answer.absent();
                 }
             }
@@ -119,6 +117,15 @@ public final class Output {
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
+        }
+
+        /** Whether {@code module}, one this compilation is making, did not come out. A module read
+         *  off the path was made elsewhere and is not asked. */
+        private static boolean failed(Db db, String module) {
+            List<String> declared = db.ask(new Front.Declared()).value();
+            return declared != null && declared.contains(module)
+                    && (!db.ask(new Bodies.Sound(module)).present()
+                    || !db.ask(new Bodies.PublishedBodiesRunElsewhere(module)).present());
         }
 
         /**
