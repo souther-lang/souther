@@ -80,13 +80,14 @@ class AnArmHandedToGenerationKeepsTheIdentityRowsOwedGaveItTest {
         Adequacy.Filling filling = generated.get("feeFor");
         assertNotNull(filling, "a generation was made for the behavior");
 
-        assertEquals(new LinkedHashSet<>(owed.arms().values()),
+        assertEquals(new LinkedHashSet<>(owed.arms().stream().map(RowWork.Arm::target).toList()),
                 new LinkedHashSet<>(filling.composed().plan().armsOwed()),
                 "every arm the generation was asked for is one RowsOwed bound to an identity, and"
                         + " none of that binding's arms is missing from what the plan holds");
 
         Settlements table = settlementsOf(compilation, generated);
-        for (ObligationIdentity.OfAnArm identity : owed.arms().keySet()) {
+        for (RowWork.Arm arm : owed.arms()) {
+            ObligationIdentity.OfAnArm identity = arm.identity();
             assertTrue(table.requested().contains(identity),
                     () -> identity + " is requested under the identity RowsOwed bound to its"
                             + " search target: " + table.requested());

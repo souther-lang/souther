@@ -4178,10 +4178,10 @@ public final class Adequacy {
             // account identity a row is offered under are both already in hand, and both are kept
             // rather than one of them being dropped for a reader downstream to work out again from
             // a different derivation.
-            LinkedHashMap<ObligationIdentity.OfAnArm, Generator.ArmOwed> armsOwed =
-                    new LinkedHashMap<>();
-            arms.forEach((obligation, occurrences) -> armsOwed.put(
-                    new ObligationIdentity.OfAnArm(obligation), new Generator.ArmOwed(occurrences)));
+            List<RowWork.Arm> armsOwed = arms.entrySet().stream()
+                    .map(each -> new RowWork.Arm(new ObligationIdentity.OfAnArm(each.getKey()),
+                            new Generator.ArmOwed(each.getValue())))
+                    .toList();
             return Answer.of(new RowWork(classesOwed(measured), armsOwed,
                     pairs, meetings, List.copyOf(rules), pointsOwed(db, name, behavior)));
         }
@@ -4355,7 +4355,8 @@ public final class Adequacy {
             }
             souther.compiler.partition.GenerationPlan asked =
                     souther.compiler.partition.GenerationPlan.of(subject, work.classes(),
-                            List.copyOf(work.arms().values()), work.pairs(), work.meetings());
+                            work.arms().stream().map(RowWork.Arm::target).toList(),
+                            work.pairs(), work.meetings());
             // The meetings of this body, read once for the module. A behavior with no entry is one
             // whose body was not lowered, which is nothing to search in rather than a search that
             // found nothing — and is the same condition the guards above answer for.

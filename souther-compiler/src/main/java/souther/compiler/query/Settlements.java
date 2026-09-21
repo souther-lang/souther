@@ -484,10 +484,10 @@ public record Settlements(List<ObligationIdentity> requested,
             if (filling != null) {
                 RowWork owed = db.ask(new Adequacy.RowsOwed(module, behavior)).value();
                 if (owed != null) {
-                    owed.arms().forEach((identity, target) -> {
-                        identityOfArm.put(target, identity);
-                        targetOfArm.put(identity, target);
-                    });
+                    for (RowWork.Arm arm : owed.arms()) {
+                        identityOfArm.put(arm.target(), arm.identity());
+                        targetOfArm.put(arm.identity(), arm.target());
+                    }
                 }
             }
             // And the lines of this behavior that the rows do not tell from the lines beside them,
