@@ -36,11 +36,9 @@ public final class CarriedBodyDependencies {
     /**
      * The classes emitting {@code closed} inline names, whichever module they are of.
      *
-     * <p>A helper whose parameters take their types from where it is called has none to be read
-     * against here, so it is read as written ({@link ExecutableDependencies}); the emitter refuses
-     * what that reading cannot see. A helper that has types and cannot be typed is not that case: it
-     * checked on its own, so failing to type it as a reader does is this compiler disagreeing with
-     * itself, and is said so.
+     * <p>A parameter that takes its type from the body is settled as the check settles it, so a
+     * helper with one is typed like any other. A helper that checked on its own and cannot be typed
+     * as its reader types it is this compiler disagreeing with itself, and is said so.
      *
      * @param closed        a definition as it is handed to a reader
      * @param standingCalls what the calls it leaves standing are typed against
@@ -49,18 +47,13 @@ public final class CarriedBodyDependencies {
                                               PublishedDeclarations published,
                                               DeclarationKinds kinds,
                                               Map<String, Type> standingCalls) {
-        Scope env = Scope.NONE;
-        for (Hir.FnParam p : closed.params()) {
-            if (p.type() == null) {
-                return ExecutableDependencies.of(closed.writtenBody());
-            }
-            env = env.with(p.binder(), TypeOps.resolveParamType(p.type()));
-        }
         NewtypeInners inners = NewtypeInners.asWritten(symbols);
         Type declared = closed.declaredReturn() == null
                 ? null : TypeOps.successType(closed.declaredReturn());
         Core typed;
         try {
+            Scope env = HelperTyping.parameterScope(closed, closed.writtenBody(), symbols,
+                    published, kinds, standingCalls);
             typed = Elaborator.elaborate(closed.writtenBody(), env.reaching(standingCalls),
                     new CheckContext(symbols, published, kinds, inners,
                             EffectiveFieldTypes.asWritten(symbols), FieldLayout.asWritten(symbols),

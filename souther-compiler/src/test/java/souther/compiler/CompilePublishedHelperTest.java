@@ -615,6 +615,29 @@ class CompilePublishedHelperTest {
 
                         let ranked (n: Int) = List.length(List.sort([Won, Qualified])) + n
                         """, "ranked", "n: Int", "ranked(i.n)"),
+                new Shape("an order taken beside a parameter the body leaves open", """
+                        module pricing exposing ( Qualified, Won, f )
+
+                        data Prospecting
+                        data Qualified
+                        data Won
+                        data Stage = Prospecting | Qualified | Won
+
+                        let f (xs, s: Qualified) = if s < Won then List.length(xs) else 0
+                        """, "Qualified, f", "s: Qualified", "f([1, 2], i.s)"),
+                new Shape("a function taking the elements of a list of a sum kept by the module", """
+                        module pricing exposing ( Won, f )
+
+                        data Prospecting
+                        data Qualified
+                        data Won
+                        data Stage = Prospecting | Qualified | Won
+
+                        let f (n: Int) = {
+                            let xs: List<Stage> = [Won]
+                            List.length(List.map(x -> 1, xs)) + n
+                        }
+                        """, "f", "n: Int", "f(i.n)"),
                 new Shape("a recursive helper that takes a sum kept by the module", """
                         module pricing exposing ( Qualified, f )
 
@@ -724,6 +747,43 @@ class CompilePublishedHelperTest {
 
         assertTrue(e.getMessage().contains("walk"), e.getMessage());
         assertTrue(e.getMessage().contains("carried"), e.getMessage());
+    }
+
+    /**
+     * That a body's node has a sum's type does not name the sum's class. A local that widens a case
+     * to its sum is held and compared as an object, so the sum may be kept by the module and the body
+     * still runs where it is expanded.
+     */
+    @Test
+    void aLocalThatWidensACaseToASumTheModuleKeepsNamesNoClassAndRuns() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compileModules(List.of("""
+                module pricing exposing ( Won, same )
+
+                data Prospecting
+                data Won
+                data Stage = Prospecting | Won
+
+                let same (n: Int) = {
+                    let s: Stage = Won
+                    if s == Won then n else 0
+                }
+                """, """
+                module order exposing ( In, Out, bill )
+
+                import pricing ( same )
+
+                data In = { n: Int }
+                data Out = { v: Int }
+
+                behavior bill : (i: In) -> Out constructs Out
+                let bill (i) = Out { v = same(i.n) }
+                """)), getClass().getClassLoader());
+
+        Object in = Codecs.decoded(loader, "order.In", Map.of("n", 5L));
+        Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "order.Out",
+                Codecs.apply(Emitted.behavior(loader, "order", "bill")
+                        .getConstructor().newInstance(), in));
+        assertEquals(5L, out.get("v"));
     }
 
     /** The order comes from the sum, not from the cases the helper writes, so an exposed sum is a

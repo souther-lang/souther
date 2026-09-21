@@ -21,9 +21,10 @@ import java.util.Set;
  * cases, and the class the order comes from is the sum they belong to, which only the types say.
  *
  * <p>And a value of a declared type is cast to its class wherever it comes out of something the JVM
- * holds as an object: a method's parameter, a call's result, an element of a collection. So a node
- * whose type is a declared type, and a parameter of one, are counted as they stand and not by asking
- * each place that casts, of which there are several and more may be added.
+ * holds as an object: a method's parameter, a call's result, an element of a tuple. That a node has a
+ * declared type is not enough to name its class: a local that widens a case to its sum is held and
+ * compared as an object and the sum's class is never named. So the type of a node is counted at the
+ * kinds of node that cast to it, and nowhere else.
  */
 final class EmittedClassReferences {
 
@@ -61,8 +62,15 @@ final class EmittedClassReferences {
         return walk.found;
     }
 
+    /**
+     * What each kind of node has the emitter do with a declared type's class. A type held in a local,
+     * passed along, or compared for equality is held as an object and names no class, so a node's
+     * type is counted only where the emitter casts to it: a value that comes out of a method's result,
+     * an element of a tuple, a function's parameter, the bound value of an arm. Listed for every kind
+     * rather than left to a default, so that a kind of node added to Core stops compiling here until
+     * it is said which it is.
+     */
     private void visit(Core e) {
-        add(e.type());
         switch (e) {
             case Core.Construct built -> add(built.typeName());
             case Core.UnitValue unit -> add(unit.data());
@@ -73,20 +81,32 @@ final class EmittedClassReferences {
                             add(selector.name());
                         }
                     });
+                    // What an arm binds is cast to the type it is bound as.
+                    if (arm.binder() != null) {
+                        add(arm.pattern().bindType());
+                    }
                 }
             }
             case Core.Binary bin -> comparedBy(bin);
-            case Core.Call call -> sortedBy(call);
-            // Every other node names a class, if it does, through its own type, which is counted
-            // above: a value a node answers is cast to the class of that type wherever it is held as
-            // an object, and a field is read off the class of the node it is read from. Listed
-            // rather than left to a default, so that a kind of node added to Core stops compiling
-            // here until it is said which of the two it is.
+            // A result comes back as an object and is cast to the type the call answers.
+            case Core.Call call -> {
+                add(call.type());
+                sortedBy(call);
+            }
+            case Core.Apply apply -> add(apply.type());
+            case Core.TupleGet element -> add(element.type());
+            // A field is read off the class of the value it is read from.
+            case Core.FieldAccess access -> add(access.target().type());
+            // A function's parameters come in as objects and are cast to their types.
+            case Core.Block block -> {
+                if (block.type() instanceof Type.FnOf fn) {
+                    fn.params().forEach(this::add);
+                }
+            }
             case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
-                 Core.Read _, Core.MaterialisedValue _, Core.Neg _, Core.FieldAccess _,
-                 Core.PreservedCall _, Core.Apply _, Core.If _, Core.IfConstructed _,
-                 Core.LetIn _, Core.Block _, Core.ListLit _, Core.OptionSome _, Core.OptionNone _,
-                 Core.Tuple _, Core.TupleGet _, Core.Unreachable _ -> { }
+                 Core.Read _, Core.MaterialisedValue _, Core.Neg _, Core.PreservedCall _,
+                 Core.If _, Core.IfConstructed _, Core.LetIn _, Core.ListLit _,
+                 Core.OptionSome _, Core.OptionNone _, Core.Tuple _, Core.Unreachable _ -> { }
         }
         Core.forEachChild(e, this::visit);
     }
