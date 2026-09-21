@@ -132,7 +132,8 @@ public enum DiagnosticCode {
     E1624("a-composition-carries-no-ensures", "check.pipe.title"),
     E1626("an-attached-files-values-are-for-its-rows", "check.example.title"),
     E1627("nothing-built-rests-on-an-unwritten-behavior", "check.module.title"),
-    E1628("a-published-helper-builds-only-what-its-reader-can-reach", "check.module.title"),    E1701("composition-stages-type-route", "e1701.title"),
+    E1628("a-published-helper-builds-only-what-its-reader-can-reach", "check.module.title"),
+    E1701("composition-stages-type-route", "e1701.title"),
     E1702("a-stage-after-the-first-takes-one-input", "check.pipe.title"),
     E1703("a-pipeline-composes-behaviors", "check.pipe.title"),
 
