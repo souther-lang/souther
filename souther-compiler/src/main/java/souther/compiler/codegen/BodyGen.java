@@ -19,6 +19,7 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.check.Comparison;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Ordering;
+import souther.compiler.core.BlockReaches;
 import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
 import souther.compiler.core.KernelSignature;
@@ -41,7 +42,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.SequencedMap;
@@ -120,7 +120,7 @@ final class BodyGen {
          * parameter slots and jumps to {@code tcoEntry} rather than recursing, so a self-tail-recursive
          * helper runs in constant stack. Null for any other body (a behavior never self-recurses). */
         private String tcoName;
-        private List<Hir.FnParam> tcoParams;
+        private List<Core.Binder> tcoParams;
         private Label tcoEntry;
         /** Members of this body's declared output union that reach it through a bridge case; empty
          * for every other body. @see #injectsInto */
@@ -480,7 +480,7 @@ final class BodyGen {
         /** Marks the entry of a self-tail-recursive helper. The parameters are already bound to their
          * slots; a later tail-position self-call jumps back here after reassigning them, so the helper
          * loops instead of recursing (see {@link #emitTail} and {@link #emitSelfTailCall}). */
-        void beginSelfRecursion(String name, List<Hir.FnParam> params) {
+        void beginSelfRecursion(String name, List<Core.Binder> params) {
             this.tcoName = name;
             this.tcoParams = params;
             this.tcoEntry = code.newLabel();
@@ -493,8 +493,8 @@ final class BodyGen {
          * read (e.g. {@code loop(acc + n, n - 1)} reads both {@code acc} and {@code n}). */
         private void emitSelfTailCall(Core.Call call) {
             List<Var> params = new ArrayList<>(tcoParams.size());
-            for (Hir.FnParam p : tcoParams) {
-                params.add(locals.get(p.binder().id()));
+            for (Core.Binder p : tcoParams) {
+                params.add(locals.get(p.binding()));
             }
             for (int i = 0; i < call.args().size(); i++) {
                 Type at = genExpr(call.args().get(i));
@@ -2172,16 +2172,12 @@ final class BodyGen {
          * captured free variables (and any injected behaviors it calls) to its constructor. Its
          * parameter and result types are the ones the checker put on the block (issue #81). */
         private void emitLambda(Core.Block block, List<Type> paramTypes) {
-            emitLambda(block.params(), block.body(), paramTypes, freeVars(block));
-        }
-
-        private void emitLambda(List<Core.Binder> params, Core body, List<Type> paramTypes,
-                                Reaches free) {
-            List<Core.Read> captures = free.bindings();
-            List<ValueName.Behavior> injectedNames = free.injected();
+            BlockReaches reaches = BlockReaches.of(block, reqNames);
+            List<Core.Read> captures = reaches.bindings();
+            List<ValueName.Behavior> injectedNames = reaches.requirements();
             GeneratedClass.Lambda lambda = new GeneratedClass.Lambda(pkg, ctx.nextLambdaId());
             ClassDesc cd = ctx.cd(lambda);
-            ctx.addSynth(lambda, generateLambdaClass(cd, params, body, paramTypes,
+            ctx.addSynth(lambda, generateLambdaClass(cd, block.params(), block.body(), paramTypes,
                     captures, injectedNames, reqSuccess, reqParams));
 
             // the same condition generateLambdaClass interned on — it must stay the same one
@@ -2194,7 +2190,12 @@ final class BodyGen {
             code.dup();
             List<ClassDesc> ctorDescs = new ArrayList<>();
             for (Core.Read c : captures) {
-                load(code, locals.get(c.binding()).slot(), c.type());
+                Var local = locals.get(c.binding());
+                if (local == null) {
+                    throw new IllegalStateException("a block reaches binding " + c.binding()
+                            + " but the enclosing JVM frame does not hold it");
+                }
+                load(code, local.slot(), c.type());
                 ctorDescs.add(jvmType(c.type()));
             }
             for (ValueName.Behavior inj : injectedNames) {
@@ -2226,119 +2227,6 @@ final class BodyGen {
             }
             code.invokeinterface(CD_Fn, "apply", MTD_Fn_apply);
             stackCast(fnType.result());   // Object result -> the function's result type
-        }
-
-        /**
-         * What a lambda's body reaches outside itself, and so what its class must be handed.
-         *
-         * <p>Two different things, kept apart rather than told apart afterwards: the bindings of the
-         * enclosing body it reads, and the injected behaviors it calls. One is bound here and the
-         * other is declared elsewhere, which is why one is held by binding and the other by name.
-         */
-        private static final class Reaches {
-
-            private final LinkedHashMap<BindingId, Core.Read> reads = new LinkedHashMap<>();
-            private final LinkedHashSet<ValueName.Behavior> behaviors = new LinkedHashSet<>();
-
-            List<Core.Read> bindings() {
-                return new ArrayList<>(reads.values());
-            }
-
-            List<ValueName.Behavior> injected() {
-                return new ArrayList<>(behaviors);
-            }
-        }
-
-        /** What {@code block}'s body reaches outside itself, in first-seen order. */
-        private Reaches freeVars(Core.Block block) {
-            Reaches free = new Reaches();
-            Set<BindingId> bound = new HashSet<>();
-            block.params().forEach(p -> bound.add(p.binding()));
-            collectFree(block.body(), bound, free);
-            return free;
-        }
-
-        private void collectFree(Core e, Set<BindingId> bound, Reaches free) {
-            switch (e) {
-                case Core.PreservedCall p -> throw p.unexpectedIn("the emitter");
-                case Core.Read v -> reaches(v, bound, free);
-                case Core.Call c -> {
-                    // an injected behavior the body calls is handed over too: the lambda is a class
-                    // of its own, and what it reaches has to reach it
-                    ValueName.Behavior called = behaviorOf(c);
-                    if (called != null && reqNames.contains(called)) {
-                        free.behaviors.add(called);
-                    }
-                    c.args().forEach(a -> collectFree(a, bound, free));
-                }
-                case Core.Apply a -> {
-                    reaches(a.fn(), bound, free);
-                    a.args().forEach(x -> collectFree(x, bound, free));
-                }
-                case Core.FieldAccess fa -> collectFree(fa.target(), bound, free);
-                case Core.Binary bin -> {
-                    collectFree(bin.left(), bound, free);
-                    collectFree(bin.right(), bound, free);
-                }
-                case Core.Neg neg -> collectFree(neg.operand(), bound, free);
-                case Core.Construct nd ->
-                        nd.values().forEach(v -> collectFree(v.value(), bound, free));
-                case Core.If iff -> {
-                    collectFree(iff.cond(), bound, free);
-                    collectFree(iff.then(), bound, free);
-                    collectFree(iff.els(), bound, free);
-                }
-                case Core.IfConstructed ic -> {
-                    collectFree(ic.construct(), bound, free);
-                    collectFree(ic.then(), with(bound, ic.binder().binding()), free);
-                    ic.els().forEach(arm -> collectFree(arm.body(), bound, free));
-                }
-                case Core.LetIn li -> {
-                    collectFree(li.value(), bound, free);
-                    collectFree(li.body(), with(bound, li.binder().binding()), free);
-                }
-                case Core.Match m -> {
-                    collectFree(m.scrutinee(), bound, free);
-                    for (Core.Case c : m.cases()) {
-                        collectFree(c.body(), c.binder() == null
-                                ? bound : with(bound, c.binder().binding()), free);
-                    }
-                }
-                case Core.Block b -> {
-                    Set<BindingId> inner = new HashSet<>(bound);
-                    b.params().forEach(p -> inner.add(p.binding()));
-                    collectFree(b.body(), inner, free);
-                }
-                case Core.ListLit lit -> lit.elements().forEach(x -> collectFree(x, bound, free));
-                case Core.OptionSome so -> collectFree(so.value(), bound, free);
-                case Core.Tuple t -> t.elements().forEach(x -> collectFree(x, bound, free));
-                case Core.TupleGet tg -> collectFree(tg.tuple(), bound, free);
-                case Core.OptionNone _ -> { }
-                case Core.Int _ -> { }
-                case Core.Decimal _ -> { }
-                case Core.Str _ -> { }
-                case Core.Bool _ -> { }
-                case Core.Temporal _ -> { }
-                case Core.Unreachable _ -> { }
-                // reads nothing the enclosing body binds
-                case Core.UnitValue _ -> { }
-                case Core.MaterialisedValue m -> throw new IllegalStateException(
-                        "the tree that is emitted holds no build of a value, and this holds one of "
-                                + m.value());
-            }
-        }
-
-        private static Set<BindingId> with(Set<BindingId> bound, BindingId binding) {
-            Set<BindingId> inner = new HashSet<>(bound);
-            inner.add(binding);
-            return inner;
-        }
-
-        /** A read of something bound outside the lambda is captured; one of its own is not. */
-        private void reaches(Core.Read read, Set<BindingId> bound, Reaches free) {
-            if (!bound.contains(read.binding()) && locals.containsKey(read.binding())) {
-                free.reads.putIfAbsent(read.binding(), read);
-            }
         }
 
     /** Where a value lives and what it is. {@code name} is what it is called — a diagnostic quotes

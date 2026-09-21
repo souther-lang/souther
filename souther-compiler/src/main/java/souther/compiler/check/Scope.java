@@ -7,7 +7,6 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -35,6 +34,10 @@ import java.util.Map;
  */
 public record Scope(Map<BindingId, Binding> bindings, Map<String, Type> visible,
                     Map<String, Type> standing, Substitution decisions, BoundValues values) {
+
+    public Scope {
+        bindings = BindingMap.from(bindings);
+    }
 
     /** A scope with no application's decisions in force over it. */
     public Scope(Map<BindingId, Binding> bindings, Map<String, Type> visible,
@@ -67,7 +70,7 @@ public record Scope(Map<BindingId, Binding> bindings, Map<String, Type> visible,
 
     /** The bindings a body starts with — a helper's parameters, a declaration's fields. */
     public static Scope of(Map<BindingId, Binding> bindings) {
-        return new Scope(Map.copyOf(bindings), Map.of(), Map.of(), null);
+        return new Scope(bindings, Map.of(), Map.of(), null);
     }
 
     /** The same, with the signatures a call left standing is typed against: a recursive helper,
@@ -117,16 +120,14 @@ public record Scope(Map<BindingId, Binding> bindings, Map<String, Type> visible,
     }
 
     public Scope with(BindingId binding, String name, Type type) {
-        Map<BindingId, Binding> next = new LinkedHashMap<>(bindings);
-        next.put(binding, new Binding(name, type));
-        return new Scope(next, visible, standing, decisions, values);
+        return new Scope(BindingMap.from(bindings).with(binding, new Binding(name, type)), visible,
+                standing, decisions, values);
     }
 
     /** The same, for several at once. */
     public Scope withAll(Map<BindingId, Binding> more) {
-        Map<BindingId, Binding> next = new LinkedHashMap<>(bindings);
-        next.putAll(more);
-        return new Scope(next, visible, standing, decisions, values);
+        return new Scope(BindingMap.from(bindings).withAll(more), visible, standing, decisions,
+                values);
     }
 
     /**
@@ -144,10 +145,8 @@ public record Scope(Map<BindingId, Binding> bindings, Map<String, Type> visible,
     /** The same, where the value was written outside this scope — an expansion's argument, which is
      *  elaborated before the bindings the expansion makes are in force. */
     public Scope binding(Hir.Binder binder, Type type, Hir.Expr value, BoundValues definedAt) {
-        Map<BindingId, Binding> next = new LinkedHashMap<>(bindings);
-        next.put(binder.id(), new Binding(binder.name(), type));
-        return new Scope(next, visible, standing, decisions,
-                values.binding(binder, value, definedAt));
+        return new Scope(BindingMap.from(bindings).with(binder.id(), new Binding(binder.name(), type)),
+                visible, standing, decisions, values.binding(binder, value, definedAt));
     }
 
     /** What the names in force are called — for a diagnostic that offers what the author might have

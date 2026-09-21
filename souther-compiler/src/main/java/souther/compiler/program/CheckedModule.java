@@ -85,7 +85,8 @@ public final class CheckedModule {
         return behavior;
     }
 
-    /** The helpers this module emits as definitions of their own. */
+    /** What this module emits as methods of its own: its recursions and the values it builds once
+     *  and hands on. */
     public List<CheckedHelper> helpers() {
         return helpers;
     }

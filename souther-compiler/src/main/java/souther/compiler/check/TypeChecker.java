@@ -3,7 +3,6 @@ package souther.compiler.check;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.ast.Hir;
-import souther.compiler.core.Core;
 import souther.compiler.core.ValueShape;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.diag.CompileException;
@@ -35,7 +34,7 @@ public final class TypeChecker {
 
     /** The bodies elaborated so far, filled as the check walks them. */
     static final class Elaborated {
-        final Map<String, Core> helpers = new LinkedHashMap<>();
+        final Map<String, EmittedDefinition> helpers = new LinkedHashMap<>();
         /** What each of the module's own definitions turned out to be, by name — a value's type and a
          * helper's return type, settled from the body (ADR-0066). Recorded because the exposed-surface
          * check asks what a published definition is, and the answer is a type: reading the body for
@@ -47,10 +46,9 @@ public final class TypeChecker {
          * readers that stand a call to the value's method where the value was named, which are
          * typed by it. */
         final Preserved.Settling settledValues = new Preserved.Settling();
-        /** What each value emitted as a method takes, by the name of the value. */
-        final Map<String, List<Hir.FnParam>> valueParams = new LinkedHashMap<>();
-        /** The types of what each such method takes, once they are settled. */
-        final Map<String, List<Type>> valueParamTypes = new LinkedHashMap<>();
+        /** What each definition the lowered module carries takes, by name: the parameters the
+         * method is emitted with, which are the ones a lowering added as well as the ones written. */
+        final Map<String, List<Hir.FnParam>> loweredParams = new LinkedHashMap<>();
     }
 
     /**
@@ -69,16 +67,13 @@ public final class TypeChecker {
      *                later phase reads — the {@code fns} map, the {@code exposed} set — so when one
      *                fails there is nothing left to check the rest against, and a body checked all
      *                the same reports being unable to see what was already reported missing.
-     * @param emittedHelpers the recursive helper bodies it elaborated, which the backend emits as
-     *                         methods
+     * @param emittedDefinitions the definitions it elaborated, which the backend emits as methods,
+     *                           each with its body and the types of what it takes
      * @param settledValues what each value of the module was settled as
-     * @param valueParamTypes the types of what each value emitted as a method takes, by the name of
-     *                        the value
      */
     public record Reported(List<CompileException> errors, List<Unanswerable> abandoned,
-                           boolean stopped, Map<String, Core> emittedHelpers,
-                           Preserved.Settling settledValues,
-                           Map<String, List<Type>> valueParamTypes) {}
+                           boolean stopped, Map<String, EmittedDefinition> emittedDefinitions,
+                           Preserved.Settling settledValues) {}
 
     /**
      * Everything the check has to say about a module that is not one behavior's body: its
@@ -134,7 +129,7 @@ public final class TypeChecker {
             stopped = true;
         }
         return new Reported(deduped(errors), List.copyOf(abandoned), stopped, elaborated.helpers,
-                elaborated.settledValues, elaborated.valueParamTypes);
+                elaborated.settledValues);
     }
 
     /**
@@ -273,17 +268,11 @@ public final class TypeChecker {
         toCheck.putAll(HelperInliner.takenOnBy(lowered));
         for (Hir.FnDef fn : lowered.fns()) {
             loweredBodies.put(fn.name(), fn.writtenBody());
-            // A value emitted as a method takes the values its root region demands, and its check
-            // reads them as bindings of the types those values were settled as.
-            if (fn.params().stream().anyMatch(p -> HelperInliner.valueCarriedBy(p) != null)) {
-                elaborated.valueParams.put(fn.name(), fn.params());
-            }
+            elaborated.loweredParams.put(fn.name(), fn.params());
         }
         for (Hir.FnDef fn : lowered.takenOn()) {
             loweredBodies.put(fn.name(), fn.writtenBody());
-            if (fn.params().stream().anyMatch(p -> HelperInliner.valueCarriedBy(p) != null)) {
-                elaborated.valueParams.put(fn.name(), fn.params());
-            }
+            elaborated.loweredParams.put(fn.name(), fn.params());
         }
         // The imported definitions join the table this module's bodies are expanded against: a
         // published helper is expanded at its call sites here exactly as one of this module's own is,

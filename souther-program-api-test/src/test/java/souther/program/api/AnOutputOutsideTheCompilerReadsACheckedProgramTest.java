@@ -153,6 +153,28 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
             """;
 
     /**
+     * Three operations the language tells a way of rounding, each at a different position of its
+     * own declaration: {@code round} takes it second, {@code toInt} takes it first, {@code divide}
+     * takes it last.
+     */
+    private static final String ROUNDING_OPERATIONS = """
+            module demo
+
+            data Rate = { value: Decimal }
+
+            behavior toCents : (r: Rate) -> Decimal
+            behavior wholeCents : (r: Rate) -> Int
+            behavior perUnit : (total: Decimal, units: Decimal) -> Decimal
+
+            let toCents (r) = Decimal.round(2, HALF_UP, r.value)
+            let wholeCents (r) = Decimal.toInt(HALF_UP, r.value)
+            let perUnit (total, units) =
+                match Decimal.divide(total, units, 2, HALF_UP) with
+                    | Decimal as q -> q
+                    | DivisionByZero -> unreachable "units > 0"
+            """;
+
+    /**
      * The checked fixtures below, built once per distinct source rather than once per test.
      *
      * <p>{@code CheckedProgram.of} reads the whole standard library and checks it beside whatever
@@ -624,6 +646,58 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
                 "and what it declared it answers");
         assertEquals("HALF_UP", Type.show(rounds.args().get(1).type()),
                 "while what arrived at the sum-typed parameter is the case it is");
+    }
+
+    /**
+     * And the other two operations the language tells a way of rounding expose the same boundary.
+     *
+     * <p>The same invariant checked above for {@code Decimal.round} — the declaration says which
+     * parameter is {@code RoundingMode}, the checked call carries the case that arrived there —
+     * holds at {@code toInt}'s and {@code divide}'s own declared positions too. An output that reads
+     * the declaration does not need to be told separately that {@code toInt} takes its mode first
+     * and {@code divide} takes its last.
+     */
+    @Test
+    void theOtherRoundingOperationsExposeTheSameDeclaredParameterActualCaseBoundary() {
+        CheckedProgram program = checked(ROUNDING_OPERATIONS);
+        CheckedModule demo = program.module("demo");
+
+        assertRoundingModeArrivesAsItsCase(program,
+                ((CheckedImplementation.Body) named(demo, "toCents").implementation()).body(),
+                Kernel.DECIMAL_ROUND);
+        assertRoundingModeArrivesAsItsCase(program,
+                ((CheckedImplementation.Body) named(demo, "wholeCents").implementation()).body(),
+                Kernel.DECIMAL_TO_INT);
+        assertRoundingModeArrivesAsItsCase(program,
+                ((CheckedImplementation.Body) named(demo, "perUnit").implementation()).body(),
+                Kernel.DECIMAL_DIVIDE);
+    }
+
+    private static void assertRoundingModeArrivesAsItsCase(
+            CheckedProgram program, Core body, Kernel kernel) {
+        Core.Call reached = null;
+        for (Core node : everyNodeOf(body)) {
+            if (node instanceof Core.Call call
+                    && call.fn() instanceof Core.Reached.OfKernel reaches
+                    && reaches.kernel() == kernel) {
+                reached = call;
+            }
+        }
+        assertNotNull(reached, () -> "the body reaches " + kernel);
+
+        List<Type> parameters = program.kernelSignature(kernel).parameters();
+        List<Integer> modePositions = new ArrayList<>();
+        for (int i = 0; i < parameters.size(); i++) {
+            if (Type.show(parameters.get(i)).equals("RoundingMode")) {
+                modePositions.add(i);
+            }
+        }
+        assertEquals(1, modePositions.size(),
+                () -> kernel + " declares exactly one RoundingMode parameter");
+
+        Core.Call node = reached;
+        assertEquals("HALF_UP", Type.show(node.args().get(modePositions.get(0)).type()),
+                () -> "what arrived at " + kernel + "'s RoundingMode parameter is the case it is");
     }
 
     /**

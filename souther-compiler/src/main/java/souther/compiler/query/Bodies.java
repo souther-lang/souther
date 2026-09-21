@@ -67,6 +67,7 @@ import souther.compiler.claims.ClaimDiagnostics;
 import souther.compiler.claims.Claims;
 import souther.compiler.claims.UnreachableClaims;
 import souther.compiler.check.ElementBindings;
+import souther.compiler.check.EmittedDefinition;
 import souther.compiler.check.Expandable;
 import souther.compiler.check.PathReachability;
 import souther.compiler.check.UninhabitableTypes;
@@ -3058,15 +3059,15 @@ public final class Bodies {
         /**
          * What checking one module came to.
          *
-         * @param emittedHelpers the bodies it elaborated, which the backend emits as methods
+         * @param emittedDefinitions the definitions it elaborated, which the backend emits as
+         *                           methods
          * @param sound whether it found nothing wrong. An abandoned unit is wrong and says nothing
          *              of its own, so this is not the same as having reported nothing
          * @param stopped whether it stopped rather than finished, leaving the bodies nothing to be
          *                checked against
          */
-        public record Of(Map<String, Core> emittedHelpers, boolean sound, boolean stopped,
-                         Preserved.SettledValues settledValues,
-                         Map<String, List<Type>> valueParamTypes) {}
+        public record Of(Map<String, EmittedDefinition> emittedDefinitions, boolean sound,
+                         boolean stopped, Preserved.SettledValues settledValues) {}
 
         @Override
         public String module() {
@@ -3147,11 +3148,13 @@ public final class Bodies {
             boolean sound = reported.errors().isEmpty() && reported.abandoned().isEmpty()
                     && contracts.present() && !contracts.hasError()
                     && shapes.present() && !shapes.hasError();
-            Map<String, Core> helperBodies = new LinkedHashMap<>();
-            reported.emittedHelpers().forEach((h, core) ->
-                    helperBodies.put(h, GrowingFold.rewrite(core, scope.value().theWalk())));
-            return Answer.of(new ModuleCheck.Of(helperBodies, sound, reported.stopped(),
-                    reported.settledValues().snapshot(), Map.copyOf(reported.valueParamTypes())),
+            Map<String, EmittedDefinition> definitions = new LinkedHashMap<>();
+            reported.emittedDefinitions().forEach((h, definition) ->
+                    definitions.put(h, new EmittedDefinition(
+                            GrowingFold.rewrite(definition.body(), scope.value().theWalk()),
+                            definition.parameters())));
+            return Answer.of(new ModuleCheck.Of(definitions, sound, reported.stopped(),
+                    reported.settledValues().snapshot()),
                     reports);
         }
     }
@@ -3233,7 +3236,7 @@ public final class Bodies {
     public static final class Elaborated {
 
         private final ModuleBodies of;
-        private final Map<String, Core> emittedHelpers;
+        private final Map<String, EmittedDefinition> emittedDefinitions;
         private final Map<String, Claims> claims;
         private final Map<String, ElementBindings> elements;
         private final DecisionSources decisions;
@@ -3241,22 +3244,19 @@ public final class Bodies {
         private final Map<String, AnalysisBody> analysed;
         private final CoverageSites.Plan plan;
         private final Set<String> emits;
-        private final Map<String, List<Type>> valueParamTypes;
 
         private Elaborated(ModuleBodies of,
-                           Map<String, Core> emittedHelpers,
+                           Map<String, EmittedDefinition> emittedDefinitions,
                            Map<String, Claims> claims,
                            Map<String, ElementBindings> elements,
                            DecisionSources decisions,
                            SuppliedRules supplied,
                            Map<String, AnalysisBody> analysed,
                            CoverageSites.Plan plan,
-                           Set<String> emits,
-                           Map<String, List<Type>> valueParamTypes) {
-            this.valueParamTypes = valueParamTypes;
+                           Set<String> emits) {
             this.of = of;
             this.supplied = supplied;
-            this.emittedHelpers = emittedHelpers;
+            this.emittedDefinitions = emittedDefinitions;
             this.claims = claims;
             this.elements = elements;
             this.decisions = decisions;
@@ -3309,7 +3309,7 @@ public final class Bodies {
         public boolean equals(Object other) {
             return other instanceof Elaborated that
                     && of.equals(that.of)
-                    && emittedHelpers.equals(that.emittedHelpers)
+                    && emittedDefinitions.equals(that.emittedDefinitions)
                     && claims.equals(that.claims)
                     && elements.equals(that.elements)
                     && decisions.equals(that.decisions)
@@ -3318,19 +3318,13 @@ public final class Bodies {
                     // elaborations holding one set of bodies and entitling different classes are
                     // two programs, and a check that came to the second would be taken for the
                     // first.
-                    && emits.equals(that.emits)
-                    && valueParamTypes.equals(that.valueParamTypes);
+                    && emits.equals(that.emits);
         }
 
         @Override
         public int hashCode() {
-            return java.util.Objects.hash(of, emittedHelpers, claims, elements,
-                    decisions, supplied, emits, valueParamTypes);
-        }
-
-        /** The types of what each value emitted as a method takes, by the name of the value. */
-        public Map<String, List<Type>> valueParamTypes() {
-            return valueParamTypes;
+            return java.util.Objects.hash(of, emittedDefinitions, claims, elements,
+                    decisions, supplied, emits);
         }
 
         /** Whose module these are the bodies of. */
@@ -3404,9 +3398,9 @@ public final class Bodies {
             return analysed;
         }
 
-        /** The Core of each helper the module emits as a method of its own. */
-        public Map<String, Core> emittedHelpers() {
-            return emittedHelpers;
+        /** Each definition the module emits as a method of its own: its Core and what it takes. */
+        public Map<String, EmittedDefinition> emittedDefinitions() {
+            return emittedDefinitions;
         }
 
         /**
@@ -3907,7 +3901,8 @@ public final class Bodies {
         SequencedMap<String, Core> methods = new LinkedHashMap<>();
         Set<String> behaviorNames = Names.behaviorNames(settled);
         for (Hir.FnDef fn : settled.fns()) {
-            Core method = module.emittedHelpers().get(fn.name());
+            EmittedDefinition definition = module.emittedDefinitions().get(fn.name());
+            Core method = definition == null ? null : definition.body();
             if (method != null && fn.params().isEmpty() && fn.standsAt() == null
                     && !behaviorNames.contains(fn.name())) {
                 methods.put(fn.name(), method);
@@ -3969,8 +3964,8 @@ public final class Bodies {
         // an answer carrying no plan is one every reader of it would walk the bodies for.
         CoverageSites.Plan plan =
                 CoverageSites.of(of, read, handed);
-        return new Elaborated(of, module.emittedHelpers(), judged(db, of, settled, plan), elements,
-                read, handed, analysed, plan, emits, module.valueParamTypes());
+        return new Elaborated(of, module.emittedDefinitions(), judged(db, of, settled, plan), elements,
+                read, handed, analysed, plan, emits);
     }
 
     /**

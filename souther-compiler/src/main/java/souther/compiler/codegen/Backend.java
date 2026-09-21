@@ -2,6 +2,7 @@ package souther.compiler.codegen;
 
 import souther.compiler.query.Bodies;
 
+import souther.compiler.check.EmittedDefinition;
 import souther.compiler.check.ExpandedClauseLookup;
 import souther.compiler.check.InvariantStatements;
 import souther.compiler.check.Boundary;
@@ -28,7 +29,6 @@ import souther.compiler.core.KernelSignatures;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
-import souther.compiler.check.TypeOps;
 import souther.compiler.core.Composition;
 import souther.compiler.core.Core;
 
@@ -117,6 +117,17 @@ public final class Backend {
      */
     private EnsuresEnforcement checkOf(ValueName.Behavior behavior) {
         return ctx.ensuresCheckOf(behavior);
+    }
+
+    /** The definition the checker elaborated for {@code name}, under the same invariant as
+     * {@link #elaborated}. */
+    private static EmittedDefinition emittedDefinition(Map<String, EmittedDefinition> definitions,
+                                                       String name) {
+        EmittedDefinition definition = definitions.get(name);
+        if (definition == null) {
+            throw new IllegalStateException("no elaborated body for `" + name + "`");
+        }
+        return definition;
     }
 
     /** The body the checker elaborated for {@code name}. Codegen runs only on a module that type
@@ -683,7 +694,9 @@ public final class Backend {
         return build(cdFns, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);   // package-private, not exposed
             for (Hir.FnDef h : helpers.values()) {
-                int n = h.params().size();
+                EmittedDefinition definition = emittedDefinition(checked.emittedDefinitions(),
+                        h.name());
+                int n = definition.parameters().size();
                 ClassDesc[] params = new ClassDesc[n];
                 java.util.Arrays.fill(params, CD_Object);
                 MethodTypeDesc desc = MethodTypeDesc.of(CD_Object, params);
@@ -703,25 +716,23 @@ public final class Backend {
                     BodyGen gen = new BodyGen(ctx, code, null, cdFns, n);
                     for (int i = 0; i < n; i++) {
                         // a function parameter arrives as an Fn value (a closure); every other parameter
-                        // as its boxed value. resolveParamType handles both shapes.
-                        // A value emitted as a method takes what its check settled the values it is
-                        // handed as; every other helper declares its parameters' types.
-                        List<Type> handed = checked.valueParamTypes().get(h.name());
-                        Type pt = handed != null ? handed.get(i)
-                                : TypeOps.resolveParamType(h.params().get(i).type());
+                        // as its boxed value. The type is the one the check settled for it.
+                        EmittedDefinition.Parameter parameter = definition.parameters().get(i);
+                        Type pt = parameter.type();
                         code.aload(i);
                         int slot = gen.slot(pt);
                         unbox(code, pt, slot);
-                        gen.bind(h.params().get(i).binder().binding(), h.params().get(i).binder().name(),
-                                slot, pt);
+                        gen.bind(parameter.binder(), slot, pt);
                     }
                     // A tail-position call to this same helper loops back here instead of recursing,
                     // so a self-tail-recursive helper runs in constant stack.
-                    gen.beginSelfRecursion(h.name(), h.params());
+                    gen.beginSelfRecursion(h.name(),
+                            definition.parameters().stream()
+                                    .map(EmittedDefinition.Parameter::binder).toList());
                     // a recursive helper declares its return type; thread it so a tail-position fold
                     // over an empty seed materialises its step at the declared type, not a bottom (#70)
                     Type helperReturn = h.declaredReturn() == null ? null : successType(h.declaredReturn());
-                    gen.emitTail(elaborated(checked.emittedHelpers(), h.name()),
+                    gen.emitTail(definition.body(),
                             cdFns, Set.of(), Map.of(), helperReturn);
                 });
             }
