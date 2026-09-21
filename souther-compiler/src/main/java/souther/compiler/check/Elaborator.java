@@ -1585,12 +1585,13 @@ public final class Elaborator {
         }
         List<Core> handed = new ArrayList<>();
         for (Hir.Var.Denoting each : call.arguments()) {
-            if (!(each.denotes() instanceof ValueName.Local local)
-                    || env.typeOf(local.id()) == null) {
+            BindingId binding = ((ValueName.Local) each.denotes()).id();
+            Type type = env.typeOf(binding);
+            if (type == null) {
                 throw new IllegalStateException("`" + each.written() + "` is handed to the method of "
                         + call.value() + " and is no binding in force");
             }
-            handed.add(new Core.Read(each.name(), local.id(), env.typeOf(local.id()), each.pos()));
+            handed.add(new Core.Read(each.name(), binding, type, each.pos()));
         }
         // A value another module declares runs there: what this module calls is that module's entry
         // for it, so the reference is to a published value and not to a method held here.

@@ -11,6 +11,7 @@ import souther.compiler.query.Compilation;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -65,6 +66,33 @@ class ACallOfAValueIsANodeOfItsOwnWhateverItIsHandedTest {
                 "a value that names no other value is called with nothing");
         assertTrue(calls.stream().anyMatch(call -> !call.arguments().isEmpty()),
                 "a value that names others is called with the bindings that hold them");
+    }
+
+    /**
+     * What a call is handed are names of bindings, so a walk over the parts of a tree meets them
+     * and a reader asking which bindings the tree reads is not told none of them is read.
+     */
+    @Test
+    void whatACallIsHandedIsMetByAWalkOverTheTree() {
+        List<Hir.ValueInvocation> handing = nodes(lowered("f")).stream()
+                .filter(Hir.ValueInvocation.class::isInstance)
+                .map(Hir.ValueInvocation.class::cast)
+                .filter(call -> !call.arguments().isEmpty()).toList();
+        assertFalse(handing.isEmpty());
+
+        for (Hir.ValueInvocation call : handing) {
+            List<Hir.Expr> met = new ArrayList<>();
+            Hir.forEachChild(call, met::add);
+            assertEquals(List.copyOf(call.arguments()), met);
+        }
+    }
+
+    @Test
+    void theValuesATreeReachesIncludeTheOnesItCalls() {
+        boolean reachesBoth = HelperNames.helpersReached(lowered("f")).stream()
+                .anyMatch(helper -> helper.name().equals("both"));
+
+        assertTrue(reachesBoth, "the behavior calls the method of `both`, and that is a value it reaches");
     }
 
     @Test

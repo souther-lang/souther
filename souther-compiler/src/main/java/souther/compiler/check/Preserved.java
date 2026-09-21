@@ -109,8 +109,8 @@ public final class Preserved {
         this.valuesAreTemplates = valuesAreTemplates;
     }
 
-    /** Every representation that keeps nothing standing — the tree the backend emits from, and every
-     *  expression checked outside one. */
+    /** The representation that keeps nothing standing, which is what an expression checked outside
+     *  a module's own check is read under. */
     public static final Preserved NONE = new Preserved(Map.of(), new Settling());
 
     /**

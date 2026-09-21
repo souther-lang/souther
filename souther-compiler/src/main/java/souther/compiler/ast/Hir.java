@@ -1747,16 +1747,15 @@ public interface Hir {
      *
      * <p>Where {@link Materialised} carries the body a build computes, this carries none: the value
      * is run where its method is, and what stands here is the call. {@code arguments} are the
-     * bindings the method takes, each already bound in the region that builds this. They are
-     * references this node carries and not expressions to evaluate, so they are no children of it:
-     * a walk that goes into the parts of an expression does not descend into them. A reader that
-     * follows references, such as the value graph, reads {@code target} and {@code arguments} of
-     * this node itself.
+     * bindings the method takes, each already bound in the region that builds this. They are name
+     * slots: nothing there is evaluated, and a walk over the names of a tree meets them as it meets
+     * a spread's. {@code target} is a declaration and no slot, so what a reader follows through
+     * the value graph is read off this node.
      *
-     * @param target    the declaration the value is run from, which is another module's where the
-     *                  value is declared there
+     * @param target    the declaration of the value the method is emitted for, which is another
+     *                  module's where the value is declared there
      * @param site      the region it was built for
-     * @param arguments what the method takes, in order; empty where it takes nothing
+     * @param arguments the bindings the method takes, in order; empty where it takes nothing
      */
     record ValueInvocation(ReachName.Declaration target, MaterialisationSite site,
                            List<Var.Denoting> arguments, SourcePos pos, Region region)
@@ -1767,6 +1766,16 @@ public interface Hir {
                 throw new IllegalArgumentException(
                         "a call is of some value's method, for some region: " + target
                                 + " for " + site);
+            }
+            if (!(target.denotes() instanceof ValueName.Helper)) {
+                throw new IllegalArgumentException(
+                        "only a value has a method to call, and " + target + " is not one");
+            }
+            for (Var.Denoting each : arguments) {
+                if (!(each.denotes() instanceof ValueName.Local)) {
+                    throw new IllegalArgumentException("a method is handed bindings, and `"
+                            + each.written() + "` is not one");
+                }
             }
             arguments = List.copyOf(arguments);
         }
@@ -2966,8 +2975,19 @@ public interface Hir {
             case Unreachable x -> x;
             // No slots: what the value means is its template's, and this says only which value.
             case ValueBuild x -> x;
-            // No slots: what it takes are reads of bindings already made, not parts to evaluate.
-            case ValueInvocation x -> x;
+            // What it takes are names of bindings already made, so they are name slots: nothing
+            // there is evaluated, and a reader asking which bindings a tree reads finds them.
+            case ValueInvocation x -> {
+                List<Var.Denoting> arguments = each(x.arguments(), argument -> {
+                    if (!(atName.apply(argument) instanceof Var.Denoting named)) {
+                        throw new IllegalStateException("a value's method is handed a binding, and"
+                                + " `" + argument.written() + "` was made to name nothing");
+                    }
+                    return named;
+                });
+                yield arguments == x.arguments() ? x
+                        : new ValueInvocation(x.target(), x.site(), arguments, x.pos(), x.region());
+            }
             case Neg n -> {
                 Expr operand = atExpr.apply(n.operand());
                 yield operand == n.operand() ? n : new Neg(operand, n.pos(), n.region());
