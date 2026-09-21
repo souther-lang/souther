@@ -548,6 +548,19 @@ public sealed interface Core {
                 Objects.requireNonNull(pattern, "a settled pattern is settled to some text");
             }
         }
+
+        /** The exact {@link Type} the checker proved ordered for one application of {@code
+         * List.sort}, {@code List.max}, {@code List.min}, or {@code List.sortBy} — the list's
+         * element for the first three, the sort key's result for the last. {@code Nothing} where the
+         * call has nothing to compare (an empty-list literal). Never a comparator, method symbol, or
+         * other backend representation of that proof: a backend reads {@link #type()} and decides its
+         * own representation from it. */
+        record OrderingSubject(Type type) implements CallSettlement {
+
+            public OrderingSubject {
+                Objects.requireNonNull(type, "a settled ordering subject is settled to some type");
+            }
+        }
     }
 
     /**
@@ -594,6 +607,10 @@ public sealed interface Core {
                         !(fn instanceof Reached.OfKernel k && k.kernel() == Kernel.STRING_MATCHES);
                 case CallSettlement.StringMatches _ ->
                         fn instanceof Reached.OfKernel k && k.kernel() == Kernel.STRING_MATCHES;
+                // Which kernels may carry this one is CallElaborator's decision, not a second table
+                // held here in agreement with it — this asks only that the fact is attached to some
+                // call, which the settlement's own constructor already requires of its type.
+                case CallSettlement.OrderingSubject _ -> true;
             };
             if (!agrees) {
                 throw new IllegalArgumentException("`" + fn.rendered() + "` and its settlement "
