@@ -810,40 +810,31 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
     // --- an ordering-sensitive kernel's checked subject travels with the call, the way
     // String.matches's pattern does (issue #1859) ---
 
-    private static final String ORDERS_A_LIST_OF_INTS = """
+    // One module, one checked() call — CheckedProgram.of reads the whole standard library per
+    // distinct source (this class's own fixture-cost comment above), so the three cases below share
+    // a single compile rather than paying it three times over.
+    private static final String ORDERS_LISTS_THREE_WAYS = """
             module demo
 
             data In = { ns: List<Int> }
             data Out = { sorted: List<Int>, furthest: Int?, nearest: Int? }
+            data Row = { weight: Int }
+            data RowsIn = { rows: List<Row> }
+            data RowsOut = { sorted: List<Row> }
+            data EmptyOut = { sorted: List<Int> }
 
             behavior run : (i: In) -> Out constructs Out
+            behavior sortByRun : (i: RowsIn) -> RowsOut constructs RowsOut
+            behavior emptyRun : () -> EmptyOut constructs EmptyOut
 
             let run (i) =
                 Out { sorted = List.sort(i.ns),
                       furthest = List.max(i.ns),
                       nearest = List.min(i.ns) }
-            """;
 
-    private static final String SORTS_ROWS_BY_AN_INT_KEY = """
-            module demo
+            let sortByRun (i) = RowsOut { sorted = List.sortBy(r -> r.weight, i.rows) }
 
-            data Row = { weight: Int }
-            data In = { rows: List<Row> }
-            data Out = { sorted: List<Row> }
-
-            behavior run : (i: In) -> Out constructs Out
-
-            let run (i) = Out { sorted = List.sortBy(r -> r.weight, i.rows) }
-            """;
-
-    private static final String SORTS_AN_EMPTY_LIST_LITERAL = """
-            module demo
-
-            data Out = { sorted: List<Int> }
-
-            behavior run : () -> Out constructs Out
-
-            let run = Out { sorted = List.sort([]) }
+            let emptyRun = EmptyOut { sorted = List.sort([]) }
             """;
 
     /** The one call in {@code body} reaching {@code kernel} — a fixture is written to hold exactly
@@ -867,14 +858,14 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
      */
     @Test
     void sortMaxAndMinSettleTheListsElement() {
-        CheckedProgram program = checked(ORDERS_A_LIST_OF_INTS);
+        CheckedProgram program = checked(ORDERS_LISTS_THREE_WAYS);
         Core body = ((CheckedImplementation.Body)
                 named(program.module("demo"), "run").implementation()).body();
 
         for (Kernel kernel : List.of(Kernel.LIST_SORT, Kernel.LIST_MAX, Kernel.LIST_MIN)) {
             Core.CallSettlement settlement = callTo(kernel, body).settlement();
             assertInstanceOf(Core.CallSettlement.OrderingSubject.class, settlement,
-                    kernel.name() + " carries what the checker proved ordered");
+                    kernel.name() + " carries what the ordering requirement was checked against");
             assertEquals(Type.INT, ((Core.CallSettlement.OrderingSubject) settlement).type(),
                     kernel.name() + "'s subject is the element, not the call's own result");
         }
@@ -886,27 +877,27 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
      */
     @Test
     void sortBySettlesTheKeysResultNotTheListsElement() {
-        CheckedProgram program = checked(SORTS_ROWS_BY_AN_INT_KEY);
+        CheckedProgram program = checked(ORDERS_LISTS_THREE_WAYS);
         Core body = ((CheckedImplementation.Body)
-                named(program.module("demo"), "run").implementation()).body();
+                named(program.module("demo"), "sortByRun").implementation()).body();
 
         Core.CallSettlement settlement = callTo(Kernel.LIST_SORT_BY, body).settlement();
         assertInstanceOf(Core.CallSettlement.OrderingSubject.class, settlement,
-                "sortBy carries what the checker proved ordered");
+                "sortBy carries what the ordering requirement was checked against");
         assertEquals(Type.INT, ((Core.CallSettlement.OrderingSubject) settlement).type(),
                 "the subject is the key's result (Int), not the row it was read off");
     }
 
     /**
-     * An empty-list literal sorts to itself with no element to compare, so the checker proves the
-     * subject {@code Nothing} rather than dropping the settlement — {@code None} would say the
-     * checker never looked, which is not what happened.
+     * An empty-list literal sorts to itself with no element to compare, so the ordering requirement
+     * is checked against {@code Nothing} rather than the settlement being dropped — {@code None}
+     * would say the requirement never ran, which is not what happened.
      */
     @Test
     void sortingAnEmptyListLiteralSettlesNothingRatherThanNoSettlement() {
-        CheckedProgram program = checked(SORTS_AN_EMPTY_LIST_LITERAL);
+        CheckedProgram program = checked(ORDERS_LISTS_THREE_WAYS);
         Core body = ((CheckedImplementation.Body)
-                named(program.module("demo"), "run").implementation()).body();
+                named(program.module("demo"), "emptyRun").implementation()).body();
 
         Core.CallSettlement settlement = callTo(Kernel.LIST_SORT, body).settlement();
         assertInstanceOf(Core.CallSettlement.OrderingSubject.class, settlement,
