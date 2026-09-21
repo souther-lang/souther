@@ -164,8 +164,7 @@ public final class GuardThresholds {
         // nothing for the places it hands out addresses for to be shown in.
         return states == null ? Guards.NONE
                 : of(behavior, states, emitted, plan, inputs.reading(source),
-                        ElementBindings.of(states.core(),
-                                states.elements(), source.newtypes()),
+                        ElementBindings.of(states, source.newtypes()),
                         PathReachability.Answers.NONE,
                         new RuleReachNumbering(source.symbols().module(), behavior));
     }
@@ -221,8 +220,11 @@ public final class GuardThresholds {
         // is written by the expansion that made the binding, and the two representations of one body
         // are two expansions with two sets of bindings — so `elements` is the reading of this tree
         // and the other one's answer would be about bindings this tree does not have.
-        ComparisonReadings comparisons = ComparisonReadings.of(behavior, states.core(), read,
-                InputReads.ofParametersWhereCallsStand(inputs.parameterReads(), elements));
+        ComparisonReadings comparisons = ComparisonReadings.of(behavior, states, read,
+                InputReads.ofParametersWhereCallsStand(inputs.parameterReads(), elements),
+                // What a value states is read where nothing of the behavior's inputs is in force: a
+                // value takes none and names none.
+                InputReads.ofParametersWhereCallsStand(Map.of(), elements));
         // And what the tree that runs says about each of them, joined on the construct of the model
         // the two readings agree about.
         ComparisonEmissionIndex index =

@@ -71,6 +71,11 @@ final class PathEngine {
     /** What each behavior a body may call states about its answer, by the name it is called under. */
     private final Map<ValueName.Behavior, AssumedContract> contracts;
 
+    /** The environment a value's body is read in, which is the same for every build of it. */
+    Denotations insideATemplate() {
+        return terms.insideATemplate();
+    }
+
     PathEngine(RuleReadingContext reading) {
         this(reading, Map.of(), Terms.Of.THE_DISCHARGE_TREE);
     }
@@ -95,8 +100,18 @@ final class PathEngine {
     PathEngine(RuleReadingContext ruleReading,
                Map<ValueName.Behavior, AssumedContract> contracts,
                Terms.Of reading) {
+        this(ruleReading, contracts, reading, ValueTemplates.NONE);
+    }
+
+    /**
+     * The same, over a tree that builds values and holds their bodies in {@code templates}: what a
+     * build comes to is what its template is, and this reads it there.
+     */
+    PathEngine(RuleReadingContext ruleReading,
+               Map<ValueName.Behavior, AssumedContract> contracts,
+               Terms.Of reading, ValueTemplates templates) {
         this.symbols = ruleReading.source().symbols();
-        this.terms = new Terms(reading, ruleReading);
+        this.terms = new Terms(reading, ruleReading, templates);
         this.clauses = terms.clauses();
         this.predicates = terms.predicates();
         this.guarantees = terms.guarantees();

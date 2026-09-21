@@ -1,18 +1,24 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.check.AnalysisBody;
+import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputReads;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.types.WrittenOwner;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -23,6 +29,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * off a tree that holds a copy of the value for each region, one construct arrives once per copy,
  * each under what stood on the way into that region, and the reading was made to refuse that: there
  * is one account of a construct and two copies would be two.
+ *
+ * <p>Held both ways. The reading is made without being refused, and it holds the comparison the
+ * value writes once — a reading that met no comparison in the value would not be refused either,
+ * and would be a body whose rules had gone missing.
  */
 class AValueComparedInTwoRegionsIsOneComparisonOfTheModelTest {
 
@@ -37,20 +47,45 @@ class AValueComparedInTwoRegionsIsOneComparisonOfTheModelTest {
                 + (if n > 5 then (if big then 3 else 4) else 0)
             """;
 
-    @Test
-    void theValuesComparisonIsReadOnceWhereTwoRegionsBuildIt() {
+    private record Read(AnalysisBody analysis, Core emitted, CoverageSites.Plan plan,
+                        InputDomain inputs, RuleReadingSource rules) { }
+
+    private static Read read() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
-        Core body = checked.behaviorBodies().get("f");
-        CoverageSites.Plan plan = checked.plan();
         Map<String, InputDomain> inputs =
                 compilation.db().ask(new Adequacy.Inputs(module)).value();
+        return new Read(checked.analysisBodies().get("f"), checked.behaviorBodies().get("f"),
+                checked.plan(), inputs.get("f"), rules);
+    }
 
-        assertDoesNotThrow(() -> GuardThresholds.of("f", checked.analysisBodies().get("f"), body,
-                plan, inputs.get("f"), rules));
+    @Test
+    void theReadingIsNotRefusedWhereTwoRegionsBuildTheValue() {
+        Read read = read();
+
+        assertDoesNotThrow(() -> GuardThresholds.of("f", read.analysis(), read.emitted(),
+                read.plan(), read.inputs(), read.rules()));
+    }
+
+    @Test
+    void theValuesComparisonIsReadOnce() {
+        Read read = read();
+        ElementBindings elements = ElementBindings.of(read.analysis(), read.rules().newtypes());
+
+        List<ComparisonReadings.Reading> readings = ComparisonReadings.of("f", read.analysis(),
+                read.inputs().reading(read.rules()),
+                InputReads.ofParametersWhereCallsStand(read.inputs().parameterReads(), elements),
+                InputReads.ofParametersWhereCallsStand(Map.of(), elements)).comparisons();
+
+        long ofTheValue = readings.stream()
+                .filter(each -> each.occurrence().origin().owner() instanceof WrittenOwner.Body owner
+                        && owner.definition().equals("big"))
+                .count();
+        assertEquals(1, ofTheValue,
+                "`big` writes one comparison, and it is read once for the two regions that build it");
     }
 }

@@ -106,6 +106,8 @@ public final class HelperInliner {
     private ValueAtAReference reading = ValueAtAReference.COPIED;
     /** Whether a value that needs nothing from its region is called as a method, not copied. */
     private boolean valuesAreMethods = false;
+    /** Whether a value this module declares is built as a reference to its template. */
+    private boolean valuesAreTemplates = false;
     /** What each value folds to, empty where it is not a constant, by what it is reached by. */
     private final Map<ReachName.Declaration, Optional<Object>> constantOfValues = new HashMap<>();
     /** What the method emitted for each value takes, by what the value is reached by. */
@@ -416,6 +418,19 @@ public final class HelperInliner {
     public HelperInliner callingValuesAsMethodsWhereEmitted(Symbols symbols) {
         this.valuesAreMethods = table.policy() == InliningPolicy.FULL;
         this.constEval = ConstEval.against(symbols, this::constantOf);
+        return this;
+    }
+
+    /**
+     * In the tree an analysis reads, a value this module declares is built where it is named and is
+     * held once as a template, and a build of it is a reference and not a copy of its body.
+     *
+     * <p>The other half of {@link #callingValuesAsMethodsWhereEmitted}: the tree that runs has a
+     * method to call and the tree an analysis reads has a meaning to refer to. What each of them
+     * builds where is {@link ValuePlan}'s, so the two cannot disagree about it.
+     */
+    public HelperInliner buildingValuesAsTemplatesWhereAnalysed() {
+        this.valuesAreTemplates = table.policy() == InliningPolicy.DISCHARGE;
         return this;
     }
 
@@ -2334,6 +2349,10 @@ public final class HelperInliner {
         if (readAt(reached) != null) {
             return;
         }
+        if (valuesAreTemplates && declarationArity(named).isEmpty() && isATemplateValue(named)) {
+            materialiseAsABuild(named, here, order, values, site);
+            return;
+        }
         if (emittedAsAMethod(named) && declarationArity(named).isEmpty()) {
             Handover handover = handoverOf(named, site.get());
             if (handover.callable()) {
@@ -2359,6 +2378,80 @@ public final class HelperInliner {
                 insideThisBuild(named.denotes(), where, () -> read(calls)));
         values.add(new Hir.Materialised(named.denotes(), where, built, built.pos(),
                 built.region()));
+    }
+
+    /**
+     * The values {@code e} builds as references to their templates, by the name each is reached by,
+     * in the order they are met and each once.
+     *
+     * <p>What a build holds of a value is the value's name, and what the value means is asked of the
+     * template. So this is what says which templates a body needs — and, asked of a template, which
+     * more.
+     */
+    public static SequencedSet<ReachName.Declaration> valuesBuiltIn(Hir.Expr e) {
+        SequencedSet<ReachName.Declaration> out = new LinkedHashSet<>();
+        collectBuilds(e, out);
+        return out;
+    }
+
+    private static void collectBuilds(Hir.Expr e, SequencedSet<ReachName.Declaration> out) {
+        if (e == null) {
+            return;
+        }
+        if (e instanceof Hir.Materialised build && isACallOfItsValue(build)
+                && build.body() instanceof Hir.Var.Denoting named
+                && named.reachesADeclaration() != null) {
+            out.add(named.reachesADeclaration());
+            return;
+        }
+        Hir.forEachChild(e, child -> collectBuilds(child, out));
+    }
+
+    /**
+     * Whether {@code named} is a value this module declared, held once as a template.
+     *
+     * <p>The kind whose meaning is the same wherever it is built: it takes nothing, and names
+     * nothing but other values. A value another module declared is left to be copied, since the
+     * template of it is that module's to hold.
+     */
+    private boolean isATemplateValue(Hir.Var.Denoting named) {
+        ReachName.Declaration reaches = named.reachesADeclaration();
+        Hir.FnDef value = reaches == null ? null : table.reached(reaches);
+        return value != null && value.body() != null && value.params().isEmpty()
+                && value.declaredBy(moduleName()) && !graph.recurses(reaches);
+    }
+
+    /**
+     * Binds {@code named} in the region being written as a build of the value, which is a
+     * reference to it.
+     *
+     * <p>No body is put here. What the value comes to is its template's, so nothing under this
+     * binding is a copy, and what it names is built where the template names it.
+     */
+    private void materialiseAsABuild(Hir.Var.Denoting named, Map<String, Hir.Binder> here,
+                                     List<Hir.Binder> order, List<Hir.Expr> values,
+                                     Supplier<MaterialisationSite> site) {
+        Hir.Binder built = writing.binders()
+                .binder("$v" + next() + "_" + named.name(), named.pos());
+        here.put(named.reaches(), built);
+        order.add(built);
+        values.add(new Hir.Materialised(named.denotes(), site.get(), named, named.pos(),
+                named.region()));
+    }
+
+    /**
+     * The body of the value {@code fn} as its template: what it means, and the builds of the values
+     * it names in the regions it names them in.
+     *
+     * <p>Held once for every build of the value. Nothing of a region that builds it is in it, so it
+     * is written under no build and every reader of a build reads the same tree.
+     */
+    public Hir.FnDef valueTemplate(Hir.FnDef fn) {
+        Hir.Expr body = writing(bodyOf(fn.name()), Set.of(), () -> {
+            heldToTheBound(fn.writtenBody());
+            return region(inline(fn.writtenBody()), rootSite());
+        });
+        return fn.withBody(new Hir.FnBody.Written(body));
     }
 
     /**

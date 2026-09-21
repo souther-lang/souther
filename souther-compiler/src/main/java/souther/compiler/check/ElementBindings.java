@@ -46,7 +46,8 @@ import java.util.Set;
 public record ElementBindings(Map<BindingId, List<Core>> containers,
                               Map<BindingId, Core> held,
                               ElementProvenance provenance,
-                              Map<BindingId, ElementProjection> projected) {
+                              Map<BindingId, ElementProjection> projected,
+                              ValueTemplates templates) {
 
     /** Nothing was read, which is what a body with no combinator in it comes to. */
     public static final ElementBindings NONE =
@@ -56,6 +57,28 @@ public record ElementBindings(Map<BindingId, List<Core>> containers,
         containers = Map.copyOf(containers);
         held = Map.copyOf(held);
         projected = Map.copyOf(projected);
+        if (templates == null) {
+            throw new IllegalArgumentException("a body builds values it holds the meaning of, or"
+                    + " none");
+        }
+    }
+
+    /** Of a body that builds no value. */
+    public ElementBindings(Map<BindingId, List<Core>> containers, Map<BindingId, Core> held,
+                           ElementProvenance provenance,
+                           Map<BindingId, ElementProjection> projected) {
+        this(containers, held, provenance, projected, ValueTemplates.NONE);
+    }
+
+    /**
+     * What a name given {@code value} holds: the value itself, or where it is a build of one, what
+     * the value is.
+     *
+     * <p>Asked where a name is bound, so that everything that reads the name reads the meaning and
+     * not the edge that asked for it.
+     */
+    public Core dereferenced(Core value) {
+        return value instanceof Core.MaterialisedValue build ? templates.bodyOf(build) : value;
     }
 
     /**
@@ -122,11 +145,28 @@ public record ElementBindings(Map<BindingId, List<Core>> containers,
      */
     public static ElementBindings of(Core body, ElementProvenance provenance,
                                      DeclarationNewtypes newtypes) {
+        return of(body, List.of(), ValueTemplates.NONE, provenance, newtypes);
+    }
+
+    /**
+     * The same, of a tree that builds values: what each of them binds is bound in the value's
+     * template, and a name given a build holds what the value is.
+     */
+    public static ElementBindings of(AnalysisBody analysis, DeclarationNewtypes newtypes) {
+        return of(analysis.core(), analysis.templatesAfterTheirBuilders(), analysis.templates(),
+                analysis.elements(), newtypes);
+    }
+
+    private static ElementBindings of(Core body, List<Core> templates, ValueTemplates values,
+                                      ElementProvenance provenance, DeclarationNewtypes newtypes) {
         Map<BindingId, List<Core>> found = new LinkedHashMap<>();
         Map<BindingId, Core> held = new LinkedHashMap<>();
         Map<BindingId, Core> answered = new LinkedHashMap<>();
         Map<BindingId, Core> standing = new LinkedHashMap<>();
-        walk(body, found, held, provenance, answered, standing);
+        walk(body, found, held, provenance, answered, standing, values);
+        for (Core template : templates) {
+            walk(template, found, held, provenance, answered, standing, values);
+        }
         // What one walk hands its closure is what a licence and a projection are about, and a
         // binding taking elements of more than one container has no one walk to be about. The
         // binding is still an element of each — what says so is what came back above — and what
@@ -145,8 +185,8 @@ public record ElementBindings(Map<BindingId, List<Core>> containers,
                 projected.putIfAbsent(element, was);
             }
         });
-        return found.isEmpty() && provenance.isEmpty() ? NONE
-                : new ElementBindings(found, held, provenance, projected);
+        return found.isEmpty() && provenance.isEmpty() && values.templates().isEmpty() ? NONE
+                : new ElementBindings(found, held, provenance, projected, values);
     }
 
     /**
@@ -239,10 +279,13 @@ public record ElementBindings(Map<BindingId, List<Core>> containers,
     private static void walk(Core e, Map<BindingId, List<Core>> found,
                              Map<BindingId, Core> held,
                              ElementProvenance provenance, Map<BindingId, Core> answered,
-                             Map<BindingId, Core> standing) {
+                             Map<BindingId, Core> standing, ValueTemplates values) {
         if (e instanceof Core.LetIn let && let.binder() != null
                 && let.binder().binding() != null) {
-            held.putIfAbsent(let.binder().binding(), let.value());
+            // A name given a build of a value holds what the value is: what it was bound to is the
+            // template, and the build is only where it was asked for.
+            held.putIfAbsent(let.binder().binding(), let.value() instanceof Core.MaterialisedValue build
+                    ? values.bodyOf(build) : let.value());
             // The body of a binding is read only where a fact proved before the tree was rewritten
             // says this binding is a closure parameter of a walk answering one per element. The
             // shape connects the two ends; it establishes nothing, and a binding nothing licenses
@@ -265,7 +308,7 @@ public record ElementBindings(Map<BindingId, List<Core>> containers,
             handed(preserved.declared().operation(), preserved.args(), found, standing, held);
         }
         Core.forEachChild(e, child ->
-                walk(child, found, held, provenance, answered, standing));
+                walk(child, found, held, provenance, answered, standing, values));
     }
 
     /**

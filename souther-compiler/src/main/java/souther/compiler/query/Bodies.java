@@ -2054,11 +2054,21 @@ public final class Bodies {
             // read in. A recursion is a cycle among the declarations in reach, and which
             // declarations those are is what the policy decides.
             HelperInliner inliner = HelperInliner.over(against.value().table(),
-                    against.value().graph());
+                    against.value().graph()).buildingValuesAsTemplatesWhereAnalysed();
             HelperEntry held = against.value().table().at(new DefinitionName(fn));
             boolean recursive = held != null
                     && against.value().graph().recurses(held.reachedAs());
             try {
+                // A value the analysis reads by its template, as opposed to a behavior's
+                // implementation that takes no inputs: what tells them apart is whether a behavior
+                // declares it.
+                boolean aValue = !recursive && def.value().params().isEmpty()
+                        && def.value().standsAt() == null
+                        && !db.ask(new Spec(module, fn)).present();
+                if (aValue) {
+                    return Answer.of(Lower.valueTemplate(def.value(),
+                            inliner.namingBehaviors(behaviors.value())));
+                }
                 return Answer.of(Lower.body(def.value(),
                         inliner.namingBehaviors(behaviors.value()),
                         recursive, dependencyParams(db, module, fn)));
@@ -2066,6 +2076,42 @@ public final class Bodies {
                 return Answer.absent(e);
             }
         }
+    }
+
+    /**
+     * The template of every value the analysis of {@code body} builds, and of every value those
+     * build in turn, each once.
+     *
+     * <p>Asked one value at a time, so a value more than one body builds is expanded once for the
+     * lot and a chain of them costs the links it has. Absent where the expansion of any of them is.
+     */
+    private static Answer<SequencedMap<ReachName.Declaration, InvariantChecker.Template>>
+            templatesBuiltBy(Db db, String module, Hir.Expr body) {
+        Answer<Expanding.Of> against = db.ask(new Expanding(module, InliningPolicy.DISCHARGE));
+        if (!against.present()) {
+            return Answer.absent();
+        }
+        SequencedMap<ReachName.Declaration, InvariantChecker.Template> out =
+                new LinkedHashMap<>();
+        ArrayDeque<Hir.Expr> toRead = new ArrayDeque<>();
+        toRead.add(body);
+        while (!toRead.isEmpty()) {
+            for (ReachName.Declaration each : HelperInliner.valuesBuiltIn(toRead.remove())) {
+                if (out.containsKey(each)) {
+                    continue;
+                }
+                Hir.FnDef value = against.value().table().reached(each);
+                Answer<Expansion<Hir.FnDef>> template =
+                        db.ask(new BodyForInvariantDischarge(module, value.name()));
+                if (!template.present()) {
+                    return Answer.absent();
+                }
+                Hir.Expr written = template.value().value().writtenBody();
+                out.put(each, new InvariantChecker.Template(written, template.value().provenance()));
+                toRead.add(written);
+            }
+        }
+        return Answer.of(out);
     }
 
     /**
@@ -2565,8 +2611,15 @@ public final class Bodies {
             // answers nothing rather than answering wrongly — so there is no representation here to
             // arrive late, and nothing this body reads turns on a declaration beside the ones it
             // names.
-            InvariantChecker.Source dischargeSource =
+            // What each value the body builds means, asked once for every build of it. Where any of
+            // them cannot be expanded the body is not analysed, as one whose own expansion could
+            // not be made is not.
+            Answer<SequencedMap<ReachName.Declaration, InvariantChecker.Template>> templates =
                     discharge.present()
+                            ? templatesBuiltBy(db, module, discharge.value().value().writtenBody())
+                            : Answer.absent();
+            InvariantChecker.Source dischargeSource =
+                    discharge.present() && templates.present()
                     ? new InvariantChecker.Source(discharge.value().value().writtenBody(),
                             discharge.value().provenance(),
                             // A source of this check's own, over the scope everything below the
@@ -2586,7 +2639,8 @@ public final class Bodies {
                                             Shapes.fieldLayout(db),
                                             Shapes.clauseLocations(db)),
                                     policy, db.readings()),
-                            contracts.present() ? contracts.value() : Map.of())
+                            contracts.present() ? contracts.value() : Map.of(),
+                            templates.value())
                     : null;
             try {
                 SpecChecker.Checked checked =

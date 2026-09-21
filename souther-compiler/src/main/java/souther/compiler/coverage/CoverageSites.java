@@ -1100,6 +1100,11 @@ public final class CoverageSites {
                 // A leaf, and one holding no fork. Whether the arm it stands in is an arm to cover is
                 // decided where that arm is made, not here.
                 case Core.Unreachable _ -> { }
+                // What a tree an analysis reads holds where a value is built. The tree that runs
+                // holds the value's method and a call of it, so one arriving here is the wrong tree.
+                case Core.MaterialisedValue m -> throw new IllegalStateException(
+                        "the tree that runs builds a value by calling it, and this is a build of one"
+                                + " in the tree an analysis reads: " + m.value());
                 case Core.Neg n ->
                         walk(structural.take(new CoreStructure.Edge.NegOperand(), n.operand()),
                                 inside);

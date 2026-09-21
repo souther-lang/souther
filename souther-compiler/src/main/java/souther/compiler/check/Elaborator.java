@@ -205,6 +205,9 @@ public final class Elaborator {
             case Hir.Expansion ex -> expansion(ex, env, ctx, expected);
             // A build of a value elaborates as the value does, in the copy the build is: the walk
             // is where the copy it stands in is known, and the node says which build this is.
+            case Hir.Materialised m when ctx.preserved().valuesAreTemplates()
+                    && m.body() instanceof Hir.Var.Denoting named
+                    && named.denotes().equals(m.value()) -> materialisedValue(m, named, ctx);
             case Hir.Materialised m ->
                     elaborate(m.body(), env, ctx.building(m.value(), m.site()), expected);
             // reached only where a block escapes: it may be passed as an argument, or bound to a
@@ -1544,6 +1547,24 @@ public final class Elaborator {
             return value;
         }
         return new Core.OptionSome(value, expected, value.pos());
+    }
+
+    /**
+     * A build of a value in the tree an analysis reads: where it is built, and the type the value's
+     * own check settled it as.
+     *
+     * <p>Its body is not read here, and is not in the node. What the value means is its template,
+     * which is elaborated once for every build of it and carries no trace of which build asked.
+     */
+    private static Core materialisedValue(Hir.Materialised m, Hir.Var.Denoting named,
+                                          CheckContext ctx) {
+        ReachName.Declaration declaration = named.reachesADeclaration();
+        CompleteSignature settled = ctx.preserved().valueKept(named.denotes());
+        if (declaration == null || settled == null) {
+            throw new IllegalStateException("`" + named.written() + "` is built as a value of its"
+                    + " template and has no settled signature to build it by");
+        }
+        return new Core.MaterialisedValue(declaration, m.site(), settled.result(), m.pos());
     }
 
     /**

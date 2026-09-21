@@ -4,6 +4,7 @@ import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
 import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.types.MaterialisationSite;
 import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.ReferenceOrigin;
@@ -196,6 +197,22 @@ public sealed interface Core {
     /** A unit data written where a value goes: the type has one value, and naming it is that value
      * (spec §unit-data). Which unit is on the node, so nothing resolves a spelling again. */
     record UnitValue(TypeSymbol data, Type type, SourcePos pos) implements Core {}
+
+    /**
+     * A build of a value in the tree an analysis reads: where the value is evaluated, and not what it
+     * means.
+     *
+     * <p>What the value means is its template, held once for the whole of what reads this tree and
+     * asked of it by {@code value}. A tree that held the body at every build would hold a copy per
+     * region that builds it, and values naming one another in several regions would grow with every
+     * link. Nothing here is a call: there is nothing applied and nothing passed, and a reader that
+     * walks a node's children meets no body under it.
+     *
+     * @param value which value, by the name the module reaches it by
+     * @param site  the region this build stands in
+     */
+    record MaterialisedValue(ReachName.Declaration value, MaterialisationSite site, Type type,
+                             SourcePos pos) implements Core {}
 
     record Neg(Core operand, Type type, SourcePos pos) implements Core {}
 
@@ -971,6 +988,7 @@ public sealed interface Core {
             case Temporal x -> x;
             case Read x -> x;
             case UnitValue x -> x;
+            case MaterialisedValue x -> x;
             case OptionNone x -> x;
             case Unreachable x -> x;
             case Neg n -> {

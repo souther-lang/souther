@@ -87,6 +87,37 @@ public final class ElementProvenance {
     }
 
     /**
+     * What this and {@code other} say together, of two bodies that share no binding.
+     *
+     * <p>A value's body and the body that builds it are written by different expansions, so their
+     * bindings are different bindings, and what is said of one is not said of the other. A binding
+     * both hold facts of is two expansions writing one binding, which is refused.
+     */
+    public ElementProvenance and(ElementProvenance other) {
+        if (other.isEmpty()) {
+            return this;
+        }
+        if (isEmpty()) {
+            return other;
+        }
+        Map<BindingId, ElementEdge> joinedEdges = new LinkedHashMap<>(edges);
+        other.edges.forEach((binding, edge) -> {
+            if (joinedEdges.put(binding, edge) != null) {
+                throw new IllegalStateException(
+                        "two bodies both say what the elements of " + binding + " are");
+            }
+        });
+        Map<BindingId, BindingId> joinedProjections = new LinkedHashMap<>(projections);
+        other.projections.forEach((binding, of) -> {
+            if (joinedProjections.put(binding, of) != null) {
+                throw new IllegalStateException(
+                        "two bodies both say what " + binding + " projects");
+            }
+        });
+        return new ElementProvenance(joinedEdges, joinedProjections);
+    }
+
+    /**
      * What a walk asking {@code question} may do at {@code binding} ({@link ElementStep}).
      *
      * <p>The one place an edge is read. Answered per question and never by asking whether this is

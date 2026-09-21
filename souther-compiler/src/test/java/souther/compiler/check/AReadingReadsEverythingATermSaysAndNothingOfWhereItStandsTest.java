@@ -5,6 +5,7 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.types.MaterialisationSite;
 import souther.compiler.types.ReferenceOrigin;
 
 import org.junit.jupiter.api.Test;
@@ -38,8 +39,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * there. So the population is the components themselves, as the record declares them, and each is
  * asked which of the two it is by its type. What says where a node stands is the position every node
  * carries, the occurrence a comparison is of the model, the construction a written temporal was
- * spelled with, and the two values a fork and a kept call hold their pairs in. Everything else is
- * what the term says.
+ * spelled with, the two values a fork and a kept call hold their pairs in, and the region a build of
+ * a value stands in. Everything else is what the term says.
  *
  * <p>Read off the compiled projection rather than off its text: which accessors it calls is what the
  * class file says, and reading the source would be answering the same question a second way. An
@@ -58,7 +59,8 @@ class AReadingReadsEverythingATermSaysAndNothingOfWhereItStandsTest {
             ApplicationOrigin.class,
             ReferenceOrigin.class,
             Core.ForkPlace.class,
-            Core.KeptCallPlace.class);
+            Core.KeptCallPlace.class,
+            MaterialisationSite.class);
 
     /**
      * The records a reading walks: every kind of term, and the three a term holds that are not terms

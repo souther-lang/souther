@@ -293,6 +293,11 @@ public final class CoverageRead {
             case Core.UnitValue _ -> { }
             case Core.OptionNone _ -> { }
             case Core.Unreachable _ -> { }
+            // What a tree an analysis reads holds where a value is built. This reads the tree that
+            // runs, which holds the value's method and a call of it.
+            case Core.MaterialisedValue m -> throw new IllegalStateException(
+                    "the tree that runs holds no build of a value, and this holds one of "
+                            + m.value());
             // Everything the node is made of is evaluated, and under what the node itself was.
             case Core.Neg neg -> walkAll(some(neg.operand()), naming, reach, observed);
             case Core.FieldAccess access -> walkAll(some(access.target()), naming, reach, observed);

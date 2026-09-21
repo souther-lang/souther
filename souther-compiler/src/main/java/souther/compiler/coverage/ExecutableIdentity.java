@@ -129,6 +129,11 @@ public record ExecutableIdentity(Kind kind, List<Settled> settled,
                 yield Kind.UNIT_VALUE;
             }
             case Core.OptionNone _ -> Kind.OPTION_NONE;
+            // A build in the tree an analysis reads. What runs holds the value's method and a call
+            // of it, so this is the wrong tree.
+            case Core.MaterialisedValue it -> throw new IllegalStateException(
+                    "the tree that runs holds no build of a value, and this holds one of "
+                            + it.value());
             case Core.Unreachable it -> {
                 settled.add(new Settled.Word(it.reason()));
                 yield Kind.UNREACHABLE;

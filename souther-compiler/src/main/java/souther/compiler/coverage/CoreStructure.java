@@ -111,7 +111,8 @@ public final class CoreStructure {
         List<Child> out = new ArrayList<>();
         switch (e) {
             case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
-                 Core.Read _, Core.UnitValue _, Core.OptionNone _, Core.Unreachable _ -> { }
+                 Core.Read _, Core.UnitValue _, Core.OptionNone _, Core.Unreachable _,
+                 Core.MaterialisedValue _ -> { }
             case Core.Neg n -> out.add(new Child(new Edge.NegOperand(), n.operand()));
             case Core.FieldAccess fa -> out.add(new Child(new Edge.FieldTarget(), fa.target()));
             case Core.Binary b -> {

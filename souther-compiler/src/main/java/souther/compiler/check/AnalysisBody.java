@@ -2,6 +2,12 @@ package souther.compiler.check;
 
 import souther.compiler.core.Core;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Set;
+
 /**
  * A behavior's body as the analysis reads it, which is not the body the backend emits.
  *
@@ -28,14 +34,50 @@ import souther.compiler.core.Core;
  * one body are two expansions with two sets of bindings — so a reading of this tree handed the other
  * expansion's answer is asking about bindings this tree does not have. The two travel together for
  * that reason, and a reader takes the pair rather than putting one beside the other.
+ *
+ * <p><b>A value is built here and means what its template is.</b> The tree holds where a value is
+ * built ({@link Core.MaterialisedValue}) and not the value's body, which is in {@code templates}
+ * once however many regions build it. A reader that walks the tree with {@link Core#forEachChild}
+ * meets no body under a build, and one that needs what the build comes to asks the templates.
+ *
+ * @param templates what each value built in {@code core} comes to, and what each of those builds
+ *                  in turn
  */
-public record AnalysisBody(Core core, ElementProvenance elements) {
+public record AnalysisBody(Core core, ElementProvenance elements, ValueTemplates templates) {
 
     public AnalysisBody {
-        if (core == null || elements == null) {
+        if (core == null || elements == null || templates == null) {
             throw new IllegalArgumentException(
                     "a body the analysis reads is some tree; a behavior with none has no reading"
                             + " rather than one holding nothing");
         }
+    }
+
+    /**
+     * The template of every value this body builds, and of every value those build, each once and
+     * after every template that builds it.
+     *
+     * <p>The order a reader that carries something from a build into what is built needs: by the
+     * time a template comes up, everything that could have entered it has been read. Found from the
+     * tree by what it builds, so a template nothing builds is not here.
+     */
+    public List<Core> templatesAfterTheirBuilders() {
+        List<Core> afterTheirBuilt = new ArrayList<>();
+        Set<Core> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        visit(core, seen, afterTheirBuilt);
+        Collections.reverse(afterTheirBuilt);
+        return afterTheirBuilt;
+    }
+
+    private void visit(Core e, Set<Core> seen, List<Core> out) {
+        if (e instanceof Core.MaterialisedValue build) {
+            Core template = templates.bodyOf(build);
+            if (seen.add(template)) {
+                visit(template, seen, out);
+                out.add(template);
+            }
+            return;
+        }
+        Core.forEachChild(e, child -> visit(child, seen, out));
     }
 }

@@ -2,6 +2,10 @@ package souther.compiler.coverage;
 
 import souther.compiler.core.Core;
 
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Map;
+
 /**
  * Whether an expression answers a value, for a reader that asks about more than one of them.
  *
@@ -39,6 +43,33 @@ public interface Arrivals {
     static Arrivals inTheTree(Core root) {
         NormalReturn answering = NormalReturn.lazilyWhereTheOperationsStand(root);
         return answering::at;
+    }
+
+    /**
+     * The nodes of each of {@code roots}, each tree read as a tree of its own.
+     *
+     * <p>For a body that builds values, which is several trees: the body, and what each value it
+     * builds is. A node is answered for by the tree it stands in, and one that stands in none of
+     * them answers no.
+     */
+    static Arrivals inTheTrees(List<Core> roots) {
+        Map<Core, Arrivals> owners = new IdentityHashMap<>();
+        for (Core root : roots) {
+            Arrivals of = inTheTree(root);
+            claim(root, of, owners);
+        }
+        return e -> {
+            Arrivals owner = owners.get(e);
+            return owner != null && owner.at(e);
+        };
+    }
+
+    private static void claim(Core e, Arrivals of, Map<Core, Arrivals> owners) {
+        if (e == null) {
+            return;
+        }
+        owners.put(e, of);
+        Core.forEachChild(e, child -> claim(child, of, owners));
     }
 
     /**

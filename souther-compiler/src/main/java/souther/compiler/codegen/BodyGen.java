@@ -792,6 +792,10 @@ final class BodyGen {
                 case Core.OptionNone _ ->
                         code.invokestatic(CD_Option, "none", MethodTypeDesc.of(CD_Option), true);
                 case Core.Unreachable u -> unreachable(u, expected);
+                // A build in the tree an analysis reads. What is emitted calls the value's method.
+                case Core.MaterialisedValue m -> throw new IllegalStateException(
+                        "the tree that is emitted holds no build of a value, and this holds one of "
+                                + m.value());
                 case Core.ListLit lit -> listLit(lit);
                 case Core.Tuple t -> tuple(t);
                 case Core.TupleGet tg -> tupleGet(tg);
@@ -2307,6 +2311,9 @@ final class BodyGen {
                 case Core.Unreachable _ -> { }
                 // reads nothing the enclosing body binds
                 case Core.UnitValue _ -> { }
+                case Core.MaterialisedValue m -> throw new IllegalStateException(
+                        "the tree that is emitted holds no build of a value, and this holds one of "
+                                + m.value());
             }
         }
 

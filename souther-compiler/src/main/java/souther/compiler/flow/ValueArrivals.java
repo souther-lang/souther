@@ -314,13 +314,13 @@ public final class ValueArrivals<P> {
     private Paths<P> reading(Core e, Naming<P> naming, ComparisonWays comparisons,
                             Map<BindingId, Bound<P>> bound) {
         return switch (e) {
-            case Core.Unreachable ignored -> new Paths.Held<>(List.of());
+            case Core.Unreachable _ -> new Paths.Held<>(List.of());
             case Core.Bool literal -> one(Truth.of(literal.value()), whole(naming.nowhere()));
             case Core.Read read when bound.containsKey(read.binding()) ->
                     bound.get(read.binding()).ways();
             // A function value, not a body being run here. What happens when a call applies it is
             // that call's business, and a call is not read through either.
-            case Core.Block ignored -> oneWay();
+            case Core.Block _ -> oneWay();
             // The value is evaluated before the body it binds is.
             case Core.LetIn let -> {
                 Paths<P> value = settle(let.value(), naming, comparisons, bound);
@@ -711,15 +711,17 @@ public final class ValueArrivals<P> {
      */
     private static List<Core> partsOf(Core node) {
         return switch (node) {
-            case Core.Int ignored -> List.of();
-            case Core.Decimal ignored -> List.of();
-            case Core.Str ignored -> List.of();
-            case Core.Bool ignored -> List.of();
-            case Core.Temporal ignored -> List.of();
-            case Core.Read ignored -> List.of();
-            case Core.UnitValue ignored -> List.of();
-            case Core.OptionNone ignored -> List.of();
-            case Core.Unreachable ignored -> List.of();
+            case Core.Int _ -> List.of();
+            case Core.Decimal _ -> List.of();
+            case Core.Str _ -> List.of();
+            case Core.Bool _ -> List.of();
+            case Core.Temporal _ -> List.of();
+            case Core.Read _ -> List.of();
+            case Core.UnitValue _ -> List.of();
+            case Core.OptionNone _ -> List.of();
+            case Core.Unreachable _ -> List.of();
+            // Built out of nothing here: what a value comes to is its template's and is read there.
+            case Core.MaterialisedValue _ -> List.of();
             case Core.Neg neg -> present(neg.operand());
             case Core.FieldAccess access -> present(access.target());
             case Core.TupleGet get -> present(get.tuple());
@@ -737,7 +739,7 @@ public final class ValueArrivals<P> {
             case Core.If iff -> present(iff.cond(), iff.then(), iff.els());
             case Core.LetIn let -> present(let.value(), let.body());
             // Not the body. Evaluating this makes the function.
-            case Core.Block ignored -> List.of();
+            case Core.Block _ -> List.of();
             case Core.Match match -> {
                 List<Core> out = new ArrayList<>();
                 out.add(match.scrutinee());
