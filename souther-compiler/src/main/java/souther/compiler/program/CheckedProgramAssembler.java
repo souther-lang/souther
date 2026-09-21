@@ -4,10 +4,12 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.BehaviorImplementation;
+import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.CoreBinders;
 import souther.compiler.check.Derived;
 import souther.compiler.check.Lower;
 import souther.compiler.check.PublishedDeclarations;
+import souther.compiler.check.Requirements;
 import souther.compiler.check.Sig;
 import souther.compiler.check.SpecImplementation;
 import souther.compiler.check.Symbols;
@@ -336,7 +338,8 @@ final class CheckedProgramAssembler {
                                  Map<ValueName.Behavior, Composition> compositions,
                                  Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                  List<CheckedData> data,
-                                 Map<String, List<Output.RowsRead.ReadRow>> rowsByBehavior) {}
+                                 Map<String, List<Output.RowsRead.ReadRow>> rowsByBehavior,
+                                 Map<String, List<ValueName.Behavior>> requirements) {}
 
     /**
      * The rows this compile read for {@code module}, by the behavior each is a row of.
@@ -377,6 +380,8 @@ final class CheckedProgramAssembler {
                 db.ask(new Shapes.ValueShapes(module)).value();
         Map<ValueName.Behavior, EnsuresEnforcement> checks =
                 db.ask(new Bodies.EnsuresChecks(module)).value();
+        Map<String, List<BehaviorRequirement>> requirements =
+                db.ask(new Bodies.Requirements(module)).value();
         // What the module's names mean over the derived declarations, which is what a declaration's
         // fields and a sum's cases are read against. It is a way of reaching the compiler's answers
         // and not one of them: it holds a registry that asks `db` for each declaration, so it is
@@ -385,7 +390,8 @@ final class CheckedProgramAssembler {
         Symbols symbols = Names.derivedSymbols(db, module).value();
         if (checked == null || lowering == null || signatures == null
                 || implementations == null
-                || compositions == null || symbols == null || shapes == null || checks == null) {
+                || compositions == null || symbols == null || shapes == null || checks == null
+                || requirements == null) {
             // Not a report: the failure above is what a caller is told, and reaching here past it
             // means the two readings of whether this program checked have come apart.
             throw new IllegalStateException("`" + module + "` was taken as checked and is not");
@@ -400,7 +406,22 @@ final class CheckedProgramAssembler {
         return new ModuleReading(module, bodies, checked, signatures, implementations,
                 compositions, checks,
                 dataOf(declarations, Shapes.publishedDeclarations(db), shapes),
-                rowsOf(db, module));
+                rowsOf(db, module), requirementsOf(requirements));
+    }
+
+    /**
+     * {@code requirements}, projected to the dependency identities alone.
+     *
+     * <p>{@link BehaviorRequirement#requiredBy} is a compiler diagnostic's provenance for a missing
+     * fake, not a fact a checked program's reader wants — every one of those wants the dependency
+     * and the order its constructor takes them in, which {@link Requirements#names} already
+     * answers.
+     */
+    private static Map<String, List<ValueName.Behavior>> requirementsOf(
+            Map<String, List<BehaviorRequirement>> requirements) {
+        Map<String, List<ValueName.Behavior>> byName = new LinkedHashMap<>();
+        requirements.forEach((name, reqs) -> byName.put(name, Requirements.names(reqs)));
+        return byName;
     }
 
     /**
@@ -418,7 +439,8 @@ final class CheckedProgramAssembler {
                 behaviors.add(new CheckedBehavior(named, target,
                         EnsuresEnforcement.in(read.checks(), read.name(), named),
                         rowsOf(read.rowsByBehavior().getOrDefault(named.name(), List.of()), types,
-                                target.signature(), targets))));
+                                target.signature(), targets),
+                        read.requirements().getOrDefault(named.name(), List.of()))));
         return new CheckedModule(read.name(), behaviors,
                 helpersOf(read.name(), read.bodies(), read.checked()), read.data());
     }

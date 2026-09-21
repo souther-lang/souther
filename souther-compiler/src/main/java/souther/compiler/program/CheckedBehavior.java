@@ -20,9 +20,9 @@ import java.util.List;
  * never read here — handed over as a behavior with no rows it would read as one nothing says what
  * it owes, which is a different program.
  *
- * <p>A class and not a record. What a checked behavior is known to be will grow — what it requires,
- * what it declares cannot arrive — and each of those is something a reader asks for rather than a
- * place in a constructor every existing reader would have to be recompiled against.
+ * <p>A class and not a record. What a checked behavior is known to be will grow — what it declares
+ * cannot arrive is one such thing still owed — and each of those is something a reader asks for
+ * rather than a place in a constructor every existing reader would have to be recompiled against.
  */
 public final class CheckedBehavior {
 
@@ -30,13 +30,15 @@ public final class CheckedBehavior {
     private final BehaviorTarget target;
     private final EnsuresEnforcement ensures;
     private final List<CheckedRow> rows;
+    private final List<ValueName.Behavior> requirements;
 
     CheckedBehavior(ValueName.Behavior name, BehaviorTarget target, EnsuresEnforcement ensures,
-                    List<CheckedRow> rows) {
+                    List<CheckedRow> rows, List<ValueName.Behavior> requirements) {
         this.name = name;
         this.target = target;
         this.ensures = ensures;
         this.rows = List.copyOf(rows);
+        this.requirements = List.copyOf(requirements);
     }
 
     /**
@@ -110,6 +112,19 @@ public final class CheckedBehavior {
      */
     public List<CheckedRow> rows() {
         return rows;
+    }
+
+    /**
+     * The behaviors constructing this one requires injected, in the order its constructor takes
+     * them.
+     *
+     * <p>The dependency identities alone, and not who asked for each: which definition wanted a
+     * dependency is a compiler diagnostic's concern, and every reader of a checked program that
+     * would emit a constructor parameter, a capture, or an example's fake wants only this list and
+     * its order.
+     */
+    public List<ValueName.Behavior> requirements() {
+        return requirements;
     }
 
     @Override
