@@ -306,6 +306,8 @@ A published value is substituted where it is named and a published helper expand
 
 A published *value* rests on none of that. What a value builds belongs to its definition whatever module declares the type, so reading one across a boundary answers the same as reading one within a module (<<fn-value-semantics>>). Crossing the boundary is what the paragraph above is about, and a value never needed it.
 
+[[a-published-helper-builds-only-what-its-reader-can-reach]]A published helper's body runs in the module that calls it, so what it builds SHALL be a type another module can reach: one the declaring module exposes, or one of some other module. A published helper whose closed body — with the helpers and values it names already substituted, and every recursive helper that travels with it — builds a type its module keeps to itself is refused where it is published, and not where it is called. This is asked of what the reader is handed and not of what the source writes, so a type the closing substitutes away does not count. It does not reach a published value, which runs in the module that declares it and hands its reader an answer.
+
 A published body's source travels in the jar and is read back by the importing compiler (<<published-modules>>). What that source means is therefore part of what a compiled module promises, and is recorded under the same boundary version as the rest of it.
 
 [#exposed-surface]
@@ -5923,6 +5925,19 @@ The fix is to declare the value in the module's own source. A value the model is
 ----
 
 Reported where the name is written — in a `+depends on+` clause, or as a `+>->+` stage (<<unwritten-behavior>>). The behavior naming it has a body, so it is built here and holds the named one as an injected field, and nothing can supply that field: Java has no base to extend, because the model says the body is Souther's, and Souther has not written it. Declaring the unwritten behavior is not an error, and neither is resting on it from another behavior that is itself unwritten.
+
+[#e1628]
+=== A published helper builds a type the module keeps
+
+[,text]
+----
+`taxed` is published, so its body runs in each module that imports it, and that body builds
+`Step`, which this module keeps to itself.
+----
+
+Reported where the module that publishes the helper is compiled (<<a-published-helper-builds-only-what-its-reader-can-reach>>). A published helper is expanded into its reader, so the reader's classes name what the helper builds, and a type that is not in `+exposing+` is not one they can name. Nothing in the helper's signature shows it: `Step` may occur only in the body, or only in a private value the body names, which is expanded with it.
+
+Either expose the type, or build it somewhere the reader does not run — a published value runs in the module that declares it.
 
 [#e1701]
 === behavior composition type mismatch

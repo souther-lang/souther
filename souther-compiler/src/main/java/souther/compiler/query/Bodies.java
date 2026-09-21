@@ -33,6 +33,7 @@ import souther.compiler.check.HelperInliner;
 import souther.compiler.check.Preserved;
 import souther.compiler.check.ValueEntries;
 import souther.compiler.core.CompleteSignature;
+import souther.compiler.check.ExecutableDependencies;
 import souther.compiler.check.Expansion;
 import souther.compiler.check.HelperGraph;
 import souther.compiler.check.HelperNames;
@@ -61,6 +62,7 @@ import souther.compiler.core.GrowingFold;
 import souther.compiler.core.ValueShape;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.claims.ClaimDiagnostics;
 import souther.compiler.claims.Claims;
 import souther.compiler.claims.UnreachableClaims;
@@ -1699,11 +1701,11 @@ public final class Bodies {
      * and emitted once, one with parameters is expanded where it is called.
      */
     private static Map<String, Hir.FnDef> publishedDefinitions(Hir.Module from,
-                                                               Collection<PublishedHelper> allowed,
+                                                               Collection<Hir.FnDef> roots,
                                                                Expanding.Of against) {
         Map<String, Hir.FnDef> out = new LinkedHashMap<>();
         HelperInliner inliner = null;
-        for (Hir.FnDef fn : bodiesOf(from, allowed)) {
+        for (Hir.FnDef fn : roots) {
             if (inliner == null) {
                 inliner = HelperInliner.over(against.table(), against.graph());
             }
@@ -1727,7 +1729,22 @@ public final class Bodies {
     public static Map<String, Hir.FnDef> publishedClosure(Hir.Module from,
                                                           Collection<PublishedHelper> allowed,
                                                           Expanding.Of against) {
-        Map<String, Hir.FnDef> out = publishedDefinitions(from, allowed, against);
+        return carriedClosure(from, bodiesOf(from, allowed), against);
+    }
+
+    /**
+     * What travels with {@code roots}, which are definitions of {@code from} it hands over: each
+     * closed over its own module, and every recursive helper of {@code from} they reach.
+     *
+     * <p>The one computation of what a reader is given. The reader asks it for the definitions it
+     * holds leave to read ({@link #publishedClosure}); the module that publishes asks it for the
+     * ones it exposes, to hold what it ships to the question of whether another module can run it.
+     * Two computations of one set would agree only until the closing changed.
+     */
+    public static Map<String, Hir.FnDef> carriedClosure(Hir.Module from,
+                                                        Collection<Hir.FnDef> roots,
+                                                        Expanding.Of against) {
+        Map<String, Hir.FnDef> out = publishedDefinitions(from, roots, against);
         if (out.isEmpty()) {
             return out;
         }
@@ -1873,6 +1890,73 @@ public final class Bodies {
             HelperTable table = HelperTable.of(settled.value(), imported.value(), policy,
                     db.ask(new Front.Library()).value());
             return Answer.of(new Expanding.Of(table, HelperGraph.of(table)));
+        }
+    }
+
+    /**
+     * Whether what {@code name} hands over to run in another module can be run there.
+     *
+     * <p>A published helper is expanded into its reader, so the classes the reader generates name
+     * whatever the closed body builds. Only the types a module exposes are public, so a body that
+     * builds one the module keeps to itself is a class the reader cannot link against. This asks
+     * the set the reader is given ({@link #carriedClosure}), from the roots the module publishes,
+     * and holds each body in it to that.
+     *
+     * <p>A value is not among what is asked: it runs where it is declared, and its reader calls an
+     * entry there. It is one definition of the closure only because a helper may be closed over it.
+     */
+    public record PublishedBodiesRunElsewhere(String name) implements Key<Boolean> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Boolean> compute(Db db) {
+            Answer<Hir.Module> settled = db.ask(new Settled(name));
+            Answer<Expanding.Of> against = db.ask(new Expanding(name, InliningPolicy.FULL));
+            if (!settled.present() || !against.present()) {
+                return Answer.absent();
+            }
+            Hir.Module from = settled.value();
+            // A module that exposes nothing in particular exposes everything.
+            if (from.exposing().isEmpty()) {
+                return Answer.of(Boolean.TRUE);
+            }
+            Set<String> exposing = Set.copyOf(from.exposing());
+            List<Hir.FnDef> roots = new ArrayList<>();
+            for (Hir.FnDef fn : HelperInliner.helpersOf(from).values()) {
+                if (fn.body() instanceof Hir.FnBody.Written && !fn.params().isEmpty()
+                        && exposing.contains(fn.name())) {
+                    roots.add(fn);
+                }
+            }
+            if (roots.isEmpty()) {
+                return Answer.of(Boolean.TRUE);
+            }
+            Set<String> kept = new LinkedHashSet<>();
+            for (Hir.Def def : from.defs()) {
+                if ((def instanceof Hir.Data || def instanceof Hir.UnitData)
+                        && !exposing.contains(def.declares().name())) {
+                    kept.add(def.declares().name());
+                }
+            }
+            List<Report> reports = new ArrayList<>();
+            for (Hir.FnDef carried : carriedClosure(from, roots, against.value()).values()) {
+                if (carried.params().isEmpty()) {
+                    continue;
+                }
+                for (TypeSymbol.AtModule built
+                        : ExecutableDependencies.of(carried.writtenBody())) {
+                    if (built.module().equals(name) && kept.contains(built.name())) {
+                        reports.add(Report.raised(Diagnostic.at(carried.pos())
+                                .say(new ModuleMessage.APublishedHelperBuildsWhatIsKept(
+                                        carried.written().canonical(), built.name()))
+                                .build()));
+                    }
+                }
+            }
+            return reports.isEmpty() ? Answer.of(Boolean.TRUE) : Answer.absent(reports);
         }
     }
 

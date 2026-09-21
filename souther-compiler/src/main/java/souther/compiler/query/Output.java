@@ -88,6 +88,12 @@ public final class Output {
             if (in == null) {
                 return Answer.absent();
             }
+            // What this module hands over to run in another has to be runnable there. Asked before
+            // the classes are made, because what a reader is given is stamped onto them.
+            Answer<Boolean> runnable = db.ask(new Bodies.PublishedBodiesRunElsewhere(name));
+            if (!runnable.present()) {
+                return Answer.absent(runnable.reports());
+            }
             try {
                 Emissions emitted = Backend.generate(
                         shipped(in), in.scope(), in.published(), in.kinds(),

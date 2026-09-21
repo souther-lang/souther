@@ -1358,8 +1358,14 @@ public final class Backend {
      * jar written before it has no entry to call. The module's metadata also records what each of
      * its values was settled as, which is what a reader types a call to the entry by, so a reader
      * of an older jar has no answer to type it with.
+     *
+     * <p>Version 22 strengthens what publishing a helper promises. A helper's body is compiled into
+     * each module that imports it, so the module that publishes it now refuses a body that reaches
+     * a type it keeps to itself, and a reader does not check that again. A jar written before it
+     * was not held to that, and a reader that trusted one would emit a class the JVM refuses when
+     * it runs.
      */
-    public static final int BOUNDARY_VERSION = 21;
+    public static final int BOUNDARY_VERSION = 22;
 
     /** Emits the class a module's own declarations are published on, carrying {@code declarations}.
      * What it says is the caller's; that it is built like every other generated class — the same Java

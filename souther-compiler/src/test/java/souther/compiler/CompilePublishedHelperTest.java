@@ -34,15 +34,14 @@ class CompilePublishedHelperTest {
             module pricing exposing ( Amount, taxed )
 
             data Amount = Int
-            data Rate = Int
 
-            let rate = Rate(10)
+            let rate = 10
             let taxed (a: Amount) =
-                Amount(a.value + Rational.toInt(DOWN, a.value * rate.value / 100))
+                Amount(a.value + Rational.toInt(DOWN, a.value * rate / 100))
             """;
 
     /**
-     * The helper is called, and the reader writes nothing else about it: `Rate` is `pricing`'s and is
+     * The helper is called, and the reader writes nothing else about it: `rate` is `pricing`'s and is
      * not named here, and neither is the `Amount` the helper builds declared in `constructs` —
      * publishing `taxed` is what states that origination, and it was stated in `pricing`.
      */
@@ -105,7 +104,7 @@ class CompilePublishedHelperTest {
     @Test
     void aUnitDataAPublishedBodyBuildsIsCarriedToo() {
         assertDoesNotThrow(() -> Compiler.compileModules(List.of("""
-                module pricing exposing ( doubled )
+                module pricing exposing ( Marker, doubled )
 
                 data Marker
 
@@ -127,7 +126,7 @@ class CompilePublishedHelperTest {
     @Test
     void aCarriedUnitDataIsNotTheReadersUnitOfThatName() {
         assertDoesNotThrow(() -> Compiler.compileModules(List.of("""
-                module pricing exposing ( doubled )
+                module pricing exposing ( Marker, doubled )
 
                 data Marker
 
@@ -512,6 +511,113 @@ class CompilePublishedHelperTest {
                 """));
 
         assertTrue(e.getMessage().contains("Hidden"), e.getMessage());
+    }
+
+    /** A published helper's body runs in the module that calls it, so what the body builds has to be
+     * a type that module can reach. The signature names only `Amount`, and the body builds `Step`. */
+    @Test
+    void aPublishedHelperMayNotBuildATypeTheModuleKeepsToItself() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module pricing exposing ( Amount, taxed )
+
+                data Amount = Int
+                data Step = Int
+
+                let taxed (a: Amount) = Amount(a.value * Step(3).value)
+                """));
+
+        assertTrue(e.getMessage().contains("Step"), e.getMessage());
+        assertTrue(e.getMessage().contains("taxed"), e.getMessage());
+    }
+
+    /** A unit data is read from the shared instance of its class, which is as much a reference to
+     * that class as a construction is. */
+    @Test
+    void aPublishedHelperMayNotNameAUnitDataTheModuleKeepsToItself() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module pricing exposing ( doubled )
+
+                data Marker
+
+                let doubled (n: Int) = if Marker == Marker then n * 2 else n
+                """));
+
+        assertEquals("E1628", e.code(), e.getMessage());
+        assertTrue(e.getMessage().contains("Marker"), e.getMessage());
+    }
+
+    /** And an exposed one is public, so the reader runs the body that reads it. */
+    @Test
+    void aPublishedHelperMayNameAUnitDataTheModuleExposesAndItRuns() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compileModules(List.of("""
+                module pricing exposing ( Marker, doubled )
+
+                data Marker
+
+                let doubled (n: Int) = if Marker == Marker then n * 2 else n
+                """, """
+                module order exposing ( In, Out, bill )
+
+                import pricing ( doubled )
+
+                data In = { n: Int }
+                data Out = { v: Int }
+
+                behavior bill : (i: In) -> Out constructs Out
+                let bill (i) = Out { v = doubled(i.n) }
+                """)), getClass().getClassLoader());
+
+        Object in = Codecs.decoded(loader, "order.In", Map.of("n", 5L));
+        Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "order.Out",
+                Codecs.apply(Emitted.behavior(loader, "order", "bill")
+                        .getConstructor().newInstance(), in));
+        assertEquals(10L, out.get("v"));
+    }
+
+    /** A private value a published helper names is expanded into the helper, so what that value
+     * builds is what the helper builds. */
+    @Test
+    void aPublishedHelperMayNotNameAValueThatBuildsATypeTheModuleKeepsToItself() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module pricing exposing ( Amount, taxed )
+
+                data Amount = Int
+                data Rate = Int
+
+                let rate = Rate(10)
+                let taxed (a: Amount) = Amount(a.value * rate.value)
+                """));
+
+        assertTrue(e.getMessage().contains("Rate"), e.getMessage());
+    }
+
+    /** A published value runs in the module that declares it, so what its body builds stays that
+     * module's and its reader is handed the answer. */
+    @Test
+    void aPublishedValueMayBuildATypeTheModuleKeepsToItself() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compileModules(List.of("""
+                module pricing exposing ( step )
+
+                data Step = Int
+
+                let step = Step(3).value
+                """, """
+                module order exposing ( In, Out, bill )
+
+                import pricing ( step )
+
+                data In = { n: Int }
+                data Out = { v: Int }
+
+                behavior bill : (i: In) -> Out constructs Out
+                let bill (i) = Out { v = i.n * step }
+                """)), getClass().getClassLoader());
+
+        Object in = Codecs.decoded(loader, "order.In", Map.of("n", 5L));
+        Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "order.Out",
+                Codecs.apply(Emitted.behavior(loader, "order", "bill")
+                        .getConstructor().newInstance(), in));
+        assertEquals(15L, out.get("v"));
     }
 
     /** The same holds of a value, which is the definition with no parameter list. */
