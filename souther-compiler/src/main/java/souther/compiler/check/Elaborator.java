@@ -1598,8 +1598,8 @@ public final class Elaborator {
                 && !of.denotes().module().equals(ctx.symbols().module())
                 ? new Core.Reached.OfPublishedValue(of)
                 : new Core.Reached.OfDeclaration(call.target());
-        return new Core.Call(callee, handed, ConstructOccurrence.unwritten(), settled.result(),
-                call.pos());
+        return new Core.Call(callee, handed, ConstructOccurrence.unwritten(),
+                Core.CallSettlement.None.INSTANCE, settled.result(), call.pos());
     }
 
     /**
