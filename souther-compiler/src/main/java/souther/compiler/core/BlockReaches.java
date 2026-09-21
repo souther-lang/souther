@@ -87,24 +87,28 @@ public record BlockReaches(
             }
             case Core.IfConstructed ic -> {
                 walk(ic.construct(), bound, acc);
-                walk(ic.then(), with(bound, ic.binder().binding()), acc);
+                enter(bound, ic.binder().binding(), () -> walk(ic.then(), bound, acc));
                 ic.els().forEach(arm -> walk(arm.body(), bound, acc));
             }
             case Core.LetIn li -> {
                 walk(li.value(), bound, acc);
-                walk(li.body(), with(bound, li.binder().binding()), acc);
+                enter(bound, li.binder().binding(), () -> walk(li.body(), bound, acc));
             }
             case Core.Match m -> {
                 walk(m.scrutinee(), bound, acc);
                 for (Core.Case c : m.cases()) {
-                    walk(c.body(), c.binder() == null ? bound : with(bound, c.binder().binding()),
-                            acc);
+                    if (c.binder() == null) {
+                        walk(c.body(), bound, acc);
+                    } else {
+                        enter(bound, c.binder().binding(), () -> walk(c.body(), bound, acc));
+                    }
                 }
             }
             case Core.Block b -> {
-                Set<BindingId> inner = new HashSet<>(bound);
-                b.params().forEach(p -> inner.add(p.binding()));
-                walk(b.body(), inner, acc);
+                List<BindingId> entered = b.params().stream().map(Core.Binder::binding).toList();
+                entered.forEach(bound::add);
+                walk(b.body(), bound, acc);
+                entered.forEach(bound::remove);
             }
             case Core.ListLit lit -> lit.elements().forEach(x -> walk(x, bound, acc));
             case Core.OptionSome so -> walk(so.value(), bound, acc);
@@ -140,9 +144,17 @@ public record BlockReaches(
         }
     }
 
-    private static Set<BindingId> with(Set<BindingId> bound, BindingId binding) {
-        Set<BindingId> inner = new HashSet<>(bound);
-        inner.add(binding);
-        return inner;
+    /**
+     * Walks {@code body} with {@code binding} added to {@code bound}, then takes it back out.
+     *
+     * <p>A DFS backtracks: no branch this returns to ever needed a scope another branch entered, so
+     * one shared, mutated set answers every scope along the walk. A copy per {@code let}, arm or
+     * nested block instead would sum to the square of how deep the scopes nest, for a cost this walk
+     * never needs to pay.
+     */
+    private static void enter(Set<BindingId> bound, BindingId binding, Runnable body) {
+        bound.add(binding);
+        body.run();
+        bound.remove(binding);
     }
 }
