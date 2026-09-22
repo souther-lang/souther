@@ -50,15 +50,22 @@ from `Intrinsics.JdkVirtual` (`java.lang.String.trim`) to `Intrinsics.RuntimeSta
 
 The same question — does a host method's meaning match the one Souther has committed to, or only
 its totality and representation — applies next and most sharply to `String.lowercase`/`uppercase`
-(`java.lang.String.toLowerCase`/`toUpperCase` with no `Locale` argument, so both the mapping table
-a JVM ships and the *default locale it happens to be running under* decide the answer). Case
-conversion has no sibling operation like `words` to expose a disagreement the way this issue did,
-and the specification does not yet commit to a fixed casing rule the way `[#string-whitespace]`
-now commits to a fixed whitespace set. `contains`/`startsWith`/`endsWith`/`append` stay on
-`JdkVirtual` under ADR-0112 for a different reason and are not part of the same risk: each is a
-sequence operation over the representation Souther already shares with the JDK, with no Unicode
-property table or locale behind it. Deciding the casing question is left open; this ADR fixes only
-the whitespace case, which #1871 raised.
+(`java.lang.String.toLowerCase`/`toUpperCase` with no `Locale` argument). Case conversion has no
+sibling operation like `words` to expose a disagreement the way this issue did, and unlike
+whitespace it is not one axis but at least three independent ones a decision would have to settle
+together: which locale tailors the mapping (the JDK's default-locale behaviour is one visible
+symptom, not the whole question); whether the mapping is Unicode's *simple*, one-code-point-to-one
+mapping or its *full*, possibly one-to-many and context-sensitive one (`ß` to `SS`, Greek final
+sigma); and which Unicode version's mapping table is meant, since a JVM's built-in tables and a
+`souther-wasm-compiler` Rust runtime's are not guaranteed to agree even at the same nominal version.
+Fixing the JDK's default-locale symptom alone, while leaving the mapping-algorithm and
+Unicode-version axes implicit, would repeat this issue's own mistake one level up — a spec sentence
+claiming a definite meaning without checking it against what either backend actually computes.
+`contains`/`startsWith`/`endsWith`/`append` stay on `JdkVirtual` under ADR-0112 for a different
+reason and are not part of the same risk: each is a sequence operation over the representation
+Souther already shares with the JDK, with no Unicode property table, locale, or version behind it.
+Deciding the casing question, on all three axes at once and against both backends, is left open;
+this ADR fixes only the whitespace case, which #1871 raised.
 
 ## Consequences
 
