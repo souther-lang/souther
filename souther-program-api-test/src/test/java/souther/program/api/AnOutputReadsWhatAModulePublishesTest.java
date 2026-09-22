@@ -5,6 +5,7 @@ import souther.compiler.program.CheckedBehavior;
 import souther.compiler.program.CheckedModule;
 import souther.compiler.program.CheckedProgram;
 import souther.compiler.program.Publication;
+import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
@@ -81,6 +82,17 @@ class AnOutputReadsWhatAModulePublishesTest {
         CheckedModule module = CheckedProgram.of(List.of(WITH_AN_EMPTY_CLAUSE)).module("emptily");
 
         assertEquals(Publication.KEPT, publicationOf(module, "one"));
+    }
+
+    /** A name this module does not declare is not a name it keeps, and is refused rather than answered. */
+    @Test
+    void aBehaviorThisModuleDoesNotDeclareIsRefusedRatherThanKept() {
+        CheckedModule module = CheckedProgram.of(List.of(WITH_A_CLAUSE)).module("pricing");
+
+        assertThrows(IllegalArgumentException.class, () -> module.publicationOf(
+                new ValueName.Behavior("pricing", "nobodyWroteThis")));
+        assertThrows(IllegalArgumentException.class, () -> module.publicationOf(
+                new ValueName.Behavior("somewhere.else", "total")));
     }
 
     /**

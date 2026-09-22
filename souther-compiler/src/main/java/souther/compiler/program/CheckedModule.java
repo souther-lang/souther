@@ -1,6 +1,5 @@
 package souther.compiler.program;
 
-import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.LinkedHashMap;
@@ -52,7 +51,7 @@ public final class CheckedModule {
     }
 
     /**
-     * Whether this module publishes what it declares under {@code name}, or keeps it.
+     * Whether this module publishes the behavior {@code name}, or keeps it.
      *
      * <p>Asked of the module because that is what the question is: a name being published is this
      * module's surface holding it, and a module is the only thing that can be asked what its
@@ -60,26 +59,22 @@ public final class CheckedModule {
      * module declared — which is most of {@link #helpers()} — would answer about whose surface is
      * not said.
      *
-     * <p>So it answers about a name this module declares, and refuses one it does not. What
-     * another module publishes is that module's answer.
+     * <p>Of a behavior and of nothing else, for now. The same clause decides a data and a value
+     * and a helper, and each of those is answered here when a reader wants it: a question asked of
+     * a wider domain than it can answer over would have to answer {@code KEPT} for a name that is
+     * not declared at all, which is a different thing and reads as the module having decided it.
      *
-     * @throws IllegalArgumentException where the name is not one this module declares
+     * @throws IllegalArgumentException where this module declares no behavior {@code name}
      */
-    public Publication publicationOf(ValueName.OfAModule name) {
-        return publicationOfName(name.module(), name.name(), name);
-    }
-
-    /** The same, for a type this module declares. */
-    public Publication publicationOf(TypeSymbol.AtModule name) {
-        return publicationOfName(name.module(), name.name(), name);
-    }
-
-    private Publication publicationOfName(String module, String bare, Object asked) {
-        if (!name.equals(module)) {
-            throw new IllegalArgumentException("`" + name + "` does not declare `" + asked
+    public Publication publicationOf(ValueName.Behavior name) {
+        if (name == null) {
+            throw new IllegalArgumentException("a behavior is asked about by its identity");
+        }
+        if (!behaviourByName.containsKey(name)) {
+            throw new IllegalArgumentException("`" + this.name + "` declares no behavior `" + name
                     + "`, and what another module publishes is that module's answer");
         }
-        return published.contains(bare) ? Publication.PUBLISHED : Publication.KEPT;
+        return published.contains(name.name()) ? Publication.PUBLISHED : Publication.KEPT;
     }
 
     /** What the module is called: what its own declarations are under, and what an import names. */

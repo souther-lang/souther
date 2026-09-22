@@ -405,15 +405,22 @@ final class CheckedProgramAssembler {
         // agree with the checker only for as long as lowering left declarations alone.
         Hir.Module declarations = lowering.settled();
         Hir.Module bodies = lowering.lowered();
-        // What the module publishes, asked of the one answer everything else asks. Read off the
-        // `exposing` clause again here, this would be a second reading of a decision the check
-        // already made — and the two would agree until one of them learnt something.
+        // What the module publishes, asked of the one answer everything that reaches across a
+        // module boundary asks. Read off the `exposing` clause again here, this would be a second
+        // reading of a decision the check already made — and the two would agree until one of them
+        // learnt something.
         Set<String> published = db.ask(new Front.Exposes(module)).value();
+        if (published == null) {
+            // The same reading as every other answer above: a module taken as checked is one every
+            // question about it has been answered for, and nothing here turns an answer that was
+            // never read into a module that publishes nothing.
+            throw new IllegalStateException("`" + module + "` was taken as checked and what it"
+                    + " publishes was not read");
+        }
         return new ModuleReading(module, bodies, checked, signatures, implementations,
                 compositions, checks,
                 dataOf(declarations, Shapes.publishedDeclarations(db), shapes),
-                rowsOf(db, module), requirementsOf(requirements),
-                published == null ? Set.of() : published);
+                rowsOf(db, module), requirementsOf(requirements), published);
     }
 
     /**
