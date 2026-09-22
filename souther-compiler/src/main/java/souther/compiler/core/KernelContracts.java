@@ -97,9 +97,10 @@ public final class KernelContracts {
             // `toDecimal` narrowing to a carrier that holds no such value are the same half, read
             // off `Rational#asWholeNumber`/`#asDecimal`. `RATIONAL_ADD`/`SUBTRACT` are the second
             // half: the exact sum or difference always has a value, but writing it is what
-            // `Rational`'s own arithmetic is defined to do (`Rational#plus`/`#minus`,
-            // `#aScaleThatClearsBothExponents`), and that required form can ask for an exponent past
-            // what `Rational` holds even where the mathematical answer would fit.
+            // `Rational`'s own arithmetic is defined to do — a common exponent brought out and the
+            // remaining distance built in full (`Rational#plus`/`#minus`) — and that required form
+            // can ask for an exponent past what `Rational` holds even where the mathematical answer
+            // would fit.
             case STRING_REPEAT, STRING_PAD_LEFT, STRING_PAD_RIGHT,
                     LIST_SUM, LIST_PRODUCT, LIST_RANGE_INCLUSIVE,
                     DATE_ADD_DAYS, DATE_ADD_MONTHS, DATE_ADD_YEARS,

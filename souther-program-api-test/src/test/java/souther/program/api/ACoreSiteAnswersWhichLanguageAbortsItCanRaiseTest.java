@@ -6,6 +6,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.program.CheckedImplementation;
 import souther.compiler.program.CheckedModule;
 import souther.compiler.program.CheckedProgram;
+import souther.compiler.types.BinOp;
 import souther.compiler.types.Type;
 
 import org.junit.jupiter.api.Test;
@@ -26,7 +27,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ACoreSiteAnswersWhichLanguageAbortsItCanRaiseTest {
 
     private static final String MODULE = """
-            module demo exposing ( Positive, unguarded, guarded, sums, divides, unreached )
+            module demo exposing
+                ( Positive, unguarded, guarded, sums
+                , dividesIntByInt, dividesDecimalByDecimal, dividesWithARationalOperand
+                , unreached
+                )
 
             data Positive = Int
                 invariant positive = value > 0
@@ -47,9 +52,17 @@ class ACoreSiteAnswersWhichLanguageAbortsItCanRaiseTest {
 
             let sums (a, b) = a + b
 
-            behavior divides : (a: Int, b: Int) -> Int
+            behavior dividesIntByInt : (a: Int, b: Int) -> Int
 
-            let divides (a, b) = Rational.toInt(DOWN, a / b)
+            let dividesIntByInt (a, b) = Rational.toInt(DOWN, a / b)
+
+            behavior dividesDecimalByDecimal : (a: Decimal, b: Decimal) -> Int
+
+            let dividesDecimalByDecimal (a, b) = Rational.toInt(DOWN, a / b)
+
+            behavior dividesWithARationalOperand : (a: Int, b: Int, c: Int) -> Int
+
+            let dividesWithARationalOperand (a, b, c) = Rational.toInt(DOWN, (a / b) / c)
 
             behavior unreached : (n: Int) -> Int
 
@@ -121,15 +134,70 @@ class ACoreSiteAnswersWhichLanguageAbortsItCanRaiseTest {
         assertEquals(Set.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE), program.abortsAt(sum).kinds());
     }
 
+    /**
+     * {@code Int / Int} runs through {@code RationalMath.divideWholeNumbers} on two freshly-widened,
+     * compact operands, so a zero divisor is the only reason this site can end without a value for
+     * — never {@link AbortKind#REQUIRED_FORM_HAS_NO_PLACE}, even though the answer is
+     * {@code Rational} the same way every {@code /} answers is.
+     */
     @Test
-    void theExactQuotientAbortsOnAZeroDivisorAndOnAnAnswerWithNoPlace() {
+    void intDividedByIntAbortsOnlyOnAZeroDivisor() {
         CheckedProgram program = program();
-        Core body = bodyOf(program, "divides");
+        Core body = bodyOf(program, "dividesIntByInt");
 
         Core.Binary quotient = onlyOneOf(Core.Binary.class, body);
 
+        assertEquals(Set.of(AbortKind.DIVISION_BY_ZERO), program.abortsAt(quotient).kinds());
+    }
+
+    /** {@code Decimal / Decimal} is the same story: both operands are widened fresh through
+     *  {@code RationalMath.fromDecimal}, so only a zero divisor reaches this site. */
+    @Test
+    void decimalDividedByDecimalAbortsOnlyOnAZeroDivisor() {
+        CheckedProgram program = program();
+        Core body = bodyOf(program, "dividesDecimalByDecimal");
+
+        Core.Binary quotient = onlyOneOf(Core.Binary.class, body);
+
+        assertEquals(Set.of(AbortKind.DIVISION_BY_ZERO), program.abortsAt(quotient).kinds());
+    }
+
+    /**
+     * {@code (a / b) / c}: the inner {@code Int / Int} is zero-only, exactly as above, but the
+     * outer division's left operand is already {@code Rational} — carrying whatever exponents the
+     * inner quotient left it with — so that site adds
+     * {@link AbortKind#REQUIRED_FORM_HAS_NO_PLACE}. Two {@code Core.Binary(DIV, ...)} nodes in one
+     * body, told apart by which one, answering differently — the reason this classification reads
+     * operand types at all rather than the shared answer type alone.
+     */
+    @Test
+    void aDivisionWithAnAlreadyRationalOperandAlsoRisksAnAnswerWithNoPlace() {
+        CheckedProgram program = program();
+        Core body = bodyOf(program, "dividesWithARationalOperand");
+
+        List<Core.Binary> divisions = new ArrayList<>();
+        for (Core node : everyNodeOf(body)) {
+            if (node instanceof Core.Binary binary && binary.op() == BinOp.DIV) {
+                divisions.add(binary);
+            }
+        }
+        assertEquals(2, divisions.size(), () -> "one inner and one outer division: " + divisions);
+
+        Core.Binary inner = null;
+        Core.Binary outer = null;
+        for (Core.Binary division : divisions) {
+            if (division.left().type() == Type.RATIONAL) {
+                outer = division;
+            } else {
+                inner = division;
+            }
+        }
+
+        assertEquals(Set.of(AbortKind.DIVISION_BY_ZERO), program.abortsAt(inner).kinds(),
+                "the inner Int / Int, same as intDividedByIntAbortsOnlyOnAZeroDivisor");
         assertEquals(Set.of(AbortKind.DIVISION_BY_ZERO, AbortKind.REQUIRED_FORM_HAS_NO_PLACE),
-                program.abortsAt(quotient).kinds());
+                program.abortsAt(outer).kinds(),
+                "the outer division, whose left operand is already Rational");
     }
 
     @Test

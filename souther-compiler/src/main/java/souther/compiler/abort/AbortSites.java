@@ -216,10 +216,11 @@ public final class AbortSites {
      * an {@code Int} or a {@code Decimal} sum, difference or product outside what its type holds
      * ({@code souther.runtime.IntMath}, {@code souther.runtime.DecimalMath}), or a {@code Rational}
      * one whose required exact form asks for more exponent than {@code Rational} holds
-     * ({@code souther.runtime.Rational#noRoomForIt}). {@code /} always answers {@code Rational}
-     * (ADR-0116) and adds {@link AbortKind#DIVISION_BY_ZERO}: {@code RationalMath.divide} /
-     * {@code divideWholeNumbers} refuse a zero divisor before they ask whether the quotient's
-     * required form has a place — see {@link #divide}.
+     * ({@code souther.runtime.Rational#noRoomForIt}). Never both at one site: {@code Int + Int} and
+     * {@code Decimal + Decimal} stay {@code Int} and {@code Decimal} (ADR-0116's homogeneous rule),
+     * so a {@code +}/{@code -}/{@code *} whose answer is {@code Rational} already has a
+     * {@code Rational}-typed operand feeding it — the same fact {@link #divide} reads directly for
+     * {@code /}, which does not get that guarantee for free.
      */
     private static AbortSet arithmetic(Core.Binary binary) {
         return switch (binary.op()) {
@@ -260,6 +261,28 @@ public final class AbortSites {
      * produced is refused here the same way, rather than answered as though it were an ordinary
      * {@code Int} or {@code Decimal} division — the one thing that would let a future checker
      * change quietly agree with a stale reading here.
+     *
+     * <p>{@code /} always answers {@code Rational}, but unlike {@code +}/{@code -}/{@code *} that
+     * does not by itself mean a {@code Rational}-typed operand is already in play — {@code Int / Int}
+     * and {@code Decimal / Decimal} answer {@code Rational} too. So this reads both operand types
+     * directly, the one place in this walker an operand's own type decides the answer rather than
+     * the node's. {@code BodyGen.pushExact} is why: {@code Int} and {@code Decimal} operands are
+     * widened through {@code RationalMath.fromInt}/{@code fromDecimal} — exact and total, building a
+     * fresh, compact {@code Rational} with no prior exponent history — while an operand already
+     * {@code Rational}-typed is pushed as it stands, whatever exponents it already carries.
+     * {@code Int / Int} is emitted through {@code RationalMath.divideWholeNumbers} specifically
+     * (never the general path), but the same fact holds there too: two {@code long}s make a fresh,
+     * compact pair.
+     *
+     * <p>So a zero divisor is the only reason where neither operand was already {@code Rational}:
+     * {@code Int / Int} runs {@code divideWholeNumbers}, {@code Decimal / Decimal} runs
+     * {@code RationalMath.divide} on two freshly-widened operands, and
+     * {@code Rational#dividedBy}'s own exponent subtraction ({@code lessened}) cannot overflow a
+     * {@code long} for exponents that both trace back to a 32-bit {@code Decimal} scale or a
+     * {@code long} {@code Int} — traced directly against {@code Rational#dividedBy} rather than
+     * assumed from the type alone. Where either operand is already {@code Rational}, it may carry
+     * exponents from arithmetic earlier in the program, and dividing can still ask for more than
+     * {@code Rational} holds.
      */
     private static AbortSet divide(Core.Binary binary) {
         if (binary.type() != Type.RATIONAL) {
@@ -267,6 +290,11 @@ public final class AbortSites {
                     "`/` answers " + Type.show(binary.type()) + ", and the exact operator's answer"
                             + " is always Rational (spec §stdlib-rational)");
         }
-        return AbortSet.of(AbortKind.DIVISION_BY_ZERO, AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
+        AbortSet zeroDivisor = AbortSet.of(AbortKind.DIVISION_BY_ZERO);
+        boolean anOperandIsAlreadyRational =
+                binary.left().type() == Type.RATIONAL || binary.right().type() == Type.RATIONAL;
+        return anOperandIsAlreadyRational
+                ? zeroDivisor.union(AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE))
+                : zeroDivisor;
     }
 }
