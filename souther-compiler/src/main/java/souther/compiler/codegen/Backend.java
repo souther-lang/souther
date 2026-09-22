@@ -1535,6 +1535,15 @@ public final class Backend {
         cb.withMethodBody("apply", mtdApply, ClassFile.ACC_PUBLIC, code -> {
             int answered = n + 1;    // this=0, the arguments are 1..n
             int carrier = n + 2;
+            // Canonicalized in place before either reader sees them: apply$body's own binding loop
+            // canonicalizes again on its way in, so this is not the only door, but `ensures` reads
+            // these same slots below and has to see what apply$body saw, not the raw Java value —
+            // the asymmetry a runtime ensures check on the answer alone already had to close.
+            for (int i = 0; i < n; i++) {
+                code.aload(i + 1);
+                CanonicalizeAtCrossing.emit(code, successType(spec.params().get(i).type()));
+                code.astore(i + 1);
+            }
             code.aload(0);
             for (int i = 0; i < n; i++) {
                 code.aload(i + 1);
@@ -1673,6 +1682,14 @@ public final class Backend {
             cb.withMethodBody("apply", mtdApply, ClassFile.ACC_PUBLIC, code -> {
                 // slot 1 always holds the running value (an output case, as an Object).
                 List<Composition.Stage> stages = composed.stages();
+                // This apply is exactly as callable from Java directly as generateSpecFn's, so its
+                // own arguments are a crossing before stage 0 ever reads them, not only what an
+                // injected stage answers with below.
+                for (int i = 0; i < arity; i++) {
+                    code.aload(i + 1);
+                    CanonicalizeAtCrossing.emit(code, declared.inputTypes().get(i));
+                    code.astore(i + 1);
+                }
                 // stage 0 consumes the pipeline's arguments unconditionally
                 applyFirstStage(code, cdP, stages.get(0).behavior(), arity, requiredNames,
                         reqStages, behaviorDeps, stages.get(0).answers(), arity + 1);
@@ -1745,6 +1762,7 @@ public final class Backend {
             }
             code.invokevirtual(cdBehavior(stage), "apply", desc);
             projectStage(code, stage, stageOut, slot);
+            CanonicalizeAtCrossing.emit(code, stageOut);
             checkStageAtCrossing(code, stage, arity, slot + 1);
             code.astore(1);
             return;
@@ -1758,6 +1776,7 @@ public final class Backend {
         code.invokevirtual(ctx.cdBehaviorImpl(stage), "apply",
                 MethodTypeDesc.of(CD_Object, params));
         projectStage(code, stage, stageOut, slot);
+        CanonicalizeAtCrossing.emit(code, stageOut);
         checkStageAtCrossing(code, stage, arity, slot + 1);
         code.astore(1);
     }
@@ -1774,6 +1793,7 @@ public final class Backend {
         code.aload(1);
         code.invokeinterface(CD_Behavior, "apply", MTD_apply);
         projectStage(code, stage, stageOut, slot);
+        CanonicalizeAtCrossing.emit(code, stageOut);
         checkStageAtCrossing(code, stage, 1, slot + 1);
         code.astore(1);
     }

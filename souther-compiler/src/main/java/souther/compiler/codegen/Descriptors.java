@@ -386,6 +386,18 @@ final class Descriptors {
     /** {@code Options.mapWith(Function, Option)} — the same, keeping the {@code Option} shape
      *  rather than unwrapping it the way {@link #MTD_encodedOrNull} does. */
     static final MethodTypeDesc MTD_optionMapWith = MethodTypeDesc.of(CD_Option, CD_Function, CD_Option);
+    /** {@code Maps.canonicalizeWith(Map, Function, Function)} — key and value in one pass, failing
+     *  on a canonicalization collision rather than the encoder-side {@link #MTD_mapKeysWith}'s
+     *  overwrite ({@code CanonicalizeAtCrossing}). */
+    static final MethodTypeDesc MTD_mapsCanonicalizeWith =
+            MethodTypeDesc.of(CD_Map, CD_Map, CD_Function, CD_Function);
+    /** {@code Maps.canonicalizeWithCaptured(Function, Function, Map)} — the same, the map last, for
+     *  a {@code Map} nested inside another container's single captured element function. */
+    static final MethodTypeDesc MTD_mapsCanonicalizeWithCaptured =
+            MethodTypeDesc.of(CD_Map, CD_Function, CD_Function, CD_Map);
+    /** {@code Function.identity()} — the side of a crossing's {@code Map} canonicalization that
+     *  does not reach a {@code String}. */
+    static final MethodTypeDesc MTD_functionIdentity = MethodTypeDesc.of(CD_Function);
     /** {@code Encoder.contramap(Function)}: pre-processes the value an element encoder receives —
      * a nested Set is listed, a nested newtype-keyed Map has its keys rendered bare. */
     static final MethodTypeDesc MTD_Rencoder_contramap = MethodTypeDesc.of(CD_REncoder, CD_Function);

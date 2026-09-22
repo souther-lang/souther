@@ -130,28 +130,55 @@ question.
 compiler, recursing into `List`/`Set`/`Option`/`Map` the same way `CodecGen`'s encoder side already
 composes a nested `Function` for those shapes — the identical technique turned around: instead of
 building an `Encoder`, it builds the plain `java.util.function.Function` the runtime's
-`Lists.map`/`Sets.map`/`Options.mapWith`/`Maps.mapValuesWith` take. Three call sites reach it:
+`Lists.map`/`Sets.map`/`Options.mapWith`/`Maps.canonicalizeWith` take. A `Type.Union` naming a bare
+`String` member — a real, existing shape (`Member | Missing`-style unions already appear in the
+specification) — is the one case settled at run time rather than at codegen time: which arm a
+crossing value actually is is not known until then, so an `instanceof String` guards the
+canonicalization instead.
+
+Six call sites reach it, closed over two passes rather than named once and left to grow by
+omission:
 
 - `BodyGen.requiredCall`, an injected behavior's answer — canonicalized *before* `checkAtCrossing`
-  runs `Ensures.check`, not after. The two were the wrong way around at first: `ensures` for a
-  relation that cannot be proven statically has to run at the crossing precisely because it is
-  checking a Java-supplied value, and checking it before establishing the carrier invariant would
-  hold `ensures` to a value ADR-0120 does not yet promise anything about.
+  runs `Ensures.check`, not after. A runtime `ensures` (one that cannot be proven statically) checks
+  a Java-supplied value precisely because it is the crossing, and checking it before establishing
+  the carrier invariant would hold that check to a value the invariant does not promise anything
+  about yet.
+- `Backend.emitCheckingApply`, the same asymmetry on the *input* side of a generated behavior's own
+  runtime `ensures`: `apply$body`'s own binding loop canonicalizes its arguments, but the wrapper
+  that calls both `apply$body` and `Ensures.check` used to reload the raw, uncanonicalized argument
+  for the check. Canonicalizing each argument slot in place, once, before either reader sees it, is
+  what keeps the two answers to "what is this argument" from being able to disagree.
 - `Backend.emitDataFactory`, a field a Java-supplied factory hands `__construct` — the same
   `protected` factory an injected behavior's Java subclass calls directly.
 - `Backend.generateSpecFn`, the argument a Java caller hands a generated behavior's public `apply`
-  directly. This is a fourth boundary door beyond the two ADR-0096 named and the third
-  (`requiredCall`) this ADR already added: a generated behavior's `apply` is exactly as callable
-  from outside as a decoder is, and a Souther body — `let identity (s) = s` — has no decoder, no
-  literal and no injected behavior between it and whatever a Java caller passed.
+  directly — a fourth boundary door beyond the two ADR-0096 named and the crossing `requiredCall`
+  already closed: a generated behavior's `apply` is exactly as callable from outside as a decoder
+  is, and a Souther body — `let identity (s) = s` — has no decoder, no literal and no injected
+  behavior between it and whatever a Java caller passed.
+- `Backend.generatePipe`, twice over: a composition's own public `apply` is the same fourth door one
+  level up, and each stage's projected answer — `projectStage` then `checkStageAtCrossing` — had the
+  identical before/after-`ensures` ordering problem `requiredCall` already had, unfixed a second
+  time in a different method.
 
-**Still narrower, named gaps.** Not walked into a data's own field, into a `Type.Union`'s members,
-or into a `Map`'s key/value when that `Map` sits inside another container — the first two are the
-same scope boundary `CodecGen`'s decoder side draws (construction and container recursion are two
-questions); the third is `CanonicalizeAtCrossing`'s own, since composing two captured functions (key
-and value) inside a further container's single captured function is a second kind of composition it
-does not build. A `List<String>` crossing any of these three doors is canonicalized; a
-`List<SomeDataWithAStringField>` or a `List<Map<String, String>>` is not.
+`emitAsFunction` — the half of `CanonicalizeAtCrossing` that composes a nested container's element
+function — used to refuse a `Map` outright with an `IllegalArgumentException`, so a *valid*
+declaration like `List<Map<String, String>>` crashed the compiler rather than leaving a documented
+gap: `reachesString` said yes, `emitAsFunction` said no such function exists. It now composes a
+`Map`'s key and value functions the same way any other container composes one, via
+`Maps.canonicalizeWithCaptured`.
+
+**A `Map`'s key canonicalization can collide.** Two keys that are distinct before canonicalization —
+`"â"` and the precomposed `"â"` — can become one key after it, and overwriting is exactly
+the silent loss a derived decoder already refuses as `duplicate_key`. `Maps.canonicalizeWith` aborts
+with a `ConstraintViolation` instead of picking a survivor, the crossing's own semantics rather than
+the encoder-side `mapKeysWith`'s overwrite (correct there: an encoder's keys are already known
+distinct before it renders them).
+
+**Still a narrower, named gap.** Not walked into a data's own field — canonicalizing one means
+rebuilding it through its own factory with one field replaced, the same construction-versus-recursion
+boundary `CodecGen`'s decoder side draws. A `List<String>` crossing any of these doors is
+canonicalized; a `List<SomeDataWithAStringField>` is not.
 
 ### `reverse`'s law is retracted, not narrowed
 
