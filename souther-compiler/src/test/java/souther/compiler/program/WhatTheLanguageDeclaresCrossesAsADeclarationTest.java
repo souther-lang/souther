@@ -9,6 +9,7 @@ import souther.compiler.types.TypeSymbols;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -88,6 +89,6 @@ class WhatTheLanguageDeclaresCrossesAsADeclarationTest {
     }
 
     private static CheckedModule module(String name, CheckedData declares) {
-        return new CheckedModule(name, List.of(), List.of(), List.of(declares));
+        return new CheckedModule(name, List.of(), List.of(), List.of(declares), Set.of());
     }
 }

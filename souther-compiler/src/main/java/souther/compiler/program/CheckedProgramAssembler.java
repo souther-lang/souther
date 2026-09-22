@@ -340,7 +340,8 @@ final class CheckedProgramAssembler {
                                  Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                  List<CheckedData> data,
                                  Map<String, List<Output.RowsRead.ReadRow>> rowsByBehavior,
-                                 Map<String, List<ValueName.Behavior>> requirements) {}
+                                 Map<String, List<ValueName.Behavior>> requirements,
+                                 Set<String> published) {}
 
     /**
      * The rows this compile read for {@code module}, by the behavior each is a row of.
@@ -404,10 +405,22 @@ final class CheckedProgramAssembler {
         // agree with the checker only for as long as lowering left declarations alone.
         Hir.Module declarations = lowering.settled();
         Hir.Module bodies = lowering.lowered();
+        // What the module publishes, asked of the one answer everything that reaches across a
+        // module boundary asks. Read off the `exposing` clause again here, this would be a second
+        // reading of a decision the check already made — and the two would agree until one of them
+        // learnt something.
+        Set<String> published = db.ask(new Front.Exposes(module)).value();
+        if (published == null) {
+            // The same reading as every other answer above: a module taken as checked is one every
+            // question about it has been answered for, and nothing here turns an answer that was
+            // never read into a module that publishes nothing.
+            throw new IllegalStateException("`" + module + "` was taken as checked and what it"
+                    + " publishes was not read");
+        }
         return new ModuleReading(module, bodies, checked, signatures, implementations,
                 compositions, checks,
                 dataOf(declarations, Shapes.publishedDeclarations(db), shapes),
-                rowsOf(db, module), requirementsOf(requirements));
+                rowsOf(db, module), requirementsOf(requirements), published);
     }
 
     /**
@@ -443,7 +456,8 @@ final class CheckedProgramAssembler {
                                 target.signature(), targets),
                         read.requirements().getOrDefault(named.name(), List.of()))));
         return new CheckedModule(read.name(), behaviors,
-                helpersOf(read.name(), read.bodies(), read.checked()), read.data());
+                helpersOf(read.name(), read.bodies(), read.checked()), read.data(),
+                read.published());
     }
 
     /**

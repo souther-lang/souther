@@ -5,6 +5,7 @@ import souther.compiler.types.ValueName;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * One module the compiler checked, as an output outside this compiler reads it.
@@ -21,10 +22,12 @@ public final class CheckedModule {
     private final List<CheckedHelper> helpers;
     private final Map<ValueName, CheckedHelper> helperByDeclaration;
     private final List<CheckedData> data;
+    private final Set<String> published;
 
     CheckedModule(String name, List<CheckedBehavior> behaviors, List<CheckedHelper> helpers,
-                  List<CheckedData> data) {
+                  List<CheckedData> data, Set<String> published) {
         this.name = name;
+        this.published = Set.copyOf(published);
         this.behaviors = List.copyOf(behaviors);
         this.helpers = List.copyOf(helpers);
         this.data = List.copyOf(data);
@@ -45,6 +48,33 @@ public final class CheckedModule {
             }
         }
         this.helperByDeclaration = Map.copyOf(byDeclaration);
+    }
+
+    /**
+     * Whether this module publishes the behavior {@code name}, or keeps it.
+     *
+     * <p>Asked of the module because that is what the question is: a name being published is this
+     * module's surface holding it, and a module is the only thing that can be asked what its
+     * surface is. Asked of a definition instead, a definition this module carries and another
+     * module declared — which is most of {@link #helpers()} — would answer about whose surface is
+     * not said.
+     *
+     * <p>Of a behavior and of nothing else, for now. The same clause decides a data and a value
+     * and a helper, and each of those is answered here when a reader wants it: a question asked of
+     * a wider domain than it can answer over would have to answer {@code KEPT} for a name that is
+     * not declared at all, which is a different thing and reads as the module having decided it.
+     *
+     * @throws IllegalArgumentException where this module declares no behavior {@code name}
+     */
+    public Publication publicationOf(ValueName.Behavior name) {
+        if (name == null) {
+            throw new IllegalArgumentException("a behavior is asked about by its identity");
+        }
+        if (!behaviourByName.containsKey(name)) {
+            throw new IllegalArgumentException("`" + this.name + "` declares no behavior `" + name
+                    + "`, and what another module publishes is that module's answer");
+        }
+        return published.contains(name.name()) ? Publication.PUBLISHED : Publication.KEPT;
     }
 
     /** What the module is called: what its own declarations are under, and what an import names. */

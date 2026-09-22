@@ -62,6 +62,7 @@ public final class CheckedBehavior {
         return target.implementation();
     }
 
+
     /**
      * The call boundary this behavior is reached by, which is the one
      * {@link CheckedProgram#behavior} answers with.
