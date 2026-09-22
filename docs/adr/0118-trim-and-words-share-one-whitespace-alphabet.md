@@ -6,13 +6,16 @@ Status: Accepted. Narrows ADR-0112's consequences for `String.trim`.
 
 `String.trim` was emitted as `Intrinsics.JdkVirtual` straight to `java.lang.String.trim`, which
 strips every code point `<= U+0020`. `String.words` was `Strings.words`, splitting on the Java
-regex class `\s`, which is the six ASCII characters `[ \t\n\x0B\f\r]`. The two disagreed beyond
-those six: `String.trim("\u001Ca\u001C")` removed the FILE SEPARATOR control character (it is
-`<= U+0020`), while `String.words("a\u001Cb")` did not split on it (`\s` does not include it); a
-full-width IDEOGRAPHIC SPACE (U+3000) split `words` but was left untouched by `trim`. `words` and
-`trim` are read as one concept in `[#stdlib-string]` — a caller trims a field and then reads its
-words — and the specification named neither set: `+words(s)+` said only "runs of whitespace",
-and `+trim+` had no defining sentence at all, only an entry in the function table (issue #1871).
+regex class `\s`, which is the six ASCII characters `[ \t\n\x0B\f\r]`. The two agreed on far less
+than either author likely assumed: both treated NBSP (U+00A0) and every non-ASCII Unicode space
+such as the full-width IDEOGRAPHIC SPACE (U+3000) as ordinary characters, neither `trim` stripping
+them nor `words` splitting on them. Where they disagreed was the C0 control range below U+0020 that
+is not TAB/LF/VT/FF/CR: `String.trim("\u001Ca\u001C")` removed the FILE SEPARATOR control character
+(it is `<= U+0020`), while `String.words("a\u001Cb")` did not split on it (`\s` does not include
+it). `words` and `trim` are read as one concept in `[#stdlib-string]` — a caller trims a field and
+then reads its words — and the specification named neither set: `+words(s)+` said only "runs of
+whitespace", and `+trim+` had no defining sentence at all, only an entry in the function table
+(issue #1871).
 
 ADR-0112 already states the general rule this falls under — a backend may reach for a host
 primitive only where "the primitive is semantically equivalent to the language contract" — and
@@ -45,14 +48,17 @@ from `Intrinsics.JdkVirtual` (`java.lang.String.trim`) to `Intrinsics.RuntimeSta
 
 ## What this does not settle
 
-The same question — does a host method's meaning match the one Souther has committed to,
-or only its totality and representation — applies to `String.lowercase`/`uppercase`
-(`java.lang.String.toLowerCase`/`toUpperCase`, both locale- and Unicode-version-sensitive) and to
-`contains`/`startsWith`/`endsWith`/`append`, all still on `JdkVirtual` per ADR-0112. Case
+The same question — does a host method's meaning match the one Souther has committed to, or only
+its totality and representation — applies next and most sharply to `String.lowercase`/`uppercase`
+(`java.lang.String.toLowerCase`/`toUpperCase` with no `Locale` argument, so both the mapping table
+a JVM ships and the *default locale it happens to be running under* decide the answer). Case
 conversion has no sibling operation like `words` to expose a disagreement the way this issue did,
-and the specification does not yet commit to a fixed casing table the way `[#string-whitespace]`
-now commits to a fixed whitespace one. Deciding that is left open; this ADR fixes only the
-whitespace case, which #1871 raised.
+and the specification does not yet commit to a fixed casing rule the way `[#string-whitespace]`
+now commits to a fixed whitespace set. `contains`/`startsWith`/`endsWith`/`append` stay on
+`JdkVirtual` under ADR-0112 for a different reason and are not part of the same risk: each is a
+sequence operation over the representation Souther already shares with the JDK, with no Unicode
+property table or locale behind it. Deciding the casing question is left open; this ADR fixes only
+the whitespace case, which #1871 raised.
 
 ## Consequences
 
@@ -73,4 +79,4 @@ whitespace case, which #1871 raised.
 - Issue #1871
 - Specification: `[#stdlib-string]`, `[#string-whitespace]`
 - ADR-0112: a backend does not change a value to fit a host API
-- Unicode 18.0 `White_Space` property (`DerivedCoreProperties.txt`)
+- Unicode 18.0 `White_Space` property (`PropList.txt`)

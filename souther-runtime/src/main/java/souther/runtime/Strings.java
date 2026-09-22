@@ -117,23 +117,23 @@ public final class Strings {
      *  character outside the whitespace set — including one JDK's own {@code String.trim} would
      *  have stripped — stops the run rather than being crossed. */
     public static String trim(String s) {
-        int[] cps = s.codePoints().toArray();
         int start = 0;
-        while (start < cps.length && isWhitespace(cps[start])) {
-            start++;
+        int end = s.length();
+        while (start < end) {
+            int cp = s.codePointAt(start);
+            if (!isWhitespace(cp)) {
+                break;
+            }
+            start += Character.charCount(cp);
         }
-        int end = cps.length;
-        while (end > start && isWhitespace(cps[end - 1])) {
-            end--;
+        while (end > start) {
+            int cp = s.codePointBefore(end);
+            if (!isWhitespace(cp)) {
+                break;
+            }
+            end -= Character.charCount(cp);
         }
-        if (start == 0 && end == cps.length) {
-            return s;
-        }
-        StringBuilder out = new StringBuilder();
-        for (int i = start; i < end; i++) {
-            out.appendCodePoint(cps[i]);
-        }
-        return out.toString();
+        return s.substring(start, end);
     }
 
     /** Splits on runs of String whitespace (spec §string-whitespace), dropping empty pieces (Elm
