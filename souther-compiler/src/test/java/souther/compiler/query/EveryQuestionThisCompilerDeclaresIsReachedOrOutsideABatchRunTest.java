@@ -113,7 +113,12 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
             "the same facts under the binding each is for, which is the table the walk that says"
                     + " what an expression is declared to be looks a name up in. That walk is"
                     + " reached from the editor's snapshot, and no answer of a batch compilation"
-                    + " reads it");
+                    + " reads it",
+            Shapes.TypeAlternatives.class.getName(),
+            "how a sum or a behavior's answer union travels at a boundary, read by"
+                    + " program.CheckedProgramAssembler for the snapshot an output outside this"
+                    + " compiler reads — CheckedProgram.of has no caller among this project's own"
+                    + " operations, so nothing a batch run performs builds one");
 
     /** What the scan counted, worked out when a test first asks and kept for the rest: nothing it
      *  reads changes while the tests run, and each of them would otherwise scan again. */

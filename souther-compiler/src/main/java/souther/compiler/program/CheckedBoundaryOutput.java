@@ -5,7 +5,6 @@ import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
-import java.util.LinkedHashSet;
 import java.util.List;
 
 /**
@@ -60,21 +59,23 @@ public sealed interface CheckedBoundaryOutput {
     }
 
     /**
-     * The union a behavior answers with, whose members nobody named together, alongside the form
-     * the set of them travels in — enumeration or discriminated, settled the same way and by the
-     * same call as a named sum's (spec §sum-discrimination), so a reader of either asks nothing
-     * about the cases that the other does not.
+     * The union a behavior answers with, whose members nobody named together: the type — the
+     * members exactly as written, unflattened, which is the language's own answer to what the
+     * union is — beside the wire form, which is not the same question.
+     *
+     * <p>{@code cases} is the boundary's own descent (a member that is itself a sum is walked into,
+     * the way a named sum's are), which a reader writing a value needs and {@link #type} does not
+     * answer: {@code type}'s members are the union exactly as its members were admitted, and
+     * rebuilding {@code type} from {@code cases} would answer with a union nobody wrote. The form
+     * the set of {@code cases} travels in — enumeration or discriminated — is settled the one way a
+     * set of alternatives is settled (spec §sum-discrimination), the same call a named sum's is, so
+     * a reader of either asks nothing about the cases that the other does not.
      */
-    record Cases(List<TypeSymbol> members, CheckedAlternativesForm representation)
+    record Cases(Type.Union type, List<TypeSymbol> cases, CheckedAlternativesForm representation)
             implements CheckedBoundaryOutput {
 
         public Cases {
-            members = List.copyOf(members);
-        }
-
-        @Override
-        public Type type() {
-            return Type.union(new LinkedHashSet<>(members));
+            cases = List.copyOf(cases);
         }
     }
 }

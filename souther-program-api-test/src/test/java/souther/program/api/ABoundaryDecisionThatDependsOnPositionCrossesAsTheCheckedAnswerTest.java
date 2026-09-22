@@ -13,6 +13,8 @@ import souther.compiler.types.TypeSymbol;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -57,6 +59,12 @@ class ABoundaryDecisionThatDependsOnPositionCrossesAsTheCheckedAnswerTest {
             let mixed (n) = {
                 guard n /= 0 else Standard
                 n
+            }
+
+            behavior nested : (n: Int) -> Agreement | Failure
+            let nested (n) = {
+                guard n /= 0 else Standard
+                Failure { reason = "boom" }
             }
             """;
 
@@ -146,6 +154,30 @@ class ABoundaryDecisionThatDependsOnPositionCrossesAsTheCheckedAnswerTest {
                 assertInstanceOf(CheckedBoundaryOutput.Cases.class,
                         signatureOf(module, "mixed").output());
         assertInstanceOf(CheckedAlternativesForm.Discriminated.class, mixed.representation());
+    }
+
+    /**
+     * A behavior's answer union may name a sum as one of its members, and what travels at the
+     * boundary is the sum's own leaves, not the sum's name: {@code Agreement | Failure} answers
+     * with {@code Standard}, {@code Extended} and {@code Failure} on the wire, the same descent a
+     * named sum's own cases already make. The union's {@link souther.compiler.types.Type} is the
+     * other question — its members are {@code Agreement} and {@code Failure} exactly as written —
+     * and a reader wanting the wire form does not reconstruct it from that type, because the type
+     * does not hold it.
+     */
+    @Test
+    void aBehaviorsAnswerUnionNamingASumCrossesAtTheSumsLeavesNotItsName() {
+        CheckedBoundaryOutput.Cases nested = assertInstanceOf(CheckedBoundaryOutput.Cases.class,
+                signatureOf(demo(), "nested").output());
+
+        assertEquals(List.of("Standard", "Extended", "Failure"),
+                nested.cases().stream().map(TypeSymbol::name).toList(),
+                "the wire cases descend into Agreement rather than naming it");
+        assertEquals(Set.of("Agreement", "Failure"),
+                nested.type().members().stream().map(TypeSymbol::name).collect(Collectors.toSet()),
+                "the semantic type is the union exactly as written, unflattened");
+        assertInstanceOf(CheckedAlternativesForm.Discriminated.class, nested.representation(),
+                "Failure carries something, so the whole set is discriminated");
     }
 
     /**

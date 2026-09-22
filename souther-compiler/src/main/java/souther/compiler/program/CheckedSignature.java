@@ -2,7 +2,6 @@ package souther.compiler.program;
 
 import souther.compiler.types.Type;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -45,11 +44,7 @@ public final class CheckedSignature {
 
     /** Its inputs' types, in the order they were declared. */
     public List<Type> takes() {
-        List<Type> types = new ArrayList<>(inputs.size());
-        for (CheckedBoundaryInput input : inputs) {
-            types.add(input.type());
-        }
-        return types;
+        return inputs.stream().map(CheckedBoundaryInput::type).toList();
     }
 
     /** What it answers with — for a behavior that can depart, the union of every case it may
