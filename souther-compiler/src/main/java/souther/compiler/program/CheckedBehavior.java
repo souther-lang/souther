@@ -28,21 +28,14 @@ public final class CheckedBehavior {
 
     private final ValueName.Behavior name;
     private final BehaviorTarget target;
-    private final Exposure exposure;
     private final EnsuresEnforcement ensures;
     private final List<CheckedRow> rows;
     private final List<ValueName.Behavior> requirements;
 
-    CheckedBehavior(ValueName.Behavior name, BehaviorTarget target, Exposure exposure,
-                    EnsuresEnforcement ensures, List<CheckedRow> rows,
-                    List<ValueName.Behavior> requirements) {
-        if (exposure == null) {
-            throw new IllegalArgumentException("a module either publishes a name or keeps it: "
-                    + name);
-        }
+    CheckedBehavior(ValueName.Behavior name, BehaviorTarget target, EnsuresEnforcement ensures,
+                    List<CheckedRow> rows, List<ValueName.Behavior> requirements) {
         this.name = name;
         this.target = target;
-        this.exposure = exposure;
         this.ensures = ensures;
         this.rows = List.copyOf(rows);
         this.requirements = List.copyOf(requirements);
@@ -69,21 +62,6 @@ public final class CheckedBehavior {
         return target.implementation();
     }
 
-    /**
-     * Whether the module publishes this behavior, or keeps it.
-     *
-     * <p>What an output says about the name it emits: public or not on the JVM, a symbol the
-     * linker sees or one it does not in an object. The module's {@code exposing} clause decides
-     * it, and a module written without one publishes everything — both read here, so that an
-     * output is told what the module publishes rather than handed the clause and the rule.
-     *
-     * <p>Asked of the behavior rather than of the module, so that the module's surface is one
-     * answer and not a set beside a flag: two of them would agree only until something added a
-     * name to one.
-     */
-    public Exposure exposure() {
-        return exposure;
-    }
 
     /**
      * The call boundary this behavior is reached by, which is the one

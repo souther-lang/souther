@@ -340,7 +340,8 @@ final class CheckedProgramAssembler {
                                  Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                  List<CheckedData> data,
                                  Map<String, List<Output.RowsRead.ReadRow>> rowsByBehavior,
-                                 Map<String, List<ValueName.Behavior>> requirements) {}
+                                 Map<String, List<ValueName.Behavior>> requirements,
+                                 Set<String> published) {}
 
     /**
      * The rows this compile read for {@code module}, by the behavior each is a row of.
@@ -404,10 +405,15 @@ final class CheckedProgramAssembler {
         // agree with the checker only for as long as lowering left declarations alone.
         Hir.Module declarations = lowering.settled();
         Hir.Module bodies = lowering.lowered();
+        // What the module publishes, asked of the one answer everything else asks. Read off the
+        // `exposing` clause again here, this would be a second reading of a decision the check
+        // already made — and the two would agree until one of them learnt something.
+        Set<String> published = db.ask(new Front.Exposes(module)).value();
         return new ModuleReading(module, bodies, checked, signatures, implementations,
                 compositions, checks,
                 dataOf(declarations, Shapes.publishedDeclarations(db), shapes),
-                rowsOf(db, module), requirementsOf(requirements));
+                rowsOf(db, module), requirementsOf(requirements),
+                published == null ? Set.of() : published);
     }
 
     /**
@@ -435,23 +441,16 @@ final class CheckedProgramAssembler {
     private static CheckedModule moduleOf(ModuleBoundaries module, ValueTypes types,
                                           Map<ValueName.Behavior, BehaviorTarget> targets) {
         ModuleReading read = module.read();
-        // What the module publishes, read once here. A module written without a clause publishes
-        // everything, so the rule about an absent clause is applied where the clause is read and
-        // never travels with the answer.
-        Set<String> published = Set.copyOf(read.bodies().exposing());
-        boolean publishesAll = published.isEmpty();
         List<CheckedBehavior> behaviors = new ArrayList<>();
         module.declared().forEach((named, target) ->
                 behaviors.add(new CheckedBehavior(named, target,
-                        publishesAll || published.contains(named.name())
-                                ? Exposure.EXPOSED
-                                : Exposure.KEPT,
                         EnsuresEnforcement.in(read.checks(), read.name(), named),
                         rowsOf(read.rowsByBehavior().getOrDefault(named.name(), List.of()), types,
                                 target.signature(), targets),
                         read.requirements().getOrDefault(named.name(), List.of()))));
         return new CheckedModule(read.name(), behaviors,
-                helpersOf(read.name(), read.bodies(), read.checked()), read.data());
+                helpersOf(read.name(), read.bodies(), read.checked()), read.data(),
+                read.published());
     }
 
     /**

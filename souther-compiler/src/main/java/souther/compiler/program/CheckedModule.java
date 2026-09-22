@@ -1,10 +1,12 @@
 package souther.compiler.program;
 
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * One module the compiler checked, as an output outside this compiler reads it.
@@ -21,10 +23,12 @@ public final class CheckedModule {
     private final List<CheckedHelper> helpers;
     private final Map<ValueName, CheckedHelper> helperByDeclaration;
     private final List<CheckedData> data;
+    private final Set<String> published;
 
     CheckedModule(String name, List<CheckedBehavior> behaviors, List<CheckedHelper> helpers,
-                  List<CheckedData> data) {
+                  List<CheckedData> data, Set<String> published) {
         this.name = name;
+        this.published = Set.copyOf(published);
         this.behaviors = List.copyOf(behaviors);
         this.helpers = List.copyOf(helpers);
         this.data = List.copyOf(data);
@@ -45,6 +49,37 @@ public final class CheckedModule {
             }
         }
         this.helperByDeclaration = Map.copyOf(byDeclaration);
+    }
+
+    /**
+     * Whether this module publishes what it declares under {@code name}, or keeps it.
+     *
+     * <p>Asked of the module because that is what the question is: a name being published is this
+     * module's surface holding it, and a module is the only thing that can be asked what its
+     * surface is. Asked of a definition instead, a definition this module carries and another
+     * module declared — which is most of {@link #helpers()} — would answer about whose surface is
+     * not said.
+     *
+     * <p>So it answers about a name this module declares, and refuses one it does not. What
+     * another module publishes is that module's answer.
+     *
+     * @throws IllegalArgumentException where the name is not one this module declares
+     */
+    public Publication publicationOf(ValueName.OfAModule name) {
+        return publicationOfName(name.module(), name.name(), name);
+    }
+
+    /** The same, for a type this module declares. */
+    public Publication publicationOf(TypeSymbol.AtModule name) {
+        return publicationOfName(name.module(), name.name(), name);
+    }
+
+    private Publication publicationOfName(String module, String bare, Object asked) {
+        if (!name.equals(module)) {
+            throw new IllegalArgumentException("`" + name + "` does not declare `" + asked
+                    + "`, and what another module publishes is that module's answer");
+        }
+        return published.contains(bare) ? Publication.PUBLISHED : Publication.KEPT;
     }
 
     /** What the module is called: what its own declarations are under, and what an import names. */
