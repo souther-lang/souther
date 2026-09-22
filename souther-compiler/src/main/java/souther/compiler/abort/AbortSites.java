@@ -148,14 +148,60 @@ public final class AbortSites {
     }
 
     /**
+     * Whether one of {@code node}'s own children never answers a value — {@link Type.Never}, the
+     * type nothing is ever a value of ({@code unreachable}'s own type, spec §unreachable; ADR-0083).
+     * A checker that types a position {@code Never} has proven nothing reaches past it, so a node
+     * with such a child is not itself reached: what runs first diverges, whichever way, before this
+     * node's own operation ever gets a value to work with.
+     *
+     * <p>Direct children only, read off {@link Core#forEachChild} — every slot {@code node} actually
+     * evaluates on the way to its own operation, for every node kind this walker answers non-{@link
+     * AbortSet#NONE} for: {@link Core.Binary}'s operands, {@link Core.Call}'s arguments, {@link
+     * Core.Construct}'s field values. None of those slots short-circuits (only {@code &&}/{@code ||}
+     * do, and a {@link Core.Binary} of either is already {@link AbortSet#NONE} whether or not a
+     * child is {@code Never}), so every child this walk visits here is one the checker actually
+     * requires a value from before {@code node} runs.
+     *
+     * <p>Composition needs no special handling: where a {@code Never}-typed child makes an outer
+     * expression's own type something other than {@code Never} — the checker defers to whichever
+     * operand answered a value, spec §unreachable — a node built from that outer expression reads an
+     * ordinary type at its own children, not {@code Never}, and this answers {@code false} for it.
+     * The unreachability does not need to be re-derived transitively here: it already left no trace
+     * for a node one level up to misread, because the checker's own deferral already resolved it to
+     * whichever type description was still in play.
+     */
+    private static boolean aChildNeverAnswers(Core node) {
+        boolean[] found = {false};
+        Core.forEachChild(node, child -> {
+            if (child.type() instanceof Type.Never) {
+                found[0] = true;
+            }
+        });
+        return found[0];
+    }
+
+    /**
      * What {@code node} itself — independent of any child — can end a run without a value for.
      *
-     * <p>Exhaustive over {@link Core}. A node kind added later stops the build here, the same way
-     * {@link Core#mapChildren} and {@link Core#forEachChild} are stopped by {@code Core}'s own
-     * exhaustive switch.
+     * <p>{@link AbortSet#NONE} outright where {@link #aChildNeverAnswers} says a child of this node
+     * is never reached with a value: {@code node}'s own operation is not reached either, whatever it
+     * is, because what runs before it diverges first. This is answered before the switch below
+     * rather than folded into it, so every arm past this point can go on assuming the operand or
+     * field types it reads are the ones its own operation is actually declared over — a
+     * {@code Core.Binary(DIV, ...)} the checker built with a {@code Never}-typed operand answers
+     * {@code Int} or whatever the other side is (the checker defers to it, since the operator itself
+     * never runs), not {@code Rational}, and {@link #divide} would otherwise read that as a
+     * malformed node rather than as the ordinary, checked shape it is.
+     *
+     * <p>Exhaustive over {@link Core} past this point. A node kind added later stops the build here,
+     * the same way {@link Core#mapChildren} and {@link Core#forEachChild} are stopped by
+     * {@code Core}'s own exhaustive switch.
      */
     private static AbortSet localAbortOf(Core node, KernelContracts kernels,
                                          Set<TypeSymbol.AtModule> constructedWithInvariants) {
+        if (aChildNeverAnswers(node)) {
+            return AbortSet.NONE;
+        }
         return switch (node) {
             case Core.Unreachable _ -> AbortSet.of(AbortKind.UNREACHABLE_REACHED);
             case Core.Binary b -> arithmetic(b);
