@@ -61,10 +61,10 @@ public final class HelperTyping {
         for (Hir.FnDef h : valuesBeforeTheValuesThatNameThem(inliner, symbols.library(), toCheck)) {
             boolean recursive = recursiveHelperFns.containsKey(h.name());
             // What it runs as, settled once where this module was lowered and read here rather than
-            // answered again from the definition: everything this checks is a method the module
-            // emits, so a definition without a role here is a reader asking about something the
-            // lowering never carried.
-            LoweringRole.Emitted role = elaborated.roles.get(h.name());
+            // answered again from the definition. Not narrowed to what is emitted: most of what is
+            // checked here is inlined at its call sites and never is, so this is answered whether or
+            // not a method follows — narrowing waits for the answer to that, below.
+            LoweringRole role = elaborated.roles.get(h.name());
             if (role == null) {
                 throw new IllegalStateException("`" + h.name() + "` is checked standalone and the"
                         + " lowering settled no role for it");
@@ -81,9 +81,17 @@ public final class HelperTyping {
             // no implementation at all.
             // The entry a module publishes for a value is the same: it is nullary and static, called
             // from another module, and has no dependency in force to reach a behavior through.
+            //
+            // Neither a behavior's implementation nor a value declared elsewhere is ever checked
+            // here (toCheck holds neither), so the compiler would be disagreeing with itself about
+            // what it settled if one of them turned up — the same disagreement LoweringRole#emitted
+            // refuses below.
             Map<ValueName.Behavior, ReqSig> reachable = switch (role) {
                 case LoweringRole.RowValue _, LoweringRole.PublishedValueEntry _ -> Map.of();
                 case LoweringRole.ValueHome _, LoweringRole.Helper _ -> reqSigs;
+                case LoweringRole.Behavior _, LoweringRole.ValueDeclaredElsewhere _ ->
+                        throw new IllegalStateException("`" + h.name() + "` is checked standalone as"
+                                + " `" + inliner.moduleName() + "`'s own, and its role is " + role);
             };
             // A helper reads a settled value as a value does. A helper's body is expanded into
             // whoever calls it, and a value it names is expanded into that expansion, so a chain of
@@ -241,7 +249,11 @@ public final class HelperTyping {
                         .ifPresent(c -> settledConstants.put(settled, c));
             }
             if (emitted != null) {
-                elaborated.helpers.put(h.name(), new EmittedDefinition(elaboratedBody, takes, role));
+                // The one place this narrows to what the module emits: a role that reached here
+                // without narrowing all the way is a value or a helper by construction, and the
+                // narrowing states that rather than assumes it.
+                elaborated.helpers.put(h.name(), new EmittedDefinition(elaboratedBody, takes,
+                        LoweringRole.emitted(role, h.name(), inliner.moduleName())));
             }
             // a declared return type — required on a recursive helper, allowed on any helper — must
             // match the body; a lying annotation is not silently ignored. What a row's operand

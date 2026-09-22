@@ -37,13 +37,17 @@ public final class Lower {
      * <p>{@code carried} is what each parameter the lowering gave a value's method holds, by the
      * binding of the parameter, across every method of the lowered module.
      *
-     * <p>{@code roles} is what each definition the lowered module carries runs as, by its name — the
-     * answer {@link souther.compiler.query.Bodies.LoweringRoleOf} settled for it, so a reader that
-     * needs the role of a definition this settled reads it from here rather than asking again.
+     * <p>{@code roles} is what each non-behavior definition this module declares or takes on runs
+     * as, by its name — the answer {@link souther.compiler.query.Bodies.LoweringRoleOf} settled for
+     * it, so a reader that needs the role of one reads it from here rather than asking again. Not
+     * narrowed to what this module emits: most of a module's helpers are inlined at their call
+     * sites and never are, so a definition here having a role says nothing about whether {@code
+     * lowered} carries a method for it — {@link LoweringRole#emitted} is asked at the boundary that
+     * decides that, not here.
      */
     public record Lowered(Hir.Module settled, Hir.Module lowered,
                           Map<BindingId, ValueName.Helper> carried,
-                          Map<String, LoweringRole.Emitted> roles) {
+                          Map<String, LoweringRole> roles) {
 
         public Lowered {
             carried = Map.copyOf(carried);

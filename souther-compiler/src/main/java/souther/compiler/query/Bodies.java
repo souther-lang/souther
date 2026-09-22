@@ -2355,7 +2355,7 @@ public final class Bodies {
             Set<String> taken = new LinkedHashSet<>();
             List<List<Hir.FnDef>> lowered = new ArrayList<>();
             Map<BindingId, ValueName.Helper> carried = new LinkedHashMap<>();
-            Map<String, LoweringRole.Emitted> roles = new LinkedHashMap<>();
+            Map<String, LoweringRole> roles = new LinkedHashMap<>();
             // What this module emits and did not declare: every recursion its own expansions left
             // standing that it has no declaration for, under the name it reaches each by — which is
             // the name a call in the emitted tree already holds, and so the name the method is
@@ -2393,7 +2393,9 @@ public final class Bodies {
             // survives to be emitted as a method of its own: a helper fully inlined at its call
             // sites is still checked standalone and still has an answer here, which is what
             // TypeChecker checks every one of these against (Bodies.LoweringRoleOf, kept — never
-            // asked again from the shape of what was lowered).
+            // asked again from the shape of what was lowered). Not narrowed to what a module emits:
+            // most of these never are, and narrowing here would make this map claim an emission
+            // that only the checker, settling which of them a body survives to be, gets to decide.
             for (Hir.FnDef fn : settled.value().fns()) {
                 if (behaviors.contains(fn.name())) {
                     // Emitted as the behavior, never as a method of its own, so it has no role
@@ -2404,14 +2406,14 @@ public final class Bodies {
                 if (!role.present()) {
                     return Answer.absent();
                 }
-                roles.put(fn.name(), LoweringRole.emitted(role.value(), fn.name(), name));
+                roles.put(fn.name(), role.value());
             }
             for (Hir.FnDef fn : beyond) {
                 Answer<LoweringRole> role = db.ask(new LoweringRoleOf(name, fn.name()));
                 if (!role.present()) {
                     return Answer.absent();
                 }
-                roles.put(fn.name(), LoweringRole.emitted(role.value(), fn.name(), name));
+                roles.put(fn.name(), role.value());
             }
             // Both, and each stays where it was: what becomes a method is one question and what this
             // module declared is another, and the backend reads the first while every rule about the

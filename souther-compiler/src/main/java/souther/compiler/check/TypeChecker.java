@@ -53,10 +53,12 @@ public final class TypeChecker {
         /** The value each parameter a lowering gave a value's method holds, by the binding of the
          * parameter. A parameter the source wrote is not in here. */
         final Map<BindingId, ValueName.Helper> carried = new LinkedHashMap<>();
-        /** What each definition the lowered module carries runs as, by name — settled once at
-         * {@link souther.compiler.query.Bodies.LoweringRoleOf} and read here rather than answered
-         * again from the definition's shape. */
-        final Map<String, LoweringRole.Emitted> roles = new LinkedHashMap<>();
+        /** What each non-behavior definition this module declares or takes on runs as, by name —
+         * settled once at {@link souther.compiler.query.Bodies.LoweringRoleOf} and read here rather
+         * than answered again from the definition's shape. Not narrowed to what is emitted: most of
+         * these are inlined at their call sites, and {@link LoweringRole#emitted} is asked where an
+         * {@link EmittedDefinition} is actually made. */
+        final Map<String, LoweringRole> roles = new LinkedHashMap<>();
     }
 
     /**
@@ -102,7 +104,7 @@ public final class TypeChecker {
                                        Set<ValueName.Behavior> importedInjected,
                                        Set<ValueName.Behavior> importedUnwritten,
                                        Hir.Module lowered, Map<BindingId, ValueName.Helper> carried,
-                                       Map<String, LoweringRole.Emitted> roles,
+                                       Map<String, LoweringRole> roles,
                                        Map<ValueName.Behavior, ReqSig> reqSigs,
                                        Map<ValueName.Behavior, ReqSig> calleeSigs,
                                        Map<String, Type> recursiveHelperFns,
