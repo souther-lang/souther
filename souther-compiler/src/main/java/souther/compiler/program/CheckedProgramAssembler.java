@@ -435,9 +435,17 @@ final class CheckedProgramAssembler {
     private static CheckedModule moduleOf(ModuleBoundaries module, ValueTypes types,
                                           Map<ValueName.Behavior, BehaviorTarget> targets) {
         ModuleReading read = module.read();
+        // What the module publishes, read once here. A module written without a clause publishes
+        // everything, so the rule about an absent clause is applied where the clause is read and
+        // never travels with the answer.
+        Set<String> published = Set.copyOf(read.bodies().exposing());
+        boolean publishesAll = published.isEmpty();
         List<CheckedBehavior> behaviors = new ArrayList<>();
         module.declared().forEach((named, target) ->
                 behaviors.add(new CheckedBehavior(named, target,
+                        publishesAll || published.contains(named.name())
+                                ? Exposure.EXPOSED
+                                : Exposure.KEPT,
                         EnsuresEnforcement.in(read.checks(), read.name(), named),
                         rowsOf(read.rowsByBehavior().getOrDefault(named.name(), List.of()), types,
                                 target.signature(), targets),

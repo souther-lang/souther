@@ -84,7 +84,7 @@ class ABehaviorIsCalledByTheBoundaryItsModuleHoldsTest {
 
     private static CheckedProgram program(BehaviorTarget held,
                                           Map<ValueName.Behavior, BehaviorTarget> index) {
-        CheckedBehavior behavior = new CheckedBehavior(NAMED, held,
+        CheckedBehavior behavior = new CheckedBehavior(NAMED, held, Exposure.EXPOSED,
                 EnsuresEnforcement.NoContract.INSTANCE, List.of(), List.of());
         return new CheckedProgram(
                 List.of(new CheckedModule("demo", List.of(behavior), List.of(), List.of())),
