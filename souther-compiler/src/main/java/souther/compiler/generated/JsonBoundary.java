@@ -10,6 +10,7 @@ import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.TemporalRule;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.runtime.Normalization;
 import souther.runtime.Representations;
 import souther.runtime.Sets;
 import souther.runtime.Temporals;
@@ -133,9 +134,13 @@ public final class JsonBoundary {
     }
 
     /** The string leaf a key is read through. Text arriving from outside is canonical, which is what
-     *  the leaf makes it (ADR-0096). */
+     *  the leaf makes it — Unicode 18.0.0's NFC, not whatever Unicode version this JDK's own
+     *  {@code java.text.Normalizer} carries, which is why this wraps {@link Normalization#nfc}
+     *  rather than calling {@code StringDecoder.normalize()}. {@link StringDecoder#from} keeps the
+     *  result a {@link StringDecoder}, so {@link #temporal} can still chain {@code .date()} etc. on
+     *  it. */
     private static StringDecoder<Object> text() {
-        return ObjectDecoders.string().normalize();
+        return StringDecoder.from(ObjectDecoders.string().map(Normalization::nfc));
     }
 
     /**
@@ -277,7 +282,7 @@ public final class JsonBoundary {
             // A union nobody named is generated as the behavior's result type, which is where its
             // encoder is (spec §jvm-anonymous-union). It is the only output with no name in the source, so it is the
             // behavior that says which class to reach for.
-            case BoundaryOutput.Cases c -> encodeThrough(loader,
+            case BoundaryOutput.Cases _ -> encodeThrough(loader,
                     SoutherJvmAbi.nameOf(new GeneratedClass.BehaviorResult(pkg, behavior)).binaryName(), result);
         };
     }

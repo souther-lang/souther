@@ -42,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import souther.runtime.Normalization;
 
 /**
  * Builds the compiler's {@link Ast} from a concrete syntax tree. This is where the surface forms the
@@ -2043,9 +2044,12 @@ public final class AstBuilder {
      *
      * <p>NFC and not NFKC: compatibility folding turns ① into 1 and a half-width kana into a
      * full-width one, which is a different claim about the text than "these are the same characters".
+     *
+     * <p>{@link Normalization#nfc}, not {@code java.text.Normalizer}: the one Unicode 18.0.0 NFC
+     * this language runs everywhere, not whatever Unicode version this JDK shipped with.
      */
     private static String stringValue(String raw) {
-        return java.text.Normalizer.normalize(CstLexer.textOf(raw), java.text.Normalizer.Form.NFC);
+        return Normalization.nfc(CstLexer.textOf(raw));
     }
 
     private <M extends Message & Reported> CompileException error(SourcePos pos, M said) {

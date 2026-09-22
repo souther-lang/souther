@@ -64,7 +64,7 @@ class TheRuntimeAnswersEveryKernelAtItsDeclaredAbiTest {
      */
     private static final Set<Kernel> ANSWERED_BY_THE_HOST = EnumSet.of(
             Kernel.STRING_CONTAINS, Kernel.STRING_STARTS_WITH, Kernel.STRING_ENDS_WITH,
-            Kernel.STRING_APPEND, Kernel.DATETIME_TO_DATE, Kernel.DATETIME_TO_TIME,
+            Kernel.DATETIME_TO_DATE, Kernel.DATETIME_TO_TIME,
             Kernel.DATETIME_FROM_DATE_AND_TIME);
 
     @Test

@@ -4,14 +4,17 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import souther.runtime.Normalization;
 
 /**
  * The reserved standard-library namespace (ADR-0028, spec §stdlib): the qualifiers a call or an
- * import may write. A fact of the language, not of the loaded library — held with no dependencies
- * so the frontend and the standard library both read it without one initializing the other. The
- * loader ({@code check.StdlibLoader}) parses the modules behind these names through the frontend,
- * so a constant of the
- * language that lived on either side would put the two in an initialization cycle.
+ * import may write. A fact of the language, not of the loaded library — held with no dependency on
+ * the compiler frontend so the frontend and the standard library both read it without one
+ * initializing the other. The loader ({@code check.StdlibLoader}) parses the modules behind these
+ * names through the frontend, so a constant of the language that lived on either side would put
+ * the two in an initialization cycle. The one dependency it does carry, {@code souther-runtime},
+ * is a one-way edge nothing here closes into a cycle: {@link #name} canonicalizes through
+ * {@link Normalization#nfc}, the same Unicode 18.0.0 NFC every other canonicalizing door runs.
  */
 public final class Reserved {
 
@@ -89,15 +92,16 @@ public final class Reserved {
      * frontend and would otherwise have grown a second copy.
      *
      * <p>A string literal is canonicalized too, but separately and for its own reason: it is a value
-     * that crosses a boundary, not a name (ADR-0096).
+     * that crosses a boundary, not a name. Both go through {@link Normalization#nfc}, the one
+     * Unicode 18.0.0 NFC this language runs — not the JVM's own {@code java.text.Normalizer}, which
+     * answers for whatever Unicode version this JDK shipped with.
      *
      * <p>This answers which name it is and nothing else. Which characters spell it, and where they
      * are, is the other half, and a report and an editor want that half — so a name in the tree is
      * a {@link souther.compiler.ast.WrittenName}, which holds both and is where this is called from.
      */
     public static String name(String spelling) {
-        return spelling == null ? null
-                : java.text.Normalizer.normalize(spelling, java.text.Normalizer.Form.NFC);
+        return spelling == null ? null : Normalization.nfc(spelling);
     }
 
     /** Whether {@code qualifier} names a standard-library namespace a call or an import may write:

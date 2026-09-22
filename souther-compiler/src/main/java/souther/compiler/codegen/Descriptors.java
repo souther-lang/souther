@@ -208,6 +208,7 @@ final class Descriptors {
     static final ClassDesc CD_Sets = ClassDesc.of("souther.runtime.Sets");
     static final ClassDesc CD_Representations = ClassDesc.of("souther.runtime.Representations");
     static final ClassDesc CD_Temporals = ClassDesc.of("souther.runtime.Temporals");
+    static final ClassDesc CD_Normalization = ClassDesc.of("souther.runtime.Normalization");
     static final ClassDesc CD_Option = ClassDesc.of("souther.runtime.Option");
     static final ClassDesc CD_Options = ClassDesc.of("souther.runtime.Options");
     static final ClassDesc CD_OptionSome = CD_Option.nested("Some");
@@ -316,8 +317,13 @@ final class Descriptors {
     static final MethodTypeDesc MTD_Rdecoder = MethodTypeDesc.of(CD_RDecoder);
     static final MethodTypeDesc MTD_Rencoder = MethodTypeDesc.of(CD_REncoder);
     static final MethodTypeDesc MTD_leafString = MethodTypeDesc.of(CD_StringDecoder);
-    /** {@code StringDecoder.normalize()} — the no-argument form, which is NFC. */
-    static final MethodTypeDesc MTD_normalize = MethodTypeDesc.of(CD_StringDecoder);
+    /** {@code Normalization.nfc(String):String}, lifted into a {@code Function} at the call site
+     *  that reaches for it. */
+    static final MethodTypeDesc MTD_nfc = MethodTypeDesc.of(CD_String, CD_String);
+    /** {@code StringDecoder.from(Decoder<I,String>)} — wraps a plain string-producing decoder back
+     *  into a {@link CD_StringDecoder} so the fluent constraint methods after it (following
+     *  {@code Normalization.nfc}, not {@code StringDecoder.normalize()}) still resolve. */
+    static final MethodTypeDesc MTD_stringDecoderFrom = MethodTypeDesc.of(CD_StringDecoder, CD_RDecoder);
     static final MethodTypeDesc MTD_leafLong = MethodTypeDesc.of(CD_LongDecoder);
     static final MethodTypeDesc MTD_leafBool = MethodTypeDesc.of(CD_BoolDecoder);
     static final MethodTypeDesc MTD_leafDecimal = MethodTypeDesc.of(CD_DecimalDecoder);
