@@ -1,5 +1,6 @@
 package souther.program.api;
 
+import souther.compiler.abort.AbortKind;
 import souther.compiler.core.Contract;
 import souther.compiler.core.Core;
 import souther.compiler.core.EnsuresEnforcement;
@@ -195,14 +196,18 @@ class AnOutputReadsWhatMustHoldOfAValueTest {
         assertNotNull(states.rules().get(0).condition(), "and what has to hold of the answer");
         assertEquals(List.of("a"), states.params().stream().map(Contract.Param::name).toList(),
                 "over the parameters the rule names");
+        assertEquals(Set.of(AbortKind.ENSURES_NOT_HELD), halve.ensures().aborts().kinds(),
+                "a crossing that checks a clause can end without a value for that reason alone");
     }
 
     /** A behavior that declares nothing says that, and it is not the answer for a behavior nobody
      *  decided about. */
     @Test
     void aBehaviorThatDeclaresNothingSaysSo() {
-        assertInstanceOf(EnsuresEnforcement.NoContract.class,
-                behavior(program().module("up"), "name").ensures());
+        EnsuresEnforcement ensures = behavior(program().module("up"), "name").ensures();
+        assertInstanceOf(EnsuresEnforcement.NoContract.class, ensures);
+        assertTrue(ensures.aborts().isEmpty(),
+                "a crossing with no clause to check never ends without a value for that reason");
     }
 
     /** Every binding {@code condition} reads. */
