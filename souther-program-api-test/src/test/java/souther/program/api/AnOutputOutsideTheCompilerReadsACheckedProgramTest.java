@@ -747,16 +747,16 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
      *
      * <p>An output reads this off {@link CheckedProgram#kernel}, the same call it reads the
      * signature through, rather than deriving it from {@code souther-runtime}'s classes or from the
-     * specification's prose — which is the whole boundary issue #1862 draws.
+     * specification's prose.
      */
     @Test
     void andTheProgramSaysEveryWayThatKernelCanEndWithoutAValue() {
         CheckedProgram program = checked(ROUNDS);
 
-        assertEquals(Set.of(AbortKind.ANSWER_HAS_NO_PLACE),
+        assertEquals(Set.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE),
                 program.kernel(Kernel.DECIMAL_ROUND).aborts().kinds(),
                 "Decimal.round aborts where the rounded value has no place at the scale asked");
-        assertEquals(Set.of(AbortKind.ANSWER_HAS_NO_PLACE),
+        assertEquals(Set.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE),
                 program.kernel(Kernel.INT_TRUNCATING_DIVIDE).aborts().kinds(),
                 "truncatingDivide answers a zero divisor as a case and aborts only on the one pair"
                         + " whose quotient no Int holds");

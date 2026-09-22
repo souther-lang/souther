@@ -10,7 +10,7 @@ import java.util.Set;
  * {@code ensures} crossing — is answered by whoever asks the question this rides back from; this
  * itself says only which reasons, and how many. Most sites answer {@link #NONE} or a single kind;
  * more than one is real too — the exact {@code /} operator answers with both
- * {@link AbortKind#DIVISION_BY_ZERO} and {@link AbortKind#ANSWER_HAS_NO_PLACE}, on a zero divisor
+ * {@link AbortKind#DIVISION_BY_ZERO} and {@link AbortKind#REQUIRED_FORM_HAS_NO_PLACE}, on a zero divisor
  * and on an exponent past what {@code Rational}'s own representation holds, which the specification
  * treats as two reasons. {@code Int.truncatingDivide} answers a zero divisor as a case instead and
  * carries only the second.

@@ -29,10 +29,11 @@ class AbortSetTest {
 
     @Test
     void ofHoldsMoreThanOneReasonForOneSite() {
-        AbortSet both = AbortSet.of(AbortKind.DIVISION_BY_ZERO, AbortKind.ANSWER_HAS_NO_PLACE);
+        AbortSet both = AbortSet.of(AbortKind.DIVISION_BY_ZERO, AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
         assertTrue(both.contains(AbortKind.DIVISION_BY_ZERO));
-        assertTrue(both.contains(AbortKind.ANSWER_HAS_NO_PLACE));
-        assertEquals(Set.of(AbortKind.DIVISION_BY_ZERO, AbortKind.ANSWER_HAS_NO_PLACE), both.kinds());
+        assertTrue(both.contains(AbortKind.REQUIRED_FORM_HAS_NO_PLACE));
+        assertEquals(Set.of(AbortKind.DIVISION_BY_ZERO, AbortKind.REQUIRED_FORM_HAS_NO_PLACE),
+                both.kinds());
     }
 
     @Test
@@ -43,12 +44,13 @@ class AbortSetTest {
     @Test
     void unionKeepsEveryReasonEitherSideAnswers() {
         AbortSet left = AbortSet.of(AbortKind.DIVISION_BY_ZERO);
-        AbortSet right = AbortSet.of(AbortKind.ANSWER_HAS_NO_PLACE, AbortKind.INVALID_BOUNDS);
+        AbortSet right =
+                AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE, AbortKind.INVALID_BOUNDS);
 
         AbortSet merged = left.union(right);
 
         assertEquals(
-                Set.of(AbortKind.DIVISION_BY_ZERO, AbortKind.ANSWER_HAS_NO_PLACE,
+                Set.of(AbortKind.DIVISION_BY_ZERO, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
                         AbortKind.INVALID_BOUNDS),
                 merged.kinds());
     }

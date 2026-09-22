@@ -212,28 +212,27 @@ public final class AbortSites {
      * RationalMath.divideWholeNumbers}, where both operands are {@code Int} and the answer, and the
      * operation, are {@code Rational}.
      *
-     * <p>{@code +}, {@code -}, {@code *} abort only on {@link AbortKind#ANSWER_HAS_NO_PLACE}: an
-     * {@code Int} or a {@code Decimal} sum, difference or product outside what its type holds
+     * <p>{@code +}, {@code -}, {@code *} abort only on {@link AbortKind#REQUIRED_FORM_HAS_NO_PLACE}:
+     * an {@code Int} or a {@code Decimal} sum, difference or product outside what its type holds
      * ({@code souther.runtime.IntMath}, {@code souther.runtime.DecimalMath}), or a {@code Rational}
-     * one past what its own exponents hold ({@code souther.runtime.Rational#noRoomForIt}). {@code /}
-     * adds {@link AbortKind#DIVISION_BY_ZERO}: every one of {@code IntMath.divideExact},
-     * {@code DecimalMath.divide}'s zero-divisor branch (reached through {@code /}, not through the
-     * named {@code Decimal.divide}, which answers a case instead) and {@code RationalMath.divide} /
-     * {@code divideWholeNumbers} refuses a zero divisor before it asks whether the quotient has a
-     * place.
+     * one whose required exact form asks for more exponent than {@code Rational} holds
+     * ({@code souther.runtime.Rational#noRoomForIt}). {@code /} always answers {@code Rational}
+     * (ADR-0116) and adds {@link AbortKind#DIVISION_BY_ZERO}: {@code RationalMath.divide} /
+     * {@code divideWholeNumbers} refuse a zero divisor before they ask whether the quotient's
+     * required form has a place — see {@link #divide}.
      */
     private static AbortSet arithmetic(Core.Binary binary) {
         return switch (binary.op()) {
             case BinOp.ADD, BinOp.SUB, BinOp.MUL -> arithmeticType(binary);
-            case BinOp.DIV -> arithmeticType(binary).union(AbortSet.of(AbortKind.DIVISION_BY_ZERO));
+            case BinOp.DIV -> divide(binary);
             case BinOp.EQ, BinOp.NE, BinOp.LT, BinOp.LE, BinOp.GT, BinOp.GE, BinOp.AND, BinOp.OR,
                     BinOp.CONCAT ->
                     AbortSet.NONE;
         };
     }
 
-    /** {@link AbortKind#ANSWER_HAS_NO_PLACE} for every type {@code +}, {@code -}, {@code *} and
-     *  {@code /} answer with, or a compiler invariant failure for a type none of them do — refused
+    /** {@link AbortKind#REQUIRED_FORM_HAS_NO_PLACE} for every type {@code +}, {@code -} and
+     *  {@code *} answer with, or a compiler invariant failure for a type none of them do — refused
      *  rather than answered with {@link AbortSet#NONE}, so a primitive the checker admits to
      *  arithmetic later and this has not been told about fails loudly instead of silently reading
      *  as total. */
@@ -244,10 +243,30 @@ public final class AbortSites {
                             + ", which no arithmetic the checker admits answers with");
         }
         return switch (prim) {
-            case INT, DECIMAL, RATIONAL -> AbortSet.of(AbortKind.ANSWER_HAS_NO_PLACE);
+            case INT, DECIMAL, RATIONAL -> AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
             case STRING, BOOL, DATE, TIME, DATETIME, INSTANT, RAW -> throw new IllegalStateException(
                     "`" + binary.op() + "` answers " + prim.shown()
                             + ", which no arithmetic the checker admits answers with");
         };
+    }
+
+    /**
+     * {@code /}'s own answer is exact, and the exact quotient of any two of {@code Int},
+     * {@code Decimal} and {@code Rational} is {@code Rational} (ADR-0116) — never {@code Int} or
+     * {@code Decimal}, the way {@code +}, {@code -} and {@code *} can answer. {@code BodyGen} itself
+     * has no kernel to reach for a {@code /} whose answer is not {@code Rational}: {@code
+     * arithmetic(bin, null, null)} passes null for both, so a malformed one reaches the checker's
+     * own "no kernel for this number" failure there. A {@code Core} the checker could not have
+     * produced is refused here the same way, rather than answered as though it were an ordinary
+     * {@code Int} or {@code Decimal} division — the one thing that would let a future checker
+     * change quietly agree with a stale reading here.
+     */
+    private static AbortSet divide(Core.Binary binary) {
+        if (binary.type() != Type.RATIONAL) {
+            throw new IllegalStateException(
+                    "`/` answers " + Type.show(binary.type()) + ", and the exact operator's answer"
+                            + " is always Rational (spec §stdlib-rational)");
+        }
+        return AbortSet.of(AbortKind.DIVISION_BY_ZERO, AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
     }
 }

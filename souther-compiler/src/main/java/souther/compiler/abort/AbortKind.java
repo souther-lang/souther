@@ -13,12 +13,12 @@ package souther.compiler.abort;
  * <p>A member here is one the specification states as its own abort, not one operation that happens
  * to reach it. {@code Int} overflow, a {@code Decimal} scale outside what the run time takes, a
  * temporal shift off the end of what it holds, and a {@code String.repeat} count no string could
- * hold are four different operations and one member — {@link #ANSWER_HAS_NO_PLACE} — because the
- * specification states one law for all four (`an-operation-refuses-only-what-its-own-answer-has-no-
- * place-for`) and each of the four cites it. Two operations are folded together only where the
+ * hold are four different operations and one member — {@link #REQUIRED_FORM_HAS_NO_PLACE} — because
+ * the specification states one law for all four (`an-operation-refuses-only-what-its-own-answer-has-
+ * no-place-for`) and each of the four cites it. Two operations are folded together only where the
  * specification itself gives them one reason; two are kept apart wherever it gives them two, even
- * where both are, say, a division — {@link #DIVISION_BY_ZERO} and {@link #ANSWER_HAS_NO_PLACE} are
- * both reached by the exact {@code /} operator, on a zero divisor and on an exponent past what
+ * where both are, say, a division — {@link #DIVISION_BY_ZERO} and {@link #REQUIRED_FORM_HAS_NO_PLACE}
+ * are both reached by the exact {@code /} operator, on a zero divisor and on an exponent past what
  * {@code Rational}'s own representation holds, and the specification is explicit that those are two
  * reasons and not one. {@code Int.truncatingDivide} answers a zero divisor as a case instead and
  * reaches only the second — see {@link #DIVISION_BY_ZERO}'s own note on that line.
@@ -80,24 +80,36 @@ public enum AbortKind {
     DIVISION_BY_ZERO,
 
     /**
-     * The value an operation would answer with has no place in the type its answer is declared to
-     * be — never because an intermediate a backend happened to compute through has none (spec
-     * `an-operation-refuses-only-what-its-own-answer-has-no-place-for`, cited by §stdlib-int's
-     * {@code Int} overflow, a {@code Decimal} scale outside what the run time takes, a temporal
-     * shift off the end of what it holds, {@code String.repeat}'s and the padding operations'
-     * count no string could hold, {@code List.rangeInclusive}'s span, and {@code Rational}'s own
-     * narrowings to {@code Int} and to a scaled {@code Decimal}. One member for all of them because
-     * the specification states one law and each of them cites it; a future operation that does not
-     * cite that law is not this reason merely for resembling one that does.
+     * The value an operation would answer with, or a form the operation's own semantics is defined
+     * as needing on the way there, has no place in the type it is declared to be — never because an
+     * intermediate a backend happened to choose has none (spec
+     * `an-operation-refuses-only-what-its-own-answer-has-no-place-for`).
+     *
+     * <p>The law names two things and not one: "its own answer, <b>or a form the operation is
+     * defined as</b>". Most members of this family are the first half — {@code Int} overflow, a
+     * {@code Decimal} scale outside what the run time takes, a temporal shift off the end of what it
+     * holds, {@code String.repeat}'s and the padding operations' count no string could hold,
+     * {@code List.rangeInclusive}'s span, and {@code Rational}'s own narrowings to {@code Int} and to
+     * a scaled {@code Decimal} — the answer itself has no place. {@code Rational}'s {@code +} and
+     * {@code -} are the second half, deliberately: the mathematical sum or difference always has an
+     * exact value, but writing it exactly is what {@code Rational}'s own arithmetic is defined to do
+     * (a common exponent brought out, the remaining distance built in full), and that required form
+     * can ask for more exponent than {@code Rational}'s representation holds even where the value it
+     * would write is one nothing keeps this type from stating. Naming this member for only the first
+     * half would make the second an exception the enum's own name lies about.
+     *
+     * <p>One member for all of them because the specification states one law and each of them cites
+     * it; a future operation that does not cite that law is not this reason merely for resembling one
+     * that does.
      */
-    ANSWER_HAS_NO_PLACE,
+    REQUIRED_FORM_HAS_NO_PLACE,
 
     /**
      * The bounds an operation was given do not name the thing they are asked to name, independent
      * of what any answer would be: {@code String.slice} with an index the string has not got, or a
      * {@code toExclusive} before {@code fromInclusive} (spec §stdlib-string). Kept apart
-     * from {@link #ANSWER_HAS_NO_PLACE} because the two fail for different reasons even where both
-     * sit on one operation's argument list — {@code slice}'s bounds may name nothing to slice at
+     * from {@link #REQUIRED_FORM_HAS_NO_PLACE} because the two fail for different reasons even where
+     * both sit on one operation's argument list — {@code slice}'s bounds may name nothing to slice at
      * all, where an {@code Int} overflow's operands are always positions a value exists at and it
      * is the answer that has none.
      */

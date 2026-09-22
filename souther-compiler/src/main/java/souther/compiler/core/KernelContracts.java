@@ -78,7 +78,7 @@ public final class KernelContracts {
                     DATETIME_FROM_DATE_AND_TIME,
                     INT_TRUNCATING_REMAINDER, INT_COMPARE,
                     DECIMAL_COMPARE, DECIMAL_FROM_INT,
-                    RATIONAL_FROM_INT, RATIONAL_FROM_DECIMAL, RATIONAL_TO_FINITE_DECIMAL,
+                    RATIONAL_FROM_INT, RATIONAL_FROM_DECIMAL,
                     RATIONAL_COMPARE,
                     OPTION_MAP ->
                     AbortSet.NONE;
@@ -88,20 +88,27 @@ public final class KernelContracts {
             // is computed.
             case STRING_SLICE -> AbortSet.of(AbortKind.INVALID_BOUNDS);
 
-            // The law `an-operation-refuses-only-what-its-own-answer-has-no-place-for`: a `repeat`
-            // or `pad` count no `String` could hold, a calendar shift off the end of what a
-            // temporal holds, a `List.rangeInclusive` span longer than a `List` can hold, an `Int`
-            // or `Decimal` arithmetic result outside what its type holds, and a `Rational` narrowed
-            // to an `Int` or a scaled `Decimal` it does not fit — one reason, cited by each.
+            // The law `an-operation-refuses-only-what-its-own-answer-has-no-place-for`: "its own
+            // answer, or a form the operation is defined as, has no representation". A `repeat` or
+            // `pad` count no `String` could hold, a calendar shift off the end of what a temporal
+            // holds, a `List.rangeInclusive` span longer than a `List` can hold, and an `Int` or
+            // `Decimal` arithmetic result outside what its type holds are the first half — the
+            // answer itself has no place. `Rational.toWholeNumber`/`toInt`/`toFiniteDecimal`/
+            // `toDecimal` narrowing to a carrier that holds no such value are the same half, read
+            // off `Rational#asWholeNumber`/`#asDecimal`. `RATIONAL_ADD`/`SUBTRACT` are the second
+            // half: the exact sum or difference always has a value, but writing it is what
+            // `Rational`'s own arithmetic is defined to do (`Rational#plus`/`#minus`,
+            // `#aScaleThatClearsBothExponents`), and that required form can ask for an exponent past
+            // what `Rational` holds even where the mathematical answer would fit.
             case STRING_REPEAT, STRING_PAD_LEFT, STRING_PAD_RIGHT,
                     LIST_SUM, LIST_PRODUCT, LIST_RANGE_INCLUSIVE,
                     DATE_ADD_DAYS, DATE_ADD_MONTHS, DATE_ADD_YEARS,
                     DATETIME_ADD_MINUTES, DATETIME_ADD_HOURS, DATETIME_ADD_DAYS,
                     INT_ADD, INT_SUBTRACT, INT_MULTIPLY,
                     DECIMAL_TO_INT, DECIMAL_ROUND, DECIMAL_ADD, DECIMAL_SUBTRACT, DECIMAL_MULTIPLY,
-                    RATIONAL_TO_WHOLE_NUMBER, RATIONAL_TO_INT, RATIONAL_TO_DECIMAL,
-                    RATIONAL_ADD, RATIONAL_SUBTRACT, RATIONAL_MULTIPLY ->
-                    AbortSet.of(AbortKind.ANSWER_HAS_NO_PLACE);
+                    RATIONAL_TO_WHOLE_NUMBER, RATIONAL_TO_FINITE_DECIMAL, RATIONAL_TO_INT,
+                    RATIONAL_TO_DECIMAL, RATIONAL_ADD, RATIONAL_SUBTRACT, RATIONAL_MULTIPLY ->
+                    AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
 
             // `floorMod` aborts on a zero divisor like `/` does (spec §stdlib-int) and never
             // overflows: its answer is bounded by the divisor's own magnitude.
@@ -111,13 +118,14 @@ public final class KernelContracts {
             // whose quotient no `Int` holds (spec §stdlib-int); `Decimal.divide` answers a zero
             // divisor as a case the same way and aborts only where the quotient it rounds to has no
             // place at the scale asked (spec §stdlib-decimal).
-            case INT_TRUNCATING_DIVIDE, DECIMAL_DIVIDE -> AbortSet.of(AbortKind.ANSWER_HAS_NO_PLACE);
+            case INT_TRUNCATING_DIVIDE, DECIMAL_DIVIDE ->
+                    AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
 
             // The exact `/` operator: a zero divisor aborts outright (spec §stdlib-rational), and
             // the exact arithmetic underneath can still ask for an exponent past what a `Rational`
             // holds — the same law the narrowings above answer to.
             case RATIONAL_DIVIDE ->
-                    AbortSet.of(AbortKind.DIVISION_BY_ZERO, AbortKind.ANSWER_HAS_NO_PLACE);
+                    AbortSet.of(AbortKind.DIVISION_BY_ZERO, AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
         };
     }
 }

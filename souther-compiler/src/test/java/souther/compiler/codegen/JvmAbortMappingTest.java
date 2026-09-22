@@ -12,6 +12,8 @@ import souther.runtime.HALF_UP;
 import souther.runtime.IntMath;
 import souther.runtime.InvariantFailure;
 import souther.runtime.Lists;
+import souther.runtime.Rational;
+import souther.runtime.RationalMath;
 import souther.runtime.Strings;
 import souther.runtime.Temporals;
 import souther.runtime.UnreachableReached;
@@ -20,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -49,11 +52,11 @@ class JvmAbortMappingTest {
     /** {@code Int}'s three checked operators, each on the pair that overflows {@code long}. */
     @Test
     void intArithmeticOverflowsAsAnswerHasNoPlace() {
-        assertKernelAborts(Kernel.INT_ADD, AbortKind.ANSWER_HAS_NO_PLACE,
+        assertKernelAborts(Kernel.INT_ADD, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
                 () -> IntMath.addExact(Long.MAX_VALUE, 1));
-        assertKernelAborts(Kernel.INT_SUBTRACT, AbortKind.ANSWER_HAS_NO_PLACE,
+        assertKernelAborts(Kernel.INT_SUBTRACT, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
                 () -> IntMath.subtractExact(Long.MIN_VALUE, 1));
-        assertKernelAborts(Kernel.INT_MULTIPLY, AbortKind.ANSWER_HAS_NO_PLACE,
+        assertKernelAborts(Kernel.INT_MULTIPLY, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
                 () -> IntMath.multiplyExact(Long.MAX_VALUE, 2));
     }
 
@@ -61,7 +64,7 @@ class JvmAbortMappingTest {
      *  quotient no {@code Int} holds. */
     @Test
     void truncatingDivideAbortsOnlyWhereTheQuotientHasNoPlace() {
-        assertKernelAborts(Kernel.INT_TRUNCATING_DIVIDE, AbortKind.ANSWER_HAS_NO_PLACE,
+        assertKernelAborts(Kernel.INT_TRUNCATING_DIVIDE, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
                 () -> IntMath.divideExact(Long.MIN_VALUE, -1));
     }
 
@@ -77,20 +80,20 @@ class JvmAbortMappingTest {
     @Test
     void decimalArithmeticOverflowsAsAnswerHasNoPlace() {
         BigDecimal huge = new BigDecimal(BigDecimal.ONE.unscaledValue(), Integer.MIN_VALUE + 1);
-        assertKernelAborts(Kernel.DECIMAL_ADD, AbortKind.ANSWER_HAS_NO_PLACE,
+        assertKernelAborts(Kernel.DECIMAL_ADD, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
                 () -> DecimalMath.add(huge, BigDecimal.valueOf(0.1)));
-        assertKernelAborts(Kernel.DECIMAL_SUBTRACT, AbortKind.ANSWER_HAS_NO_PLACE,
+        assertKernelAborts(Kernel.DECIMAL_SUBTRACT, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
                 () -> DecimalMath.subtract(huge, BigDecimal.valueOf(0.1)));
-        assertKernelAborts(Kernel.DECIMAL_MULTIPLY, AbortKind.ANSWER_HAS_NO_PLACE,
+        assertKernelAborts(Kernel.DECIMAL_MULTIPLY, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
                 () -> DecimalMath.multiply(huge, huge));
     }
 
     /** {@code Decimal.round} and {@code Decimal.toInt} refuse a scale the run time does not take. */
     @Test
     void decimalRoundAndToIntAbortOnAScaleTheRunTimeDoesNotTake() {
-        assertKernelAborts(Kernel.DECIMAL_ROUND, AbortKind.ANSWER_HAS_NO_PLACE,
+        assertKernelAborts(Kernel.DECIMAL_ROUND, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
                 () -> DecimalMath.round(Long.MAX_VALUE, HALF_UP.INSTANCE, BigDecimal.ONE));
-        assertKernelAborts(Kernel.DECIMAL_TO_INT, AbortKind.ANSWER_HAS_NO_PLACE,
+        assertKernelAborts(Kernel.DECIMAL_TO_INT, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
                 () -> DecimalMath.toInt(HALF_UP.INSTANCE,
                         new BigDecimal(BigDecimal.valueOf(Long.MAX_VALUE).unscaledValue())
                                 .multiply(BigDecimal.TEN)));
@@ -100,20 +103,36 @@ class JvmAbortMappingTest {
      *  quotient has no place at. */
     @Test
     void decimalDivideAbortsOnlyWhereTheQuotientHasNoPlace() {
-        assertKernelAborts(Kernel.DECIMAL_DIVIDE, AbortKind.ANSWER_HAS_NO_PLACE,
+        assertKernelAborts(Kernel.DECIMAL_DIVIDE, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
                 () -> DecimalMath.divide(BigDecimal.ONE, BigDecimal.valueOf(3), Long.MAX_VALUE,
                         HALF_UP.INSTANCE));
+    }
+
+    /**
+     * {@code Rational.toFiniteDecimal}: a mathematically finite decimal whose required form still
+     * asks for more exponent than {@code Rational} holds. Reached without a huge intermediate — a
+     * {@code Decimal} of scale {@code Integer.MAX_VALUE} read into {@code Rational} exactly stays
+     * compact, and multiplying by a tenth pushes the required scale one step past what
+     * {@link Rational#asDecimal()} can name.
+     */
+    @Test
+    void rationalToFiniteDecimalAbortsWhereTheRequiredFormHasNoPlace() {
+        Rational compact = RationalMath.fromDecimal(new BigDecimal(BigInteger.ONE, Integer.MAX_VALUE));
+        Rational beyond = compact.times(RationalMath.fromDecimal(new BigDecimal("0.1")));
+
+        assertKernelAborts(Kernel.RATIONAL_TO_FINITE_DECIMAL, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+                () -> RationalMath.toFiniteDecimal(beyond));
     }
 
     /** {@code repeat}, {@code padLeft} and {@code padRight}: a count or a width no {@code String}
      *  could hold, the same law {@code Int} overflow answers to. */
     @Test
     void stringRepeatAndPaddingAbortWhereTheResultHasNoPlace() {
-        assertKernelAborts(Kernel.STRING_REPEAT, AbortKind.ANSWER_HAS_NO_PLACE,
+        assertKernelAborts(Kernel.STRING_REPEAT, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
                 () -> Strings.repeat("x", Integer.MAX_VALUE + 2L));
-        assertKernelAborts(Kernel.STRING_PAD_LEFT, AbortKind.ANSWER_HAS_NO_PLACE,
+        assertKernelAborts(Kernel.STRING_PAD_LEFT, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
                 () -> Strings.padLeft("x", Integer.MAX_VALUE + 2L, "y"));
-        assertKernelAborts(Kernel.STRING_PAD_RIGHT, AbortKind.ANSWER_HAS_NO_PLACE,
+        assertKernelAborts(Kernel.STRING_PAD_RIGHT, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
                 () -> Strings.padRight("x", Integer.MAX_VALUE + 2L, "y"));
     }
 
@@ -131,7 +150,7 @@ class JvmAbortMappingTest {
      *  {@code Int} overflow answers to (spec §stdlib-list). */
     @Test
     void listRangeInclusiveAbortsWhereTheSpanHasNoPlace() {
-        assertKernelAborts(Kernel.LIST_RANGE_INCLUSIVE, AbortKind.ANSWER_HAS_NO_PLACE,
+        assertKernelAborts(Kernel.LIST_RANGE_INCLUSIVE, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
                 () -> Lists.rangeInclusive(0, Long.MAX_VALUE));
     }
 
@@ -139,9 +158,9 @@ class JvmAbortMappingTest {
      *  Int} instantiation — a fact the kernel signature does not distinguish by element type. */
     @Test
     void listSumAndProductOverflowThroughTheirIntInstantiation() {
-        assertKernelAborts(Kernel.LIST_SUM, AbortKind.ANSWER_HAS_NO_PLACE,
+        assertKernelAborts(Kernel.LIST_SUM, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
                 () -> Lists.sumInt(List.of(Long.MAX_VALUE, 1L)));
-        assertKernelAborts(Kernel.LIST_PRODUCT, AbortKind.ANSWER_HAS_NO_PLACE,
+        assertKernelAborts(Kernel.LIST_PRODUCT, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
                 () -> Lists.productInt(List.of(Long.MAX_VALUE, 2L)));
     }
 
@@ -149,11 +168,11 @@ class JvmAbortMappingTest {
     @Test
     void everyCalendarShiftAbortsWhereTheResultHasNoPlace() {
         LocalDate late = LocalDate.of(999999999, 12, 31);
-        assertKernelAborts(Kernel.DATE_ADD_DAYS, AbortKind.ANSWER_HAS_NO_PLACE,
+        assertKernelAborts(Kernel.DATE_ADD_DAYS, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
                 () -> Temporals.addDays(late, Long.MAX_VALUE));
-        assertKernelAborts(Kernel.DATE_ADD_MONTHS, AbortKind.ANSWER_HAS_NO_PLACE,
+        assertKernelAborts(Kernel.DATE_ADD_MONTHS, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
                 () -> Temporals.addMonths(late, Long.MAX_VALUE));
-        assertKernelAborts(Kernel.DATE_ADD_YEARS, AbortKind.ANSWER_HAS_NO_PLACE,
+        assertKernelAborts(Kernel.DATE_ADD_YEARS, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
                 () -> Temporals.addYears(late, Long.MAX_VALUE));
     }
 

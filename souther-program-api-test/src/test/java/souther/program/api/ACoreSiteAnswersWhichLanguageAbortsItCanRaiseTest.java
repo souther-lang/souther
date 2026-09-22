@@ -118,7 +118,7 @@ class ACoreSiteAnswersWhichLanguageAbortsItCanRaiseTest {
 
         Core.Binary sum = onlyOneOf(Core.Binary.class, body);
 
-        assertEquals(Set.of(AbortKind.ANSWER_HAS_NO_PLACE), program.abortsAt(sum).kinds());
+        assertEquals(Set.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE), program.abortsAt(sum).kinds());
     }
 
     @Test
@@ -128,7 +128,7 @@ class ACoreSiteAnswersWhichLanguageAbortsItCanRaiseTest {
 
         Core.Binary quotient = onlyOneOf(Core.Binary.class, body);
 
-        assertEquals(Set.of(AbortKind.DIVISION_BY_ZERO, AbortKind.ANSWER_HAS_NO_PLACE),
+        assertEquals(Set.of(AbortKind.DIVISION_BY_ZERO, AbortKind.REQUIRED_FORM_HAS_NO_PLACE),
                 program.abortsAt(quotient).kinds());
     }
 

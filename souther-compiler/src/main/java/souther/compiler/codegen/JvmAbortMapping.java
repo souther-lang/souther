@@ -31,7 +31,7 @@ public final class JvmAbortMapping {
             case ENSURES_NOT_HELD -> ConstraintViolation.class;
             case UNREACHABLE_REACHED -> UnreachableReached.class;
             case DIVISION_BY_ZERO -> ConstraintViolation.class;
-            case ANSWER_HAS_NO_PLACE -> ConstraintViolation.class;
+            case REQUIRED_FORM_HAS_NO_PLACE -> ConstraintViolation.class;
             case INVALID_BOUNDS -> ConstraintViolation.class;
         };
     }
