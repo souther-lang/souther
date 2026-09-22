@@ -736,10 +736,11 @@ final class BodyGen {
                 // helper names that module's unit, which this module need not declare at all — and,
                 // if it declares one spelled the same, is not the same unit.
                 case Core.UnitValue u -> loadSharedInstance(code, cd(u.data()));
-                // Negating a Decimal goes to the runtime that owns Decimal arithmetic, as the
-                // binary operators do (ADR-0112). This one is total, so calling BigDecimal here
-                // would be sound — what it would cost is the next reader having to work out which
-                // of these are (BodyGen.java:1725).
+                // Negating a Decimal or a Rational goes to the runtime that owns its arithmetic, as
+                // the binary operators do (ADR-0112); both are total there, since neither changes
+                // scale nor exponent. Int is not: the smallest Int has no positive counterpart, so
+                // its negation goes through the same overflow-checked runtime as `+ - *` rather than
+                // the host's own (unchecked) `lneg` (spec §stdlib-int).
                 case Core.Neg n -> {
                     Type negated = genExpr(n.operand());
                     if (negated == Type.DECIMAL) {
@@ -748,7 +749,7 @@ final class BodyGen {
                     } else if (negated == Type.RATIONAL) {
                         code.invokestatic(CD_RationalMath, "negate", MTD_ratNegate);
                     } else {
-                        code.lneg();               // Int is carried as a long
+                        code.invokestatic(CD_IntMath, "negateExact", MTD_intNegate);
                     }
                 }
                 case Core.FieldAccess fa -> {

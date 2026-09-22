@@ -167,6 +167,11 @@ final class Descriptors {
     /** {@code (long, long) -> long}: overflow-checked Int arithmetic (spec §stdlib-int). */
     static final MethodTypeDesc MTD_intExact =
             MethodTypeDesc.of(ConstantDescs.CD_long, ConstantDescs.CD_long, ConstantDescs.CD_long);
+    /** {@code (long) -> long}: overflow-checked Int negation (spec §stdlib-int) — the one value
+     *  with no positive counterpart aborts here the same way a sum, a difference or a product
+     *  outside the range does. */
+    static final MethodTypeDesc MTD_intNegate =
+            MethodTypeDesc.of(ConstantDescs.CD_long, ConstantDescs.CD_long);
     static final ClassDesc CD_DivisionByZero = ClassDesc.of("souther.runtime.DivisionByZero");
     static final ClassDesc CD_NotANumber = ClassDesc.of("souther.runtime.NotANumber");
     static final ClassDesc CD_Boolean = ClassDesc.of("java.lang.Boolean");

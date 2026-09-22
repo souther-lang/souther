@@ -159,6 +159,7 @@ public final class AbortSites {
         return switch (node) {
             case Core.Unreachable _ -> AbortSet.of(AbortKind.UNREACHABLE_REACHED);
             case Core.Binary b -> arithmetic(b);
+            case Core.Neg n -> negation(n);
             case Core.Call c -> callAborts(c, kernels);
             case Core.Construct c -> constructedWithInvariants.contains(c.typeName())
                     ? AbortSet.of(AbortKind.INVARIANT_NOT_HELD)
@@ -170,10 +171,6 @@ public final class AbortSites {
             case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _,
                     Core.Temporal _, Core.Read _, Core.UnitValue _,
                     Core.MaterialisedValue _, Core.OptionNone _,
-                    // `Neg` is total: the JVM emits Int negation as `lneg` and Decimal negation as
-                    // `DecimalMath.negate`, neither of which the runtime ever refuses (traced
-                    // against `souther.compiler.codegen.BodyGen` and `souther.runtime.DecimalMath`).
-                    Core.Neg _,
                     Core.FieldAccess _, Core.PreservedCall _, Core.Apply _,
                     Core.If _, Core.IfConstructed _, Core.LetIn _,
                     Core.Block _, Core.ListLit _, Core.OptionSome _,
@@ -250,6 +247,37 @@ public final class AbortSites {
             case STRING, BOOL, DATE, TIME, DATETIME, INSTANT, RAW -> throw new IllegalStateException(
                     "`" + binary.op() + "` answers " + prim.shown()
                             + ", which no arithmetic the checker admits answers with");
+        };
+    }
+
+    /**
+     * Unary minus, read off {@link Core.Neg#type} the same way {@link #arithmeticType} reads
+     * {@link Core.Binary#type} — the checked fact, not a re-derivation from what the backend happens
+     * to emit. The specification states unary minus as answering the type it is given
+     * (spec §an-operator-takes-the-types-it-is-defined-for) and states {@code Int}'s own case
+     * explicitly: {@code abs} negates with {@code -}, and the smallest {@code Int} — the one value
+     * with no positive counterpart — aborts on overflow like any other overflow (spec §stdlib-int).
+     * {@code Decimal} and {@code Rational} negation only flip a sign; neither changes the scale or
+     * the exponent a {@code +}/{@code -}/{@code *} on either type can push out of range, so neither
+     * is a case {@link AbortKind#REQUIRED_FORM_HAS_NO_PLACE} names.
+     *
+     * <p>A checked {@code Core.Neg} answers only {@code Int}, {@code Decimal} or {@code Rational}
+     * (spec §an-operator-takes-the-types-it-is-defined-for); a fourth reaching here is a malformed
+     * checked {@code Core} and is refused the same way {@link #arithmeticType} refuses one, rather
+     * than answered with {@link AbortSet#NONE}.
+     */
+    private static AbortSet negation(Core.Neg neg) {
+        if (!(neg.type() instanceof Type.Prim prim)) {
+            throw new IllegalStateException(
+                    "unary minus answers " + Type.show(neg.type())
+                            + ", which no negation the checker admits answers with");
+        }
+        return switch (prim) {
+            case INT -> AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
+            case DECIMAL, RATIONAL -> AbortSet.NONE;
+            case STRING, BOOL, DATE, TIME, DATETIME, INSTANT, RAW -> throw new IllegalStateException(
+                    "unary minus answers " + prim.shown()
+                            + ", which no negation the checker admits answers with");
         };
     }
 
