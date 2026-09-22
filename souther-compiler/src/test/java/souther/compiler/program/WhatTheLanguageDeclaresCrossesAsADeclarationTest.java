@@ -1,6 +1,7 @@
 package souther.compiler.program;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.abort.AbortSites;
 import souther.compiler.core.KernelContracts;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -68,12 +69,12 @@ class WhatTheLanguageDeclaresCrossesAsADeclarationTest {
         assertEquals("`demo.Mode` is declared by A_MODULE and by THE_LANGUAGE",
                 assertThrows(IllegalStateException.class, () -> new CheckedProgram(
                         List.of(module("demo", twice)), List.of(twice), List.of(), Map.of(),
-                        kernels()))
+                        kernels(), noAborts()))
                         .getMessage());
         assertEquals("`demo.Mode` is declared by A_MODULE and by A_MODULE_ON_THE_PATH",
                 assertThrows(IllegalStateException.class, () -> new CheckedProgram(
                         List.of(module("demo", twice)), List.of(), List.of(twice), Map.of(),
-                        kernels()))
+                        kernels(), noAborts()))
                         .getMessage());
     }
 
@@ -82,6 +83,12 @@ class WhatTheLanguageDeclaresCrossesAsADeclarationTest {
      *  a program as one really is. */
     private static KernelContracts kernels() {
         return KernelContracts.of(DefaultStdlib.get().kernelSignatures());
+    }
+
+    /** A program with no {@code Core} of its own to classify — every fixture here is about the
+     *  address an index is built over, not about a body. */
+    private static AbortSites noAborts() {
+        return AbortSites.of(List.of(), kernels(), Set.of());
     }
 
     private static TypeSymbol.AtModule named(String module, String name) {

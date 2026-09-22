@@ -15,6 +15,7 @@ import souther.compiler.check.Sig;
 import souther.compiler.check.SpecImplementation;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
+import souther.compiler.abort.AbortSites;
 import souther.compiler.core.Composition;
 import souther.compiler.core.Core;
 import souther.compiler.core.EnsuresEnforcement;
@@ -45,6 +46,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -105,8 +107,56 @@ final class CheckedProgramAssembler {
         for (ModuleBoundaries module : boundaries) {
             modules.add(moduleOf(module, types, targets));
         }
-        return new CheckedProgram(modules, language, onThePath, targets,
-                KernelContracts.of(libraryOf(db).kernelSignatures()));
+        KernelContracts kernels = KernelContracts.of(libraryOf(db).kernelSignatures());
+        AbortSites aborts = AbortSites.of(everyCoreRootOf(modules), kernels,
+                constructedWithInvariants(everyDeclaration));
+        return new CheckedProgram(modules, language, onThePath, targets, kernels, aborts);
+    }
+
+    /**
+     * Every declared type at least one {@code invariant} clause names.
+     *
+     * <p>Read off the same declarations {@link #languageDataOf} and {@link #dataOf} already
+     * answered, and not re-derived from the checker's own state: a second reading of what a type's
+     * invariants are would be a second place that could disagree with {@link ValueShape#invariants}
+     * about which types have one.
+     */
+    private static Set<TypeSymbol.AtModule> constructedWithInvariants(
+            List<CheckedData> everyDeclaration) {
+        Set<TypeSymbol.AtModule> found = new LinkedHashSet<>();
+        for (CheckedData declared : everyDeclaration) {
+            if (declared instanceof CheckedData.WithFields fields && !fields.invariants().isEmpty()) {
+                found.add(declared.name());
+            }
+        }
+        return found;
+    }
+
+    /**
+     * Every {@code Core} a program's outputs are asked to emit: each behavior's body, where it has
+     * one this compile wrote, and each helper's.
+     *
+     * <p>Not a behavior composed of stages, and not one this program only calls — an
+     * {@link CheckedImplementation.Composed} has no {@code Core} of its own to classify, and
+     * {@link CheckedImplementation.ImplementedElsewhere} and {@link CheckedImplementation.Injected}
+     * likewise emit nothing here for {@link AbortSites} to be asked about: what either can end
+     * without a value for is a fact about a build this is not, read the same way a call to either
+     * already answers {@link AbortSet#NONE} at the site that reaches it
+     * ({@link souther.compiler.abort.AbortSites}).
+     */
+    private static List<Core> everyCoreRootOf(List<CheckedModule> modules) {
+        List<Core> roots = new ArrayList<>();
+        for (CheckedModule module : modules) {
+            for (CheckedBehavior behavior : module.behaviors()) {
+                if (behavior.implementation() instanceof CheckedImplementation.Body body) {
+                    roots.add(body.body());
+                }
+            }
+            for (CheckedHelper helper : module.helpers()) {
+                roots.add(helper.body());
+            }
+        }
+        return roots;
     }
 
     /**

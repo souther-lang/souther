@@ -1,5 +1,8 @@
 package souther.compiler.program;
 
+import souther.compiler.abort.AbortSet;
+import souther.compiler.abort.AbortSites;
+import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
 import souther.compiler.core.KernelContract;
 import souther.compiler.core.KernelContracts;
@@ -116,10 +119,21 @@ public final class CheckedProgram {
      * as the program happens to reach the library.
      */
     private final KernelContracts kernels;
+    /**
+     * Every way each {@code Core} site this program's outputs are asked to emit can end without a
+     * value.
+     *
+     * <p>Classified once, over every behavior body and helper this program holds, rather than left
+     * for an output to work out from {@code Core}'s own shape: that working-out is exactly what
+     * left the JVM and a second backend each reading the same specification prose and writing down
+     * their own list, which is what this program answers instead.
+     */
+    private final AbortSites aborts;
 
     CheckedProgram(List<CheckedModule> modules, List<CheckedData> languageDeclarations,
                    List<CheckedData> declaredOnThePath,
-                   Map<ValueName.Behavior, BehaviorTarget> behaviors, KernelContracts kernels) {
+                   Map<ValueName.Behavior, BehaviorTarget> behaviors, KernelContracts kernels,
+                   AbortSites aborts) {
         this.modules = List.copyOf(modules);
         Map<String, CheckedModule> named = new LinkedHashMap<>();
         for (CheckedModule module : this.modules) {
@@ -180,6 +194,8 @@ public final class CheckedProgram {
         }
         this.kernels = Objects.requireNonNull(kernels,
                 "a checked program is what the language it was checked with declares of its kernels");
+        this.aborts = Objects.requireNonNull(aborts,
+                "a checked program is what its own Core sites can end without a value for, too");
     }
 
     /**
@@ -324,6 +340,23 @@ public final class CheckedProgram {
      */
     public KernelContract kernel(Kernel kernel) {
         return kernels.contractOf(kernel);
+    }
+
+    /**
+     * Every {@link souther.compiler.abort.AbortKind} a run reaching {@code site} can end without a
+     * value for.
+     *
+     * <p>{@code site} is a {@code Core} an output actually holds — one this program handed over as
+     * part of a behavior's body or a helper's, reached off {@link CheckedImplementation.Body#body}
+     * or {@link CheckedHelper#body}, or a node under one of those. A kernel site's answer already
+     * reads {@link #kernel}'s {@link KernelContract#aborts}; an {@code ensures} crossing's already
+     * reads {@link EnsuresEnforcement#aborts}; this is where the rest of a body — an arithmetic
+     * operator, an {@code unreachable}, a construction — answers the same question.
+     *
+     * @throws IllegalArgumentException where {@code site} is not a {@code Core} this program holds
+     */
+    public AbortSet abortsAt(Core site) {
+        return aborts.at(site);
     }
 
     /**

@@ -119,6 +119,11 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.ArithmeticCheck.of",
                     "which operands an operator takes and what it answers, which is a question"
                             + " about the operator itself"),
+            new Held("souther.compiler.abort.AbortSites.arithmetic",
+                    "which AbortKind a Core.Binary can end without a value for, which the operator"
+                            + " alone answers for + - * and needs the answered type for too for /"),
+            new Held("souther.compiler.abort.AbortSites.arithmeticType",
+                    "the same, for the answered type / dispatches on before it asks the operator"),
             new Held("souther.compiler.check.BinaryElaborator.operandBeside",
                     "what the operator asks of one operand, given the one beside it"),
             new Held("souther.compiler.check.HelperParams.BodyTyping.visitOperand",
