@@ -2354,7 +2354,8 @@ public final class Bodies {
             // that took on a helper it also declares would otherwise emit two of it.
             Set<String> taken = new LinkedHashSet<>();
             List<List<Hir.FnDef>> lowered = new ArrayList<>();
-            Map<BindingId, ValueName> carried = new LinkedHashMap<>();
+            Map<BindingId, ValueName.Helper> carried = new LinkedHashMap<>();
+            Map<String, LoweringRole.Emitted> roles = new LinkedHashMap<>();
             // What this module emits and did not declare: every recursion its own expansions left
             // standing that it has no declaration for, under the name it reaches each by — which is
             // the name a call in the emitted tree already holds, and so the name the method is
@@ -2388,6 +2389,30 @@ public final class Bodies {
                 return Answer.absent();
             }
             beyond.addAll(minted.value().values());
+            // What every non-behavior definition this module declares runs as, whether or not it
+            // survives to be emitted as a method of its own: a helper fully inlined at its call
+            // sites is still checked standalone and still has an answer here, which is what
+            // TypeChecker checks every one of these against (Bodies.LoweringRoleOf, kept — never
+            // asked again from the shape of what was lowered).
+            for (Hir.FnDef fn : settled.value().fns()) {
+                if (behaviors.contains(fn.name())) {
+                    // Emitted as the behavior, never as a method of its own, so it has no role
+                    // among these — the same reason it is not among toCheck's helpers either.
+                    continue;
+                }
+                Answer<LoweringRole> role = db.ask(new LoweringRoleOf(name, fn.name()));
+                if (!role.present()) {
+                    return Answer.absent();
+                }
+                roles.put(fn.name(), LoweringRole.emitted(role.value(), fn.name(), name));
+            }
+            for (Hir.FnDef fn : beyond) {
+                Answer<LoweringRole> role = db.ask(new LoweringRoleOf(name, fn.name()));
+                if (!role.present()) {
+                    return Answer.absent();
+                }
+                roles.put(fn.name(), LoweringRole.emitted(role.value(), fn.name(), name));
+            }
             // Both, and each stays where it was: what becomes a method is one question and what this
             // module declared is another, and the backend reads the first while every rule about the
             // declaring module reads the second.
@@ -2419,7 +2444,7 @@ public final class Bodies {
                 lowered.add(fns);
             }
             return Answer.of(new Lower.Lowered(settled.value(),
-                    Lower.lowered(settled.value(), lowered.get(0), lowered.get(1)), carried));
+                    Lower.lowered(settled.value(), lowered.get(0), lowered.get(1)), carried, roles));
         }
     }
 
@@ -3180,7 +3205,8 @@ public final class Bodies {
                         db.ask(new Front.Reading()).value(),
                         signatures.present() ? signatures.value() : null,
                         injected.value(), unwritten.value(), lowering.value().lowered(),
-                        lowering.value().carried(), reqSigs.value(), calleeSigs.value(), sigs.value(), published.value(),
+                        lowering.value().carried(), lowering.value().roles(), reqSigs.value(),
+                        calleeSigs.value(), sigs.value(), published.value(),
                         settled, shapes.present() ? shapes.value() : Map.of(),
                         elsewhere.value());
             } catch (CompileException e) {

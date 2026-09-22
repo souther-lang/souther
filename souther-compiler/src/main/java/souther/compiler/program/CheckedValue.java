@@ -39,7 +39,7 @@ public final class CheckedValue {
      * What the method this value runs as is handed: the binding its body reads, the type arriving in
      * it, and the value {@code carries} it holds.
      */
-    public record Handover(Core.Binder binder, Type type, ValueName carries) {}
+    public record Handover(Core.Binder binder, Type type, ValueName.Helper carries) {}
 
     /** Which value this is. */
     public ValueName.Helper name() {

@@ -17,7 +17,7 @@ import souther.compiler.types.ValueName;
  * @param definition the definition as lowered
  * @param carried the value each parameter the lowering added holds, by the binding of the parameter
  */
-public record LoweredDefinition(Hir.FnDef definition, Map<BindingId, ValueName> carried) {
+public record LoweredDefinition(Hir.FnDef definition, Map<BindingId, ValueName.Helper> carried) {
 
     public LoweredDefinition {
         carried = Map.copyOf(carried);

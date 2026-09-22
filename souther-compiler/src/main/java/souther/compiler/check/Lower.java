@@ -36,11 +36,18 @@ public final class Lower {
      *
      * <p>{@code carried} is what each parameter the lowering gave a value's method holds, by the
      * binding of the parameter, across every method of the lowered module.
+     *
+     * <p>{@code roles} is what each definition the lowered module carries runs as, by its name — the
+     * answer {@link souther.compiler.query.Bodies.LoweringRoleOf} settled for it, so a reader that
+     * needs the role of a definition this settled reads it from here rather than asking again.
      */
-    public record Lowered(Hir.Module settled, Hir.Module lowered, Map<BindingId, ValueName> carried) {
+    public record Lowered(Hir.Module settled, Hir.Module lowered,
+                          Map<BindingId, ValueName.Helper> carried,
+                          Map<String, LoweringRole.Emitted> roles) {
 
         public Lowered {
             carried = Map.copyOf(carried);
+            roles = Map.copyOf(roles);
         }
     }
 

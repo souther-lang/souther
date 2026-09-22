@@ -2660,7 +2660,7 @@ public final class HelperInliner {
      */
     public LoweredDefinition valueMethod(Hir.FnDef fn) {
         List<Hir.FnParam> parameters = new ArrayList<>();
-        Map<BindingId, ValueName> carried = new LinkedHashMap<>();
+        Map<BindingId, ValueName.Helper> carried = new LinkedHashMap<>();
         Hir.Expr body = writing(bodyOf(fn.name()), Set.of(), () -> {
             heldToTheBound(fn.writtenBody());
             Hir.Expr calls = inline(fn.writtenBody());
@@ -2671,7 +2671,14 @@ public final class HelperInliner {
                         .binder(VALUE_PARAMETER + each.name(), each.pos());
                 handed.put(each.reaches(), binder);
                 parameters.add(new Hir.FnParam(binder, null));
-                carried.put(binder.binding(), each.denotes());
+                // takenByTheMethod took this through isAMethodValue, which only holds of a name
+                // substitutedAt already read as a ValueName.Helper — nothing else is emitted as a
+                // method for a value to be handed.
+                if (!(each.denotes() instanceof ValueName.Helper carries)) {
+                    throw new IllegalStateException("`" + each.name() + "` is handed to a value's"
+                            + " method and denotes " + each.denotes() + ", not a value");
+                }
+                carried.put(binder.binding(), carries);
             }
             materialised.add(handed);
             try {

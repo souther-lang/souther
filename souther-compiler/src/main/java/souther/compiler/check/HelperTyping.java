@@ -60,9 +60,15 @@ public final class HelperTyping {
         Preserved standing = Preserved.valuesAlreadySettled(settledSignatures);
         for (Hir.FnDef h : valuesBeforeTheValuesThatNameThem(inliner, symbols.library(), toCheck)) {
             boolean recursive = recursiveHelperFns.containsKey(h.name());
-            // What it runs as. None of these is a behavior's implementation: a fn a behavior of its
-            // name declares is checked against that behavior and is not among these.
-            LoweringRole role = LoweringRole.of(h, inliner.moduleName(), false);
+            // What it runs as, settled once where this module was lowered and read here rather than
+            // answered again from the definition: everything this checks is a method the module
+            // emits, so a definition without a role here is a reader asking about something the
+            // lowering never carried.
+            LoweringRole.Emitted role = elaborated.roles.get(h.name());
+            if (role == null) {
+                throw new IllegalStateException("`" + h.name() + "` is checked standalone and the"
+                        + " lowering settled no role for it");
+            }
             // Where this definition stands, or null where it stands nowhere: the one thing every
             // rule below that is about a row's operand asks, read off the definition the rule is
             // holding rather than off a set of names travelling beside it.
@@ -77,8 +83,7 @@ public final class HelperTyping {
             // from another module, and has no dependency in force to reach a behavior through.
             Map<ValueName.Behavior, ReqSig> reachable = switch (role) {
                 case LoweringRole.RowValue _, LoweringRole.PublishedValueEntry _ -> Map.of();
-                case LoweringRole.ValueHome _, LoweringRole.Helper _,
-                     LoweringRole.ValueDeclaredElsewhere _, LoweringRole.Behavior _ -> reqSigs;
+                case LoweringRole.ValueHome _, LoweringRole.Helper _ -> reqSigs;
             };
             // A helper reads a settled value as a value does. A helper's body is expanded into
             // whoever calls it, and a value it names is expanded into that expansion, so a chain of
@@ -117,7 +122,7 @@ public final class HelperTyping {
             if (loweredParams != null) {
                 takes = new ArrayList<>();
                 for (Hir.FnParam p : loweredParams) {
-                    ValueName carries = elaborated.carried.get(p.binder().binding());
+                    ValueName.Helper carries = elaborated.carried.get(p.binder().binding());
                     if (carries != null) {
                         CompleteSignature carried = standing.valueKept(carries);
                         if (carried == null) {
@@ -236,8 +241,7 @@ public final class HelperTyping {
                         .ifPresent(c -> settledConstants.put(settled, c));
             }
             if (emitted != null) {
-                elaborated.helpers.put(h.name(), new EmittedDefinition(elaboratedBody, takes,
-                        LoweringRole.emitted(role, h.name(), inliner.moduleName())));
+                elaborated.helpers.put(h.name(), new EmittedDefinition(elaboratedBody, takes, role));
             }
             // a declared return type — required on a recursive helper, allowed on any helper — must
             // match the body; a lying annotation is not silently ignored. What a row's operand

@@ -52,7 +52,11 @@ public final class TypeChecker {
         final Map<String, List<Hir.FnParam>> loweredParams = new LinkedHashMap<>();
         /** The value each parameter a lowering gave a value's method holds, by the binding of the
          * parameter. A parameter the source wrote is not in here. */
-        final Map<BindingId, ValueName> carried = new LinkedHashMap<>();
+        final Map<BindingId, ValueName.Helper> carried = new LinkedHashMap<>();
+        /** What each definition the lowered module carries runs as, by name — settled once at
+         * {@link souther.compiler.query.Bodies.LoweringRoleOf} and read here rather than answered
+         * again from the definition's shape. */
+        final Map<String, LoweringRole.Emitted> roles = new LinkedHashMap<>();
     }
 
     /**
@@ -97,7 +101,8 @@ public final class TypeChecker {
                                        Map<String, Sig> sigs,
                                        Set<ValueName.Behavior> importedInjected,
                                        Set<ValueName.Behavior> importedUnwritten,
-                                       Hir.Module lowered, Map<BindingId, ValueName> carried,
+                                       Hir.Module lowered, Map<BindingId, ValueName.Helper> carried,
+                                       Map<String, LoweringRole.Emitted> roles,
                                        Map<ValueName.Behavior, ReqSig> reqSigs,
                                        Map<ValueName.Behavior, ReqSig> calleeSigs,
                                        Map<String, Type> recursiveHelperFns,
@@ -106,6 +111,7 @@ public final class TypeChecker {
                                        Preserved.SettledValues declaredElsewhere) {
         Elaborated elaborated = new Elaborated();
         elaborated.carried.putAll(carried);
+        elaborated.roles.putAll(roles);
         // What the modules that declare the values this one reads settled them as: their answer,
         // which is the only one there is, and not a check of a copy of their bodies made here.
         declaredElsewhere.signatures().values().forEach(elaborated.settledValues::settled);

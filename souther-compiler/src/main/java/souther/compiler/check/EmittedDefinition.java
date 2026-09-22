@@ -45,7 +45,8 @@ public record EmittedDefinition(Core body, List<Parameter> parameters, LoweringR
      * <p>Not an argument of the value. A value takes none; this is how the method it runs as is
      * handed what it would otherwise build a second time.
      */
-    public record Handover(Core.Binder binder, Type type, ValueName carries) implements Parameter {}
+    public record Handover(Core.Binder binder, Type type, ValueName.Helper carries)
+            implements Parameter {}
 
     public EmittedDefinition {
         parameters = List.copyOf(parameters);
