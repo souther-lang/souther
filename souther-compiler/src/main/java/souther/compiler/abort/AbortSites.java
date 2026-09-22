@@ -81,17 +81,18 @@ public final class AbortSites {
      * same site's own local reading, except {@link Core.IfConstructed#construct}, which
      * {@link #walkGuarded} answers for.
      *
-     * <p>A node already filed is not walked again. Nothing in one body's tree is shared — a Core
-     * body is not a graph — so this is defensive rather than load-bearing; it is what keeps a
-     * caller handing the same root twice from being a second, disagreeing classification of it.
+     * <p>A node already filed is not walked again — checked and filed in the one map access
+     * {@link IdentityHashMap#put} already makes, rather than a separate {@code containsKey} first.
+     * Nothing in one body's tree is shared — a Core body is not a graph — so this is defensive
+     * rather than load-bearing; it is what keeps a caller handing the same root twice from being a
+     * second, disagreeing classification of it, and from recursing into its children twice.
      */
     private static void walk(Core node, KernelContracts kernels,
                              Set<TypeSymbol.AtModule> constructedWithInvariants,
                              IdentityHashMap<Core, AbortSet> into) {
-        if (into.containsKey(node)) {
+        if (into.put(node, localAbortOf(node, kernels, constructedWithInvariants)) != null) {
             return;
         }
-        into.put(node, localAbortOf(node, kernels, constructedWithInvariants));
         if (node instanceof Core.IfConstructed ic) {
             walkGuarded(ic.construct(), kernels, constructedWithInvariants, into);
             walk(ic.then(), kernels, constructedWithInvariants, into);
@@ -114,10 +115,9 @@ public final class AbortSites {
     private static void walkGuarded(Core.Construct construct, KernelContracts kernels,
                                     Set<TypeSymbol.AtModule> constructedWithInvariants,
                                     IdentityHashMap<Core, AbortSet> into) {
-        if (into.containsKey(construct)) {
+        if (into.put(construct, AbortSet.NONE) != null) {
             return;
         }
-        into.put(construct, AbortSet.NONE);
         Core.forEachChild(construct,
                 child -> walk(child, kernels, constructedWithInvariants, into));
     }
