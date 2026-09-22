@@ -4,10 +4,13 @@ import souther.compiler.DefaultStdlib;
 import souther.compiler.abort.AbortKind;
 import souther.compiler.core.Kernel;
 import souther.compiler.core.KernelContracts;
+import souther.runtime.ConstraintFailure;
 import souther.runtime.ConstraintViolation;
 import souther.runtime.DecimalMath;
+import souther.runtime.EnsuresFailure;
 import souther.runtime.HALF_UP;
 import souther.runtime.IntMath;
+import souther.runtime.InvariantFailure;
 import souther.runtime.Lists;
 import souther.runtime.Strings;
 import souther.runtime.Temporals;
@@ -20,7 +23,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -156,11 +158,39 @@ class JvmAbortMappingTest {
     }
 
     @Test
-    void unreachableAbortsForTheOneReasonItIs() {
-        assertEquals(AbortKind.UNREACHABLE_REACHED.name(), AbortKind.UNREACHABLE_REACHED.name());
-        assertEquals(UnreachableReached.class,
-                JvmAbortMapping.representationOf(AbortKind.UNREACHABLE_REACHED));
-        assertThrows(UnreachableReached.class, () -> UnreachableReached.reached("never"));
+    void unreachableAbortsAsTheClassJvmAbortMappingNames() {
+        assertThrows(JvmAbortMapping.representationOf(AbortKind.UNREACHABLE_REACHED),
+                () -> UnreachableReached.reached("never"));
+    }
+
+    /**
+     * {@code InvariantFailure} is what {@code __construct} answers on its failure side (spec
+     * §invariant-mvp), and {@code ConstraintViolation.notHeld} is the one place any
+     * {@link ConstraintFailure} leaves as an abort ({@code BodyGen}'s
+     * {@code ConstraintViolation.orThrow} calls it for a construction; this calls it directly for
+     * the same reason the kernel assertions above call {@code souther-runtime} directly, rather than
+     * compiling and running a Souther program to reach the one line that does).
+     */
+    @Test
+    void invariantNotHeldAbortsAsTheClassJvmAbortMappingNames() {
+        InvariantFailure failure = InvariantFailure.unnamed("demo", "Positive");
+
+        assertThrows(JvmAbortMapping.representationOf(AbortKind.INVARIANT_NOT_HELD),
+                () -> { throw ConstraintViolation.notHeld(failure); });
+    }
+
+    /**
+     * {@code EnsuresFailure} is what the check {@code EnsuresGen} emits at
+     * {@link souther.compiler.core.EnsuresEnforcement.AtTheCallee} and
+     * {@link souther.compiler.core.EnsuresEnforcement.AtEachCrossing} builds and throws through the
+     * same {@code ConstraintViolation.notHeld}.
+     */
+    @Test
+    void ensuresNotHeldAbortsAsTheClassJvmAbortMappingNames() {
+        EnsuresFailure failure = new EnsuresFailure("demo", "halve", null, null, null);
+
+        assertThrows(JvmAbortMapping.representationOf(AbortKind.ENSURES_NOT_HELD),
+                () -> { throw ConstraintViolation.notHeld(failure); });
     }
 
     /**

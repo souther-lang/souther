@@ -9,10 +9,11 @@ import java.util.Set;
  * <p>A small immutable value, not a registry. What owns one — a {@code Core} site, a kernel, an
  * {@code ensures} crossing — is answered by whoever asks the question this rides back from; this
  * itself says only which reasons, and how many. Most sites answer {@link #NONE} or a single kind;
- * more than one is real too — {@code Int.truncatingDivide} answers with both
+ * more than one is real too — the exact {@code /} operator answers with both
  * {@link AbortKind#DIVISION_BY_ZERO} and {@link AbortKind#ANSWER_HAS_NO_PLACE}, on a zero divisor
- * and on the one pair whose quotient no {@code Int} holds, which the specification treats as two
- * reasons.
+ * and on an exponent past what {@code Rational}'s own representation holds, which the specification
+ * treats as two reasons. {@code Int.truncatingDivide} answers a zero divisor as a case instead and
+ * carries only the second.
  *
  * <p>Order carries no meaning — two kinds either sit at one site or they do not, and nothing asks
  * which was found first — so this is backed by an {@code EnumSet} and answers no orderable view of

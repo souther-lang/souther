@@ -81,16 +81,13 @@ public final class AbortSites {
      * same site's own local reading, except {@link Core.IfConstructed#construct}, which
      * {@link #walkGuarded} answers for.
      *
-     * <p>A node already filed is not walked again — checked and filed in the one map access
-     * {@link IdentityHashMap#put} already makes, rather than a separate {@code containsKey} first.
-     * Nothing in one body's tree is shared — a Core body is not a graph — so this is defensive
-     * rather than load-bearing; it is what keeps a caller handing the same root twice from being a
-     * second, disagreeing classification of it, and from recursing into its children twice.
+     * <p>A node already filed is not walked into a second time; {@link #file} says whether this is
+     * the first time.
      */
     private static void walk(Core node, KernelContracts kernels,
                              Set<TypeSymbol.AtModule> constructedWithInvariants,
                              IdentityHashMap<Core, AbortSet> into) {
-        if (into.put(node, localAbortOf(node, kernels, constructedWithInvariants)) != null) {
+        if (!file(node, localAbortOf(node, kernels, constructedWithInvariants), into)) {
             return;
         }
         if (node instanceof Core.IfConstructed ic) {
@@ -115,11 +112,39 @@ public final class AbortSites {
     private static void walkGuarded(Core.Construct construct, KernelContracts kernels,
                                     Set<TypeSymbol.AtModule> constructedWithInvariants,
                                     IdentityHashMap<Core, AbortSet> into) {
-        if (into.put(construct, AbortSet.NONE) != null) {
+        if (!file(construct, AbortSet.NONE, into)) {
             return;
         }
         Core.forEachChild(construct,
                 child -> walk(child, kernels, constructedWithInvariants, into));
+    }
+
+    /**
+     * Files {@code node}'s answer, and says whether this is the first time — a caller recurses into
+     * a node's children exactly where this answers {@code true}.
+     *
+     * <p>One map access on the common path ({@link IdentityHashMap#putIfAbsent}), not a
+     * {@code containsKey} ahead of a {@code put}. But a second filing of the same node is not
+     * silently accepted merely because it is cheap to detect: {@code Core} is immutable and this
+     * walker's own {@link Core.IfConstructed} handling proves a node's context changes what it
+     * means, so nothing here may assume {@code Core} bodies stay trees rather than becoming graphs
+     * a future rewrite shares nodes across. A second filing that disagrees with the first is refused
+     * outright — silently keeping whichever answer got there first would let the order two callers
+     * happen to walk in decide what a shared site's own answer is, which is not a fact about the
+     * site at all.
+     *
+     * @throws IllegalStateException where {@code node} was already filed with a different answer
+     */
+    private static boolean file(Core node, AbortSet answer, IdentityHashMap<Core, AbortSet> into) {
+        AbortSet already = into.putIfAbsent(node, answer);
+        if (already == null) {
+            return true;
+        }
+        if (!already.equals(answer)) {
+            throw new IllegalStateException("one Core instance is classified " + already
+                    + " under one context and " + answer + " under another: " + node);
+        }
+        return false;
     }
 
     /**

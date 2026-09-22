@@ -18,8 +18,10 @@ package souther.compiler.abort;
  * place-for`) and each of the four cites it. Two operations are folded together only where the
  * specification itself gives them one reason; two are kept apart wherever it gives them two, even
  * where both are, say, a division — {@link #DIVISION_BY_ZERO} and {@link #ANSWER_HAS_NO_PLACE} are
- * both reached by {@code Int.truncatingDivide}, on a zero divisor and on the one pair whose quotient
- * no {@code Int} holds, and the specification is explicit that those are two reasons and not one.
+ * both reached by the exact {@code /} operator, on a zero divisor and on an exponent past what
+ * {@code Rational}'s own representation holds, and the specification is explicit that those are two
+ * reasons and not one. {@code Int.truncatingDivide} answers a zero divisor as a case instead and
+ * reaches only the second — see {@link #DIVISION_BY_ZERO}'s own note on that line.
  *
  * <p>A carrier's own reasons are not here. A bad arena mark, a document that is not JSON, a value
  * whose tag nothing knows — none of those is a Souther program ending without a value; they are an
@@ -49,8 +51,11 @@ public enum AbortKind {
     /**
      * A behavior's {@code ensures} relates what it is given to what it answers, and a run did not
      * keep it (spec §violation-destination). Where this is checked is a separate question, answered
-     * by {@link souther.compiler.core.EnsuresEnforcement}: a behavior with no clause, or one this
-     * compilation has not decided the enforcement of, never reaches this reason at all.
+     * by {@link souther.compiler.core.EnsuresEnforcement}: a behavior with no clause never reaches
+     * this reason at all, and one this compilation has not decided the enforcement of is a question
+     * {@link souther.compiler.core.EnsuresEnforcement#aborts} refuses rather than answers — "never
+     * reaches this" and "this compilation does not say" are not the same claim, and only the first
+     * is {@link AbortSet#NONE}.
      */
     ENSURES_NOT_HELD,
 
@@ -65,11 +70,12 @@ public enum AbortKind {
 
     /**
      * An operation defined to abort on a zero divisor met one: {@code Int}'s {@code /} and
-     * {@code floorMod}, {@code Decimal}'s {@code /} and {@code divide}, {@code Rational}'s
-     * {@code /} (spec §stdlib-int, §stdlib-decimal, §stdlib-rational). A named operation that
-     * answers {@code DivisionByZero} as a case instead — {@code truncatingDivide},
-     * {@code truncatingRemainder} — never reaches this: the specification drew that line by name,
-     * and this reason exists only on the side of it that did not become a case.
+     * {@code floorMod}, {@code Decimal}'s {@code /}, {@code Rational}'s {@code /} (spec
+     * §stdlib-int, §stdlib-decimal, §stdlib-rational). A named operation that answers
+     * {@code DivisionByZero} as a case instead — {@code Int.truncatingDivide},
+     * {@code Int.truncatingRemainder}, {@code Decimal.divide} — never reaches this: the
+     * specification drew that line by name, and this reason exists only on the side of it that
+     * did not become a case.
      */
     DIVISION_BY_ZERO,
 

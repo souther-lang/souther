@@ -117,23 +117,40 @@ public sealed interface EnsuresEnforcement {
     /**
      * Every {@link AbortKind} a run of the crossing this enforces can end without a value for:
      * {@link AbortKind#ENSURES_NOT_HELD} where something here actually checks a clause, and
-     * {@link AbortSet#NONE} where nothing does.
+     * {@link AbortSet#NONE} where {@link NoContract} says there is no clause to check — a
+     * conclusion, reached by reading what the behavior declared.
      *
      * <p>This is the {@code ensures} half of what {@link souther.compiler.abort.AbortSites} answers
      * for a {@code Core} site — not folded into that walker, because where a clause is checked is
      * already a semantic object of its own and asking it a second question here is cheaper and more
-     * honest than reading the same fact out of a tree walk. {@link NotDecidedHere} answers
-     * {@link AbortSet#NONE} for the same reason {@link #contract} answers no contract for it: this
-     * compilation has not decided whether the crossing checks anything, and an output reading
-     * {@code NONE} from an undecided crossing is reading exactly that — not that the crossing is
-     * known to never abort.
+     * honest than reading the same fact out of a tree walk.
+     *
+     * <p>{@link NotDecidedHere} is not answered here at all. {@link AbortSet#NONE} states, by its
+     * own contract, that a site {@code always answers a value or a business case, never neither} —
+     * and {@link NotDecidedHere} is the opposite of that claim: this compilation has not decided
+     * whether the crossing checks anything, so there is no fact yet to state as an {@link AbortSet}.
+     * Answering {@code NONE} for it would be "nothing said" read back as "considered and found
+     * total" — the exact confusion a backend-neutral abort vocabulary exists to end. So this throws
+     * instead, the same refusal {@link #contract} would be making too if it did not already have
+     * {@code null} to answer with. Every {@link souther.compiler.program.CheckedBehavior} this
+     * compiler emits is checked against its own declaring module, which {@link #in} never answers
+     * {@link NotDecidedHere} for — so no site this compiler builds a program from reaches this arm;
+     * it exists for the day cross-module ownership is designed and this becomes one of the other
+     * three answers.
+     *
+     * @throws IllegalStateException where this is {@link NotDecidedHere} — this compilation has
+     *     nothing to say about whether the crossing aborts, and {@link AbortSet} has no value that
+     *     means "unknown"
      */
     default AbortSet aborts() {
         return switch (this) {
             case AtTheCallee _ -> AbortSet.of(AbortKind.ENSURES_NOT_HELD);
             case AtEachCrossing _ -> AbortSet.of(AbortKind.ENSURES_NOT_HELD);
             case NoContract _ -> AbortSet.NONE;
-            case NotDecidedHere _ -> AbortSet.NONE;
+            case NotDecidedHere _ -> throw new IllegalStateException(
+                    "whether this crossing can end without a value for ENSURES_NOT_HELD is not"
+                            + " decided here — asked of a behavior another module declares, which"
+                            + " this compilation did not classify");
         };
     }
 
