@@ -1,7 +1,10 @@
 # ADR-0119: `lowercase`/`uppercase` are Unicode 18.0.0's default case conversion, untailored
 
-Status: Accepted. Narrows ADR-0112's consequences for `String.lowercase`/`String.uppercase`, the
-same way ADR-0118 narrowed them for `String.trim`.
+Status: Accepted. Settles what ADR-0118's "What this does not settle" section left open, and
+narrows ADR-0112's and ADR-0118's consequences for `String.lowercase`/`String.uppercase` the same
+way ADR-0118 narrowed ADR-0112's for `String.trim`: both ADR-0112's "stay on `JdkVirtual`" bullet
+and ADR-0118's "is unchanged" bullet, each naming `lowercase`/`uppercase` among the operations
+untouched by that ADR, no longer hold for those two.
 
 ## Context
 
@@ -65,9 +68,10 @@ itself does not promise casing preserves a normalization form.
 semantically equivalent, invariant included, and `String#toLowerCase()`/`toUpperCase()` are not,
 on any of the three axes above.
 
-The mapping and property data (roughly 1,600 lowercase entries, 1,600 uppercase entries, 180
-`Cased` ranges, 524 `Case_Ignorable` ranges) is too large for a hand-enumerated `switch`, the way
-ADR-0118's 25-code-point whitespace set is written. It is generated: `bin/GenerateCaseTables.java`,
+The mapping and property data spans thousands of code points across both directions and hundreds
+of `Cased`/`Case_Ignorable` ranges — too large for a hand-enumerated `switch`, the way ADR-0118's
+25-code-point whitespace set is written, and a count here would rot on the next Unicode version
+this same file regenerates against. It is generated: `bin/GenerateCaseTables.java`,
 run manually (never during `mvn`, since a Unicode version bump is a specification change, not a
 dependency bump) against a downloaded `UnicodeData.txt`/`SpecialCasing.txt`/`DerivedCoreProperties.txt`
 for one pinned version, emits `souther-runtime/.../souther/runtime/CaseTables.java` — generated
