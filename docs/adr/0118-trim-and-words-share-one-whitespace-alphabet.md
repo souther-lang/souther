@@ -46,25 +46,26 @@ from `Intrinsics.JdkVirtual` (`java.lang.String.trim`) to `Intrinsics.RuntimeSta
 (`Strings.trim`), next to `STRING_WORDS` in the emitter table, and out of
 `TheRuntimeAnswersEveryKernelAtItsDeclaredAbiTest`'s `ANSWERED_BY_THE_HOST` set.
 
-## What this raised, and does not settle by itself
+## What this does not settle
 
 The same question — does a host method's meaning match the one Souther has committed to, or only
 its totality and representation — applies next and most sharply to `String.lowercase`/`uppercase`
 (`java.lang.String.toLowerCase`/`toUpperCase` with no `Locale` argument, so both the mapping table
 a JVM ships and the *default locale it happens to be running under* decide the answer). Case
-conversion has no sibling operation like `words` to expose a disagreement the way this issue did.
-ADR-0119 settles that one, fixing a locale the same way this ADR fixes a whitespace set.
-`contains`/`startsWith`/`endsWith`/`append` stay on `JdkVirtual` under ADR-0112 for a different
-reason and are not part of either risk: each is a sequence operation over the representation
-Souther already shares with the JDK, with no Unicode property table or locale behind it.
+conversion has no sibling operation like `words` to expose a disagreement the way this issue did,
+and the specification does not yet commit to a fixed casing rule the way `[#string-whitespace]`
+now commits to a fixed whitespace set. `contains`/`startsWith`/`endsWith`/`append` stay on
+`JdkVirtual` under ADR-0112 for a different reason and are not part of the same risk: each is a
+sequence operation over the representation Souther already shares with the JDK, with no Unicode
+property table or locale behind it. Deciding the casing question is left open; this ADR fixes only
+the whitespace case, which #1871 raised.
 
 ## Consequences
 
 - ADR-0112's consequences bullet naming `String.trim` as staying on `JdkVirtual` no longer holds;
   `trim` moved to `Strings`, alongside `words`, `characters` and the runtime's other code-point
-  operations. `lowercase`/`uppercase` move too, under ADR-0119. The rest of that bullet —
-  `contains`/`startsWith`/`endsWith`/`append` and the `DateTime` conversions staying on
-  `JdkVirtual` — is unchanged.
+  operations. The rest of that bullet — `lowercase`/`uppercase`/`contains`/`startsWith`/
+  `endsWith`/`append` and the `DateTime` conversions staying on `JdkVirtual` — is unchanged.
 - `String.trim` on a control character below U+0020 that is not TAB/LF/VT/FF/CR (e.g. U+0007 BEL,
   U+001C FILE SEPARATOR) no longer strips it; that behaviour was never specified and came only
   from the JDK method's own `<= U+0020` rule.

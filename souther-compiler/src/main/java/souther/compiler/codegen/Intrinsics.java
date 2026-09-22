@@ -459,6 +459,8 @@ final class Intrinsics {
         t.put(Kernel.STRING_TO_INT, rt(CD_Strings, "toInt", order(0)));
         t.put(Kernel.STRING_TO_DECIMAL, rt(CD_Strings, "toDecimal", order(0)));
         t.put(Kernel.STRING_LENGTH, rt(CD_Strings, "length", order(0)));
+        t.put(Kernel.STRING_LOWERCASE, jdk(CD_String, "toLowerCase", mtd(CD_String), order(0)));
+        t.put(Kernel.STRING_UPPERCASE, jdk(CD_String, "toUpperCase", mtd(CD_String), order(0)));
         t.put(Kernel.STRING_CONTAINS, jdk(CD_String, "contains", mtd(bool, CD_CharSequence), order(1, 0)));
         t.put(Kernel.STRING_STARTS_WITH, jdk(CD_String, "startsWith", mtd(bool, CD_String), order(1, 0)));
         t.put(Kernel.STRING_ENDS_WITH, jdk(CD_String, "endsWith", mtd(bool, CD_String), order(1, 0)));
@@ -475,11 +477,6 @@ final class Intrinsics {
         // on the runtime rather than the JDK's own `trim`, whose whitespace set does not agree.
         t.put(Kernel.STRING_TRIM, rt(CD_Strings, "trim", order(0)));
         t.put(Kernel.STRING_WORDS, rt(CD_Strings, "words", order(0)));
-        // `lowercase`/`uppercase` fix Locale.ROOT (spec §string-case) rather than reaching the
-        // JDK's no-argument case conversion, whose answer depends on the default locale a JVM
-        // happens to have started with.
-        t.put(Kernel.STRING_LOWERCASE, rt(CD_Strings, "lowercase", order(0)));
-        t.put(Kernel.STRING_UPPERCASE, rt(CD_Strings, "uppercase", order(0)));
         t.put(Kernel.STRING_MATCHES, rt(CD_Strings, "matches", order(1, 0)));
         t.put(Kernel.STRING_CHARACTERS, rt(CD_Strings, "characters", order(0)));
         t.put(Kernel.STRING_CODE_POINTS, rt(CD_Strings, "codePoints", order(0)));
