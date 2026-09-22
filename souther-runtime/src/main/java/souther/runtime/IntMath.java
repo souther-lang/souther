@@ -37,6 +37,16 @@ public final class IntMath {
         }
     }
 
+    /** Unary minus (spec §stdlib-int): the smallest {@code Int} has no positive counterpart, and
+     *  negating it aborts the same way a sum, a difference or a product outside the range does. */
+    public static long negateExact(long value) {
+        try {
+            return Math.negateExact(value);
+        } catch (ArithmeticException _) {
+            throw new ConstraintViolation("Int overflow: -(" + value + ")");
+        }
+    }
+
     /**
      * The quotient {@code Int.truncatingDivide} answers, truncated toward zero: what its value case
      * carries, once the zero divisor its other case is about has been ruled out (spec §stdlib-int).
