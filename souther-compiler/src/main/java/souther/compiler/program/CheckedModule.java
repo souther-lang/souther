@@ -1,7 +1,9 @@
 package souther.compiler.program;
 
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +24,7 @@ public final class CheckedModule {
     private final List<CheckedHelper> helpers;
     private final Map<ValueName, CheckedHelper> helperByDeclaration;
     private final List<CheckedData> data;
+    private final Set<TypeSymbol.AtModule> declaredData;
     private final Set<String> published;
 
     CheckedModule(String name, List<CheckedBehavior> behaviors, List<CheckedHelper> helpers,
@@ -36,6 +39,11 @@ public final class CheckedModule {
             byBehavior.put(behavior.name(), behavior);
         }
         this.behaviourByName = Map.copyOf(byBehavior);
+        Set<TypeSymbol.AtModule> dataNames = new HashSet<>();
+        for (CheckedData declaration : this.data) {
+            dataNames.add(declaration.name());
+        }
+        this.declaredData = Set.copyOf(dataNames);
         Map<ValueName, CheckedHelper> byDeclaration = new LinkedHashMap<>();
         for (CheckedHelper helper : this.helpers) {
             CheckedHelper already = byDeclaration.put(helper.declares(), helper);
@@ -59,10 +67,11 @@ public final class CheckedModule {
      * module declared — which is most of {@link #helpers()} — would answer about whose surface is
      * not said.
      *
-     * <p>Of a behavior and of nothing else, for now. The same clause decides a data and a value
-     * and a helper, and each of those is answered here when a reader wants it: a question asked of
-     * a wider domain than it can answer over would have to answer {@code KEPT} for a name that is
-     * not declared at all, which is a different thing and reads as the module having decided it.
+     * <p>Of a behavior here. A data is answered the same way by
+     * {@link #publicationOf(TypeSymbol.AtModule)}; a value and a helper are answered here when a
+     * reader needs each — a question asked of a wider domain than it can answer over would have to
+     * answer {@code KEPT} for a name that is not declared at all, which is a different thing and
+     * reads as the module having decided it.
      *
      * @throws IllegalArgumentException where this module declares no behavior {@code name}
      */
@@ -74,7 +83,30 @@ public final class CheckedModule {
             throw new IllegalArgumentException("`" + this.name + "` declares no behavior `" + name
                     + "`, and what another module publishes is that module's answer");
         }
-        return published.contains(name.name()) ? Publication.PUBLISHED : Publication.KEPT;
+        return publicationOfBaseName(name.name());
+    }
+
+    /**
+     * Whether this module publishes the data {@code name}, or keeps it.
+     *
+     * <p>The data counterpart of {@link #publicationOf(ValueName.Behavior)}; see there for why the
+     * question is asked of a module and why it stays narrow to the identities a reader has needed.
+     *
+     * @throws IllegalArgumentException where this module declares no data {@code name}
+     */
+    public Publication publicationOf(TypeSymbol.AtModule name) {
+        if (name == null) {
+            throw new IllegalArgumentException("a data is asked about by its identity");
+        }
+        if (!declaredData.contains(name)) {
+            throw new IllegalArgumentException("`" + this.name + "` declares no data `" + name
+                    + "`, and what another module publishes is that module's answer");
+        }
+        return publicationOfBaseName(name.name());
+    }
+
+    private Publication publicationOfBaseName(String name) {
+        return published.contains(name) ? Publication.PUBLISHED : Publication.KEPT;
     }
 
     /** What the module is called: what its own declarations are under, and what an import names. */
