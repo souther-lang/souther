@@ -96,8 +96,11 @@ record Methods(Map<String, Core> bodies, Map<String, Set<String>> calledBy) {
                 case Core.Reached.OfPublishedValue _, Core.Reached.OfKernel _, Core.Emitted _ ->
                         null;
             };
-            if (held != null && methods.containsKey(DefinitionName.of(held).text())) {
-                out.add(DefinitionName.of(held).text());
+            if (held != null) {
+                String text = DefinitionName.of(held).text();
+                if (methods.containsKey(text)) {
+                    out.add(text);
+                }
             }
         }
         Core.forEachChild(e, child -> collectCalls(child, methods, out));
