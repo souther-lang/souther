@@ -1601,6 +1601,11 @@ final class BodyGen {
             // an answer enters the domain. What the arguments were has to survive the call to be
             // handed to the check, so they are put in slots first — the call consumes what it is
             // pushed.
+            //
+            // project, then canonicalize, then the ensures check, then the cast a caller reads: not
+            // project-check-canonicalize-cast, which would hold `ensures` to a value the carrier
+            // invariant has not established yet. CanonicalizeAtCrossing.emit runs on the Souther
+            // value project leaves, before checkAtCrossing hands anything to `Ensures.check`.
             List<Integer> saved = ctx.ensuresCheckOf(callee) instanceof EnsuresEnforcement.AtEachCrossing
                     ? new ArrayList<>() : null;
             if (ctx.isStandaloneRequired(callee)) {
@@ -1617,6 +1622,7 @@ final class BodyGen {
                 }
                 code.invokevirtual(ctx.cdBehavior(callee), "apply", desc);
                 project(callee, success);
+                CanonicalizeAtCrossing.emit(code, success);
                 checkAtCrossing(callee, saved);
                 stackCast(success);
                 return;
@@ -1628,6 +1634,7 @@ final class BodyGen {
             keepForTheCheck(saved);
             code.invokeinterface(CD_Behavior, "apply", MTD_apply);
             project(callee, success);
+            CanonicalizeAtCrossing.emit(code, success);
             checkAtCrossing(callee, saved);
             stackCast(success);
         }
@@ -1772,11 +1779,13 @@ final class BodyGen {
                 case CONCAT -> {
                     Type lt = genExpr(bin.left());
                     // `++` over two strings is Elm's appendable on String; the checker guarantees both
-                    // sides are String here, so emit `a.concat(b)` rather than the list join.
+                    // sides are String here. `Strings.append`, not `String.concat`: NFC is not closed
+                    // under concatenation, and this is the same join `String.append` names — `a ++ b`
+                    // and `append(a, b)` cannot answer differently.
                     if (lt == Type.STRING) {
                         genExpr(bin.right());
-                        code.invokevirtual(CD_String, "concat",
-                                MethodTypeDesc.of(CD_String, CD_String));
+                        code.invokestatic(CD_Strings, "append",
+                                MethodTypeDesc.of(CD_String, CD_String, CD_String));
                     } else if (bin.right() instanceof Core.ListLit lit && lit.elements().size() == 1) {
                         // `acc ++ [x]` is how every fold-derived combinator grows its list
                         // (souther.list's map/filter), so it runs once per element. Push the element

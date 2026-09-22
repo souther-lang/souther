@@ -145,13 +145,21 @@ final class CodecGen {
      * not of any one shape, and the first attempt at it — normalizing where each caller happened to
      * build a leaf — left four paths behind, each found separately and after the fact.
      *
+     * <p>Not {@code StringDecoder.normalize()}: that is Raoh's own call into {@code java.text.Normalizer},
+     * which answers for whatever Unicode version this JDK shipped with, not Unicode 18.0.0.
+     * {@code Normalization::nfc} is lifted through {@code Decoder.map} instead, and
+     * {@code StringDecoder.from} wraps the result back into a {@link CD_StringDecoder} so a
+     * constraint chained after this (a length bound, {@code refine}) still resolves against one.
+     *
      * <p>{@code ADecoderCanonicalizesEveryShapeTest} is the check that goes with it: it walks the
      * decoder shapes rather than this file, so a path added later that does not come through here
      * fails on what a caller would see rather than on how the code is written.
      */
     private void emitStringLeaf(CodeBuilder code, ClassDesc leafOwner) {
         code.invokestatic(leafOwner, "string", MTD_leafString);
-        code.invokevirtual(CD_StringDecoder, "normalize", MTD_normalize);
+        code.invokedynamic(normalizationNfcCallSite());
+        code.invokeinterface(CD_RDecoder, "map", MTD_Rdecoder_map);
+        code.invokestatic(CD_StringDecoder, "from", MTD_stringDecoderFrom);
     }
 
 
@@ -1915,6 +1923,20 @@ final class CodecGen {
                 MTD_Representations_sorted,                              // samMethodType: (Object) -> Object
                 impl,
                 MTD_Representations_sorted);
+    }
+
+    /** {@code Normalization::nfc} as a {@code Function}, for {@code Decoder.map} to canonicalize a
+     *  string leaf to Unicode 18.0.0 NFC — in place of {@code StringDecoder.normalize()}, which is
+     *  the JVM's own {@code java.text.Normalizer} and so a different, JDK-dependent NFC. */
+    private static DynamicCallSiteDesc normalizationNfcCallSite() {
+        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
+                DirectMethodHandleDesc.Kind.STATIC, CD_Normalization, "nfc", MTD_nfc);
+        return DynamicCallSiteDesc.of(
+                BSM_METAFACTORY, "apply",
+                MethodTypeDesc.of(CD_Function),                          // no captures: () -> Function
+                MethodTypeDesc.of(CD_Object, CD_Object),                 // samMethodType: (Object) -> Object
+                impl,
+                MTD_nfc);                                                // (String) -> String
     }
 
     /** {@code Option::ofNullable} as a {@code Function}, for {@code Decoder.map} to lift a

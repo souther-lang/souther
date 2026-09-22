@@ -112,6 +112,19 @@ public final class Lists {
         return acc;
     }
 
+    /** Every element through {@code f}, in order — not the self-hosted {@code List.map} a Souther
+     *  body writes (which folds over a first-class {@code Fn}), but the codegen-internal one a
+     *  crossing's canonicalization composes recursively for a nested container
+     *  ({@code CanonicalizeAtCrossing}): a plain {@link java.util.function.Function} the compiler
+     *  builds and binds at the crossing, not a value the domain can construct. */
+    public static <T> List<Object> map(java.util.function.Function<? super T, Object> f, List<T> xs) {
+        List<Object> out = new ArrayList<>(xs.size());
+        for (T x : xs) {
+            out.add(f.apply(x));
+        }
+        return List.copyOf(out);
+    }
+
     /** The list in reverse order (Elm {@code List.reverse}). A native primitive rather than a fold:
      *  a left fold can only prepend to build a reversed list, and prepending to an array-backed
      *  vector is O(n) per step (O(n²) overall), so reversing walks the input from the end in O(n). */

@@ -464,7 +464,7 @@ final class Intrinsics {
         t.put(Kernel.STRING_CONTAINS, jdk(CD_String, "contains", mtd(bool, CD_CharSequence), order(1, 0)));
         t.put(Kernel.STRING_STARTS_WITH, jdk(CD_String, "startsWith", mtd(bool, CD_String), order(1, 0)));
         t.put(Kernel.STRING_ENDS_WITH, jdk(CD_String, "endsWith", mtd(bool, CD_String), order(1, 0)));
-        t.put(Kernel.STRING_APPEND, jdk(CD_String, "concat", mtd(CD_String, CD_String), order(0, 1)));
+        t.put(Kernel.STRING_APPEND, rt(CD_Strings, "append", order(0, 1)));
         // String — Strings runtime statics.
         // `slice` left the JDK's `substring` when the language settled on code points: the JDK method
         // indexes UTF-16 units, so the conversion — and the abort for an index the string has not

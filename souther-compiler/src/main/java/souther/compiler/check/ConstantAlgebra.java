@@ -12,6 +12,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
+import souther.unicode.Normalization;
 
 /**
  * What an expression comes to where the values under it are already known.
@@ -92,9 +93,12 @@ final class ConstantAlgebra {
                     ? Optional.of(x || y) : Optional.empty();
             case ADD, SUB, MUL -> arith(op, a, b);
             // `++` appends two strings or two lists (spec §an-operator-takes-the-types-it-is-defined-for);
-            // the string case folds, and a list is not a constant here to begin with.
+            // the string case folds, and a list is not a constant here to begin with. Canonicalized,
+            // the same seam String.append/Strings.append has: a folded `"a" ++ pad` and the same
+            // expression run at the runtime it would otherwise be compiled to cannot answer
+            // differently just because one of them happened at compile time.
             case CONCAT -> a instanceof String x && b instanceof String y
-                    ? Optional.of(x + y) : Optional.empty();
+                    ? Optional.of(Normalization.nfc(x + y)) : Optional.empty();
             case DIV -> quotient(a, b);
             // Answered above as what it placed. Written out rather than left to a default, because
             // what would arrive here is the partition above having admitted a comparison into the

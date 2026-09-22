@@ -1,6 +1,6 @@
 package souther.cli;
 
-import souther.compiler.Reserved;
+import souther.compiler.CanonicalNames;
 import souther.compiler.Compiler;
 import souther.compiler.diag.CompileException;
 import souther.compiler.frontend.CstFrontend;
@@ -64,7 +64,7 @@ class ANameIsCanonicalWhereverItEntersTest {
     @Test
     void theTwoSpellingsAreDifferentStrings() {
         // The premise, so nothing below can pass by the two being equal already.
-        assertEquals(NFC, Reserved.name(NFD));
+        assertEquals(NFC, CanonicalNames.name(NFD));
         assertTrue(!NFD.equals(NFC));
     }
 

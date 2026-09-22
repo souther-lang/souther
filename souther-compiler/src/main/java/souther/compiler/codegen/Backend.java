@@ -935,7 +935,13 @@ public final class Backend {
 
     /** A factory taking the data's fields (in declaration order) and building it through
      * {@code __construct}, so the invariant is checked and a violation aborts (spec §algebraic-types) — the same
-     * path an in-domain construction takes, not a decode of an external representation. */
+     * path an in-domain construction takes, not a decode of an external representation.
+     *
+     * <p>{@code protected}, so it is not only in-domain: an injected behavior's Java implementation
+     * subclasses the behavior base class this is generated onto, and calls it directly with
+     * whatever field values its own Java code holds. A field that reaches a {@code String} arriving
+     * that way is a crossing exactly as foreign as a decoder's leaf, so {@link CanonicalizeAtCrossing}
+     * canonicalizes it here before {@code __construct} sees it. */
     private void emitDataFactory(ClassBuilder cb, TypeSymbol construct) {
         // The type as the `constructs` clause resolved it: an entry there may name a type another
         // module declares, and the class of one is that module's.
@@ -951,6 +957,7 @@ public final class Backend {
                         int slot = 1;   // slot 0 is `this`
                         for (Type t : fields.values()) {
                             load(code, slot, t);
+                            CanonicalizeAtCrossing.emit(code, t);
                             slot += width(t);
                         }
                         code.invokestatic(cdType, "__construct", MethodTypeDesc.of(CD_Result, fieldDs));
@@ -1375,8 +1382,15 @@ public final class Backend {
      * a type it keeps to itself, and a reader does not check that again. A jar written before it
      * was not held to that, and a reader that trusted one would emit a class the JVM refuses when
      * it runs.
+     *
+     * <p>Version 23 strengthens what a data's own generated constructor promises: every field that
+     * reaches a {@code String} is canonicalized before it is stored, whichever of a data's several
+     * construction doors a caller used to reach it. A crossing reads a named type's value without
+     * walking into its fields, trusting that guarantee instead. A jar written before this version
+     * has a constructor that does not give it, so a reader that trusted one could observe a field
+     * value the carrier invariant says cannot exist.
      */
-    public static final int BOUNDARY_VERSION = 22;
+    public static final int BOUNDARY_VERSION = 23;
 
     /** Emits the class a module's own declarations are published on, carrying {@code declarations}.
      * What it says is the caller's; that it is built like every other generated class — the same Java
@@ -1468,6 +1482,10 @@ public final class Backend {
                     // paired with it where the parameters were divided rather than here
                     Type pt = successType(input.declared().type());
                     code.aload(input.at() + 1);
+                    // A generated behavior's apply is public, callable by Java directly and not
+                    // only from another generated class — the same crossing as an injected
+                    // behavior's answer or a factory's field, one door earlier.
+                    CanonicalizeAtCrossing.emit(code, pt);
                     int slot = gen.slot(pt);
                     unbox(code, pt, slot);
                     Hir.Binder binder = input.written().binder();
@@ -1524,6 +1542,15 @@ public final class Backend {
         cb.withMethodBody("apply", mtdApply, ClassFile.ACC_PUBLIC, code -> {
             int answered = n + 1;    // this=0, the arguments are 1..n
             int carrier = n + 2;
+            // Canonicalized in place before either reader sees them: apply$body's own binding loop
+            // canonicalizes again on its way in, so this is not the only door, but `ensures` reads
+            // these same slots below and has to see what apply$body saw, not the raw Java value —
+            // the asymmetry a runtime ensures check on the answer alone already had to close.
+            for (int i = 0; i < n; i++) {
+                code.aload(i + 1);
+                CanonicalizeAtCrossing.emit(code, successType(spec.params().get(i).type()));
+                code.astore(i + 1);
+            }
             code.aload(0);
             for (int i = 0; i < n; i++) {
                 code.aload(i + 1);
@@ -1662,6 +1689,14 @@ public final class Backend {
             cb.withMethodBody("apply", mtdApply, ClassFile.ACC_PUBLIC, code -> {
                 // slot 1 always holds the running value (an output case, as an Object).
                 List<Composition.Stage> stages = composed.stages();
+                // This apply is exactly as callable from Java directly as generateSpecFn's, so its
+                // own arguments are a crossing before stage 0 ever reads them, not only what an
+                // injected stage answers with below.
+                for (int i = 0; i < arity; i++) {
+                    code.aload(i + 1);
+                    CanonicalizeAtCrossing.emit(code, declared.inputTypes().get(i));
+                    code.astore(i + 1);
+                }
                 // stage 0 consumes the pipeline's arguments unconditionally
                 applyFirstStage(code, cdP, stages.get(0).behavior(), arity, requiredNames,
                         reqStages, behaviorDeps, stages.get(0).answers(), arity + 1);
@@ -1734,6 +1769,7 @@ public final class Backend {
             }
             code.invokevirtual(cdBehavior(stage), "apply", desc);
             projectStage(code, stage, stageOut, slot);
+            CanonicalizeAtCrossing.emit(code, stageOut);
             checkStageAtCrossing(code, stage, arity, slot + 1);
             code.astore(1);
             return;
@@ -1747,6 +1783,7 @@ public final class Backend {
         code.invokevirtual(ctx.cdBehaviorImpl(stage), "apply",
                 MethodTypeDesc.of(CD_Object, params));
         projectStage(code, stage, stageOut, slot);
+        CanonicalizeAtCrossing.emit(code, stageOut);
         checkStageAtCrossing(code, stage, arity, slot + 1);
         code.astore(1);
     }
@@ -1763,6 +1800,7 @@ public final class Backend {
         code.aload(1);
         code.invokeinterface(CD_Behavior, "apply", MTD_apply);
         projectStage(code, stage, stageOut, slot);
+        CanonicalizeAtCrossing.emit(code, stageOut);
         checkStageAtCrossing(code, stage, 1, slot + 1);
         code.astore(1);
     }

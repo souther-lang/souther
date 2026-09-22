@@ -208,6 +208,7 @@ final class Descriptors {
     static final ClassDesc CD_Sets = ClassDesc.of("souther.runtime.Sets");
     static final ClassDesc CD_Representations = ClassDesc.of("souther.runtime.Representations");
     static final ClassDesc CD_Temporals = ClassDesc.of("souther.runtime.Temporals");
+    static final ClassDesc CD_Normalization = ClassDesc.of("souther.unicode.Normalization");
     static final ClassDesc CD_Option = ClassDesc.of("souther.runtime.Option");
     static final ClassDesc CD_Options = ClassDesc.of("souther.runtime.Options");
     static final ClassDesc CD_OptionSome = CD_Option.nested("Some");
@@ -316,8 +317,13 @@ final class Descriptors {
     static final MethodTypeDesc MTD_Rdecoder = MethodTypeDesc.of(CD_RDecoder);
     static final MethodTypeDesc MTD_Rencoder = MethodTypeDesc.of(CD_REncoder);
     static final MethodTypeDesc MTD_leafString = MethodTypeDesc.of(CD_StringDecoder);
-    /** {@code StringDecoder.normalize()} — the no-argument form, which is NFC. */
-    static final MethodTypeDesc MTD_normalize = MethodTypeDesc.of(CD_StringDecoder);
+    /** {@code Normalization.nfc(String):String}, lifted into a {@code Function} at the call site
+     *  that reaches for it. */
+    static final MethodTypeDesc MTD_nfc = MethodTypeDesc.of(CD_String, CD_String);
+    /** {@code StringDecoder.from(Decoder<I,String>)} — wraps a plain string-producing decoder back
+     *  into a {@link CD_StringDecoder} so the fluent constraint methods after it (following
+     *  {@code Normalization.nfc}, not {@code StringDecoder.normalize()}) still resolve. */
+    static final MethodTypeDesc MTD_stringDecoderFrom = MethodTypeDesc.of(CD_StringDecoder, CD_RDecoder);
     static final MethodTypeDesc MTD_leafLong = MethodTypeDesc.of(CD_LongDecoder);
     static final MethodTypeDesc MTD_leafBool = MethodTypeDesc.of(CD_BoolDecoder);
     static final MethodTypeDesc MTD_leafDecimal = MethodTypeDesc.of(CD_DecimalDecoder);
@@ -368,6 +374,27 @@ final class Descriptors {
     static final MethodTypeDesc MTD_Path_append = MethodTypeDesc.of(CD_RPath, CD_String);
     static final MethodTypeDesc MTD_mapKeys = MethodTypeDesc.of(CD_Map, CD_Map, CD_Function);
     static final MethodTypeDesc MTD_mapKeysWith = MethodTypeDesc.of(CD_Map, CD_Function, CD_Map);
+    /** {@code Lists.map(Function, List)} — a crossing's canonicalization recursing into a
+     *  {@code List}'s elements. */
+    static final MethodTypeDesc MTD_Lists_map = MethodTypeDesc.of(CD_List, CD_Function, CD_List);
+    /** {@code Sets.map(Function, Set)} — the same, deduplicating where canonicalization collapses
+     *  two elements into one. */
+    static final MethodTypeDesc MTD_Sets_map = MethodTypeDesc.of(CD_Set, CD_Function, CD_Set);
+    /** {@code Options.mapWith(Function, Option)} — the same, keeping the {@code Option} shape
+     *  rather than unwrapping it the way {@link #MTD_encodedOrNull} does. */
+    static final MethodTypeDesc MTD_optionMapWith = MethodTypeDesc.of(CD_Option, CD_Function, CD_Option);
+    /** {@code Maps.canonicalizeWith(Map, Function, Function)} — key and value in one pass, failing
+     *  on a canonicalization collision rather than the encoder-side {@link #MTD_mapKeysWith}'s
+     *  overwrite ({@code CanonicalizeAtCrossing}). */
+    static final MethodTypeDesc MTD_mapsCanonicalizeWith =
+            MethodTypeDesc.of(CD_Map, CD_Map, CD_Function, CD_Function);
+    /** {@code Maps.canonicalizeWithCaptured(Function, Function, Map)} — the same, the map last, for
+     *  a {@code Map} nested inside another container's single captured element function. */
+    static final MethodTypeDesc MTD_mapsCanonicalizeWithCaptured =
+            MethodTypeDesc.of(CD_Map, CD_Function, CD_Function, CD_Map);
+    /** {@code Function.identity()} — the side of a crossing's {@code Map} canonicalization that
+     *  does not reach a {@code String}. */
+    static final MethodTypeDesc MTD_functionIdentity = MethodTypeDesc.of(CD_Function);
     /** {@code Encoder.contramap(Function)}: pre-processes the value an element encoder receives —
      * a nested Set is listed, a nested newtype-keyed Map has its keys rendered bare. */
     static final MethodTypeDesc MTD_Rencoder_contramap = MethodTypeDesc.of(CD_REncoder, CD_Function);

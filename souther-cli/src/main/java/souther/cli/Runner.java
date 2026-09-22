@@ -3,7 +3,7 @@ package souther.cli;
 import souther.compiler.Compiler;
 import souther.compiler.generated.GeneratedBehavior;
 import souther.compiler.generated.JsonBoundary;
-import souther.compiler.Reserved;
+import souther.compiler.CanonicalNames;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
@@ -276,7 +276,7 @@ public final class Runner {
                                                    String requestedSpelling) {
         // What `--behavior` was given is a name arriving from outside, and it is looked up
         // against names the source settled.
-        String requested = Reserved.name(requestedSpelling);
+        String requested = CanonicalNames.name(requestedSpelling);
         Map<String, List<BehaviorRequirement>> requirements = requirementsOf(compilation, module);
         // The ones that can be run, in the order the module declares them. A reader is given this
         // list to pick from, so it is held as something that has an order rather than as a set of
@@ -608,7 +608,7 @@ public final class Runner {
         // Canonicalized before it is judged, not after: a file delivered by macOS carries its name
         // decomposed, and a combining mark is not a letter or a digit, so the same file would be
         // `main` on one machine and its own name on another.
-        String stem = Reserved.name(dot < 0 ? fileName : fileName.substring(0, dot));
+        String stem = CanonicalNames.name(dot < 0 ? fileName : fileName.substring(0, dot));
         if (stem.isEmpty() || !Character.isLetter(stem.charAt(0))) {
             return "main";
         }

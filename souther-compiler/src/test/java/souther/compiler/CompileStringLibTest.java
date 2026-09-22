@@ -37,6 +37,48 @@ class CompileStringLibTest {
         assertEquals("hi ROB!", Codecs.encode(loader, "demo.Greeting", greeting));
     }
 
+    /** A bare combining circumflex (U+0302) — NFC on its own, but not once joined after {@code "a"}.
+     *  Built from its code point rather than an escape typed inline, so what the source file holds
+     *  is unambiguous. */
+    private static final String COMBINING_CIRCUMFLEX = new String(Character.toChars(0x0302));
+
+    /** {@code "a"} composed with {@link #COMBINING_CIRCUMFLEX} — one code point, U+00E2. */
+    private static final String A_CIRCUMFLEX = new String(Character.toChars(0x00E2));
+
+    /** The seam {@code append}/{@code ++} share: {@code "a"} and {@link #COMBINING_CIRCUMFLEX} are
+     *  each NFC on their own, but their join is not until canonicalized. {@code ++} and
+     *  {@code append} must answer alike, since the specification states one as the other
+     *  (spec §stdlib-string). */
+    @Test
+    void concatOperatorAndAppendCanonicalizeTheSeamAlike() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                import String ( append, length )
+
+                data In = { a: String, mark: String }
+                data Out = { operator: String, function: String, operatorLength: Int }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let run (i) = Out {
+                    operator = i.a ++ i.mark,
+                    function = append(i.a, i.mark),
+                    operatorLength = length(i.a ++ i.mark)
+                }
+                """), getClass().getClassLoader());
+
+        Object in = Codecs.decoded(loader, "demo.In",
+                java.util.Map.of("a", "a", "mark", COMBINING_CIRCUMFLEX));
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
+        Object out = Codecs.apply(behavior, in);
+
+        java.util.Map<?, ?> m = (java.util.Map<?, ?>) Codecs.encode(loader, "demo.Out", out);
+        assertEquals(A_CIRCUMFLEX, m.get("operator"), "`++` composes the seam, same as `append`");
+        assertEquals(A_CIRCUMFLEX, m.get("function"));
+        assertEquals(1L, m.get("operatorLength"), "one code point once composed, not two");
+    }
+
     @Test
     void appendFunctionAndConcatOfAList() throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""

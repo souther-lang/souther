@@ -6,7 +6,7 @@ import souther.compiler.source.SourceId;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.JvmClassName;
 import souther.compiler.Compiler;
-import souther.compiler.Reserved;
+import souther.compiler.CanonicalNames;
 import souther.compiler.cst.CstError;
 import souther.compiler.cst.CstParser;
 import souther.compiler.diag.CompileException;
@@ -331,8 +331,8 @@ public final class Main {
                         }
                     }
                 }
-                case "--module" -> module = Reserved.name(args[++i]);   // a name from outside
-                case "--behavior" -> behavior = Reserved.name(args[++i]);   // a name from outside
+                case "--module" -> module = CanonicalNames.name(args[++i]);   // a name from outside
+                case "--behavior" -> behavior = CanonicalNames.name(args[++i]);   // a name from outside
                 case "--generate" -> generate = true;
                 case "--strict" -> strict = true;
                 default -> sources.add(Path.of(args[i]));
