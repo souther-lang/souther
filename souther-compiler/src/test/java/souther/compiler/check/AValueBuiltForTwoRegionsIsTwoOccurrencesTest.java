@@ -60,7 +60,7 @@ class AValueBuiltForTwoRegionsIsTwoOccurrencesTest {
     private static Hir.Expr loweredBody(String source, String behavior) {
         return Compiler.compiled(source, "m").db()
                 .ask(new Bodies.LoweredBody("m", new DefinitionName(behavior)))
-                .value().value().writtenBody();
+                .value().value().definition().writtenBody();
     }
 
     /** The body a behavior is read as where the language's own operations stand. */

@@ -39,7 +39,7 @@ class ACallOfAValueIsANodeOfItsOwnWhateverItIsHandedTest {
     private static Hir.Expr lowered(String name) {
         return Compiler.compiled(SOURCE, "m").db()
                 .ask(new Bodies.LoweredBody("m", new DefinitionName(name)))
-                .value().value().writtenBody();
+                .value().value().definition().writtenBody();
     }
 
     private static void collect(Hir.Expr e, List<Hir.Expr> out) {
@@ -111,7 +111,7 @@ class ACallOfAValueIsANodeOfItsOwnWhateverItIsHandedTest {
                 """), ModulePath.EMPTY, new ArrayList<>());
         Hir.Expr body = compiled.db()
                 .ask(new Bodies.LoweredBody("down", new DefinitionName("f")))
-                .value().value().writtenBody();
+                .value().value().definition().writtenBody();
 
         List<Hir.Expr> all = nodes(body);
         assertTrue(all.stream().anyMatch(each -> each instanceof Hir.ValueInvocation call

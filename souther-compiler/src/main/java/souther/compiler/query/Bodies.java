@@ -45,6 +45,8 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.check.InliningPolicy;
 import souther.compiler.check.InvariantChecker;
 import souther.compiler.check.Lower;
+import souther.compiler.check.LoweredDefinition;
+import souther.compiler.check.LoweringRole;
 import souther.compiler.check.PipelineSigs;
 import souther.compiler.check.ModuleUniverse.InSight.Read.PublishedHelper;
 import souther.compiler.check.ReqSig;
@@ -1465,7 +1467,7 @@ public final class Bodies {
                     db.ask(new StandingRecursionsOfBody(module, behavior, InliningPolicy.FULL));
             // What the expansion of this body left standing as well, which is a value the tree calls
             // the method of: a value is on no cycle, so what the graph says stands is not it.
-            Answer<Expansion<Hir.FnDef>> lowered =
+            Answer<Expansion<LoweredDefinition>> lowered =
                     db.ask(new LoweredBody(module, new DefinitionName(behavior)));
             if (!constructs.present() || !reached.present() || !lowered.present()) {
                 return Answer.absent();
@@ -1476,7 +1478,7 @@ public final class Bodies {
             // A value another module declares is named where the body reads it and is not among what
             // an expansion left standing, since nothing of it is expanded or called from here.
             for (ValueName.Helper named : HelperNames.helpersReached(
-                    lowered.value().value().writtenBody())) {
+                    lowered.value().value().definition().writtenBody())) {
                 held.add(HelperNames.qualified(named.module(), named.name()));
             }
             Map<String, DataChecker.Constructs> out = new LinkedHashMap<>();
@@ -2127,22 +2129,44 @@ public final class Bodies {
     }
 
     /**
+     * What the definition {@code module} holds at {@code fn} runs as.
+     *
+     * <p>One answer for every reader that lowers the definition or asks why a call to it was left
+     * standing, whatever representation it reads the definition in: what a definition is does not
+     * depend on which of the module's expansions is looking at it.
+     */
+    public record LoweringRoleOf(String module, String fn) implements Key<LoweringRole> {
+
+        @Override
+        public Answer<LoweringRole> compute(Db db) {
+            Answer<Hir.FnDef> def = db.ask(new SettledFn(module, fn));
+            if (!def.present()) {
+                return Answer.absent();
+            }
+            return Answer.of(LoweringRole.of(def.value(), module,
+                    db.ask(new Spec(module, fn)).present()));
+        }
+    }
+
+    /**
      * One body as the backend emits it: its helper calls expanded and its comprehensions desugared.
      *
      * <p>What it reads is the fn itself and the helpers around it, so neither editing another body
      * in the same module nor declaring a behavior beside it expands this one again.
      */
     public record LoweredBody(String module, DefinitionName fn)
-            implements Key<Expansion<Hir.FnDef>> {
+            implements Key<Expansion<LoweredDefinition>> {
 
         @Override
-        public Answer<Expansion<Hir.FnDef>> compute(Db db) {
+        public Answer<Expansion<LoweredDefinition>> compute(Db db) {
             Answer<Hir.FnDef> def = db.ask(new SettledFn(module, fn.text()));
+            Answer<LoweringRole> role = db.ask(new LoweringRoleOf(module, fn.text()));
             Answer<Expanding.Of> against = db.ask(new Expanding(module, InliningPolicy.FULL));
             Answer<Map<ValueName.Behavior, Integer>> behaviors =
                     db.ask(new BehaviorAritiesForBody(module, fn.text(), InliningPolicy.FULL));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, module);
-            if (!def.present() || !against.present() || !behaviors.present() || !scope.present()) {
+            if (!def.present() || !role.present() || !against.present() || !behaviors.present()
+                    || !scope.present()) {
                 return Answer.absent();
             }
             // Whether this body is a recursion, asked of the graph rather than of the set the module
@@ -2159,18 +2183,18 @@ public final class Bodies {
                 HelperInliner inliner = HelperInliner.over(against.value().table(),
                         against.value().graph())
                         .callingValuesAsMethodsWhereEmitted(scope.value());
-                // A value the backend emits a method for, as opposed to a behavior's implementation
-                // that takes no inputs: what tells them apart is whether a behavior declares it.
-                boolean aValue = !recursive && def.value().params().isEmpty()
-                        && def.value().standsAt() == null && !def.value().isAValueEntry()
-                        && !db.ask(new Spec(module, fn.text())).present();
-                if (aValue) {
-                    return Answer.of(Lower.valueMethod(def.value(),
-                            inliner.namingBehaviors(behaviors.value())));
-                }
-                return Answer.of(Lower.body(def.value(),
-                        inliner.namingBehaviors(behaviors.value()),
-                        recursive, dependencyParams(db, module, fn.text())));
+                // A value runs as a method that takes the values its root region demands; every
+                // other definition runs as the body it was written with.
+                return Answer.of(switch (role.value()) {
+                    case LoweringRole.ValueHome _, LoweringRole.ValueDeclaredElsewhere _ ->
+                            Lower.valueMethod(def.value(),
+                                    inliner.namingBehaviors(behaviors.value()));
+                    case LoweringRole.Behavior _, LoweringRole.Helper _, LoweringRole.RowValue _,
+                         LoweringRole.PublishedValueEntry _ ->
+                            Lower.asWritten(Lower.body(def.value(),
+                                    inliner.namingBehaviors(behaviors.value()),
+                                    recursive, dependencyParams(db, module, fn.text())));
+                });
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -2192,10 +2216,11 @@ public final class Bodies {
         @Override
         public Answer<Expansion<Hir.FnDef>> compute(Db db) {
             Answer<Hir.FnDef> def = db.ask(new SettledFn(module, fn));
+            Answer<LoweringRole> role = db.ask(new LoweringRoleOf(module, fn));
             Answer<Expanding.Of> against = db.ask(new Expanding(module, InliningPolicy.DISCHARGE));
             Answer<Map<ValueName.Behavior, Integer>> behaviors =
                     db.ask(new BehaviorAritiesForBody(module, fn, InliningPolicy.DISCHARGE));
-            if (!def.present() || !against.present() || !behaviors.present()) {
+            if (!def.present() || !role.present() || !against.present() || !behaviors.present()) {
                 return Answer.absent();
             }
             // Whether this body is a recursion, asked of the graph of the representation it is being
@@ -2207,19 +2232,17 @@ public final class Bodies {
             boolean recursive = held != null
                     && against.value().graph().recurses(held.reachedAs());
             try {
-                // A value the analysis reads by its template, as opposed to a behavior's
-                // implementation that takes no inputs: what tells them apart is whether a behavior
-                // declares it.
-                boolean aValue = !recursive && def.value().params().isEmpty()
-                        && def.value().standsAt() == null && !def.value().isAValueEntry()
-                        && !db.ask(new Spec(module, fn)).present();
-                if (aValue) {
-                    return Answer.of(Lower.valueTemplate(def.value(),
-                            inliner.namingBehaviors(behaviors.value())));
-                }
-                return Answer.of(Lower.body(def.value(),
-                        inliner.namingBehaviors(behaviors.value()),
-                        recursive, dependencyParams(db, module, fn)));
+                // A value the analysis reads by its template; every other definition by the body
+                // it was written with.
+                return Answer.of(switch (role.value()) {
+                    case LoweringRole.ValueHome _, LoweringRole.ValueDeclaredElsewhere _ ->
+                            Lower.valueTemplate(def.value(),
+                                    inliner.namingBehaviors(behaviors.value()));
+                    case LoweringRole.Behavior _, LoweringRole.Helper _, LoweringRole.RowValue _,
+                         LoweringRole.PublishedValueEntry _ ->
+                            Lower.body(def.value(), inliner.namingBehaviors(behaviors.value()),
+                                    recursive, dependencyParams(db, module, fn));
+                });
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -2331,6 +2354,7 @@ public final class Bodies {
             // that took on a helper it also declares would otherwise emit two of it.
             Set<String> taken = new LinkedHashSet<>();
             List<List<Hir.FnDef>> lowered = new ArrayList<>();
+            Map<BindingId, ValueName> carried = new LinkedHashMap<>();
             // What this module emits and did not declare: every recursion its own expansions left
             // standing that it has no declaration for, under the name it reaches each by — which is
             // the name a call in the emitted tree already holds, and so the name the method is
@@ -2382,19 +2406,20 @@ public final class Bodies {
                     if (!taken.add(fn.name())) {
                         continue;
                     }
-                    Answer<Expansion<Hir.FnDef>> body =
+                    Answer<Expansion<LoweredDefinition>> body =
                             db.ask(new LoweredBody(name, fn.address()));
                     if (!body.present()) {
                         // Why is the body's to say, and it said it. A module with a body that does
                         // not expand has none to emit.
                         return Answer.absent();
                     }
-                    fns.add(body.value().value());
+                    fns.add(body.value().value().definition());
+                    carried.putAll(body.value().value().carried());
                 }
                 lowered.add(fns);
             }
             return Answer.of(new Lower.Lowered(settled.value(),
-                    Lower.lowered(settled.value(), lowered.get(0), lowered.get(1))));
+                    Lower.lowered(settled.value(), lowered.get(0), lowered.get(1)), carried));
         }
     }
 
@@ -2503,7 +2528,7 @@ public final class Bodies {
             // use. Its body still goes through the walk below — being required is not being read.
             for (HelperEntry declared : against.value().table().declarations().values()) {
                 if (graph.recurses(declared.reachedAs())) {
-                    require(graph, table, required, pending,declared.reachedAs());
+                    require(db, name, graph, required, pending, declared.reachedAs());
                 }
             }
             // The trees that survive to run: a behavior's implementation, a row's operand, and the
@@ -2512,7 +2537,7 @@ public final class Bodies {
             // helper nothing reaches leaves nothing standing anywhere, which is why one that folds
             // and is never called asks for no fold.
             for (ReachName.Declaration standing :settling.value().standingRecursiveCalls()) {
-                require(graph, table, required, pending,standing);
+                require(db, name, graph, required, pending, standing);
             }
             Set<String> behaviors = Names.behaviorNames(settled.value());
             Set<String> roots = new LinkedHashSet<>(rows.value());
@@ -2529,14 +2554,14 @@ public final class Bodies {
                 }
             }
             for (String root : roots) {
-                Answer<Expansion<Hir.FnDef>> body =
+                Answer<Expansion<LoweredDefinition>> body =
                         db.ask(new LoweredBody(name, new DefinitionName(root)));
                 if (!body.present()) {
                     // Why is the body's to say, and it said it where it went wrong.
                     return Answer.absent();
                 }
                 for (ReachName.Declaration standing :body.value().standing()) {
-                    require(graph, table, required, pending,standing);
+                    require(db, name, graph, required, pending, standing);
                 }
             }
             // A required definition is emitted as a method, so its own body is expanded on its own
@@ -2553,13 +2578,13 @@ public final class Bodies {
                 // Reached one way, held at one address: the reference chose the definition and the
                 // address is where its body is asked for. Working the address out of the reference
                 // is what this walk does, and it is the direction that holds.
-                Answer<Expansion<Hir.FnDef>> body =
+                Answer<Expansion<LoweredDefinition>> body =
                         db.ask(new LoweredBody(name, DefinitionName.of(next)));
                 if (!body.present()) {
                     return Answer.absent();
                 }
                 for (ReachName.Declaration standing :body.value().standing()) {
-                    require(graph, table, required, pending,standing);
+                    require(db, name, graph, required, pending, standing);
                 }
             }
             // In the graph's order, which is declaration order: a check reporting one member of a
@@ -2585,15 +2610,20 @@ public final class Bodies {
         }
 
         /** Takes {@code standing} on, and queues its body to be expanded the first time. */
-        private static void require(HelperGraph graph, HelperTable table,
+        private static void require(Db db, String module, HelperGraph graph,
                                     Set<ReachName.Declaration> required,
                                     Deque<ReachName.Declaration> pending,
                                     ReachName.Declaration standing) {
             // A value the emitted tree calls the method of is left standing without being on a cycle:
             // what makes a call a call here is that a method is emitted for it, and a value is emitted
             // as one wherever a tree that runs names it from a region that needs nothing else.
-            Hir.FnDef held = table.reached(standing);
-            boolean aValue = held != null && held.params().isEmpty();
+            Answer<LoweringRole> role =
+                    db.ask(new LoweringRoleOf(module, DefinitionName.of(standing).text()));
+            boolean aValue = role.present() && switch (role.value()) {
+                case LoweringRole.ValueHome _, LoweringRole.ValueDeclaredElsewhere _ -> true;
+                case LoweringRole.Behavior _, LoweringRole.Helper _, LoweringRole.RowValue _,
+                     LoweringRole.PublishedValueEntry _ -> false;
+            };
             if (!graph.recurses(standing) && !aValue) {
                 // An expansion answers with what it left standing, and a call is left standing
                 // because its callee recurses. One that does not is this compiler disagreeing with
@@ -2630,11 +2660,11 @@ public final class Bodies {
             Map<String, Hir.Expr> bodies = new LinkedHashMap<>();
             for (ReachName.Declaration helper : required.value()) {
                 DefinitionName at = DefinitionName.of(helper);
-                Answer<Expansion<Hir.FnDef>> body = db.ask(new LoweredBody(name, at));
+                Answer<Expansion<LoweredDefinition>> body = db.ask(new LoweredBody(name, at));
                 if (!body.present()) {
                     return Answer.absent();
                 }
-                bodies.put(at.text(), body.value().value().writtenBody());
+                bodies.put(at.text(), body.value().value().definition().writtenBody());
             }
             // A value another module declares is called and not expanded, so what it constructs is
             // not in any body here. What it constructs is read off the definition the module was
@@ -2788,7 +2818,7 @@ public final class Bodies {
         public Answer<CheckedBody> compute(Db db) {
             Answer<Hir.SpecBehavior> spec = db.ask(new Spec(module, behavior));
             Answer<Hir.FnDef> fn = db.ask(new SettledFn(module, behavior));
-            Answer<Expansion<Hir.FnDef>> body =
+            Answer<Expansion<LoweredDefinition>> body =
                     db.ask(new LoweredBody(module, new DefinitionName(behavior)));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, module);
             // What this body names, and not what its module happens to have callable in it: a
@@ -2865,7 +2895,7 @@ public final class Bodies {
             try {
                 SpecChecker.Checked checked =
                         TypeChecker.checkBehavior(spec.value(), fn.value(),
-                        body.value().value().writtenBody(),
+                        body.value().value().definition().writtenBody(),
                         policy,
                         dischargeSource, scope.value(), Shapes.publishedDeclarations(db),
                         Shapes.declarationKinds(db), Shapes.newtypeInners(db),
@@ -3150,7 +3180,7 @@ public final class Bodies {
                         db.ask(new Front.Reading()).value(),
                         signatures.present() ? signatures.value() : null,
                         injected.value(), unwritten.value(), lowering.value().lowered(),
-                        reqSigs.value(), calleeSigs.value(), sigs.value(), published.value(),
+                        lowering.value().carried(), reqSigs.value(), calleeSigs.value(), sigs.value(), published.value(),
                         settled, shapes.present() ? shapes.value() : Map.of(),
                         elsewhere.value());
             } catch (CompileException e) {
@@ -3172,7 +3202,7 @@ public final class Bodies {
             reported.emittedDefinitions().forEach((h, definition) ->
                     definitions.put(h, new EmittedDefinition(
                             GrowingFold.rewrite(definition.body(), scope.value().theWalk()),
-                            definition.parameters())));
+                            definition.parameters(), definition.role())));
             return Answer.of(new ModuleCheck.Of(definitions, sound, reported.stopped(),
                     reported.settledValues().snapshot()),
                     reports);
@@ -3919,18 +3949,16 @@ public final class Bodies {
         // Held apart from the behaviors: it declares no rows and states no answer, and the places of
         // a behavior are its own and those of the methods it calls.
         SequencedMap<String, Core> methods = new LinkedHashMap<>();
-        Set<String> behaviorNames = Names.behaviorNames(settled);
         for (Hir.FnDef fn : settled.fns()) {
             EmittedDefinition definition = module.emittedDefinitions().get(fn.name());
-            Core method = definition == null ? null : definition.body();
-            if (method != null && fn.params().isEmpty() && fn.standsAt() == null
-                    && !behaviorNames.contains(fn.name())) {
-                methods.put(fn.name(), method);
+            if (definition != null && definition.role() instanceof LoweringRole.ValueHome) {
+                methods.put(fn.name(), definition.body());
                 // What a body is read with travels with the body. A behavior's check answers with
                 // the rules its calls were handed, and the expansion a value method was lowered
                 // from answers with the same; a value emitted for another module to call has no
                 // behavior whose check would have carried them.
-                Answer<Expansion<Hir.FnDef>> lowered = db.ask(new LoweredBody(name, fn.address()));
+                Answer<Expansion<LoweredDefinition>> lowered =
+                        db.ask(new LoweredBody(name, fn.address()));
                 if (!lowered.present()) {
                     throw new IllegalStateException("`" + name + "." + fn.name() + "` is emitted"
                             + " as a method and its body did not come out");

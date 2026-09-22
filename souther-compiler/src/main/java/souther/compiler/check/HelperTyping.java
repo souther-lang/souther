@@ -14,7 +14,6 @@ import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
-import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -61,6 +60,9 @@ public final class HelperTyping {
         Preserved standing = Preserved.valuesAlreadySettled(settledSignatures);
         for (Hir.FnDef h : valuesBeforeTheValuesThatNameThem(inliner, symbols.library(), toCheck)) {
             boolean recursive = recursiveHelperFns.containsKey(h.name());
+            // What it runs as. None of these is a behavior's implementation: a fn a behavior of its
+            // name declares is checked against that behavior and is not among these.
+            LoweringRole role = LoweringRole.of(h, inliner.moduleName(), false);
             // Where this definition stands, or null where it stands nowhere: the one thing every
             // rule below that is about a row's operand asks, read off the definition the rule is
             // holding rather than off a set of names travelling beside it.
@@ -73,19 +75,19 @@ public final class HelperTyping {
             // no implementation at all.
             // The entry a module publishes for a value is the same: it is nullary and static, called
             // from another module, and has no dependency in force to reach a behavior through.
-            Map<ValueName.Behavior, ReqSig> reachable =
-                    standsAt != null || h.isAValueEntry() ? Map.of() : reqSigs;
+            Map<ValueName.Behavior, ReqSig> reachable = switch (role) {
+                case LoweringRole.RowValue _, LoweringRole.PublishedValueEntry _ -> Map.of();
+                case LoweringRole.ValueHome _, LoweringRole.Helper _,
+                     LoweringRole.ValueDeclaredElsewhere _, LoweringRole.Behavior _ -> reqSigs;
+            };
             // A helper reads a settled value as a value does. A helper's body is expanded into
             // whoever calls it, and a value it names is expanded into that expansion, so a chain of
             // values written through helpers reaches every link exactly as one written without them
             // — and would copy every link, once per helper, for the same reason.
             //
-            // What settles one is a value, whichever module declared it: it has an answer to read,
-            // and the answer is the declaration's. A helper settles nothing.
-            // A value emitted as a method takes the values its root region demands, so a value that
-            // was lowered has parameters and every one of them carries a value.
-            ValueName settled = h.params().stream().allMatch(p -> HelperInliner.valueCarriedBy(p) != null)
-                    ? declarationOf(h, inliner.moduleName()) : null;
+            // What settles one is a value of this module: it has an answer to read. A value another
+            // module declares was settled by that module's check, and a helper settles nothing.
+            ValueName settled = role instanceof LoweringRole.ValueHome home ? home.value() : null;
             Scope env = Scope.NONE;
             List<Integer> inferred = new ArrayList<>();
             for (int i = 0; i < h.params().size(); i++) {
@@ -115,24 +117,23 @@ public final class HelperTyping {
             if (loweredParams != null) {
                 takes = new ArrayList<>();
                 for (Hir.FnParam p : loweredParams) {
-                    String carries = HelperInliner.valueCarriedBy(p);
-                    Type type;
+                    ValueName carries = elaborated.carried.get(p.binder().binding());
                     if (carries != null) {
-                        CompleteSignature carried = standing.valueKept(
-                                carriedValue(carries, inliner.moduleName()));
+                        CompleteSignature carried = standing.valueKept(carries);
                         if (carried == null) {
                             throw new IllegalStateException("`" + h.name() + "` takes `" + p.name()
                                     + "`, whose value was not settled before it");
                         }
                         env = env.with(p.binder(), carried.result());
-                        type = carried.result();
+                        takes.add(new EmittedDefinition.Handover(CoreBinders.of(p.binder()),
+                                carried.result(), carries));
                     } else if (p.type() == null) {
                         throw new IllegalStateException("`" + h.name() + "` is emitted and its"
                                 + " parameter `" + p.name() + "` has no type to take it from");
                     } else {
-                        type = TypeOps.resolveParamType(p.type());
+                        takes.add(new EmittedDefinition.Declared(CoreBinders.of(p.binder()),
+                                TypeOps.resolveParamType(p.type())));
                     }
-                    takes.add(new EmittedDefinition.Parameter(CoreBinders.of(p.binder()), type));
                 }
             }
             Elaborator.rejectBuiltinShadowing(h.writtenBody());
@@ -235,7 +236,8 @@ public final class HelperTyping {
                         .ifPresent(c -> settledConstants.put(settled, c));
             }
             if (emitted != null) {
-                elaborated.helpers.put(h.name(), new EmittedDefinition(elaboratedBody, takes));
+                elaborated.helpers.put(h.name(), new EmittedDefinition(elaboratedBody, takes,
+                        LoweringRole.emitted(role, h.name(), inliner.moduleName())));
             }
             // a declared return type — required on a recursive helper, allowed on any helper — must
             // match the body; a lying annotation is not silently ignored. What a row's operand
@@ -259,22 +261,6 @@ public final class HelperTyping {
                 }
             }
         }
-    }
-
-    /** The value a method's parameter carries, by the name it was reached by: bare where this
-     *  module declared it, and under the module that did where it is another's. A definition's own
-     *  name has no dot in it, so the last one is where the module ends. */
-    private static ValueName carriedValue(String reached, String module) {
-        int dot = reached.lastIndexOf('.');
-        return dot < 0 ? new ValueName.Helper(module, reached)
-                : new ValueName.Helper(reached.substring(0, dot), reached.substring(dot + 1));
-    }
-
-    /** The declaration {@code h} is a definition of: what it reaches where another module declared
-     *  it, and this module's own where it did. */
-    private static ValueName declarationOf(Hir.FnDef h, String module) {
-        ReachName.Declaration taken = h.takenOnAs();
-        return taken != null ? taken.denotes() : new ValueName.Helper(module, h.name());
     }
 
     /**

@@ -51,7 +51,7 @@ class AValueNamedTwiceIsBuiltOnceTest {
         Compilation compiled = Compiler.compiled(chain(links, twice), "m");
         Hir.Expr body = compiled.db()
                 .ask(new Bodies.LoweredBody("m", new DefinitionName("f")))
-                .value().value().writtenBody();
+                .value().value().definition().writtenBody();
         return count(body);
     }
 

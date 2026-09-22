@@ -2,6 +2,7 @@ package souther.compiler.coverage;
 
 import souther.compiler.ast.DefinitionName;
 import souther.compiler.core.Core;
+import souther.compiler.types.ReachName;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -86,10 +87,17 @@ record Methods(Map<String, Core> bodies, Map<String, Set<String>> calledBy) {
         if (e == null) {
             return;
         }
-        if (e instanceof Core.Call call && call.fn() instanceof Core.Reached.OfDeclaration named) {
-            String text = DefinitionName.of(named.name()).text();
-            if (methods.containsKey(text)) {
-                out.add(text);
+        if (e instanceof Core.Call call) {
+            // What a call reaches that a method of this module might run: a helper it carries, or
+            // one of its values. Every other callee runs somewhere a method here is not.
+            ReachName.Declaration held = switch (call.fn()) {
+                case Core.Reached.OfDeclaration named -> named.name();
+                case Core.Reached.OfValue value -> value.name();
+                case Core.Reached.OfPublishedValue _, Core.Reached.OfKernel _, Core.Emitted _ ->
+                        null;
+            };
+            if (held != null && methods.containsKey(DefinitionName.of(held).text())) {
+                out.add(DefinitionName.of(held).text());
             }
         }
         Core.forEachChild(e, child -> collectCalls(child, methods, out));

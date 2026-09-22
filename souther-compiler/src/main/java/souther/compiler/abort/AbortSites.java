@@ -189,12 +189,14 @@ public final class AbortSites {
      * than a second reading of it here. A call to a declared behavior or a published value answers
      * {@link AbortSet#NONE} at this site: what the callee itself can end without a value for is a
      * fact about walking into that behavior's body, which is not this site's own — the same
-     * distinction that keeps a subtree's abort set from being copied onto every node above it.
+     * distinction that keeps a subtree's abort set from being copied onto every node above it. A
+     * value this module builds answers the same, for the same reason: its body is a root of its own.
      */
     private static AbortSet callAborts(Core.Call call, KernelContracts kernels) {
         return switch (call.fn()) {
             case Core.Reached.OfKernel kernel -> kernels.contractOf(kernel.kernel()).aborts();
             case Core.Reached.OfDeclaration _ -> AbortSet.NONE;
+            case Core.Reached.OfValue _ -> AbortSet.NONE;
             case Core.Reached.OfPublishedValue _ -> AbortSet.NONE;
             // Minted by a Core-to-Core pass for a fold the backend lowers as a whole ($build,
             // $grow for a List or a Map); traced against souther-runtime's collection builders,

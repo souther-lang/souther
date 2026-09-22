@@ -2645,16 +2645,9 @@ public final class HelperInliner {
         return taken;
     }
 
-    /** What every parameter a value's method takes is named under, so that what it stands for can be
-     *  read back off the name. */
+    /** What every parameter a value's method takes is named under. A name for a generated method to
+     *  be read by; what the parameter holds is carried beside the method, not in this. */
     private static final String VALUE_PARAMETER = "$dep_";
-
-    /** The name of the value that {@code parameter} carries into a method emitted for a value, or
-     *  null where it is no such parameter. */
-    public static String valueCarriedBy(Hir.FnParam parameter) {
-        String name = parameter.name();
-        return name.startsWith(VALUE_PARAMETER) ? name.substring(VALUE_PARAMETER.length()) : null;
-    }
 
     /**
      * The body of the value {@code fn} as the method it is emitted as: what its root region demands
@@ -2665,8 +2658,9 @@ public final class HelperInliner {
      * built those already, and hands them over, so two values that name one value are handed the
      * same one.
      */
-    public Hir.FnDef valueMethod(Hir.FnDef fn) {
+    public LoweredDefinition valueMethod(Hir.FnDef fn) {
         List<Hir.FnParam> parameters = new ArrayList<>();
+        Map<BindingId, ValueName> carried = new LinkedHashMap<>();
         Hir.Expr body = writing(bodyOf(fn.name()), Set.of(), () -> {
             heldToTheBound(fn.writtenBody());
             Hir.Expr calls = inline(fn.writtenBody());
@@ -2677,6 +2671,7 @@ public final class HelperInliner {
                         .binder(VALUE_PARAMETER + each.name(), each.pos());
                 handed.put(each.reaches(), binder);
                 parameters.add(new Hir.FnParam(binder, null));
+                carried.put(binder.binding(), each.denotes());
             }
             materialised.add(handed);
             try {
@@ -2685,7 +2680,8 @@ public final class HelperInliner {
                 materialised.remove(materialised.size() - 1);
             }
         });
-        return fn.withParams(parameters).withBody(new Hir.FnBody.Written(body));
+        return new LoweredDefinition(
+                fn.withParams(parameters).withBody(new Hir.FnBody.Written(body)), carried);
     }
 
     /**

@@ -1264,6 +1264,7 @@ final class BodyGen {
             // helper at all.
             Core.Reaches reaches = switch (call.fn()) {
                 case Core.Reached.OfDeclaration reached -> reached.reaches();
+                case Core.Reached.OfValue value -> value.reaches();
                 case Core.Reached.OfPublishedValue published -> published.reaches();
                 default -> throw new IllegalStateException("unknown function `" + call.name() + "`");
             };
@@ -1283,6 +1284,9 @@ final class BodyGen {
                         recursiveHelperCall(call);
                     }
                 }
+                // A value runs as a method of this module's `$Fns`, beside its recursions, and is
+                // called the way one of them is.
+                case Core.Reaches.AValue _ -> recursiveHelperCall(call);
                 // Which of the two it is, is where the value of the behavior stands in this frame:
                 // one supplied to the class being emitted is read off it, one implemented elsewhere
                 // is called. Neither is a question about what the call reaches.
