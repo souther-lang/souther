@@ -8,8 +8,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * {@code <} {@code <=} {@code >} {@code >=} on {@code String} compare the UTF-16 code-unit
- * sequence, not the code points {@link AStringIsMeasuredInCodePointsTest} measures {@code length},
- * {@code slice} and the rest of the module by (spec §equality, §string-code-points). The two orders
+ * sequence, not the code points used by the module's positional operations —
+ * {@link AStringIsMeasuredInCodePointsTest}'s {@code length}, {@code slice} and the rest (spec
+ * §equality, §string-code-points). The two orders
  * disagree wherever a surrogate pair sits beside a basic-plane character whose code point is below
  * it but whose single code unit is above the pair's first unit: {@code 𠮷} is U+20BB7, whose
  * code-point value is above {@code ￥}'s (U+FFE5), but written D842 DFB7 it begins with the unit
