@@ -5,7 +5,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * Checks {@code souther.runtime.Normalization.nfc} against Unicode 18.0.0's
+ * Checks {@code souther.unicode.Normalization.nfc} against Unicode 18.0.0's
  * {@code NormalizationTest.txt} in full — the conformance oracle for
  * {@code NormalizationTables.java}/{@code Normalization.java}, run by hand rather than kept as a
  * Maven test for the reason {@code GenerateCaseTables.java}'s regeneration step already gives: a
@@ -18,9 +18,16 @@ import java.util.List;
  * {@code c2 == toNFC(c1) == toNFC(c2) == toNFC(c3)} (a fourth check to run once NFD exists), so
  * every one of the three is checked against every data line, not only the source column.
  *
+ * <p>Fails closed on the input's own version header, the same check
+ * {@code GenerateNormalizationTables.java} runs on its three inputs: a {@code NormalizationTest.txt}
+ * for a different Unicode version would silently check {@link souther.unicode.Normalization#nfc}
+ * against the wrong oracle rather than the tables it was actually generated from.
+ *
  * <pre>java bin/VerifyNormalization.java &lt;NormalizationTest.txt&gt;</pre>
  */
 public final class VerifyNormalization {
+
+    private static final String UNICODE_VERSION = "18.0.0";
 
     private VerifyNormalization() {}
 
@@ -29,7 +36,9 @@ public final class VerifyNormalization {
             System.err.println("usage: java bin/VerifyNormalization.java <NormalizationTest.txt>");
             System.exit(1);
         }
-        List<String> lines = Files.readAllLines(Path.of(args[0]), StandardCharsets.UTF_8);
+        Path path = Path.of(args[0]);
+        checkVersionHeader(path);
+        List<String> lines = Files.readAllLines(path, StandardCharsets.UTF_8);
         int checked = 0;
         int failed = 0;
         for (int lineNo = 1; lineNo <= lines.size(); lineNo++) {
@@ -56,8 +65,22 @@ public final class VerifyNormalization {
         }
     }
 
+    /** {@code # NormalizationTest-<version>.txt}, the same first-line check
+     *  {@code GenerateNormalizationTables.java} runs on its own two versioned inputs. */
+    private static void checkVersionHeader(Path path) throws IOException {
+        String firstLine = Files.readAllLines(path, StandardCharsets.UTF_8).get(0);
+        String expected = "# NormalizationTest-" + UNICODE_VERSION + ".txt";
+        if (!firstLine.equals(expected)) {
+            throw new IllegalStateException(
+                    path + " does not open with " + expected + " (found: " + firstLine + ") — this"
+                            + " verifier is pinned to Unicode " + UNICODE_VERSION + ", the same"
+                            + " version NormalizationTables.java was generated from; a different"
+                            + " version's corpus is not this table's oracle");
+        }
+    }
+
     private static boolean checkNfc(int lineNo, String column, String input, String expected) {
-        String actual = souther.runtime.Normalization.nfc(input);
+        String actual = souther.unicode.Normalization.nfc(input);
         if (actual.equals(expected)) {
             return true;
         }

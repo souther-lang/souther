@@ -10,7 +10,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 
 /**
- * Regenerates {@code souther-runtime/.../souther/runtime/NormalizationTables.java} from the
+ * Regenerates {@code souther-runtime/.../souther/unicode/NormalizationTables.java} from the
  * Unicode Character Database (spec §stdlib-string).
  *
  * <p>Reads {@code UnicodeData.txt} and {@code CompositionExclusions.txt} for one pinned Unicode
@@ -48,7 +48,7 @@ import java.util.TreeSet;
 public final class GenerateNormalizationTables {
 
     private static final Path OUTPUT =
-            Path.of("souther-runtime/src/main/java/souther/runtime/NormalizationTables.java");
+            Path.of("souther-runtime/src/main/java/souther/unicode/NormalizationTables.java");
     private static final String UNICODE_VERSION = "18.0.0";
 
     private GenerateNormalizationTables() {}
@@ -229,7 +229,7 @@ public final class GenerateNormalizationTables {
             Set<Integer> scriptSpecificExclusions, String unicodeDataSha256,
             String compositionExclusionsSha256, String derivedNormalizationPropsSha256) {
         StringBuilder out = new StringBuilder();
-        out.append("package souther.runtime;\n\n");
+        out.append("package souther.unicode;\n\n");
         out.append("/**\n");
         out.append(" * The Unicode ").append(UNICODE_VERSION)
                 .append(" canonical decomposition, combining class and script-specific composition\n");

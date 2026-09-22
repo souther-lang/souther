@@ -935,7 +935,14 @@ public final class Backend {
 
     /** A factory taking the data's fields (in declaration order) and building it through
      * {@code __construct}, so the invariant is checked and a violation aborts (spec §algebraic-types) — the same
-     * path an in-domain construction takes, not a decode of an external representation. */
+     * path an in-domain construction takes, not a decode of an external representation.
+     *
+     * <p>{@code protected}, so it is not only in-domain: an injected behavior's Java implementation
+     * subclasses the behavior base class this is generated onto, and calls it directly with
+     * whatever field values its own Java code holds. A {@code String} field arriving that way is a
+     * crossing exactly as foreign as a decoder's leaf, so it is canonicalized here before
+     * {@code __construct} sees it — a {@code List<String>}/{@code Option<String>}/{@code Map}
+     * field is not, the same scoped gap {@code BodyGen.stackCastAtCrossing} states. */
     private void emitDataFactory(ClassBuilder cb, TypeSymbol construct) {
         // The type as the `constructs` clause resolved it: an entry there may name a type another
         // module declares, and the class of one is that module's.
@@ -951,6 +958,9 @@ public final class Backend {
                         int slot = 1;   // slot 0 is `this`
                         for (Type t : fields.values()) {
                             load(code, slot, t);
+                            if (t == Type.STRING) {
+                                code.invokestatic(CD_Normalization, "nfc", MTD_nfc);
+                            }
                             slot += width(t);
                         }
                         code.invokestatic(cdType, "__construct", MethodTypeDesc.of(CD_Result, fieldDs));

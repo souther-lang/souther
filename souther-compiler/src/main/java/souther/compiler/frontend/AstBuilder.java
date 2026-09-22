@@ -1,5 +1,6 @@
 package souther.compiler.frontend;
 
+import souther.compiler.CanonicalNames;
 import souther.compiler.diag.msg.Reported;
 import souther.compiler.diag.msg.Supporting;
 import souther.compiler.ast.Ast;
@@ -42,7 +43,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import souther.runtime.Normalization;
+import souther.unicode.Normalization;
 
 /**
  * Builds the compiler's {@link Ast} from a concrete syntax tree. This is where the surface forms the
@@ -117,7 +118,7 @@ public final class AstBuilder {
     private Ast.Module module(SyntaxNode file, String defaultModuleNameSpelling) {
         // A header-less source is named by its caller — the CLI's file stem, an
         // annotation processor, a test — which is a name arriving from outside.
-        String defaultModuleName = souther.compiler.Reserved.name(defaultModuleNameSpelling);
+        String defaultModuleName = CanonicalNames.name(defaultModuleNameSpelling);
         Optional<SyntaxNode> exampleFile = file.child(SyntaxKind.EXAMPLES_FILE_HEADER);
         if (exampleFile.isPresent()) {
             return exampleFileModule(file, exampleFile.get());
@@ -434,7 +435,7 @@ public final class AstBuilder {
         }
         Optional<SyntaxToken> typevar = n.token(SyntaxKind.TYPEVAR);
         if (typevar.isPresent()) {
-            String v = souther.compiler.Reserved.name(typevar.get().text());
+            String v = CanonicalNames.name(typevar.get().text());
             if (!isReservedNamespace(moduleName)) {
                 throw error(pos(n), new ParseMessage.ATypeVariableIsOnlyAllowedInTheCore(v));
             }
@@ -1799,7 +1800,7 @@ public final class AstBuilder {
      * literal is not: it is parsed, not compared.
      */
     private static String ident(SyntaxToken t) {
-        return souther.compiler.Reserved.name(t.text());
+        return CanonicalNames.name(t.text());
     }
 
     /** The name a top-level declaration declares: the first identifier in it. This is how the

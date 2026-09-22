@@ -26,13 +26,6 @@
             <artifactId>jackson-databind</artifactId>
             <version>3.2.2</version>
         </dependency>
-        <!-- Normalization.nfc, the one Unicode 18.0.0 NFC every canonicalizing door in the language
-             runs, Reserved.name among them. Adds nothing above what this module already carries:
-             souther-runtime depends on nothing here, so this stays a one-way edge. -->
-        <dependency>
-            <groupId>org.souther-lang</groupId>
-            <artifactId>souther-runtime</artifactId>
-        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>

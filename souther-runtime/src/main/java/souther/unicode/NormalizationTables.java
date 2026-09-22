@@ -1,4 +1,4 @@
-package souther.runtime;
+package souther.unicode;
 
 /**
  * The Unicode 18.0.0 canonical decomposition, combining class and script-specific composition

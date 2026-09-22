@@ -34,7 +34,7 @@ import souther.compiler.check.ContractDischarge;
 import souther.compiler.check.ContractDischarge.RuleDischarge;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
-import souther.compiler.Reserved;
+import souther.compiler.CanonicalNames;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
@@ -1384,7 +1384,7 @@ public final class Analyzer {
      * not a thing an editor may answer differently.
      */
     private static String nameOf(SyntaxToken token) {
-        return token == null ? null : Reserved.name(token.text());
+        return token == null ? null : CanonicalNames.name(token.text());
     }
 
     /** Whether an identifier token spells {@code name}, which is canonical. */

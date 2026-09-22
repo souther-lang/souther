@@ -10,7 +10,7 @@ import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.TemporalRule;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
-import souther.runtime.Normalization;
+import souther.unicode.Normalization;
 import souther.runtime.Representations;
 import souther.runtime.Sets;
 import souther.runtime.Temporals;

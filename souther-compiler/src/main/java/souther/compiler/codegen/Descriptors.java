@@ -208,7 +208,7 @@ final class Descriptors {
     static final ClassDesc CD_Sets = ClassDesc.of("souther.runtime.Sets");
     static final ClassDesc CD_Representations = ClassDesc.of("souther.runtime.Representations");
     static final ClassDesc CD_Temporals = ClassDesc.of("souther.runtime.Temporals");
-    static final ClassDesc CD_Normalization = ClassDesc.of("souther.runtime.Normalization");
+    static final ClassDesc CD_Normalization = ClassDesc.of("souther.unicode.Normalization");
     static final ClassDesc CD_Option = ClassDesc.of("souther.runtime.Option");
     static final ClassDesc CD_Options = ClassDesc.of("souther.runtime.Options");
     static final ClassDesc CD_OptionSome = CD_Option.nested("Some");

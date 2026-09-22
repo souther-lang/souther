@@ -1,4 +1,4 @@
-package souther.runtime;
+package souther.unicode;
 
 import java.util.Arrays;
 import java.util.TreeMap;
@@ -37,7 +37,7 @@ public final class Normalization {
         return out.toString();
     }
 
-    // ---- Hangul algorithmic decomposition/composition (UAX #15 §Hangul) ----
+    // ---- Hangul algorithmic decomposition/composition (UAX #15, the Hangul section) ----
 
     private static final int S_BASE = 0xAC00;
     private static final int L_BASE = 0x1100;
@@ -113,7 +113,7 @@ public final class Normalization {
 
     // ---- Canonical ordering ----
 
-    /** Unicode's canonical ordering algorithm (UAX #15 §Canonical Ordering Behavior): a stable
+    /** Unicode's canonical ordering algorithm (UAX #15's Canonical Ordering Behavior section): a stable
      *  insertion sort that only ever moves a combining mark earlier past marks of a strictly
      *  higher combining class, never past a starter (combining class 0) or past one of equal
      *  class — which is what keeps two canonically-equivalent orderings converging on one. */
@@ -143,7 +143,7 @@ public final class Normalization {
 
     // ---- Canonical composition ----
 
-    /** Unicode's canonical composition algorithm (UAX #15 §Canonical Composition Algorithm): scan
+    /** Unicode's canonical composition algorithm (UAX #15's Canonical Composition Algorithm section): scan
      *  left to right, tracking the most recent starter and the combining class of the last
      *  character folded into the run since it. A character composes with the starter only if
      *  nothing between them blocks it — a combining class it is not strictly greater than, or
