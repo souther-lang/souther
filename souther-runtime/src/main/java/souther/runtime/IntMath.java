@@ -1,8 +1,8 @@
 package souther.runtime;
 
 /**
- * Overflow-checked {@code Int} arithmetic (spec §stdlib-int). {@code Int} is signed 64-bit; when a sum,
- * difference, or product leaves that range the computation aborts rather than wrapping. Overflow is a model
+ * Overflow-checked {@code Int} arithmetic (spec §stdlib-int). {@code Int} is signed 64-bit; when an
+ * operation requires a result outside that range it aborts rather than wrapping. Overflow is a model
  * bug, not a business result, so — like an invariant violation — it throws {@link ConstraintViolation} (spec
  * §algebraic-types, §violation-destination, §jvm-abort), which Souther code cannot catch.
  *

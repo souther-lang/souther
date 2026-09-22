@@ -1,6 +1,5 @@
 package souther.compiler.abort;
 
-import souther.compiler.check.Elaborator;
 import souther.compiler.core.Core;
 import souther.compiler.core.KernelContracts;
 import souther.compiler.types.BinOp;
@@ -262,9 +261,10 @@ public final class AbortSites {
      * the exponent a {@code +}/{@code -}/{@code *} on either type can push out of range, so neither
      * is a case {@link AbortKind#REQUIRED_FORM_HAS_NO_PLACE} names.
      *
-     * <p>The {@link Elaborator} that builds {@link Core.Neg} admits only these three types for its
-     * operand and its answer (spec ADR-0116); a fourth reaching here is refused the same way
-     * {@link #arithmeticType} refuses one, rather than answered with {@link AbortSet#NONE}.
+     * <p>A checked {@code Core.Neg} answers only {@code Int}, {@code Decimal} or {@code Rational}
+     * (spec §an-operator-takes-the-types-it-is-defined-for); a fourth reaching here is a malformed
+     * checked {@code Core} and is refused the same way {@link #arithmeticType} refuses one, rather
+     * than answered with {@link AbortSet#NONE}.
      */
     private static AbortSet negation(Core.Neg neg) {
         if (!(neg.type() instanceof Type.Prim prim)) {

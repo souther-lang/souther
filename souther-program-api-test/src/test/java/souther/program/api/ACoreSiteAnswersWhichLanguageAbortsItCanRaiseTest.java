@@ -31,6 +31,7 @@ class ACoreSiteAnswersWhichLanguageAbortsItCanRaiseTest {
                 ( Positive, unguarded, guarded, sums
                 , dividesIntByInt, dividesDecimalByDecimal, dividesWithARationalOperand
                 , unreached
+                , negatesInt, negatesDecimal, negatesRational
                 )
 
             data Positive = Int
@@ -67,6 +68,18 @@ class ACoreSiteAnswersWhichLanguageAbortsItCanRaiseTest {
             behavior unreached : (n: Int) -> Int
 
             let unreached (n) = unreachable "never called with anything"
+
+            behavior negatesInt : (n: Int) -> Int
+
+            let negatesInt (n) = -n
+
+            behavior negatesDecimal : (n: Decimal) -> Decimal
+
+            let negatesDecimal (n) = -n
+
+            behavior negatesRational : (a: Int, b: Int) -> Int
+
+            let negatesRational (a, b) = Rational.toInt(DOWN, -(a / b))
             """;
 
     private static CheckedProgram program() {
@@ -132,6 +145,48 @@ class ACoreSiteAnswersWhichLanguageAbortsItCanRaiseTest {
         Core.Binary sum = onlyOneOf(Core.Binary.class, body);
 
         assertEquals(Set.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE), program.abortsAt(sum).kinds());
+    }
+
+    /**
+     * Unary minus on {@code Int} aborts the same way {@code +}/{@code -}/{@code *} do (spec
+     * §stdlib-int, issue #1878): the smallest {@code Int} has no positive counterpart. Fixed at this
+     * layer and not only at {@code BodyGen}'s — a classifier answering {@link AbortSet#NONE} again
+     * here would leave the JVM execution test green, since {@code BodyGen}'s emission does not read
+     * {@code AbortSites} back.
+     */
+    @Test
+    void intNegationAbortsWhereTheAnswerHasNoPlace() {
+        CheckedProgram program = program();
+        Core body = bodyOf(program, "negatesInt");
+
+        Core.Neg neg = onlyOneOf(Core.Neg.class, body);
+
+        assertEquals(Set.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE), program.abortsAt(neg).kinds());
+    }
+
+    /** {@code Decimal} negation only flips a sign, so it never leaves the scale a
+     *  {@code +}/{@code -}/{@code *} could — total, unlike {@code Int}'s. */
+    @Test
+    void decimalNegationNeverAborts() {
+        CheckedProgram program = program();
+        Core body = bodyOf(program, "negatesDecimal");
+
+        Core.Neg neg = onlyOneOf(Core.Neg.class, body);
+
+        assertTrue(program.abortsAt(neg).isEmpty());
+    }
+
+    /** {@code Rational} negation only flips the numerator's sign, never its exponents — total, the
+     *  same as {@code Decimal}'s. Reached as an intermediate: {@code Rational} crosses no boundary,
+     *  so {@code -(a / b)} is narrowed back to {@code Int} by the {@code toInt} it feeds. */
+    @Test
+    void rationalNegationNeverAborts() {
+        CheckedProgram program = program();
+        Core body = bodyOf(program, "negatesRational");
+
+        Core.Neg neg = onlyOneOf(Core.Neg.class, body);
+
+        assertTrue(program.abortsAt(neg).isEmpty());
     }
 
     /**
