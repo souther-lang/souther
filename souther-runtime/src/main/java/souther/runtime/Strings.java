@@ -2,6 +2,7 @@ package souther.runtime;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.PrimitiveIterator;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
@@ -16,10 +17,25 @@ import java.util.regex.Pattern;
  */
 public final class Strings {
 
-    /** Runs of whitespace, for {@link #words} — compiled once rather than per call. */
-    private static final Pattern WHITESPACE = Pattern.compile("\\s+");
-
     private Strings() {}
+
+    /** String whitespace (spec §string-whitespace): the fixed 25-code-point set {@code trim} and
+     *  {@code words} both scan by. The set is enumerated rather than read off a platform table, so
+     *  a Unicode update in the JVM does not silently change what a Souther program means. */
+    private static boolean isWhitespace(int cp) {
+        return switch (cp) {
+            case 0x0009, 0x000A, 0x000B, 0x000C, 0x000D,
+                 0x0020,
+                 0x0085,
+                 0x00A0,
+                 0x1680,
+                 0x2028, 0x2029,
+                 0x202F,
+                 0x205F,
+                 0x3000 -> true;
+            default -> cp >= 0x2000 && cp <= 0x200A;
+        };
+    }
 
     /** The number of code points, as the Int the language carries. Counting them is a walk, so this
      *  is O(n) where the UTF-16 unit count would be a field read — the price of a length that agrees
@@ -96,14 +112,51 @@ public final class Strings {
         return Long.toString(n);
     }
 
-    /** Splits on runs of whitespace, dropping empty pieces (Elm {@code String.words}):
-     *  {@code words("  a  b ") == ["a", "b"]}. */
+    /** Removes a maximal run of String whitespace (spec §string-whitespace) from each end,
+     *  leaving the rest untouched: {@code trim("　a　") == "a"}. Scans code points, so a
+     *  character outside the whitespace set — including one JDK's own {@code String.trim} would
+     *  have stripped — stops the run rather than being crossed. */
+    public static String trim(String s) {
+        int[] cps = s.codePoints().toArray();
+        int start = 0;
+        while (start < cps.length && isWhitespace(cps[start])) {
+            start++;
+        }
+        int end = cps.length;
+        while (end > start && isWhitespace(cps[end - 1])) {
+            end--;
+        }
+        if (start == 0 && end == cps.length) {
+            return s;
+        }
+        StringBuilder out = new StringBuilder();
+        for (int i = start; i < end; i++) {
+            out.appendCodePoint(cps[i]);
+        }
+        return out.toString();
+    }
+
+    /** Splits on runs of String whitespace (spec §string-whitespace), dropping empty pieces (Elm
+     *  {@code String.words}): {@code words("  a  b ") == ["a", "b"]}. The same predicate
+     *  {@link #trim} uses, scanned by code point rather than by a regex class, so a run of
+     *  whitespace this splits on is a run {@link #trim} would remove at either end. */
     public static List<String> words(String s) {
         List<String> out = new ArrayList<>();
-        for (String w : WHITESPACE.split(s)) {
-            if (!w.isEmpty()) {
-                out.add(w);
+        StringBuilder word = new StringBuilder();
+        PrimitiveIterator.OfInt it = s.codePoints().iterator();
+        while (it.hasNext()) {
+            int cp = it.nextInt();
+            if (isWhitespace(cp)) {
+                if (!word.isEmpty()) {
+                    out.add(word.toString());
+                    word.setLength(0);
+                }
+            } else {
+                word.appendCodePoint(cp);
             }
+        }
+        if (!word.isEmpty()) {
+            out.add(word.toString());
         }
         return List.copyOf(out);
     }

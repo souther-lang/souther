@@ -459,7 +459,6 @@ final class Intrinsics {
         t.put(Kernel.STRING_TO_INT, rt(CD_Strings, "toInt", order(0)));
         t.put(Kernel.STRING_TO_DECIMAL, rt(CD_Strings, "toDecimal", order(0)));
         t.put(Kernel.STRING_LENGTH, rt(CD_Strings, "length", order(0)));
-        t.put(Kernel.STRING_TRIM, jdk(CD_String, "trim", mtd(CD_String), order(0)));
         t.put(Kernel.STRING_LOWERCASE, jdk(CD_String, "toLowerCase", mtd(CD_String), order(0)));
         t.put(Kernel.STRING_UPPERCASE, jdk(CD_String, "toUpperCase", mtd(CD_String), order(0)));
         t.put(Kernel.STRING_CONTAINS, jdk(CD_String, "contains", mtd(bool, CD_CharSequence), order(1, 0)));
@@ -474,6 +473,9 @@ final class Intrinsics {
         t.put(Kernel.STRING_SPLIT, rt(CD_Strings, "split", order(1, 0)));
         t.put(Kernel.STRING_JOIN, rt(CD_Strings, "join", order(1, 0)));
         t.put(Kernel.STRING_REPLACE, rt(CD_Strings, "replace", order(2, 0, 1)));
+        // `trim` and `words` share one whitespace predicate (spec §string-whitespace), so both stay
+        // on the runtime rather than the JDK's own `trim`, whose whitespace set does not agree.
+        t.put(Kernel.STRING_TRIM, rt(CD_Strings, "trim", order(0)));
         t.put(Kernel.STRING_WORDS, rt(CD_Strings, "words", order(0)));
         t.put(Kernel.STRING_MATCHES, rt(CD_Strings, "matches", order(1, 0)));
         t.put(Kernel.STRING_CHARACTERS, rt(CD_Strings, "characters", order(0)));
