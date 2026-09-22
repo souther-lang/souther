@@ -263,15 +263,18 @@ public final class Strings {
     /** Widens {@code s} to exactly {@code width} code points with copies of {@code pad} — on the
      *  left when {@code atStart}, on the right otherwise. Already wide enough is left alone.
      *
-     * <p>The fill is {@code pad} repeated and canonicalized, cut to the code points still needed
-     * from its own front (so a multi-code-point {@code pad} does not overshoot, the way a whole
-     * number of copies would) — then joined to {@code s} and canonicalized once more at that seam.
+     * <p>The fill is {@code pad} repeated a whole number of times (at least enough to cover what is
+     * needed), canonicalized once, and cut to the code points still needed from its own front (so a
+     * multi-code-point {@code pad} does not overshoot) — then joined to {@code s} and canonicalized
+     * once more at that seam.
      *
-     * <p>The seam is why the fill's own length is not the last word: composing where the fill meets
-     * {@code s} can absorb a code point neither side had on its own — a {@code pad} that is a bare
-     * combining mark can compose straight into {@code s}'s first character. So the fill is cut to
-     * one code point more than still needed, and re-cut, exactly as many times as the seam keeps
-     * costing a code point, before the join is trusted to be {@code width} wide. */
+     * <p>The seam is why the fill's own length is not the last word: composing where copies of
+     * {@code pad} meet each other, or where the fill meets {@code s}, can absorb a code point
+     * neither side had on its own — a {@code pad} that is a bare combining mark can compose straight
+     * into {@code s}'s first character. So on the rare occasion the join comes up short, one more
+     * code point is asked for and the whole fill is rebuilt — never grown one copy of {@code pad} at
+     * a time with a fresh canonicalization each time, which would canonicalize the same leading code
+     * points as many times as there are copies of {@code pad} still to add. */
     private static String pad(String s, long width, String pad, boolean atStart) {
         if (pad.isEmpty() || length(s) >= width) {
             return s;
@@ -279,12 +282,11 @@ public final class Strings {
         if (width > Integer.MAX_VALUE) {
             throw new ConstraintViolation("String.pad width out of range: " + width);
         }
-        String fill = "";
+        long padLength = length(pad);
         long need = width - length(s);
         while (true) {
-            while (length(fill) < need) {
-                fill = Normalization.nfc(fill + pad);
-            }
+            long copies = (need + padLength - 1) / padLength;
+            String fill = Normalization.nfc(pad.repeat((int) copies));
             String trimmedFill = length(fill) > need ? slice(fill, 0, need) : fill;
             String joined = Normalization.nfc(atStart ? trimmedFill + s : s + trimmedFill);
             if (length(joined) >= width) {
