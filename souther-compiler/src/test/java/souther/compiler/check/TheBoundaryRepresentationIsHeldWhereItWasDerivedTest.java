@@ -112,9 +112,9 @@ class TheBoundaryRepresentationIsHeldWhereItWasDerivedTest {
                 answers.add(m.getName());
             }
         }
-        assertEquals(Set.of("declaration", "decoder", "encoder"), answers,
-                "a derived product answers with the declaration it was made from and how a value of"
-                        + " it crosses, and no more");
+        assertEquals(Set.of("declaration", "decoder", "encoder", "fieldShapes"), answers,
+                "a derived product answers with the declaration it was made from, how a value of it"
+                        + " crosses, and what each field carries across the boundary, and no more");
     }
 
     private static boolean mentions(java.lang.reflect.Type type, Class<?> named) {

@@ -93,6 +93,15 @@ public sealed interface CheckedData {
         List<ValueShape.Field> fields();
 
         /**
+         * What each of {@link #fields()} carries across the boundary, in the same order — the
+         * checked codec shape, never re-derived from a field's bare {@link Type}: an optional here
+         * is a {@link CheckedCodecShape.OptionOf} whether the field omits its key or an element
+         * under it writes {@code null}, and which of the two it is is not this list's to decide,
+         * only to carry.
+         */
+        List<CheckedCodecShape> codecShapes();
+
+        /**
          * What must hold of a value of this, in the order a failure is decided in.
          *
          * <p>The clauses that apply and not the ones this declaration wrote: an include carries the
@@ -120,13 +129,15 @@ public sealed interface CheckedData {
     final class Product implements CheckedData, WithFields {
 
         private final ValueShape shape;
+        private final List<CheckedCodecShape> codecShapes;
 
-        Product(ValueShape shape) {
+        Product(ValueShape shape, List<CheckedCodecShape> codecShapes) {
             if (shape == null) {
                 throw new IllegalArgumentException(
                         "a product is what a value of it is made of and what must hold of one");
             }
             this.shape = shape;
+            this.codecShapes = List.copyOf(codecShapes);
         }
 
         @Override
@@ -137,6 +148,11 @@ public sealed interface CheckedData {
         @Override
         public List<ValueShape.Field> fields() {
             return shape.fields();
+        }
+
+        @Override
+        public List<CheckedCodecShape> codecShapes() {
+            return codecShapes;
         }
 
         @Override
@@ -172,8 +188,9 @@ public sealed interface CheckedData {
     final class Newtype implements CheckedData, WithFields {
 
         private final ValueShape shape;
+        private final List<CheckedCodecShape> codecShapes;
 
-        Newtype(ValueShape shape) {
+        Newtype(ValueShape shape, List<CheckedCodecShape> codecShapes) {
             if (shape == null) {
                 throw new IllegalArgumentException(
                         "a newtype is what a value of it is made of and what must hold of one");
@@ -183,6 +200,7 @@ public sealed interface CheckedData {
                         + shape.name() + "` is made of " + shape.fields());
             }
             this.shape = shape;
+            this.codecShapes = List.copyOf(codecShapes);
         }
 
         @Override
@@ -205,6 +223,11 @@ public sealed interface CheckedData {
         @Override
         public List<ValueShape.Field> fields() {
             return shape.fields();
+        }
+
+        @Override
+        public List<CheckedCodecShape> codecShapes() {
+            return codecShapes;
         }
 
         @Override
@@ -236,8 +259,15 @@ public sealed interface CheckedData {
      * here is not that identity. One data may be a case of two sums declared in one module and
      * stands at a different position in each, so a reader that made a position into a tag would
      * have given one value two of them.
+     *
+     * @param representation the form the set of {@code cases} travels at a boundary — enumeration or
+     *     discriminated, settled the one way a set of alternatives is settled (spec
+     *     §sum-discrimination) and carried here rather than left for a reader to work out from
+     *     {@code cases} alone: a standalone unit admitted into this sum is one atom that is itself a
+     *     unit, which {@code cases} alone cannot be told apart from a unit sum
      */
-    record Sum(TypeSymbol.AtModule name, List<TypeSymbol> cases) implements CheckedData {
+    record Sum(TypeSymbol.AtModule name, List<TypeSymbol> cases,
+              CheckedAlternativesForm representation) implements CheckedData {
 
         public Sum {
             if (name == null) {

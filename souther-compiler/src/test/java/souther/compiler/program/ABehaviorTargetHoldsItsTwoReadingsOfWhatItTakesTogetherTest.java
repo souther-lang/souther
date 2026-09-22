@@ -3,10 +3,12 @@ package souther.compiler.program;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -75,7 +77,13 @@ class ABehaviorTargetHoldsItsTwoReadingsOfWhatItTakesTogetherTest {
     }
 
     private static BehaviorTarget target(List<Type> takes, CheckedImplementation implementation) {
-        return new BehaviorTarget(new CheckedSignature(takes, INT), implementation);
+        List<CheckedBoundaryInput> inputs = new ArrayList<>(takes.size());
+        for (Type type : takes) {
+            inputs.add(new CheckedBoundaryInput.Scalar(LeafScalar.of((Type.Prim) type)));
+        }
+        return new BehaviorTarget(
+                new CheckedSignature(inputs, new CheckedBoundaryOutput.Scalar(LeafScalar.INT)),
+                implementation);
     }
 
     private static CheckedImplementation.Body body(Core.Binder... parameters) {

@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.Boundary;
 import souther.compiler.check.ClauseDischarge;
 import souther.compiler.check.ClauseLocations;
 import souther.compiler.check.DeclarationCitations;
@@ -205,6 +206,29 @@ public final class Shapes {
             }
             souther.compiler.check.Derived.Def def = defs.value().get(named.name());
             return def == null ? Answer.absent() : Answer.of(def);
+        }
+    }
+
+    /**
+     * How the alternatives {@code type} names travel at a boundary: which cases the boundary
+     * descends to, and whether the set of them is a bare tag or a discriminated object.
+     * {@code type} is a named sum's own reference or a behavior's answer union — the two are one
+     * question asked of two spellings (spec §sum-discrimination) and answered by one call either
+     * way, {@link Boundary#of}.
+     *
+     * <p>Asked here rather than by whoever wants the answer, so that the call is made once for a
+     * type however many readers ask about it — a program's assembler among them, which reads this
+     * rather than calling {@link Boundary#of} itself.
+     */
+    public record TypeAlternatives(String moduleName, Type type) implements Key<Boundary.Alternatives> {
+        @Override
+        public String module() {
+            return moduleName;
+        }
+
+        @Override
+        public Answer<Boundary.Alternatives> compute(Db db) {
+            return Answer.of(Boundary.of(type, declarationKinds(db), publishedDeclarations(db)));
         }
     }
 

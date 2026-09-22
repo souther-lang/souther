@@ -5,16 +5,20 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.BehaviorRequirement;
+import souther.compiler.check.Boundary;
+import souther.compiler.check.BoundaryInput;
+import souther.compiler.check.BoundaryOutput;
 import souther.compiler.check.CoreBinders;
 import souther.compiler.check.Derived;
 import souther.compiler.check.EmittedDefinition;
 import souther.compiler.check.Lower;
-import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.Requirements;
 import souther.compiler.check.Sig;
 import souther.compiler.check.SpecImplementation;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
+import souther.compiler.derive.CodecShape;
+import souther.compiler.derive.Deriver;
 import souther.compiler.abort.AbortSites;
 import souther.compiler.core.Composition;
 import souther.compiler.core.Core;
@@ -100,7 +104,7 @@ final class CheckedProgramAssembler {
         Map<ValueName.Behavior, BehaviorTarget> targets = new LinkedHashMap<>();
         List<ModuleBoundaries> boundaries = new ArrayList<>();
         for (ModuleReading module : read) {
-            boundaries.add(fileWhatIsChecked(targets, module));
+            boundaries.add(fileWhatIsChecked(targets, module, db));
         }
         fileWhatIsOnThePath(targets, db);
         List<CheckedModule> modules = new ArrayList<>();
@@ -186,7 +190,7 @@ final class CheckedProgramAssembler {
      * answer arrives where a state is being chosen — and it is chosen as one of them.
      */
     private static ModuleBoundaries fileWhatIsChecked(
-            Map<ValueName.Behavior, BehaviorTarget> targets, ModuleReading module) {
+            Map<ValueName.Behavior, BehaviorTarget> targets, ModuleReading module, Db db) {
         Map<ValueName.Behavior, BehaviorTarget> declares = new LinkedHashMap<>();
         Map<String, SpecImplementation.Implemented> implementations =
                 SpecImplementation.implementationsOf(module.bodies());
@@ -202,7 +206,7 @@ final class CheckedProgramAssembler {
                 throw new IllegalStateException("`" + named + "` was taken as checked and this"
                         + " compile has no reading of it");
             }
-            BehaviorTarget target = new BehaviorTarget(signatureOf(signature),
+            BehaviorTarget target = new BehaviorTarget(signatureOf(signature, module.name(), db),
                     implementedAs(state, named, declared, implementations, module.checked(),
                             module.compositions()));
             file(targets, named, target);
@@ -247,7 +251,7 @@ final class CheckedProgramAssembler {
                             + " compile read off the path and this compile has no reading of it");
                 }
                 file(targets, named,
-                        new BehaviorTarget(signatureOf(signature), publishedAs(state)));
+                        new BehaviorTarget(signatureOf(signature, module, db), publishedAs(state)));
             }
         }
     }
@@ -335,7 +339,7 @@ final class CheckedProgramAssembler {
                 throw new IllegalStateException("the language declares `" + product.declares()
                         + "` as a product, and what a value of one is made of is not derived here");
             }
-            declared.add(declaredAs(def, Shapes.publishedDeclarations(db), Map.of()));
+            declared.add(declaredAs(def, db, Map.of(), Map.of()));
         }
         return declared;
     }
@@ -368,8 +372,7 @@ final class CheckedProgramAssembler {
                         + " compile has nothing to say about what it declares");
             }
             for (Derived.Def def : defs.values()) {
-                declared.add(declaredAs(def.declaration().node(),
-                        Shapes.publishedDeclarations(db), shapes));
+                declared.add(declaredAs(def.declaration().node(), db, shapes, defs));
             }
         }
         return declared;
@@ -431,6 +434,10 @@ final class CheckedProgramAssembler {
         // the bytecode beside it hold one another's decisions.
         Map<TypeSymbol.AtModule, ValueShape> shapes =
                 db.ask(new Shapes.ValueShapes(module)).value();
+        // What each field a product or a newtype declares carries across the boundary — the same
+        // walk `Shapes.ValueShapes` is read beside, held here so a reader of the program does not
+        // re-derive it from a field's bare type.
+        Map<String, Derived.Def> codecDefs = db.ask(new Shapes.DerivedDeclarations(module)).value();
         Map<ValueName.Behavior, EnsuresEnforcement> checks =
                 db.ask(new Bodies.EnsuresChecks(module)).value();
         Map<String, List<BehaviorRequirement>> requirements =
@@ -444,7 +451,7 @@ final class CheckedProgramAssembler {
         if (checked == null || lowering == null || signatures == null
                 || implementations == null
                 || compositions == null || symbols == null || shapes == null || checks == null
-                || requirements == null) {
+                || requirements == null || codecDefs == null) {
             // Not a report: the failure above is what a caller is told, and reaching here past it
             // means the two readings of whether this program checked have come apart.
             throw new IllegalStateException("`" + module + "` was taken as checked and is not");
@@ -470,7 +477,7 @@ final class CheckedProgramAssembler {
         }
         return new ModuleReading(module, bodies, checked, signatures, implementations,
                 compositions, checks,
-                dataOf(declarations, Shapes.publishedDeclarations(db), shapes),
+                dataOf(declarations, db, shapes, codecDefs),
                 rowsOf(db, module), requirementsOf(requirements), published);
     }
 
@@ -638,12 +645,12 @@ final class CheckedProgramAssembler {
      * {@link CheckedData.WithFields#fields} and {@link CheckedData.Sum#cases} — and those are the
      * ones said out loud.
      */
-    private static List<CheckedData> dataOf(Hir.Module declarations,
-                                           PublishedDeclarations published,
-                                           Map<TypeSymbol.AtModule, ValueShape> shapes) {
+    private static List<CheckedData> dataOf(Hir.Module declarations, Db db,
+                                           Map<TypeSymbol.AtModule, ValueShape> shapes,
+                                           Map<String, Derived.Def> codecDefs) {
         List<CheckedData> declared = new ArrayList<>();
         for (Hir.Def def : declarations.defs()) {
-            declared.add(declaredAs(def, published, shapes));
+            declared.add(declaredAs(def, db, shapes, codecDefs));
         }
         return declared;
     }
@@ -655,12 +662,20 @@ final class CheckedProgramAssembler {
      * of thing — they resolve and type alike and a value of either lays out alike — and this is
      * where that stops being something two readings agree about.
      */
-    private static CheckedData declaredAs(Hir.Def def, PublishedDeclarations published,
-                                          Map<TypeSymbol.AtModule, ValueShape> shapes) {
+    private static CheckedData declaredAs(Hir.Def def, Db db,
+                                          Map<TypeSymbol.AtModule, ValueShape> shapes,
+                                          Map<String, Derived.Def> codecDefs) {
         return switch (def) {
-            case Hir.Data data -> checkedDataOf(data, shapes);
-            case Hir.SumData sum -> new CheckedData.Sum(sum.declares(),
-                    AtomSpace.subjectAtoms(Type.ref(sum.declares()), published));
+            case Hir.Data data -> checkedDataOf(data, shapes, codecDefs);
+            case Hir.SumData sum -> {
+                // Asked of the store and not settled here: this is a `Type -> answer` question, and
+                // the answer belongs to whichever check-stage query already answers it for every
+                // other reader — never to a second place that works it out again.
+                Boundary.Alternatives alternatives = db.ask(new Shapes.TypeAlternatives(
+                        sum.declares().key().module(), Type.ref(sum.declares()))).value();
+                yield new CheckedData.Sum(sum.declares(), alternatives.atoms(),
+                        projectRepresentation(alternatives.representation()));
+            }
             case Hir.UnitData unit -> new CheckedData.Unit(unit.declares());
         };
     }
@@ -680,7 +695,8 @@ final class CheckedProgramAssembler {
      * codec is generated from.
      */
     private static CheckedData checkedDataOf(Hir.Data data,
-                                             Map<TypeSymbol.AtModule, ValueShape> shapes) {
+                                             Map<TypeSymbol.AtModule, ValueShape> shapes,
+                                             Map<String, Derived.Def> codecDefs) {
         ValueShape shape = shapes.get(data.declares());
         if (shape == null) {
             // The module was taken as checked, and a declaration of it has no answer for what a
@@ -689,19 +705,125 @@ final class CheckedProgramAssembler {
             throw new IllegalStateException("`" + data.declares() + "` was taken as checked and"
                     + " the check said nothing about what a value of it is");
         }
-        return data.newtype() ? new CheckedData.Newtype(shape) : new CheckedData.Product(shape);
+        List<CheckedCodecShape> codecShapes = codecShapesOf(data, shape, codecDefs);
+        return data.newtype() ? new CheckedData.Newtype(shape, codecShapes)
+                : new CheckedData.Product(shape, codecShapes);
     }
 
     /**
-     * What the behavior takes and answers, as types.
-     *
-     * <p>The reading of a boundary the compiler's own signature carries as well — which of a
-     * {@code Map}'s key readings admitted it, and the witness that says so — is left behind here.
-     * That witness offers the module as it was parsed, so a signature handed over whole would put
-     * the syntax tree two hops from a behavior's declared output.
+     * What each of {@code shape}'s fields carries across the boundary, in the same order — read
+     * off the shape {@link Deriver} already derived rather than derived again here.
      */
-    private static CheckedSignature signatureOf(Sig signature) {
-        return new CheckedSignature(signature.inputTypes(), signature.outputType());
+    private static List<CheckedCodecShape> codecShapesOf(Hir.Data data, ValueShape shape,
+                                                          Map<String, Derived.Def> codecDefs) {
+        Derived.Def derived = codecDefs.get(data.declares().name());
+        if (!(derived instanceof Derived.Data withCodec)) {
+            // Present for every product this compile checked (`Shapes.DerivedDeclarations` only
+            // leaves one out where a field of it names no type, which is refused before a module
+            // reaches here) — so a product with a `ValueShape` and nothing here is the two readings
+            // of this module having come apart, the same disagreement `checkedDataOf` refuses above.
+            throw new IllegalStateException("`" + data.declares() + "` was taken as checked and"
+                    + " nothing here derived what its fields carry across the boundary");
+        }
+        Map<String, CodecShape> byField = withCodec.fieldShapes();
+        List<CheckedCodecShape> codecShapes = new ArrayList<>(shape.fields().size());
+        for (ValueShape.Field field : shape.fields()) {
+            CodecShape fieldShape = byField.get(field.name());
+            if (fieldShape == null) {
+                // The two readings of this declaration's fields — what a value is made of and what
+                // each field carries across the boundary — are worked out by two different walks,
+                // and a name one of them has that the other does not is those two walks having come
+                // apart on this declaration, not a field a reader can be handed nothing for.
+                throw new IllegalStateException("`" + data.declares() + "` was taken as checked and"
+                        + " nothing here derived what its field `" + field.name()
+                        + "` carries across the boundary");
+            }
+            codecShapes.add(projectCodecShape(fieldShape));
+        }
+        return codecShapes;
+    }
+
+    /** {@code checked}, carried over without the boundary-admission witnesses it was built from. */
+    private static CheckedCodecShape projectCodecShape(CodecShape checked) {
+        return switch (checked) {
+            case CodecShape.Scalar s -> new CheckedCodecShape.Scalar(s.kind());
+            case CodecShape.Named n -> new CheckedCodecShape.Named(n.admitted().name());
+            case CodecShape.ListOf l ->
+                    new CheckedCodecShape.ListOf(projectCodecShape(l.element()));
+            case CodecShape.SetOf s -> new CheckedCodecShape.SetOf(projectCodecShape(s.element()));
+            case CodecShape.MapOf m -> new CheckedCodecShape.MapOf(m.key().representation(),
+                    projectCodecShape(m.value()));
+            case CodecShape.OptionOf o ->
+                    new CheckedCodecShape.OptionOf((CheckedCodecShape.Bare) projectCodecShape(o.present()));
+        };
+    }
+
+    /**
+     * What the behavior takes and answers, as the checked boundary shape.
+     *
+     * <p>The compiler's own {@link BoundaryInput}/{@link BoundaryOutput} are projected rather than
+     * handed over whole: each holds a witness — which of a {@code Map}'s key readings admitted it —
+     * that offers the module as it was parsed, so handing one over whole would put the syntax tree
+     * two hops from a behavior's declared output. What is kept is the answer the witness proves,
+     * never the witness.
+     */
+    private static CheckedSignature signatureOf(Sig signature, String moduleName, Db db) {
+        List<CheckedBoundaryInput> inputs = new ArrayList<>(signature.ins().size());
+        for (BoundaryInput in : signature.ins()) {
+            inputs.add(projectInput(in));
+        }
+        return new CheckedSignature(inputs, projectOutput(signature.out(), moduleName, db));
+    }
+
+    /** {@code checked}, carried over without the admission witness it was made from. */
+    private static CheckedBoundaryInput projectInput(BoundaryInput checked) {
+        return switch (checked) {
+            case BoundaryInput.Scalar s -> new CheckedBoundaryInput.Scalar(s.scalar());
+            case BoundaryInput.Nominal n -> new CheckedBoundaryInput.Nominal(n.name());
+            case BoundaryInput.ListOf l -> new CheckedBoundaryInput.ListOf(projectInput(l.element()));
+            case BoundaryInput.SetOf s -> new CheckedBoundaryInput.SetOf(projectInput(s.element()));
+            case BoundaryInput.MapOf m ->
+                    new CheckedBoundaryInput.MapOf(m.key().representation(), projectInput(m.value()));
+        };
+    }
+
+    /**
+     * {@code checked}, carried over the same way. A union of cases nobody named together carries
+     * its wire cases and their form beside the union itself — asked of the store rather than
+     * settled here, the same {@link souther.compiler.query.Shapes.TypeAlternatives} a named sum's
+     * cases answer from (spec §sum-discrimination) — rather than left for a reader to work out from
+     * the union's own members, which are not descended the way a boundary's cases are.
+     */
+    private static CheckedBoundaryOutput projectOutput(BoundaryOutput checked, String moduleName, Db db) {
+        return switch (checked) {
+            case BoundaryOutput.Scalar s -> new CheckedBoundaryOutput.Scalar(s.scalar());
+            case BoundaryOutput.Nominal n -> new CheckedBoundaryOutput.Nominal(n.name());
+            case BoundaryOutput.ListOf l ->
+                    new CheckedBoundaryOutput.ListOf(projectOutput(l.element(), moduleName, db));
+            case BoundaryOutput.SetOf s ->
+                    new CheckedBoundaryOutput.SetOf(projectOutput(s.element(), moduleName, db));
+            case BoundaryOutput.MapOf m -> new CheckedBoundaryOutput.MapOf(
+                    m.key().representation(), projectOutput(m.value(), moduleName, db));
+            case BoundaryOutput.Cases c -> {
+                // `c.type()` answers `Type` — the interface every case here answers — but a union
+                // is what this case was admitted from and the only thing it could be.
+                Type.Union union = (Type.Union) c.type();
+                Boundary.Alternatives alternatives =
+                        db.ask(new Shapes.TypeAlternatives(moduleName, union)).value();
+                yield new CheckedBoundaryOutput.Cases(union, alternatives.atoms(),
+                        projectRepresentation(alternatives.representation()));
+            }
+        };
+    }
+
+    /** {@code representation}, carried over: enumeration or discriminated, and the key where it is
+     *  one (spec §sum-discrimination). */
+    private static CheckedAlternativesForm projectRepresentation(Boundary.Representation representation) {
+        return switch (representation) {
+            case Boundary.Representation.Enumeration _ -> new CheckedAlternativesForm.Enumeration();
+            case Boundary.Representation.Discriminated d ->
+                    new CheckedAlternativesForm.Discriminated(d.key());
+        };
     }
 
     /**
