@@ -46,9 +46,9 @@ class CompileStringLibTest {
     private static final String A_CIRCUMFLEX = new String(Character.toChars(0x00E2));
 
     /** The seam {@code append}/{@code ++} share: {@code "a"} and {@link #COMBINING_CIRCUMFLEX} are
-     *  each NFC on their own, but their join is not until canonicalized — the witness ADR-0120
-     *  exists for. {@code ++} and {@code append} must answer alike, since the specification states
-     *  one as the other (spec §stdlib-string). */
+     *  each NFC on their own, but their join is not until canonicalized. {@code ++} and
+     *  {@code append} must answer alike, since the specification states one as the other
+     *  (spec §stdlib-string). */
     @Test
     void concatOperatorAndAppendCanonicalizeTheSeamAlike() throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""

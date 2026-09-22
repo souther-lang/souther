@@ -374,6 +374,18 @@ final class Descriptors {
     static final MethodTypeDesc MTD_Path_append = MethodTypeDesc.of(CD_RPath, CD_String);
     static final MethodTypeDesc MTD_mapKeys = MethodTypeDesc.of(CD_Map, CD_Map, CD_Function);
     static final MethodTypeDesc MTD_mapKeysWith = MethodTypeDesc.of(CD_Map, CD_Function, CD_Map);
+    /** {@code Maps.mapValuesWith(Function, Map)} — a crossing's canonicalization recursing into a
+     *  {@code Map}'s values ({@code CanonicalizeAtCrossing}). */
+    static final MethodTypeDesc MTD_mapValuesWith = MethodTypeDesc.of(CD_Map, CD_Function, CD_Map);
+    /** {@code Lists.map(Function, List)} — a crossing's canonicalization recursing into a
+     *  {@code List}'s elements. */
+    static final MethodTypeDesc MTD_Lists_map = MethodTypeDesc.of(CD_List, CD_Function, CD_List);
+    /** {@code Sets.map(Function, Set)} — the same, deduplicating where canonicalization collapses
+     *  two elements into one. */
+    static final MethodTypeDesc MTD_Sets_map = MethodTypeDesc.of(CD_Set, CD_Function, CD_Set);
+    /** {@code Options.mapWith(Function, Option)} — the same, keeping the {@code Option} shape
+     *  rather than unwrapping it the way {@link #MTD_encodedOrNull} does. */
+    static final MethodTypeDesc MTD_optionMapWith = MethodTypeDesc.of(CD_Option, CD_Function, CD_Option);
     /** {@code Encoder.contramap(Function)}: pre-processes the value an element encoder receives —
      * a nested Set is listed, a nested newtype-keyed Map has its keys rendered bare. */
     static final MethodTypeDesc MTD_Rencoder_contramap = MethodTypeDesc.of(CD_REncoder, CD_Function);

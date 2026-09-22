@@ -93,9 +93,9 @@ final class ConstantAlgebra {
                     ? Optional.of(x || y) : Optional.empty();
             case ADD, SUB, MUL -> arith(op, a, b);
             // `++` appends two strings or two lists (spec §an-operator-takes-the-types-it-is-defined-for);
-            // the string case folds, and a list is not a constant here to begin with. Canonicalized
-            // (ADR-0120), the same seam String.append/Strings.append has: a folded `"a" ++ pad` and
-            // the same expression run at the runtime it would otherwise be compiled to cannot answer
+            // the string case folds, and a list is not a constant here to begin with. Canonicalized,
+            // the same seam String.append/Strings.append has: a folded `"a" ++ pad` and the same
+            // expression run at the runtime it would otherwise be compiled to cannot answer
             // differently just because one of them happened at compile time.
             case CONCAT -> a instanceof String x && b instanceof String y
                     ? Optional.of(Normalization.nfc(x + y)) : Optional.empty();

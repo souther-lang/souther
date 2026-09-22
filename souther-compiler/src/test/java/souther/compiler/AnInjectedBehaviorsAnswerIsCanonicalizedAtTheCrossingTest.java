@@ -14,11 +14,11 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * An injected behavior's implementation is Java, supplied from outside the compiler — exactly as
- * foreign as a decoder's input, and answering just as freely with text that has left NFC. ADR-0096
- * named a derived decoder's string leaf and a source literal as the two doors text arrives through;
- * a required behavior's bare {@code String} answer is a third one it did not name, and
- * {@code BodyGen.requiredCall} (ADR-0120) canonicalizes it at the crossing the same way.
+ * Every place Java crosses into a Souther value that the boundary's original two doors (a derived
+ * decoder's leaf, a source literal) did not name: an injected behavior's answer, a generated
+ * behavior's public {@code apply} called directly, and — recursively — a {@code List} one of them
+ * answers with. {@code CanonicalizeAtCrossing} closes all three the same way a decoder's leaf does,
+ * and does it before an {@code ensures} check that cannot be proven statically ever reads the value.
  */
 class AnInjectedBehaviorsAnswerIsCanonicalizedAtTheCrossingTest {
 
@@ -63,6 +63,122 @@ class AnInjectedBehaviorsAnswerIsCanonicalizedAtTheCrossingTest {
         Object out = Codecs.apply(run, true);
 
         assertEquals(A_CIRCUMFLEX, ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("v"));
+    }
+
+    private static final String MODULE_WITH_ENSURES = """
+            module demo
+
+            data Out = { v: String }
+
+            behavior source : (seed: Bool) -> String
+                ensures (seed || Bool.not(seed)) && String.length(value) == 1
+
+            behavior run : (unused: Bool) -> Out constructs Out
+                depends on source
+
+            let run (unused, source) = Out { v = source(unused) }
+            """;
+
+    private static final String IMPL_SRC_WITH_SEED = """
+            package demo;
+            public final class SourceImpl extends Source {
+                public String apply(Boolean seed) {
+                    return "a" + java.lang.Character.toString(0x0302);
+                }
+            }
+            """;
+
+    /**
+     * The {@code ensures} check runs at the crossing (it cannot be proven statically — the
+     * implementation is Java), so it has to see the canonicalized answer, not the two code points
+     * {@code IMPL_SRC_WITH_SEED} actually returns. Before {@code CanonicalizeAtCrossing} ran ahead
+     * of {@code checkAtCrossing} rather than after it, this same module raised an
+     * {@code EnsuresFailure} on a value the carrier invariant says is one code point.
+     */
+    @Test
+    void theRuntimeEnsuresCheckSeesTheCanonicalAnswerNotTheRawOne() throws Exception {
+        Map<String, ClassFileImage> classes = new HashMap<>(Compiler.compile(MODULE_WITH_ENSURES));
+        classes.put("demo.SourceImpl", compileSubclass(classes, "demo.SourceImpl", IMPL_SRC_WITH_SEED));
+
+        BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
+        Class<?> source = loader.loadClass("demo.Source");
+        Object impl = loader.loadClass("demo.SourceImpl").getConstructor().newInstance();
+        Object run = loader.loadClass("demo.Run").getMethod("bind", source).invoke(null, impl);
+
+        Object out = Codecs.apply(run, true);
+
+        assertEquals(A_CIRCUMFLEX, ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("v"));
+    }
+
+    private static final String IDENTITY_MODULE = """
+            module demo
+
+            behavior identity : (s: String) -> String
+            let identity (s) = s
+            """;
+
+    /**
+     * A generated behavior's {@code apply} is public — a Java caller reaches it directly, not only
+     * through another generated class — so a decomposed {@code String} handed in that way is a
+     * crossing exactly as foreign as a decoder's input or an injected behavior's answer, and
+     * {@code Backend.generateSpecFn} canonicalizes it before the body ({@code let identity (s) = s})
+     * ever sees {@code s}.
+     */
+    @Test
+    void aJavaCallersArgumentToAGeneratedBehaviorArrivesComposed() throws Exception {
+        Map<String, ClassFileImage> classes = Compiler.compile(IDENTITY_MODULE);
+        BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
+        Object identity = Emitted.behavior(loader, "demo", "identity").getConstructor().newInstance();
+
+        String decomposed = "a" + new String(Character.toChars(0x0302));
+        Object answer = Codecs.apply(identity, decomposed);
+
+        assertEquals(A_CIRCUMFLEX, answer);
+    }
+
+    private static final String LIST_MODULE = """
+            module demo
+
+            data Out = { names: List<String> }
+
+            behavior source : () -> List<String>
+
+            behavior run : (unused: Bool) -> Out constructs Out
+                depends on source
+
+            let run (unused, source) = Out { names = source() }
+            """;
+
+    private static final String LIST_IMPL_SRC = """
+            package demo;
+            import java.util.List;
+            public final class SourceImpl extends Source {
+                public List<String> apply() {
+                    return List.of("a" + java.lang.Character.toString(0x0302));
+                }
+            }
+            """;
+
+    /**
+     * A required behavior answering {@code List<String>} crosses the same door a bare {@code String}
+     * does, and {@code CanonicalizeAtCrossing} recurses into the list's elements the same way
+     * {@code CodecGen}'s encoder side already recurses into a nested container, rather than leaving
+     * this shape as a documented but uncanonicalized exception to the carrier invariant.
+     */
+    @Test
+    void aRequiredBehaviorsListOfStringAnswerArrivesComposed() throws Exception {
+        Map<String, ClassFileImage> classes = new HashMap<>(Compiler.compile(LIST_MODULE));
+        classes.put("demo.SourceImpl", compileSubclass(classes, "demo.SourceImpl", LIST_IMPL_SRC));
+
+        BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
+        Class<?> source = loader.loadClass("demo.Source");
+        Object impl = loader.loadClass("demo.SourceImpl").getConstructor().newInstance();
+        Object run = loader.loadClass("demo.Run").getMethod("bind", source).invoke(null, impl);
+
+        Object out = Codecs.apply(run, true);
+
+        assertEquals(java.util.List.of(A_CIRCUMFLEX),
+                ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("names"));
     }
 
     private static ClassFileImage compileSubclass(Map<String, ClassFileImage> generated,

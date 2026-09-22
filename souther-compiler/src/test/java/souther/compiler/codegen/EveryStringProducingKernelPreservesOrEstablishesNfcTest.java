@@ -6,6 +6,7 @@ import souther.compiler.core.Kernel;
 import souther.compiler.core.KernelSignatures;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.EnumSet;
 import java.util.Set;
@@ -19,8 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * either preserves NFC by construction or establishes it, the disjoint union {@code Strings.nfc}'s
  * three kinds of caller split into. Written as a closed-world check over a mechanically-derived
  * population rather than three hand-kept sets naming the same kernels a second time, because a hand
- * kept set is exactly the shape that missed four decoder paths before ADR-0096's leaf was written
- * as one method: it looks complete until the next kernel is added beside it.
+ * kept set is exactly the shape that missed four decoder paths before the boundary's canonicalizing
+ * leaf was written as one method: it looks complete until the next kernel is added beside it.
  *
  * <p>The population is read off {@link KernelSignatures#signatureOf}, the checker's own resolved
  * {@link Type} for what a kernel answers — not a second parse of the {@code .sou} source a kernel's
@@ -28,10 +29,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * checker, the codegen table and the stdlib loader. A {@code Type} is walked structurally through
  * {@link Type.ListOf}/{@link Type.SetOf}/{@link Type.OptionOf}/{@link Type.MapOf}/{@link Type.TupleOf}
  * rather than matched by name, so a kernel later declared to answer, say, {@code Option<String>}
- * lands in the population without this file's own list of shapes needing to grow to see it. Not
- * walked into a {@link Type.Union}'s members: none of today's kernels answer one that carries a
- * {@code String}, and resolving what a union member's own declaration is would ask the checker's
- * symbol table a second question this file has no business asking.
+ * lands in the population without this file's own list of shapes needing to grow to see it.
+ *
+ * <p>A {@link Type.Union} fails the run rather than reading as "does not reach String": none of
+ * today's kernels answer one that carries a {@code String}, but a closed-world test that reads an
+ * unhandled shape as the negative answer is the same mistake a hand-kept set makes, one level
+ * removed — it looks complete until a kernel's result becomes a union. Deciding what NFC
+ * classification means for a union member is this test's business the day one exists; reading past
+ * it silently is not.
  */
 class EveryStringProducingKernelPreservesOrEstablishesNfcTest {
 
@@ -107,7 +112,26 @@ class EveryStringProducingKernelPreservesOrEstablishesNfcTest {
             case Type.MapOf t -> resultReachesString(t.key()) || resultReachesString(t.value());
             case Type.TupleOf t -> t.elements().stream().anyMatch(
                     EveryStringProducingKernelPreservesOrEstablishesNfcTest::resultReachesString);
+            case Type.Union u -> u.members().stream().anyMatch(
+                    EveryStringProducingKernelPreservesOrEstablishesNfcTest::memberReachesString);
             default -> false;
+        };
+    }
+
+    /** A union member's own {@code Type.Prim} is resolvable with no symbol table (a primitive is
+     *  its own answer); a {@code LanguageCase} — {@code NotANumber}, {@code DivisionByZero} and the
+     *  like — is a compiler-built-in marker carrying no field of its own, so it cannot carry a
+     *  {@code String} either. Anything else a union could name is a declared type this file would
+     *  need the checker's symbol table to look inside, which it fails closed on rather than reading
+     *  as "does not reach String" by default — the same reason a bare {@code Type.Union} used to
+     *  fail closed before any kernel actually needed one resolved. */
+    private static boolean memberReachesString(TypeSymbol member) {
+        return switch (member) {
+            case TypeSymbol.Primitive p -> p.primitive() == Type.STRING;
+            case TypeSymbol.LanguageCase _ -> false;
+            default -> throw new AssertionError(
+                    "union member " + member + " is not a Primitive or a LanguageCase — decide how"
+                            + " NFC classification applies to it before this test can read past it");
         };
     }
 }

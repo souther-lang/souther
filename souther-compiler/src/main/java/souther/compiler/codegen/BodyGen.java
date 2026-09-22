@@ -1601,6 +1601,11 @@ final class BodyGen {
             // an answer enters the domain. What the arguments were has to survive the call to be
             // handed to the check, so they are put in slots first — the call consumes what it is
             // pushed.
+            //
+            // project, then canonicalize, then the ensures check, then the cast a caller reads: not
+            // project-check-canonicalize-cast, which would hold `ensures` to a value the carrier
+            // invariant has not established yet. CanonicalizeAtCrossing.emit runs on the Souther
+            // value project leaves, before checkAtCrossing hands anything to `Ensures.check`.
             List<Integer> saved = ctx.ensuresCheckOf(callee) instanceof EnsuresEnforcement.AtEachCrossing
                     ? new ArrayList<>() : null;
             if (ctx.isStandaloneRequired(callee)) {
@@ -1617,8 +1622,9 @@ final class BodyGen {
                 }
                 code.invokevirtual(ctx.cdBehavior(callee), "apply", desc);
                 project(callee, success);
+                CanonicalizeAtCrossing.emit(code, success);
                 checkAtCrossing(callee, saved);
-                stackCastAtCrossing(success);
+                stackCast(success);
                 return;
             }
             code.aload(0);
@@ -1628,28 +1634,9 @@ final class BodyGen {
             keepForTheCheck(saved);
             code.invokeinterface(CD_Behavior, "apply", MTD_apply);
             project(callee, success);
+            CanonicalizeAtCrossing.emit(code, success);
             checkAtCrossing(callee, saved);
-            stackCastAtCrossing(success);
-        }
-
-        /** {@link #stackCast}, plus canonicalization where {@code type} is {@code String}: an
-         *  injected behavior's implementation is Java, supplied from outside the compiler, so its
-         *  answer is exactly as foreign as a decoder's — a Java implementation of
-         *  {@code behavior now : () -> String} can hand back a decomposed spelling as freely as
-         *  JSON can. Not {@link #stackCast} itself, which every ordinary intra-language value
-         *  extraction also runs through and where the value is already domain-canonical by
-         *  construction; only a value that just crossed from outside needs re-establishing here.
-         *
-         * <p>Scoped to bare {@code String} only. A required behavior answering {@code List<String>},
-         * {@code Option<String>}, a {@code Map} keyed or valued by one, or a data whose own field is
-         * one, crosses the same door uncanonicalized still — the recursive walk a
-         * {@code List}/{@code Option}/{@code Map} carrying a {@code String} would need is not this
-         * fix's scope, and is tracked separately rather than claimed here. */
-        private void stackCastAtCrossing(Type type) {
-            stackCast(type);
-            if (type == Type.STRING) {
-                code.invokestatic(CD_Normalization, "nfc", MTD_nfc);
-            }
+            stackCast(success);
         }
 
         /** Keeps a copy of the boxed argument on the stack in a slot of its own, where a check is
@@ -1793,8 +1780,8 @@ final class BodyGen {
                     Type lt = genExpr(bin.left());
                     // `++` over two strings is Elm's appendable on String; the checker guarantees both
                     // sides are String here. `Strings.append`, not `String.concat`: NFC is not closed
-                    // under concatenation (ADR-0120), and this is the same join `String.append` names
-                    // — `a ++ b` and `append(a, b)` cannot answer differently.
+                    // under concatenation, and this is the same join `String.append` names — `a ++ b`
+                    // and `append(a, b)` cannot answer differently.
                     if (lt == Type.STRING) {
                         genExpr(bin.right());
                         code.invokestatic(CD_Strings, "append",

@@ -124,21 +124,34 @@ Not walked into a `Type.Union`'s members: none of today's kernels answer one tha
 table a question this test has no business asking. Left open until a kernel makes it a live
 question.
 
-### A required behavior's answer is canonicalized at the crossing
+### Every Java crossing is canonicalized by the type it declares, not by a per-site guess
 
-`BodyGen.requiredCall` canonicalizes a bare `String` result the same way a decoder canonicalizes its
-leaf — right where `stackCast` would otherwise hand the value straight to the caller, via a
-`stackCastAtCrossing` that adds one `Normalization.nfc` call when the declared type is `String`.
-`Backend.emitDataFactory` does the same for a `String`-typed field before it reaches `__construct`,
-since the same `protected` factory is what an injected behavior's Java subclass calls directly.
+`CanonicalizeAtCrossing` canonicalizes a value of a declared `Type` wherever Java hands one to the
+compiler, recursing into `List`/`Set`/`Option`/`Map` the same way `CodecGen`'s encoder side already
+composes a nested `Function` for those shapes — the identical technique turned around: instead of
+building an `Encoder`, it builds the plain `java.util.function.Function` the runtime's
+`Lists.map`/`Sets.map`/`Options.mapWith`/`Maps.mapValuesWith` take. Three call sites reach it:
 
-**Scoped to bare `String` only.** A required behavior answering `List<String>`, `Option<String>`, a
-`Map` keyed or valued by one, or a data whose own field is one of those, crosses the same door
-uncanonicalized still. Closing that needs a recursive, `Type`-driven canonicalizing transform over an
-already-materialized Java value — the same shape of problem a decoder solves by walking the *type*
-it is generating a decoder *for*, but here over a value that already exists — and is deliberately
-left for a follow-up rather than rushed into this decision. It is a known, named gap, not a silent
-one.
+- `BodyGen.requiredCall`, an injected behavior's answer — canonicalized *before* `checkAtCrossing`
+  runs `Ensures.check`, not after. The two were the wrong way around at first: `ensures` for a
+  relation that cannot be proven statically has to run at the crossing precisely because it is
+  checking a Java-supplied value, and checking it before establishing the carrier invariant would
+  hold `ensures` to a value ADR-0120 does not yet promise anything about.
+- `Backend.emitDataFactory`, a field a Java-supplied factory hands `__construct` — the same
+  `protected` factory an injected behavior's Java subclass calls directly.
+- `Backend.generateSpecFn`, the argument a Java caller hands a generated behavior's public `apply`
+  directly. This is a fourth boundary door beyond the two ADR-0096 named and the third
+  (`requiredCall`) this ADR already added: a generated behavior's `apply` is exactly as callable
+  from outside as a decoder is, and a Souther body — `let identity (s) = s` — has no decoder, no
+  literal and no injected behavior between it and whatever a Java caller passed.
+
+**Still narrower, named gaps.** Not walked into a data's own field, into a `Type.Union`'s members,
+or into a `Map`'s key/value when that `Map` sits inside another container — the first two are the
+same scope boundary `CodecGen`'s decoder side draws (construction and container recursion are two
+questions); the third is `CanonicalizeAtCrossing`'s own, since composing two captured functions (key
+and value) inside a further container's single captured function is a second kind of composition it
+does not build. A `List<String>` crossing any of these three doors is canonicalized; a
+`List<SomeDataWithAStringField>` or a `List<Map<String, String>>` is not.
 
 ### `reverse`'s law is retracted, not narrowed
 
@@ -200,3 +213,16 @@ arrived from outside; they now read every `String` that way, which is what makes
 
 `TheRuntimeAnswersEveryKernelAtItsDeclaredAbiTest` loses `STRING_APPEND` from the kernels a JDK
 method answers directly, since it now dispatches to `Strings.append` like the rest of the module.
+
+`EveryStringProducingKernelPreservesOrEstablishesNfcTest`'s structural walk fails closed on a
+`Type.Union` member it cannot resolve without the checker's symbol table, rather than reading an
+unhandled shape as "does not reach String" — the population it derives stopped being closed the
+moment a kernel's own result became one, and `STRING_TO_INT`/`STRING_TO_DECIMAL` already answer
+`Int | NotANumber`/`Decimal | NotANumber`; a `Primitive` member resolves on its own, a `LanguageCase`
+carries no field to hold a `String` in, and anything else stops the test until it is decided.
+
+`souther.runtime.Lists` gains `map`, `souther.runtime.Sets` gains `map`, `souther.runtime.Options`
+gains `mapWith`, and `souther.runtime.Maps` gains `mapValuesWith` — the codegen-internal
+counterparts `CanonicalizeAtCrossing` composes recursively, each taking a plain
+`java.util.function.Function` rather than the domain's own `Fn`, the same split
+`Options.encodedOrNull` already draws for the encoder side.
