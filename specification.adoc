@@ -4261,6 +4261,23 @@ the rest untouched; a code point outside the set — a zero-width space (U+200B)
 than being crossed. Both operations are stated over this one set, so `+words(trim(s)) == words(s)+`
 and no word `+words+` returns contains a String whitespace code point.
 
+[#string-case]
+**`+lowercase(s)+`/`+uppercase(s)+`** apply Unicode 18.0's default case conversion — full mapping,
+untailored — to every code point of `+s+`. Untailored means no locale is read: `+uppercase("i")+`
+is always `+"I"+`, never the Turkish `+"İ"+`. Full means the mapping is not the platform's simple
+one-to-one table, so a result can hold more code points than the input:
+`+uppercase("straße")+` is `+"STRASSE"+`, and lowercasing Turkish capital I with dot above
+(`+U+0130+`) gives `+"i"+` followed by a combining dot above, the untailored expansion — not the
+bare `+"i"+` a Turkish locale would give. One mapping is context-dependent rather than
+locale-dependent: Greek capital sigma lowercases to the final form `+ς+` only at the end of a cased
+run (`+lowercase("ΟΣ")+` is `+"ος"+`) and to `+σ+` everywhere else, including at the start of one
+(`+lowercase("ΟΣΑ")+` is `+"οσα"+`). The Unicode version is pinned the same way <<string-whitespace>>
+pins Unicode 18.0's `+White_Space+` property: a later Unicode version changing a mapping is a
+specification change, not a platform upgrade a JVM or WASM host can make unnoticed (ADR-0119).
+
+Neither operation promises its result is NFC. <<string-canonical>>'s canonicalization is stated over
+where text *arrives*, not over every operation that produces a `+String+`.
+
 The middle row is the rest of what Souther's types allow, which have no `+Char+`, `+Maybe+` or `+Float+`. `+split(sep, s)+` splits by a separator into `+List<String>+`, keeping empty pieces (`+split(",", "a,,b")+` is `+["a", "", "b"]+`). `+words(s)+` splits by runs of String whitespace (<<string-whitespace>>), dropping empty pieces. `+join(sep, xs)+` joins with a separator. `+replace(target, replacement, s)+` replaces every occurrence of `+target+`. `+fromInt(n)+` makes an `+Int+` a decimal string. `+concat(xs)+` joins a `+List<String>+` with no separator (equal to `+join("", xs)+`). The primary subject string is last (<<pipe>>). There is no `+Char+` type and no character-mapping operation.
 
 `+isEmpty(s)+` is `+length(s) == 0+`, the sibling of `+List.isEmpty+` / `+Map.isEmpty+` / `+Set.isEmpty+`. It belongs in a predicate — `+filter(piece -> not(String.isEmpty(piece)))+` — rather than in a newtype invariant: a derived decoder recognises `+String.length(value) >= 1+` and reports a violation as `+too_short+` with its bound, while the helper's inlined form leaves it the generic `+invariant_violation+` (<<decoder-error>>).

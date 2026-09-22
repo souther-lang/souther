@@ -459,8 +459,8 @@ final class Intrinsics {
         t.put(Kernel.STRING_TO_INT, rt(CD_Strings, "toInt", order(0)));
         t.put(Kernel.STRING_TO_DECIMAL, rt(CD_Strings, "toDecimal", order(0)));
         t.put(Kernel.STRING_LENGTH, rt(CD_Strings, "length", order(0)));
-        t.put(Kernel.STRING_LOWERCASE, jdk(CD_String, "toLowerCase", mtd(CD_String), order(0)));
-        t.put(Kernel.STRING_UPPERCASE, jdk(CD_String, "toUpperCase", mtd(CD_String), order(0)));
+        t.put(Kernel.STRING_LOWERCASE, rt(CD_Strings, "lowercase", order(0)));
+        t.put(Kernel.STRING_UPPERCASE, rt(CD_Strings, "uppercase", order(0)));
         t.put(Kernel.STRING_CONTAINS, jdk(CD_String, "contains", mtd(bool, CD_CharSequence), order(1, 0)));
         t.put(Kernel.STRING_STARTS_WITH, jdk(CD_String, "startsWith", mtd(bool, CD_String), order(1, 0)));
         t.put(Kernel.STRING_ENDS_WITH, jdk(CD_String, "endsWith", mtd(bool, CD_String), order(1, 0)));
