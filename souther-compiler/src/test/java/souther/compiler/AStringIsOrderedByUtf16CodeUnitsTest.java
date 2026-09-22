@@ -10,9 +10,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * {@code <} {@code <=} {@code >} {@code >=} on {@code String} compare the UTF-16 code-unit
  * sequence, not the code points {@link AStringIsMeasuredInCodePointsTest} measures {@code length},
  * {@code slice} and the rest of the module by (spec §equality, §string-code-points). The two orders
- * disagree wherever a surrogate pair sits beside a basic-plane character above it: {@code 𠮷} is
- * U+20BB7, one code point above {@code ￥} (U+FFE5), but written D842 DFB7 it begins with a unit
- * below {@code ￥}'s FFE5, so by code unit {@code 𠮷} is the smaller of the two.
+ * disagree wherever a surrogate pair sits beside a basic-plane character whose code point is below
+ * it but whose single code unit is above the pair's first unit: {@code 𠮷} is U+20BB7, whose
+ * code-point value is above {@code ￥}'s (U+FFE5), but written D842 DFB7 it begins with the unit
+ * D842, which is below {@code ￥}'s single unit FFE5 — so by code unit {@code 𠮷} is the smaller of
+ * the two, the reverse of their code-point order.
  *
  * <p>This is the language-level contract, not the machinery underneath it —
  * {@code RuntimeOrder}'s own laws hold the compiler's automata to {@link String#compareTo}, which
@@ -22,7 +24,8 @@ class AStringIsOrderedByUtf16CodeUnitsTest {
 
     /** A supplementary-plane kanji: one code point, two UTF-16 units — D842 DFB7. */
     private static final String YOSHI = "𠮷";
-    /** One code point, one UTF-16 unit — FFE5, below D842 but above D7FF. */
+    /** One code point, one UTF-16 unit — FFE5, above D842 and above the surrogate block entirely
+     *  (D800-DFFF), so it never collides with either half of a pair. */
     private static final String YEN = "￥";
 
     private static final String MODULE = """
@@ -57,8 +60,11 @@ class AStringIsOrderedByUtf16CodeUnitsTest {
         assertEquals(false, compares("i.a > i.b", YOSHI, YEN));
     }
 
+    /** Not part of the spec witness above — {@code java.lang.String#compareTo} is an oracle, not
+     *  the contract. This is a conformance check that the JVM carrier implements the order the
+     *  spec now states, which happens to be the same order the first test already exercises. */
     @Test
-    void orderingAgreesWithJavaLangStringCompareTo() throws Exception {
+    void jvmCarrierImplementsTheSpecifiedOrder() throws Exception {
         assertEquals(YOSHI.compareTo(YEN) < 0, compares("i.a < i.b", YOSHI, YEN));
         assertEquals(YEN.compareTo(YOSHI) < 0, compares("i.a < i.b", YEN, YOSHI));
     }
