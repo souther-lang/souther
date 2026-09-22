@@ -1382,8 +1382,15 @@ public final class Backend {
      * a type it keeps to itself, and a reader does not check that again. A jar written before it
      * was not held to that, and a reader that trusted one would emit a class the JVM refuses when
      * it runs.
+     *
+     * <p>Version 23 strengthens what a data's own generated constructor promises: every field that
+     * reaches a {@code String} is canonicalized before it is stored, whichever of a data's several
+     * construction doors a caller used to reach it. A crossing reads a named type's value without
+     * walking into its fields, trusting that guarantee instead. A jar written before this version
+     * has a constructor that does not give it, so a reader that trusted one could observe a field
+     * value the carrier invariant says cannot exist.
      */
-    public static final int BOUNDARY_VERSION = 22;
+    public static final int BOUNDARY_VERSION = 23;
 
     /** Emits the class a module's own declarations are published on, carrying {@code declarations}.
      * What it says is the caller's; that it is built like every other generated class — the same Java

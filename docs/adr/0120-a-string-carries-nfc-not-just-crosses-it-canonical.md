@@ -259,7 +259,17 @@ moment a kernel's own result became one, and `STRING_TO_INT`/`STRING_TO_DECIMAL`
 carries no field to hold a `String` in, and anything else stops the test until it is decided.
 
 `souther.runtime.Lists` gains `map`, `souther.runtime.Sets` gains `map`, `souther.runtime.Options`
-gains `mapWith`, and `souther.runtime.Maps` gains `mapValuesWith` — the codegen-internal
-counterparts `CanonicalizeAtCrossing` composes recursively, each taking a plain
+gains `mapWith`, and `souther.runtime.Maps` gains `canonicalizeWith`/`canonicalizeWithCaptured` — the
+codegen-internal counterparts `CanonicalizeAtCrossing` composes recursively, each taking a plain
 `java.util.function.Function` rather than the domain's own `Fn`, the same split
 `Options.encodedOrNull` already draws for the encoder side.
+
+`Backend.BOUNDARY_VERSION` moves 22 → 23. A generated data's constructor now canonicalizes every
+field that reaches a `String` itself, regardless of which construction door a caller used to reach
+it — the inductive argument above, that a crossing does not need to walk into a `Type.Ref` because
+the value was already canonical by construction, depends on that. A jar built at 22 has no such
+guarantee in its own generated constructors, so a reader that trusted one anyway could observe a
+field value the carrier invariant says cannot exist. ADR-0063's own carve-out — a change confined to
+the inside of a generated method does not move the number — is written for a change that leaves
+what a reader relies on unchanged; this one adds something a reader now relies on, so it stays with
+the rule the carve-out describes rather than the exception.
