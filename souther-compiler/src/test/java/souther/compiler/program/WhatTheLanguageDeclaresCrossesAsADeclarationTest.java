@@ -1,7 +1,7 @@
 package souther.compiler.program;
 
 import souther.compiler.DefaultStdlib;
-import souther.compiler.core.KernelSignatures;
+import souther.compiler.core.KernelContracts;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
@@ -80,8 +80,8 @@ class WhatTheLanguageDeclaresCrossesAsADeclarationTest {
     /** What the language declares its kernels to take, as an assembled program carries them. The
      *  fixtures below are about which world an address belongs to, so everything else about them is
      *  a program as one really is. */
-    private static KernelSignatures kernels() {
-        return DefaultStdlib.get().kernelSignatures();
+    private static KernelContracts kernels() {
+        return KernelContracts.of(DefaultStdlib.get().kernelSignatures());
     }
 
     private static TypeSymbol.AtModule named(String module, String name) {

@@ -1,5 +1,7 @@
 package souther.compiler.core;
 
+import souther.compiler.abort.AbortKind;
+import souther.compiler.abort.AbortSet;
 import souther.compiler.types.ValueName;
 
 import java.util.Map;
@@ -107,8 +109,31 @@ public sealed interface EnsuresEnforcement {
         return switch (this) {
             case AtTheCallee(Contract c) -> c;
             case AtEachCrossing(Contract c) -> c;
-            case NoContract ignored -> null;
-            case NotDecidedHere ignored -> null;
+            case NoContract _ -> null;
+            case NotDecidedHere _ -> null;
+        };
+    }
+
+    /**
+     * Every {@link AbortKind} a run of the crossing this enforces can end without a value for:
+     * {@link AbortKind#ENSURES_NOT_HELD} where something here actually checks a clause, and
+     * {@link AbortSet#NONE} where nothing does.
+     *
+     * <p>This is the {@code ensures} half of what {@link souther.compiler.abort.AbortSites} answers
+     * for a {@code Core} site — not folded into that walker, because where a clause is checked is
+     * already a semantic object of its own and asking it a second question here is cheaper and more
+     * honest than reading the same fact out of a tree walk. {@link NotDecidedHere} answers
+     * {@link AbortSet#NONE} for the same reason {@link #contract} answers no contract for it: this
+     * compilation has not decided whether the crossing checks anything, and an output reading
+     * {@code NONE} from an undecided crossing is reading exactly that — not that the crossing is
+     * known to never abort.
+     */
+    default AbortSet aborts() {
+        return switch (this) {
+            case AtTheCallee _ -> AbortSet.of(AbortKind.ENSURES_NOT_HELD);
+            case AtEachCrossing _ -> AbortSet.of(AbortKind.ENSURES_NOT_HELD);
+            case NoContract _ -> AbortSet.NONE;
+            case NotDecidedHere _ -> AbortSet.NONE;
         };
     }
 

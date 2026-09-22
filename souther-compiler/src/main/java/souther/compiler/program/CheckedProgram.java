@@ -1,8 +1,8 @@
 package souther.compiler.program;
 
 import souther.compiler.core.Kernel;
-import souther.compiler.core.KernelSignature;
-import souther.compiler.core.KernelSignatures;
+import souther.compiler.core.KernelContract;
+import souther.compiler.core.KernelContracts;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -106,19 +106,20 @@ public final class CheckedProgram {
      */
     private final Map<ValueName.Behavior, BehaviorTarget> behaviors;
     /**
-     * What each kernel of the language was declared to take and answer.
+     * What each kernel of the language was declared to take and answer, and every way a call to it
+     * can end without a value instead.
      *
      * <p>Held once for the program and not on the calls that reach one. Which operation a call
-     * reaches is a fact about that call; what the operation accepts is a fact about the language
-     * this program was checked with, and the same for every call in every module — written onto
-     * each call site it would be one statement copied as many times as the program happens to reach
-     * the library.
+     * reaches is a fact about that call; what the operation accepts and how it can end without a
+     * value are facts about the language this program was checked with, and the same for every call
+     * in every module — written onto each call site it would be one statement copied as many times
+     * as the program happens to reach the library.
      */
-    private final KernelSignatures kernels;
+    private final KernelContracts kernels;
 
     CheckedProgram(List<CheckedModule> modules, List<CheckedData> languageDeclarations,
                    List<CheckedData> declaredOnThePath,
-                   Map<ValueName.Behavior, BehaviorTarget> behaviors, KernelSignatures kernels) {
+                   Map<ValueName.Behavior, BehaviorTarget> behaviors, KernelContracts kernels) {
         this.modules = List.copyOf(modules);
         Map<String, CheckedModule> named = new LinkedHashMap<>();
         for (CheckedModule module : this.modules) {
@@ -300,25 +301,29 @@ public final class CheckedProgram {
     }
 
     /**
-     * What {@code kernel} was declared to take and to answer.
+     * What {@code kernel} was declared to take and to answer, and every way a call to it can end
+     * without a value instead.
      *
      * <p>The declaration behind a call this program's bodies reach. A call says which operation it
      * reaches ({@link souther.compiler.core.Core.Reached.OfKernel}) and every node carries the type
      * the checker settled for it, and those answer what arrived rather than what the callee accepts:
      * the two part company wherever a declared parameter is a type a value can arrive narrower than,
-     * which a sum-typed parameter is. An output building a boundary form for a call reads it here.
+     * which a sum-typed parameter is. An output building a boundary form for a call reads it here —
+     * and reads {@link KernelContract#aborts} here too, rather than deriving what a kernel can end
+     * without a value for from its own reading of {@code souther-runtime} or of the specification
+     * prose the two would otherwise have been read from separately.
      *
      * <p>Total over the kernels, and never a null. The language names a fixed set of them and a
      * snapshot holding fewer cannot be made, so there is no kernel a program can reach that this
      * has nothing for.
      *
      * <p>Asked of the program, because a program was checked against one version of the language.
-     * A signature read from a library obtained some other way would be a second reading of what a
+     * A contract read from a library obtained some other way would be a second reading of what a
      * body was already checked against, and the two would agree for exactly as long as they were
      * the same version.
      */
-    public KernelSignature kernelSignature(Kernel kernel) {
-        return kernels.signatureOf(kernel);
+    public KernelContract kernel(Kernel kernel) {
+        return kernels.contractOf(kernel);
     }
 
     /**

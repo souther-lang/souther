@@ -18,6 +18,7 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.core.Composition;
 import souther.compiler.core.Core;
 import souther.compiler.core.EnsuresEnforcement;
+import souther.compiler.core.KernelContracts;
 import souther.compiler.core.ValueShape;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.Expectation;
@@ -105,7 +106,7 @@ final class CheckedProgramAssembler {
             modules.add(moduleOf(module, types, targets));
         }
         return new CheckedProgram(modules, language, onThePath, targets,
-                libraryOf(db).kernelSignatures());
+                KernelContracts.of(libraryOf(db).kernelSignatures()));
     }
 
     /**

@@ -5,6 +5,7 @@ import souther.compiler.core.Composition;
 import souther.compiler.diag.CompileException;
 import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
+import souther.compiler.abort.AbortKind;
 import souther.compiler.core.KernelSignature;
 import souther.compiler.program.CheckedBehavior;
 import souther.compiler.program.CheckedData;
@@ -637,7 +638,7 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
         }
         assertNotNull(rounds, "the body reaches Decimal.round");
 
-        KernelSignature declared = program.kernelSignature(Kernel.DECIMAL_ROUND);
+        KernelSignature declared = program.kernel(Kernel.DECIMAL_ROUND).signature();
 
         assertEquals(List.of("Int", "RoundingMode", "Decimal"),
                 declared.parameters().stream().map(Type::show).toList(),
@@ -685,7 +686,7 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
         }
         assertNotNull(reached, () -> "the body reaches " + kernel);
 
-        List<Type> parameters = program.kernelSignature(kernel).parameters();
+        List<Type> parameters = program.kernel(kernel).signature().parameters();
         List<Integer> modePositions = new ArrayList<>();
         for (int i = 0; i < parameters.size(); i++) {
             if (Type.show(parameters.get(i)).equals("RoundingMode")) {
@@ -713,7 +714,7 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
         List<String> answered = new ArrayList<>();
         for (Kernel kernel : Kernel.values()) {
             // Refused rather than answered with an absence, so asking is the assertion.
-            answered.add(Type.show(program.kernelSignature(kernel).result()));
+            answered.add(Type.show(program.kernel(kernel).signature().result()));
         }
 
         assertEquals(Kernel.values().length, answered.size(),
@@ -734,10 +735,42 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
         CheckedProgram program = checked(ROUNDS);
 
         assertEquals(Set.of(new TypeSymbol.LanguageCase(LanguageCaseId.DIVISION_BY_ZERO)),
-                program.kernelSignature(Kernel.INT_TRUNCATING_DIVIDE).languageCaseMembers(),
+                program.kernel(Kernel.INT_TRUNCATING_DIVIDE).signature().languageCaseMembers(),
                 "the case a truncating quotient departs with, as the language's own identity");
-        assertEquals(Set.of(), program.kernelSignature(Kernel.DECIMAL_ROUND).languageCaseMembers(),
+        assertEquals(Set.of(),
+                program.kernel(Kernel.DECIMAL_ROUND).signature().languageCaseMembers(),
                 "while a kernel that cannot depart names none");
+    }
+
+    /**
+     * And the program says every way a call to that kernel can end without a value instead.
+     *
+     * <p>An output reads this off {@link CheckedProgram#kernel}, the same call it reads the
+     * signature through, rather than deriving it from {@code souther-runtime}'s classes or from the
+     * specification's prose — which is the whole boundary issue #1862 draws.
+     */
+    @Test
+    void andTheProgramSaysEveryWayThatKernelCanEndWithoutAValue() {
+        CheckedProgram program = checked(ROUNDS);
+
+        assertEquals(Set.of(AbortKind.ANSWER_HAS_NO_PLACE),
+                program.kernel(Kernel.DECIMAL_ROUND).aborts().kinds(),
+                "Decimal.round aborts where the rounded value has no place at the scale asked");
+        assertEquals(Set.of(AbortKind.ANSWER_HAS_NO_PLACE),
+                program.kernel(Kernel.INT_TRUNCATING_DIVIDE).aborts().kinds(),
+                "truncatingDivide answers a zero divisor as a case and aborts only on the one pair"
+                        + " whose quotient no Int holds");
+        assertEquals(Set.of(AbortKind.DIVISION_BY_ZERO),
+                program.kernel(Kernel.INT_FLOOR_MOD).aborts().kinds(),
+                "floorMod aborts on a zero divisor like / does, and never overflows");
+        assertTrue(program.kernel(Kernel.STRING_LENGTH).aborts().isEmpty(),
+                "a kernel that never aborts still answers, with AbortSet.NONE");
+
+        for (Kernel kernel : Kernel.values()) {
+            // Refused rather than answered with a null, so asking is the assertion: every kernel
+            // the language has says whether and how it can end without a value.
+            assertNotNull(program.kernel(kernel).aborts(), () -> kernel + " answers no AbortSet");
+        }
     }
 
     /**

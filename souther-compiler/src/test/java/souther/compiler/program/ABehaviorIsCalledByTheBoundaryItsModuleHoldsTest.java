@@ -2,6 +2,7 @@ package souther.compiler.program;
 
 import souther.compiler.DefaultStdlib;
 import souther.compiler.core.EnsuresEnforcement;
+import souther.compiler.core.KernelContracts;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -89,7 +90,8 @@ class ABehaviorIsCalledByTheBoundaryItsModuleHoldsTest {
                 EnsuresEnforcement.NoContract.INSTANCE, List.of(), List.of());
         return new CheckedProgram(
                 List.of(new CheckedModule("demo", List.of(behavior), List.of(), List.of(), Set.of())),
-                List.of(), List.of(), index, DefaultStdlib.get().kernelSignatures());
+                List.of(), List.of(), index,
+                KernelContracts.of(DefaultStdlib.get().kernelSignatures()));
     }
 
     /** One boundary, made afresh each time it is asked for: what tells two of these apart is that
