@@ -40,7 +40,7 @@ import souther.compiler.types.TypeSymbol;
  * recursion open would give this tree an admitted set wider than the boundary has representations
  * for, which is the disagreement the type is here to make unwritable.
  */
-sealed interface CodecShape {
+public sealed interface CodecShape {
 
     /**
      * A shape that is not an optional. Everything but an optional is one, and what the distinction

@@ -11,6 +11,7 @@ import souther.compiler.types.Type;
 import souther.compiler.check.TypeOps;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -36,13 +37,20 @@ public final class Deriver {
 
     /**
      * The decoder and the encoder of one product, which are two halves of one reading and are
-     * carried together for that reason.
+     * carried together for that reason, beside the shape each field carries that both were lowered
+     * from ({@code shapes}, in the order a value lays its fields out).
+     *
+     * <p>Held here rather than worked out again by a reader that wants the shape and not the
+     * lowered {@code Hir}: asked separately, what a reader below the derivation reads and what the
+     * decoder and the encoder were built from would agree only by coincidence — the same risk this
+     * class's own doc gives for the decoder and the encoder disagreeing with each other.
      */
-    public record Codecs(Hir.DecoderDef decoder, Hir.EncoderDef encoder) {
+    public record Codecs(Hir.DecoderDef decoder, Hir.EncoderDef encoder, Map<String, CodecShape> shapes) {
 
         public Codecs {
             java.util.Objects.requireNonNull(decoder, "a derived representation reads");
             java.util.Objects.requireNonNull(encoder, "a derived representation writes");
+            shapes = Collections.unmodifiableMap(new LinkedHashMap<>(shapes));
         }
     }
 
@@ -89,7 +97,7 @@ public final class Deriver {
         Hir.EncoderDef encoder = deriveEncoder(d, shapes,
                 new Hir.Binders(new BindingOwner.Synthesized(declared,
                         BindingOwner.Pass.DERIVER, 1)));
-        return new Codecs(decoder, encoder);
+        return new Codecs(decoder, encoder, shapes);
     }
 
     // --- decoder derivation ---

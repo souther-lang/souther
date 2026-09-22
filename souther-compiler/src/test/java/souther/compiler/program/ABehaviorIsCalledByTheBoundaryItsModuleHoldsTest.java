@@ -4,7 +4,7 @@ import souther.compiler.DefaultStdlib;
 import souther.compiler.abort.AbortSites;
 import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.core.KernelContracts;
-import souther.compiler.types.Type;
+import souther.compiler.types.LeafScalar;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
@@ -100,7 +100,9 @@ class ABehaviorIsCalledByTheBoundaryItsModuleHoldsTest {
     /** One boundary, made afresh each time it is asked for: what tells two of these apart is that
      *  they are two, and not what either of them says. */
     private static BehaviorTarget target() {
-        return new BehaviorTarget(new CheckedSignature(List.of(Type.INT), Type.INT),
+        return new BehaviorTarget(
+                new CheckedSignature(List.of(new CheckedBoundaryInput.Scalar(LeafScalar.INT)),
+                        new CheckedBoundaryOutput.Scalar(LeafScalar.INT)),
                 new CheckedImplementation.Injected());
     }
 }
