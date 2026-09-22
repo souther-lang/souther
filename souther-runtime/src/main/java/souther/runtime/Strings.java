@@ -304,9 +304,11 @@ public final class Strings {
         for (int i = 0; i < cps.length; i++) {
             int cp = cps[i];
             if (lower) {
-                int finalSigma = Arrays.binarySearch(CaseTables.FINAL_SIGMA.codePoints(), cp);
-                if (finalSigma >= 0 && isFinalSigmaContext(cps, i)) {
-                    out.appendCodePoint(CaseTables.FINAL_SIGMA.mapped()[finalSigma][0]);
+                int[] finalSigmaMapped = lookup(CaseTables.FINAL_SIGMA, cp);
+                if (finalSigmaMapped != null && isFinalSigmaContext(cps, i)) {
+                    for (int m : finalSigmaMapped) {
+                        out.appendCodePoint(m);
+                    }
                     continue;
                 }
             }

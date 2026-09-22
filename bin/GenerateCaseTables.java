@@ -7,6 +7,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 /**
@@ -20,6 +21,12 @@ import java.util.TreeMap;
  * {@code SpecialCasing.txt} entry (a condition carrying a language ID such as {@code tr}, {@code az}
  * or {@code lt}) is read and discarded — ADR-0119's contract is untailored, so tailoring never
  * reaches the generated table.
+ *
+ * <p>Fails closed rather than generating a plausible-looking wrong table: a
+ * {@code SpecialCasing.txt} condition outside the ones named above ({@link #KNOWN_TAILORING_LANGUAGES}
+ * plus {@code Final_Sigma}) stops the run, and so does a {@code SpecialCasing.txt} or
+ * {@code DerivedCoreProperties.txt} whose own version header does not match {@link #UNICODE_VERSION}.
+ * Neither check assumes a mapping's width; {@code Final_Sigma} is read at whatever arity it comes at.
  *
  * <p>Not part of the Maven build: a Unicode version bump is a specification change, not a dependency
  * bump, so regenerating is a deliberate, separate step. Run from the repository root:
@@ -51,9 +58,12 @@ public final class GenerateCaseTables {
         Map<Integer, Integer> simpleUpper = new TreeMap<>();
         parseUnicodeData(unicodeData, simpleLower, simpleUpper);
 
+        checkVersionHeader(specialCasing, "SpecialCasing");
+        checkVersionHeader(derivedCoreProperties, "DerivedCoreProperties");
+
         Map<Integer, int[]> fullLower = new TreeMap<>();
         Map<Integer, int[]> fullUpper = new TreeMap<>();
-        Map<Integer, Integer> finalSigmaLower = new TreeMap<>();
+        Map<Integer, int[]> finalSigmaLower = new TreeMap<>();
         parseSpecialCasing(specialCasing, fullLower, fullUpper, finalSigmaLower);
 
         List<int[]> cased = new ArrayList<>();
@@ -69,6 +79,23 @@ public final class GenerateCaseTables {
         System.out.println("wrote " + OUTPUT + " (" + lower.size() + " lowercase, " + upper.size()
                 + " uppercase, " + finalSigmaLower.size() + " Final_Sigma entries, " + cased.size()
                 + " Cased ranges, " + caseIgnorable.size() + " Case_Ignorable ranges)");
+    }
+
+    /** {@code UnicodeData.txt} carries no version header of its own — {@code SpecialCasing.txt} and
+     *  {@code DerivedCoreProperties.txt} do, each a {@code # <FileName>-<version>.txt} first line —
+     *  so those two are checked against {@link #UNICODE_VERSION} directly, catching the input
+     *  directory not being the version this generator claims to have read from it. A checksum alone
+     *  cannot: it proves the bytes match what was hashed, not that they are the version labelled. */
+    private static void checkVersionHeader(Path path, String fileName) throws IOException {
+        String firstLine = Files.readAllLines(path, StandardCharsets.UTF_8).get(0);
+        String expected = "# " + fileName + "-" + UNICODE_VERSION + ".txt";
+        if (!firstLine.equals(expected)) {
+            throw new IllegalStateException(
+                    path + " does not open with " + expected + " (found: " + firstLine + ") — this"
+                            + " generator is pinned to Unicode " + UNICODE_VERSION + "; update"
+                            + " UNICODE_VERSION and re-verify every witness before regenerating"
+                            + " against a different one");
+        }
     }
 
     /** {@code UnicodeData.txt} fields, 0-indexed: 12 is the simple uppercase mapping, 13 the simple
@@ -91,13 +118,25 @@ public final class GenerateCaseTables {
         }
     }
 
+    /** Condition lists this generator has checked are locale tailoring — read and discarded, since
+     *  ADR-0119's contract carries none — rather than merely unrecognized. {@code SpecialCasing.txt}
+     *  documents the condition list as "language IDs or casing contexts" and warns a parser to
+     *  expect more of either kind in a later version; a language ID may gain a fourth member, but a
+     *  new language-insensitive *context* (the {@code Final_Sigma} kind) is exactly the case that
+     *  must not fall into this set by default. */
+    private static final Set<String> KNOWN_TAILORING_LANGUAGES = Set.of("lt", "tr", "az");
+
     /** {@code <code>; <lower>; <title>; <upper>; (<condition_list>;)?} per file. A blank condition
      *  list is the unconditional full mapping ADR-0119 uses; {@code Final_Sigma} is the one
-     *  condition that is context, not locale, and so is kept as its own table; every other
-     *  condition names a language (a {@code lt}/{@code tr}/{@code az} tailoring) and is dropped,
-     *  since ADR-0119's contract carries none. */
+     *  condition Unicode 18.0.0 states that is context, not locale, and so is kept, at whatever
+     *  arity it maps to — not assumed to be one code point. Every condition in
+     *  {@link #KNOWN_TAILORING_LANGUAGES} is a checked, deliberate exclusion. Anything else fails
+     *  the generation rather than being silently treated as more of the same: a condition list this
+     *  generator has not been told about is exactly the shape a Unicode version bump could add
+     *  (the file format's own words are "language IDs or casing contexts", and it says to expect
+     *  more of either), and ADR-0119 requires that to be caught here, not modeled wrong. */
     private static void parseSpecialCasing(Path path, Map<Integer, int[]> lower, Map<Integer, int[]> upper,
-            Map<Integer, Integer> finalSigmaLower) throws IOException {
+            Map<Integer, int[]> finalSigmaLower) throws IOException {
         for (String rawLine : Files.readAllLines(path, StandardCharsets.UTF_8)) {
             String line = rawLine.replaceFirst("#.*", "");
             if (line.isBlank()) {
@@ -106,16 +145,27 @@ public final class GenerateCaseTables {
             String[] f = line.split(";", -1);
             int cp = Integer.parseInt(f[0].trim(), 16);
             String condition = f.length > 4 ? f[4].trim() : "";
-            if (condition.equalsIgnoreCase("Final_Sigma")) {
-                finalSigmaLower.put(cp, codePoints(f[1])[0]);
-                continue;
+            if (condition.isEmpty()) {
+                lower.put(cp, codePoints(f[1]));
+                upper.put(cp, codePoints(f[3]));
+            } else if (condition.equalsIgnoreCase("Final_Sigma")) {
+                finalSigmaLower.put(cp, codePoints(f[1]));
+            } else if (KNOWN_TAILORING_LANGUAGES.contains(firstWord(condition).toLowerCase(java.util.Locale.ROOT))) {
+                // deliberately discarded: locale tailoring, outside ADR-0119's untailored contract.
+            } else {
+                throw new IllegalStateException(
+                        "unrecognized SpecialCasing.txt condition \"" + condition + "\" at U+"
+                                + hex(cp) + " — is this a new untailored context Unicode "
+                                + UNICODE_VERSION + " added, or a language this generator's"
+                                + " KNOWN_TAILORING_LANGUAGES does not list yet? Decide which before"
+                                + " teaching the generator to handle it either way.");
             }
-            if (!condition.isEmpty()) {
-                continue;
-            }
-            lower.put(cp, codePoints(f[1]));
-            upper.put(cp, codePoints(f[3]));
         }
+    }
+
+    private static String firstWord(String s) {
+        int space = s.indexOf(' ');
+        return space < 0 ? s : s.substring(0, space);
     }
 
     private static int[] codePoints(String hexList) {
@@ -182,7 +232,7 @@ public final class GenerateCaseTables {
     }
 
     private static String render(Map<Integer, int[]> lower, Map<Integer, int[]> upper,
-            Map<Integer, Integer> finalSigmaLower, List<int[]> cased, List<int[]> caseIgnorable,
+            Map<Integer, int[]> finalSigmaLower, List<int[]> cased, List<int[]> caseIgnorable,
             String unicodeDataSha256, String specialCasingSha256, String derivedCorePropertiesSha256) {
         StringBuilder out = new StringBuilder();
         out.append("package souther.runtime;\n\n");
@@ -272,15 +322,14 @@ public final class GenerateCaseTables {
                 .append(encodeMapping(mapping)).append("\");\n\n");
     }
 
-    private static void renderFinalSigma(StringBuilder out, Map<Integer, Integer> finalSigmaLower) {
+    private static void renderFinalSigma(StringBuilder out, Map<Integer, int[]> finalSigmaLower) {
         out.append("    /** Code points whose {@link #LOWER} mapping is the untailored default, overridden by this\n");
         out.append("     *  mapping's result when the code point sits at the end of a cased run (Unicode's\n");
         out.append("     *  {@code Final_Sigma} condition) — Unicode 18.0.0 states exactly one such entry, Greek\n");
-        out.append("     *  capital sigma, but this stays a table rather than a special case so a future Unicode\n");
-        out.append("     *  version that adds another needs only regeneration, not new code. */\n");
-        Map<Integer, int[]> asSingletons = new TreeMap<>();
-        finalSigmaLower.forEach((cp, target) -> asSingletons.put(cp, new int[] {target}));
-        out.append("    static final Mapping FINAL_SIGMA = decodeMapping(\"").append(encodeMapping(asSingletons))
+        out.append("     *  capital sigma, mapping to one code point, but nothing here assumes that arity: this\n");
+        out.append("     *  is the same {@link Mapping} shape {@link #LOWER}/{@link #UPPER} use, read the same way,\n");
+        out.append("     *  so a future Unicode version's wider Final_Sigma entry needs only regeneration. */\n");
+        out.append("    static final Mapping FINAL_SIGMA = decodeMapping(\"").append(encodeMapping(finalSigmaLower))
                 .append("\");\n\n");
     }
 

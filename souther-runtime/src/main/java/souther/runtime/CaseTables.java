@@ -65,8 +65,9 @@ final class CaseTables {
     /** Code points whose {@link #LOWER} mapping is the untailored default, overridden by this
      *  mapping's result when the code point sits at the end of a cased run (Unicode's
      *  {@code Final_Sigma} condition) — Unicode 18.0.0 states exactly one such entry, Greek
-     *  capital sigma, but this stays a table rather than a special case so a future Unicode
-     *  version that adds another needs only regeneration, not new code. */
+     *  capital sigma, mapping to one code point, but nothing here assumes that arity: this
+     *  is the same {@link Mapping} shape {@link #LOWER}/{@link #UPPER} use, read the same way,
+     *  so a future Unicode version's wider Final_Sigma entry needs only regeneration. */
     static final Mapping FINAL_SIGMA = decodeMapping("3A3:3C2");
 
     /** {@code Cased} (the property Unicode's {@code Final_Sigma}

@@ -97,11 +97,19 @@ A Unicode version bump is now a decision with a visible trail: rerun
 `java bin/GenerateCaseTables.java <ucd-directory>` against the new version's files, review the
 regenerated `CaseTables.java`'s changed checksums and diffed mappings, and add whatever witness case
 the new version's changes call for — not something that happens by upgrading the JDK or a
-dependency.
+dependency. The generator fails rather than regenerating on two things it cannot itself resolve: an
+input file whose own version header does not match the pinned version, and a `SpecialCasing.txt`
+condition that is neither the unconditional case, `Final_Sigma`, nor a language in its known
+tailoring set — the file format's own documentation warns that a later version may add either a new
+language or a new language-insensitive context, and only a human deciding which one a new condition
+is keeps the untailored/tailored line where ADR-0119 draws it.
 
 `ACaseConversionIsUnicode18DefaultUntailoredTest` (`souther-runtime`) covers the full-mapping
-expansions (`ß`, Turkish-locale `İ`'s untailored full form), the `Final_Sigma` condition including a
-`Case_Ignorable` code point sitting between a cased letter and a sigma, the absence of Turkish
-tailoring, and a Unicode-version sentinel — a case pair this JVM's own `String.toUpperCase()`
-still does not know, so a regression back onto the JDK table fails it even though the pair carries
-no locale distinction at all.
+expansions (`ß`, Turkish-locale `İ`'s untailored full form), `Final_Sigma` on both sides of the
+sigma and through a `Case_Ignorable` code point in between — including the one code point
+(`U+0345`) that is both `Cased` and `Case_Ignorable`, where Unicode's possessive
+`Case_Ignorable*` skip means "preceded by Cased" is not satisfied — the absence of Turkish
+tailoring, and a Unicode 18.0.0 case pair this JVM's own casing does not currently answer. That
+last case asserts the contract directly rather than by comparison with the host: `Strings.uppercase`
+must answer it regardless of what any particular JDK's own tables know, now or after a future JDK
+catches up.
