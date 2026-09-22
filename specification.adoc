@@ -4202,6 +4202,9 @@ characters  codePoints  toInt  fromDecimal  toDecimal
 
 `+append(a, b)+` joins two strings in their written order; the `{plus}{plus}` operator is the common form, `+append(a, b)+` equals `+a {plus}{plus} b+` (<<stdlib-list>>).
 
+[#string-case]
+`+lowercase(s)+` and `+uppercase(s)+` map every character using Unicode's locale-independent simple case mapping — the fixed mapping, not whichever locale a host process happens to have started in. A Souther program's meaning must not depend on where it runs: Turkish's dotless `ı` and dotted `İ` are the standard example of a mapping that a locale-*sensitive* case conversion would otherwise introduce for plain `+i+`/`+I+`, and Souther has no per-locale casing to select one with.
+
 [#string-code-points]
 Every length, index and range in this module counts *Unicode code points*. It is not the UTF-16 code unit a JVM `+String+` is stored in — that is the backend's representation and says nothing a domain wants — and it is not the grapheme cluster a reader sees as one character. `+髙+` and `+𠮷+` are one code point each; a base letter followed by a combining accent is two, and an emoji joined with zero-width joiners is several. So `+String.length("𠮷")+` is `+1+`, and an invariant written `+String.length(value) <= 20+` admits twenty code points — not twenty columns on a printed form, and not twenty UTF-16 units. A derived decoder carries the same bound to the boundary in the same unit, so a value the model admits is not rejected on the way in (<<decoder-error>>).
 

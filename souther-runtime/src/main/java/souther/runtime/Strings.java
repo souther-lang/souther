@@ -2,6 +2,7 @@ package souther.runtime;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.PrimitiveIterator;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
@@ -65,6 +66,20 @@ public final class Strings {
                             + fromInclusive);
         }
         return s.substring(from, to);
+    }
+
+    /** Every code point of {@code s} mapped to lower case (spec §string-case), using
+     *  {@link Locale#ROOT}'s casing rather than whichever locale a JVM happens to have started in
+     *  — a Souther program's meaning must not turn on where it runs, and the JVM's no-argument
+     *  {@code toLowerCase()} answers differently for the same input under, for instance, a Turkish
+     *  default locale. */
+    public static String lowercase(String s) {
+        return s.toLowerCase(Locale.ROOT);
+    }
+
+    /** The upper-case sibling of {@link #lowercase}, over the same fixed locale. */
+    public static String uppercase(String s) {
+        return s.toUpperCase(Locale.ROOT);
     }
 
     /** Splits on a literal separator, keeping empty pieces (Elm {@code String.split} semantics):
