@@ -65,8 +65,8 @@
              into. A build that is not the hook leaves it at the root module's sources, which do
              not exist, so the goal has nothing to read. -->
         <checkstyle.staged.dir>${project.basedir}/src/main/java</checkstyle.staged.dir>
-        <checkstyle.version>14.0.0</checkstyle.version>
-        <nullaway.version>0.14.0</nullaway.version>
+        <checkstyle.version>14.1.0</checkstyle.version>
+        <nullaway.version>0.14.1</nullaway.version>
         <!-- What NullAway is asked for, written once. The gate below and the `lint` profile both
              ask, and a gate configured differently in each is a gate whose answer depends on which
              build asked. -->
@@ -99,7 +99,7 @@
         <!-- The coverage agent a run under `-Pcoverage-by-class` carries. Named once because two
              places need the same number: the profile that starts the agent and the test-support
              module that compiles against its runtime. -->
-        <jacoco.version>0.8.14</jacoco.version>
+        <jacoco.version>0.8.15</jacoco.version>
         <!-- How many JVMs the tests are spread over. Named here so -DforkCount=N reaches it: a
              literal in the plugin's configuration outranks the property surefire declares, so the
              override the comment below offers was not one, and a fork count could not be measured
