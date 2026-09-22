@@ -33,8 +33,27 @@ public final class Lower {
      * and the lowered module the backend emits from. The type check reads both — the surface one for
      * the declarations, the lowered one for the bodies — so they must be the same settling, which is
      * why they are handed back together rather than settled again downstream.
+     *
+     * <p>{@code carried} is what each parameter the lowering gave a value's method holds, by the
+     * binding of the parameter, across every method of the lowered module.
+     *
+     * <p>{@code roles} is what each non-behavior definition this module declares or takes on runs
+     * as, by its name — the answer {@link souther.compiler.query.Bodies.LoweringRoleOf} settled for
+     * it, so a reader that needs the role of one reads it from here rather than asking again. Not
+     * narrowed to what this module emits: most of a module's helpers are inlined at their call
+     * sites and never are, so a definition here having a role says nothing about whether {@code
+     * lowered} carries a method for it — {@link LoweringRole#emitted} is asked at the boundary that
+     * decides that, not here.
      */
-    public record Lowered(Hir.Module settled, Hir.Module lowered) {}
+    public record Lowered(Hir.Module settled, Hir.Module lowered,
+                          Map<BindingId, ValueName.Helper> carried,
+                          Map<String, LoweringRole> roles) {
+
+        public Lowered {
+            carried = Map.copyOf(carried);
+            roles = Map.copyOf(roles);
+        }
+    }
 
     /**
      * {@code module} with every helper parameter the author left unwritten carrying the type its body
@@ -86,11 +105,19 @@ public final class Lower {
      * The body of the value {@code fn} as the method it is emitted as, which takes the values its
      * root region demands.
      */
-    public static Expansion<Hir.FnDef> valueMethod(Hir.FnDef fn, HelperInliner inliner) {
+    public static Expansion<LoweredDefinition> valueMethod(Hir.FnDef fn, HelperInliner inliner) {
         inliner.sharingOneMaterialisationPerRegion();
-        Hir.FnDef method = inliner.valueMethod(fn);
-        return new Expansion<>(method.withBody(new Hir.FnBody.Written(desugar(method.writtenBody()))),
+        LoweredDefinition method = inliner.valueMethod(fn);
+        Hir.FnDef desugared = method.definition().withBody(
+                new Hir.FnBody.Written(desugar(method.definition().writtenBody())));
+        return new Expansion<>(new LoweredDefinition(desugared, method.carried()),
                 inliner.leftStanding(), inliner.provenance(), inliner.suppliedRules());
+    }
+
+    /** {@code expansion} of a definition that runs as the body it was written with. */
+    public static Expansion<LoweredDefinition> asWritten(Expansion<Hir.FnDef> expansion) {
+        return new Expansion<>(LoweredDefinition.asWritten(expansion.value()), expansion.standing(),
+                expansion.provenance(), expansion.supplied());
     }
 
     /**

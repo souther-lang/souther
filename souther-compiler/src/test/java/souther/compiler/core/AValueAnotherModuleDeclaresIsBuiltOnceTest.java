@@ -47,7 +47,7 @@ class AValueAnotherModuleDeclaresIsBuiltOnceTest {
                 List.of(upstream(links), downstream(links)), ModulePath.EMPTY, new ArrayList<>());
         Hir.Expr body = compiled.db()
                 .ask(new Bodies.LoweredBody("down", new DefinitionName("f")))
-                .value().value().writtenBody();
+                .value().value().definition().writtenBody();
         return count(body);
     }
 

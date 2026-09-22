@@ -4,6 +4,7 @@ import souther.compiler.stdlib.Stdlib;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.ValueShape;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -49,6 +50,15 @@ public final class TypeChecker {
         /** What each definition the lowered module carries takes, by name: the parameters the
          * method is emitted with, which are the ones a lowering added as well as the ones written. */
         final Map<String, List<Hir.FnParam>> loweredParams = new LinkedHashMap<>();
+        /** The value each parameter a lowering gave a value's method holds, by the binding of the
+         * parameter. A parameter the source wrote is not in here. */
+        final Map<BindingId, ValueName.Helper> carried = new LinkedHashMap<>();
+        /** What each non-behavior definition this module declares or takes on runs as, by name —
+         * settled once at {@link souther.compiler.query.Bodies.LoweringRoleOf} and read here rather
+         * than answered again from the definition's shape. Not narrowed to what is emitted: most of
+         * these are inlined at their call sites, and {@link LoweringRole#emitted} is asked where an
+         * {@link EmittedDefinition} is actually made. */
+        final Map<String, LoweringRole> roles = new LinkedHashMap<>();
     }
 
     /**
@@ -93,13 +103,17 @@ public final class TypeChecker {
                                        Map<String, Sig> sigs,
                                        Set<ValueName.Behavior> importedInjected,
                                        Set<ValueName.Behavior> importedUnwritten,
-                                       Hir.Module lowered, Map<ValueName.Behavior, ReqSig> reqSigs,
+                                       Hir.Module lowered, Map<BindingId, ValueName.Helper> carried,
+                                       Map<String, LoweringRole> roles,
+                                       Map<ValueName.Behavior, ReqSig> reqSigs,
                                        Map<ValueName.Behavior, ReqSig> calleeSigs,
                                        Map<String, Type> recursiveHelperFns,
                                        Map<String, Hir.FnDef> imported, Set<String> settled,
                                        Map<TypeSymbol.AtModule, ValueShape> shapes,
                                        Preserved.SettledValues declaredElsewhere) {
         Elaborated elaborated = new Elaborated();
+        elaborated.carried.putAll(carried);
+        elaborated.roles.putAll(roles);
         // What the modules that declare the values this one reads settled them as: their answer,
         // which is the only one there is, and not a check of a copy of their bodies made here.
         declaredElsewhere.signatures().values().forEach(elaborated.settledValues::settled);

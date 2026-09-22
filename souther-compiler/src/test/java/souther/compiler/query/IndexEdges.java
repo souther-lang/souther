@@ -449,6 +449,7 @@ final class IndexEdges {
         names(out, Bodies.RecursiveCallSigsForBody.class, "behavior");
         names(out, Bodies.RecursiveHelperConstructsForBody.class, "behavior");
         names(out, Bodies.SettledFn.class, "fn");
+        names(out, Bodies.LoweringRoleOf.class, "fn");
         names(out, Bodies.Spec.class, "behavior");
         names(out, Bodies.StandingRecursionsOfBody.class, "fn");
         names(out, Bodies.Stated.class, "behavior");

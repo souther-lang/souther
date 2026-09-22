@@ -57,7 +57,7 @@ class AValueBuiltMoreThanOnceKeepsWhichBuildEachIsTest {
         Compilation compilation = Compilation.ofSource(HEAD + tail, "m");
         return compilation.db()
                 .ask(new Bodies.LoweredBody("m", new DefinitionName(name)))
-                .value().value().writtenBody();
+                .value().value().definition().writtenBody();
     }
 
     /** A build of a value, whether it carries the body or calls the method the value is emitted as. */

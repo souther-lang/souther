@@ -43,7 +43,7 @@ class ASpreadReadsTheMaterialisationItsNameReadsTest {
                 "the source this counts over was refused");
         Hir.Expr body = compiled.db()
                 .ask(new Bodies.LoweredBody("m", new DefinitionName("f")))
-                .value().value().writtenBody();
+                .value().value().definition().writtenBody();
         assertEquals(1, builds(body),
                 "a value spread in one place and named in another was built once per place, so a"
                         + " spread is answered apart from every other reference of the name");

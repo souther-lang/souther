@@ -361,6 +361,35 @@ public sealed interface Core {
         }
 
         /**
+         * A value the emitting module declares, built where the tree that runs names it.
+         *
+         * <p>Its own family and not an {@link OfDeclaration}. A value is not a helper: it runs in the
+         * one place its module builds it, and what it answers lives past the call that reads it,
+         * where a helper's method is a copy a call was left standing to. What is emitted for it is a
+         * call to the method the module runs the value as, handed the values its root region
+         * demands.
+         */
+        record OfValue(ReachName.Declaration name) implements Reached {
+
+            public OfValue {
+                if (name == null || !(name.denotes() instanceof ValueName.Helper)) {
+                    throw new IllegalArgumentException(
+                            "a value is a helper of the module that declares it: " + name);
+                }
+            }
+
+            /** What running this call means: the method the value runs as. */
+            public Reaches reaches() {
+                return new Reaches.AValue((ValueName.Helper) name.denotes());
+            }
+
+            @Override
+            public String toString() {
+                return rendered();
+            }
+        }
+
+        /**
          * A value another module publishes, read where it is named.
          *
          * <p>Its own family and not an {@link OfDeclaration}, because what is emitted for it is not a
@@ -423,16 +452,18 @@ public sealed interface Core {
     /**
      * What a call to a declaration runs, for whoever has to emit it.
      *
-     * <p>The two kinds of thing a call that survived to here can reach, and the division an emitter
+     * <p>The kinds of thing a call that survived to here can reach, and the division an emitter
      * writes its arms over. Not provenance: a module's own helper, another module's and a library
      * operation written in Souther are one answer, because one thing is emitted for all three — a
      * call to a method the emitting module holds. What differs between them is where the
-     * declaration came from, which is a different question and is asked of the declaration.
+     * declaration came from, which is a different question and is asked of the declaration. A value
+     * is a different answer and not a different provenance: it runs in the one place its module
+     * builds it, and lives past the call that reads it.
      *
      * <p>Read off a call rather than stored on one ({@link Reached.OfDeclaration#reaches}), so this
      * cannot come to say something the reference does not.
      *
-     * <p>Sealed, and the switches over it carry no {@code default}: a third kind of callee is a
+     * <p>Sealed, and the switches over it carry no {@code default}: another kind of callee is a
      * compile error at every emitter rather than a call one of them quietly does nothing for.
      */
     sealed interface Reaches {
@@ -449,6 +480,18 @@ public sealed interface Core {
          * how the call reaches it, and a reader emitting one works it out from the reference.
          */
         record AHelper(ValueName declaration) implements Reaches { }
+
+        /**
+         * A value the emitting module declares, which runs here and nowhere else. What is emitted is
+         * a call to the method the module runs it as.
+         */
+        record AValue(ValueName.Helper value) implements Reaches {
+
+            @Override
+            public ValueName declaration() {
+                return value;
+            }
+        }
 
         /**
          * A value another module declares, which runs there. What is emitted is a call to the

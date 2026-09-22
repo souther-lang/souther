@@ -12,6 +12,7 @@ import souther.compiler.check.CoreBinders;
 import souther.compiler.check.Derived;
 import souther.compiler.check.EmittedDefinition;
 import souther.compiler.check.Lower;
+import souther.compiler.check.LoweringRole;
 import souther.compiler.check.Requirements;
 import souther.compiler.check.Sig;
 import souther.compiler.check.SpecImplementation;
@@ -138,7 +139,7 @@ final class CheckedProgramAssembler {
 
     /**
      * Every {@code Core} a program's outputs are asked to emit: each behavior's body, where it has
-     * one this compile wrote, and each helper's.
+     * one this compile wrote, each helper's, and each value's.
      *
      * <p>Not a behavior composed of stages, and not one this program only calls — an
      * {@link CheckedImplementation.Composed} has no {@code Core} of its own to classify, and
@@ -158,6 +159,9 @@ final class CheckedProgramAssembler {
             }
             for (CheckedHelper helper : module.helpers()) {
                 roots.add(helper.body());
+            }
+            for (CheckedValue value : module.values()) {
+                roots.add(value.body());
             }
         }
         return roots;
@@ -513,9 +517,9 @@ final class CheckedProgramAssembler {
                         rowsOf(read.rowsByBehavior().getOrDefault(named.name(), List.of()), types,
                                 target.signature(), targets),
                         read.requirements().getOrDefault(named.name(), List.of()))));
-        return new CheckedModule(read.name(), behaviors,
-                helpersOf(read.name(), read.bodies(), read.checked()), read.data(),
-                read.published());
+        Emitted emitted = emittedBy(read.name(), read.checked());
+        return new CheckedModule(read.name(), behaviors, emitted.helpers(), emitted.values(),
+                read.data(), read.published());
     }
 
     /**
@@ -903,43 +907,66 @@ final class CheckedProgramAssembler {
     }
 
     /**
-     * The helpers this module emits as definitions of their own.
+     * What this module emits as methods of its own: the helpers it carries and the values it builds.
      *
-     * <p>What a helper takes and its body are the check's, read whole from what it emitted; what
-     * the calls in this module reach it by is the definition's. Both are read here so that a call
-     * reaching a helper reaches something the snapshot holds.
+     * <p>Which of the two each method is was answered where the method was lowered, and is read here
+     * as it was answered. Nothing is worked out again from what a method takes or what it is named:
+     * a value's method takes the values its root region demands, and the name a method is filed under
+     * is where the module holds it.
      */
-    private static List<CheckedHelper> helpersOf(String module, Hir.Module lowered,
-                                                 Bodies.Elaborated checked) {
-        Map<String, Hir.FnDef> defined = new LinkedHashMap<>();
-        for (Hir.FnDef fn : lowered.fns()) {
-            defined.put(fn.name(), fn);
-        }
-        for (Hir.FnDef fn : lowered.takenOn()) {
-            defined.put(fn.name(), fn);
-        }
+    private record Emitted(List<CheckedHelper> helpers, List<CheckedValue> values) {}
+
+    /**
+     * {@link Emitted} for {@code module}, off what its check emitted.
+     *
+     * <p>What each method takes and its body are the check's, read whole; what the calls in this
+     * module reach it by is its role's. Both are read here so that a call reaching a method reaches
+     * something the snapshot holds.
+     */
+    private static Emitted emittedBy(String module, Bodies.Elaborated checked) {
         List<CheckedHelper> helpers = new ArrayList<>();
+        List<CheckedValue> values = new ArrayList<>();
         checked.emittedDefinitions().forEach((name, emitted) -> {
-            Hir.FnDef fn = defined.get(name);
-            if (fn == null) {
-                // A call in a body reaches this helper by name, so a snapshot without it hands an
-                // output a call to something it was never given. Nothing here can put that right,
-                // and letting it through is what makes it the reader's problem.
-                throw new IllegalStateException("the checked helper `" + module + "." + name
-                        + "` has no definition to read what it takes from");
+            switch (emitted.role()) {
+                case LoweringRole.ValueHome home ->
+                        values.add(new CheckedValue(home.value(), handoversOf(emitted),
+                                emitted.body()));
+                case LoweringRole.Helper helper ->
+                        helpers.add(new CheckedHelper(helper.declaration(), parametersOf(emitted),
+                                emitted.body()));
+                // What the harness and another module call, under the name the module holds the
+                // method at, which no source declares and which is the only reference to it.
+                case LoweringRole.RowValue _, LoweringRole.PublishedValueEntry _ ->
+                        helpers.add(new CheckedHelper(
+                                new ReachName.Own(new ValueName.Helper(module, name)),
+                                parametersOf(emitted), emitted.body()));
             }
-            List<CheckedHelper.Parameter> parameters = new ArrayList<>();
-            for (EmittedDefinition.Parameter parameter : emitted.parameters()) {
-                parameters.add(new CheckedHelper.Parameter(parameter.binder(), parameter.type()));
-            }
-            // What the calls in this module reach it by. A definition this module took on says so
-            // itself; one it declared it reaches as it stands. Neither is worked out from the name
-            // it is filed under here — that name is where the module holds the method, and the
-            // alias a library operation is carried under says nothing about who declared it.
-            ReachName.Declaration reachedAs = fn.takenOnAs() != null ? fn.takenOnAs()
-                    : new ReachName.Own(new ValueName.Helper(module, fn.name()));
-            helpers.add(new CheckedHelper(reachedAs, parameters, emitted.body()));
         });
-        return helpers;
+        return new Emitted(helpers, values);
+    }
+
+    /** What a helper's method takes: what its source wrote. */
+    private static List<CheckedHelper.Parameter> parametersOf(EmittedDefinition emitted) {
+        List<CheckedHelper.Parameter> parameters = new ArrayList<>();
+        for (EmittedDefinition.Parameter parameter : emitted.parameters()) {
+            parameters.add(new CheckedHelper.Parameter(parameter.binder(), parameter.type()));
+        }
+        return parameters;
+    }
+
+    /** What a value's method is handed. {@link EmittedDefinition} holds that it is handed nothing
+     *  else. */
+    private static List<CheckedValue.Handover> handoversOf(EmittedDefinition emitted) {
+        List<CheckedValue.Handover> handovers = new ArrayList<>();
+        for (EmittedDefinition.Parameter parameter : emitted.parameters()) {
+            switch (parameter) {
+                case EmittedDefinition.Handover handover -> handovers.add(new CheckedValue.Handover(
+                        handover.binder(), handover.type(), handover.carries()));
+                case EmittedDefinition.Declared declared -> throw new IllegalStateException(
+                        "a value's method takes `" + declared.binder() + "`, which nothing hands"
+                                + " over to it");
+            }
+        }
+        return handovers;
     }
 }

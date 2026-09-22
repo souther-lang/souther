@@ -69,7 +69,7 @@ class AConstantValueStaysAConstantWhereItIsBuiltIntoAConstructionTest {
     void aConstantTwoMethodValuesNameIsBuiltOnceByTheRegionThatBuildsThem() {
         Hir.Expr body = Compiler.compiled(SHARED, "m").db()
                 .ask(new Bodies.LoweredBody("m", new DefinitionName("f")))
-                .value().value().writtenBody();
+                .value().value().definition().writtenBody();
 
         assertEquals(4, builds(body),
                 "a, x, y and z each built once here: a method that built the constant itself would"
@@ -87,7 +87,7 @@ class AConstantValueStaysAConstantWhereItIsBuiltIntoAConstructionTest {
     void aValueTheFoldEvaluatesIsNotCalledAsAMethod() {
         Hir.Expr body = Compiler.compiled(MODULE, "m").db()
                 .ask(new Bodies.LoweredBody("m", new DefinitionName("go")))
-                .value().value().writtenBody();
+                .value().value().definition().writtenBody();
 
         assertEquals(0, callsOfValues(body),
                 "the value folds to a literal, so it stands where it is named");

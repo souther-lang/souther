@@ -1599,11 +1599,12 @@ public final class Elaborator {
             handed.add(new Core.Read(each.name(), binding, type, each.pos()));
         }
         // A value another module declares runs there: what this module calls is that module's entry
-        // for it, so the reference is to a published value and not to a method held here.
+        // for it, so the reference is to a published value and not to a method held here. One this
+        // module declares runs here, as the method this module holds for it.
         Core.Reached callee = call.target() instanceof ReachName.OfModule of
                 && !of.denotes().module().equals(ctx.symbols().module())
                 ? new Core.Reached.OfPublishedValue(of)
-                : new Core.Reached.OfDeclaration(call.target());
+                : new Core.Reached.OfValue(call.target());
         return new Core.Call(callee, handed, ConstructOccurrence.unwritten(),
                 Core.CallSettlement.None.INSTANCE, settled.result(), call.pos());
     }

@@ -50,7 +50,7 @@ class AValueTwoValuesNameIsHandedToBothTest {
     void everyValueOfADiamondChainIsBuiltOnce() {
         Hir.Expr body = Compiler.compiled(diamonds(LINKS), "m").db()
                 .ask(new Bodies.LoweredBody("m", new DefinitionName("f")))
-                .value().value().writtenBody();
+                .value().value().definition().writtenBody();
 
         assertEquals(3 * LINKS + 1, builds(body),
                 "one build per value: a value two values name is handed to both, and not built by"

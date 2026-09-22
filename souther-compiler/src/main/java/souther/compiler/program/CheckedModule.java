@@ -23,16 +23,19 @@ public final class CheckedModule {
     private final Map<ValueName.Behavior, CheckedBehavior> behaviourByName;
     private final List<CheckedHelper> helpers;
     private final Map<ValueName, CheckedHelper> helperByDeclaration;
+    private final List<CheckedValue> values;
+    private final Map<ValueName.Helper, CheckedValue> valueByName;
     private final List<CheckedData> data;
     private final Set<TypeSymbol.AtModule> declaredData;
     private final Set<String> published;
 
     CheckedModule(String name, List<CheckedBehavior> behaviors, List<CheckedHelper> helpers,
-                  List<CheckedData> data, Set<String> published) {
+                  List<CheckedValue> values, List<CheckedData> data, Set<String> published) {
         this.name = name;
         this.published = Set.copyOf(published);
         this.behaviors = List.copyOf(behaviors);
         this.helpers = List.copyOf(helpers);
+        this.values = List.copyOf(values);
         this.data = List.copyOf(data);
         Map<ValueName.Behavior, CheckedBehavior> byBehavior = new LinkedHashMap<>();
         for (CheckedBehavior behavior : this.behaviors) {
@@ -56,6 +59,24 @@ public final class CheckedModule {
             }
         }
         this.helperByDeclaration = Map.copyOf(byDeclaration);
+        Map<ValueName.Helper, CheckedValue> byName = new LinkedHashMap<>();
+        for (CheckedValue value : this.values) {
+            if (!value.name().module().equals(name)) {
+                // A value runs in the module that declares it and in no other, so a module holding
+                // one another module declared would be running it a second time.
+                throw new IllegalStateException("`" + name + "` holds the value `" + value.name()
+                        + "`, which another module declares");
+            }
+            if (byName.put(value.name(), value) != null) {
+                throw new IllegalStateException("`" + name + "` holds `" + value.name()
+                        + "` twice");
+            }
+            if (byDeclaration.containsKey(value.name())) {
+                throw new IllegalStateException("`" + name + "` holds `" + value.name()
+                        + "` as a value and carries a method for it as a helper");
+            }
+        }
+        this.valueByName = Map.copyOf(byName);
     }
 
     /**
@@ -147,10 +168,39 @@ public final class CheckedModule {
         return behavior;
     }
 
-    /** What this module emits as methods of its own: its recursions and the values it builds once
-     *  and hands on. */
+    /** The methods this module carries for declarations a call was left standing to: its recursions,
+     *  and the methods compiled for its rows' values and for the entries of its values. Not its
+     *  values, which are {@link #values()}. */
     public List<CheckedHelper> helpers() {
         return helpers;
+    }
+
+    /** The values this module builds, each in the one place it runs. */
+    public List<CheckedValue> values() {
+        return values;
+    }
+
+    /**
+     * The value {@code name} as the one place it runs.
+     *
+     * <p>Never a null and never an absence to interpret. A call in this module that reaches one of
+     * its values says so ({@link souther.compiler.core.Core.Reaches.AValue}), and a value another
+     * module declares is reached through that module's entry and runs there — so a name this has
+     * nothing for is a reader asking about a value this module does not build, which is a mistake
+     * at the reader rather than a state of the program.
+     *
+     * @throws IllegalArgumentException where this module builds no value {@code name}
+     */
+    public CheckedValue value(ValueName.Helper name) {
+        if (name == null) {
+            throw new IllegalArgumentException("a value is asked for by its identity");
+        }
+        CheckedValue value = valueByName.get(name);
+        if (value == null) {
+            throw new IllegalArgumentException("`" + this.name + "` builds no value `" + name
+                    + "`; the values it builds are " + values);
+        }
+        return value;
     }
 
     /**

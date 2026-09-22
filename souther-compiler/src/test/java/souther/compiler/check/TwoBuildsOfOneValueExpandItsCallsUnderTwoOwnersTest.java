@@ -104,10 +104,10 @@ class TwoBuildsOfOneValueExpandItsCallsUnderTwoOwnersTest {
         var db = Compiler.compiled(source, "m").db();
         Set<BindingOwner> inTheBehavior = new LinkedHashSet<>();
         collect(db.ask(new Bodies.LoweredBody("m", new DefinitionName("f")))
-                .value().value().writtenBody(), inTheBehavior);
+                .value().value().definition().writtenBody(),inTheBehavior);
         Set<BindingOwner> inTheValue = new LinkedHashSet<>();
         collect(db.ask(new Bodies.LoweredBody("m", new DefinitionName("dependent")))
-                .value().value().writtenBody(), inTheValue);
+                .value().value().definition().writtenBody(),inTheValue);
 
         assertEquals(0, inTheBehavior.size(), inTheBehavior::toString);
         assertEquals(1, inTheValue.size(), inTheValue::toString);
