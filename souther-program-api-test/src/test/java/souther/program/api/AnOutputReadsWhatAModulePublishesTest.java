@@ -75,6 +75,12 @@ class AnOutputReadsWhatAModulePublishesTest {
             data Amount = { value: Int }
             """;
 
+    private static final String WITH_NO_DATA_CLAUSE = """
+            module unexposed
+
+            data Amount = { value: Int }
+            """;
+
     @Test
     void aNameTheClauseListsIsPublishedAndOneItDoesNotIsKept() {
         CheckedModule module = CheckedProgram.of(List.of(WITH_A_CLAUSE)).module("pricing");
@@ -142,6 +148,18 @@ class AnOutputReadsWhatAModulePublishesTest {
         TypeSymbol.AtModule elsewheresAmount = dataNamed(program.module("elsewhere"), "Amount");
 
         assertThrows(IllegalArgumentException.class, () -> amounts.publicationOf(elsewheresAmount));
+    }
+
+    /**
+     * A module that writes no clause publishes no data either — #1867's own text said the opposite
+     * ("everything is published then"), which #1866 already settled against: a module with no
+     * clause keeps everything, data included.
+     */
+    @Test
+    void aModuleThatWritesNoClausePublishesNoDataEither() {
+        CheckedModule module = CheckedProgram.of(List.of(WITH_NO_DATA_CLAUSE)).module("unexposed");
+
+        assertEquals(Publication.KEPT, publicationOfData(module, "Amount"));
     }
 
     private static Publication publicationOf(CheckedModule module, String name) {

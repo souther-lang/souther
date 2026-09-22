@@ -67,10 +67,11 @@ public final class CheckedModule {
      * module declared — which is most of {@link #helpers()} — would answer about whose surface is
      * not said.
      *
-     * <p>Asked with a behavior's identity and a data's, for now. The same clause decides a value
-     * and a helper too, and each is answered here when a reader wants it: a question asked of a
-     * wider domain than it can answer over would have to answer {@code KEPT} for a name that is
-     * not declared at all, which is a different thing and reads as the module having decided it.
+     * <p>Of a behavior here. A data is answered the same way by
+     * {@link #publicationOf(TypeSymbol.AtModule)}; a value and a helper are answered here when a
+     * reader needs each — a question asked of a wider domain than it can answer over would have to
+     * answer {@code KEPT} for a name that is not declared at all, which is a different thing and
+     * reads as the module having decided it.
      *
      * @throws IllegalArgumentException where this module declares no behavior {@code name}
      */
