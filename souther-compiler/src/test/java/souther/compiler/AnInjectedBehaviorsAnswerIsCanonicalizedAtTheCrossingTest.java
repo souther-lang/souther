@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Every place Java crosses into a Souther value that the boundary's original two doors (a derived
@@ -393,6 +394,82 @@ class AnInjectedBehaviorsAnswerIsCanonicalizedAtTheCrossingTest {
         org.junit.jupiter.api.function.Executable call = () -> Codecs.apply(run, true);
         org.junit.jupiter.api.Assertions.assertThrows(
                 souther.runtime.ConstraintViolation.class, call);
+    }
+
+    private static final String RAW_CONSTRUCTION_MODULE = """
+            module demo
+
+            data Name = { text: String }
+
+            behavior source : () -> Name
+
+            behavior run : (unused: Bool) -> Name
+                depends on source
+
+            let run (unused, source) = source()
+            """;
+
+    private static final String RAW_CONSTRUCTION_IMPL_SRC = """
+            package demo;
+            public final class SourceImpl extends Source {
+                public Name apply() {
+                    // Same-package Java calling the canonical constructor directly, not through
+                    // __construct or the protected factory — ADR-0065 lets raw record construction
+                    // exist, and the package-private constructor does not refuse a same-package
+                    // caller for having skipped either of those two doors.
+                    return new Name("a" + java.lang.Character.toString(0x0302));
+                }
+            }
+            """;
+
+    /**
+     * A data's canonical constructor is package-private, not sealed off from Java: an injected
+     * behavior's implementation shares the package and can write {@code new Name(...)} directly,
+     * bypassing both {@code __construct} (which runs the invariant) and the {@code protected}
+     * factory ({@code Backend.emitDataFactory}, which already canonicalized before this fix). Before
+     * {@code emitCtor} canonicalized each field itself, this was a real hole in the carrier
+     * invariant: a decomposed field value could reach Souther code with no crossing having read it.
+     */
+    @Test
+    void aSamePackageJavasRawConstructionOfADataArrivesComposed() throws Exception {
+        Map<String, ClassFileImage> classes = new HashMap<>(Compiler.compile(RAW_CONSTRUCTION_MODULE));
+        classes.put("demo.SourceImpl", compileSubclass(classes, "demo.SourceImpl", RAW_CONSTRUCTION_IMPL_SRC));
+
+        BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
+        Class<?> source = loader.loadClass("demo.Source");
+        Object impl = loader.loadClass("demo.SourceImpl").getConstructor().newInstance();
+        Object run = loader.loadClass("demo.Run").getMethod("bind", source).invoke(null, impl);
+
+        Object out = Codecs.apply(run, true);
+
+        assertEquals(A_CIRCUMFLEX, ((Map<?, ?>) Codecs.encode(loader, "demo.Name", out)).get("text"));
+    }
+
+    private static final String CONSTRUCT_CROSSING_MODULE = """
+            module demo
+
+            data Name = { text: String } invariant String.length(text) == 1
+            """;
+
+    /**
+     * {@code __construct} is public whenever another module may call it directly (ADR-0002), so it
+     * is a crossing in its own right, not only reachable through the canonicalizing factory this
+     * module's own behaviors go through. Before the invariant's own argument slots were
+     * canonicalized ahead of {@code bindFields}, a decomposed argument here would fail the
+     * {@code invariant} clause on a length the carrier invariant already says is wrong to count.
+     */
+    @Test
+    void constructSeesTheCanonicalArgumentWhenCalledDirectlyAcrossAModule() throws Exception {
+        Map<String, ClassFileImage> classes = Compiler.compile(CONSTRUCT_CROSSING_MODULE);
+        BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
+        Class<?> nameClass = loader.loadClass("demo.Name");
+
+        String decomposed = "a" + new String(Character.toChars(0x0302));
+        Object result = nameClass.getMethod("__construct", String.class).invoke(null, decomposed);
+
+        assertTrue(result instanceof souther.runtime.Result.Ok<?, ?>);
+        Object ok = ((souther.runtime.Result.Ok<?, ?>) result).value();
+        assertEquals(A_CIRCUMFLEX, ((Map<?, ?>) Codecs.encode(loader, "demo.Name", ok)).get("text"));
     }
 
     private static ClassFileImage compileSubclass(Map<String, ClassFileImage> generated,

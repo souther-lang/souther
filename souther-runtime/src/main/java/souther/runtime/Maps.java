@@ -178,19 +178,6 @@ public final class Maps {
         return mapKeys(m, keyFn);
     }
 
-    /** Every value through {@code valueFn}, the keys untouched — the codegen-internal counterpart to
-     *  {@link #mapKeysWith} for a crossing's canonicalization ({@code CanonicalizeAtCrossing}).
-     *  Values, not keys, so no collision is possible the way a canonicalized key can collide: two
-     *  keys stay two entries, one of them now holding a canonicalized value. */
-    public static <K, V> Map<K, Object> mapValuesWith(java.util.function.Function<V, Object> valueFn,
-                                                       Map<K, V> m) {
-        PersistentHashMap.Builder<K, Object> out = new PersistentHashMap.Builder<>();
-        for (Map.Entry<K, V> e : m.entrySet()) {
-            out.set(e.getKey(), valueFn.apply(e.getValue()));
-        }
-        return out.build();
-    }
-
     /** Key and value through {@code keyFn}/{@code valueFn} in one pass, for a crossing's
      *  canonicalization ({@code CanonicalizeAtCrossing}) — not {@link #mapKeysWith}, which the
      *  encoder also calls and which overwrites on a collision because the encoder's own keys are

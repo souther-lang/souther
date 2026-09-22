@@ -709,7 +709,13 @@ final class ValueClassGen {
     /**
      * Emits the canonical constructor: the components in declaration order, package-private, so a
      * value is built inside the module or through the invariant-checking {@code __construct} and not
-     * by a Java caller writing {@code new} (spec §field-visibility).
+     * by a Java caller writing {@code new} (spec §field-visibility). Package-private is not foreign
+     * closed off, though — an injected behavior's Java implementation shares this package and can
+     * write {@code new} directly, exactly as it can call the {@code protected} factory
+     * ({@code Backend.emitDataFactory}) or the record's own accessor. This is that construction's
+     * one choke point regardless of which of those three a caller used, so each field is
+     * canonicalized here, once, rather than trusted to have been canonicalized by whichever door the
+     * caller happened to take.
      */
     private void emitCtor(ClassBuilder cb, ClassDesc cdName, SequencedMap<String, Type> fields) {
         emitCtor(cb, cdName, fields, 0);
@@ -723,6 +729,7 @@ final class ValueClassGen {
             for (Map.Entry<String, Type> f : fields.entrySet()) {
                 code.aload(0);
                 load(code, slot, f.getValue());
+                CanonicalizeAtCrossing.emit(code, f.getValue());
                 code.putfield(cdName, f.getKey(), jvmType(f.getValue()));
                 slot += width(f.getValue());
             }
@@ -741,6 +748,23 @@ final class ValueClassGen {
                             MethodSignature.parseFrom(constructSignature(fields, cdName))));
                     mb.withCode(code -> {
                         BodyGen gen = new BodyGen(ctx, code, data, cdName, 0);
+
+                        // Canonicalized in the argument slots themselves, before a clause below reads
+                        // any of them by the binding bindFields is about to install: a public
+                        // __construct is a crossing in its own right (ADR-0002 lets another module
+                        // call it directly, not only through the canonicalizing factory this module's
+                        // own behaviors go through), and a clause reading a slot this skipped would
+                        // check the invariant against a value the constructor is about to replace.
+                        int argSlot = 0;
+                        for (Type t : fields.values()) {
+                            if (CanonicalizeAtCrossing.reachesString(t)) {
+                                load(code, argSlot, t);
+                                CanonicalizeAtCrossing.emit(code, t);
+                                store(code, argSlot, t);
+                            }
+                            argSlot += width(t);
+                        }
+
                         bindFields(gen, data);
 
                         // Clause by clause, in the order they are declared, stopping at the first that

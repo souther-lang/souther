@@ -175,10 +175,20 @@ with a `ConstraintViolation` instead of picking a survivor, the crossing's own s
 the encoder-side `mapKeysWith`'s overwrite (correct there: an encoder's keys are already known
 distinct before it renders them).
 
-**Still a narrower, named gap.** Not walked into a data's own field — canonicalizing one means
-rebuilding it through its own factory with one field replaced, the same construction-versus-recursion
-boundary `CodecGen`'s decoder side draws. A `List<String>` crossing any of these doors is
-canonicalized; a `List<SomeDataWithAStringField>` is not.
+**Named values are not recursively rebuilt at a crossing — their own constructor already
+established the invariant for their fields.** `CanonicalizeAtCrossing` does not walk into a
+`Type.Ref`, but that is not a fourth gap alongside the closed ones above: a data's canonical
+constructor (`ValueClassGen.emitCtor`) canonicalizes each field itself, right before storing it,
+regardless of which of three doors a caller took to reach it — the invariant-checking
+`__construct`, the canonicalizing factory an injected behavior's Java subclass calls
+(`Backend.emitDataFactory`), or `new` written directly by same-package Java, which the
+constructor's package-private visibility does not close off (ADR-0065 allows raw record
+construction to exist at all). `__construct` is itself a crossing when another module calls it
+directly rather than through that factory (ADR-0002), so its own invariant clauses read each
+argument slot only after canonicalizing it, not before — the same before/`ensures`-after ordering
+every other crossing in this section keeps. A `List<SomeDataWithAStringField>` is canonical for the
+same reason a bare `SomeDataWithAStringField` is: the data was canonical the moment it was built,
+and a container walking its elements has nothing left to do to them.
 
 ### `reverse`'s law is retracted, not narrowed
 
