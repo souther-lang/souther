@@ -94,10 +94,10 @@ public sealed interface CheckedData {
 
         /**
          * What each of {@link #fields()} carries across the boundary, in the same order — the
-         * checked codec shape (issue #1863), never re-derived from a field's bare {@link Type}: an
-         * optional here is a {@link CheckedCodecShape.OptionOf} whether the field omits its key or
-         * an element under it writes {@code null}, and which of the two it is is not this list's to
-         * decide, only to carry.
+         * checked codec shape, never re-derived from a field's bare {@link Type}: an optional here
+         * is a {@link CheckedCodecShape.OptionOf} whether the field omits its key or an element
+         * under it writes {@code null}, and which of the two it is is not this list's to decide,
+         * only to carry.
          */
         List<CheckedCodecShape> codecShapes();
 

@@ -15,12 +15,12 @@ import java.util.List;
  * from a behavior's declared output.
  *
  * <p>What an output needs is not only the type. Representation is a function of a value and the
- * position it stands at (ADR-0094) — an {@code Option} at a parameter and one nested in a list
- * cross differently, and a sum's alternatives travel as a bare tag or a discriminated object
- * depending on what they carry — so a reader asking how a value crosses reads {@link #inputs()}
- * and {@link #output()}, which are the checked boundary shape and carry that decision rather than
- * leaving it to be read off {@link Type} again (issue #1863). {@link #takes()} and
- * {@link #answers()} stay for a reader that only ever wanted the type.
+ * position it stands at — an {@code Option} at a parameter and one nested in a list cross
+ * differently, and a sum's alternatives travel as a bare tag or a discriminated object depending
+ * on what they carry — so a reader asking how a value crosses reads {@link #inputs()} and
+ * {@link #output()}, which are the checked boundary shape and carry that decision rather than
+ * leaving it to be read off {@link Type} again. {@link #takes()} and {@link #answers()} stay for a
+ * reader that only ever wanted the type.
  */
 public final class CheckedSignature {
 

@@ -439,8 +439,8 @@ final class CheckedProgramAssembler {
         Map<TypeSymbol.AtModule, ValueShape> shapes =
                 db.ask(new Shapes.ValueShapes(module)).value();
         // What each field a product or a newtype declares carries across the boundary — the same
-        // walk {@link Shapes.ValueShapes} is read beside, held here so a reader of the program does
-        // not re-derive it from a field's bare type (issue #1863).
+        // walk `Shapes.ValueShapes` is read beside, held here so a reader of the program does not
+        // re-derive it from a field's bare type.
         Map<String, Derived.Def> codecDefs = db.ask(new Shapes.DerivedDeclarations(module)).value();
         Map<ValueName.Behavior, EnsuresEnforcement> checks =
                 db.ask(new Bodies.EnsuresChecks(module)).value();
@@ -715,7 +715,7 @@ final class CheckedProgramAssembler {
 
     /**
      * What each of {@code shape}'s fields carries across the boundary, in the same order — read
-     * off the shape {@link Deriver} already derived rather than derived again here (issue #1863).
+     * off the shape {@link Deriver} already derived rather than derived again here.
      */
     private static List<CheckedCodecShape> codecShapesOf(Hir.Data data, ValueShape shape,
                                                           Map<String, Derived.Def> codecDefs) {
@@ -731,7 +731,17 @@ final class CheckedProgramAssembler {
         Map<String, CodecShape> byField = withCodec.fieldShapes();
         List<CheckedCodecShape> codecShapes = new ArrayList<>(shape.fields().size());
         for (ValueShape.Field field : shape.fields()) {
-            codecShapes.add(projectCodecShape(byField.get(field.name())));
+            CodecShape fieldShape = byField.get(field.name());
+            if (fieldShape == null) {
+                // The two readings of this declaration's fields — what a value is made of and what
+                // each field carries across the boundary — are worked out by two different walks,
+                // and a name one of them has that the other does not is those two walks having come
+                // apart on this declaration, not a field a reader can be handed nothing for.
+                throw new IllegalStateException("`" + data.declares() + "` was taken as checked and"
+                        + " nothing here derived what its field `" + field.name()
+                        + "` carries across the boundary");
+            }
+            codecShapes.add(projectCodecShape(fieldShape));
         }
         return codecShapes;
     }
@@ -758,7 +768,7 @@ final class CheckedProgramAssembler {
      * handed over whole: each holds a witness — which of a {@code Map}'s key readings admitted it —
      * that offers the module as it was parsed, so handing one over whole would put the syntax tree
      * two hops from a behavior's declared output. What is kept is the answer the witness proves,
-     * never the witness (issue #1863).
+     * never the witness.
      */
     private static CheckedSignature signatureOf(Sig signature, Db db) {
         List<CheckedBoundaryInput> inputs = new ArrayList<>(signature.ins().size());

@@ -20,8 +20,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * Two positions that hold the same {@link souther.compiler.types.Type} cross differently, and what
- * a checked program hands over is the answer for the position asked about — never the type alone
- * (issue #1863, ADR-0094: representation is a function of a value and the position it stands at).
+ * a checked program hands over is the answer for the position asked about — never the type alone:
+ * representation is a function of a value and the position it stands at, not of the value's type by
+ * itself.
  *
  * <p>Each case here is one a reader could get right by accident if it only ever saw one program: the
  * value of this test is that the same checked program answers both sides of every pair at once, so
