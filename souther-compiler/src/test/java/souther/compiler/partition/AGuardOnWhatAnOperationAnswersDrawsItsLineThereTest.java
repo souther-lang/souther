@@ -77,7 +77,7 @@ class AGuardOnWhatAnOperationAnswersDrawsItsLineThereTest {
         Core body = checked.behaviorBodies().get(behavior);
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
         souther.compiler.inputs.Quantities quantities = inputs.quantities(rules);
-        return GuardThresholds.of(behavior, checked.analysisBodies().get(behavior), body, plan,
+        return ThresholdFixtures.guardsOf(behavior, checked.analysisBodies().get(behavior), body, plan,
                         inputs, rules).thresholds().stream()
                 .<String>map(each -> each.term() + " at "
                         + (each.value() == null ? "nowhere" : each.value().spelled()) + " on "

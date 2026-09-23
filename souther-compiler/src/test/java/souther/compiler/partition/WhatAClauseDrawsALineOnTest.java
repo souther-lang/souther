@@ -52,7 +52,7 @@ class WhatAClauseDrawsALineOnTest {
         assertTrue(prepared.behaviors().stream()
                         .anyMatch(b -> b instanceof Hir.SpecBehavior && b.name().equals(behavior)),
                 "the behavior under test is declared");
-        return EnsuresThresholds.of(stated == null ? null : stated.get(behavior), inputs, rules);
+        return ThresholdFixtures.clausesOf(stated == null ? null : stated.get(behavior), inputs, rules);
     }
 
     private static List<String> valuesOf(EnsuresThresholds.Clauses clauses) {

@@ -93,6 +93,7 @@ class TwoValuesStandingAlikeAreStillTwoValuesTest {
             }
         }
         throw new AssertionError("no row was offered for " + classId + ": "
-                + filling.composed().discharge().classes().values());
+                + filling.composed().discharge().answers().values().stream()
+                        .filter(GenerationAnswer.Class.class::isInstance).toList());
     }
 }

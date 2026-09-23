@@ -152,7 +152,7 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
 
     /** The rows a fill of that model's classes comes to. */
     private static FillResult filled(String source) {
-        return Generator.fill(MeasuredInput.of("gate", readingOf(source), partitioningOf(source)),
+        return GenerationFixtures.fill(MeasuredInput.of("gate", readingOf(source), partitioningOf(source)),
                 List.of(), Generator.CandidateCheck.ANY, Budgets.generation());
     }
 

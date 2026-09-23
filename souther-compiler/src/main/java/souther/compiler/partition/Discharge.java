@@ -28,13 +28,16 @@ import java.util.Set;
  * reading and a sentence could start saying. What is written out is written in one order ({@link
  * #toString}), which is what a message about one run reading the same way twice wanted of it.
  *
- * <p><b>{@link #answers} is the one canonical map; {@link #classes}, {@link #arms}, {@link #pairs}
- * and {@link #meetings} are projections of it, not a second representation kept in step by hand.</b>
- * Each is built from {@code answers} once, in the constructor, and handed back — so there is
- * nothing for a kind added to {@link GenerationObligation} to fall out of step with, and nothing
- * that pays for the same walk of every obligation on every call a reader asking one arm at a time
- * happens to make. See {@link GenerationAnswer} for why the values these project are not one
- * shared disposition type either.
+ * <p><b>{@link #answers} is the one canonical map, and the sole authority for every reader
+ * below it.</b> A single-obligation lookup at a class, a pair or a meeting wraps the target in
+ * the obligation it belongs to and asks {@code answers} directly, which costs no walk of the
+ * others — so there is nothing left to project as a whole map, and no reader asks for one; a
+ * caller that wants every class or every pair filters {@link #answers} itself. {@link #arms} is
+ * the one projection still cached — {@link #at(souther.compiler.coverage.ArmProbe)} is asked
+ * once per finding of a behavior, over every arm, by a reader holding no obligation to wrap a
+ * key from; caching it once here is what spares that reader the walk of every answer a fresh
+ * projection would otherwise cost on every finding. See {@link GenerationAnswer} for why the
+ * values these project are not one shared disposition type either.
  *
  * <p>Not a record, for the same reason: what {@link #equals} and {@link #hashCode} answer with is
  * {@link #plan} and {@link #answers} alone, held in no order — the derived views are computed from
@@ -44,10 +47,7 @@ public final class Discharge {
 
     private final GenerationPlan plan;
     private final Map<GenerationObligation, GenerationAnswer> answers;
-    private final Map<ClassOfAPosition, ClassDisposition> classes;
     private final Map<Generator.ArmOwed, ArmDisposition> arms;
-    private final Map<ObligationIdentity.OfAFallbackPairCell, ClassDisposition> pairs;
-    private final Map<ObligationIdentity.OfACombinationOfDecisions, ClassDisposition> meetings;
 
     public Discharge(GenerationPlan plan, Map<GenerationObligation, GenerationAnswer> answers) {
         Objects.requireNonNull(plan, "a discharge answers a plan");
@@ -68,30 +68,15 @@ public final class Discharge {
         }
         this.plan = plan;
         this.answers = validated;
-        // The four projections, walked once here rather than rebuilt on every call a reader
-        // taking one kind at a time makes — an arm found one at a time, over every finding of a
-        // behavior, is the walk this exists to spare.
-        Map<ClassOfAPosition, ClassDisposition> classes = new LinkedHashMap<>();
+        // The one projection worth walking once here rather than rebuilding on every finding a
+        // reader asks at(ArmProbe) for — see the class comment.
         Map<Generator.ArmOwed, ArmDisposition> arms = new LinkedHashMap<>();
-        Map<ObligationIdentity.OfAFallbackPairCell, ClassDisposition> pairs = new LinkedHashMap<>();
-        Map<ObligationIdentity.OfACombinationOfDecisions, ClassDisposition> meetings =
-                new LinkedHashMap<>();
         for (GenerationAnswer each : validated.values()) {
-            switch (each) {
-                case GenerationAnswer.Class(var obligation, var disposition) ->
-                        classes.put(obligation.target(), disposition);
-                case GenerationAnswer.Arm(var obligation, var disposition) ->
-                        arms.put(obligation.target(), disposition);
-                case GenerationAnswer.Pair(var obligation, var disposition) ->
-                        pairs.put(obligation.target(), disposition);
-                case GenerationAnswer.Meeting(var obligation, var disposition) ->
-                        meetings.put(obligation.target(), disposition);
+            if (each instanceof GenerationAnswer.Arm(var obligation, var disposition)) {
+                arms.put(obligation.target(), disposition);
             }
         }
-        this.classes = Collections.unmodifiableMap(classes);
         this.arms = Collections.unmodifiableMap(arms);
-        this.pairs = Collections.unmodifiableMap(pairs);
-        this.meetings = Collections.unmodifiableMap(meetings);
     }
 
     /**
@@ -151,34 +136,27 @@ public final class Discharge {
         return Objects.hash(plan, answers);
     }
 
-    /** One class of one position apiece, or none where the plan named none. */
-    public Map<ClassOfAPosition, ClassDisposition> classes() {
-        return classes;
-    }
-
     /** One arm apiece, or none where the plan named none. */
     public Map<Generator.ArmOwed, ArmDisposition> arms() {
         return arms;
     }
 
-    /** One combination of two classes apiece, or none where the plan named none. */
-    public Map<ObligationIdentity.OfAFallbackPairCell, ClassDisposition> pairs() {
-        return pairs;
-    }
-
     /** What became of one combination of the body's decisions, or null where nothing asked. */
     public ClassDisposition at(ObligationIdentity.OfACombinationOfDecisions owed) {
-        return meetings.get(owed);
+        return answers.get(new GenerationObligation.Meeting(owed))
+                instanceof GenerationAnswer.Meeting(var _, var disposition) ? disposition : null;
     }
 
     /** What became of one combination of two classes, or null where nothing asked about it. */
     public ClassDisposition at(ObligationIdentity.OfAFallbackPairCell owed) {
-        return pairs.get(owed);
+        return answers.get(new GenerationObligation.Pair(owed))
+                instanceof GenerationAnswer.Pair(var _, var disposition) ? disposition : null;
     }
 
     /** What became of one class, or null where this run was not asked about it. */
     public ClassDisposition at(ClassOfAPosition owed) {
-        return classes.get(owed);
+        return answers.get(new GenerationObligation.Class(owed))
+                instanceof GenerationAnswer.Class(var _, var disposition) ? disposition : null;
     }
 
     /** What became of one arm, or null where this run was not asked about it. */

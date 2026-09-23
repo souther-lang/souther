@@ -79,7 +79,7 @@ class NoAxesByItselfIsNotAGenerationReasonTest {
         ways.put(ARM, NOT_ENUMERABLE);
         CoverageRead.Read read = new CoverageRead.Read(List.of(), ways);
 
-        return Generator.fill(subject, List.of(), Generator.CandidateCheck.ANY, read,
+        return GenerationFixtures.fill(subject, List.of(), Generator.CandidateCheck.ANY, read,
                 Generator.Trial.NOTHING_RUNS, List.of(), List.of(), List.of(ARM),
                 Budgets.generation());
     }
