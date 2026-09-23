@@ -8,7 +8,8 @@ import java.util.List;
 
 /**
  * How the alternatives a value can be are written at a boundary: which form the set travels as, what
- * tag each alternative wears, and — where the form has one — the key that tag stands under.
+ * tag each alternative wears, and — where the form has them — the key that tag stands under and the
+ * key a case's contents stand under when the case is no object to put the tag in.
  *
  * <p>A named sum and a behavior's output union are one question asked of two spellings. Both are a
  * set of alternatives that has to cross, and both are answered here through the same call, so
@@ -42,6 +43,10 @@ public final class Boundary {
     /** The key a derived codec writes an alternative's tag under (spec §encoder-derivation). */
     private static final String DISCRIMINATOR = "type";
 
+    /** The key a derived codec writes the contents of a case with no object of its own under, beside
+     *  the tag (spec §sum-discrimination). */
+    private static final String CONTENTS = "value";
+
     /**
      * How {@code subject}'s alternatives are written at a boundary.
      *
@@ -58,7 +63,7 @@ public final class Boundary {
         List<TypeSymbol> atoms = AtomSpace.subjectAtoms(subject, published);
         return new Alternatives(atoms, isEnumerationForm(subject, atoms, kinds)
                 ? new Representation.Enumeration()
-                : new Representation.Discriminated(DISCRIMINATOR));
+                : new Representation.Discriminated(DISCRIMINATOR, CONTENTS));
     }
 
     /**
@@ -120,8 +125,15 @@ public final class Boundary {
         /** Every alternative carries nothing but which one it is, so the value is the tag itself. */
         record Enumeration() implements Representation {}
 
-        /** An alternative carries something of its own, so the tag stands under {@code key} beside
-         *  it (spec §sum-discrimination). */
-        record Discriminated(String key) implements Representation {}
+        /**
+         * An alternative carries something of its own, so the tag stands under {@code tagKey} beside
+         * it (spec §sum-discrimination).
+         *
+         * <p>A case whose own form is an object takes the tag into that object. One whose form is not
+         * — a newtype, a primitive member of an answer — has nowhere to put it, and its form goes
+         * under {@code contentsKey} beside the tag. Which cases those are is {@link TypeOps#caseShape}'s
+         * answer; the two keys are this form's, and a reader writing it spells neither.
+         */
+        record Discriminated(String tagKey, String contentsKey) implements Representation {}
     }
 }

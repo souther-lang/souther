@@ -8,10 +8,12 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.DerivedSymbols;
+import souther.compiler.check.TypeOps;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
+import souther.compiler.types.CaseShape;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
@@ -43,6 +45,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AnEmitterWritesWhatItWasHandedTest {
 
     private static final String SENTINEL_KEY = "__no_derivation_writes_this__";
+
+    private static final String SENTINEL_CONTENTS_KEY = "__no_derivation_writes_these_contents__";
 
     private static final String MODULE = """
             module m
@@ -86,6 +90,26 @@ class AnEmitterWritesWhatItWasHandedTest {
     }
 
     /**
+     * A newtype case has no object to take the tag, so its form goes under the second key the
+     * representation holds. The shape says that it goes under a key; which key is the form's, and an
+     * emitter that spelled it from the shape writes the language's own and not the one handed in.
+     */
+    @Test
+    void theSumEncoderWritesTheContentsKeyItWasHanded() {
+        String written = text(codec.generateSumEncoder(sum("Payment"), theNewtypeCase("Payment")));
+        assertTrue(written.contains(SENTINEL_CONTENTS_KEY),
+                "the encoder did not write the contents key it was handed");
+    }
+
+    @Test
+    void theSumDecoderReadsTheContentsKeyItWasHanded() {
+        String read = text(codec.generateSumDecoder(sum("Payment"),
+                theNewtypeCase("Payment"), CodecGen.Src.JSON));
+        assertTrue(read.contains(SENTINEL_CONTENTS_KEY),
+                "the decoder did not read the contents key it was handed");
+    }
+
+    /**
      * Handed one alternative of the three, the encoder dispatches over that one.
      *
      * <p>The tag is the atom's name on both sides, so a sentinel tag cannot be handed in — the
@@ -119,7 +143,19 @@ class AnEmitterWritesWhatItWasHandedTest {
         List<TypeSymbol> atoms =
                 Boundary.of(Type.ref(sum(sumName).declares()), forms, said).atoms();
         return new Boundary.Alternatives(List.of(atoms.get(0)),
-                new Boundary.Representation.Discriminated(key));
+                new Boundary.Representation.Discriminated(key, SENTINEL_CONTENTS_KEY));
+    }
+
+    /** The sum's newtype case alone, under keys no derivation produces. */
+    private Boundary.Alternatives theNewtypeCase(String sumName) {
+        List<TypeSymbol> atoms =
+                Boundary.of(Type.ref(sum(sumName).declares()), forms, said).atoms();
+        TypeSymbol wrapped = atoms.stream()
+                .filter(atom -> TypeOps.caseShape(atom, symbols) == CaseShape.WRAPPED)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(sumName + " has no newtype case"));
+        return new Boundary.Alternatives(List.of(wrapped),
+                new Boundary.Representation.Discriminated(SENTINEL_KEY, SENTINEL_CONTENTS_KEY));
     }
 
     /** A classfile's bytes as text, which is enough to find a constant-pool UTF-8 entry in. */

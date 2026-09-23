@@ -17,7 +17,13 @@ public sealed interface CheckedAlternativesForm {
     /** Every alternative carries nothing but which one it is, so the value is the tag itself. */
     record Enumeration() implements CheckedAlternativesForm {}
 
-    /** An alternative carries something of its own, so the tag stands under {@code key} beside it
-     *  (spec §sum-discrimination). */
-    record Discriminated(String key) implements CheckedAlternativesForm {}
+    /**
+     * An alternative carries something of its own, so the tag stands under {@code tagKey} beside it
+     * (spec §sum-discrimination).
+     *
+     * <p>A case whose own form is an object takes the tag into it; one whose form is not — a newtype
+     * case, a primitive member of an answer — writes its form under {@code contentsKey} beside the
+     * tag. Both keys are carried so that a reader writing this form spells neither of them.
+     */
+    record Discriminated(String tagKey, String contentsKey) implements CheckedAlternativesForm {}
 }

@@ -823,13 +823,13 @@ final class CheckedProgramAssembler {
         };
     }
 
-    /** {@code representation}, carried over: enumeration or discriminated, and the key where it is
+    /** {@code representation}, carried over: enumeration or discriminated, and the keys where it is
      *  one (spec §sum-discrimination). */
     private static CheckedAlternativesForm projectRepresentation(Boundary.Representation representation) {
         return switch (representation) {
             case Boundary.Representation.Enumeration _ -> new CheckedAlternativesForm.Enumeration();
             case Boundary.Representation.Discriminated d ->
-                    new CheckedAlternativesForm.Discriminated(d.key());
+                    new CheckedAlternativesForm.Discriminated(d.tagKey(), d.contentsKey());
         };
     }
 

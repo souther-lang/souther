@@ -572,7 +572,7 @@ public final class SpecChecker {
             // (`DataChecker`). Written here as a constant of its own, this checker and the codec that
             // writes the key were two places the language's own spelling was kept.
             if (!(Boundary.of(sig.outputType(), kinds, published).representation()
-                    instanceof Boundary.Representation.Discriminated(String key))) {
+                    instanceof Boundary.Representation.Discriminated(String key, String _))) {
                 continue;
             }
             TypeSymbol carrying =

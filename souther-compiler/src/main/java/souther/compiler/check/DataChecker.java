@@ -455,7 +455,7 @@ public final class DataChecker {
         // cannot come to be checked against different keys — and an enumeration, which writes no key,
         // is not asked.
         if (Boundary.of(Type.ref(sum.declares()), kinds, published).representation()
-                instanceof Boundary.Representation.Discriminated(String key)) {
+                instanceof Boundary.Representation.Discriminated(String key, String _)) {
             TypeSymbol carrying =
                     TypeOps.memberCarryingField(Type.ref(sum.declares()), key, symbols, published);
             if (carrying != null) {
