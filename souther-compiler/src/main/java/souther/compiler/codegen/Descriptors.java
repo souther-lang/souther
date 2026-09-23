@@ -8,8 +8,6 @@ import java.lang.classfile.attribute.RuntimeVisibleAnnotationsAttribute;
 import java.lang.classfile.attribute.SourceFileAttribute;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;
-import java.lang.constant.DirectMethodHandleDesc;
-import java.lang.constant.MethodHandleDesc;
 import java.lang.constant.MethodTypeDesc;
 import java.util.function.Consumer;
 
@@ -452,20 +450,6 @@ final class Descriptors {
             MethodTypeDesc.of(CD_RResult, CD_String, CD_Object, CD_RPath);
     static final MethodTypeDesc MTD_Rfail4 =
             MethodTypeDesc.of(CD_RResult, CD_RPath, CD_String, CD_String, CD_Map);
-    static final MethodTypeDesc MTD_ctfeCheckObject = MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object);
-    /** {@code LambdaMetafactory.metafactory} — the bootstrap that materialises a method reference as a
-     *  functional-interface instance, so {@code Sets::fromList} becomes a {@code Function} for {@code map}. */
-    static final DirectMethodHandleDesc BSM_METAFACTORY = MethodHandleDesc.ofMethod(
-            DirectMethodHandleDesc.Kind.STATIC,
-            ClassDesc.of("java.lang.invoke.LambdaMetafactory"), "metafactory",
-            MethodTypeDesc.of(
-                    ClassDesc.of("java.lang.invoke.CallSite"),
-                    ClassDesc.of("java.lang.invoke.MethodHandles").nested("Lookup"),
-                    ClassDesc.of("java.lang.String"),
-                    ClassDesc.of("java.lang.invoke.MethodType"),
-                    ClassDesc.of("java.lang.invoke.MethodType"),
-                    ClassDesc.of("java.lang.invoke.MethodHandle"),
-                    ClassDesc.of("java.lang.invoke.MethodType")));
     static final MethodTypeDesc MTD_Rencode_variant =
             MethodTypeDesc.of(CD_MapEncVariant, CD_Class, CD_String, CD_REncoder);
     static final MethodTypeDesc MTD_Rencode_discriminate =

@@ -30,7 +30,6 @@ import java.lang.classfile.attribute.RuntimeVisibleTypeAnnotationsAttribute;
 import java.lang.classfile.attribute.SignatureAttribute;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.DirectMethodHandleDesc;
-import java.lang.constant.DynamicCallSiteDesc;
 import java.lang.constant.MethodHandleDesc;
 import java.lang.constant.ConstantDescs;
 import java.lang.constant.MethodTypeDesc;
@@ -317,10 +316,7 @@ final class ValueClassGen {
         }));
         cb.withMethod(ORDERING_METHOD, MTD_ordering, ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC
                 | ClassFile.ACC_SYNTHETIC, mb -> mb.withCode(code -> {
-            code.invokedynamic(DynamicCallSiteDesc.of(
-                    BSM_METAFACTORY, "applyAsInt",
-                    MethodTypeDesc.of(CD_ToIntFunction),
-                    MethodTypeDesc.of(ConstantDescs.CD_int, CD_Object),
+            code.invokedynamic(Lambdas.callSite(Lambdas.Sam.TO_INT_FUNCTION,
                     MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.INTERFACE_STATIC,
                             cdX, ORDER_METHOD, MTD_order),
                     MTD_order));

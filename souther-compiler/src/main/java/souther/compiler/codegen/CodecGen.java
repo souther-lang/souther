@@ -127,12 +127,7 @@ final class CodecGen {
         DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
                 DirectMethodHandleDesc.Kind.STATIC, CD_Sets, "fromList",
                 MethodTypeDesc.of(CD_Set, CD_List));
-        return DynamicCallSiteDesc.of(
-                BSM_METAFACTORY, "apply",
-                MethodTypeDesc.of(CD_Function),               // no captures: () -> Function
-                MethodTypeDesc.of(CD_Object, CD_Object),      // samMethodType: (Object) -> Object
-                impl,                                         // implMethod: Sets.fromList(List) -> Set
-                MethodTypeDesc.of(CD_Set, CD_List));          // instantiatedMethodType: (List) -> Set
+        return Lambdas.callSite(Lambdas.Sam.FUNCTION, impl, MethodTypeDesc.of(CD_Set, CD_List));
     }
 
     /**
@@ -219,12 +214,7 @@ final class CodecGen {
     private static DynamicCallSiteDesc rekeyCallSite(ClassDesc cdDec, MapKeyRepresentation key) {
         DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
                 DirectMethodHandleDesc.Kind.STATIC, cdDec, rekeyMethod(key), MTD_rekey);
-        return DynamicCallSiteDesc.of(
-                BSM_METAFACTORY, "apply",
-                MethodTypeDesc.of(CD_BiFunction),                        // no captures: () -> BiFunction
-                MethodTypeDesc.of(CD_Object, CD_Object, CD_Object),      // samMethodType: (Object,Object) -> Object
-                impl,                                                    // implMethod: __rekey(Map,Path) -> Result
-                MTD_rekey);                                              // instantiatedMethodType: (Map,Path) -> Result
+        return Lambdas.callSite(Lambdas.Sam.BI_FUNCTION, impl, MTD_rekey);
     }
 
     /**
@@ -412,12 +402,7 @@ final class CodecGen {
     private static DynamicCallSiteDesc fromNameCallSite(ClassDesc cdDec) {
         DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
                 DirectMethodHandleDesc.Kind.STATIC, cdDec, "__fromName", MTD_fromName);
-        return DynamicCallSiteDesc.of(
-                BSM_METAFACTORY, "apply",
-                MethodTypeDesc.of(CD_BiFunction),
-                MethodTypeDesc.of(CD_Object, CD_Object, CD_Object),
-                impl,
-                MTD_fromName);
+        return Lambdas.callSite(Lambdas.Sam.BI_FUNCTION, impl, MTD_fromName);
     }
 
     /** Encodes an enumeration to its case's name — the same string its decoder reads. */
@@ -1006,22 +991,18 @@ final class CodecGen {
     }
 
     /** {@code Temporals::notALeapSecond} as a {@code Predicate}, for the text refinement below. */
-    private static final DynamicCallSiteDesc NOT_A_LEAP_SECOND = DynamicCallSiteDesc.of(
-            BSM_METAFACTORY, "test",
-            MethodTypeDesc.of(CD_Predicate),
-            MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object),
+    private static final DynamicCallSiteDesc NOT_A_LEAP_SECOND = Lambdas.callSite(
+            Lambdas.Sam.PREDICATE,
             MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, CD_Temporals,
                     "notALeapSecond", MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object)),
             MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));
 
     /** {@code Temporals::toTheSecond} as a {@code Predicate}, for the leaf refinement below. */
-    private static final DynamicCallSiteDesc TO_THE_SECOND = DynamicCallSiteDesc.of(
-            BSM_METAFACTORY, "test",
-            MethodTypeDesc.of(CD_Predicate),                                   // no captures
-            MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object),            // samMethodType
+    private static final DynamicCallSiteDesc TO_THE_SECOND = Lambdas.callSite(
+            Lambdas.Sam.PREDICATE,
             MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, CD_Temporals,
                     "toTheSecond", MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object)),
-            MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));           // instantiated
+            MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));
 
     /**
      * Emits a temporal leaf decoder from text: Raoh's string leaf, refined, parsed, refined again.
@@ -1527,12 +1508,8 @@ final class CodecGen {
         DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
                 DirectMethodHandleDesc.Kind.STATIC, cdCtfe,
                 ValueClassGen.ctfeClauseCheck(clause), check);
-        return DynamicCallSiteDesc.of(
-                BSM_METAFACTORY, "test",
-                MethodTypeDesc.of(CD_Predicate),                                 // no captures
-                MTD_ctfeCheckObject,                                             // samMethodType
-                impl,
-                MethodTypeDesc.of(ConstantDescs.CD_boolean, boxed));             // instantiatedMethodType
+        return Lambdas.callSite(Lambdas.Sam.PREDICATE, impl,
+                MethodTypeDesc.of(ConstantDescs.CD_boolean, boxed));
     }
 
     /**
@@ -1545,12 +1522,8 @@ final class CodecGen {
         DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
                 DirectMethodHandleDesc.Kind.STATIC, decoderClass, "__invariantFailure",
                 MTD_invariantFailureNamed);
-        return DynamicCallSiteDesc.of(
-                BSM_METAFACTORY, "apply",
-                MethodTypeDesc.of(CD_BiFunction, CD_String),                     // captures the clause
-                MethodTypeDesc.of(CD_Object, CD_Object, CD_Object),              // samMethodType
-                impl,
-                MTD_invariantFailure);
+        return Lambdas.callSite(Lambdas.Sam.BI_FUNCTION, impl, MTD_invariantFailure,
+                CD_String);                                                      // captures the clause
     }
 
     /**
@@ -1887,12 +1860,7 @@ final class CodecGen {
         DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
                 DirectMethodHandleDesc.Kind.STATIC, CD_Representations, "canonicalNumber",
                 MTD_canonicalNumber);
-        return DynamicCallSiteDesc.of(
-                BSM_METAFACTORY, "encode",
-                MethodTypeDesc.of(CD_REncoder),                          // no captures: () -> Encoder
-                MTD_Representations_sorted,                              // samMethodType: (Object) -> Object
-                impl,
-                MTD_canonicalNumber);                                    // (BigDecimal) -> BigDecimal
+        return Lambdas.callSite(Lambdas.Sam.ENCODER, impl, MTD_canonicalNumber);
     }
 
     /**
@@ -1908,26 +1876,19 @@ final class CodecGen {
         DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
                 DirectMethodHandleDesc.Kind.STATIC, CD_Representations, ordering,
                 MTD_Representations_sorted);
-        return DynamicCallSiteDesc.of(
-                BSM_METAFACTORY, "encode",
-                MethodTypeDesc.of(CD_REncoder),                          // no captures: () -> Encoder
-                MTD_Representations_sorted,                              // samMethodType: (Object) -> Object
-                impl,
-                MTD_Representations_sorted);
+        return Lambdas.callSite(Lambdas.Sam.ENCODER, impl, MTD_Representations_sorted);
     }
 
     /** {@code Normalization::nfc} as a {@code Function}, for {@code Decoder.map} to canonicalize a
      *  string leaf to Unicode 18.0.0 NFC — in place of {@code StringDecoder.normalize()}, which is
-     *  the JVM's own {@code java.text.Normalizer} and so a different, JDK-dependent NFC. */
-    private static DynamicCallSiteDesc normalizationNfcCallSite() {
+     *  the JVM's own {@code java.text.Normalizer} and so a different, JDK-dependent NFC.
+     *
+     *  <p>And the function a crossing canonicalizes a string through ({@link CanonicalizeAtCrossing}),
+     *  which is the same NFC and so the same call site. */
+    static DynamicCallSiteDesc normalizationNfcCallSite() {
         DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
                 DirectMethodHandleDesc.Kind.STATIC, CD_Normalization, "nfc", MTD_nfc);
-        return DynamicCallSiteDesc.of(
-                BSM_METAFACTORY, "apply",
-                MethodTypeDesc.of(CD_Function),                          // no captures: () -> Function
-                MethodTypeDesc.of(CD_Object, CD_Object),                 // samMethodType: (Object) -> Object
-                impl,
-                MTD_nfc);                                                // (String) -> String
+        return Lambdas.callSite(Lambdas.Sam.FUNCTION, impl, MTD_nfc);
     }
 
     /** {@code Option::ofNullable} as a {@code Function}, for {@code Decoder.map} to lift a
@@ -1936,12 +1897,7 @@ final class CodecGen {
         // Option is a sealed interface, so its static factory is an interface method reference
         DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
                 DirectMethodHandleDesc.Kind.INTERFACE_STATIC, CD_Option, "ofNullable", MTD_ofNullable);
-        return DynamicCallSiteDesc.of(
-                BSM_METAFACTORY, "apply",
-                MethodTypeDesc.of(CD_Function),                          // no captures: () -> Function
-                MethodTypeDesc.of(CD_Object, CD_Object),                 // samMethodType: (Object) -> Object
-                impl,
-                MTD_ofNullable);                                         // (Object) -> Option
+        return Lambdas.callSite(Lambdas.Sam.FUNCTION, impl, MTD_ofNullable);
     }
 
     /** An {@code Encoder}'s own {@code encode} as a {@code Function}, capturing the encoder already
@@ -1950,12 +1906,8 @@ final class CodecGen {
     private static DynamicCallSiteDesc encodeAsFunctionCallSite() {
         DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
                 DirectMethodHandleDesc.Kind.INTERFACE_VIRTUAL, CD_REncoder, "encode", MTD_Rencode);
-        return DynamicCallSiteDesc.of(
-                BSM_METAFACTORY, "apply",
-                MethodTypeDesc.of(CD_Function, CD_REncoder),             // captures the encoder
-                MethodTypeDesc.of(CD_Object, CD_Object),                 // samMethodType: (Object) -> Object
-                impl,
-                MTD_Rencode);                                            // (Object) -> Object
+        return Lambdas.callSite(Lambdas.Sam.FUNCTION, impl, MTD_Rencode,
+                CD_REncoder);                                            // captures the encoder
     }
 
     /** {@code opt -> Options.encodedOrNull(inner, opt)} as an {@code Encoder}, capturing the present
@@ -1963,24 +1915,15 @@ final class CodecGen {
     private static DynamicCallSiteDesc optionElemEncoderCallSite() {
         DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
                 DirectMethodHandleDesc.Kind.STATIC, CD_Options, "encodedOrNull", MTD_encodedOrNull);
-        return DynamicCallSiteDesc.of(
-                BSM_METAFACTORY, "encode",
-                MethodTypeDesc.of(CD_REncoder, CD_Function),             // captures the function
-                MTD_Rencode,                                             // samMethodType: (Object) -> Object
-                impl,
-                MethodTypeDesc.of(CD_Object, CD_Option));                // (Option) -> Object
+        return Lambdas.callSite(Lambdas.Sam.ENCODER, impl, MethodTypeDesc.of(CD_Object, CD_Option),
+                CD_Function);                                            // captures the function
     }
 
     /** {@code Sets::toList} as a {@code Function}, so a nested Set reaches the list encoder. */
     private static DynamicCallSiteDesc setToListCallSite() {
         DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
                 DirectMethodHandleDesc.Kind.STATIC, CD_Sets, "toList", MTD_Sets_toList);
-        return DynamicCallSiteDesc.of(
-                BSM_METAFACTORY, "apply",
-                MethodTypeDesc.of(CD_Function),                          // no captures: () -> Function
-                MethodTypeDesc.of(CD_Object, CD_Object),                 // samMethodType: (Object) -> Object
-                impl,
-                MTD_Sets_toList);                                        // instantiatedMethodType: (Set) -> List
+        return Lambdas.callSite(Lambdas.Sam.FUNCTION, impl, MTD_Sets_toList);
     }
 
     /** {@code m -> Maps.mapKeysWith(keyFn, m)} as a {@code Function}, capturing the key function
@@ -1989,12 +1932,8 @@ final class CodecGen {
     private static DynamicCallSiteDesc mapKeysCallSite() {
         DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
                 DirectMethodHandleDesc.Kind.STATIC, CD_Maps, "mapKeysWith", MTD_mapKeysWith);
-        return DynamicCallSiteDesc.of(
-                BSM_METAFACTORY, "apply",
-                MethodTypeDesc.of(CD_Function, CD_Function),             // captures the key Function
-                MethodTypeDesc.of(CD_Object, CD_Object),                 // samMethodType: (Object) -> Object
-                impl,
-                MethodTypeDesc.of(CD_Map, CD_Map));                      // instantiatedMethodType: (Map) -> Map
+        return Lambdas.callSite(Lambdas.Sam.FUNCTION, impl, MethodTypeDesc.of(CD_Map, CD_Map),
+                CD_Function);                                            // captures the key Function
     }
 
     // --- a behavior output union's encoder (spec §jvm-anonymous-union) -------------------------------------------
