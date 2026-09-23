@@ -9,7 +9,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -105,7 +104,6 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
     @Test
     void aComparisonIsDecidedFromTheExponentsWhereTheValuesAreApart() {
         Rational taken = Rational.of(COMPACT);
-        assertEquals(Integer.valueOf(-1), taken.magnitudeFromBrackets(Rational.ONE, 128));
         assertTrue(taken.compareTo(Rational.ONE) < 0);
         assertTrue(Rational.ONE.compareTo(taken) > 0);
         assertTrue(taken.compareTo(taken.negated()) > 0);
@@ -145,24 +143,6 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
     }
 
     /**
-     * And a bracket too narrow to separate that pair says so rather than answering.
-     *
-     * <p>The control for the refinement: the same pair the comparison answers is undecided at a width
-     * the exponents' own is, so the width rising is what reaches the answer and not a first bracket that
-     * was always going to be enough. A bracket that always decided would leave the loop above it
-     * unreached, and one that never did would leave the comparison looping.
-     */
-    @Test
-    void aBracketTooNarrowToSeparateAPairSaysSo() {
-        Rational twos = aPowerOfTwo();
-        Rational fives = theNearestPowerOfFive();
-
-        assertNull(twos.magnitudeFromBrackets(fives, 64));
-        assertNull(fives.magnitudeFromBrackets(twos, 64));
-        assertEquals(Integer.valueOf(1), twos.magnitudeFromBrackets(fives, 128));
-    }
-
-    /**
      * A pair the width the comparison starts at cannot separate, which is what the width rises for.
      *
      * <p>A power of five, and the whole number one above it. The power is large enough that a bracket of
@@ -174,10 +154,6 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
     void aPairInsideTheStartingWidthIsAnsweredByRaisingIt() {
         Rational aPower = new Rational(BigInteger.ONE, BigInteger.ONE, 0, 100);
         Rational oneAbove = new Rational(FIVE.pow(100).add(BigInteger.ONE), BigInteger.ONE, 0, 0);
-
-        assertNull(aPower.magnitudeFromBrackets(oneAbove, 128),
-                "the width the comparison starts at does not separate this pair");
-        assertEquals(Integer.valueOf(-1), aPower.magnitudeFromBrackets(oneAbove, 256));
 
         assertTrue(aPower.compareTo(oneAbove) < 0, "and the comparison reaches that width");
         assertTrue(oneAbove.compareTo(aPower) > 0);
@@ -244,9 +220,7 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
         assertEquals(0, lower.twos(), "the powers cancel, which is what the shape is about");
         assertEquals(0, higher.fives());
 
-        assertNull(lower.magnitudeFromBrackets(higher, 128),
-                "no bracket of the width the comparison starts at separates these");
-        assertTrue(lower.compareTo(higher) < 0, "and the order is answered all the same");
+        assertTrue(lower.compareTo(higher) < 0, "the order is answered all the same");
         assertTrue(higher.compareTo(lower) > 0);
         assertEquals(0, lower.compareTo(
                 Rational.of(base.add(BigInteger.ONE), base.add(BigInteger.valueOf(3)))));
@@ -269,9 +243,7 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
         assertTrue(justBelowTwo.twos() != two.twos() || justBelowTwo.fives() != two.fives(),
                 "the powers do not cancel, which is what this is about");
 
-        assertNull(justBelowTwo.magnitudeFromBrackets(two, 128),
-                "no bracket of the width the comparison starts at separates these");
-        assertTrue(justBelowTwo.compareTo(two) < 0, "and the order is answered all the same");
+        assertTrue(justBelowTwo.compareTo(two) < 0, "the order is answered all the same");
         assertTrue(two.compareTo(justBelowTwo) > 0);
     }
 
@@ -295,8 +267,7 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
         Rational justBelowOne = new Rational(BigInteger.ONE, power.add(BigInteger.ONE), 4000, 0);
         assertEquals(4000L, justBelowOne.twos(), "the exponent no bracket reaches");
 
-        assertNull(justBelowOne.magnitudeFromBrackets(Rational.ONE, 128));
-        assertTrue(justBelowOne.compareTo(Rational.ONE) < 0, "and the order is answered all the same");
+        assertTrue(justBelowOne.compareTo(Rational.ONE) < 0, "the order is answered all the same");
         assertTrue(Rational.ONE.compareTo(justBelowOne) > 0);
         assertEquals(1L, RationalMath.toInt(HALF_UP.INSTANCE, justBelowOne));
         assertEquals(0L, RationalMath.toInt(DOWN.INSTANCE, justBelowOne));
@@ -310,7 +281,6 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
                 odd, odd.multiply(BigInteger.TEN).add(BigInteger.ONE), 0, 1);
         Rational half = new Rational(BigInteger.ONE, BigInteger.ONE, -1, 0);
         assertEquals(1L, justBelowHalf.fives(), "a power of five stands in it");
-        assertNull(justBelowHalf.magnitudeFromBrackets(half, 128));
         assertTrue(justBelowHalf.compareTo(half) < 0);
 
         assertEquals(0L, RationalMath.toInt(HALF_UP.INSTANCE, justBelowHalf));
@@ -329,9 +299,6 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
         BigInteger base = BigInteger.TWO.pow(700);
         Rational justBelowHalf = new Rational(
                 base.add(BigInteger.valueOf(3)), base.add(BigInteger.valueOf(7)), -1, 0);
-        Rational half = new Rational(BigInteger.ONE, BigInteger.ONE, -1, 0);
-        assertNull(justBelowHalf.magnitudeFromBrackets(half, 128),
-                "no bracket of that width tells this from half of one");
 
         assertEquals(0L, RationalMath.toInt(HALF_UP.INSTANCE, justBelowHalf));
         assertEquals(0L, RationalMath.toInt(HALF_EVEN.INSTANCE, justBelowHalf));
@@ -430,130 +397,17 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
     }
 
     /**
-     * And the refinement on its own answers the pairs the readings above it answer.
-     *
-     * <p>It is the reading the order's promise is made of: the three above it are cheap and each is allowed
-     * to decline, and this one asks for no width in advance and so has nothing to decline for. Asked
-     * through a comparison it is unreachable to a fixture — the pairs that reach it are the ones whose
-     * fractions the host has no room to write out, which is a pair no test builds — so it is asked here
-     * directly, on the pairs the readings above it would have taken.
-     *
-     * <p>Each of these is undecided at the width the comparison starts at, which is the control: the answer
-     * below is one the width rising reached and not one the first bracket had. Take the rising away and this
-     * is what says so.
-     */
-    @Test
-    @Timeout(60)
-    void theRefinementAnswersAPairTheStartingWidthLeavesOpen() {
-        BigInteger base = BigInteger.TWO.pow(700);
-        Rational lower = Rational.of(base.add(BigInteger.ONE), base.add(BigInteger.valueOf(3)));
-        Rational higher = Rational.of(base.add(BigInteger.valueOf(11)), base.add(BigInteger.valueOf(13)));
-        assertNull(lower.magnitudeFromBrackets(higher, 128),
-                "the width the comparison starts at does not separate these");
-        assertEquals(-1, lower.magnitudeByRefining(higher));
-        assertEquals(1, higher.magnitudeByRefining(lower));
-
-        Rational aPower = new Rational(BigInteger.ONE, BigInteger.ONE, 0, 100);
-        Rational oneAbove = new Rational(FIVE.pow(100).add(BigInteger.ONE), BigInteger.ONE, 0, 0);
-        assertNull(aPower.magnitudeFromBrackets(oneAbove, 128));
-        assertEquals(-1, aPower.magnitudeByRefining(oneAbove));
-    }
-
-    /**
-     * And over values small enough to spell out, the order the refinement answers is the order the whole
-     * numbers do.
-     *
-     * <p>The pairs it is reached for cannot be checked against a second reading, there being no second
-     * reading of a pair no machine writes out. So it is checked where both readings are possible and asked
-     * for directly: every pair over a grid of numerators, denominators and both exponents, against the
-     * exact order of the two spelled out, in both directions. What that holds is the refinement itself —
-     * that a bracket holds the number it was taken for however many times it has been cut, and that the
-     * rising ends where the pair comes apart rather than where the pair is equal.
-     */
-    @Test
-    @Timeout(60)
-    void theOrderTheRefinementAnswersIsTheOrderTheWholeNumbersDo() {
-        List<Rational> values = new ArrayList<>();
-        for (long n : new long[] {1, 3, 7, -3}) {
-            for (long d : new long[] {1, 2, 7}) {
-                for (long twos : new long[] {-2, 0, 3}) {
-                    for (long fives : new long[] {-2, 0, 3}) {
-                        values.add(new Rational(
-                                BigInteger.valueOf(n), BigInteger.valueOf(d), twos, fives));
-                    }
-                }
-            }
-        }
-
-        for (Rational a : values) {
-            for (Rational b : values) {
-                // the exact order of the two magnitudes, by cross-multiplying them spelled out
-                int exactly = up(a).abs().multiply(down(b)).compareTo(up(b).abs().multiply(down(a)));
-                if (exactly == 0) {
-                    // Two of one magnitude are one record and one sign, which the comparison answers
-                    // before any reading is reached — and a bracket, holding both, never separates them.
-                    continue;
-                }
-                assertEquals(Integer.signum(exactly), a.magnitudeByRefining(b),
-                        a + " against " + b);
-            }
-        }
-    }
-
-    /**
-     * A pair of huge opposing exponents is written out by neither side, and is still ordered.
-     *
-     * <p>This is the pair #1795 is about, read at the reading that was its whole subject. Both values are
-     * one exponent each; the two exponents are large and pull opposite ways, so the writing that puts their
-     * difference on one side asks for a power of two of some three hundred million megabytes on the way up
-     * and a power of five of the same on the way down. Neither is a number the host holds, so both writings
-     * decline — which is the fact this asserts, and which nothing else here would notice, the order being
-     * settled for this pair by the cheap bracket before any writing is reached.
-     */
-    @Test
-    void aPairOfHugeOpposingExponentsIsWrittenOutByNeitherSide() {
-        Rational twos = aPowerOfTwo();
-        Rational fives = theNearestPowerOfFive();
-
-        assertNull(twos.magnitudeWrittenOut(fives, Long.MAX_VALUE),
-                "no writing of this pair is a number the host holds, whatever it may cost");
-        assertNull(fives.magnitudeWrittenOut(twos, Long.MAX_VALUE));
-        assertTrue(twos.compareTo(fives) > 0, "and the order is answered all the same");
-    }
-
-    /**
      * A power of two against a power of five brought within a hundred and thirty bits of it by a fraction:
-     * one pair with every part of the shape in it.
-     *
-     * <p>Compact — one exponent on one side, a fraction of some forty digits on the other. Large exponents
-     * pulling opposite ways, so neither writing of the pair is a number the host holds. Closer together than
-     * the width the comparison starts at, so the cheap bracket leaves them open. And ordered, because they
-     * are not the same value. So {@code compareTo} reaches the refinement by its own route, with nothing
-     * standing in for anything.
-     *
-     * <p>The fraction is the correction, and where it came from is arithmetic this type cannot do. The two
-     * exponents put the two logarithms some sixty-odd bits apart — as close as whole numbers of their size
-     * bring them — and the fraction closes that to about a hundred and thirty-five bits, which needed
-     * {@code log2 5} to more places than any value here holds. It was computed apart from this and is
-     * checked here by what it does: the assertions below say the starting width does not separate the pair
-     * and that twice it does, which is the closeness, and the order follows from the fraction standing below
-     * the correction it approximates.
+     * both exponents large and pulling opposite ways, and the two values closer together than the width
+     * the comparison starts at. The order is answered all the same, from either side and for either sign.
      */
     @Test
-    void aPowerOfTwoAndACorrectedPowerOfFiveReachTheRefinementByThemselves() {
+    void aPowerOfTwoAndACorrectedPowerOfFiveAreOrdered() {
         Rational twos = aPowerOfTwo();
         Rational correctedFives = new Rational(
                 new BigInteger("1393796574908163946434124475858836208137477"),
                 new BigInteger("1393796574908163946345982392040522594123779"),
                 0, 1_329_339_201_633_350_533L);
-
-        assertNull(twos.magnitudeFromBrackets(correctedFives, 128),
-                "the width the comparison starts at does not separate this pair");
-        assertEquals(Integer.valueOf(1), twos.magnitudeFromBrackets(correctedFives, 256),
-                "and twice that width does, which is how close they stand");
-        assertNull(twos.magnitudeWrittenOut(correctedFives, Long.MAX_VALUE),
-                "no writing of this pair is a number the host holds, whatever it may cost");
-        assertNull(correctedFives.magnitudeWrittenOut(twos, Long.MAX_VALUE));
 
         assertTrue(twos.compareTo(correctedFives) > 0, "the power of two is the greater of the two");
         assertTrue(correctedFives.compareTo(twos) < 0);
@@ -561,142 +415,6 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
                 new BigInteger("1393796574908163946434124475858836208137477"),
                 new BigInteger("1393796574908163946345982392040522594123779"),
                 0, 1_329_339_201_633_350_533L)));
-    }
-
-    /**
-     * And a pair the starting width leaves open, whose powers no writing is worth, is answered by refining —
-     * through the comparison's own readings and not by asking the last of them directly.
-     *
-     * <p>The pair has everything the shape needs but the size: compact parts, large exponents pulling
-     * opposite ways, and the two values standing far closer together than the width the comparison starts
-     * at. What it does not have is powers past what the host holds, because a pair with those has no second
-     * reading to check the answer against — so what stands in for the host's end here is the budget, the
-     * reading being told no writing is worth anything. The route is then the route the huge pair takes:
-     * bracket open, both writings declining, the refinement answering.
-     *
-     * <p>The fraction is the best one of its size standing near the power, so the two values agree over
-     * hundreds of bits — found by the walk a common measure takes, which is the same walk that orders two
-     * fractions. The answer is held against cross multiplication, which these are small enough for.
-     */
-    @Test
-    void aPairNoWritingIsWorthIsAnsweredByTheReadingsBelowIt() {
-        BigInteger power = FIVE.pow(300);
-        BigInteger[] near = theBestApproximationOf(power, BigInteger.TWO.pow(697), 135);
-        Rational aPower = new Rational(BigInteger.ONE, BigInteger.ONE, 0, 300);
-        Rational nearIt = new Rational(near[0], near[1], 697, 0);
-
-        assertNull(aPower.magnitudeFromBrackets(nearIt, 128),
-                "the width the comparison starts at does not separate this pair");
-        assertNull(aPower.magnitudeWrittenOut(nearIt, 0),
-                "and no writing of it is worth taking at this budget");
-
-        // the exact order, by cross-multiplying the two written out as fractions
-        int exactly = power.multiply(near[1]).compareTo(near[0].multiply(BigInteger.TWO.pow(697)));
-        assertEquals(Integer.signum(exactly), aPower.magnitudeWithAWritingWorth(nearIt, 0));
-        assertEquals(-Integer.signum(exactly), nearIt.magnitudeWithAWritingWorth(aPower, 0));
-        // and the same pair, left to work out for itself what a writing is worth, answers the same
-        assertEquals(Integer.signum(exactly), Integer.signum(aPower.compareTo(nearIt)));
-    }
-
-    /**
-     * The best approximation of {@code n/d} whose denominator is over {@code bits} bits, as a numerator
-     * beside a denominator.
-     *
-     * <p>The convergents of the walk a common measure takes, which are the closest any fraction of their
-     * size stands to what they approximate — a denominator of some many bits lands within twice that many
-     * bits of the value, which is how a fixture stands hundreds of bits from a power while staying small
-     * enough to read.
-     */
-    private static BigInteger[] theBestApproximationOf(BigInteger n, BigInteger d, int bits) {
-        BigInteger overBefore = BigInteger.ZERO;
-        BigInteger over = BigInteger.ONE;
-        BigInteger underBefore = BigInteger.ONE;
-        BigInteger under = BigInteger.ZERO;
-        BigInteger up = n;
-        BigInteger by = d;
-        while (under.bitLength() <= bits && by.signum() != 0) {
-            BigInteger[] step = up.divideAndRemainder(by);
-            BigInteger overNext = step[0].multiply(over).add(overBefore);
-            BigInteger underNext = step[0].multiply(under).add(underBefore);
-            overBefore = over;
-            over = overNext;
-            underBefore = under;
-            under = underNext;
-            up = by;
-            by = step[1];
-        }
-        return new BigInteger[] {over, under};
-    }
-
-    /**
-     * And the search for a width retreats into what the host holds where the rise has asked for too much.
-     *
-     * <p>Two searches are going on in the refinement and they are not the same search: one is for the
-     * precision the question needs, which rises, and the other is for where the host's room gives out, which
-     * is only found by asking. Read as one, the first width that asked for too much ended the whole thing —
-     * so a question needing a width between the last one that was held and the one that failed went
-     * unanswered while the room for it was there, which is the one thing a total order may not do.
-     *
-     * <p>Asked of this mechanism with a reading of its own, because for any reading of a Rational the two
-     * widths stand hundreds of megabytes apart. The rising overshoots by design, which is what the assertion
-     * below the answer says: the width that failed was tried, and the answer came from a narrower one.
-     */
-    @Test
-    void theSearchForAWidthRetreatsIntoWhatTheHostHolds() {
-        int enough = 5000;
-        int pastWhatIsHeld = 6000;
-        List<Integer> tried = new ArrayList<>();
-
-        String answered = Rational.asWideAsItTakes(width -> {
-            tried.add(width);
-            if (width >= pastWhatIsHeld) {
-                throw new OutOfRoom("no room for a width of " + width);
-            }
-            return width >= enough ? "answered" : null;
-        }, () -> "answer this");
-
-        assertEquals("answered", answered);
-        assertTrue(tried.stream().anyMatch(width -> width >= pastWhatIsHeld),
-                "the rise asked for a width the host would not hold, which is what the retreat is for");
-        assertTrue(tried.stream().anyMatch(width -> width >= enough && width < pastWhatIsHeld),
-                "and the answer came from a width between the two");
-    }
-
-    /**
-     * And where no width the host holds is wide enough, the search ends and the run has failed.
-     *
-     * <p>The control for the retreat, and what says it ends: the two widths close on one another, so the
-     * search stops rather than going round for ever. A retreat that could not end would have been the other
-     * way to lose the promise.
-     */
-    @Test
-    @Timeout(20)
-    void whereNoWidthTheHostHoldsIsEnoughTheRunHasFailed() {
-        assertThrows(OutOfRoom.class, () -> Rational.asWideAsItTakes(
-                width -> {
-                    if (width >= 6000) {
-                        throw new OutOfRoom("no room for a width of " + width);
-                    }
-                    return null;
-                },
-                () -> "answer this"));
-    }
-
-    /**
-     * And a count of bits past what the host addresses is the run's shortage, not a number.
-     *
-     * <p>A width and a bit length are both counted in an {@code int}, so a count made of two of them wraps
-     * in silence — and a wrapped count of bits does not refuse but answers, a negative shift being a shift
-     * the other way. What came of that was a bracket holding the wrong numbers, which is an order answered
-     * wrongly rather than declined. Reaching it through a comparison wants numbers of some hundreds of
-     * megabytes, so the arithmetic that every count goes through is asked directly.
-     */
-    @Test
-    void aCountOfBitsPastWhatTheHostAddressesIsTheRunsShortage() {
-        assertEquals(Integer.MAX_VALUE, Rational.bitsTheHostAddresses(Integer.MAX_VALUE));
-        assertThrows(OutOfRoom.class, () -> Rational.bitsTheHostAddresses(Integer.MAX_VALUE + 1L));
-        assertThrows(OutOfRoom.class,
-                () -> Rational.bitsTheHostAddresses((long) Integer.MAX_VALUE + Integer.MAX_VALUE));
     }
 
     /** The numerator of a value spelled out as one fraction, which only the small ones can be. */

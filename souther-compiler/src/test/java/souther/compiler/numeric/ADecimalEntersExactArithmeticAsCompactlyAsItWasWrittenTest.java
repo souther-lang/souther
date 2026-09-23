@@ -484,20 +484,19 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
     }
 
     /**
-     * The exponents are a range closed under negation, and that is asked where a ratio is made.
+     * Every exponent a long holds is one a ratio holds, and an operation refuses where its own answer
+     * has none.
      *
-     * <p>Every operation here turns an exponent round: a reciprocal negates both, reading the scale
-     * of the decimal this is negates them, writing the powers out puts whichever is below the line
-     * on the other side. The least number a long holds is its own negation, so a ratio standing at
-     * it is one no operation could act on — and squaring a half reaches it, which is why this is a
-     * rule and not a remark.
+     * <p>The least number a long holds is its own negation, so a ratio standing at it is one whose
+     * reciprocal has no exponent — but the ratio is a value, and squaring a half reaches it, which is
+     * why this is a rule and not a remark. What a step past it refuses is the answer that is past it.
      */
     @Test
-    void anExponentWhoseNegationIsNotHeldIsNotHeldEither() {
-        assertThrows(ArithmeticException.class,
-                () -> new ExactRatio(BigInteger.ONE, BigInteger.ONE, Long.MIN_VALUE, 0));
-        assertThrows(ArithmeticException.class,
-                () -> new ExactRatio(BigInteger.ONE, BigInteger.ONE, 0, Long.MIN_VALUE));
+    void anExponentIsHeldWhereverALongHoldsItAndAnOperationRefusesWhereItsAnswerHasNone() {
+        ExactRatio atTheEnd = new ExactRatio(BigInteger.ONE, BigInteger.ONE, Long.MIN_VALUE, 0);
+        assertEquals(Long.MIN_VALUE, atTheEnd.twos());
+        assertEquals(Long.MIN_VALUE,
+                new ExactRatio(BigInteger.ONE, BigInteger.ONE, 0, Long.MIN_VALUE).fives());
 
         ExactRatio at = ExactRatio.of(BigInteger.ONE, BigInteger.TWO);
         for (int i = 0; i < 62; i++) {
@@ -505,7 +504,8 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
         }
         assertEquals(-(1L << 62), at.twos());
         ExactRatio reached = at;
-        assertThrows(ArithmeticException.class, () -> reached.times(reached));
+        assertEquals(Long.MIN_VALUE, reached.times(reached).twos());
+        assertThrows(ArithmeticException.class, () -> reached.times(reached).times(reached));
     }
 
     /** The fraction is still there for a caller whose question is about those two numbers, and it is

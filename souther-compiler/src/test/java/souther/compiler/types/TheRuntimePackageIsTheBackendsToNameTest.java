@@ -71,6 +71,28 @@ class TheRuntimePackageIsTheBackendsToNameTest {
                         + " `jvm.SoutherJvmAbi`'s to say and is said there");
     }
 
+    /**
+     * And what a backend writes into a program is never the exact arithmetic's package.
+     *
+     * <p>{@code souther.exact} is target-neutral and shipped in the runtime artifact, which is what lets
+     * the compiler reason with the arithmetic a program runs. It is an implementation both share and no
+     * part of the language's vocabulary or of a class a backend generates, so a program links against
+     * {@code souther.runtime} alone and the arithmetic stays replaceable behind it.
+     */
+    @Test
+    void nothingABackendWritesNamesTheExactPackage() throws IOException {
+        Set<String> naming = new LinkedHashSet<>();
+        for (Path source : sources()) {
+            if (MAY_NAME_IT.contains(area(source))
+                    && code(Files.readString(source)).contains("souther.exact")) {
+                naming.add(relative(source));
+            }
+        }
+
+        assertEquals(List.of(), naming.stream().sorted().toList(),
+                "a generated class reaches the arithmetic through souther.runtime, never past it");
+    }
+
     /** And the areas above are areas: a package renamed out from under this stops covering what it
      *  covered, and would do it silently. */
     @Test

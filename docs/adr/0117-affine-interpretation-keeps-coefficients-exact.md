@@ -1,6 +1,8 @@
 # ADR-0117: Affine interpretation keeps coefficients exact
 
-Status: Accepted. Specialises ADR-0111. Follows ADR-0116.
+Status: Accepted. Specialises ADR-0111. Follows ADR-0116. Revised 2026-09-23: the two types share
+one implementation of the exact arithmetic, `souther.exact` — see *The compiler's ratio and the
+language's Rational are two types*.
 
 ## Context
 
@@ -245,22 +247,42 @@ ADR-0116 gives the name `Rational` to the language type. The compiler's
 exact scalar that compiler numeric reasoning is done in, used by `LinearForm` and `NumericDomain`,
 and not the runtime carrier of a model's value.
 
-They hold the same mathematical domain, so sharing one implementation is the obvious question.
-The reason not to is the boundary the compiler already draws.
-`TheRuntimePackageIsTheBackendsToNameTest` refuses any mention of `souther.runtime` from the
+They hold the same mathematical domain, and two questions come out of that which have different
+answers.
+
+Which type a value is stays two types. The boundary the compiler draws is
+`TheRuntimePackageIsTheBackendsToNameTest`, which refuses any mention of `souther.runtime` from the
 areas that reason about what a declaration is — `types`, `check`, `stdlib`, `semantics`,
-`partition`, `inputs`, `core`, `flow` — because what a declaration *is* and what one backend calls
-it are two things. The runtime carrier of `Rational` is the JVM backend's physical representation
-and would be another backend's to choose differently; an analysis reasoning in it would be one
-whose soundness depended on which backend was linked.
+`partition`, `inputs`, `core`, `flow`, `numeric` — because what a declaration *is* and what one
+backend calls it are two things. The runtime carrier of `Rational` is the JVM backend's physical
+representation and would be another backend's to choose differently; an analysis reasoning in it
+would be one whose soundness depended on which backend was linked.
 
-The alternative is a third target-neutral module holding an exact ratio both could use. That buys
-one shared implementation for the cost of a new architecture boundary maintained for a single
-type, and this decision does not take it.
+How the arithmetic on either is done is one implementation. Canonical form, the four operations,
+the order and the rounding of `n/d · 2^a · 5^b` are `souther.exact.ExactArithmetic`, and
+`ExactRatio` and `Rational` each keep their own four fields and their own equality and put their own
+failures on what it reports. Two independent implementations of one non-trivial invariant are too
+many whatever the number of callers: the order alone is bracketing, cheap exact writing and a
+refinement that searches for the width the host holds, and the two copies did not stay the same
+answer — one refused the least exponent as a value and the other held it, one ordered by a width that
+rose without asking what the host holds and the other retreated into what it holds. The shared
+implementation follows the run time's: every exponent a `long` holds is a value, and what refuses is
+an operation whose own answer has no exponent, so `r / r` is one at any exponent.
 
-`numeric` is in neither set that test names, so the rule it holds does not currently reach the
-package this exact ratio lives in. It is added to the target-neutral set, which is what makes this
-paragraph a rule rather than an intention.
+`souther.exact` is a package of the `souther-runtime` artifact, beside `souther.unicode` and not
+under `souther.runtime`. An artifact is a deployment unit and a package is what a name belongs to;
+the compiler already depends on the artifact for `souther.unicode`, so this adds no edge to the
+dependency graph, and what the boundary above keeps out is the JVM backend's vocabulary, which
+`souther.exact` does not contain. It names no `Rational`, throws no `ConstraintViolation` or
+`OutOfRoom` — it reports `ExactRangeExceeded` where the answer has no representation and
+`ExactRoomExceeded` where the run had no room for an instrument, and each type says that in its own
+terms — and it depends on the JDK alone. Generated code never names it: what a program links against
+is `souther.runtime`, and `TheRuntimePackageIsTheBackendsToNameTest` holds that of what a backend
+writes.
+
+A separate module is what becomes right if a backend needs `souther.exact` and `souther.unicode`
+without `souther.runtime`: the packages are already separate, so the move is a change of artifact
+and nothing else.
 
 ## Alternatives
 
