@@ -306,38 +306,23 @@ record Grammar(List<Production> productions, List<Region> regions) {
                 throw failure("the text ends inside a production");
             }
             char c = text.charAt(pos);
-            switch (c) {
-                case '"', '\'' -> {
-                    return new Terminal(quoted(c));
-                }
-                case '?' -> {
-                    return new Special(quoted('?').strip());
-                }
-                case '[' -> {
-                    pos++;
-                    Expr body = choice();
-                    expect(']');
-                    return new Optional(body);
-                }
-                case '{' -> {
-                    pos++;
-                    Expr body = choice();
-                    expect('}');
-                    return new Repetition(body);
-                }
-                case '(' -> {
-                    pos++;
-                    Expr body = choice();
-                    expect(')');
-                    return body;
-                }
-                case '<' -> {
-                    return restriction();
-                }
-                default -> {
-                    return reference();
-                }
-            }
+            return switch (c) {
+                case '"', '\'' -> new Terminal(quoted(c));
+                case '?' -> new Special(quoted('?').strip());
+                case '[' -> new Optional(enclosed(']'));
+                case '{' -> new Repetition(enclosed('}'));
+                case '(' -> enclosed(')');
+                case '<' -> restriction();
+                default -> reference();
+            };
+        }
+
+        /** What a bracket at the cursor encloses, up to the {@code closing} one. */
+        private Expr enclosed(char closing) {
+            pos++;
+            Expr body = choice();
+            expect(closing);
+            return body;
         }
 
         private Expr restriction() {
