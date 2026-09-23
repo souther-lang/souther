@@ -59,8 +59,10 @@ class DecomposingACountDoesNotChangeWhatItReportsTest {
         ReadingPolicy policy = c.db().ask(new Front.Reading()).value();
         List<UninhabitableTypes.UninhabitableGroup> whole = UninhabitableTypes.withNoValueOfTheirOwn(
                 declared,
-                TypeCardinality.overTheWholeGraph(declared, source, policy, c.db().readings(),
-                        TypeCardinality.Premises.read(source, policy, c.db().readings())));
+                TypeCardinality.overTheWholeGraph(declared,
+                        RuleReadingContext.of(source, policy, c.db().readings()),
+                        TypeCardinality.Premises.read(
+                                RuleReadingContext.of(source, policy, c.db().readings()))));
 
         assertEquals(named,
                 whole.stream().map(each -> each.members().stream().map(TypeSymbol::name).toList())

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.conformance.RepositoryModels;
@@ -164,8 +165,8 @@ class APositionARuleWasNotReadAtDoesNotReadAsOneEveryRuleWasReadAtTest {
                     compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
             RuleReadingSource rules = RuleReadings.of(compilation, module);
             for (DeclaredSig declared : sigs.values()) {
-                out.add(InputDomain.of(declared, rules, ReadAs.THE_COMPILATION_DOES,
-                        RepositoryModels.knownTo(compilation)));
+                out.add(InputDomain.of(declared, RuleReadingContext.of(rules,
+                        ReadAs.THE_COMPILATION_DOES, RepositoryModels.knownTo(compilation))));
             }
         }
     }

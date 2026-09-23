@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.OfferedAtTheLines;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputDomain;
@@ -69,7 +70,8 @@ class ACollectionOfSeveralIsFilledFromWhatItsElementTypeAdmitsTest {
         assertNotNull(sigs, "the model did not compile");
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain domain =
-                InputDomain.of(sigs.get("countThem"), rules, ReadAs.THE_COMPILATION_DOES);
+                InputDomain.of(sigs.get("countThem"),
+                        RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES));
         Partitions.Partitioning partitioning =
                 Partitions.of("countThem", domain, rules, ReadAs.THE_COMPILATION_DOES);
         return Generator.fill(MeasuredInput.of("countThem", domain.reading(rules), partitioning),

@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
@@ -171,7 +172,7 @@ class EachOfAPositionsNumbersIsMeasuredOnItsOwnTest {
         Type type = Type.ref(TypeSymbols.declared(new TypeKey(rules.symbols().module(), parameter)));
         InputDomain read = InputDomain.of(
                 List.of(new InputDomain.Parameter("v", null, type)),
-                rules, ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES));
         List<String> out = new ArrayList<>();
         for (souther.compiler.inputs.Position at : read.positions()) {
             switch (LocalInspection.of(at,

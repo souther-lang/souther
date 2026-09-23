@@ -22,33 +22,33 @@ import java.util.Map;
  */
 final class CountsByComponent implements TypeCardinality.Counts {
 
-    private final RuleReadingSource source;
-    private final ReadingPolicy policy;
-    private final DeclarationReadings machines;
+    private final RuleReadingContext reading;
     private final TypeCardinality.Premises premises;
     private final Map<TypeSymbol, Cardinality> known = new HashMap<>();
 
-    private CountsByComponent(RuleReadingSource source, ReadingPolicy policy,
-                              DeclarationReadings machines) {
-        this.source = source;
-        this.policy = policy;
-        this.machines = machines;
-        this.premises = TypeCardinality.Premises.read(source, policy, machines);
+    private CountsByComponent(RuleReadingContext reading) {
+        this.reading = reading;
+        this.premises = TypeCardinality.Premises.read(reading);
     }
 
     /** What {@code declarations} and everything they reach come to. */
     static TypeCardinality.Cardinalities of(List<Hir.Def> declarations, RuleReadingSource source,
                                             ReadingPolicy policy) {
-        return of(declarations, source, policy, DeclarationReadings.NONE);
+        return of(declarations, RuleReadingContext.unshared(source, policy));
     }
 
     /** The same, with what somebody has already made of each declaration borrowed from
      *  {@code machines}. */
     static TypeCardinality.Cardinalities of(List<Hir.Def> declarations, RuleReadingSource source,
                                             ReadingPolicy policy, DeclarationReadings machines) {
-        CountsByComponent counts = new CountsByComponent(source, policy, machines);
+        return of(declarations, RuleReadingContext.of(source, policy, machines));
+    }
+
+    private static TypeCardinality.Cardinalities of(List<Hir.Def> declarations,
+                                                    RuleReadingContext reading) {
+        CountsByComponent counts = new CountsByComponent(reading);
         return TypeCardinality.assembled(declarations.stream().map(Hir.Def::declares).toList(),
-                source, policy, machines, counts.premises, counts);
+                reading, counts.premises, counts);
     }
 
     @Override
@@ -56,7 +56,7 @@ final class CountsByComponent implements TypeCardinality.Counts {
         if (known.containsKey(name)) {
             return known.get(name);
         }
-        List<TypeSymbol> component = TypeCardinality.componentOf(name, source);
+        List<TypeSymbol> component = TypeCardinality.componentOf(name, reading.source());
         if (component.isEmpty()) {
             return null;
         }
@@ -66,8 +66,7 @@ final class CountsByComponent implements TypeCardinality.Counts {
             of(component.get(0));
             return known.get(name);
         }
-        known.putAll(TypeCardinality.ofComponent(
-                component, source, policy, machines, premises, this));
+        known.putAll(TypeCardinality.ofComponent(component, reading, premises, this));
         return known.get(name);
     }
 }

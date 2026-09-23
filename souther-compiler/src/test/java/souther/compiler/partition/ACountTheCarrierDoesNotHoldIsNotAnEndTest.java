@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Carrier;
@@ -210,8 +211,8 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         assertFalse(sigs.isEmpty(), "the model under test compiles");
         Map.Entry<String, DeclaredSig> declared = sigs.entrySet().iterator().next();
-        InputDomain domain = InputDomain.of(declared.getValue(), rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        InputDomain domain = InputDomain.of(declared.getValue(), RuleReadingContext.unshared(rules,
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
         souther.compiler.inputs.Quantities reading = domain.quantities(rules);
         Partitions.Partitioning p = Partitions.of(declared.getKey(), domain, rules,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);

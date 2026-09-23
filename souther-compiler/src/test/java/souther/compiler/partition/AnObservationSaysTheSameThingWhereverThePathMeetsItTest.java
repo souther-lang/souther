@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.RuleReadingContext;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.DeclaredSig;
@@ -86,8 +87,8 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
         assertNotNull(checked, "the model under test compiles");
         Core body = checked.behaviorBodies().get("book");
         CoverageSites.Plan plan = checked.plan();
-        InputDomain read = InputDomain.of(sigs.get("book"), rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        InputDomain read = InputDomain.of(sigs.get("book"), RuleReadingContext.unshared(rules,
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
         Partitions.Partitioning partitioning = Partitions.withThresholds(
                 Partitions.of("book", read, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 read.quantities(rules),

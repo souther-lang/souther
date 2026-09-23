@@ -68,7 +68,7 @@ class WhatACountIsShortOfIsTheReadingsAndNotTheRunsTest {
                         + " and a count over it is a count of what the model states");
 
         InvariantChecker.Seeded email = InvariantChecker.seedFields(
-                named(compilation, module, "Email"), whole, policy, DeclarationReadings.NONE);
+                named(compilation, module, "Email"), RuleReadingContext.unshared(whole, policy));
         assertFalse(email.notGathered().isEmpty(),
                 "the model says nothing here unless a reading of it does stop somewhere");
         assertFalse(email.clausesNotExpanded(),

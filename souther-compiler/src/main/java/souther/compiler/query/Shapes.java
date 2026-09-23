@@ -915,7 +915,7 @@ public final class Shapes {
             Answer<Hir.Def> declared = db.ask(new Names.ResolvedDeclaration(named));
             return Answer.of(declared.present()
                     ? CardinalityPremise.of(declared.value().declares(), declared.value(),
-                            reading.value(), policy.value(), db.readings())
+                            RuleReadingContext.of(reading.value(), policy.value(), db.readings()))
                     : CardinalityPremise.NOTHING);
         }
     }
@@ -928,10 +928,8 @@ public final class Shapes {
      * for has nothing to be edited either, so what is read there is read once and asked for
      * afterwards; what the store answers is every declaration an author is typing in.
      */
-    public static TypeCardinality.Premises cardinalityPremises(
-            Db db, RuleReadingSource source, souther.compiler.check.ReadingPolicy policy) {
-        TypeCardinality.Premises here =
-                TypeCardinality.Premises.read(source, policy, db.readings());
+    public static TypeCardinality.Premises cardinalityPremises(Db db, RuleReadingContext reading) {
+        TypeCardinality.Premises here = TypeCardinality.Premises.read(reading);
         return named -> {
             if (!(named instanceof TypeSymbol.AtModule at)) {
                 return CardinalityPremise.NOTHING;
@@ -1050,9 +1048,10 @@ public final class Shapes {
                 return db.ask(new CardinalityOf(first.key()));
             }
             try {
-                return Answer.of(TypeCardinality.ofComponent(members, reading.value(), policy.value(),
-                        db.readings(), cardinalityPremises(db, reading.value(), policy.value()),
-                        name -> countOf(db, name)));
+                RuleReadingContext world =
+                        RuleReadingContext.of(reading.value(), policy.value(), db.readings());
+                return Answer.of(TypeCardinality.ofComponent(members, world,
+                        cardinalityPremises(db, world), name -> countOf(db, name)));
             } catch (CompileException e) {
                 return Answer.absent(Report.of(e));
             }
@@ -1166,9 +1165,10 @@ public final class Shapes {
                 // What is left to do is what a count is beside the counts: which declarations had to
                 // be answered together, what each reads, and what their rules ask a collection to
                 // hold, which is what the question about who is at fault for a lack is asked of.
+                RuleReadingContext world =
+                        RuleReadingContext.of(reading.value(), policy.value(), db.readings());
                 TypeCardinality.Cardinalities counted = TypeCardinality.assembled(
-                        declarations, reading.value(), policy.value(), db.readings(),
-                        cardinalityPremises(db, reading.value(), policy.value()),
+                        declarations, world, cardinalityPremises(db, world),
                         name -> countOf(db, name));
                 // Not counted where a rule the count read could not be read at all. What makes a
                 // type have no value is what its rules leave, so a count short of one of them may

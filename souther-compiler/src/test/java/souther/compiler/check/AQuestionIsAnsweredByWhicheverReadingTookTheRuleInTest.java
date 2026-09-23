@@ -52,8 +52,8 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
         assertNotNull(symbols);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
         assertNotNull(symbols.declaredNode(named.key()), "no `" + type + "` declared");
-        return FieldDomains.of(named, RuleReadings.of(compilation, module),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES).accounting();
+        return FieldDomains.of(named, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES)).accounting();
     }
 
     /** What the author called the clause, of a rule that is a declaration's invariant. */
@@ -133,8 +133,8 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         TypeSymbol.AtModule holder = TypeSymbols.declared(new TypeKey(module, "Holder"));
-        return FieldDomains.of(holder, RuleReadings.of(compilation, module),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
+        return FieldDomains.of(holder, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES))
                 .at(RuleKey.of("len")).bounds().min().at().toString();
     }
 
@@ -377,8 +377,9 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Length"));
-        FieldDomains read = FieldDomains.of(named, RuleReadings.of(compilation, module),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        FieldDomains read = FieldDomains.of(named,
+                RuleReadingContext.unshared(RuleReadings.of(compilation, module),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
 
         assertFalse(read.projection().isCertified(), "the bounds hold no hole");
         assertEquals(Set.of(), rule(read.accounting(), "said").unaccounted(),

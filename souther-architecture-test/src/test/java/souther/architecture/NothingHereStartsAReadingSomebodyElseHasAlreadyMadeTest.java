@@ -12,14 +12,10 @@ import java.lang.classfile.instruction.InvokeInstruction;
 import java.lang.classfile.constantpool.LoadableConstantEntry;
 import java.lang.classfile.constantpool.MemberRefEntry;
 import java.lang.classfile.constantpool.MethodHandleEntry;
-import java.lang.constant.ClassDesc;
 import java.lang.constant.MethodTypeDesc;
-import java.lang.reflect.AccessFlag;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
@@ -38,11 +34,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * under a revision and handed to whoever asks next — and where the lending is reached, a reader
  * says where it borrows from ({@code DeclarationReadings}).
  *
- * <p><b>A reader that says nothing gets nothing, and nothing about that fails.</b> The entry points
- * come in pairs: one takes the lending and one does not, and the second reads for itself and
- * answers the same. A caller that reached for the shorter one loses every reading the lending had
- * to give and is told by nothing at all — which is how a boundary search came to build a
- * declaration's string machines again for each value it probed.
+ * <p><b>A reader that says nothing gets nothing, and nothing about that fails.</b> An entry point
+ * that took the rules and the budget apart could be offered beside one that also took the lending,
+ * and the shorter would read for itself and answer the same. A caller that reached for it would
+ * lose every reading the lending had to give and be told by nothing at all — which is how a
+ * boundary search came to build a declaration's string machines again for each value it probed. So
+ * a reader of a declaration's rules is handed a world, which always says where it borrows from, and
+ * nothing in {@code check} or {@code inputs} takes the rules and the budget as two arguments but
+ * what makes a world.
  *
  * <p><b>What is written down is the edge and not the place it arrives at.</b> A reader that starts
  * such a reading is reached by a call, and a table of readers says nothing about who is calling
@@ -56,14 +55,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * missing, and a walk that had stopped reading call sites would report a compiler that starts no
  * such reading. So the way in is asserted to be there, and the readers to be none.
  *
- * <p>The shorter entry points stay for the same reason the way in does: a test standing one
- * declaration up to look at it is a reader with no store, and saying so is not a defect. What may
- * not happen is this compiler reaching for one.
+ * <p>A test standing one declaration up to look at it is a reader with no store, and saying so is
+ * not a defect: it asks for the world with nothing lent by name. What may not happen is this
+ * compiler asking for one.
  *
  * <p>Read off the compiled classes, because what is being asked is which method a call site
- * resolved to. The overloads differ by one argument and the shorter is reached by leaving it out,
- * which is a fact about resolution rather than about the text: a walk over spellings would be
- * deciding overload resolution again, and getting it wrong quietly.
+ * resolved to and what a method takes, which are facts about resolution rather than about the
+ * text: a walk over spellings would be deciding overload resolution again, and getting it wrong
+ * quietly.
  *
  * <p><b>Every way an instruction names a method.</b> A call is one; handing the method over to be
  * called later is another, and that arrives as a handle among the arguments a bootstrap is given.
@@ -75,16 +74,32 @@ class NothingHereStartsAReadingSomebodyElseHasAlreadyMadeTest {
 
     private static final String LENDING = "souther/compiler/check/DeclarationReadings";
 
-    private static final String LENDING_TYPE = "L" + LENDING + ";";
-
     /** What a row names when a reader takes nothing to borrow from rather than reaching a way in
      *  that does. */
     private static final String NOTHING_TO_BORROW_FROM = LENDING + "#NONE";
 
     private static final String CHECK = "souther/compiler/check/";
 
-    private static final String SOURCE_AND_POLICY =
-            "L" + CHECK + "RuleReadingSource;L" + CHECK + "ReadingPolicy;";
+    private static final String INPUTS = "souther/compiler/inputs/";
+
+    private static final String THE_RULES = "L" + CHECK + "RuleReadingSource;";
+
+    private static final String THE_BUDGET = "L" + CHECK + "ReadingPolicy;";
+
+    private static final String SOURCE_AND_POLICY = THE_RULES + THE_BUDGET;
+
+    /**
+     * Every method of {@code check} and {@code inputs} that takes the rules and the budget as two
+     * arguments, which is what makes a world and nothing else.
+     *
+     * <p>Named rather than counted, so that a walk that stopped reading what methods take comes
+     * back with nothing and fails. A method added here is a way to read a declaration's rules
+     * without saying where to borrow from; a method gone from here is a world nobody can make.
+     */
+    private static final Set<String> TAKING_THE_RULES_AND_THE_BUDGET_APART = Set.of(
+            CHECK + "RuleReadingContext#<init>",
+            CHECK + "RuleReadingContext#of",
+            CHECK + "RuleReadingContext#unshared");
 
     /**
      * The one way in that says outright it reads for itself, and the whole of what may say it.
@@ -119,86 +134,33 @@ class NothingHereStartsAReadingSomebodyElseHasAlreadyMadeTest {
     private static final Set<String> EDGES_INTO_A_READING_OF_ONES_OWN = Set.of();
 
     /**
-     * Every pair: a static method taking the lending, and one of the same name on the same class
-     * reached by leaving it out.
+     * Only a world is made of the rules and the budget.
      *
-     * <p>Both halves are found rather than listed, so an entry point written later is in the
-     * population the day it is written and one whose partner is deleted leaves it the same day. A
-     * list of names would be a second answer to which entry points these are, kept up by whoever
-     * remembered.
-     */
-    private static Map<String, Set<MethodTypeDesc>> theShorterOfEachPair() {
-        Map<String, Set<MethodTypeDesc>> found = new LinkedHashMap<>();
-        for (ClassModel read : COMPILED.all()) {
-            String owner = read.thisClass().name().stringValue();
-            Map<String, List<MethodModel>> byName = new LinkedHashMap<>();
-            for (MethodModel method : read.methods()) {
-                if (method.flags().has(AccessFlag.STATIC)) {
-                    byName.computeIfAbsent(method.methodName().stringValue(),
-                            each -> new ArrayList<>()).add(method);
-                }
-            }
-            byName.forEach((name, overloads) -> {
-                Set<MethodTypeDesc> shorter = new LinkedHashSet<>();
-                for (MethodModel each : overloads) {
-                    if (!lends(each) && overloads.stream()
-                            .anyMatch(other -> reachedByLeavingTheLendingOut(each, other))) {
-                        shorter.add(each.methodTypeSymbol());
-                    }
-                }
-                if (!shorter.isEmpty()) {
-                    found.put(owner + "#" + name, shorter);
-                }
-            });
-        }
-        return found;
-    }
-
-    /**
-     * Whether {@code shorter} is what a caller gets by leaving the lending out of {@code lending}.
-     *
-     * <p>What tells the pairs from the overloads that merely differ. A reader handed something that
-     * carries a lending of its own is not reading for itself, and the two would look alike to a
-     * rule that only asked whether one of the shapes names the lending: a meaning read off clauses
-     * already holds where those clauses borrow from, and the shape beside it that takes a source
-     * and a lending is where the clauses are made.
-     *
-     * <p>So the shapes have to line up: everything the longer one takes before the lending, in the
-     * order it takes them. A shorter one that takes something else takes something else, whatever
-     * the two are called.
-     */
-    private static boolean reachedByLeavingTheLendingOut(MethodModel shorter, MethodModel lending) {
-        if (!lends(lending)) {
-            return false;
-        }
-        List<ClassDesc> taken = lending.methodTypeSymbol().parameterList().stream()
-                .filter(each -> !LENDING_TYPE.equals(each.descriptorString()))
-                .toList();
-        List<ClassDesc> without = shorter.methodTypeSymbol().parameterList();
-        return without.size() <= taken.size() && without.equals(taken.subList(0, without.size()));
-    }
-
-    /** Whether {@code method} is handed somewhere to borrow a reading from. */
-    private static boolean lends(MethodModel method) {
-        return method.methodTypeSymbol().parameterList().stream()
-                .anyMatch(each -> LENDING_TYPE.equals(each.descriptorString()));
-    }
-
-    /**
-     * The pairs exist, so that a walk finding none would not read as a walk finding no edges.
-     *
-     * <p>Named rather than counted. What this is about is that the population is derived, and a
-     * derivation that came back empty because the shapes had been renamed would let every row below
-     * pass without looking at anything.
+     * <p>What keeps a reader from being offered a way in that leaves the lending out. A method
+     * taking the rules and the budget apart takes them without the lending unless it takes that as
+     * well, and one that takes all three is a world taken apart — which a step under a walk then
+     * hands on as three, and the next step down is free to put together with some other lender.
      */
     @Test
-    void theEntryPointsThatReadForThemselvesAreFound() {
-        Map<String, Set<MethodTypeDesc>> pairs = theShorterOfEachPair();
-
-        assertTrue(pairs.containsKey("souther/compiler/check/FieldDomains#of"),
-                () -> "what a record's rules leave has a way in that reads for itself: " + pairs);
-        assertTrue(pairs.containsKey("souther/compiler/check/OccurrenceCounts#of"),
-                () -> "and so does what a count at a name is read off: " + pairs);
+    void onlyAWorldIsMadeOfTheRulesAndTheBudget() {
+        Set<String> found = new TreeSet<>();
+        for (ClassModel read : COMPILED.all()) {
+            String owner = read.thisClass().name().stringValue();
+            if (!owner.startsWith(CHECK) && !owner.startsWith(INPUTS)) {
+                continue;
+            }
+            for (MethodModel method : read.methods()) {
+                StringBuilder taken = new StringBuilder();
+                method.methodTypeSymbol().parameterList()
+                        .forEach(each -> taken.append(each.descriptorString()));
+                if (taken.indexOf(THE_RULES) >= 0 && taken.indexOf(THE_BUDGET) >= 0) {
+                    found.add(owner + "#" + method.methodName().stringValue());
+                }
+            }
+        }
+        assertEquals(new TreeSet<>(TAKING_THE_RULES_AND_THE_BUDGET_APART), found,
+                "what takes the rules and the budget as two arguments is not what makes a world;"
+                        + " take the world instead");
     }
 
     /**
@@ -312,22 +274,16 @@ class NothingHereStartsAReadingSomebodyElseHasAlreadyMadeTest {
     private static Set<String> EVERY_EDGE;
 
     private static Set<String> walkForEveryEdgeIntoAReadingOfOnesOwn() {
-        Map<String, Set<MethodTypeDesc>> pairs = theShorterOfEachPair();
-        Set<Named> waysIn = theWaysInThatSayTheyReadForThemselves(pairs);
+        Set<Named> waysIn = theWaysInThatSayTheyReadForThemselves();
         Set<String> reaching = new TreeSet<>();
         for (ClassModel read : COMPILED.all()) {
             String owner = read.thisClass().name().stringValue();
             for (MethodModel method : read.methods()) {
                 String from = owner + "#" + method.methodName().stringValue()
                         + method.methodTypeSymbol().descriptorString();
-                // A way in reading for itself is how one of them is written rather than a place
-                // this compiler starts such a reading, and what it names inside is its own.
-                if (readsForItself(pairs, owner, method)) {
-                    continue;
-                }
                 for (Instruction instruction : instructionsOf(method)) {
                     for (Named named : whatItNames(instruction)) {
-                        if (startsAReadingOfItsOwn(pairs, waysIn, named)) {
+                        if (startsAReadingOfItsOwn(waysIn, named)) {
                             reaching.add(from + " -> " + named.member());
                         }
                     }
@@ -407,38 +363,25 @@ class NothingHereStartsAReadingSomebodyElseHasAlreadyMadeTest {
     /**
      * Whether reaching {@code named} is starting a reading nobody else made.
      *
-     * <p>Which method, and not which name. The pairs differ by one argument, so a name says
-     * nothing on its own: the entry point that takes the lending and the one beside it that does
-     * not are the same name, and a rule reading the name alone would report every caller of the
-     * first as a caller of the second.
+     * <p>Which method, and not which name: a way in is found with what it takes, so an overload of
+     * the same name that takes something to borrow from is not one.
      */
-    private static boolean startsAReadingOfItsOwn(Map<String, Set<MethodTypeDesc>> pairs,
-                                                  Set<Named> waysIn, Named named) {
-        if (named.member().equals(NOTHING_TO_BORROW_FROM) || waysIn.contains(named)) {
-            return true;
-        }
-        Set<MethodTypeDesc> shorter = pairs.get(named.member());
-        return shorter != null && shorter.contains(named.taking());
+    private static boolean startsAReadingOfItsOwn(Set<Named> waysIn, Named named) {
+        return named.member().equals(NOTHING_TO_BORROW_FROM) || waysIn.contains(named);
     }
 
     /**
      * The ways in that say outright that they read for themselves.
      *
      * <p>Derived and not listed: a method that takes nothing to borrow from is one that names the
-     * lending there is nothing to borrow from, and is not one of the pair of entry points reached
-     * by leaving an argument out — those are what a caller with no store reaches, and are found
-     * already. So a way in written later is one the day it is written, and one whose reason is
-     * settled leaves the population when the naming goes.
+     * lending there is nothing to borrow from. So a way in written later is one the day it is
+     * written, and one whose reason is settled leaves the population when the naming goes.
      */
-    private static Set<Named> theWaysInThatSayTheyReadForThemselves(
-            Map<String, Set<MethodTypeDesc>> pairs) {
+    private static Set<Named> theWaysInThatSayTheyReadForThemselves() {
         Set<Named> found = new LinkedHashSet<>();
         for (ClassModel read : COMPILED.all()) {
             String owner = read.thisClass().name().stringValue();
             for (MethodModel method : read.methods()) {
-                if (readsForItself(pairs, owner, method)) {
-                    continue;
-                }
                 for (Instruction instruction : instructionsOf(method)) {
                     for (Named named : whatItNames(instruction)) {
                         if (named.member().equals(NOTHING_TO_BORROW_FROM)) {
@@ -450,19 +393,6 @@ class NothingHereStartsAReadingSomebodyElseHasAlreadyMadeTest {
             }
         }
         return found;
-    }
-
-    /**
-     * Whether {@code method} is itself one of the ways in that read for themselves.
-     *
-     * <p>Asked of what it takes and not of what it is called. Two overloads of one name are two
-     * methods, and the one that takes a lending is a reader like any other — exempting it because
-     * something of that name reads for itself would leave the reader this is about unread.
-     */
-    private static boolean readsForItself(Map<String, Set<MethodTypeDesc>> pairs, String owner,
-                                          MethodModel method) {
-        Set<MethodTypeDesc> shorter = pairs.get(owner + "#" + method.methodName().stringValue());
-        return shorter != null && shorter.contains(method.methodTypeSymbol());
     }
 
     /** Whether anything at all was read, so that an empty population fails rather than passes. */

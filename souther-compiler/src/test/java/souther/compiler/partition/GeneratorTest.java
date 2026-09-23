@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.carrier.Lookup;
 import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputDomain;
@@ -101,8 +102,8 @@ class GeneratorTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         assertNotNull(sigs);
-        InputDomain domain = InputDomain.of(sigs.get(behavior), rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        InputDomain domain = InputDomain.of(sigs.get(behavior), RuleReadingContext.unshared(rules,
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
         Partitions.Partitioning partitioning = Partitions.of(behavior, domain, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return new Model(
                 MeasuredInput.of(behavior, domain.reading(rules), partitioning),
@@ -208,8 +209,8 @@ class GeneratorTest {
         for (String each : parameters) {
             declared.add(new souther.compiler.inputs.InputDomain.Parameter(each, null, Type.INT));
         }
-        return souther.compiler.inputs.InputDomain.of(declared, rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES).reading(rules);
+        return souther.compiler.inputs.InputDomain.of(declared, RuleReadingContext.unshared(rules,
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES)).reading(rules);
     }
 
     /** The classes said to be of the number the axis they are put on measures, which is what a

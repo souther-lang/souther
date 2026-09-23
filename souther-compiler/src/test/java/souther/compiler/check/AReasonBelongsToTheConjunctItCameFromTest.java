@@ -42,8 +42,8 @@ class AReasonBelongsToTheConjunctItCameFromTest {
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Pair"));
-        return FieldDomains.of(named, RuleReadings.of(compilation, module),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES).accounting().values().stream()
+        return FieldDomains.of(named, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES)).accounting().values().stream()
                 .flatMap(each -> each.answers().entrySet().stream())
                 .filter(e -> e.getKey().obligation() == CoverageObligation.BOUNDARY)
                 .map(e -> assertInstanceOf(RuleAccounting.Outcome.Unaccounted.class, e.getValue()))

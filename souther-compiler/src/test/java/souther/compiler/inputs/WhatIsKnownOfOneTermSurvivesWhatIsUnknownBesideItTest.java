@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.NumberAt;
@@ -364,7 +365,7 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
-        return new Read(InputDomain.of(sigs.get("take"), rules,
-                ReadAs.THE_COMPILATION_DOES), rules);
+        return new Read(InputDomain.of(sigs.get("take"),
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES)), rules);
     }
 }

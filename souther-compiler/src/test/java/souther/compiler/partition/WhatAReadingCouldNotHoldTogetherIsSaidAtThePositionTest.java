@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.DeclaredSig;
@@ -41,7 +42,7 @@ class WhatAReadingCouldNotHoldTogetherIsSaidAtThePositionTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         return Partitions.of(behavior,
-                InputDomain.of(sigs.get(behavior), rules, souther.compiler.query.ReadAs.MERGING_WHAT_A_CHOICE_LEAVES), rules, souther.compiler.query.ReadAs.MERGING_WHAT_A_CHOICE_LEAVES);
+                InputDomain.of(sigs.get(behavior), RuleReadingContext.unshared(rules, souther.compiler.query.ReadAs.MERGING_WHAT_A_CHOICE_LEAVES)), rules, souther.compiler.query.ReadAs.MERGING_WHAT_A_CHOICE_LEAVES);
     }
 
     /** The witness of issue #877: two invariants, each a choice reaching across both fields. */

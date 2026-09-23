@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputDomain;
@@ -46,8 +47,8 @@ class AFloorNothingBuildsIsSaidTheSameWhereverItIsWrittenTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         assertNotNull(sigs, "the model did not compile");
-        InputDomain domain = InputDomain.of(sigs.get(behavior), rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        InputDomain domain = InputDomain.of(sigs.get(behavior), RuleReadingContext.unshared(rules,
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
         Partitions.Partitioning partitioning = Partitions.of(behavior, domain, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         FillResult filled = Generator.fill(
                 MeasuredInput.of(behavior, domain.reading(rules), partitioning),

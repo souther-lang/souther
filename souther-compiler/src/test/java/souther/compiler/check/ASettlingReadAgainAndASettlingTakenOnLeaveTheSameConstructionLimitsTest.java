@@ -67,12 +67,12 @@ class ASettlingReadAgainAndASettlingTakenOnLeaveTheSameConstructionLimitsTest {
         int counted = 0;
         int deep = 0;
         for (Record record : recordsRead()) {
-            FieldDomains base = FieldDomains.of(record.declared(), record.source(), record.policy(),
-                    record.lent());
+            RuleReadingContext reading =
+                    RuleReadingContext.of(record.source(), record.policy(), record.lent());
+            FieldDomains base = FieldDomains.of(record.declared(), reading);
             List<RuleKey> coordinates = coordinatesOf(base, record.fields());
             for (Map<RuleKey, Count> settling : settlings(base, coordinates)) {
-                FieldDomains readUnder = FieldDomains.of(record.declared(), record.source(),
-                        record.policy(), settling, record.lent());
+                FieldDomains readUnder = FieldDomains.of(record.declared(), reading, settling);
                 FieldDomains.Composing takenOn = base.composing(named(settling));
                 for (RuleKey field : coordinates) {
                     NumericDomain.Bounds values = readUnder.at(field).bounds();

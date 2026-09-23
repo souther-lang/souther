@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.DeclaredSig;
@@ -252,8 +253,8 @@ class ARuleThatStatesNothingIsNotOneThatRestrictsThePositionTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         return Partitions.of("read",
-                InputDomain.of(sigs.get("read"), rules,
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                InputDomain.of(sigs.get("read"), RuleReadingContext.unshared(rules,
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES)),
                 rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 }

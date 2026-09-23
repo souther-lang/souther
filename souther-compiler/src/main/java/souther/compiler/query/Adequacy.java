@@ -30,7 +30,6 @@ import souther.compiler.check.AtomSpace;
 import souther.compiler.check.BoundaryOutput;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.DeclarationCitations;
-import souther.compiler.check.DeclarationReadings;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.PublishedDeclarations;
@@ -761,14 +760,14 @@ public final class Adequacy {
             Answer<StatedContract> stated = db.ask(new Bodies.Stated(module, behavior));
             return Answer.of(InputDomain.of(declared.value(),
                     implemented == null ? List.of() : implemented.declaredInputs(),
-                    reading.value(), db.ask(new Front.Reading()).value(),
+                    RuleReadingContext.of(reading.value(), db.ask(new Front.Reading()).value(),
+                            db.readings()),
                     // What this behavior's body reads, so the reading is closed over the paths its
                     // measurement names as well as the ones the enumeration finds. Asked as the
                     // reading is made and never after it: one that grew a position when somebody
                     // looked one up would answer a question differently depending on what had been
                     // asked before it.
-                    demandOf(db, module, spec.value(), implemented, scope.value(), stated.value()),
-                    db.readings()));
+                    demandOf(db, module, spec.value(), implemented, scope.value(), stated.value())));
         }
     }
 
@@ -2607,7 +2606,7 @@ public final class Adequacy {
         }
         souther.compiler.inputs.InputReading read = souther.compiler.inputs.InputDomain.of(
                 List.of(new souther.compiler.inputs.InputDomain.Parameter(ANSWER, null, answers)),
-                reading, policy, beside.machines()).reading(reading);
+                RuleReadingContext.of(reading, policy, beside.machines())).reading(reading);
         return souther.compiler.partition.MeasuredInput.of(ANSWER, read,
                 souther.compiler.partition.Partitions.of(ANSWER, read, policy));
     }
@@ -2856,8 +2855,9 @@ public final class Adequacy {
             resolved.put(debt.point(), new BorderAccount.Answer(debt,
                     debt.id().owedToTheDeclaration().isPresent()
                             ? axisOf(debt.id(), declarations, Shapes.publishedDeclarations(db),
-                                    Shapes.declarationCitations(db), ruleReading, policy,
-                                    db.readings()) : null,
+                                    Shapes.declarationCitations(db),
+                                    RuleReadingContext.of(ruleReading, policy, db.readings()))
+                            : null,
                     PointResolver.resolveAt(debt.owed(), List.copyOf(debt.met().keySet()),
                             reading -> readingOf(db, module, scope, debt, debt.at(), reading))));
         }
@@ -6140,8 +6140,8 @@ public final class Adequacy {
                 }
                 out.add(new DeclaredDebt(debt,
                         axisOf(debt.id(), declarations, Shapes.publishedDeclarations(db),
-                                Shapes.declarationCitations(db), ruleReading, policy,
-                                db.readings()),
+                                Shapes.declarationCitations(db),
+                                RuleReadingContext.of(ruleReading, policy, db.readings())),
                         owners));
             }
             return Answer.of(new DeclaredBoundaries(out, went));
@@ -6165,14 +6165,11 @@ public final class Adequacy {
     private static String axisOf(souther.compiler.partition.BorderObligationId id,
                                  Map<TypeSymbol, souther.compiler.check.DeclaredBorders> read,
                                  PublishedDeclarations published, DeclarationCitations citations,
-                                 RuleReadingSource reading,
-                                 souther.compiler.check.ReadingPolicy policy,
-                                 DeclarationReadings machines) {
+                                 RuleReadingContext reading) {
         TypeSymbol declaredOn = id.owedToTheDeclaration().orElseThrow(
                 () -> new IllegalStateException("what a line with no declaration is on is not"
                         + " something anybody wrote: " + id));
-        String named = declarationRead(read, declaredOn, published, citations, reading, policy,
-                        machines)
+        String named = declarationRead(read, declaredOn, published, citations, reading)
                 // Which line of the declaration this is, asked of the rule. Taken apart
                 // here, a reader would be deciding which rules have a clause and a
                 // conjunct, which is the rule's own answer.
@@ -6187,10 +6184,9 @@ public final class Adequacy {
     private static souther.compiler.check.DeclaredBorders declarationRead(
             Map<TypeSymbol, souther.compiler.check.DeclaredBorders> kept, TypeSymbol declaredOn,
             PublishedDeclarations published, DeclarationCitations citations,
-            RuleReadingSource reading, souther.compiler.check.ReadingPolicy policy,
-            DeclarationReadings machines) {
+            RuleReadingContext reading) {
         return kept.computeIfAbsent(declaredOn, each -> souther.compiler.check.DeclaredBorders
-                .of(each, published, citations, reading, policy, machines));
+                .of(each, published, citations, reading));
     }
 
 
