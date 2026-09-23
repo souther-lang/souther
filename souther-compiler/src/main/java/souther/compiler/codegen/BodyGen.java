@@ -855,7 +855,7 @@ final class BodyGen {
             }
             code.loadConstant(abortMessage(u));
             code.invokestatic(CD_UnreachableReached, "reached", MTD_reached);
-            stackCast(shape);
+            castFromObject(code, shape);
         }
 
         /**
@@ -1576,7 +1576,7 @@ final class BodyGen {
                 box(code, at);
                 code.invokeinterface(CD_Behavior, "apply", MTD_apply);
                 project(callee, sig.success());
-                stackCast(sig.success());
+                castFromObject(code, sig.success());
                 return;
             }
             for (Core arg : call.args()) {
@@ -1586,7 +1586,7 @@ final class BodyGen {
             code.invokeinterface(ctx.cdBehavior(callee), "apply",
                     ctx.typedApplyDesc(callee, sig.params(), sig.success()));
             project(callee, sig.success());
-            stackCast(sig.success());
+            castFromObject(code, sig.success());
         }
 
         /** Emits an inline call to an injected required behavior, leaving its success value on
@@ -1622,7 +1622,7 @@ final class BodyGen {
                 project(callee, success);
                 CanonicalizeAtCrossing.emit(code, success);
                 checkAtCrossing(callee, saved);
-                stackCast(success);
+                castFromObject(code, success);
                 return;
             }
             code.aload(0);
@@ -1634,7 +1634,7 @@ final class BodyGen {
             project(callee, success);
             CanonicalizeAtCrossing.emit(code, success);
             checkAtCrossing(callee, saved);
-            stackCast(success);
+            castFromObject(code, success);
         }
 
         /** Keeps a copy of the boxed argument on the stack in a slot of its own, where a check is
@@ -1693,19 +1693,6 @@ final class BodyGen {
         private void project(ValueName.Behavior callee, Type calleeOut) {
             List<TypeSymbol> bridged = ctx.bridgedMembersOf(callee, calleeOut);
             ResultBoundary.project(code, ctx, callee, bridged, slot(Type.NOTHING));
-        }
-
-        /** Casts the {@code Object} on the stack to {@code type}, unboxing primitives. */
-        private void stackCast(Type type) {
-            if (type == Type.INT) {
-                code.checkcast(CD_Long);
-                code.invokevirtual(CD_Long, "longValue", MethodTypeDesc.of(ConstantDescs.CD_long));
-            } else if (type == Type.BOOL) {
-                code.checkcast(CD_Boolean);
-                code.invokevirtual(CD_Boolean, "booleanValue", MethodTypeDesc.of(ConstantDescs.CD_boolean));
-            } else if (!(type instanceof Type.Union)) {
-                code.checkcast(jvmType(type));
-            }
         }
 
         /**
@@ -2178,7 +2165,7 @@ final class BodyGen {
                 code.aastore();
             }
             code.invokeinterface(CD_Fn, "apply", MTD_Fn_apply);
-            stackCast(fnType.result());   // Object result -> the function's result type
+            castFromObject(code, fnType.result());   // Object result -> the function's result type
         }
 
     /** Where a value lives and what it is. {@code name} is what it is called — a diagnostic quotes
