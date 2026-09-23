@@ -63,16 +63,19 @@ final class ExactPowers {
     }
 
     /**
-     * That a whole number of this many bits is one the host holds, asked before it is built.
+     * Whether {@code whole × 2^twos × 5^fives} is a whole number the host holds, asked before it is
+     * built and by whoever wants to know without building it.
      *
-     * <p>The count is under the truth rather than over it, a factor of five counted as two bits where it
-     * is nearer two and a third, so nothing the host would have held is refused here and what the
-     * under-count lets through is refused by the host and translated where it is caught.
+     * <p>The one count, because two of them are how a question and the building that answers it come
+     * apart: a value the first called writable would be one the second then refused. It is under the
+     * truth rather than over it, a factor of five counted as two bits where it is nearer two and a
+     * third, so nothing the host would have held is refused here and what the under-count lets through
+     * is refused by the host and translated where it is caught. The exponents are held wider than a
+     * long, since a sum of an exponent and a scale need not fit one.
      */
-    static void heldByTheHost(long bits) {
-        if (bits > Integer.MAX_VALUE) {
-            throw new ExactRangeExceeded("no whole number of " + bits + " bits is held");
-        }
+    static boolean writable(BigInteger whole, BigInteger twos, BigInteger fives) {
+        BigInteger bits = BigInteger.valueOf(whole.abs().bitLength()).add(twos).add(fives.shiftLeft(1));
+        return bits.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) <= 0;
     }
 
     /**
@@ -93,20 +96,22 @@ final class ExactPowers {
 
     /** {@code 2^twos × 5^fives}, both exponents being non-negative. */
     static BigInteger powers(long twos, long fives) {
-        int byTwos = buildable(twos);
-        int byFives = buildable(fives);
-        heldByTheHost(byTwos + 2L * byFives);
-        BigInteger of = BigInteger.ONE.shiftLeft(byTwos);
-        return byFives == 0 ? of : of.multiply(FIVE.pow(byFives));
+        return built(BigInteger.ONE, BigInteger.valueOf(twos), BigInteger.valueOf(fives));
     }
 
     /** {@code whole × 2^twos × 5^fives}, both exponents being at least nought. What this builds is
-     *  the answer's own digits, which is the one thing a narrowing is always allowed to ask for. */
+     *  the answer's own digits, which is the one thing a narrowing is always allowed to ask for.
+     *
+     *  @throws ExactRangeExceeded where no whole number the host holds is that number */
     static BigInteger built(BigInteger whole, BigInteger twos, BigInteger fives) {
         int byTwos = buildable(twos);
         int byFives = buildable(fives);
-        heldByTheHost(whole.bitLength() + byTwos + 2L * byFives);
-        return whole.shiftLeft(byTwos).multiply(FIVE.pow(byFives));
+        if (!writable(whole, twos, fives)) {
+            throw new ExactRangeExceeded("no whole number the host holds is a whole number of "
+                    + whole.bitLength() + " bits times two to the " + twos + " times five to the " + fives);
+        }
+        BigInteger shifted = whole.shiftLeft(byTwos);
+        return byFives == 0 ? shifted : shifted.multiply(FIVE.pow(byFives));
     }
 
     /**

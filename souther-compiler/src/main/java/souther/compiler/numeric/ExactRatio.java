@@ -411,9 +411,7 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
         if (byTwos.signum() < 0 || byFives.signum() < 0) {
             return false;
         }
-        BigInteger bits = BigInteger.valueOf(numeratorWithoutUnits.abs().bitLength())
-                .add(byTwos).add(byFives.shiftLeft(1));
-        return bits.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) <= 0;
+        return ExactArithmetic.canBeWritten(numeratorWithoutUnits, byTwos, byFives);
     }
 
     /** How many twos the unscaled value at {@code scale} carries, as a whole number, since the sum

@@ -311,9 +311,15 @@ public final class ExactArithmetic {
         return ExactPowers.built(whole, twos, fives);
     }
 
-    /** {@code 2^twos × 5^fives} written out, both exponents being at least nought. */
-    public static BigInteger written(long twos, long fives) {
-        return ExactPowers.powers(twos, fives);
+    /**
+     * Whether {@link #written} would answer, without building the number: whether the host holds
+     * {@code whole × 2^twos × 5^fives}.
+     *
+     * <p>The same count the building asks, so a caller deciding whether a value can be written and the
+     * writing of it never disagree.
+     */
+    public static boolean canBeWritten(BigInteger whole, BigInteger twos, BigInteger fives) {
+        return ExactPowers.writable(whole, twos, fives);
     }
 
     /** An exponent negated, which the least long is not. */
