@@ -1,0 +1,318 @@
+================================================================================
+a module header, its exposed names, and imports
+================================================================================
+
+module travel.request exposing (Request, submit, approved: Approved | Rejected,)
+import travel.money as M (Amount, Currency)
+import travel.people
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (module-header
+    (qualified-name (identifier) (identifier))
+    (exposing-clause
+      (exposed-entry (qualified-name (identifier)))
+      (exposed-entry (qualified-name (identifier)))
+      (exposed-entry
+        (qualified-name (identifier))
+        (union-type
+          (type-reference (qualified-name (identifier)))
+          (type-reference (qualified-name (identifier)))))))
+  (import-declaration
+    (qualified-name (identifier) (identifier))
+    (import-alias (identifier))
+    (name-list (identifier) (identifier)))
+  (import-declaration
+    (qualified-name (identifier) (identifier))))
+
+================================================================================
+product data, its fields, a spread and an invariant
+================================================================================
+
+data Order =
+    { id: OrderId
+    , lines: List<Line>
+    , note: String?
+    , ...Audited
+    }
+    invariant nonEmpty = List.length(lines) >= 1
+    invariant _ = true
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (data-declaration
+    (identifier)
+    (product-body
+      (field (identifier) (type-reference (qualified-name (identifier))))
+      (field
+        (identifier)
+        (type-reference
+          (qualified-name (identifier))
+          (type-arguments (type-reference (qualified-name (identifier))))))
+      (field
+        (identifier)
+        (optional-type (type-reference (qualified-name (identifier)))))
+      (field-spread (identifier)))
+    (invariant-clause
+      (identifier)
+      (comparison
+        (application
+          (field-access (variable (identifier)) (identifier))
+          (argument-list (variable (identifier))))
+        (integer-literal)))
+    (invariant-clause
+      (discard)
+      (boolean-literal))))
+
+================================================================================
+sum, unit and newtype data
+================================================================================
+
+data Status = Draft | Submitted | Approved
+data Draft
+data Amount = Int
+    invariant value >= 0
+data Label = String?
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (data-declaration
+    (identifier)
+    (sum-body (identifier) (identifier) (identifier)))
+  (data-declaration (identifier))
+  (data-declaration
+    (identifier)
+    (newtype-body (type-reference (qualified-name (identifier))))
+    (invariant-clause
+      (comparison (variable (identifier)) (integer-literal))))
+  (data-declaration
+    (identifier)
+    (newtype-body
+      (optional-type (type-reference (qualified-name (identifier)))))))
+
+================================================================================
+a behavior's signature and its clauses
+================================================================================
+
+behavior submit : (r: Draft, at: DateTime) -> Submitted | Rejected
+    constructs Submitted, travel.Rejected,
+    depends on now, clock.today
+    ensures Submitted -> true
+        | Rejected | Withdrawn -> false
+    ensures named = at == at
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (behavior-declaration
+    (identifier)
+    (behavior-signature
+      (parameter-list
+        (parameter (identifier) (type-reference (qualified-name (identifier))))
+        (parameter (identifier) (type-reference (qualified-name (identifier)))))
+      (union-type
+        (type-reference (qualified-name (identifier)))
+        (type-reference (qualified-name (identifier))))
+      (constructs-clause
+        (qualified-name (identifier))
+        (qualified-name (identifier) (identifier)))
+      (depends-clause
+        (qualified-name (identifier))
+        (qualified-name (identifier) (identifier)))
+      (ensures-clause
+        (ensures-arm (qualified-name (identifier)) (boolean-literal))
+        (ensures-arm
+          (qualified-name (identifier))
+          (qualified-name (identifier))
+          (boolean-literal)))
+      (ensures-clause
+        (identifier)
+        (comparison (variable (identifier)) (variable (identifier)))))))
+
+================================================================================
+a composition, with a declared output and an ensures
+================================================================================
+
+behavior process = validate >-> price >-> billing.charge -> Charged | Declined
+    ensures Charged -> true
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (behavior-declaration
+    (identifier)
+    (composition
+      (qualified-name (identifier))
+      (qualified-name (identifier))
+      (qualified-name (identifier) (identifier))
+      (union-type
+        (type-reference (qualified-name (identifier)))
+        (type-reference (qualified-name (identifier)))))
+    (ensures-clause
+      (ensures-arm (qualified-name (identifier)) (boolean-literal)))))
+
+================================================================================
+definitions
+================================================================================
+
+private partial let total ((a, b), n: Int): Int = a + n
+let origin = { 0 }
+let trim = intrinsic "string.trim"
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (private-modifier)
+    (partial-modifier)
+    (identifier)
+    (function-parameter-list
+      (function-parameter
+        (tuple-pattern (pattern-name (identifier)) (pattern-name (identifier))))
+      (function-parameter
+        (identifier)
+        (type-reference (qualified-name (identifier)))))
+    (type-reference (qualified-name (identifier)))
+    (additive-expression (variable (identifier)) (variable (identifier))))
+  (let-definition
+    (identifier)
+    (block (integer-literal)))
+  (let-definition
+    (identifier)
+    (intrinsic-body (string-literal))))
+
+================================================================================
+types in type positions
+================================================================================
+
+let f (g: (Int, String) -> Bool | None, t: (Int, (String)), u: List<(Int) -> Bool>): ('a) -> () = g
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (function-parameter-list
+      (function-parameter
+        (identifier)
+        (function-type
+          (type-reference (qualified-name (identifier)))
+          (type-reference (qualified-name (identifier)))
+          (union-type
+            (type-reference (qualified-name (identifier)))
+            (type-reference (qualified-name (identifier))))))
+      (function-parameter
+        (identifier)
+        (tuple-type
+          (type-reference (qualified-name (identifier)))
+          (parenthesized-type (type-reference (qualified-name (identifier))))))
+      (function-parameter
+        (identifier)
+        (type-reference
+          (qualified-name (identifier))
+          (type-arguments
+            (function-type
+              (type-reference (qualified-name (identifier)))
+              (type-reference (qualified-name (identifier))))))))
+    (function-type
+      (type-reference (type-variable))
+      (tuple-type))
+    (variable (identifier))))
+
+================================================================================
+an example with named rows, a value fake and an owed answer
+================================================================================
+
+example submit
+    | "within the ceiling" : (Draft { cost = 1 }) -> Submitted
+    | (Draft { cost = 2 }) with now = DateTime("2026-07-20T09:00"), clock.today = d, -> <?>
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (example-declaration
+    (identifier)
+    (example-row
+      (string-literal)
+      (argument-list
+        (construction
+          (qualified-name (identifier))
+          (field-initializer (identifier) (integer-literal))))
+      (variable (identifier)))
+    (example-row
+      (argument-list
+        (construction
+          (qualified-name (identifier))
+          (field-initializer (identifier) (integer-literal))))
+      (with-clause
+        (with-binding
+          (qualified-name (identifier))
+          (application
+            (variable (identifier))
+            (argument-list (string-literal))))
+        (with-binding
+          (qualified-name (identifier) (identifier))
+          (variable (identifier))))
+      (answer-owed))))
+
+================================================================================
+a fake table with a default row
+================================================================================
+
+fake catalog.currentPrice
+    | (Sku("a-1")) -> Price(10.00m)
+    | _ -> Price(0.00m)
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (fake-declaration
+    (qualified-name (identifier) (identifier))
+    (fake-row
+      (argument-list
+        (application
+          (variable (identifier))
+          (argument-list (string-literal))))
+      (application
+        (variable (identifier))
+        (argument-list (decimal-literal))))
+    (fake-row
+      (discard)
+      (application
+        (variable (identifier))
+        (argument-list (decimal-literal))))))
+
+================================================================================
+an attached example file
+================================================================================
+
+examples for travel.request
+
+example submit
+    | (1) -> 2
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (examples-file-header (qualified-name (identifier) (identifier)))
+  (example-declaration
+    (identifier)
+    (example-row (argument-list (integer-literal)) (integer-literal))))
+
+================================================================================
+a contextual word is a name where no form reads it
+================================================================================
+
+data on = { example: Int, for: Int }
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (data-declaration
+    (identifier)
+    (product-body
+      (field (identifier) (type-reference (qualified-name (identifier))))
+      (field (identifier) (type-reference (qualified-name (identifier)))))))

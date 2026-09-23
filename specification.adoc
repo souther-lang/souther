@@ -188,6 +188,11 @@ A Java Binding at the boundary (the Java implementation of a behavior with no im
 [#modules]
 == Source files and modules
 
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=modules]
+----
+
 The extension is `+.sou+`. Each file defines one module.
 
 Two hold of the names inside it:
@@ -282,6 +287,11 @@ module example.order exposing ( placeOrder : PlacedOrder | OutOfStock )
 [#exposed-values]
 ==== A value and a helper are published
 
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=exposed-values]
+----
+
 [[exposing-lists-this-modules-own-definitions]]`+exposing+` lists what this module declares. A name it does not declare is not published by writing it here, and neither is an imported one: a module re-exporting another's vocabulary would put one declaration behind two surfaces.
 
 [[exposing-is-type-granular]]`+exposing+` is granular to the type. A data's derived `+decoder+` and `+encoder+` are published with it and are not named separately — they are how the type crosses a boundary, and a type that crosses one carries them (<<decoder>>, <<encoder>>).
@@ -325,6 +335,11 @@ This does not reach the *cases* of a sum, or of an output written as more than o
 
 [#imports]
 Imports SHALL be listed explicitly. Wildcard imports are forbidden.
+
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=imports]
+----
 
 [[module-dependencies-are-acyclic]]A module depends on every module it imports and on every module it names in a qualified reference (<<qualified-reference>>). Those dependencies MUST have no cycle.
 
@@ -392,6 +407,11 @@ satisfy: a dependency's implementation-only dependencies need not be on the clas
 
 [#qualified-reference]
 === Qualified reference
+
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=qualified-reference]
+----
 
 A type is also reachable through the module that declares it, written as the module name and the type name.
 
@@ -465,7 +485,20 @@ A row is a form, or a rule about one, together with what kind of thing it is and
 
 Which of the three a symbol is listed as is the specification's own too. The compiler holds no set that says `+->+` joins two types where `{plus}` computes from two numbers, so nothing checks the column, and reading a row for what a symbol does is reading this document. An editor asks something else — which symbols a reader wants told apart from the names and the brackets around them — and answers it for itself, so what it paints as an operator is neither this column nor derived from it.
 
-The full formal grammar (BNF) is deferred (<<future-work>>).
+The grammar itself is `+syntax/grammar.ebnf+`, and it is normative. Beside it the repository publishes `+syntax/vocabulary.json+`, which lists the reserved words, the contextual words and the fixed spellings the grammar is written in, and `+syntax/corpus/+`, sources each paired with the tree the grammar says it is or with the fact that it is not Souther source. The three are what an implementation other than this compiler is built from, and this compiler is held to them the same way. Each construct's section below shows the productions that are its own, taken from the grammar where they are written; the notation, and the rules that decide between two readings of one text, are here.
+
+include::syntax/grammar.ebnf[tag=notation,indent=0]
+
+include::syntax/grammar.ebnf[tag=layout,indent=0]
+
+The tokens a text is made of:
+
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=lexical]
+----
+
+include::syntax/grammar.ebnf[tag=tokens,indent=0]
 
 [cols="3,1,2",separator=!,role="syntax-inventory"]
 !===
@@ -582,7 +615,19 @@ There is no block comment. `+/*+` is not a form: the characters read as the oper
 [#delimiters]
 === Delimiters and disambiguation
 
-The full formal grammar (BNF) is deferred (<<future-work>>). The delimiters and precedence needed for reading and writing are fixed here.
+The delimiters and precedence needed for reading and writing are fixed here, and the grammar states them as productions:
+
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=operators]
+----
+
+What an expression may begin with:
+
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=expressions]
+----
 
 What a text MUST be for the compiler to read it is stated with each construct, and a text that is not is refused where the reading stops. Where the reading can stop is kept apart, because a reader looking one up is asking about a different part of the language, and each place names where the forms it is about are given (<<grammar>> indexes them all):
 
@@ -608,6 +653,13 @@ What a text MUST be for the compiler to read it is stated with each construct, a
 * What a type position reads is not the same in every position. Where a *whole* type is read — a behavior's parameter and its output, a composition's declared output, a helper's parameter and its declared return, a local binding's annotation, and a function type's parameter and its result — the forms are a named type, a stdlib generic type (such as `+List<T>+`), a tuple type, a function type `+(A) -> B+`, an anonymous output sum (`+A | B+`), and a postfix `+?+`. A data field reads all of those but the anonymous sum (<<an-anonymous-union-is-not-written-in-a-narrow-type-position>>). A type argument and a tuple's member read neither the anonymous sum nor the postfix `+?+`, so `+List<A | B>+` and `+List<T?>+` are not written at all (<<an-optional-is-not-written-inside-another-type>>). A newtype's base is narrower again, below. What a position *reads* is what it builds as the type standing there; a form it does not read is still recognized where it is written, and named, so that what the author reached for is what they are answered about. Recognizing a form in order to refuse it is neither admitting it nor building it. A function type's parameters and result are themselves whole types, so `+->+` is right-associative — `+(A) -> (B) -> C+` returns a function and `+((A) -> B) -> C+` takes one — and `+(A) -> B | C+` still reads as `+(A) -> (B | C)+` by the `+|+` rule above. `+(A, B) -> C+` takes two parameters and `+((A, B)) -> C+` takes one tuple, as a lambda's parameter list does. A parenthesised single type is grouping.
 * Writing a type in a position is not being admitted by it. What a position requires of a type is asked of the type: a data field, a newtype base and a behavior's input and output require an *external representation*, so none of them takes a type that carries at any depth something with none (`+List<(Int) -> Bool>+` included; <<what-has-no-external-representation>>); `+==+` / `+/=+`, a `+Set+`'s element and a `+Map+`'s key require *equality*; `+sort+` and a `+sortBy+` key require an *ordering* (<<equality>>).
 * A newtype's base (`+data X = Y+`) is a type position narrowed to what `+X+` can take as its own external representation: no tuple, no function type, and no `+?+` (<<newtype>>). A sum's cases are names of declared data, so a case is never generic: `+data X = List<A> | B+` is not a sum (<<sum-data>>).
+
+The type positions, as the grammar reads them:
+
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=a-type-is-written-in-a-type-position]
+----
 
 [#external-representation]
 == External representation
@@ -923,12 +975,22 @@ Decoder<T> = external representation -> Result<T>    // failure carries Raoh's I
 [#data]
 == data
 
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=data]
+----
+
 `+data+` defines typed data of the internal world. All fields are immutable.
 
 A declaration takes the form `+data <Name> = <right-hand side>+`. If the right-hand side is `+{ ... }+` it is a product; `+A | B+` a sum; a single type name `+Y+` a newtype wrapping `+Y+` (<<newtype>>); if the right-hand side is omitted, a unit. This mirrors the spec DSL's `+data <Name> = ...+`.
 
 [#product-data]
 === Product data (AND)
+
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=product-data]
+----
 
 The spec DSL's `+AND+` maps to a product. A field name is the business role; the type may be specified separately.
 
@@ -988,6 +1050,11 @@ This decides a cycle and not inhabitance in general. A sum is an OR composition 
 [#field-spread]
 === Field composition (spread)
 
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=field-spread]
+----
+
 In the spec DSL, a state sharing common items is written as `+data Submitted = TravelRequestCommon AND submittedAt+`, meaning "has all fields of `+TravelRequestCommon+`, plus `+submittedAt+`". Souther expresses this with the `+...+` spread.
 
 [,souther]
@@ -1021,6 +1088,11 @@ To hold the common items as a single value rather than flattened, nest it as a n
 
 [#sum-data]
 === Sum data (OR)
+
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=sum-data]
+----
 
 The spec DSL's `+OR+` maps to a sum. *A case MAY reference an already-defined named data.*
 
@@ -1166,6 +1238,11 @@ Structural intersection types (`+A & B+`, a type operator for "a value that is b
 [#newtype]
 === newtype (`+data X = Y+`)
 
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=newtype]
+----
+
 When the right-hand side is a single type rather than a `+{ ... }+` product or a `+|+` sum, `+X+` is a newtype wrapping that type `+Y+`.
 
 [[newtype-wraps-a-value-that-is-always-there]]What a newtype wraps MUST be there. A newtype is one value under another name and takes that value's representation, so an optional leaves it nothing to be when the value is absent; the absence belongs to the field that holds the newtype (<<optional>>).
@@ -1206,6 +1283,11 @@ Because there is no `+|+`, there is no room to read `+data InsufficientAuthority
 
 [#invariant-declaration]
 === Declaration
+
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=invariant-declaration]
+----
 
 A value constraint written as a comment in the spec DSL is made executable as an `+invariant+`.
 
@@ -2199,6 +2281,11 @@ Specification and implementation are separated not because `+data+` already does
 [#behavior-io]
 === Input and output
 
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=behavior-io]
+----
+
 The spec DSL's input `+AND+` maps to an argument list. A parameter is always written `+name: type+`.
 
 [,souther]
@@ -2275,6 +2362,11 @@ A behavior's *input* type is always a single named type, including a named sum (
 
 [#constructs]
 === Data construction authority (constructs)
+
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=constructs]
+----
 
 A behavior that constructs data MAY write the constructed type in `+constructs+`. This is an internal construction authority; unlike a dependency (`+depends on+`), it is invisible to callers. So for a behavior with a `+let+` implementation it is *optional* — omit it and it is inferred from the body. If written, it MUST *exactly match* the body. An injected behavior has no body to infer from, so what it writes is what its implementation may build, and it MUST write every such data (<<java-base-class>>). A behavior whose construction set is empty writes no clause, injected or not: the unit cases of an injected behavior's output get their factories from the output type rather than from this clause (<<constructs-excludes-unit-data>>).
 
@@ -2354,6 +2446,11 @@ A dependency (`+depends on+`) is different and MUST *always* be written (<<depen
 [#record-literal]
 === Record literals and spread
 
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=record-literal]
+----
+
 Construction is done with a record literal that names the type it constructs. [[a-construction-names-its-type-as-a-type-is-named]]That name MAY be written bare or as a qualified reference (<<qualified-reference>>), as a type named anywhere else is — `+Amount { ... }+`, `+Pricing.Amount { ... }+` and `+example.pricing.Amount { ... }+` construct one type. What follows the name is what makes it a construction: a name and a brace are read together, so a module reaching a type through the module that declares it builds one there as it names one elsewhere.
 
 [[a-construction-names-a-data]]What is constructed MUST be a data. [[a-construction-names-fields-of-its-type]]A field written in the literal MUST be one that data declares, and [[a-construction-is-written-where-one-may-be]]a construction MUST be written where one is allowed — not, for instance, inside an `+invariant+`, which states a condition over a value rather than building one (<<invariant-expressions>>).
@@ -2401,6 +2498,11 @@ A record literal and a spread both require construction authority (`+constructs+
 [#blocks]
 === Blocks
 
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=blocks]
+----
+
 To apply processing to each element of a list, pass a block as an argument. A block is written `+<args> -> <expr>+`.
 
 [,souther]
@@ -2433,6 +2535,11 @@ let steps: List<(String) -> String> = [String.trim, String.uppercase]
 
 Application is written after what is applied, and what is applied is any expression: a name (`+f(x)+`), a parenthesised expression (`+(if flag then String.trim else String.uppercase)(s)+`), or the result of an application (`+adder(1)(x)+`). What is applied is evaluated once, and before the arguments. An argument list MUST begin on the line its callee ends on — a `+(+` that opens a line is a parenthesised expression, so a block whose result is a tuple written under a call reads as that block's result and not as an application of the line above.
 
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=application]
+----
+
 A behavior's name handed over is the *behavior*, not the `+let+` that implements it: a Java implementation replaces the behavior, so passing one to `+List.map+` and calling it by name reach the same place (<<calling-a-behavior>>). A behavior with a requirement arrives bound through `+depends on+` and is a binding by the time it can be named, so nothing carries a requirement past that statement.
 
 A block and a `+let+` may be passed as arguments, and a `+let+` may take one as an argument (<<requirement-propagation>>). *What is not allowed is a boundary that requires an external representation*: a data field, a newtype's base, and a behavior's input and output (<<fn-rules>>). A function has none, so placing one would create an exception to decoder / encoder derivation (<<decoder>>, <<encoder>>), and it is refused wherever it sits — directly, or inside a `+List+` or a `+Map+` written there. This is a representation constraint unrelated to side effects. The spec DSL itself holds a rule it wants to swap not as a function but as data (`+data fieldDefinition = ... AND validationRule?+`).
@@ -2445,6 +2552,11 @@ A block and a helper `+let+` are the same in constructing data. A block construc
 
 [#binding-patterns]
 === Binding patterns
+
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=binding-patterns]
+----
 
 Where a name is bound — a block's `+let+`, a behavior implementation's parameter, a helper's parameter, a lambda's parameter — a *pattern* may be written instead, opening the value where it is named. The patterns admitted here are the ones every value of the type satisfies: a name, a tuple, a newtype opened by its constructor, a record's fields.
 
@@ -2480,6 +2592,11 @@ A lambda's `+(a, b) -> ...+` is its parameter list, not a tuple pattern; a singl
 
 [#depends-on]
 === Dependencies (depends on)
+
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=depends-on]
+----
 
 A behavior that touches the outside world writes what it depends on in `+depends on+`.
 
@@ -2563,6 +2680,11 @@ The set of behaviors with a non-empty requirement set that a `+let+` uses and th
 
 [#ensures]
 === `ensures`
+
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=ensures]
+----
 
 An `+ensures+` clause declares the relation between a behavior's named parameters and the value it answers. It is a clause of the behavior signature, beside `+constructs+` and `+depends on+`, and travels with the published declaration.
 
@@ -2658,6 +2780,11 @@ Behaviors do not recurse. A behavior MUST NOT reach itself, through calls, throu
 [#tuple]
 == Tuples
 
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=tuple]
+----
+
 `+(a, b, ...)+` is a tuple bundling two or more values into one. It is an expression-level value, used only in the middle of a computation — a helper `+let+` returning multiple values and destructuring them — and MUST NOT be written in a data field or a behavior input/output. Like a function (<<blocks>>), it does not cross the boundary, so no codec is derived. Domain vocabulary stays as named data.
 
 A tuple *type* `+(A, B, ...)+` is written in a type position like any other type (<<a-type-is-written-in-a-type-position>>), and what refuses it is the positions requiring an external representation — a data field, a newtype's base, and a behavior's input and output — where a codec would have to be derived (<<what-crosses-the-boundary-has-an-external-representation>>). A signature is not a codec boundary, so a helper's or the standard library's takes one, `+List<(String, 'a)>+` included. A one-element `+(T)+` is not a tuple type.
@@ -2705,6 +2832,11 @@ A `+let+` is the implementation of a behavior. A behavior is the specification (
 
 [#fn-declaration]
 === Declaration and binding
+
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=fn-declaration]
+----
 
 A `+let+` is written `+let <name> (<args>) = <body>+`. If a behavior of the same name exists, it implements it.
 
@@ -2960,6 +3092,11 @@ The requirement set of `+applyAll+` is empty. Whatever `+p+` requires is irrelev
 [#sequential-composition]
 === Sequential composition `+>->+`
 
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=sequential-composition]
+----
+
 [[a-stage-after-the-first-takes-one-input]]Every stage after the first takes one input: what reaches it is the value the stage before answered with. A behavior taking more is called inside a stage rather than made one.
 
 [[a-pipeline-composes-behaviors]]`+>->+` composes behaviors and nothing else. A decoder and an encoder are the edges the pipeline runs between (<<decoder>>, <<encoder>>), not stages within it.
@@ -3114,6 +3251,11 @@ Accumulation (applicative) is inside the decode boundary; case propagation is be
 [#examples]
 == Examples
 
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=examples]
+----
+
 An `+example+` attaches compile-time-checked test rows to a behavior. It is evaluated as part of compilation: a row that does not hold is a compile error (<<e1905>>), so a stale example cannot survive a build. An `+example+` is not exposed and produces no run-time class.
 
 [,souther]
@@ -3165,6 +3307,11 @@ Types make totality and the case set exhaustive (<<match>>, <<unmarked-sum>>); a
 
 [#example-answer-owed]
 === A row whose answer is owed
+
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=example-answer-owed]
+----
 
 A row may be written `+<?>+` where its expected result goes. What it says is that these inputs are worth asking about and nobody has written down what the system answers for them. It is one token, written in this position and nowhere else: `+< ? >+` is not it, and a value position that reads it is a parse error.
 
@@ -3270,6 +3417,11 @@ When a row does not hold, the diagnostic (<<e1905>>) shows what the behavior pro
 
 [#example-fakes]
 === Faking a dependency
+
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=example-fakes]
+----
 
 [[example-dependency-has-a-usable-fake]]Every dependency required to evaluate a row MUST have a usable fake: one supplied, by a `+with+` on the row or a `+fake+` table, and one whose fixture builds as a value of what that dependency answers with.
 
@@ -3403,6 +3555,11 @@ Where a bare case name does not determine a value on its own, what the row state
 
 [#example-placement]
 === Inline or an attached file
+
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=example-placement]
+----
 
 [[examples-file-holds-only-examples]]An `+examples for+` file MUST hold only examples, the fakes they run against and the values their rows name, and MUST NOT declare a name the target module already declares.
 
@@ -3782,6 +3939,11 @@ A reader that took an empty stdout for a refused command reads the exit status i
 [#let]
 === let
 
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=let]
+----
+
 [,souther]
 ----
 let normalized = String.trim(input)
@@ -3797,6 +3959,11 @@ A binding may carry its type, `+let x: T = v+`. The type is optional — a bindi
 
 [#if]
 === if
+
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=if]
+----
 
 [,text]
 ----
@@ -3818,6 +3985,11 @@ if total >= 100000 then [HighValueTravel { threshold = threshold }] else [Client
 
 [#match]
 === match
+
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=match]
+----
 
 [,text]
 ----
@@ -3925,6 +4097,11 @@ Four more hold of the arms themselves:
 [#unreachable]
 ==== An arm may say its combination cannot arise
 
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=unreachable]
+----
+
 A table indexed by two sums has a cell for every pair, and some of those pairs the model does not admit. `+unreachable "reason"+` is what such an arm answers: it produces no value, and reaching it aborts.
 
 [[unreachable-states-its-reason]]`+unreachable+` MUST state why the point cannot be reached, written as a string. The reason is what a reader is shown when a row gets there (<<e1911>>), and an `+unreachable+` with nothing to say leaves them the position alone.
@@ -3978,6 +4155,11 @@ The rules it obeys:
 [#guard]
 === guard
 
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=guard]
+----
+
 [,text]
 ----
 guard amount <= balance
@@ -4003,6 +4185,11 @@ Desugaring is done at parse time; later stages (type check, construction-authori
 
 [#attempted-construction]
 === An attempted construction
+
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=attempted-construction]
+----
 
 [,text]
 ----
@@ -4043,6 +4230,11 @@ helper `+let+`, which has no departure case to name, reaches it too.
 
 [#attempt-departures]
 ==== Departing per clause
+
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=attempt-departures]
+----
 
 The `+else+` MAY instead answer each invariant clause the type names (<<invariant-clause-name>>), so a
 behavior that departs differently per rule states the rules once rather than restating them as guards.
@@ -4104,6 +4296,11 @@ takes; write the construction out (`+T(a.value - b.value)+`).
 
 [#block-expression]
 === Block expressions
+
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=block-expression]
+----
 
 `+{ ... }+` is an expression. Place `+let+`s and `+guard+`s, then put the result expression last.
 
@@ -4191,6 +4388,11 @@ Because a signature is a declaration and nothing else, a standard-library functi
 
 [#pipe]
 === The value pipe and argument order
+
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=pipe]
+----
 
 To thread a value through functions, write `+|>+` left to right. `+e |> f(a)+` is `+f(a, e)+` — the left side enters the *last argument* of the right-hand call. A parenthesis-less function name `+e |> f+` is `+f(e)+`. `+|>+` binds most loosely and left-associatively, so `+a |> f |> g+` reads as `+g(f(a))+`.
 
@@ -4432,6 +4634,11 @@ The order carries the widest of these promises, because an answer to it is one o
 
 [#stdlib-list]
 === List
+
+[,ebnf]
+----
+include::syntax/grammar.ebnf[tag=stdlib-list]
+----
 
 ==== Construction
 
@@ -7495,7 +7702,6 @@ var result = handle.apply(rawInput);
 
 The language core is implemented. The following are future extensions — distinct from what is permanently absent (<<out-of-scope>>).
 
-* A full formal grammar (BNF). The key delimiters and precedence are stated ahead in <<delimiters>>, and where each written form is given is <<grammar>>.
 * Incremental compilation.
 
 [#non-functional]

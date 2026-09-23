@@ -5,3 +5,8 @@
 # it counts the offsets of a file whose lines end the way Windows ends them. Checked out this way on
 # every platform, so the file packaged on Linux and the file packaged on Windows are one file.
 *.cmd text eol=crlf
+
+# The syntax corpus tells an LF, a CR LF and a CR on its own apart as source characters, and this
+# file writes each of them where a case needs it. Left as text, a checkout or a commit would rewrite
+# them and every case here would witness something other than what it names.
+syntax/corpus/line-terminators.txt -text

@@ -1,0 +1,247 @@
+================================================================================
+a with value is not a lambda, and the row's arrow follows it
+================================================================================
+
+example t
+    | (1) with d = (x) -> 2
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (example-declaration
+    (identifier)
+    (example-row
+      (argument-list (integer-literal))
+      (with-clause
+        (with-binding
+          (qualified-name (identifier))
+          (parenthesized-expression (variable (identifier)))))
+      (integer-literal))))
+
+================================================================================
+a lambda in an argument list of a with value
+================================================================================
+
+example t
+    | (1) with d = g(x -> x) -> 2
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (example-declaration
+    (identifier)
+    (example-row
+      (argument-list (integer-literal))
+      (with-clause
+        (with-binding
+          (qualified-name (identifier))
+          (application
+            (variable (identifier))
+            (argument-list
+              (lambda (identifier) (variable (identifier)))))))
+      (integer-literal))))
+
+================================================================================
+a lambda in a parenthesis of a with value
+================================================================================
+
+example t
+    | (1) with d = (x -> x) -> 2
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (example-declaration
+    (identifier)
+    (example-row
+      (argument-list (integer-literal))
+      (with-clause
+        (with-binding
+          (qualified-name (identifier))
+          (parenthesized-expression
+            (lambda (identifier) (variable (identifier))))))
+      (integer-literal))))
+
+================================================================================
+a lambda in a list of a with value
+================================================================================
+
+example t
+    | (1) with d = [x -> x] -> 2
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (example-declaration
+    (identifier)
+    (example-row
+      (argument-list (integer-literal))
+      (with-clause
+        (with-binding
+          (qualified-name (identifier))
+          (list-expression
+            (lambda (identifier) (variable (identifier))))))
+      (integer-literal))))
+
+================================================================================
+a lambda in a block of a with value
+================================================================================
+
+example t
+    | (1) with d = { x -> x } -> 2
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (example-declaration
+    (identifier)
+    (example-row
+      (argument-list (integer-literal))
+      (with-clause
+        (with-binding
+          (qualified-name (identifier))
+          (block
+            (lambda (identifier) (variable (identifier))))))
+      (integer-literal))))
+
+================================================================================
+a lambda in a construction of a with value
+================================================================================
+
+example t
+    | (1) with d = Rule { check = x -> x } -> 2
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (example-declaration
+    (identifier)
+    (example-row
+      (argument-list (integer-literal))
+      (with-clause
+        (with-binding
+          (qualified-name (identifier))
+          (construction
+            (qualified-name (identifier))
+            (field-initializer
+              (identifier)
+              (lambda (identifier) (variable (identifier)))))))
+      (integer-literal))))
+
+================================================================================
+an else arm in a with value is not a lambda, and the row's arrow follows it
+================================================================================
+
+example t
+    | (1) with d = if c then 0 else | e -> x -> 2
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (example-declaration
+    (identifier)
+    (example-row
+      (argument-list (integer-literal))
+      (with-clause
+        (with-binding
+          (qualified-name (identifier))
+          (if-expression
+            (variable (identifier))
+            (integer-literal)
+            (else-arms
+              (else-arm (identifier) (variable (identifier)))))))
+      (integer-literal))))
+
+================================================================================
+an else's arms take a pipe at the enclosing match's arm column
+================================================================================
+
+let f = match x with
+    | A -> if T(v) as t then t else
+        | c -> 1
+    | B -> 2
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (match-expression
+      (variable (identifier))
+      (match-case
+        (qualified-name (identifier))
+        (if-expression
+          (application
+            (variable (identifier))
+            (argument-list (variable (identifier))))
+          (as-binding (identifier))
+          (variable (identifier))
+          (else-arms
+            (else-arm (identifier) (integer-literal))
+            (else-arm (identifier) (integer-literal))))))))
+
+================================================================================
+an ensures body of one name and an arrow is an arm and not a lambda
+================================================================================
+
+behavior b : (x: Int) -> Int
+    ensures x -> x > 0
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (behavior-declaration
+    (identifier)
+    (behavior-signature
+      (parameter-list
+        (parameter (identifier) (type-reference (qualified-name (identifier)))))
+      (type-reference (qualified-name (identifier)))
+      (ensures-clause
+        (ensures-arm
+          (qualified-name (identifier))
+          (comparison (variable (identifier)) (integer-literal)))))))
+
+================================================================================
+a match in a fake row takes the pipe of the next row
+:error
+================================================================================
+
+fake d
+    | (1) -> match x with
+        | A -> 1
+    | _ -> 2
+
+--------------------------------------------------------------------------------
+
+================================================================================
+a match in an example row takes the pipe of the next row
+:error
+================================================================================
+
+example t
+    | (1) -> match x with
+        | A -> 1
+    | (2) -> 2
+
+--------------------------------------------------------------------------------
+
+================================================================================
+a name before a brace on the next line begins a construction
+:error
+================================================================================
+
+let f = {
+    let a = foo
+    { 1 }
+}
+
+--------------------------------------------------------------------------------
+
+================================================================================
+a definition's body that opens with a brace is a block and ends there
+:error
+================================================================================
+
+let f = { 1 } + 2
+
+--------------------------------------------------------------------------------

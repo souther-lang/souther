@@ -938,11 +938,16 @@ public final class CstParser {
 
     /** A brace-delimited block: {@code let}/{@code guard} statements then a result expression. */
     private void blockExpr() {
-        start(SyntaxKind.BLOCK_EXPR);
-        expect(SyntaxKind.LBRACE, Reading.AN_EXPRESSION);
-        blockStatements();
-        expect(SyntaxKind.RBRACE, Reading.AN_EXPRESSION);
-        finish();
+        boolean saved = admitLambda();
+        try {
+            start(SyntaxKind.BLOCK_EXPR);
+            expect(SyntaxKind.LBRACE, Reading.AN_EXPRESSION);
+            blockStatements();
+            expect(SyntaxKind.RBRACE, Reading.AN_EXPRESSION);
+            finish();
+        } finally {
+            noLambda = saved;
+        }
     }
 
     /** The statement sequence a behavior body is: {@code let}/{@code guard} lines then one result. */
@@ -1145,11 +1150,22 @@ public final class CstParser {
 
     // --- expressions (precedence ladder; left-associative via wrap) ---
 
-    private boolean noConstruct = false;
     /** Set where an expression is followed by a `->` that belongs to the enclosing form rather than
      * to the expression: an example row's `with` value. A parenthesised value there has exactly the
-     * shape of a lambda's parameter list, and the enclosing form has the prior claim. */
+     * shape of a lambda's parameter list, and the enclosing form has the prior claim. An expression
+     * a bracket encloses cannot end the one the flag was set for, so every production that reads
+     * a bracket pair clears it for what is inside, through {@link #admitLambda}. */
     private boolean noLambda = false;
+
+    /** Admits a lambda for what a bracket pair encloses, and answers what to put back when the
+     * pair is closed. What is inside ends at the closing bracket, so no `->` after it can be taken
+     * for a lambda's. The production reading the pair does this itself rather than its callers,
+     * so a caller added later cannot leave it out. */
+    private boolean admitLambda() {
+        boolean saved = noLambda;
+        noLambda = false;
+        return saved;
+    }
 
     private void expr() {
         pipeExpr();
@@ -1351,38 +1367,56 @@ public final class CstParser {
 
     /** {@code ( e )} or {@code ( e1, e2, ... )} — a parenthesised expression or a tuple. */
     private void parenOrTuple() {
-        start(SyntaxKind.PAREN_EXPR);
-        bump();   // (
-        expr();
-        if (at(SyntaxKind.COMMA)) {
-            // a tuple: retag the just-opened PAREN_EXPR as a TUPLE_EXPR
-            while (eat(SyntaxKind.COMMA)) {
-                if (at(SyntaxKind.RPAREN)) {
-                    break;
+        boolean saved = admitLambda();
+        try {
+            start(SyntaxKind.PAREN_EXPR);
+            bump();   // (
+            expr();
+            if (at(SyntaxKind.COMMA)) {
+                // a tuple: retag the just-opened PAREN_EXPR as a TUPLE_EXPR
+                while (eat(SyntaxKind.COMMA)) {
+                    if (at(SyntaxKind.RPAREN)) {
+                        break;
+                    }
+                    expr();
                 }
-                expr();
+                expect(SyntaxKind.RPAREN, Reading.AN_EXPRESSION);
+                retagTop(SyntaxKind.TUPLE_EXPR);
+                finish();
+                return;
             }
             expect(SyntaxKind.RPAREN, Reading.AN_EXPRESSION);
-            retagTop(SyntaxKind.TUPLE_EXPR);
             finish();
-            return;
+        } finally {
+            noLambda = saved;
         }
-        expect(SyntaxKind.RPAREN, Reading.AN_EXPRESSION);
-        finish();
     }
 
     /** {@code [e, ...]} (a literal) or {@code [element | guard, ...]} (a guard comprehension). */
     private void listExpr() {
-        start(SyntaxKind.LIST_EXPR);
-        bump();   // [
-        if (at(SyntaxKind.RBRACKET)) {
-            bump();
-            finish();
-            return;
-        }
-        expr();
-        if (eat(SyntaxKind.PIPE)) {
+        boolean saved = admitLambda();
+        try {
+            start(SyntaxKind.LIST_EXPR);
+            bump();   // [
+            if (at(SyntaxKind.RBRACKET)) {
+                bump();
+                finish();
+                return;
+            }
             expr();
+            if (eat(SyntaxKind.PIPE)) {
+                expr();
+                while (eat(SyntaxKind.COMMA)) {
+                    if (at(SyntaxKind.RBRACKET)) {
+                        break;
+                    }
+                    expr();
+                }
+                expect(SyntaxKind.RBRACKET, Reading.AN_EXPRESSION);
+                retagTop(SyntaxKind.LIST_COMP);
+                finish();
+                return;
+            }
             while (eat(SyntaxKind.COMMA)) {
                 if (at(SyntaxKind.RBRACKET)) {
                     break;
@@ -1390,18 +1424,10 @@ public final class CstParser {
                 expr();
             }
             expect(SyntaxKind.RBRACKET, Reading.AN_EXPRESSION);
-            retagTop(SyntaxKind.LIST_COMP);
             finish();
-            return;
+        } finally {
+            noLambda = saved;
         }
-        while (eat(SyntaxKind.COMMA)) {
-            if (at(SyntaxKind.RBRACKET)) {
-                break;
-            }
-            expr();
-        }
-        expect(SyntaxKind.RBRACKET, Reading.AN_EXPRESSION);
-        finish();
     }
 
     private void ifExpr() {
@@ -1438,10 +1464,7 @@ public final class CstParser {
     private void matchExpr() {
         start(SyntaxKind.MATCH_EXPR);
         bump();   // match
-        boolean saved = noConstruct;
-        noConstruct = true;
         expr();   // scrutinee
-        noConstruct = saved;
         expect(SyntaxKind.WITH_KW, Reading.AN_EXPRESSION);
         int enclosing = matchArmColumns.isEmpty() ? -1 : matchArmColumns.peek();
         // this match's arm column: the leading `|` when written, else the first case's own column
@@ -1457,17 +1480,18 @@ public final class CstParser {
         finish();
     }
 
-    /** The 0-based column of the token at {@code index}, walking back to the last newline in the
-     * trivia. A match arm's column is what decides which match it belongs to. */
+    /** The 0-based column of the token at {@code index}: the code points written between the last
+     * line terminator before it and the token. A match arm's column is what decides which match it
+     * belongs to. */
     private int columnOf(int index) {
         int column = 0;
         for (int i = index - 1; i >= 0; i--) {
             String text = tokens.get(i).text();
-            int newline = text.lastIndexOf('\n');
-            if (newline >= 0) {
-                return column + (text.length() - newline - 1);
+            int lineStart = CstLexer.endOfLastLineTerminator(text);
+            if (lineStart >= 0) {
+                return column + text.codePointCount(lineStart, text.length());
             }
-            column += text.length();
+            column += text.codePointCount(0, text.length());
         }
         return column;
     }
@@ -1582,12 +1606,12 @@ public final class CstParser {
      * left to resolution, which knows the bindings in force.
      */
     private void identExpr() {
-        if (!noConstruct && nth(pastDottedName(0)) == SyntaxKind.LBRACE) {
-            // construction `Type { ... }` (unless suppressed, as in a match scrutinee). The type is
-            // named the way a type is named anywhere — bare, through an alias, or through the
-            // module that declares it — so the name is read past its dots before the brace decides
-            // what this is. Whether the name reaches a type is resolution's answer: a dotted name
-            // here is read as one name and not as a field taken of something.
+        if (nth(pastDottedName(0)) == SyntaxKind.LBRACE) {
+            // construction `Type { ... }`. The type is named the way a type is named anywhere —
+            // bare, through an alias, or through the module that declares it — so the name is read
+            // past its dots before the brace decides what this is. Whether the name reaches a type
+            // is resolution's answer: a dotted name here is read as one name and not as a field
+            // taken of something.
             newDataExpr();
         } else {
             start(SyntaxKind.VAR_EXPR);
@@ -1597,21 +1621,26 @@ public final class CstParser {
     }
 
     private void newDataExpr() {
-        start(SyntaxKind.NEW_DATA_EXPR);
-        bump();   // Type
-        dottedTail();   // written through its module or an alias, as a type is named anywhere
-        expect(SyntaxKind.LBRACE, Reading.AN_EXPRESSION);
-        if (!at(SyntaxKind.RBRACE)) {
-            initElem();
-            while (eat(SyntaxKind.COMMA)) {
-                if (at(SyntaxKind.RBRACE)) {
-                    break;
-                }
+        boolean saved = admitLambda();
+        try {
+            start(SyntaxKind.NEW_DATA_EXPR);
+            bump();   // Type
+            dottedTail();   // written through its module or an alias, as a type is named anywhere
+            expect(SyntaxKind.LBRACE, Reading.AN_EXPRESSION);
+            if (!at(SyntaxKind.RBRACE)) {
                 initElem();
+                while (eat(SyntaxKind.COMMA)) {
+                    if (at(SyntaxKind.RBRACE)) {
+                        break;
+                    }
+                    initElem();
+                }
             }
+            expect(SyntaxKind.RBRACE, Reading.AN_EXPRESSION);
+            finish();
+        } finally {
+            noLambda = saved;
         }
-        expect(SyntaxKind.RBRACE, Reading.AN_EXPRESSION);
-        finish();
     }
 
     private void initElem() {
@@ -1636,19 +1665,24 @@ public final class CstParser {
     }
 
     private void argList() {
-        start(SyntaxKind.ARG_LIST);
-        expect(SyntaxKind.LPAREN, Reading.AN_EXPRESSION);
-        if (!at(SyntaxKind.RPAREN)) {
-            arg();
-            while (eat(SyntaxKind.COMMA)) {
-                if (at(SyntaxKind.RPAREN)) {
-                    break;
-                }
+        boolean saved = admitLambda();
+        try {
+            start(SyntaxKind.ARG_LIST);
+            expect(SyntaxKind.LPAREN, Reading.AN_EXPRESSION);
+            if (!at(SyntaxKind.RPAREN)) {
                 arg();
+                while (eat(SyntaxKind.COMMA)) {
+                    if (at(SyntaxKind.RPAREN)) {
+                        break;
+                    }
+                    arg();
+                }
             }
+            expect(SyntaxKind.RPAREN, Reading.AN_EXPRESSION);
+            finish();
+        } finally {
+            noLambda = saved;
         }
-        expect(SyntaxKind.RPAREN, Reading.AN_EXPRESSION);
-        finish();
     }
 
     /** An argument is an expression, including a bare lambda {@code x -> e} / {@code (a, b) -> e}. */
@@ -1867,7 +1901,7 @@ public final class CstParser {
             if (!tokens.get(i).kind().isTrivia()) {
                 return false;
             }
-            if (tokens.get(i).text().indexOf('\n') >= 0) {
+            if (CstLexer.holdsALineTerminator(tokens.get(i).text())) {
                 return true;
             }
         }

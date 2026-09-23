@@ -37,4 +37,34 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <!-- The syntax contract the repository publishes at its root rides in this artifact, so a
+                 tool that depends on the syntax layer has the grammar, the vocabulary and the corpus
+                 its parser is held to. The repository's copy is the one written; this is the one
+                 distributed. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>bundle-syntax-contract</id>
+                        <phase>generate-resources</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.outputDirectory}/META-INF/souther/syntax</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.basedir}/../syntax</directory>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 </project>
