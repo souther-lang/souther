@@ -150,7 +150,7 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
     }
 
     private Denotations given(Core.Binder binder, Core value, Denotations at) {
-        return engine.bindLet(new Core.LetIn(binder, value,
+        return engine.bindLet(new Core.LetIn(binder, value.type(), value,
                 new Core.Read(binder.name(), binder.binding(), value.type(), POS), value.type(), POS),
                 Known.top(), at).at();
     }

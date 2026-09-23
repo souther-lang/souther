@@ -116,8 +116,11 @@ public sealed interface Core {
     /**
      * A binding this tree makes: a {@code let}, a lambda's parameter, a {@code match} arm's name.
      *
-     * <p>Core's own, and not the resolved tree's binder. What a backend has of a binding is which
-     * one it is and what to call the local — the two here. The rest of a resolved binder is about
+     * <p>Core's own, and not the resolved tree's binder. What the binder itself holds is which
+     * binding it is and what to call the local — the two here. The type the binding is in force at
+     * is not among them: the node that makes the binding answers it ({@link LetIn#bindType}, a
+     * {@link Block}'s {@link Type.FnOf} parameters, a {@link Case}'s pattern), and a binder
+     * carrying it too would state that fact twice. The rest of a resolved binder is about
      * the characters an author typed: the spelling before a desugaring canonicalised it, and where
      * the name was written, which is what a cursor is compared against. A backend has no cursor and
      * emits no spelling, and Core naming that form put {@code souther.compiler.ast} on what a
@@ -957,10 +960,20 @@ public sealed interface Core {
      * for any failure) and the value taken. */
     record ElseArm(Optional<String> clause, Core body) {}
 
-    /** A local binding. What the source wrote as its type — {@code let x: T = e} — is already in
-     * {@code value}'s type: the checker pushed the annotation into the value when it typed it, so an
-     * empty collection bound here materialises at the written type rather than a bottom (issue #71). */
-    record LetIn(Binder binder, Core value, Core body, Type type, SourcePos pos) implements Core {
+    /**
+     * A local binding.
+     *
+     * <p>{@code bindType} is the type {@code binder} is in force at in {@code body}: the type the
+     * checker entered it into the environment at. It is the checker's decision and is not
+     * {@code value}'s type: the value may be one case of the sum the binding is read at — an
+     * annotation wider than the value, or a declared sum parameter an expansion binds its argument
+     * at.
+     *
+     * <p>{@code type} is the type of the whole expression, which an expansion may widen past its
+     * body's.
+     */
+    record LetIn(Binder binder, Type bindType, Core value, Core body, Type type, SourcePos pos)
+            implements Core {
 
         public String name() {
             return binder.name();
@@ -1346,7 +1359,7 @@ public sealed interface Core {
                 Core value = atExpr.apply(li.value());
                 Core body = atExpr.apply(li.body());
                 yield value == li.value() && body == li.body() ? li
-                        : new LetIn(li.binder(), value, body, li.type(), li.pos());
+                        : new LetIn(li.binder(), li.bindType(), value, body, li.type(), li.pos());
             }
             case Block b -> {
                 Core body = atExpr.apply(b.body());

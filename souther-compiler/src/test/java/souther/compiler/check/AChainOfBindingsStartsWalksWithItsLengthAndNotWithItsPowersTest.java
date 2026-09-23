@@ -57,7 +57,7 @@ class AChainOfBindingsStartsWalksWithItsLengthAndNotWithItsPowersTest {
                         new Core.Int(1, Type.INT, POS), ConstructOccurrence.unwritten(),
                         Type.INT, POS);
         Core read = new Core.Read(binder.name(), binder.binding(), Type.INT, POS);
-        return new Level(binder, new Core.LetIn(binder, value, read, Type.INT, POS));
+        return new Level(binder, new Core.LetIn(binder, Type.INT, value, read, Type.INT, POS));
     }
 
     /** A chain nested {@code depth} deep, each level's initializer holding the one before it. */

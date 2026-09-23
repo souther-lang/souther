@@ -209,6 +209,16 @@ final class BodyGen {
             put(locals, binding, new Var(slot, type, name));
         }
 
+        /** Stores the value a {@code let} was just emitted as, at {@code stored} — what is on the
+         * stack — and binds its name to that slot at {@link Core.LetIn#bindType}, the type the
+         * checker read the body with. The two differ where the value is one case of the sum the
+         * binding is read at. */
+        private void storeLet(Core.LetIn let, Type stored) {
+            int slot = slot(stored);
+            store(code, slot, stored);
+            bind(let.binder(), slot, let.bindType());
+        }
+
         private <K> void put(Map<K, Var> where, K key, Var var) {
             where.put(key, var);
             nextSlot = Math.max(nextSlot, var.slot() + width(var.type()));
@@ -398,11 +408,8 @@ final class BodyGen {
                         // call an injected required behavior; requiredCall handles both the unary
                         // Behavior contract and a multi-input base (issue #57), leaving the success
                         // value cast on the stack
-                        Type letType = call.type();
                         requiredCall(call);
-                        int vSlot = slot(letType);
-                        store(code, vSlot, letType);
-                        bind(li.binder(), vSlot, letType);
+                        storeLet(li, call.type());
                     } else {
                         Type vt = li.value().type();
                         if (vt instanceof Type.FnOf fn) {
@@ -412,9 +419,7 @@ final class BodyGen {
                         } else {
                             genExpr(li.value(), vt);
                         }
-                        int slot = slot(vt);
-                        store(code, slot, vt);
-                        bind(li.binder(), slot, vt);
+                        storeLet(li, vt);
                     }
                     emitLine(li);   // re-pin: a bound value may have moved the line off the call
                     emitTail(li.body(), cdB, requiredNames, requiredSuccess, expected);
@@ -816,9 +821,7 @@ final class BodyGen {
                     } else {
                         genExpr(li.value(), vt);
                     }
-                    int s = slot(vt);
-                    store(code, s, vt);
-                    bind(li.binder(), s, vt);
+                    storeLet(li, vt);
                     emitLine(li);   // re-pin: a bound value may have moved the line off the call
                     genExpr(li.body(), expected);
                 }
@@ -2097,10 +2100,7 @@ final class BodyGen {
                 }
                 case Core.LetIn li -> {
                     // a capture binding around the function: bind it here so the lambda captures it
-                    Type vt = genExpr(li.value());
-                    int s = slot(vt);
-                    store(code, s, vt);
-                    bind(li.binder(), s, vt);
+                    storeLet(li, genExpr(li.value()));
                     emitFunctionValue(li.body(), paramTypes);
                 }
                 default -> genExpr(value);

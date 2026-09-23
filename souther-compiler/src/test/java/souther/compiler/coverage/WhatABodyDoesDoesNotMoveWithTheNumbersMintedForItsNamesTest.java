@@ -200,8 +200,8 @@ class WhatABodyDoesDoesNotMoveWithTheNumbersMintedForItsNamesTest {
         return switch (e) {
             case Core.Read it -> new Core.Read(it.name(), moved(it.binding(), subst), it.type(),
                     it.pos());
-            case Core.LetIn it -> new Core.LetIn(moved(it.binder(), subst), it.value(), it.body(),
-                    it.type(), it.pos());
+            case Core.LetIn it -> new Core.LetIn(moved(it.binder(), subst), it.bindType(), it.value(),
+                    it.body(), it.type(), it.pos());
             case Core.Block it -> new Core.Block(
                     it.params().stream().map(each -> moved(each, subst)).toList(),
                     it.body(), it.type(), it.pos());

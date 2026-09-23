@@ -80,8 +80,8 @@ class AClauseUnderABindingIsReadInsideItTest {
     }
 
     private static Core.LetIn let(String name, int ordinal, Core value, Core body) {
-        return new Core.LetIn(new Core.Binder(name, new BindingId(OWNER, ordinal)), value, body,
-                body.type(), POS);
+        return new Core.LetIn(new Core.Binder(name, new BindingId(OWNER, ordinal)), value.type(),
+                value, body, body.type(), POS);
     }
 
     private static Core.Binary binary(BinOp op, Core left, Core right) {

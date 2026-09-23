@@ -40,7 +40,7 @@ class BlockReachesTest {
         BindingId bound = binding(0);
         // let b = b in b — the right-hand `b` names no binding yet, so it is a reach; the left-hand
         // `b` in the body is the let's own and is not.
-        Core.LetIn let = new Core.LetIn(new Core.Binder("b", bound), read(bound), read(bound),
+        Core.LetIn let = new Core.LetIn(new Core.Binder("b", bound), Type.INT, read(bound), read(bound),
                 Type.INT, POS);
         Core.Block block = block(let);
 

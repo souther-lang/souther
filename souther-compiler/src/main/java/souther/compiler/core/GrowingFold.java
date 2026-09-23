@@ -174,7 +174,8 @@ public final class GrowingFold {
         }
         for (int i = kept.size() - 1; i >= 0; i--) {
             Core.LetIn k = kept.get(i);
-            joined = new Core.LetIn(k.binder(), k.value(), joined, joined.type(), k.pos());
+            joined = new Core.LetIn(k.binder(), k.bindType(), k.value(), joined, joined.type(),
+                    k.pos());
         }
         return joined;
     }
@@ -220,8 +221,8 @@ public final class GrowingFold {
     private static Core puttingStep(Core step) {
         if (step instanceof Core.LetIn li) {
             Core inner = puttingStep(li.body());
-            return inner == null ? null : new Core.LetIn(li.binder(), li.value(), inner,
-                    li.type(), li.pos());
+            return inner == null ? null : new Core.LetIn(li.binder(), li.bindType(), li.value(),
+                    inner, li.type(), li.pos());
         }
         if (!(step instanceof Core.Block block) || block.params().size() != 2) {
             return null;
@@ -359,10 +360,12 @@ public final class GrowingFold {
                 refused[0] = true;   // the add hands over a list, and the outer step takes an element
                 return e;
             }
+            // each binding is in force at the type the outer step takes that parameter at
+            List<Type> takes = ((Type.FnOf) outer.type()).params();
             Core body = outer.body();
-            Core element = new Core.LetIn(outer.params().get(1), lit.elements().get(0), body,
-                    body.type(), c.pos());
-            return new Core.LetIn(outer.params().get(0), c.args().get(0), element,
+            Core element = new Core.LetIn(outer.params().get(1), takes.get(1), lit.elements().get(0),
+                    body, body.type(), c.pos());
+            return new Core.LetIn(outer.params().get(0), takes.get(0), c.args().get(0), element,
                     body.type(), c.pos());
         }
         return Core.mapChildren(e, child -> piped(child, outer, refused), s -> s,
@@ -409,8 +412,8 @@ public final class GrowingFold {
     private static Core grownStep(Core step) {
         if (step instanceof Core.LetIn li) {
             Core inner = grownStep(li.body());
-            return inner == null ? null : new Core.LetIn(li.binder(), li.value(), inner,
-                    li.type(), li.pos());
+            return inner == null ? null : new Core.LetIn(li.binder(), li.bindType(), li.value(),
+                    inner, li.type(), li.pos());
         }
         if (!(step instanceof Core.Block block) || block.params().size() != 2) {
             return null;
@@ -487,7 +490,8 @@ public final class GrowingFold {
                 }
                 Core body = answers(li.body(), acc, found, growth);
                 yield body == null ? null
-                        : new Core.LetIn(li.binder(), li.value(), body, li.type(), li.pos());
+                        : new Core.LetIn(li.binder(), li.bindType(), li.value(), body, li.type(),
+                                li.pos());
             }
             case Core.Match m -> answers(m, acc, found, growth);
             // A call a representation kept standing is not part of the tree a fold grows in: this

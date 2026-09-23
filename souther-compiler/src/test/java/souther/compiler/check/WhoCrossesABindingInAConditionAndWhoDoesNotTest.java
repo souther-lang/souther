@@ -86,12 +86,12 @@ class WhoCrossesABindingInAConditionAndWhoDoesNotTest {
         return binary(BinOp.GE, subject, new Core.Int(0, Type.INT, POS));
     }
 
-    /** `let $n = n in <written against $n>`, which is what naming a rule expands to. */
+    /** {@code let $n = n in <written against $n>}, which is what naming a rule expands to. */
     private static Core.LetIn naming(Function<Core, Core> body) {
         BindingId bound = new BindingId(OWNER, 1);
         Core written = body.apply(new Core.Read("$n", bound, Type.INT, POS));
-        return new Core.LetIn(new Core.Binder("$n", bound), subject(), written, written.type(),
-                POS);
+        return new Core.LetIn(new Core.Binder("$n", bound), Type.INT, subject(), written,
+                written.type(), POS);
     }
 
     /** `let $n = n in $n >= 0`, which is what naming the rule expands to. */
