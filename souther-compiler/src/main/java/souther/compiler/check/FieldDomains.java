@@ -78,7 +78,7 @@ public final class FieldDomains {
                     NOTHING_NAMED,
                     ConstraintState.top(FactSubject.inOneOrder()), null, null, Map.of(),
                     Set.of(RuleKey.THE_VALUE),
-                    Map.of(), Map.of(), List.of(), Map.of(), StringFacts.NONE,
+                    Map.of(), Map.of(), List.of(), Map.of(), StringFacts.NONE, KnownExtents.NONE,
                     Map.of(), Map.of(), BoundaryState.nothing(),
                     SettledOrderEnvelope.nothing());
 
@@ -261,7 +261,7 @@ public final class FieldDomains {
                          Map<RuleKey, FactSubject> atomAt, Map<RuleKey, Counted> countAt,
                          List<InvariantChecker.Written> readings,
                          Map<FactSubject, souther.compiler.numeric.Granularity> spacing,
-                         StringFacts stringMachines,
+                         StringFacts stringMachines, KnownExtents known,
                          Map<RuleRef.Invariant, Map<FactSubject, Set<ChoiceToLift>>> endsLeftOpen,
                          Map<RuleRef.Invariant, Map<OpenEnd, Set<ChoiceToLift>>> boundsLeftOpen,
                          BoundaryState derived, SettledOrderEnvelope settledOrder) {
@@ -271,12 +271,11 @@ public final class FieldDomains {
         this.settledOrder = settledOrder;
         this.stringMachines = stringMachines;
         // What is kept of the world this was read in: the rules and the budget, to read again
-        // under, and where the sets met were found to stop. Not the lender — a counterfactual of this
-        // reading borrows what this reading made ({@link #borrowingMachines}) — and nothing where no
-        // reading was made.
+        // under. Not the lender — a counterfactual of this reading borrows what this reading made
+        // ({@link #borrowingMachines}) — and nothing where no reading was made.
         this.source = readIn == null ? null : readIn.source();
         this.policy = readIn == null ? null : readIn.policy();
-        this.known = readIn == null ? KnownExtents.NONE : readIn.readings().extents();
+        this.known = known;
         this.byName = byName;
         this.heldByName = heldByName;
         this.admittedByName = admittedByName;
@@ -498,6 +497,9 @@ public final class FieldDomains {
                 seeded.constraints(), named, reading, settled,
                 seeded.unreadOfEveryValue(), seeded.atoms(), seeded.held(),
                 seeded.readings(), seeded.spacing(), seeded.stringMachines(),
+                // Where the sets this reading met were found to stop, which is the revision's and
+                // is what a counterfactual of this reading walks them by.
+                reading.readings().extents(),
                 seeded.endsLeftOpen(), seeded.boundsLeftOpen(), seeded.derived(),
                 seeded.settledOrder());
     }

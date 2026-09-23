@@ -39,8 +39,6 @@ final class Clauses {
      *  not one this reader makes out of the tree it was handed. Which clauses it has, what each of
      *  them states, and what it spreads all come from here. */
     private final PublishedDeclarations published;
-    /** Which form each of those declarations was written in. */
-    private final DeclarationKinds kinds;
     private final Map<TypeSymbol.AtModule, Map<String, Type>> fields = new HashMap<>();
     private final Map<TypeSymbol.AtModule, Map<String, BindingId>> bindings =
             new HashMap<>();
@@ -69,7 +67,6 @@ final class Clauses {
         this.expandedClauses = source.invariants();
         this.written = source.written();
         this.published = source.published();
-        this.kinds = source.kinds();
     }
 
 

@@ -78,6 +78,8 @@ class NothingHereStartsAReadingSomebodyElseHasAlreadyMadeTest {
      *  that does. */
     private static final String NOTHING_TO_BORROW_FROM = LENDING + "#NONE";
 
+    private static final String LENDING_TYPE = "L" + LENDING + ";";
+
     private static final String CHECK = "souther/compiler/check/";
 
     private static final String INPUTS = "souther/compiler/inputs/";
@@ -95,11 +97,16 @@ class NothingHereStartsAReadingSomebodyElseHasAlreadyMadeTest {
      * <p>Named rather than counted, so that a walk that stopped reading what methods take comes
      * back with nothing and fails. A method added here is a way to read a declaration's rules
      * without saying where to borrow from; a method gone from here is a world nobody can make.
+     * Each is named with what it takes ({@link AMethod}), so a shorter overload of one of them is
+     * a row of its own.
      */
     private static final Set<String> TAKING_THE_RULES_AND_THE_BUDGET_APART = Set.of(
-            CHECK + "RuleReadingContext#<init>",
-            CHECK + "RuleReadingContext#of",
-            CHECK + "RuleReadingContext#unshared");
+            AMethod.of(CHECK + "RuleReadingContext", "<init>",
+                    "(" + SOURCE_AND_POLICY + LENDING_TYPE + ")V"),
+            AMethod.of(CHECK + "RuleReadingContext", "of",
+                    "(" + SOURCE_AND_POLICY + LENDING_TYPE + ")L" + CHECK + "RuleReadingContext;"),
+            AMethod.of(CHECK + "RuleReadingContext", "unshared",
+                    "(" + SOURCE_AND_POLICY + ")L" + CHECK + "RuleReadingContext;"));
 
     /**
      * The one way in that says outright it reads for itself, and the whole of what may say it.
@@ -154,7 +161,7 @@ class NothingHereStartsAReadingSomebodyElseHasAlreadyMadeTest {
                 method.methodTypeSymbol().parameterList()
                         .forEach(each -> taken.append(each.descriptorString()));
                 if (taken.indexOf(THE_RULES) >= 0 && taken.indexOf(THE_BUDGET) >= 0) {
-                    found.add(owner + "#" + method.methodName().stringValue());
+                    found.add(AMethod.of(read, method));
                 }
             }
         }
@@ -277,10 +284,8 @@ class NothingHereStartsAReadingSomebodyElseHasAlreadyMadeTest {
         Set<Named> waysIn = theWaysInThatSayTheyReadForThemselves();
         Set<String> reaching = new TreeSet<>();
         for (ClassModel read : COMPILED.all()) {
-            String owner = read.thisClass().name().stringValue();
             for (MethodModel method : read.methods()) {
-                String from = owner + "#" + method.methodName().stringValue()
-                        + method.methodTypeSymbol().descriptorString();
+                String from = AMethod.of(read, method);
                 for (Instruction instruction : instructionsOf(method)) {
                     for (Named named : whatItNames(instruction)) {
                         if (startsAReadingOfItsOwn(waysIn, named)) {

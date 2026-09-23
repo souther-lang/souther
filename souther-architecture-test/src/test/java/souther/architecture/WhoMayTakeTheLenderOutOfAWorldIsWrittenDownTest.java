@@ -34,7 +34,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * RuleReadingContext} in {@code souther.compiler.check} may read it, and the walk this is about
  * lives in that package. The rows below are what says which methods do.
  *
- * <p>Written per method and not per class. What is entitled is a method that uses the lender
+ * <p>Written per method and not per class, and per overload: a method is named with what it takes
+ * ({@link AMethod}), so a way out added to another overload of a method written down here is a row
+ * of its own. What is entitled is a method that uses the lender
  * itself — borrows from it, or keeps what the revision worked out about where sets stop — or a
  * result the walk builds that keeps the lender for readers arriving after the walk. A class holding
  * one such method is not a class whose every method may reach the lender — least of all the ones
@@ -57,6 +59,9 @@ class WhoMayTakeTheLenderOutOfAWorldIsWrittenDownTest {
     private static final String CHECK = "souther/compiler/check/";
 
     private static final String OWNER = CHECK + "RuleReadingContext";
+
+    /** What a method taking a world takes it as. */
+    private static final String A_WORLD = "L" + OWNER + ";";
 
     private static final String INPUTS = "souther/compiler/inputs/";
 
@@ -83,12 +88,32 @@ class WhoMayTakeTheLenderOutOfAWorldIsWrittenDownTest {
      * position is offered afterwards borrows what the walk made.
      */
     private static final List<String> TAKING_IT_OUT = List.of(
-            CHECK + "CardinalityTransfer#ofData -> " + OWNER + "#" + THE_LENDER,
-            CHECK + "FieldDomains#<init> -> " + OWNER + "#" + THE_LENDER,
-            CHECK + "InvariantChecker#<init> -> " + OWNER + "#" + THE_LENDER,
-            CHECK + "InvariantChecker#readFields -> " + OWNER + "#" + THE_LENDER,
-            INPUTS + "InputDomain#of -> " + OWNER + "#" + KEPT_PAST_THE_WALK,
-            INPUTS + "PlacedRules#of -> " + OWNER + "#" + KEPT_PAST_THE_WALK);
+            AMethod.of(CHECK + "CardinalityTransfer", "ofData",
+                    "(Lsouther/compiler/types/TypeSymbol$AtModule;Lsouther/compiler/ast/Hir$Data;"
+                            + A_WORLD + "L" + CHECK + "Answers;Ljava/util/Set;)L" + CHECK
+                            + "Cardinality;")
+                    + " -> " + OWNER + "#" + THE_LENDER,
+            AMethod.of(CHECK + "FieldDomains", "leftBy",
+                    "(L" + CHECK + "InvariantChecker$Seeded;Lsouther/compiler/types/TypeSymbol$AtModule;"
+                            + A_WORLD + "Ljava/util/Map;L" + CHECK + "InvariantChecker$Reach;)L"
+                            + CHECK + "FieldDomains;")
+                    + " -> " + OWNER + "#" + THE_LENDER,
+            AMethod.of(CHECK + "InvariantChecker", "<init>",
+                    "(" + A_WORLD + "Ljava/util/Map;L" + CHECK + "ValueTemplates;)V")
+                    + " -> " + OWNER + "#" + THE_LENDER,
+            AMethod.of(CHECK + "InvariantChecker", "readFields",
+                    "(Lsouther/compiler/types/TypeSymbol$AtModule;" + A_WORLD
+                            + "Ljava/util/Map;L" + CHECK + "InvariantChecker$Reach;)L" + CHECK
+                            + "DeclarationReading;")
+                    + " -> " + OWNER + "#" + THE_LENDER,
+            AMethod.of(INPUTS + "InputDomain", "of",
+                    "(Ljava/util/List;" + A_WORLD + "L" + INPUTS + "InputDemand;)L" + INPUTS
+                            + "InputDomain;")
+                    + " -> " + OWNER + "#" + KEPT_PAST_THE_WALK,
+            AMethod.of(INPUTS + "PlacedRules", "of",
+                    "(L" + INPUTS + "TermPath;Lsouther/compiler/types/Type;" + A_WORLD + "L" + INPUTS
+                            + "PlacedRules$Reaching;)L" + INPUTS + "PlacedRules;")
+                    + " -> " + OWNER + "#" + KEPT_PAST_THE_WALK);
 
     @Test
     void everyMethodThatTakesTheLenderOutOfAWorldIsWrittenDown() {
@@ -103,11 +128,10 @@ class WhoMayTakeTheLenderOutOfAWorldIsWrittenDownTest {
     private static Set<String> takingItOut() {
         Set<String> found = new TreeSet<>();
         for (ClassModel model : COMPILED.all()) {
-            String owner = model.thisClass().name().stringValue();
             for (MethodModel method : model.methods()) {
                 for (Instruction instruction : instructionsOf(method)) {
-                    namedWayOut(instruction).ifPresent(way -> found.add(owner + "#"
-                            + method.methodName().stringValue() + " -> " + OWNER + "#" + way));
+                    namedWayOut(instruction).ifPresent(way -> found.add(
+                            AMethod.of(model, method) + " -> " + OWNER + "#" + way));
                 }
             }
         }
