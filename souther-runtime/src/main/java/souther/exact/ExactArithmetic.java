@@ -320,4 +320,21 @@ public final class ExactArithmetic {
     public static long negated(long exponent) {
         return ExactPowers.negated(exponent);
     }
+
+    /**
+     * What an exponent stands for above the line: the exponent where it is above nought, and nought
+     * where it is not.
+     *
+     * <p>Held wider than a long, as is {@link #belowTheLine}, so that no caller reads an exponent's
+     * negation as a {@code long}: the least long has none, and a negation that wrapped would say nought.
+     */
+    public static BigInteger aboveTheLine(long exponent) {
+        return BigInteger.valueOf(exponent).max(BigInteger.ZERO);
+    }
+
+    /** What an exponent stands for below the line: its negation where it is below nought, and nought
+     *  where it is not. For the least long that is a power of two no long holds. */
+    public static BigInteger belowTheLine(long exponent) {
+        return BigInteger.valueOf(exponent).negate().max(BigInteger.ZERO);
+    }
 }

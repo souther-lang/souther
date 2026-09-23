@@ -105,17 +105,6 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
         return new ExactRatio(parts.numerator(), parts.denominator(), parts.twos(), parts.fives());
     }
 
-    /** An exponent's part above the line, held wider than a long so that the least long has one. */
-    private static BigInteger above(long exponent) {
-        return BigInteger.valueOf(exponent).max(BigInteger.ZERO);
-    }
-
-    /** An exponent's part below the line, which is its negation and so wants more than a long holds
-     *  for the least long. */
-    private static BigInteger below(long exponent) {
-        return BigInteger.valueOf(exponent).negate().max(BigInteger.ZERO);
-    }
-
     /**
      * This as the one fraction it is, with the powers of two and five written into the two numbers.
      *
@@ -132,8 +121,10 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
      */
     public Fraction asFraction() {
         return new Fraction(
-                ExactArithmetic.written(numeratorWithoutUnits, above(twos), above(fives)),
-                ExactArithmetic.written(denominatorWithoutUnits, below(twos), below(fives)));
+                ExactArithmetic.written(numeratorWithoutUnits,
+                        ExactArithmetic.aboveTheLine(twos), ExactArithmetic.aboveTheLine(fives)),
+                ExactArithmetic.written(denominatorWithoutUnits,
+                        ExactArithmetic.belowTheLine(twos), ExactArithmetic.belowTheLine(fives)));
     }
 
     /** A ratio with its powers of two and five spelled out: two whole numbers in lowest terms, the
@@ -169,14 +160,16 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
      * @param modulus a positive whole number
      */
     public BigInteger numeratorMod(BigInteger modulus) {
-        return residue(numeratorWithoutUnits, above(twos), above(fives), modulus);
+        return residue(numeratorWithoutUnits,
+                ExactArithmetic.aboveTheLine(twos), ExactArithmetic.aboveTheLine(fives), modulus);
     }
 
     /** What this ratio stands over, modulo {@code modulus}.
      *
      *  @param modulus a positive whole number */
     public BigInteger denominatorMod(BigInteger modulus) {
-        return residue(denominatorWithoutUnits, below(twos), below(fives), modulus);
+        return residue(denominatorWithoutUnits,
+                ExactArithmetic.belowTheLine(twos), ExactArithmetic.belowTheLine(fives), modulus);
     }
 
     private static BigInteger residue(

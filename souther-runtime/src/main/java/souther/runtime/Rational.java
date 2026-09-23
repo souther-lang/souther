@@ -282,19 +282,14 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
 
     /** The numerator with the powers that multiply it built in. */
     private BigInteger numeratorWithItsPowers() {
-        return ExactArithmetic.written(numerator, atLeastNought(twos), atLeastNought(fives));
+        return ExactArithmetic.written(numerator,
+                ExactArithmetic.aboveTheLine(twos), ExactArithmetic.aboveTheLine(fives));
     }
 
     /** The denominator with the powers that divide it built in. */
     private BigInteger denominatorWithItsPowers() {
-        return ExactArithmetic.written(
-                denominator, atLeastNought(-twos), atLeastNought(-fives));
-    }
-
-    /** {@code e} where it is above nought, and nought where it is not, held wider than a long: the
-     *  negation of the least long is a power of two. */
-    private static BigInteger atLeastNought(long e) {
-        return BigInteger.valueOf(e).max(BigInteger.ZERO);
+        return ExactArithmetic.written(denominator,
+                ExactArithmetic.belowTheLine(twos), ExactArithmetic.belowTheLine(fives));
     }
 
     /**
