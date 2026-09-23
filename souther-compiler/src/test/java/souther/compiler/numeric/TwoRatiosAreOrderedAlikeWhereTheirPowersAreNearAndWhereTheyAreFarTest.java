@@ -13,21 +13,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Two ratios are put in the same order whether their powers stand near enough to be written out
  * over one denominator or too far apart for that.
  *
- * <p>The order has two ways to an answer. Where the exponents of two and of five differ by little,
- * both values are written over one denominator and compared; where they differ by more, each is
- * held between two whole numbers and the width rises until the two come apart. Either is exact, and
- * which of them answers is a matter of cost. So the answer must not move where the choice does, and
- * the pairs asked here stand on both sides of every edge the choice is made at, in each direction
- * and under every sign.
+ * <p>The order has more than one way to an answer: two values whose exponents differ by little are
+ * written over one denominator and compared, and two that differ by more are held between whole
+ * numbers of a width that rises until they come apart. Either is exact, and which of them answers is a
+ * matter of cost. So the answer must not move where the choice does, and the pairs asked here stand on
+ * both sides of the differences the choice is likely to be made at, in each direction and under every
+ * sign.
  *
- * <p>Held against the two values written out in full and cross-multiplied, which is what neither
- * way does: the near way takes the difference of the exponents first, and the far way never writes a
- * value out. The exponents here are small enough for that to be affordable, and it is the only
- * reading of the order that shares nothing with either.
- *
- * <p>The edges are read from the constants the choice is made by, so moving them moves what is
- * asked. {@link #theNearWayIsTakenExactlyWhereItsEdgesSayAndBothSidesAreAsked} is what says that
- * both ways are reached and not one of them by default.
+ * <p>Held against the two values written out in full and cross-multiplied, which is what no way the
+ * order takes does. The exponents here are small enough for that to be affordable, and it is the only
+ * reading of the order that shares nothing with any of them.
  */
 class TwoRatiosAreOrderedAlikeWhereTheirPowersAreNearAndWhereTheyAreFarTest {
 
@@ -39,11 +34,11 @@ class TwoRatiosAreOrderedAlikeWhereTheirPowersAreNearAndWhereTheyAreFarTest {
     private static final long[][] SHAPES = {
             {1, 1}, {3, 7}, {9, 11}, {13, 3}, {-3, 7}, {-1, 3}, {101, 99}, {-7, 9}};
 
-    /** How far apart the powers of two of a pair stand: on each side of the edge and of nought. */
-    private static final long[] TWOS_APART = around(ExactRatioOrder.NEAR_TWOS);
+    /** How far apart the powers of two of a pair stand: on each side of a few hundred and of nought. */
+    private static final long[] TWOS_APART = around(512);
 
     /** The same for five. */
-    private static final long[] FIVES_APART = around(ExactRatioOrder.NEAR_FIVES);
+    private static final long[] FIVES_APART = around(256);
 
     /** Where the first of a pair stands, so that only the differences are what is asked and not
      *  where the exponents happen to be centred. */
@@ -136,10 +131,10 @@ class TwoRatiosAreOrderedAlikeWhereTheirPowersAreNearAndWhereTheyAreFarTest {
                 continue;
             }
             asked++;
-            assertEquals(expected, Integer.signum(ExactRatioOrder.compareMagnitudes(each.a(),
-                    each.b())), () -> "the larger of " + each);
-            assertEquals(-expected, Integer.signum(ExactRatioOrder.compareMagnitudes(each.b(),
-                    each.a())), () -> "the larger of " + each + ", asked the other way round");
+            assertEquals(expected, Integer.signum(each.a().abs().compareTo(each.b().abs())),
+                    () -> "the larger of " + each);
+            assertEquals(-expected, Integer.signum(each.b().abs().compareTo(each.a().abs())),
+                    () -> "the larger of " + each + ", asked the other way round");
         }
         assertTrue(asked > 1000, "the pairs asked are a population and not a handful: " + asked);
     }
@@ -153,17 +148,18 @@ class TwoRatiosAreOrderedAlikeWhereTheirPowersAreNearAndWhereTheyAreFarTest {
     }
 
     /**
-     * Exponents too large to be subtracted are left to the brackets, however they stand.
+     * Exponents too large to be subtracted are ordered, however they stand.
      *
-     * <p>The difference of two exponents is what the near way is decided by, and the difference of
-     * two longs at opposite ends is not a long. A pair like that read as near would be answered from
-     * a wrapped-round number; asked here at exponents past an int, and at ones that overflow when
-     * one is taken from the other, of two values that differ by nothing else, so that the one with
-     * the larger exponent is the larger without a word about how it is worked out.
+     * <p>The difference of two longs at opposite ends is not a long, and a pair like that read from a
+     * wrapped-round difference would be answered from a small number that says nothing about it. Asked
+     * here at exponents past an int, and at ones that overflow when one is taken from the other, of
+     * two values that differ by nothing else, so that the one with the larger exponent is the larger
+     * without a word about how it is worked out.
      */
     @Test
-    void exponentsTooLargeToSubtractAreLeftToTheBracketsAndStillOrdered() {
-        long[] beyondAnInt = {1L << 31, -(1L << 31), 1L << 40, -(1L << 40), 1L << 62, -(1L << 62)};
+    void exponentsTooLargeToSubtractAreStillOrdered() {
+        long[] beyondAnInt = {1L << 31, -(1L << 31), 1L << 40, -(1L << 40), 1L << 62, -(1L << 62),
+                Long.MAX_VALUE, Long.MIN_VALUE};
         for (long high : beyondAnInt) {
             for (long low : beyondAnInt) {
                 if (high <= low) {
@@ -171,43 +167,15 @@ class TwoRatiosAreOrderedAlikeWhereTheirPowersAreNearAndWhereTheyAreFarTest {
                 }
                 ExactRatio larger = ratio(new long[] {3, 7}, high, 0);
                 ExactRatio smaller = ratio(new long[] {3, 7}, low, 0);
-                assertEquals(1, Integer.signum(ExactRatioOrder.compareMagnitudes(larger, smaller)),
+                assertEquals(1, Integer.signum(larger.compareTo(smaller)),
                         () -> "2^" + high + " against 2^" + low);
-                assertEquals(-1, Integer.signum(ExactRatioOrder.compareMagnitudes(smaller, larger)),
+                assertEquals(-1, Integer.signum(smaller.compareTo(larger)),
                         () -> "2^" + low + " against 2^" + high);
                 ExactRatio largerFives = ratio(new long[] {3, 7}, 0, high);
                 ExactRatio smallerFives = ratio(new long[] {3, 7}, 0, low);
-                assertEquals(1, Integer.signum(
-                        ExactRatioOrder.compareMagnitudes(largerFives, smallerFives)),
+                assertEquals(1, Integer.signum(largerFives.compareTo(smallerFives)),
                         () -> "5^" + high + " against 5^" + low);
             }
         }
-    }
-
-    /**
-     * Both ways are reached, and each where the constants say.
-     *
-     * <p>The population above stands on both sides of each edge, but a pair only says something
-     * about the near way if the near way was the one to answer it. So the way taken is read here:
-     * the near way answers a pair exactly where neither exponent stands further apart than its
-     * edge, and declines every other, which the far way then answers.
-     */
-    @Test
-    void theNearWayIsTakenExactlyWhereItsEdgesSayAndBothSidesAreAsked() {
-        int near = 0;
-        int far = 0;
-        for (Pair each : everyPair()) {
-            boolean withinEdges = Math.abs(each.twosApart()) <= ExactRatioOrder.NEAR_TWOS
-                    && Math.abs(each.fivesApart()) <= ExactRatioOrder.NEAR_FIVES;
-            boolean taken = ExactRatioOrder.fromWritingBothOut(each.a(), each.b()) != null;
-            assertEquals(withinEdges, taken, () -> "which way answers " + each);
-            if (taken) {
-                near++;
-            } else {
-                far++;
-            }
-        }
-        assertTrue(near > 0, "no pair was answered by writing both out");
-        assertTrue(far > 0, "no pair was left to the brackets");
     }
 }
