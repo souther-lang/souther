@@ -4,6 +4,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.ClauseDischarge;
 import souther.compiler.check.ClauseLocations;
+import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclarationCitations;
 import souther.compiler.check.DeclarationKind;
 import souther.compiler.check.DeclarationKinds;
@@ -1545,6 +1546,18 @@ public final class Shapes {
             Answer<DeclarationKind> kind = db.ask(new Names.DeclarationKindOf(declaration));
             return kind.present() ? kind.value() : null;
         };
+    }
+
+    /**
+     * What a check asks of a declaration it did not write, each question answered by the
+     * compilation.
+     *
+     * <p>Each is the one this class hands out for that question on its own, so a reader taking this
+     * depends on the questions it asks and on nothing it does not.
+     */
+    public static DeclarationAccess declarationAccess(Db db) {
+        return new DeclarationAccess(publishedDeclarations(db), declarationKinds(db),
+                newtypeInners(db), effectiveFieldTypes(db), fieldLayout(db));
     }
 
     /**

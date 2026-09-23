@@ -258,15 +258,15 @@ public final class SpecChecker {
      */
     static Checked checkSpecFn(Hir.SpecBehavior spec, Hir.FnDef fn, Hir.Expr inlinedBody,
                                     InvariantChecker.Source discharge,
-                                    Symbols symbols, PublishedDeclarations published,
-                                    DeclarationKinds kinds, NewtypeInners inners,
-                                    EffectiveFieldTypes fieldTypes, FieldLayout layout,
+                                    Symbols symbols, DeclarationAccess declarations,
                                     ReadingPolicy policy,
                                     Map<ValueName.Behavior, ReqSig> calleeSigs,
                                     Map<ValueName.Behavior, ReqSig> reqSigs, HelperInliner inliner,
                                     Map<String, Type> recursiveHelperFns,
                                     Map<String, DataChecker.Constructs> recHelperConstructs,
                                     Preserved.SettledValues settledValues) {
+        PublishedDeclarations published = declarations.published();
+        DeclarationKinds kinds = declarations.kinds();
         if (fn.declaredReturn() != null) {
             throw CompileException.of(Diagnostic
                             .at(fn.pos()).say(new BehaviorMessage.AnImplementationsReturnComesFromTheBehavior(fn.name(), spec.name())).build());
@@ -349,7 +349,7 @@ public final class SpecChecker {
         // push the declared output type into the body so a body that is directly an empty collection
         // (or a construction whose field is one) takes the declared type rather than a bottom
         Core elaboratedBody = Elaborator.elaborate(body, tenv,
-                new CheckContext(symbols, published, kinds, inners, fieldTypes, layout, null, reqSigs)
+                new CheckContext(symbols, declarations, null, reqSigs)
                         .withCallees(calleeSigs)
                         .withDependencies(dependsOn)
                         .preserving(Preserved.valuesAlreadySettled(settledValues)), output);
@@ -462,7 +462,7 @@ public final class SpecChecker {
         // representation there is none of is not analyzed at all, rather than analyzed over the
         // emitted tree, whose operations are no longer operations.
         CheckContext dischargeContext = discharge == null ? null
-                : new CheckContext(symbols, published, kinds, inners, fieldTypes, layout, null, reqSigs)
+                : new CheckContext(symbols, declarations, null, reqSigs)
                         .withCallees(calleeSigs)
                         .withDependencies(dependsOn).forDischarge(settledValues);
         Core dischargeBody = discharge == null ? null
