@@ -5,6 +5,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -25,17 +26,21 @@ public final class CheckedModule {
     private final Map<ValueName, CheckedHelper> helperByDeclaration;
     private final List<CheckedValue> values;
     private final Map<ValueName.Helper, CheckedValue> valueByName;
+    private final List<CheckedValueEntry> valueEntries;
+    private final Map<ValueName.Helper, CheckedValueEntry> valueEntryByValue;
     private final List<CheckedData> data;
     private final Set<TypeSymbol.AtModule> declaredData;
     private final Set<String> published;
 
     CheckedModule(String name, List<CheckedBehavior> behaviors, List<CheckedHelper> helpers,
-                  List<CheckedValue> values, List<CheckedData> data, Set<String> published) {
+                  List<CheckedValue> values, List<CheckedValueEntry> valueEntries,
+                  List<CheckedData> data, Set<String> published) {
         this.name = name;
         this.published = Set.copyOf(published);
         this.behaviors = List.copyOf(behaviors);
         this.helpers = List.copyOf(helpers);
         this.values = List.copyOf(values);
+        this.valueEntries = List.copyOf(valueEntries);
         this.data = List.copyOf(data);
         Map<ValueName.Behavior, CheckedBehavior> byBehavior = new LinkedHashMap<>();
         for (CheckedBehavior behavior : this.behaviors) {
@@ -77,6 +82,36 @@ public final class CheckedModule {
             }
         }
         this.valueByName = Map.copyOf(byName);
+        Map<ValueName.Helper, CheckedValueEntry> byEntry = new LinkedHashMap<>();
+        for (CheckedValueEntry entry : this.valueEntries) {
+            if (!byName.containsKey(entry.value())) {
+                // ADR-0074: the entry is for a value this module builds. One that named a value
+                // nowhere in `values()` would be an entry with nothing for a call through it to
+                // reach.
+                throw new IllegalStateException("`" + name + "` holds an entry for `" + entry.value()
+                        + "`, which it builds no value for");
+            }
+            if (byEntry.put(entry.value(), entry) != null) {
+                throw new IllegalStateException("`" + name + "` holds an entry for `" + entry.value()
+                        + "` twice");
+            }
+        }
+        // ADR-0074, held as one equality rather than as two checks the constructor could agree with
+        // itself about arriving at separately: the values with an entry are exactly the values this
+        // module publishes — a constant's fold included, since the surface a module offers to Java
+        // does not depend on whether a value happens to fold, and never a value this module keeps,
+        // which nothing outside it can call through.
+        Set<ValueName.Helper> publishedValues = new LinkedHashSet<>();
+        for (ValueName.Helper value : byName.keySet()) {
+            if (published.contains(value.name())) {
+                publishedValues.add(value);
+            }
+        }
+        if (!byEntry.keySet().equals(publishedValues)) {
+            throw new IllegalStateException("`" + name + "` publishes " + publishedValues
+                    + " and holds an entry for " + byEntry.keySet());
+        }
+        this.valueEntryByValue = Map.copyOf(byEntry);
     }
 
     /**
@@ -126,6 +161,29 @@ public final class CheckedModule {
         return publicationOfBaseName(name.name());
     }
 
+    /**
+     * Whether this module publishes the value {@code value}, or keeps it.
+     *
+     * <p>The value counterpart of {@link #publicationOf(ValueName.Behavior)}; see there for why the
+     * question is asked of a module. Named {@code publicationOfValue} rather than overloaded onto
+     * {@code publicationOf}: {@link ValueName.Helper} is also a carried helper's identity
+     * ({@link CheckedHelper#declares()}), and a helper's own publication (ADR-0075) is a different
+     * question a reader may one day want answered by the same identity type — an overload taken by
+     * this one now would leave that question nowhere to go.
+     *
+     * @throws IllegalArgumentException where this module builds no value {@code value}
+     */
+    public Publication publicationOfValue(ValueName.Helper value) {
+        if (value == null) {
+            throw new IllegalArgumentException("a value is asked about by its identity");
+        }
+        if (!valueByName.containsKey(value)) {
+            throw new IllegalArgumentException("`" + this.name + "` builds no value `" + value
+                    + "`, and what another module publishes is that module's answer");
+        }
+        return publicationOfBaseName(value.name());
+    }
+
     private Publication publicationOfBaseName(String name) {
         return published.contains(name) ? Publication.PUBLISHED : Publication.KEPT;
     }
@@ -169,8 +227,8 @@ public final class CheckedModule {
     }
 
     /** The methods this module carries for declarations a call was left standing to: its recursions,
-     *  and the methods compiled for its rows' values and for the entries of its values. Not its
-     *  values, which are {@link #values()}. */
+     *  and the methods compiled for its rows' values. Not its values, which are {@link #values()},
+     *  and not the entries it publishes for them, which are {@link #valueEntries()}. */
     public List<CheckedHelper> helpers() {
         return helpers;
     }
@@ -178,6 +236,38 @@ public final class CheckedModule {
     /** The values this module builds, each in the one place it runs. */
     public List<CheckedValue> values() {
         return values;
+    }
+
+    /**
+     * The entries this module publishes, one per value it lists in {@code exposing}.
+     *
+     * <p>Not the value's own body: an entry is the nullary bridge ADR-0074 describes, which another
+     * module calls in place of holding a copy of the value. Every published value has one here, a
+     * constant's fold included — the invariant this class's constructor holds.
+     */
+    public List<CheckedValueEntry> valueEntries() {
+        return valueEntries;
+    }
+
+    /**
+     * The entry this module publishes for the value {@code value}.
+     *
+     * <p>Never a null and never an absence to interpret, the same as {@link #value}: a value this
+     * module publishes has an entry by construction, and a value it does not publish is not this
+     * method's to answer for — ask {@link #publicationOfValue} first.
+     *
+     * @throws IllegalArgumentException where this module holds no entry for {@code value}
+     */
+    public CheckedValueEntry valueEntry(ValueName.Helper value) {
+        if (value == null) {
+            throw new IllegalArgumentException("an entry is asked for by the value it publishes");
+        }
+        CheckedValueEntry entry = valueEntryByValue.get(value);
+        if (entry == null) {
+            throw new IllegalArgumentException("`" + name + "` holds no entry for `" + value
+                    + "`; the entries it holds are " + valueEntries);
+        }
+        return entry;
     }
 
     /**

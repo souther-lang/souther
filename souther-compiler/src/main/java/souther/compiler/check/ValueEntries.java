@@ -43,14 +43,21 @@ public final class ValueEntries {
     }
 
     /**
-     * The values {@code module} publishes: the definitions it wrote with no parameter list that
-     * implement no behavior, and that it exposes.
+     * The values {@code module} publishes: the definitions it wrote that {@link LoweringRole}
+     * settles as a value's executable home, and that it exposes.
      *
      * <p>What the module lists and no more, which is what another Souther module can import. A module
      * that lists nothing is public to Java and offers no name to import, so nothing of it is called
      * from another module. What a published helper names of this module's is not here either: a
      * helper is expanded into its reader, so nothing of the module's is called from outside on its
      * behalf.
+     *
+     * <p>Whether a definition is a value is asked of {@link LoweringRole#of}, the one place that
+     * answer is decided, rather than read a second time off {@code fn.params().isEmpty()} here — a
+     * copy of that condition is the disagreement issue #1885 found one snapshot boundary downstream
+     * of this. {@code fn.role() instanceof DefinitionRole.Ordinary} still guards the call: an
+     * attached file's value shares {@link LoweringRole}'s {@code ValueHome} case with a module's own
+     * (spec §an-attached-files-values-are-for-its-rows), and only the module's own may be listed.
      */
     public static Set<String> publishedValues(Hir.Module module) {
         Set<String> behaviors = new HashSet<>();
@@ -60,9 +67,11 @@ public final class ValueEntries {
         Set<String> listed = new HashSet<>(module.exposing());
         Set<String> published = new LinkedHashSet<>();
         for (Hir.FnDef fn : module.fns()) {
-            if (fn.params().isEmpty() && fn.body() != null
+            boolean implementsBehavior = behaviors.contains(fn.name());
+            if (fn.body() != null
                     && fn.role() instanceof DefinitionRole.Ordinary
-                    && !behaviors.contains(fn.name())
+                    && LoweringRole.of(fn, module.name(), implementsBehavior)
+                            instanceof LoweringRole.ValueHome
                     && listed.contains(fn.name())) {
                 published.add(fn.name());
             }
