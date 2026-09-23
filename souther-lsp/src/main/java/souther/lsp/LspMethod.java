@@ -37,6 +37,11 @@ public enum LspMethod {
     DID_CHANGE("textDocument/didChange", Announced.TEXT_DOCUMENT_SYNC),
     DID_CLOSE("textDocument/didClose", Announced.TEXT_DOCUMENT_SYNC),
     DID_CHANGE_WATCHED_FILES("workspace/didChangeWatchedFiles", Announced.SOU_FILE_WATCHER),
+    // `changeNotifications` is what tells a client it may send this; `supported` alone says only
+    // that folders given at initialize are read.
+    DID_CHANGE_WORKSPACE_FOLDERS("workspace/didChangeWorkspaceFolders",
+            new Advertisement.StaticCapability(List.of("workspace", "workspaceFolders"),
+                    Map.of("supported", true, "changeNotifications", true))),
     DOCUMENT_SYMBOL("textDocument/documentSymbol",
             new Advertisement.StaticCapability("documentSymbolProvider", true)),
     SEMANTIC_TOKENS_FULL("textDocument/semanticTokens/full", Announced.SEMANTIC_TOKENS),
@@ -102,7 +107,7 @@ public enum LspMethod {
             options.put("legend", Map.of("tokenTypes", Analyzer.TOKEN_TYPES,
                     "tokenModifiers", List.of()));
             options.put("full", true);
-            return options;
+            return Collections.unmodifiableMap(options);
         }
 
         private Announced() {
@@ -163,27 +168,62 @@ public enum LspMethod {
      * what is answered and nothing else.
      *
      * <p>One field may announce several methods, and then it is the one advertisement all of them
-     * hold — not one written out again under the same key. Two methods reaching the same field by
+     * hold — not one written out again under the same path. Two methods reaching the same field by
      * different advertisements are refused even where both spell the same value: the field would
      * announce one of them, and the other would be answered without being announced, which is the
      * whole of what a capability rules out.
+     *
+     * <p>Nor may one field sit inside another's value. The outer one's value is the whole of what
+     * is there, so whichever were written second would replace or be replaced by the other.
      */
     private static Map<String, Object> capabilities() {
-        Map<String, LspMethod> announcedBy = new LinkedHashMap<>();
-        Map<String, Object> capabilities = new LinkedHashMap<>();
+        Map<List<String>, LspMethod> announcedBy = new LinkedHashMap<>();
+        Map<List<String>, Object> fields = new LinkedHashMap<>();
         for (LspMethod method : values()) {
             if (!(method.advertisement instanceof Advertisement.StaticCapability capability)) {
                 continue;
             }
-            LspMethod first = announcedBy.putIfAbsent(capability.key(), method);
+            LspMethod first = announcedBy.putIfAbsent(capability.path(), method);
             if (first == null) {
-                capabilities.put(capability.key(), capability.value());
+                fields.put(capability.path(), capability.value());
             } else if (first.advertisement != method.advertisement) {
                 throw new IllegalStateException(first + " and " + method + " both advertise "
-                        + capability.key() + " without sharing one advertisement");
+                        + capability.path() + " without sharing one advertisement");
             }
         }
-        return Collections.unmodifiableMap(capabilities);
+        for (Map.Entry<List<String>, LspMethod> outer : announcedBy.entrySet()) {
+            for (Map.Entry<List<String>, LspMethod> inner : announcedBy.entrySet()) {
+                List<String> path = inner.getKey();
+                if (path.size() > outer.getKey().size()
+                        && path.subList(0, outer.getKey().size()).equals(outer.getKey())) {
+                    throw new IllegalStateException(inner.getValue() + " advertises " + path
+                            + " inside " + outer.getKey() + ", which " + outer.getValue()
+                            + " advertises as a whole");
+                }
+            }
+        }
+        return object(fields);
+    }
+
+    /**
+     * The object holding each value at its path, the objects on the way made here and unmodifiable.
+     *
+     * <p>No path runs through another's value, so a key is either a field or an object made here,
+     * never both.
+     */
+    private static Map<String, Object> object(Map<List<String>, Object> fields) {
+        Map<String, Object> object = new LinkedHashMap<>();
+        Map<String, Map<List<String>, Object>> below = new LinkedHashMap<>();
+        fields.forEach((path, value) -> {
+            if (path.size() == 1) {
+                object.put(path.getFirst(), value);
+            } else {
+                below.computeIfAbsent(path.getFirst(), _ -> new LinkedHashMap<>())
+                        .put(path.subList(1, path.size()), value);
+            }
+        });
+        below.forEach((key, inner) -> object.put(key, object(inner)));
+        return Collections.unmodifiableMap(object);
     }
 
     /** The registrations, whose {@code method} is the method holding each one, so what is registered
