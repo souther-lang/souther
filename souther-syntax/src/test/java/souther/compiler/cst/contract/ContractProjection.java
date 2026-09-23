@@ -6,6 +6,7 @@ import souther.compiler.cst.SyntaxNode;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * How this compiler's concrete syntax tree reads as the contract syntax tree.
@@ -45,11 +46,8 @@ final class ContractProjection {
                  ASSIGN, PIPE, ARROW, PIPEFWD, VPIPE, QUESTION, PLUSPLUS,
                  EQ, NE, LT, LE, GT, GE, AND, OR, PLUS, MINUS, STAR, SLASH -> List.of();
 
-            case IDENT -> leaf("identifier");
-            case INT_LIT -> leaf("integer-literal");
-            case DECIMAL_LIT -> leaf("decimal-literal");
-            case STRING_LIT -> leaf("string-literal");
-            case TYPEVAR -> leaf("type-variable");
+            case IDENT, INT_LIT, DECIMAL_LIT, STRING_LIT, TYPEVAR ->
+                    leaf(tokenClass(element.kind()).orElseThrow());
             case TRUE_KW, FALSE_KW -> leaf("boolean-literal");
             case UNDERSCORE -> leaf("discard");
             case UNANSWERED -> leaf("answer-owed");
@@ -148,6 +146,52 @@ final class ContractProjection {
             case FIELD_INIT -> node("field-initializer", element);
             case UNREACHABLE_EXPR -> node("unreachable-expression", element);
         };
+    }
+
+    /**
+     * The open token class of the contract a token of {@code kind} is, if it is one: a token whose
+     * text the source supplies. A fixed spelling is not a class, and neither is a node, the end of
+     * input, the fragment a lexical error covers, or a contextual word the parser read as one —
+     * that is a spelling of the name it lexed as.
+     *
+     * <p>Written with no default, so a kind added to the lexer does not compile here until it is
+     * said to be one of the contract's token classes or none of them, which is what lets the
+     * vocabulary's lists be compared with the compiler's rather than with themselves.
+     */
+    static Optional<String> tokenClass(SyntaxKind kind) {
+        return Optional.ofNullable(switch (kind) {
+            case WHITESPACE -> "whitespace";
+            case LINE_COMMENT -> "line-comment";
+            case IDENT -> "identifier";
+            case INT_LIT -> "integer-literal";
+            case DECIMAL_LIT -> "decimal-literal";
+            case STRING_LIT -> "string-literal";
+            case TYPEVAR -> "type-variable";
+            case CONTEXTUAL_KW, EOF, ERROR_TOKEN,
+                 MODULE_KW, IMPORT_KW, EXPOSING_KW, DATA_KW, INVARIANT_KW, ENSURES_KW, AS_KW, LET_KW,
+                 GUARD_KW, ELSE_KW, TRUE_KW, FALSE_KW, IF_KW, THEN_KW, BEHAVIOR_KW, DEPENDS_KW,
+                 CONSTRUCTS_KW, MATCH_KW, WITH_KW, UNREACHABLE_KW,
+                 LBRACE, RBRACE, LPAREN, RPAREN, LBRACKET, RBRACKET, COLON, COMMA, DOT, SPREAD,
+                 ASSIGN, PIPE, ARROW, PIPEFWD, VPIPE, QUESTION, PLUSPLUS, UNDERSCORE, UNANSWERED,
+                 EQ, NE, LT, LE, GT, GE, AND, OR, PLUS, MINUS, STAR, SLASH,
+                 SOURCE_FILE, MODULE_HEADER, EXPOSING_CLAUSE, EXPOSED_ENTRY, IMPORT_DECL,
+                 IMPORT_ALIAS, NAME_LIST, QUALIFIED_NAME,
+                 DATA_DEF, PRODUCT_BODY, FIELD, SPREAD_MEMBER, SUM_BODY, NEWTYPE_BODY,
+                 INVARIANT_CLAUSE,
+                 BEHAVIOR_DEF, BEHAVIOR_SIG, PIPE_BEHAVIOR, PARAM_LIST, PARAM, CONSTRUCTS_CLAUSE,
+                 DEPENDS_CLAUSE, ENSURES_CLAUSE, ENSURES_ARM, STAGE,
+                 FN_DEF, FN_PARAM_LIST, FN_PARAM, INTRINSIC_BODY, PARTIAL_MODIFIER,
+                 PRIVATE_MODIFIER,
+                 EXAMPLE_DEF, EXAMPLE_ROW, EXAMPLES_FILE_HEADER, WITH_CLAUSE, WITH_BINDING,
+                 FAKE_DEF, FAKE_ROW,
+                 RET_TYPE, TYPE_REF, TYPE_ARGS, TUPLE_TYPE, FN_TYPE,
+                 LET_STMT, LET_DESTRUCTURE, GUARD_STMT,
+                 PATTERN_NAME, PATTERN_TUPLE, PATTERN_CTOR, PATTERN_RECORD, PATTERN_FIELD,
+                 BLOCK_EXPR, PIPE_EXPR, BINARY_EXPR, UNARY_EXPR, APPLY_EXPR, ARG_LIST, FIELD_ACCESS,
+                 VAR_EXPR, LITERAL_EXPR, PAREN_EXPR, TUPLE_EXPR, LIST_EXPR, LIST_COMP, IF_EXPR,
+                 ELSE_ARMS, ELSE_ARM, MATCH_EXPR, MATCH_CASE, LAMBDA_EXPR, FIELD_GETTER,
+                 NEW_DATA_EXPR, FIELD_INIT, UNREACHABLE_EXPR -> null;
+        });
     }
 
     private static List<ContractTree> leaf(String id) {

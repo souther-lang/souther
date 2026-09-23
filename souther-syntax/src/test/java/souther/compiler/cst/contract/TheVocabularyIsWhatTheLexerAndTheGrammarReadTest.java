@@ -89,6 +89,34 @@ class TheVocabularyIsWhatTheLexerAndTheGrammarReadTest {
     }
 
     /**
+     * The open token classes and the trivia are the compiler's: every kind whose text the source
+     * supplies and that is a class of the contract is listed as one, and the ones the parser skips
+     * are the ones listed as trivia. A trivia the lexer gained, or a class it dropped, is found here
+     * rather than in whichever corpus case first happened to write it.
+     */
+    @Test
+    void theTokenClassesAndTheTriviaAreTheOnesTheLexerMakes() {
+        Set<String> classes = new TreeSet<>();
+        Set<String> trivia = new TreeSet<>();
+        for (SyntaxKind kind : SyntaxKind.values()) {
+            ContractProjection.tokenClass(kind).ifPresent(name -> {
+                assertEquals(SyntaxKind.Lexis.OPEN_TOKEN, kind.lexis(),
+                        kind + " is read as the class " + name + " and is no token the source spells");
+                classes.add(name);
+                if (kind.isTrivia()) {
+                    trivia.add(name);
+                }
+            });
+            if (kind.isTrivia()) {
+                assertTrue(ContractProjection.tokenClass(kind).isPresent(),
+                        kind + " is trivia to the parser and no class of the contract");
+            }
+        }
+        assertEquals(new TreeSet<>(listed("openTokens")), classes);
+        assertEquals(new TreeSet<>(listed("trivia")), trivia);
+    }
+
+    /**
      * The Unicode version is one value, said three times: by the vocabulary, by every property the
      * grammar names, and by the table the lexer reads names with. A property named without its
      * version is refused as well, since it would be read in whichever version its reader has.
