@@ -497,10 +497,8 @@ public final class LspServer {
      * this server is not — and which Souther this is has one answer whoever asks.
      */
     private Map<String, Object> initializeResult() {
-        Map<String, Object> capabilities = new LinkedHashMap<>(LspMethod.serverCapabilities());
-        capabilities.put("experimental", Map.of("souther", SoutherExtension.advertised()));
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("capabilities", capabilities);
+        result.put("capabilities", LspMethod.serverCapabilities());
         result.put("serverInfo",
                 Map.of("name", "souther-lsp", "version", ModuleMetadata.compilerVersion()));
         return result;

@@ -217,7 +217,8 @@ public final class Main {
                 case "--adequacy" -> {
                     Adequacy.Asked named = adequacyAsked(args[++i]);
                     if (named == null) {
-                        System.err.println("`--adequacy` takes off, witness or all");
+                        System.err.println("`--adequacy` takes "
+                                + CliOption.adequacyLevels(", "));
                         return 2;
                     }
                     measure = named;

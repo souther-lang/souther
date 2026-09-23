@@ -38,6 +38,8 @@ class EveryLauncherTakesWhatItGivesTheJvmFromTheBuildTest {
 
     private static final Pattern STACK = Pattern.compile("-Xss(\\S+)");
     private static final Pattern MINIMUM = Pattern.compile("LSS (\\S+)");
+    /** A Java named by a number where the launcher says what it needs, as in "a JDK 25". */
+    private static final Pattern A_JAVA_BY_NUMBER = Pattern.compile("(?:Java|JDK) (\\d+)");
     private static final Pattern COMMENT = Pattern.compile("^\\s*(#|rem\\s|rem$).*", Pattern.CASE_INSENSITIVE);
 
     private static final RepositoryLayout LAYOUT = RepositoryLayout.ofWorkingDirectory();
@@ -66,6 +68,8 @@ class EveryLauncherTakesWhatItGivesTheJvmFromTheBuildTest {
         for (String minimum : compared) {
             assertEquals("@souther.java.minimum@", minimum, "souther.cmd states a Java of its own");
         }
+        assertEquals(List.of(), read(launcher("souther.cmd"), A_JAVA_BY_NUMBER),
+                "souther.cmd tells its reader of a Java by a number of its own");
     }
 
     @Test

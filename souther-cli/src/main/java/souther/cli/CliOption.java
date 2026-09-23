@@ -1,5 +1,7 @@
 package souther.cli;
 
+import souther.compiler.query.Adequacy;
+
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
@@ -7,6 +9,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.StringJoiner;
 
 /**
  * The options this command line takes, and what has to hold of a line that writes them.
@@ -30,7 +33,7 @@ import java.util.Set;
 enum CliOption {
 
     DIRECTORY("compile/init", "<path>", "where what this command writes goes", "-d", "--dir"),
-    ADEQUACY("compile", "off|witness|all",
+    ADEQUACY("compile", adequacyLevels("|"),
             "how much of the model to measure and warn about (default off)", "--adequacy"),
     WARNINGS("compile", "report|error", "refuse a compile that warns (default report)",
             "--warnings"),
@@ -173,6 +176,19 @@ enum CliOption {
     private static final List<Set<CliOption>> EXCLUSIVE = List.of(EnumSet.of(WRITE, CHECK));
 
     private static final Map<String, CliOption> BY_SPELLING = spellingIndex();
+
+    /**
+     * The words {@code --adequacy} takes, joined by {@code separator}: every level's
+     * {@link Adequacy.Level#spelling}, which the language server reads as well, rather than a list
+     * of them kept here.
+     */
+    static String adequacyLevels(String separator) {
+        StringJoiner levels = new StringJoiner(separator);
+        for (Adequacy.Level level : Adequacy.Level.values()) {
+            levels.add(level.spelling());
+        }
+        return levels.toString();
+    }
 
     private static Map<String, CliOption> spellingIndex() {
         Map<String, CliOption> index = new LinkedHashMap<>();

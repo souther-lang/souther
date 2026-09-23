@@ -1,5 +1,6 @@
 package souther.lsp;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -46,6 +47,6 @@ enum SoutherExtension {
         for (SoutherExtension extension : values()) {
             members.put(extension.member, Map.of());
         }
-        return members;
+        return Collections.unmodifiableMap(members);
     }
 }
