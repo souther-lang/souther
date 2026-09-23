@@ -95,15 +95,16 @@ class TheCompositionIsNotBehindTheBaselinesBudgetTest {
 
     /** What the search made of the class {@code hi} takes below the line the body draws. */
     private static ClassDisposition attemptAtTheLowerHi(Adequacy.Filling filling) {
-        for (Map.Entry<ClassOfAPosition, ClassDisposition> each
-                : filling.composed().discharge().classes().entrySet()) {
-            if (each.getKey().at().term().endsWith("hi")
-                    && each.getKey().classId().contains("0")) {
-                return each.getValue();
+        for (GenerationAnswer each : filling.composed().discharge().answers().values()) {
+            if (each instanceof GenerationAnswer.Class(var obligation, var disposition)
+                    && obligation.target().at().term().endsWith("hi")
+                    && obligation.target().classId().contains("0")) {
+                return disposition;
             }
         }
         throw new AssertionError("the lower class of `hi` is one the search was asked about: "
-                + filling.composed().discharge().classes());
+                + filling.composed().discharge().answers().values().stream()
+                        .filter(GenerationAnswer.Class.class::isInstance).toList());
     }
 
     private static Map<String, Adequacy.Filling> generated(String source) {

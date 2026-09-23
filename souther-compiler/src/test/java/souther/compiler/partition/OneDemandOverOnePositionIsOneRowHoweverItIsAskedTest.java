@@ -132,7 +132,7 @@ class OneDemandOverOnePositionIsOneRowHoweverItIsAskedTest {
     /** What one run of the search offered, by the values each row carries. */
     private static List<List<String>> rowsOf(Model model, List<ClassOfAPosition> classes,
                                              List<ArmProbe> arms) {
-        return Generator.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
+        return GenerationFixtures.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
                         model.read(), Generator.Trial.NOTHING_RUNS, List.of(), classes, arms,
                         Budgets.generation())
                 .rows().stream()

@@ -50,7 +50,7 @@ class AFloorNothingBuildsIsSaidTheSameWhereverItIsWrittenTest {
         InputDomain domain = InputDomain.of(sigs.get(behavior), RuleReadingContext.unshared(rules,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
         Partitions.Partitioning partitioning = Partitions.of(behavior, domain, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
-        FillResult filled = Generator.fill(
+        FillResult filled = GenerationFixtures.fill(
                 MeasuredInput.of(behavior, domain.reading(rules), partitioning),
                 List.of(), REFUSED, Budgets.generation());
         assertFalse(filled.unresolved().isEmpty(), "nothing was written and nothing said why");

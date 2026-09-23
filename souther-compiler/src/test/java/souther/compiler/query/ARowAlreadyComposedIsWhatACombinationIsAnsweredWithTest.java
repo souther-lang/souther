@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.partition.ClassDisposition;
 import souther.compiler.partition.FillResult;
+import souther.compiler.partition.GenerationAnswer;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.RowId;
 
@@ -78,12 +79,12 @@ class ARowAlreadyComposedIsWhatACombinationIsAnsweredWithTest {
         }
 
         List<ObligationIdentity.OfAFallbackPairCell> twice = new ArrayList<>();
-        for (Map.Entry<ObligationIdentity.OfAFallbackPairCell, ClassDisposition> each
-                : filled.discharge().pairs().entrySet()) {
-            if (each.getValue() instanceof ClassDisposition.Built built
+        for (GenerationAnswer each : filled.discharge().answers().values()) {
+            if (each instanceof GenerationAnswer.Pair(var obligation, var disposition)
+                    && disposition instanceof ClassDisposition.Built built
                     && !forSomethingElse.contains(built.rowId())
                     && theirValues.contains(filled.composed().get(built.rowId()).inputs())) {
-                twice.add(each.getKey());
+                twice.add(obligation.target());
             }
         }
         assertEquals(List.of(), twice,
@@ -98,23 +99,25 @@ class ARowAlreadyComposedIsWhatACombinationIsAnsweredWithTest {
 
         Set<RowId> forSomethingElse = composedForSomethingElse(filled);
         List<ObligationIdentity.OfAFallbackPairCell> reused = new ArrayList<>();
-        for (Map.Entry<ObligationIdentity.OfAFallbackPairCell, ClassDisposition> each
-                : filled.discharge().pairs().entrySet()) {
-            if (each.getValue() instanceof ClassDisposition.Built built
+        for (GenerationAnswer each : filled.discharge().answers().values()) {
+            if (each instanceof GenerationAnswer.Pair(var obligation, var disposition)
+                    && disposition instanceof ClassDisposition.Built built
                     && forSomethingElse.contains(built.rowId())) {
-                reused.add(each.getKey());
+                reused.add(obligation.target());
             }
         }
         assertTrue(!reused.isEmpty(),
                 () -> "the rows composed for the arms and the classes sit in some of the"
-                        + " combinations: " + filled.discharge().pairs());
+                        + " combinations: " + filled.discharge().answers().values().stream()
+                                .filter(GenerationAnswer.Pair.class::isInstance).toList());
     }
 
     /** The rows this run composed before any combination was asked about. */
     private static Set<RowId> composedForSomethingElse(FillResult filled) {
         Set<RowId> out = new LinkedHashSet<>();
-        for (ClassDisposition each : filled.discharge().classes().values()) {
-            if (each instanceof ClassDisposition.Built built) {
+        for (GenerationAnswer each : filled.discharge().answers().values()) {
+            if (each instanceof GenerationAnswer.Class(var _, var disposition)
+                    && disposition instanceof ClassDisposition.Built built) {
                 out.add(built.rowId());
             }
         }

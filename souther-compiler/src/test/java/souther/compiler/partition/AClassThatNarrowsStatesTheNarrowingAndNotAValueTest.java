@@ -90,16 +90,16 @@ class AClassThatNarrowsStatesTheNarrowingAndNotAValueTest {
         // declarations state and no lines beside them, which is the whole of what one of these
         // models is for.
         if (body != null) {
-            GuardThresholds.Guards guards = GuardThresholds.of("use",
+            GuardThresholds.Guards guards = ThresholdFixtures.guardsOf("use",
                     checked.analysisBodies().get("use"), body,
                     checked.plan(),
                     compilation.db().ask(new Adequacy.Inputs(module)).value().get("use"), rules);
-            axes = Partitions.withThresholds(axes, domain.quantities(rules), guards.thresholds(),
+            axes = ThresholdFixtures.withThresholds(axes, domain.quantities(rules), guards.thresholds(),
                     RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),
                     guards.noLine(), guards.singled(), guards.between(),
                 souther.compiler.values.Allowance.of(souther.compiler.regex.PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS));
         }
-        FillResult filled = Generator.fill(
+        FillResult filled = GenerationFixtures.fill(
                 MeasuredInput.of("use", domain.reading(rules), axes),
                 List.of(), Generator.CandidateCheck.ANY, Budgets.generation());
         assertEquals(List.of(), filled.unresolved(), filled.unresolved().toString());

@@ -93,7 +93,7 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
         Model model = Model.of(GATE);
         Set<ArmProbe> everyArm = model.read().arms().keySet();
 
-        FillResult filled = Generator.fill(model.subject(), List.of(),
+        FillResult filled = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),
                 // Seen doing everything the ways in name, and seen at no arm at all.
                 _ -> new Generator.Watched.Ran(waysWithoutTheArms(model)),
@@ -114,7 +114,7 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
         Model model = Model.of(GATE);
         Set<ArmProbe> everyArm = model.read().arms().keySet();
 
-        FillResult filled = Generator.fill(model.subject(), List.of(),
+        FillResult filled = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),
                 _ -> new Generator.Watched.Ran(everywhere(model, everyArm)),
                 List.of(), List.of(), List.copyOf(everyArm), Budgets.generation());

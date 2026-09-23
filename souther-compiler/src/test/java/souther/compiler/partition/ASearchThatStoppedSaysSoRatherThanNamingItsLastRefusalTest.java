@@ -175,7 +175,7 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
     }
 
     private static FillResult fill(Model model, Generator.Trial trial) {
-        return Generator.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
+        return GenerationFixtures.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
                 model.read(), trial, Budgets.generation());
     }
 
