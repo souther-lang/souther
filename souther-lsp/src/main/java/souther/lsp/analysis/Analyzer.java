@@ -5,7 +5,10 @@ import souther.compiler.diag.PhysicalPos;
 import souther.compiler.cst.SourceLayout;
 import souther.compiler.source.SourceId;
 
+import souther.compiler.CompilationSources;
 import souther.compiler.Compiler;
+import souther.compiler.ImplicitModuleName;
+import souther.compiler.meta.ModulePath;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Requirements;
@@ -231,16 +234,13 @@ public final class Analyzer {
         }
 
         try {
-            Ast.Module module = CstFrontend.parse(text, "Main");
-            if (!module.imports().isEmpty()) {
-                return out;   // a multi-module program can't be resolved from a single file yet
-            }
-            if (module.exampleFileTarget() != null) {
-                return out;   // an `examples for` file needs its target module, absent from one file
-            }
-            // A self-contained module compiles fully here, so its inline `example`s are evaluated
-            // on save and a failing one (E1805) surfaces as an editor diagnostic.
-            for (Located w : Compiler.compileWithWarnings(text, "Main").locatedWarnings()) {
+            // The document compiles fully here, so its inline `example`s are evaluated on save and a
+            // failing one (E1805) surfaces as an editor diagnostic. What it imports is resolved like
+            // any other import, against a path this document is given none of.
+            List<Located> warnings = new ArrayList<>();
+            Compiler.compiled(CompilationSources.text(text), ModulePath.EMPTY, warnings,
+                    Adequacy.Asked.NOTHING);
+            for (Located w : warnings) {
                 out.add(fromDiagnostic(text, lines, w.diagnostic()));
             }
         } catch (CompileException e) {
@@ -2564,7 +2564,7 @@ public final class Analyzer {
     /** The module a name is imported from in {@code text}, or {@code null} if no import exposes it. */
     private String importedFrom(String text, String name) {
         try {
-            for (Ast.Import imp : CstFrontend.parse(text, "Main").imports()) {
+            for (Ast.Import imp : CstFrontend.parse(text, ImplicitModuleName.OF_A_TEXT).imports()) {
                 if (imp.names().contains(name)) {
                     return imp.module();
                 }

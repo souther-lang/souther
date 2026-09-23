@@ -1,5 +1,7 @@
 package souther.cli;
 
+import souther.compiler.CompilationSources;
+import souther.compiler.CompilationSources.SourceFile;
 import souther.compiler.Compiler;
 import souther.compiler.generated.GeneratedBehavior;
 import souther.compiler.generated.JsonBoundary;
@@ -10,6 +12,7 @@ import souther.compiler.check.Sig;
 import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.BoundaryOutput;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
@@ -197,13 +200,14 @@ public final class Runner {
      */
     static String run(Path file, String behaviorName, String inputJson, List<Located> warningsOut,
                       ModulePath path) {
-        String source = read(file);
-        String moduleName = moduleName(file);
+        CompilationSources sources =
+                CompilationSources.files(List.of(new SourceFile(file.toString(), read(file))));
 
         // One compilation answers all of it. Re-reading the source here to find the behavior and
         // its signature would resolve every name a second time, against a tree this compile has
         // already produced.
-        Compilation compilation = Compiler.compiled(source, moduleName, warningsOut, path);
+        Compilation compilation =
+                Compiler.compiled(sources, path, warningsOut, Adequacy.Asked.NOTHING);
         // The module this file declares, and not one it reached: what the path holds is read for its
         // declarations and is no part of what this compilation declares.
         Prepared module = compilation.module(compilation.modules().get(0));
@@ -594,27 +598,6 @@ public final class Runner {
             throw fail("run.read.failed", "cannot read " + file + ": " + e.getMessage(),
                     file.toString(), e.getMessage());
         }
-    }
-
-    /** The module name for a header-less source: the file name without its extension, or {@code main}
-     * when that is not a usable identifier. */
-    static String moduleName(Path file) {
-        String fileName = file.getFileName().toString();
-        int dot = fileName.indexOf('.');
-        // Canonicalized before it is judged, not after: a file delivered by macOS carries its name
-        // decomposed, and a combining mark is not a letter or a digit, so the same file would be
-        // `main` on one machine and its own name on another.
-        String stem = CanonicalNames.name(dot < 0 ? fileName : fileName.substring(0, dot));
-        if (stem.isEmpty() || !Character.isLetter(stem.charAt(0))) {
-            return "main";
-        }
-        for (int i = 1; i < stem.length(); i++) {
-            char ch = stem.charAt(i);
-            if (!Character.isLetterOrDigit(ch) && ch != '_') {
-                return "main";
-            }
-        }
-        return stem;
     }
 
     private static String jsonPointer(net.unit8.raoh.Path path) {

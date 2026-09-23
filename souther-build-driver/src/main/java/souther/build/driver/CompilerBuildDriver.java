@@ -1,24 +1,21 @@
 package souther.build.driver;
 
-import souther.compiler.source.SourceId;
-
 import souther.build.BuildDiagnostic;
 import souther.build.BuildDiagnostic.Severity;
 import souther.build.BuildRequest;
 import souther.build.BuildResult;
 import souther.build.SoutherBuildDriver;
+import souther.compiler.CompilationSources;
+import souther.compiler.CompilationSources.SourceFile;
 import souther.compiler.Compiler;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.DiagnosticRenderer;
 import souther.compiler.diag.HumanRenderer;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
-import souther.compiler.cst.SourceLayout;
-import souther.compiler.diag.SourceContext;
-import souther.compiler.diag.SourceContextResolver;
-import souther.compiler.diag.SourceNames;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
 import java.io.IOException;
@@ -39,43 +36,24 @@ public final class CompilerBuildDriver implements SoutherBuildDriver {
     @Override
     public BuildResult compile(BuildRequest request) {
         try {
-            List<Source> sources = read(request.sourcePaths());
-            List<String> texts = sources.stream().map(Source::text).toList();
+            CompilationSources sources = read(request.sourcePaths());
             Locale locale = Messages.resolveLocale(request.languageTag());
             ModulePath path = ModulePath.ofClassPath(request.classPath());
-            // One source with no `module` header is a self-contained module rather than a module set
-            // of one, and is asked for differently. What it may not do is be imported — a module
-            // nothing can name cannot be the target of an import (ADR-0043) — and that is no reason
-            // to keep the class path from it: an import it writes resolves like any other.
-            boolean selfContained =
-                    texts.size() == 1 && Compiler.moduleNameFromHeader(texts.get(0)) == null;
-            Compiler.Compiled compiled;
+            List<Located> warnings = new ArrayList<>();
+            Compilation compilation;
             try {
-                compiled = selfContained
-                        ? selfContained(texts.get(0), path)
-                        : Compiler.compileModulesWithWarnings(texts, path);
+                compilation = Compiler.compiled(sources, path, warnings, Adequacy.Asked.NOTHING);
             } catch (CompileException e) {
                 return new BuildResult(false,
                         rendered(e.locatedDiagnostics(), sources, locale, Severity.ERROR));
             }
-            write(compiled.classes(), request.outputDirectory(), request.stateDirectory());
+            write(compilation.classes(), request.outputDirectory(), request.stateDirectory());
             // A warning is the whole of what the checker has to say about an unproven construction,
             // so a build that never reports one lets them accumulate while staying green.
-            return new BuildResult(true,
-                    rendered(compiled.locatedWarnings(), sources, locale, Severity.WARNING));
+            return new BuildResult(true, rendered(warnings, sources, locale, Severity.WARNING));
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-    }
-
-    /**
-     * One header-less source, named the way the annotation processor names one, and resolving its
-     * imports against {@code path}.
-     */
-    private static Compiler.Compiled selfContained(String text, ModulePath path) {
-        List<Located> warnings = new ArrayList<>();
-        Compilation compilation = Compiler.compiled(text, "Main", warnings, path);
-        return new Compiler.Compiled(compilation.classes(), warnings);
     }
 
     /**
@@ -83,41 +61,14 @@ public final class CompilerBuildDriver implements SoutherBuildDriver {
      * no color since this goes to a build log. One diagnostic renders to one message, so an error
      * carrying several — every failing {@code example} row — comes back as several.
      */
-    private static List<BuildDiagnostic> rendered(List<Located> located, List<Source> sources,
+    private static List<BuildDiagnostic> rendered(List<Located> located, CompilationSources sources,
                                                   Locale locale, Severity severity) {
         List<BuildDiagnostic> out = new ArrayList<>();
         for (String message : DiagnosticRenderer.renderAll(
-                located, sourcesOf(sources), new HumanRenderer(false), locale)) {
+                located, sources.contexts(), new HumanRenderer(false), locale)) {
             out.add(new BuildDiagnostic(severity, message));
         }
         return out;
-    }
-
-    /** What to quote for each source a diagnostic points into, under names no two of these files
-     *  share. The text is already in hand, so this memoizes only to keep one answer per id. */
-    private static SourceContextResolver sourcesOf(List<Source> sources) {
-        List<String> names = SourceNames.of(
-                sources.stream().map(source -> source.path().toString()).toList());
-        return SourceContextResolver.memoized(id -> {
-            int at = indexOf(sources, id);
-            return at < 0 ? null : new SourceContext(names.get(at), sources.get(at).text(),
-                    SourceLayout.of(sources.get(at).text(), id));
-        });
-    }
-
-    /** Which of the sources handed over an id names, or -1 when it names none of them. One file
-     *  handed over is the answer however a diagnostic is tagged, including one this compile could
-     *  pin on no source. */
-    private static int indexOf(List<Source> sources, SourceId sourceId) {
-        if (sources.size() == 1) {
-            return 0;
-        }
-        for (int i = 0; i < sources.size(); i++) {
-            if (Compilation.idOfSourceIndex(i).equals(sourceId)) {
-                return i;
-            }
-        }
-        return -1;
     }
 
     /**
@@ -125,20 +76,20 @@ public final class CompilerBuildDriver implements SoutherBuildDriver {
      * within each of them, and in the order they were given, so a source set with several
      * directories compiles the same way twice.
      */
-    private static List<Source> read(List<Path> sourcePaths) throws IOException {
-        List<Source> sources = new ArrayList<>();
+    private static CompilationSources read(List<Path> sourcePaths) throws IOException {
+        List<SourceFile> sources = new ArrayList<>();
         for (Path sourcePath : sourcePaths) {
             if (Files.isDirectory(sourcePath)) {
                 try (Stream<Path> walk = Files.walk(sourcePath)) {
                     for (Path file : walk.filter(p -> p.toString().endsWith(".sou")).sorted().toList()) {
-                        sources.add(new Source(file, Files.readString(file)));
+                        sources.add(new SourceFile(file.toString(), Files.readString(file)));
                     }
                 }
             } else {
-                sources.add(new Source(sourcePath, Files.readString(sourcePath)));
+                sources.add(new SourceFile(sourcePath.toString(), Files.readString(sourcePath)));
             }
         }
-        return sources;
+        return CompilationSources.files(sources);
     }
 
     /** What this compile generated, from the last one, so it can be taken back. */
@@ -201,7 +152,4 @@ public final class CompilerBuildDriver implements SoutherBuildDriver {
             directory = directory.getParent();
         }
     }
-
-    /** A {@code .sou} file and its text. The path is kept so a diagnostic can quote the line. */
-    private record Source(Path path, String text) {}
 }

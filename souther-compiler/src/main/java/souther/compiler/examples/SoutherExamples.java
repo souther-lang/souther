@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.ImplicitModuleName;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
@@ -103,7 +104,8 @@ public final class SoutherExamples {
         // than the number this compile happened to hold it under.
         Compilation compiled = Compilation.ofDocuments(
                 Map.of(source.toString(), read(source)), Set.of(), dependencies);
-        compiled.db().set(new Front.DefaultName(), nameOf(source));
+        compiled.db().set(new Front.DefaultName(),
+                ImplicitModuleName.ofFileName(source.getFileName().toString()));
         return settled(compiled);
     }
 
@@ -121,7 +123,7 @@ public final class SoutherExamples {
 
     /** One module's text, which may leave its {@code module} header off as a lone file may. */
     public static SoutherExamples ofSource(String source, ModulePath dependencies) {
-        return settled(Compilation.ofSource(source, "Main", dependencies));
+        return settled(Compilation.ofSource(source, ImplicitModuleName.OF_A_TEXT, dependencies));
     }
 
     /** The same, of one module's text that imports no other user module. */
@@ -244,12 +246,6 @@ public final class SoutherExamples {
     }
 
     /** What a lone file's module is called when it leaves its `module` header off. */
-    private static String nameOf(Path source) {
-        String file = source.getFileName().toString();
-        int dot = file.lastIndexOf('.');
-        return dot <= 0 ? file : file.substring(0, dot);
-    }
-
     private static String read(Path source) {
         try {
             return Files.readString(source);

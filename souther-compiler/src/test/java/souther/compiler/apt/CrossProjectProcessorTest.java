@@ -53,6 +53,28 @@ class CrossProjectProcessorTest {
                 "the dependency's classes belong to its own build");
     }
 
+    /**
+     * A lone source with no header may import off the classpath like any other: what it leaves out
+     * is a name another module could import, not the ability to import. It is named after its file.
+     */
+    @Test
+    void aLoneHeaderLessSourceImportsAModuleAnotherProjectCompiled(@TempDir Path dir)
+            throws IOException {
+        Path libClasses = build(dir, "lib", """
+                module shared.money exposing ( Amount )
+                data Amount = Int
+                    invariant value >= 0
+                """, List.of());
+
+        Path appClasses = build(dir, "app", "orders.sou", """
+                import shared.money ( Amount )
+                data Order = { total: Amount }
+                """, List.of(libClasses));
+
+        assertTrue(Files.exists(appClasses.resolve("orders/Order.class")),
+                "named after its file, whatever it imports");
+    }
+
     /** With nothing on the classpath the import is what is wrong, and says so where it is written. */
     @Test
     void withoutTheDependencyTheImportIsUnknown(@TempDir Path dir) {
@@ -74,8 +96,14 @@ class CrossProjectProcessorTest {
      * {@code .sou}, {@code classPath} on the compile classpath. Returns where the classes landed. */
     private static Path build(Path dir, String project, String source, List<Path> classPath)
             throws IOException {
+        return build(dir, project, "module.sou", source, classPath);
+    }
+
+    /** As above, with the {@code .sou} written under {@code fileName}. */
+    private static Path build(Path dir, String project, String fileName, String source,
+                              List<Path> classPath) throws IOException {
         Path root = Files.createDirectories(dir.resolve(project));
-        Files.writeString(root.resolve("module.sou"), source);
+        Files.writeString(root.resolve(fileName), source);
         Files.writeString(root.resolve("Dummy.java"), "public class Dummy {}\n");
         Path classes = Files.createDirectories(root.resolve("classes"));
 
@@ -90,7 +118,7 @@ class CrossProjectProcessorTest {
                      javac.getStandardFileManager(collected, null, StandardCharsets.UTF_8)) {
             ok = javac.getTask(null, files, collected, List.of(
                     "-processor", SoutherProcessor.class.getName(),
-                    "-Asouther.source=" + root.resolve("module.sou"),
+                    "-Asouther.source=" + root.resolve(fileName),
                     "-Asouther.lang=en",
                     "-d", classes.toString(),
                     "-classpath", cp.toString()),
