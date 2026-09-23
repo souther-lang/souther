@@ -19,7 +19,6 @@ import souther.compiler.check.Scoping;
 import souther.compiler.check.Registry;
 import souther.compiler.check.Requirements;
 import souther.compiler.check.Resolve;
-import souther.compiler.check.SyntaxSymbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
@@ -782,16 +781,6 @@ public final class Names {
         return symbols(db, name, (names, stdlib) -> DerivedSymbols
                 .over(name, derivedRegistry(db), normalizedRegistry(db), resolvedRegistry(db),
                         names, stdlib));
-    }
-
-    /** The same, over the declarations as they were written — what {@code Resolve} resolves
-     * against. */
-    static Answer<SyntaxSymbols> writtenSymbols(Db db, String name) {
-        if (!db.ask(new HasScope(name)).value()) {
-            return Answer.absent();
-        }
-        return Answer.of(SyntaxSymbols.of(name, writtenRegistry(db), asked(db, name),
-                library(db)));
     }
 
     /**

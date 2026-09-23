@@ -179,13 +179,6 @@ public final class DataChecker {
      * construction only when nothing has bound it — a local of the same name wins (spec §unit-data).
      * Without it, a parameter named after a unit data was read as constructing that unit.
      */
-    static void collectConstructs(Hir.Expr e, Map<TypeSymbol, String> out, Symbols symbols,
-                                  Map<String, Constructs> recConstructs) {
-        Constructs all = Constructs.empty();
-        collectConstructs(e, all, symbols, recConstructs);
-        out.putAll(all.originated());
-    }
-
     static void collectConstructs(Hir.Expr e, Constructs out, Symbols symbols,
                                           Map<String, Constructs> recConstructs) {
         switch (e) {
@@ -856,14 +849,7 @@ public final class DataChecker {
         switch (dec) {
             case Hir.PrimDecoder prim -> {
                 Type inputType = TypeOps.primType(prim.from());
-                Scope env = Scope.NONE.with(prim.input(), inputType);
-                for (Hir.DecStmt stmt : prim.stmts()) {
-                    switch (stmt) {
-                        case Hir.Let let ->
-                                env = env.with(let.binder(), Elaborator.typeOf(let.value(), env, ctx));
-                    }
-                }
-                checkConstruct(prim.result(), ctx, fields, env);
+                checkConstruct(prim.result(), ctx, fields, Scope.NONE.with(prim.input(), inputType));
             }
             case Hir.ObjectDecoder obj -> {
                 Scope env = Scope.NONE;

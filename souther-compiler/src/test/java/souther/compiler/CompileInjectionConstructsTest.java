@@ -13,24 +13,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * {@code protected} factory for every declared unit-data case, and nothing else. A non-unit case
  * it declares in {@code constructs} must therefore be reachable another way: as an exposed data
  * whose {@code decoder} is public (spec §java-base-class). One that is neither a unit nor exposed cannot be
- * built by the Java side at all — E1305.
+ * built by the Java side at all — E1305. A unit case needs no exposure; {@link CompileBehaviorResultTest}
+ * compiles an injected behavior answering an unexposed unit.
  */
 class CompileInjectionConstructsTest {
-
-    @Test
-    void aUnitCaseNeedsNoExposure() {
-        // 会員なし is a unit: the base class gets a protected factory for it, so no exposure is needed.
-        assertDoesNotThrow(() -> Compiler.compile("""
-                module demo
-                exposing ( Id, Member )
-
-                data Id = String
-                data Member = { id: Id }
-                data 会員なし
-
-                behavior findMember : (id: Id) -> Member | 会員なし
-                """));
-    }
 
     @Test
     void anExposedNonUnitCaseIsAllowed() {

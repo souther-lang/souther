@@ -6,8 +6,10 @@ import souther.compiler.partition.FixtureTemplate;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -136,8 +138,9 @@ class OneRequestIsAnsweredAlikeWhateverTheBuildMeasuresTest {
      */
     private static void alikeAtEveryLevel(String model) {
         List<String> first = null;
+        Set<HowALineIsRead> linesRead = EnumSet.noneOf(HowALineIsRead.class);
         for (Adequacy.Level level : Adequacy.Level.values()) {
-            List<String> answered = answeredAt(model, level);
+            List<String> answered = answeredAt(model, level, linesRead);
             if (first == null) {
                 first = answered;
                 assertFalse(first.isEmpty(),
@@ -148,9 +151,14 @@ class OneRequestIsAnsweredAlikeWhateverTheBuildMeasuresTest {
                         "a build measuring at " + level + " answers the request as the others do");
             }
         }
+        // Read off the compilations rather than taken from the levels: a change that made every
+        // level read the lines alike would otherwise leave this comparing one thing with itself.
+        assertEquals(EnumSet.allOf(HowALineIsRead.class), linesRead,
+                "the levels compared put different questions to the lines");
     }
 
-    private static List<String> answeredAt(String model, Adequacy.Level level) {
+    private static List<String> answeredAt(String model, Adequacy.Level level,
+                                           Set<HowALineIsRead> linesRead) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         // What a caller composing rows needs of the run, said of every one of them. Left to the
         // level, the comparison below would be moving two things and reporting one.
@@ -159,6 +167,7 @@ class OneRequestIsAnsweredAlikeWhateverTheBuildMeasuresTest {
         compilation.answerEverything();
         assertEquals(RowObservation.RECORD_ARMS, Adequacy.observationAsked(compilation.db()),
                 "every build here reads its rows and records where they went, whatever it reports");
+        linesRead.add(Adequacy.linesAskedOf(compilation.db()));
 
         Offering offering = Adequacy.offeredFor(compilation.db(),
                 OfferingRequest.overTheModule("example.answered"));

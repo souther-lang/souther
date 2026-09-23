@@ -111,27 +111,6 @@ class CompileLetAnnotationTest {
         assertEquals("Int", d.diff().expectedType());
     }
 
-    // A function type is an ordinary type, so it may be written after the colon like any other. The
-    // annotation is what says the lambda's parameter types, which the applications need not.
-    @Test
-    void aFunctionTypeMayBeWrittenOnALocalBinding() throws Exception {
-        String src = """
-                module demo
-                data In = { v: Int }
-                data Out = { v: Int }
-                behavior run : (i: In) -> Out constructs Out
-                let run (i) = {
-                    let f: (Int) -> Int = (x) -> x + 1
-                    Out { v = f(i.v) }
-                }
-                """;
-        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object run = Emitted.behavior(loader, "demo", "run").getDeclaredConstructor().newInstance();
-        Object in = Codecs.decoded(loader, "demo.In", java.util.Map.of("v", 41L));
-        assertEquals(42L, ((java.util.Map<?, ?>) Codecs.encode(loader, "demo.Out",
-                Codecs.apply(run, in))).get("v"));
-    }
-
     // The annotation is checked against the lambda, so a parameter count it does not have is an error
     // rather than a comment.
     @Test
@@ -214,7 +193,8 @@ class CompileLetAnnotationTest {
     // The other side of the same rule, and the one that says what E1810 does not report: a function
     // type in a local annotation is admitted, as it is in every type position no external
     // representation is required at. Without this the rejections above would still pass if the check
-    // refused every annotation on a function.
+    // refused every annotation on a function. The annotation is what says the lambda's parameter
+    // types, which the applications need not.
     @Test
     void aFunctionTypeAnnotationOnALambdaBindingIsAccepted() throws Exception {
         String src = """

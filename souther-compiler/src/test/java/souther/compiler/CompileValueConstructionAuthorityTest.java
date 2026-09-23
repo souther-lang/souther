@@ -34,24 +34,6 @@ class CompileValueConstructionAuthorityTest {
             let floorHours = Hours(20.0m)
             """;
 
-    @Test
-    void aBehaviorComparingAgainstAValueNeedsNoAuthorityForTheValuesType() {
-        assertDoesNotThrow(() -> Compiler.compile("""
-                module m
-
-                data Hours = Decimal invariant value >= 0.0m
-                data TooShort
-
-                let floorHours = Hours(20.0m)
-
-                behavior judge : (h: Hours) -> Hours | TooShort
-                let judge (h) = {
-                    guard h >= floorHours else TooShort
-                    h
-                }
-                """));
-    }
-
     /** Publication is not what settles the question: the same value read in the module that
      * declares it is read the same way as one read from outside. */
     @Test
@@ -335,7 +317,8 @@ class CompileValueConstructionAuthorityTest {
         assertEquals("E1002", e.code(), e.getMessage());
     }
 
-    /** The limit is read at run time, not merely accepted by the checker. */
+    /** A behavior comparing against a value needs no authority for the value's type, and the limit
+     * is read at run time, not merely accepted by the checker. */
     @Test
     void theLimitIsCompared() throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""

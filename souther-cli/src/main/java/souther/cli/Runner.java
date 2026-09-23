@@ -90,10 +90,6 @@ public final class Runner {
             this.issues = issues;
         }
 
-        RunException(String message) {
-            this(null, message, 1, null);
-        }
-
         /** This failure in {@code locale}. An exit code of 2 is a usage error, which ends with the
          * command's usage line. */
         String localized(java.util.Locale locale) {

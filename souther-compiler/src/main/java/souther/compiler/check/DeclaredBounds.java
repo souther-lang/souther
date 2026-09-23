@@ -28,7 +28,7 @@ import java.util.Set;
  *
  * <p>A range, and only what a range can hold. What the rules leave out between their ends is not
  * here — a caller asking whether some particular value is admitted is asking the domain the rules
- * seed ({@link FieldDomains#mayHoldNothingAt}) and not this.
+ * seed ({@link OccurrenceCounts#mayHoldAtMost}) and not this.
  *
  * <p>Below whoever composes it with anything else. What a declaration's rules say is a fact about the
  * declaration, and a reader that had to reach a generator to ask it would be reaching past the
@@ -325,29 +325,6 @@ public final class DeclaredBounds {
     }
 
     /**
-     * How many of whatever counts a value of the position the rules on it allow it to hold, or every
-     * number where they cap it in no way.
-     *
-     * <p>The dual of {@link #leastCountOf} and asked for the same reason: a rule capping a value at
-     * none is written on the type as readily as on the record holding one, and a reader finding only
-     * the second offered a value at a position the first leaves no room for.
-     */
-    public static int mostCountOf(TypeView view, RuleReadingContext reading) {
-        return countsHeld(view, reading, null).most();
-    }
-
-    /**
-     * The same, where the record the position sits in has a rule about it too.
-     *
-     * <p>The lower of the two, because both are rules the construction has to satisfy -- which is
-     * {@link #leastCountOf}'s argument at the other end.
-     */
-    public static int mostCountOf(TypeView view, RuleReadingContext reading,
-                                  FieldDomains.Held held) {
-        return countsHeld(view, reading, held).most();
-    }
-
-    /**
      * How many a value of the position may hold, both ends of one reading of the rules.
      *
      * <p>Both together, because a caller choosing how many to build needs the pair and neither end
@@ -384,11 +361,6 @@ public final class DeclaredBounds {
      * is the search's own budget and is nothing this says.
      */
     public record CountRange(int least, int most) {
-
-        /** Whether {@code many} is a count the rules allow. */
-        public boolean admits(int many) {
-            return many >= least && many <= most;
-        }
 
         /** Whether the rules leave no count at all. */
         public boolean empty() {

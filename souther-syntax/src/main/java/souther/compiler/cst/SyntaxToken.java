@@ -13,10 +13,6 @@ public final class SyntaxToken implements SyntaxElement {
         this.offset = offset;
     }
 
-    public GreenToken green() {
-        return green;
-    }
-
     @Override
     public SyntaxKind kind() {
         return green.kind();

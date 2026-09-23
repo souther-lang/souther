@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -112,6 +113,58 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
     }
 
     /**
+     * A rule this could not turn into a line is written with the place inside the rule an author is
+     * sent to, under keys the schema declares for one.
+     *
+     * <p>Its own model, because the key is written for one reason only. A clause the reading of ends
+     * gave up on writes an entry with no place in it, and a walk over whatever the model above
+     * happens to produce would be green over an array that never carried the key.
+     */
+    @Test
+    void aRuleWithNoLineIsWrittenWithWhereAnAuthorIsSent() {
+        JsonNode written = reportOf(Compilation.ofSource("""
+                module m
+
+                data Yes
+                data N = { n: Int }
+                    invariant r = n >= 2 || Int.abs(n) >= 5
+
+                behavior f : (v: N) -> Yes
+                    constructs Yes
+                let f (v) = Yes
+                """, "Main"));
+        JsonNode unread = written.get("modules").get(0).get("behaviors").get(0)
+                .get("partition").get("notRead");
+        assertNotNull(unread, "the model leaves a rule this could not turn into a line");
+        Set<String> keys = new LinkedHashSet<>();
+        unread.forEach(each -> each.propertyNames().forEach(keys::add));
+        assertTrue(keys.contains("sentTo"), () -> "the choice is what an author is sent to: " + unread);
+
+        keys.removeAll(schema().get("$defs").get("partition").get("properties").get("notRead")
+                .get("items").get("properties").propertyNames());
+        assertEquals(Set.of(), keys, "and every key of one of these is one the schema declares");
+    }
+
+    /**
+     * The objects a key has been written on the wrong one of are closed.
+     *
+     * <p>The walk refuses an undeclared key only on an object that forbids what it does not name, so
+     * an object opened up would take a key written on it by mistake and the walk would say nothing.
+     */
+    @Test
+    void theObjectsAKeyCanBeMisplacedOnAreClosed() {
+        JsonNode defs = schema().get("$defs");
+        JsonNode partition = defs.get("partition").get("properties");
+        for (JsonNode items : List.of(defs.get("findings").get("items"),
+                partition.get("unanswered").get("items"), partition.get("notRead").get("items"))) {
+            assertTrue(items.has("additionalProperties")
+                            && !items.get("additionalProperties").asBoolean(),
+                    () -> "the object is closed, which is what makes an undeclared key a refusal: "
+                            + items);
+        }
+    }
+
+    /**
      * A point owing no row is closed, rather than listing what it may not have.
      *
      * <p>The list was the keys of the owed side written a second time, with nothing holding the two
@@ -138,7 +191,7 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
         assertTrue(notOwed.has("additionalProperties")
                         && !notOwed.get("additionalProperties").asBoolean(),
                 "the branch forbids what it does not name, rather than naming what it forbids");
-        Set<String> named = new java.util.LinkedHashSet<>();
+        Set<String> named = new LinkedHashSet<>();
         notOwed.get("properties").propertyNames().forEach(named::add);
         assertEquals(Set.of("point", "location", "notOwed"), named,
                 "and what it names is which point of the border it is, where on the quantity it is,"

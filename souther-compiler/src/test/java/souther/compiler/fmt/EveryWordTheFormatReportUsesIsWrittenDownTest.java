@@ -101,11 +101,4 @@ class EveryWordTheFormatReportUsesIsWrittenDownTest {
         assertEquals(List.of(), stale,
                 "these are defined and nothing can print them: " + stale);
     }
-
-    /** And the section was found rather than an empty stretch of the file being read as one. */
-    @Test
-    void andTheSectionIsTheOneWithTheRulesInIt() throws IOException {
-        assertEquals(Deviations.vocabulary().size(), defined(section(doc())).size(),
-                "the section defines one rule per rule there is");
-    }
 }

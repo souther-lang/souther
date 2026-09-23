@@ -25,14 +25,10 @@ public final class DeclaredCoordinates {
      * quantity of each of them was worked out. A reader recognising the number off the spelling of
      * a side answers nothing for {@code String.length(value) * 2 >= 4}, whose sides are neither a
      * name nor a measure of one.
+     *
+     * <p>{@code machines} is asked for what somebody has already made of the declaration's string
+     * rules before building any of it.
      */
-    public static List<FieldDomains.Placed> placedOnItsOwnValue(
-            Type type, RuleReadingSource source, ReadingPolicy policy) {
-        return placedOnItsOwnValue(type, source, policy, DeclarationReadings.NONE);
-    }
-
-    /** The same, asking {@code machines} for what somebody has already made of the declaration's
-     *  string rules before building any of it. */
     public static List<FieldDomains.Placed> placedOnItsOwnValue(
             Type type, RuleReadingSource source, ReadingPolicy policy,
             DeclarationReadings machines) {

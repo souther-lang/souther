@@ -279,23 +279,6 @@ class GeneratorTest {
                 "the class each row was owed for, and not the pair they would have made");
     }
 
-    /** A class nothing can write a value for is still a class, and the row it wants is still owed. */
-    @Test
-    void aClassWithNoValueIsNamedRatherThanDropped() {
-        RuleReadingSource rules = modelOf(TRIP, "submit").rules();
-        MeasuredInput subject = twoNumbers(rules,
-                List.of(PartitionClass.ungeneratable("opaque", "opaque", new Recognition.Nothing(), "no value")),
-                List.of(number("high", 10)));
-
-        FillResult filled =
-                Generator.fill(subject, List.of(), Generator.CandidateCheck.ANY, Budgets.generation());
-
-        assertEquals(List.of(), filled.rows());
-        assertTrue(filled.unresolved().stream()
-                        .anyMatch(left -> left.why().classes().contains("a=opaque")),
-                filled.unresolved().toString());
-    }
-
     /**
      * What could not be written names what had nothing, not the combinations that wanted it.
      *
@@ -380,6 +363,10 @@ class GeneratorTest {
                 Generator.fill(subject, List.of(), Generator.CandidateCheck.ANY, Budgets.generation());
 
         assertEquals(List.of(), filled.rows(), "nothing was composed at the first position");
+        assertTrue(filled.unresolved().stream()
+                        .anyMatch(left -> left.why().classes().contains("a=empty")),
+                () -> "a class nothing can write a value for is still a class, and the row it wants"
+                        + " is still owed: " + filled.unresolved());
         CameToNothing only = filled.unresolved().getFirst();
         assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                 only.why().reason(),

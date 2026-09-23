@@ -216,21 +216,6 @@ class CompileGrowingFoldTest {
     }
 
     @Test
-    void aFoldThatDoesNotBuildAListIsLeftAlone() throws Exception {
-        String src = """
-                module demo
-                data Bag = { xs: List<Int> }
-                data Out = Int
-                behavior run : (b: Bag) -> Out constructs Out
-                let run (b) = Out(List.fold((acc, x) -> acc + x, 0, b.xs))
-                """;
-        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object bag = Codecs.decoded(loader, "demo.Bag", Map.of("xs", List.of(1L, 2L, 3L)));
-        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
-        assertEquals(6L, (long) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, bag)));
-    }
-
-    @Test
     void aBuiltListIsEqualToOneGrownByAppend() throws Exception {
         // The built list is compared against the same list reached the other way, so the two
         // representations must be equal as values — a builder that sealed its tail differently

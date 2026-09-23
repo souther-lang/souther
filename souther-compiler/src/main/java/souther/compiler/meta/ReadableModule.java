@@ -8,7 +8,6 @@ import souther.compiler.cst.SourceLayout;
 import java.util.List;
 
 import java.util.Map;
-import java.util.Set;
 
 /**
  * A module this compiler restored from an artifact and then checked: everything an importer needs to
@@ -68,28 +67,6 @@ public sealed interface ReadableModule permits ModuleReadback.AsRead {
      * the behavior Souther is to implement and nobody has, which would arrive as Java's to supply
      * (issue #936). */
     Map<String, BehaviorImplementation> behaviorImplementations();
-
-    /** The behaviors of it Java supplies, read off the states above. */
-    default Set<String> injectedBehaviors() {
-        Set<String> injected = new java.util.LinkedHashSet<>();
-        behaviorImplementations().forEach((name, implementation) -> {
-            if (implementation.isInjectionTarget()) {
-                injected.add(name);
-            }
-        });
-        return injected;
-    }
-
-    /** The behaviors of it Souther is to implement and nobody has. */
-    default Set<String> unwrittenBehaviors() {
-        Set<String> unwritten = new java.util.LinkedHashSet<>();
-        behaviorImplementations().forEach((name, implementation) -> {
-            if (implementation == BehaviorImplementation.UNIMPLEMENTED) {
-                unwritten.add(name);
-            }
-        });
-        return unwritten;
-    }
 
     /** What its library import lines brought in, which the module itself no longer says. */
     List<Scoping.Claim> libraryClaims();

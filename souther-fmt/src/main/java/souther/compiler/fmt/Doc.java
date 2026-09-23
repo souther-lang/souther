@@ -505,14 +505,6 @@ sealed interface Doc {
             this(indent, mode, doc, null, null, null);
         }
 
-        Item(int indent, Mode mode, Doc doc, Place closes) {
-            this(indent, mode, doc, closes, null, null);
-        }
-
-        Item(int indent, Mode mode, Doc doc, Place closes, Nesting under) {
-            this(indent, mode, doc, closes, under, null);
-        }
-
         Item within(Doc doc) {
             return new Item(indent, mode, doc, null, under, within);
         }

@@ -521,13 +521,6 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         return left;
     }
 
-    /** Whether the truth of {@code atom} turns on a predicate {@code read} took in, which is the
-     *  same walk a comparison is looked for along and is here so that the two agree about it. */
-    static boolean turnsOnAPredicate(Core atom, PredicateReadings read, InputReads reads,
-                                     Symbols symbols, DeclarationNewtypes newtypes) {
-        return leftUnread(atom, read, reads, symbols, newtypes).isEmpty();
-    }
-
     /** The parts of what {@code atom} decides that none of the three readers answers for, which is
      *  what a fork over it is left stating. */
     static List<Core> leftUnread(Core atom, PredicateReadings read, InputReads reads,

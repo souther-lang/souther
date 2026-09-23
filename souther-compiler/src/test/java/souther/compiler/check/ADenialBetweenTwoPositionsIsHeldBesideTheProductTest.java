@@ -76,13 +76,18 @@ class ADenialBetweenTwoPositionsIsHeldBesideTheProductTest {
      *
      * <p>Each clause about one position is read. What was not read is the one relating them, and
      * with it read there is no value {@code p} can take that {@code r} does not.
+     *
+     * <p>The refusal names the positions together, since each of them is left values of its own.
      */
     @Test
     void twoPositionsOfASumHeldApartAreLeftNoWayOfDiffering() {
-        refuses(STAGE + """
+        String source = STAGE + """
                 data Pair = { p: Stage, r: Stage }
                     invariant no = p /= r && p == Ready && r == Ready
-                """);
+                """;
+
+        refuses(source);
+        assertEquals("`p`, `r`", named(source));
     }
 
     /** And the same rules leaving them different values are admitted, so what refuses is the pair
@@ -207,17 +212,5 @@ class ADenialBetweenTwoPositionsIsHeldBesideTheProductTest {
                 data Pair = { p: Stage, r: Stage }
                     invariant no = p == r && p /= r
                 """), "no value of this can be written");
-    }
-
-    /** The refusal names the positions together, since each of them is left values of its own. */
-    @Test
-    void theRefusalNamesThePositionsTogether() {
-        String source = STAGE + """
-                data Pair = { p: Stage, r: Stage }
-                    invariant no = p /= r && p == Ready && r == Ready
-                """;
-
-        refuses(source);
-        assertEquals("`p`, `r`", named(source));
     }
 }

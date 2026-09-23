@@ -33,24 +33,6 @@ final class Intervals {
     /** One range of a position's counts. A null bound is the domain's own edge. */
     record Interval(Place lo, boolean loInclusive, Place hi, boolean hiInclusive, Band of) {
 
-        Interval(Place lo, boolean loInclusive, Place hi, boolean hiInclusive) {
-            this(lo, loInclusive, hi, hiInclusive, null);
-        }
-
-        boolean holds(Place v) {
-            if (lo != null) {
-                int c = v.compareTo(lo);
-                if (c < 0 || (c == 0 && !loInclusive)) {
-                    return false;
-                }
-            }
-            if (hi != null) {
-                int c = v.compareTo(hi);
-                return c < 0 || (c == 0 && hiInclusive);
-            }
-            return true;
-        }
-
         /** Whether any value at all is in here. Two cuts at one place leave nothing between them. */
         boolean inhabited() {
             if (lo == null || hi == null) {

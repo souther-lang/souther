@@ -88,7 +88,7 @@ class AFloorTheCarrierSuppliesIsMovedAsAWrittenOneIsTest {
      *
      * <p>Which is not the answer where the carrier holds no floor. On an {@code Int} the written
      * one is load-bearing — without it the values stop nowhere — so it is owed a row at one beside
-     * the rule that took the nought away.
+     * the rule that took the nought away ({@link #twoConjunctsHoldingOneEndAreTwoRowsToWrite}).
      */
     @Test
     void aClauseRestatingTheCarrierOwesNothingBesideTheRuleThatMovesTheEnd() {
@@ -96,12 +96,6 @@ class AFloorTheCarrierSuppliesIsMovedAsAWrittenOneIsTest {
                 "the written floor says what the length's own order already says");
         assertEquals(clausesOwing(CARRIERS), clausesOwing(WRITTEN),
                 "so the model with it owes the row the model without it owes, and no other");
-        assertEquals(2, bordersOf("""
-                data Subject = Int
-                    invariant notNegative = value >= 0
-                    invariant notZero = value /= 0
-                """).size(),
-                "and where the carrier holds no floor the written one is holding the end");
     }
 
     /** Swapping the conjuncts moves neither the range nor what is owed. */

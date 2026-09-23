@@ -61,17 +61,6 @@ public final class Expandable {
         return module.name();
     }
 
-    /**
-     * The declarations of this module with the names in their invariants written qualified.
-     *
-     * <p>An alternative representation and not a rung: it is this module's declarations read the way
-     * the discharge analysis reads them, and what makes it this carrier's to answer is that reading
-     * one expands the helpers a clause names.
-     */
-    public Hir.Module withQualifiedInvariants() {
-        return HelperNames.withQualifiedInvariants(module);
-    }
-
     /** The tree, for the passes of this package that carry the state forward. */
     Hir.Module module() {
         return module;

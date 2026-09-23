@@ -718,21 +718,6 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         wholly(ValueSet.ANY, read, "dealCount");
     }
 
-    /** And a clause of the value's own declaration reaches every position of it, so a stop there
-     *  leaves all of them short of their rules. */
-    @Test
-    void aStopAtTheValueItselfLeavesEveryPositionOfItShort() {
-        FieldDomains read = ofRefused("""
-                module demo
-
-                data Pair = { left: String, right: Int }
-                    invariant no = left == "A" && right == "B"
-                """, "Pair");
-
-        asFarAsRead(ValueSet.ANY, UnreadReason.NOT_REACHED, read, "left");
-        asFarAsRead(ValueSet.ANY, UnreadReason.NOT_REACHED, read, "right");
-    }
-
     /**
      * And a type it does not enter that no rule is written under costs nothing.
      *

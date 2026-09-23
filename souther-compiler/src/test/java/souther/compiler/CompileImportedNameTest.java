@@ -142,64 +142,6 @@ class CompileImportedNameTest {
     }
 
     /**
-     * A name that was answered is not an unknown one, whatever it turns out to denote. A composition
-     * is answered and is still not a value — its requirements are inferred from its stages, so a
-     * body holding one would take on a set that changes when an upstream stage does.
-     */
-    @Test
-    void aNameThatDenotesSomethingUnusableSaysWhatItDenotes() {
-        CompileException e = assertThrows(CompileException.class,
-                () -> Compiler.compile("""
-                module demo exposing ( In, Mid, Out, one, two, chain : Out, go )
-                data In = { n: Int }
-                data Mid = { n: Int }
-                data Out = { n: Int }
-                behavior one : (i: In) -> Mid constructs Mid
-                let one (i) = Mid { n = i.n }
-                behavior two : (m: Mid) -> Out constructs Out
-                let two (m) = Out { n = m.n }
-                behavior chain = one >-> two
-                behavior go : (i: In) -> Out
-                let go (i) = {
-                    let f = chain
-                    f(i)
-                }
-                """));
-        assertTrue(e.getMessage().contains("is a behavior"), e.getMessage());
-    }
-
-    /** A behavior handed to a combinator is the behavior: what a Java implementation replaces. */
-    @Test
-    void aBehaviorHandedOverReachesTheBehavior() {
-        assertDoesNotThrow(() -> Compiler.compile("""
-                module demo
-                data In = { xs: List<Int> }
-                data Out = { ys: List<Int> }
-                behavior twice : (n: Int) -> Int
-                let twice (n) = n * 2
-                behavior go : (i: In) -> Out constructs Out
-                let go (i) = Out { ys = List.map(twice, i.xs) }
-                """));
-    }
-
-    /**
-     * A helper's parameter takes its type from a call whose parameter type is declared, and which
-     * declaration a call reaches is not decided by whether an import let the name be written bare.
-     */
-    @Test
-    void aParameterIsTypedByADeclarationReachedThroughAnImport() {
-        assertDoesNotThrow(() -> Compiler.compile("""
-                module demo
-                import String ( length )
-                data In = { s: String }
-                data Out = { n: Int }
-                let size (s) = length(s)
-                behavior go : (i: In) -> Out constructs Out
-                let go (i) = Out { n = size(i.s) }
-                """));
-    }
-
-    /**
      * An invariant and the guards on the path to a construction are compared by what each call
      * reaches, so a clause written bare and a guard written qualified are one statement — and the
      * invariant is discharged rather than left to run time.

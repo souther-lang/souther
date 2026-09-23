@@ -69,17 +69,6 @@ public record CheckContext(Symbols symbols, PublishedDeclarations published, Dec
                 Map.of(), List.of(), OccurrenceLineage.ORIGINAL);
     }
 
-    public CheckContext(Symbols symbols, PublishedDeclarations published, DeclarationKinds kinds,
-                        NewtypeInners inners, EffectiveFieldTypes fieldTypes, FieldLayout layout,
-                        Hir.Data data,
-                        Map<ValueName.Behavior, ReqSig> reqs,
-                        Map<ValueName.Behavior, ReqSig> callees, boolean makingAnOptional,
-                        Preserved preserved,
-                        Map<BindingId, ValueName.Behavior> dependencies) {
-        this(symbols, published, kinds, inners, fieldTypes, layout, data, reqs, callees, makingAnOptional, preserved,
-                dependencies, List.of(), OccurrenceLineage.ORIGINAL);
-    }
-
     /**
      * The same, elaborating what {@code expansion} put here.
      *
@@ -151,10 +140,6 @@ public record CheckContext(Symbols symbols, PublishedDeclarations published, Dec
             return built(other, reqs, callees, makingAnOptional, preserved, dependencies, within, lineage);
         }
 
-        CheckContext reqs(Map<ValueName.Behavior, ReqSig> required) {
-            return built(data, required, callees, makingAnOptional, preserved, dependencies, within, lineage);
-        }
-
         CheckContext callees(Map<ValueName.Behavior, ReqSig> callable) {
             return built(data, reqs, callable, makingAnOptional, preserved, dependencies, within, lineage);
         }
@@ -221,17 +206,6 @@ public record CheckContext(Symbols symbols, PublishedDeclarations published, Dec
                         Hir.Data data,
                         Map<ValueName.Behavior, ReqSig> reqs) {
         this(symbols, published, kinds, inners, fieldTypes, layout, data, reqs, Map.of());
-    }
-
-    /** The same, for a reader that has not been handed what the declarations wrap — read off
-     *  {@code symbols} instead, for the reason {@link #of(Symbols, PublishedDeclarations,
-     *  DeclarationKinds)} gives. */
-    public CheckContext(Symbols symbols, PublishedDeclarations published, DeclarationKinds kinds,
-                        Hir.Data data,
-                        Map<ValueName.Behavior, ReqSig> reqs) {
-        this(symbols, published, kinds, NewtypeInners.asWritten(symbols),
-                EffectiveFieldTypes.asWritten(symbols), FieldLayout.asWritten(symbols),
-                data, reqs, Map.of());
     }
 
     public CheckContext(Symbols symbols, PublishedDeclarations published, DeclarationKinds kinds,
@@ -317,11 +291,6 @@ public record CheckContext(Symbols symbols, PublishedDeclarations published, Dec
     /** The same context checking a different {@code data}'s invariant, decoder, or encoder. */
     public CheckContext forData(Hir.Data other) {
         return same().data(other);
-    }
-
-    /** The same context with the behaviors a body may call in scope. */
-    public CheckContext withReqs(Map<ValueName.Behavior, ReqSig> required) {
-        return same().reqs(required);
     }
 
     /** The same context with the behaviors a body may call by name in scope — the ones that require

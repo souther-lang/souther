@@ -188,7 +188,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             // Rebuilding a tree, which carries the operator across unchanged.
             new Held("souther.compiler.ast.Hir.atSlots",
                     "copies it into the node it is rebuilding"),
-            new Held("souther.compiler.ast.Hir.withRegion", "the same, under a region"),
             new Held("souther.compiler.core.Core.atSlots",
                     "copies it into the node it is rebuilding"),
             new Held("souther.compiler.check.HelperInliner.inline",

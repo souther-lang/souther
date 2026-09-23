@@ -4,8 +4,6 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.BoundaryInput;
 import souther.compiler.observe.ObservedValue;
 
-import java.util.Optional;
-
 /**
  * Whether a value composed elsewhere can be built at a module's boundary.
  *
@@ -32,12 +30,6 @@ public interface BoundaryValues {
      * value.
      */
     Built build(BoundaryInput at, Hir.Expr fixture);
-
-    /** Whether the value was refused, for a caller that has nothing to do with what it is. */
-    default Optional<String> refuse(BoundaryInput at, Hir.Expr fixture) {
-        return build(at, fixture) instanceof Built.Refused refused
-                ? Optional.of(refused.why()) : Optional.empty();
-    }
 
     /** What came of building one value. */
     sealed interface Built {

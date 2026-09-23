@@ -40,6 +40,9 @@ class CompileVisibilityTest {
         assertTrue(Codecs.decode(loader, "demo.Public", Map.of("n", 5L)) instanceof Ok);
     }
 
+    /** A case reaches a reader through the decoder and, for an injected output, through the
+     *  generated factory — without being named — so an exposed sum may keep its cases (E1305's
+     *  allowance). */
     @Test
     void exposedSumWithHiddenCasesStillDecodes() throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""

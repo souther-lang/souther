@@ -416,12 +416,6 @@ public interface Ast {
                         List<Var> dependsOn,
                         List<EnsuresClause> ensures,
                         SourcePos pos) implements BehaviorDef {
-
-        /** A behavior a pass wrote, named but written nowhere. */
-        public SpecBehavior(String name, List<Param> params, RetType ret, List<Name> constructs,
-                            List<Var> dependsOn, List<EnsuresClause> ensures, SourcePos pos) {
-            this(WrittenName.synthetic(name, pos), params, ret, constructs, dependsOn, ensures, pos);
-        }
     }
 
     /** One postcondition on a behavior. A single-output clause has one arm with no cases; a sum
@@ -433,11 +427,6 @@ public interface Ast {
 
     /** A behavior parameter. Its type may be an anonymous union of cases (spec §unmarked-output). */
     record Param(WrittenName written, RetType type) implements Ast {
-
-        /** A parameter a pass wrote. */
-        public Param(String name, RetType type, SourcePos pos) {
-            this(WrittenName.synthetic(name, pos), type);
-        }
 
         /** What the parameter is called. */
         public String name() {
@@ -459,11 +448,6 @@ public interface Ast {
      */
     record PipeBehavior(WrittenName written, List<Var> stages, RetType declaredOut, SourcePos pos)
             implements BehaviorDef {
-
-        /** A composition a pass wrote, named but written nowhere. */
-        public PipeBehavior(String name, List<Var> stages, RetType declaredOut, SourcePos pos) {
-            this(WrittenName.synthetic(name, pos), stages, declaredOut, pos);
-        }
     }
 
     /**
@@ -536,16 +520,6 @@ public interface Ast {
                     DefinitionRole.AttachedValue.INSTANCE, pos);
         }
 
-        /** A block standing where a function goes, which no module declares: a lambda a binding
-         * holds, one handed to a function parameter. It has parameters and a body like a
-         * declaration, which is what lets an application of it expand like a call, and it is
-         * declared by nobody, which is what {@link #declaredIn} says of it. */
-        public static FnDef lambda(String name, List<FnParam> params, RetType declaredReturn,
-                                   FnBody body, SourcePos pos) {
-            return new FnDef(WrittenName.synthetic(name, pos), null, params, declaredReturn, body,
-                    Modifiers.NONE, pos);
-        }
-
         /**
          * The same declaration under the name a module reaches it by.
          *
@@ -560,12 +534,6 @@ public interface Ast {
         public FnDef reachedAs(String name) {
             return new FnDef(WrittenName.synthetic(name, pos), declaredIn, params, declaredReturn,
                     body, modifiers, role, pos);
-        }
-
-        /** The same declaration with {@code replacement} in place of its body. */
-        public FnDef withBody(FnBody replacement) {
-            return new FnDef(written, declaredIn, params, declaredReturn, replacement, modifiers,
-                    role, pos);
         }
 
         /** What the fn is called. */
@@ -622,11 +590,6 @@ public interface Ast {
      * constructor pattern in parameter position rather than written beside the name — a behavior's
      * implementation may write the pattern, and its type still comes from the behavior. */
     record FnParam(Binder binder, RetType type, boolean typeFromPattern) implements Ast {
-        /** A parameter whose type, if any, the author wrote (the common case). */
-        public FnParam(Binder binder, RetType type) {
-            this(binder, type, false);
-        }
-
         public String name() {
             return binder.name();
         }
@@ -960,12 +923,6 @@ public interface Ast {
             this(Binder.desugared(name, pos), value, null, false, null, body, pos, region);
         }
 
-        /** A binding carrying an inlined helper parameter's declared type. */
-        public LetIn(Binder binder, Expr value, RetType declaredType, Expr body, SourcePos pos,
-                     Region region) {
-            this(binder, value, declaredType, false, null, body, pos, region);
-        }
-
         /** {@code let x: T = value} — a binding the source annotated. */
         public static LetIn annotated(Binder binder, Expr value, RetType type, Expr body,
                                       SourcePos pos, Region region) {
@@ -986,14 +943,6 @@ public interface Ast {
                                     Region region) {
             return new LetIn(Binder.desugared(name, pos), value, null, false, opens, body, pos,
                     region);
-        }
-
-        /** The type the source wrote on this binding, or null when it wrote none. What the source
-         * wrote and what a later pass put there are both held in {@code declaredType}, and
-         * {@code annotated} is what tells them apart: a carrier from inlining is not an annotation
-         * and is not answered here. */
-        public RetType annotation() {
-            return annotated ? declaredType : null;
         }
     }
 
@@ -1059,17 +1008,6 @@ public interface Ast {
     record IfConstructed(Expr construct, Binder binder, Expr then, List<ElseArm> els,
                          SourceConstructOrigin origin, SourcePos pos, Region region) implements Expr {
 
-        /** The attempt whose failure is not told apart: one arm, naming no clause. */
-        public IfConstructed(Expr construct, Binder binder, Expr then, Expr els,
-                             SourceConstructOrigin origin, SourcePos pos, Region region) {
-            this(construct, binder, then, List.of(ElseArm.any(els)), origin, pos, region);
-        }
-
-        /** How the binding was written. */
-        public String binderName() {
-            return binder.name();
-        }
-
         /** Whether the failure is departed from per clause, rather than by one value for any of them. */
         public boolean mapsClauses() {
             return els.size() > 1 || els.get(0).clause().isPresent();
@@ -1113,9 +1051,6 @@ public interface Ast {
      */
     record Case(List<Name> caseTypes, Binder binding, Expr body, List<Name> unwrapAsserts,
                 SourcePos pos) implements Ast {
-        public Case(List<Name> caseTypes, Binder binding, Expr body, SourcePos pos) {
-            this(caseTypes, binding, body, null, pos);
-        }
 
         /** How the binding was written, or null where the arm binds nothing. */
         public String bindingName() {
@@ -1252,19 +1187,6 @@ public interface Ast {
             this(target, WrittenName.synthetic(field, pos), pos, null);
         }
 
-        /**
-         * An access standing where the author wrote something else — a copy of a body from another
-         * source, stamped at the place it was carried to.
-         *
-         * <p>The field is named and written nowhere, the occurrence it was read from being in the
-         * file this copy is no longer being read against. The characters are still somebody's, and
-         * they are whatever stands at {@code region} in the file this is read in. The counterpart of
-         * {@link Hir.Var#respelled}, for the same reason.
-         */
-        public static FieldAccess restamped(Expr target, String field, SourcePos at, Region over) {
-            return new FieldAccess(target, WrittenName.synthetic(field, at), at, over);
-        }
-
         /** The field this reads. */
         public String field() {
             return name.canonical();
@@ -1289,12 +1211,6 @@ public interface Ast {
      */
     record Apply(Expr function, List<Expr> args, SourceConstructOrigin origin, SourcePos pos,
                  Region region) implements Expr {
-
-        /** The same application over rewritten arguments — a pass that touches only the arguments
-         *  says so here rather than listing the slots it is not changing. */
-        public Apply withArgs(List<Expr> args) {
-            return new Apply(function, args, origin, pos, region);
-        }
     }
 
     /** {@code origin} is where the comparison was written, which is not always where the fork

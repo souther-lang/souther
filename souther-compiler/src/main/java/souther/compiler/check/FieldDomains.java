@@ -6,8 +6,6 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.ChoiceToLift;
 import souther.compiler.numeric.Endpoint;
-import souther.compiler.numeric.ExactRatio;
-import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Rel;
@@ -1767,38 +1765,6 @@ public final class FieldDomains {
     }
 
     /**
-     * Whether the rules leave the value at {@code path} in {@code data} able to hold nothing.
-     *
-     * <p>Asked of the domain the rules seed rather than read off the clauses. A rule removes the
-     * empty value in more ways than a floor written at the name: {@code List.length(kids.value)}
-     * counts the same thing under another spelling, {@code >= least} beside {@code least >= 1} says
-     * it through a second field, and an equality says it without stating an end a range would keep.
-     * Reading the clauses for the shapes one reader thought of leaves the rest of them saying
-     * nothing, and there is no end to the shapes. The seeding already relates all of them, so the
-     * question goes there: settle the count at none and see whether anything is left.
-     *
-     * <p>Both the record's rules and the field's own type's reach the same domain — the seeding puts
-     * each field's type in beside the clauses — so this is one reading and not two agreeing.
-     *
-     * <p>Yes where the seeding could not read the rules, and yes where what stands there is counted by
-     * nothing. Wide is the safe direction: what this decides is that a recursion has nowhere to
-     * bottom out, and a reader that guessed would refuse a type somebody can write.
-     *
-     */
-    public static boolean mayHoldNothingAt(TypeSymbol.AtModule named, RuleKey path,
-                                           RuleReadingSource source, ReadingPolicy policy) {
-        return mayHoldNothingAt(named, path, source, policy, DeclarationReadings.NONE);
-    }
-
-    /** The same, asking {@code machines} for what somebody has already made of the declaration. */
-    public static boolean mayHoldNothingAt(TypeSymbol.AtModule named, RuleKey path,
-                                           RuleReadingSource source, ReadingPolicy policy,
-                                           DeclarationReadings machines) {
-        // A count is never below none, so leaving it no room above none is leaving it at none.
-        return OccurrenceCounts.of(named, source, policy, machines).mayHoldAtMost(path, 0);
-    }
-
-    /**
      * How much the value at a name has to hold, which is not what the value there is.
      *
      * <p>Its own type because the numbers are the same numbers. {@code >= 2} at a field is a range of
@@ -2234,63 +2200,6 @@ public final class FieldDomains {
                     souther.compiler.check.NumericMeasures.isMeasure(taken.operation())
                             ? atomOf(countAt.get(path)) : null;
         };
-    }
-
-    /**
-     * The tightest bounds the rules prove on an arithmetic form over several of these coordinates.
-     *
-     * <p><b>Where a product of {@link #leftAt} cannot go.</b> Two fields each running from none to
-     * five come to ten taken one at a time, and a clause holding their sum at five is the whole
-     * reason the pair was written down — so what the form runs between is asked of the relations
-     * that reach it rather than composed from what each of them projects. Composed, a rule cutting
-     * the sum at eight drew a border on a quantity that never arrives there.
-     *
-     * <p>Asked in the vocabulary a caller here already has. What the reading called a subject means
-     * nothing once the reading that named it is gone, so what crosses is a name and a form of names
-     * — the same translation {@link #leftAt} makes, of a question with several coordinates in it.
-     *
-     * <p>Null where a coordinate of the form is one no range is taken of here, which is an answer
-     * about this reading rather than about the form: the atom that would carry it does not exist, so
-     * there is no relation to project and the caller is left with whatever it knows beside this.
-     */
-    public NumericDomain.Bounds boundsOf(Map<NumberAt<RuleKey>, java.math.BigDecimal> form) {
-        return boundsOfForm(constraints, atomAt, countAt, form);
-    }
-
-    private static NumericDomain.Bounds boundsOfForm(ConstraintState<FactSubject> constraints,
-                                                     Map<RuleKey, FactSubject> atomAt,
-                                                     Map<RuleKey, Counted> countAt,
-                                                     Map<NumberAt<RuleKey>, java.math.BigDecimal> form) {
-        if (form.isEmpty()) {
-            return null;
-        }
-        // The atom each coordinate carries, worked out for all of them before any is weighed. What
-        // is asked of the form is asked of every coordinate at once: one this reading takes no
-        // range of leaves the whole form unanswered, and a walk that stopped at the first such
-        // coordinate would be reading a map that promises no order for which one that is.
-        Map<NumberAt<RuleKey>, FactSubject> atoms = new HashMap<>();
-        form.keySet().forEach(at -> {
-            FactSubject atom = switch (at.of()) {
-                case NumberAt.OfWhatNumber.OfItsOwnValue _ -> atomAt.get(at.position());
-                case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers taken ->
-                        NumericMeasures.isMeasure(taken.operation())
-                                ? atomOf(countAt.get(at.position())) : null;
-            };
-            if (atom != null) {
-                atoms.put(at, atom);
-            }
-        });
-        if (atoms.size() != form.size()) {
-            return null;
-        }
-        // Two coordinates of one form can be one atom — a form is written over the names a rule
-        // writes, and a rule may write one of them twice. What that comes to is a sum, which is the
-        // same sum whichever coordinate is added first.
-        Map<FactSubject, ExactRatio> coefs = new HashMap<>();
-        form.forEach((at, weight) ->
-                coefs.merge(atoms.get(at), ExactRatio.of(weight), ExactRatio::plus));
-        return constraints.numbers().boundsOf(
-                new LinearForm<>(ExactRatio.ZERO, coefs));
     }
 
     /**

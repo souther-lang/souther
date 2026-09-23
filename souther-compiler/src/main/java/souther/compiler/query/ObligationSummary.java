@@ -46,16 +46,6 @@ public record ObligationSummary<T>(List<T> met, List<T> unmet, List<T> refuted,
         return met.size() + unmet.size() + refuted.size() + undecided.size();
     }
 
-    /** The undecided ones this question is open about, in the order they were given. */
-    public List<T> undecidedBy(ObligationDisposition.Uncertainty question,
-                               Function<T, ObligationAssessment> owed) {
-        return undecided.stream()
-                .filter(each -> owed.apply(each).disposition()
-                        instanceof ObligationDisposition.Undecided it
-                        && it.because().written().contains(question))
-                .toList();
-    }
-
     /** Where each of {@code items} stands, in the order they were given. */
     public static <T> ObligationSummary<T> of(List<T> items, Function<T, ObligationAssessment> owed) {
         List<T> met = new ArrayList<>();

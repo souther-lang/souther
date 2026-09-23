@@ -39,13 +39,7 @@ public record Scope(Map<BindingId, Binding> bindings, Map<String, Type> visible,
         bindings = BindingMap.from(bindings);
     }
 
-    /** A scope with no application's decisions in force over it. */
-    public Scope(Map<BindingId, Binding> bindings, Map<String, Type> visible,
-                 Map<String, Type> standing) {
-        this(bindings, visible, standing, null, BoundValues.NONE);
-    }
-
-    /** The same, for a caller that has decisions in force and no values to carry. */
+    /** A scope for a caller that has decisions in force and no values to carry. */
     public Scope(Map<BindingId, Binding> bindings, Map<String, Type> visible,
                  Map<String, Type> standing, Substitution decisions) {
         this(bindings, visible, standing, decisions, BoundValues.NONE);
@@ -124,11 +118,6 @@ public record Scope(Map<BindingId, Binding> bindings, Map<String, Type> visible,
                 standing, decisions, values);
     }
 
-    /** The same, for several at once. */
-    public Scope withAll(Map<BindingId, Binding> more) {
-        return new Scope(BindingMap.from(bindings).withAll(more), visible, standing, decisions,
-                values);
-    }
 
     /**
      * This scope with {@code binder} bound to {@code type} and standing for {@code value}.

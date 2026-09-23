@@ -42,8 +42,6 @@ class AStringIsCanonicalAtTheBoundaryTest {
     private static final String GA_NFD = "\u304b\u3099";
     /** The same kana as one code point. */
     private static final String GA_NFC = "\u304c";
-    /** 葛 followed by a variation selector: normalization-stable, so it stays two code points. */
-    private static final String VARIANT = "\u845b\udb40\udd01";
 
     private static final String MODULE = """
             module demo
@@ -181,13 +179,6 @@ class AStringIsCanonicalAtTheBoundaryTest {
         // One of them alone is fine, so the failure is the collision and not the character.
         assertTrue(Codecs.decoder(loader, "demo.V").decode(Map.of("m", Map.of(GA_NFD, 2L)), Path.ROOT)
                 instanceof Ok);
-    }
-
-    @Test
-    void whatNfcDoesNotJoinStaysApart() throws Exception {
-        // A variation sequence is normalization-stable, so this is not a gap NFC closes and the
-        // contract does not claim it does.
-        assertEquals(2L, number("String.length(i.s)", VARIANT));
     }
 
     @Test

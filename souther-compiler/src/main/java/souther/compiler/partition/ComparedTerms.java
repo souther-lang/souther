@@ -66,16 +66,6 @@ record ComparedTerms(TermOrders on, TermOrders against, Count stepsApart) {
         return orders == null ? null : orders.term().atOnePosition();
     }
 
-    /** The position the line is named by, which is the one the author wrote on the left. */
-    NumericTerm.FromOnePosition onPosition() {
-        return onTerm(on);
-    }
-
-    /** The position it is held apart from. */
-    NumericTerm.FromOnePosition againstPosition() {
-        return onTerm(against);
-    }
-
     /**
      * The two positions {@code comparison} names, or null where it names no such pair.
      *

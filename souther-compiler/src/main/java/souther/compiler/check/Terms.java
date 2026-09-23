@@ -506,22 +506,16 @@ final class Terms {
     }
 
     /**
-     * The same, saying where the reading stopped where it did.
+     * The same, saying where the reading stopped where it did, and naming only the atoms
+     * {@code names} accepts.
      *
      * <p>Beside the above and carrying what it discards. Which expression had no rule here is a
      * fact about that expression, and a caller handed nothing back had to reconstruct it from the
      * shape of what it asked about — which is a second account of this walk, written by whoever
      * needed one. The environment travels with the expression for the reason
      * {@link AffineForms.ReadThrough} gives.
-     */
-    AffineForms.Outcome<FactSubject, Denotations> outcomeOf(Core raw, Denotations at) {
-        return outcomeOf(raw, at, subject -> true);
-    }
-
-    /**
-     * The same, naming only the atoms {@code names} accepts.
      *
-     * <p>For a reader whose subjects are narrower than this one's. What may be named here is what
+     * <p>The narrowing is for a reader whose subjects are narrower than this one's. What may be named here is what
      * the discharge procedure can carry a fact about, which is every number it can identify; what a
      * measure may name is a coordinate of the value a clause is written about, which is fewer. A
      * reader that took this one's atoms and then found it had no coordinate for one of them was
@@ -1856,16 +1850,6 @@ final class Terms {
      * them was named here, so one that is not is a form built somewhere this cannot answer for. */
     Map<FactSubject, Granularity> kindsOf(LinearForm<FactSubject> f) {
         return kindsOfAtoms(f.coefs().keySet());
-    }
-
-    /** The same, for a name being given a form: the name is an atom too, and its own type says how
-     * its values are spaced. */
-    Map<FactSubject, Granularity> kindsOf(LinearForm<FactSubject> f, FactSubject atom, Type type) {
-        Map<FactSubject, Granularity> out = new HashMap<>(kindsOf(f));
-        Granularity g = granularityOf(type);
-        named(atom, g);
-        out.put(atom, g);
-        return out;
     }
 
     private Map<FactSubject, Granularity> kindsOfAtoms(Set<FactSubject> atoms) {

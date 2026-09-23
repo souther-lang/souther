@@ -166,11 +166,6 @@ public final class Discharge {
         return pairs;
     }
 
-    /** One combination of the body's decisions apiece, or none where the plan named none. */
-    public Map<ObligationIdentity.OfACombinationOfDecisions, ClassDisposition> meetings() {
-        return meetings;
-    }
-
     /** What became of one combination of the body's decisions, or null where nothing asked. */
     public ClassDisposition at(ObligationIdentity.OfACombinationOfDecisions owed) {
         return meetings.get(owed);

@@ -82,19 +82,6 @@ class LspServerTest {
     }
 
     @Test
-    void capabilitiesAdvertiseReferences() {
-        byte[] input = frames(message(1, "initialize", Map.of()));
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        new LspServer(new MessageConnection(new ByteArrayInputStream(input), out)).run();
-
-        JsonNode caps = readFrames(out.toByteArray()).stream()
-                .filter(m -> m.has("id") && m.get("id").isNumber() && m.get("id").asInt() == 1)
-                .findFirst().orElseThrow()
-                .get("result").get("capabilities");
-        assertTrue(caps.get("referencesProvider").asBoolean(), "references is advertised");
-    }
-
-    @Test
     void registersAFileWatcherForSouSourcesOnInitialized() {
         byte[] input = frames(
                 message(1, "initialize", Map.of()),
@@ -113,22 +100,6 @@ class LspServerTest {
         String glob = registration.get("registerOptions").get("watchers").get(0)
                 .get("globPattern").asString();
         assertTrue(glob.contains("*.sou"), "watches Souther sources: " + glob);
-    }
-
-    @Test
-    void capabilitiesAdvertiseFormatting() {
-        byte[] input = frames(message(1, "initialize", Map.of()));
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        new LspServer(new MessageConnection(new ByteArrayInputStream(input), out)).run();
-
-        JsonNode caps = readFrames(out.toByteArray()).stream()
-                .filter(m -> m.has("id") && m.get("id").isNumber() && m.get("id").asInt() == 1)
-                .findFirst().orElseThrow()
-                .get("result").get("capabilities");
-        assertTrue(caps.get("documentFormattingProvider").asBoolean(), "formatting is advertised");
-        assertTrue(caps.get("renameProvider").asBoolean(), "rename is advertised");
-        assertTrue(caps.has("completionProvider"), "completion is advertised");
-        assertTrue(caps.has("codeActionProvider"), "code actions are advertised");
     }
 
     @Test

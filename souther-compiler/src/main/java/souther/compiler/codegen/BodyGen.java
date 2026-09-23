@@ -380,16 +380,12 @@ final class BodyGen {
          * Because a desugared {@code guard} (spec §guard) is an {@code if} whose branches are tail,
          * this is reached for constructions on both sides of a guard — there is no second, unchecked
          * construction path.
+         *
+         * <p>{@code expected} is the declared return/output type of the body being emitted: it is
+         * threaded to a tail-position fold the same way {@link #genExpr} threads it in value
+         * position, so a fold over an empty-collection seed materialises its step at the accumulator
+         * type the checker pinned rather than a bottom. Null when no declared type is in scope.
          */
-        void emitTail(Core e, ClassDesc cdB, Set<ValueName.Behavior> requiredNames,
-                      Map<ValueName.Behavior, Type> requiredSuccess) {
-            emitTail(e, cdB, requiredNames, requiredSuccess, null);
-        }
-
-        // {@code expected} is the declared return/output type of the body being emitted (issue #70): it
-        // is threaded to a tail-position fold the same way {@link #genExpr} threads it in value
-        // position, so a fold over an empty-collection seed materialises its step at the accumulator
-        // type the checker pinned rather than a bottom. Null when no declared type is in scope.
         void emitTail(Core e, ClassDesc cdB, Set<ValueName.Behavior> requiredNames,
                       Map<ValueName.Behavior, Type> requiredSuccess,
                       Type expected) {
@@ -1157,10 +1153,6 @@ final class BodyGen {
             code.invokestatic(cdType, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(flds)));
             code.invokestatic(CD_ConstraintViolation, "orThrow", MTD_orThrow);
             code.checkcast(cdType);
-        }
-
-        Type varType(Core.Read read) {
-            return locals.get(read.binding()).type();
         }
 
         // --- the surface Intrinsics drives to emit a shipped primitive (ADR-0028) ---

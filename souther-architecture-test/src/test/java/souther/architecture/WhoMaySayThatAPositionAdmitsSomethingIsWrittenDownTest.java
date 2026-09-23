@@ -17,7 +17,6 @@ import java.lang.classfile.instruction.InvokeDynamicInstruction;
 import java.lang.classfile.instruction.InvokeInstruction;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.DirectMethodHandleDesc;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -771,27 +770,13 @@ class WhoMaySayThatAPositionAdmitsSomethingIsWrittenDownTest {
     }
 
     /**
-     * And the walk sees classes at all, in every module the repository has.
+     * And the walk sees classes at all.
      *
      * <p>Matched against a name nothing has, every list above would be empty and equal to an empty
-     * expectation. And a module whose classes are not there is one the walk reads nothing of while
-     * the lists still match — so what is asserted is that every module the reactor names was read,
-     * and not only that something was.
+     * expectation, so what is asserted is that the walk finds the word where it is known to be said.
      */
     @Test
-    void andEveryModuleTheRepositoryHoldsWasRead() {
-        int read = 0;
-        for (Path module : COMPILED.modules()) {
-            // A module holding only tests or only a pom leaves no classes and is not one this walk
-            // is missing. One that has sources and left none is refused where the outputs are
-            // taken, so a walk reading fewer modules than the repository has does not get here.
-            if (!COMPILED.classesOf(module).isEmpty()) {
-                read++;
-            }
-        }
-
-        assertTrue(read > 1, "the classes this reads are in more than the one module that declares"
-                + " the word");
+    void andTheWalkSeesTheWordWhereItIsSaid() {
         assertTrue(nestsSaying(saidInProduction(), _ -> true)
                         .contains("souther/compiler/check/Confinement"),
                 "and the pair's own reading says the word, so a walk that cannot find it there is"

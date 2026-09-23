@@ -18,6 +18,7 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,19 +27,23 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Why a row could not be placed at a position, and who is entitled to say.
+ * Which class each of a row's inputs fell in, why a row could not be placed at a position, and who
+ * is entitled to say.
+ *
+ * <p>A row writes values, not class names. What it covers is therefore a question about the values it
+ * was given, and one it has to be able to decline: a value that could not be read leaves that axis
+ * undecided, and only that axis.
  *
  * <p>A classifier may read through the value it is given: a number at a position is the number
  * inside the newtype named there, because a newtype is not a step in a path. So the value the walk
  * finds and the value a class is about are not always the same node, and only the classifier knows
- * which one it read.
- *
- * <p>Held here because the difference is invisible half the time. A limit reached one wrapper in
- * used to come back as a value that could not be read — right about the row and wrong about what
- * happened to it — while the same failure at the node itself came back correctly, and an unreadable
- * value one wrapper in came back correctly by accident. Which is why nothing noticed.
+ * which one it read. The difference is invisible half the time: a limit reached one wrapper in and
+ * the same limit at the node itself are one incompleteness, and a reading that took the wrapper for
+ * the value would say the row could not be read — right about the row and wrong about what happened
+ * to it.
  */
 class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
 
@@ -52,7 +57,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
             data Amount = Int
                 invariant value >= 0
 
-            data Request = { kind: Kind, cost: Amount, plain: Int }
+            data Request = { kind: Kind, cost: Amount, plain: Int, memo: String }
             data Submitted = { cost: Amount }
             data Waiting = { cost: Amount }
 
@@ -66,13 +71,29 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
             }
 
             example submit
-                | (Request { kind = Domestic, cost = Amount(50), plain = 1 }) -> Submitted
+                | (Request { kind = Domestic, cost = Amount(50), plain = 1, memo = "" }) -> Submitted
+                | (Request { kind = Overseas, cost = Amount(500), plain = 1, memo = "" }) -> Waiting
+                | (Request { kind = Domestic, cost = Amount(-1), plain = 1, memo = "" }) -> Submitted
             """;
 
-    private record Read(MeasuredInput subject, RowOutcome row) {
+    /** What the rows came to: the first one read, one on the other side of every line, and one
+     *  whose input never built. */
+    private record Read(MeasuredInput subject, List<RowOutcome> rows) {
 
         MeasuredInput.MeasuredAxes axes() {
             return subject.axes();
+        }
+
+        RowOutcome row() {
+            return rows.get(0);
+        }
+
+        RowOutcome acrossTheLines() {
+            return rows.get(1);
+        }
+
+        RowOutcome neverBuilt() {
+            return rows.get(2);
         }
     }
 
@@ -102,7 +123,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
                         compilation.sourceIds().get(0))).value();
         assertNotNull(observed);
         return new Read(MeasuredInput.of("submit", read.reading(rules), partitioning),
-                observed.rows().get(0));
+                observed.rows());
     }
 
     /** The row it read, with one of the request's fields replaced. */
@@ -233,6 +254,48 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
                 at(read, read.row(), "request.kind"));
     }
 
+    @Test
+    void aValueOnTheOtherSideOfAThresholdFallsInTheOtherClass() {
+        Read read = read();
+
+        assertEquals(Classification.in("Overseas"),
+                at(read, read.acrossTheLines(), "request.kind"));
+        assertEquals(Classification.in("request.cost/100 < x"),
+                at(read, read.acrossTheLines(), "request.cost"));
+    }
+
+    /** A position the model does not divide has nothing to fall into, so it is not asked about. */
+    @Test
+    void anAxisWithNoClassesIsLeftOut() {
+        Read read = read();
+
+        assertTrue(InputClassifications.of(read.row().inputs(), read.axes()).keySet().stream()
+                        .noneMatch(axis -> axis.term().equals("request.memo")),
+                "a plain String is not divided, so there is no class to be in");
+    }
+
+    /** The point of classifying per axis: one unreadable value does not take the row's other answers
+     *  with it. */
+    @Test
+    void anUnreadableValueLeavesOnlyItsOwnAxisUndecided() {
+        Read read = read();
+        RowOutcome damaged = giving(read, "cost", new ObservedValue.Truncated());
+
+        assertEquals(Classification.in("Domestic"), at(read, damaged, "request.kind"),
+                "the readable field still answers");
+        assertEquals(Incompleteness.Code.VALUE_TRUNCATED, why(at(read, damaged, "request.cost")));
+    }
+
+    @Test
+    void aRowThatNeverBuiltItsInputsClassifiesNothing() {
+        Read read = read();
+        RowOutcome row = read.neverBuilt();
+        assertEquals(List.of(), row.inputs(), "the fixture never built");
+
+        assertTrue(InputClassifications.of(row.inputs(), read.axes()).values().stream()
+                .noneMatch(Classification::isClassified));
+    }
+
     // --- what the contract says cannot happen ---------------------------------------------------
 
     /**
@@ -244,8 +307,8 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
      * rule has to be asked directly. Asked through classes instead, these would be tests of what
      * this compiler can no longer produce rather than of what it does when handed it.
      */
-    private static souther.compiler.observe.Classification answering(Membership... answers) {
-        List<String> ids = new java.util.ArrayList<>();
+    private static Classification answering(Membership... answers) {
+        List<String> ids = new ArrayList<>();
         for (int i = 0; i < answers.length; i++) {
             ids.add("c" + i);
         }
@@ -281,8 +344,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
     void everyClassReadingTheValueAndNoneHoldingItIsNotAnAnswer() {
         IllegalStateException thrown = assertThrows(IllegalStateException.class,
                 () -> answering(Membership.NO_MATCH, Membership.NO_MATCH));
-        org.junit.jupiter.api.Assertions.assertTrue(
-                thrown.getMessage().contains("holds a value it read"), thrown.getMessage());
+        assertTrue(thrown.getMessage().contains("holds a value it read"), thrown.getMessage());
     }
 
     /**
@@ -298,7 +360,6 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
                 () -> answering(
                         new Membership.Incomplete(Incompleteness.Code.VALUE_TRUNCATED),
                         new Membership.Incomplete(Incompleteness.Code.VALUE_UNREADABLE)));
-        org.junit.jupiter.api.Assertions.assertTrue(
-                thrown.getMessage().contains("disagree about why"), thrown.getMessage());
+        assertTrue(thrown.getMessage().contains("disagree about why"), thrown.getMessage());
     }
 }

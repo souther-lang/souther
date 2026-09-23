@@ -187,7 +187,7 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
      * {@code publishedBy}, {@code carriedByValue} and the {@code Origins} members that say what
      * each crossing does. The rest carry or ask — {@code with}, {@code withArgs} and
      * {@code replacedBy} put back what they were handed and
-     * {@code atSlots} and {@code withRegion} are the rewrites that go through them, while
+     * {@code atSlots} is the rewrite that goes through them, while
      * {@code mayOmitOptionalFields}, {@code wasCarried}, {@code wasCarriedByValue} and
      * {@code Origins#carried} are the questions a check puts to a node. The accessors and the
      * enum's own members are here because naming an answer is what an accessor does.
@@ -198,7 +198,6 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
      */
     private static final List<String> NAMING = List.of(
             THEIRS + "Hir#atSlots",
-            THEIRS + "Hir#withRegion",
             APPLY + "#carriedByValue",
             APPLY + "#origin",
             APPLY + "#read",

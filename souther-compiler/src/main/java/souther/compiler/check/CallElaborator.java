@@ -775,14 +775,6 @@ public final class CallElaborator {
         return pattern;
     }
 
-    /** A stdlib argument-type error: {@code subject} (a function name) expects a container of kind
-     * {@code kindKey} (a localized phrase such as "a List"), but got {@code actual}. */
-    static CompileException expects(SourcePos pos, String subject, String kindKey, Type actual,
-                                            String legacy) {
-        return CompileException.of(Diagnostic.at(pos)
-                        .say(new DeclarationMessage.ItExpectsAnotherType(subject, Localizable.of(kindKey), Type.show(actual))).build());
-    }
-
     /**
      * The element {@code List.sum} / {@code List.product} answers with. It is {@code Int},
      * {@code Decimal} or {@code Rational} — the types {@code +} and {@code *} are defined for

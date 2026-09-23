@@ -60,15 +60,6 @@ public record Report(Diagnostic diagnostic, String legacyMessage) {
         return List.copyOf(reports);
     }
 
-    /** Every report of every answer, in order — for a key that passes on what it read. */
-    public static List<Report> ofAll(List<? extends Answer<?>> answers) {
-        List<Report> all = new ArrayList<>();
-        for (Answer<?> a : answers) {
-            all.addAll(a.reports());
-        }
-        return List.copyOf(all);
-    }
-
     /** Only the errors among {@code reports} — what a caller that stops at the first one looks at,
      * since a warning is not a reason to stop. */
     public static List<Report> errorsIn(List<Report> reports) {

@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.Refinement;
 import souther.compiler.types.TypeSymbol;
-import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
 import java.util.List;
@@ -157,24 +156,6 @@ public record PartitionClass(String id, String label, Recognition recognises,
      */
     public PartitionClass selecting(Refinement refinement) {
         return new PartitionClass(id, label, recognises, representatives, denotes, refinement, of);
-    }
-
-    /**
-     * Whether {@code admitted} leaves this class a value, where that can be settled.
-     *
-     * <p>One question and two proofs, which is why it is asked here rather than at each shape a set
-     * comes in. {@code admitted} is an upper bound on what the position holds, so a class holding
-     * none of a finite set holds nothing at all; and a set written as a denial proves a class empty
-     * only by excluding every value the class has, which takes the class knowing what those are.
-     * Where neither proof is available the class stays: nothing has shown the position cannot reach
-     * it, and a class taken away on less than that is a distinction the model states going missing.
-     */
-    public boolean leftAnythingBy(ValueSet admitted, java.util.function.Predicate<Value> holds) {
-        if (denotes != null) {
-            return denotes.sharesAnythingWith(admitted);
-        }
-        return !(admitted instanceof ValueSet.Finite finite)
-                || finite.values().stream().anyMatch(holds);
     }
 
     public boolean generatable() {

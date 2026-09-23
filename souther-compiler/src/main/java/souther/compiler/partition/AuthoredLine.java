@@ -217,16 +217,4 @@ public record AuthoredLine(WhichLine which, LineFacts facts,
     public List<TypeSymbol.AtModule> ownersIn(String module) {
         return obligationOwners().stream().filter(each -> each.module().equals(module)).toList();
     }
-
-    /**
-     * Whether any declaration {@code module} wrote owes a row at this line.
-     *
-     * <p>A projection of {@link #ownersIn} and nothing more. It says the module has a declaration
-     * that owes the line, not that the module holds a debt for it: a debt is what the readings of
-     * the line came to, so a module that owes this and reads it nowhere holds none
-     * ({@link souther.compiler.query.Adequacy.DeclaredBorders}).
-     */
-    public boolean owedIn(String module) {
-        return !ownersIn(module).isEmpty();
-    }
 }

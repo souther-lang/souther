@@ -145,9 +145,10 @@ class AMovedReportKeepsWhereItsCodeIsWrittenTest {
                 "and the move keeps it");
     }
 
-    /** A body spliced into such a text does say where its code came from, and is moved with it. */
+    /** A body spliced into such a text says where its code came from, and is left where it is all
+     *  the same: what it is short of is a place, not a module. */
     @Test
-    void aBodySplicedIntoSuchATextIsMovedWithWhatItSays() {
+    void aBodySplicedIntoSuchATextIsNotMovedForWhatItSays() {
         SourcePos spliced = Placement.aTextWithNoIdentity().at(3, 3)
                 .standingInFor(new DeclaringCode(THE_CODE));
         Diagnostic said = saying(Diagnostic.at(spliced)).build();

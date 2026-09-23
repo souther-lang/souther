@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
@@ -30,11 +29,6 @@ class CompileMatchWideningTest {
                     | A as a -> OutA { value = a.v }
                     | B as b -> OutB { value = b.v }
             """;
-
-    @Test
-    void divergentMatchCasesWidenToAUnion() {
-        assertDoesNotThrow(() -> Compiler.compile(MODULE));
-    }
 
     @Test
     void theWidenedMatchRunsAndPicksTheRightCase() throws Exception {

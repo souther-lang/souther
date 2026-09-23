@@ -121,17 +121,6 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
         };
     }
 
-    /**
-     * Whether holding this line against the lines beside it came to an answer.
-     *
-     * <p>Which is not whether a line was found. A border no line beside it survives and a border
-     * with one named are both settled; a border the question could not be put of is not, and a
-     * border with no line beside it at all was never a question.
-     */
-    public boolean besideSettled() {
-        return !(beside instanceof AnotherLineTheRowsAllow.CouldNotTell);
-    }
-
     public BorderAssessment {
         if (beside == null) {
             throw new IllegalArgumentException("a border says what the rows leave standing beside"

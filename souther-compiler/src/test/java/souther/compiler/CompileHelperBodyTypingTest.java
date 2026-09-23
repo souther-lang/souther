@@ -254,8 +254,8 @@ class CompileHelperBodyTypingTest {
 
     @Test
     void aCallSiteNoLongerTypesAParameter() {
-        // `id`'s body says nothing about `v`. That the only call passes an Int is not consulted:
-        // a helper is typed by its body, not by its callers.
+        // `id`'s body says nothing about `v` — not even what shape it is. That the only call passes
+        // an Int is not consulted: a helper is typed by its body, not by its callers.
         String src = """
                 module demo
                 data X = Int
@@ -760,20 +760,6 @@ class CompileHelperBodyTypingTest {
         // `Map.keys` names the Map and neither its key nor its value, so both stay open together.
         assertTrue(bodyTypes("let keyCount (m) = List.length(Map.keys(m))"),
                 "`m` is a Map of something to something");
-    }
-
-    @Test
-    void aBareVariableIsNotADeterminedType() {
-        // Nothing about `v` is settled — not even what shape it is — so this is annotated as it was.
-        String src = """
-                module demo
-                data X = Int
-                behavior f : (x: X) -> X constructs X
-                let id (v) = v
-                let f (x) = X(id(x.value))
-                """;
-        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertInstanceOf(HelperMessage.AParameterIsNotDeterminedByTheBody.class, e.diagnostic().said(), e.getMessage());
     }
 
     @Test

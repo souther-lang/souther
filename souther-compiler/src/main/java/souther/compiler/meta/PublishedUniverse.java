@@ -158,17 +158,6 @@ public final class PublishedUniverse {
      */
     public record Read(Hir.Module module,
                        Map<String, BehaviorImplementation> behaviorImplementations) {
-
-        /** The behaviors of it Java supplies, read off the states. */
-        public Set<String> injectedBehaviors() {
-            Set<String> injected = new java.util.LinkedHashSet<>();
-            behaviorImplementations.forEach((name, implementation) -> {
-                if (implementation.isInjectionTarget()) {
-                    injected.add(name);
-                }
-            });
-            return injected;
-        }
     }
 
     /**

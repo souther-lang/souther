@@ -1,10 +1,13 @@
 package souther.cli;
 
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -29,124 +32,46 @@ class EncoderPathAgreementTest {
     @TempDir
     Path dir;
 
-    // === the primitives and the named types ===
-
-    @Test
-    void anIntIsWrittenTheSameBothWays() throws Exception {
-        writtenAlike("Int", "7");
+    static Stream<Arguments> everyTypeAndAValueOfIt() {
+        return Stream.of(
+                // the primitives and the named types
+                Arguments.of("Int", "7"),
+                Arguments.of("String", "\"k\""),
+                Arguments.of("Date", "Date(\"2026-01-01\")"),
+                Arguments.of("Code", "Code(\"c\")"),
+                Arguments.of("Outcome", "Won"),
+                Arguments.of("Closed", "Closed"),
+                // the collections
+                Arguments.of("List<Int>", "[ 1, 2 ]"),
+                Arguments.of("Set<String>", "Set.fromList([ \"b\", \"a\" ])"),
+                Arguments.of("Map<String, Code>", "Map.fromList([ (\"k\", Code(\"v\")) ])"),
+                // the kinds a boundary map may be keyed by
+                Arguments.of("Map<String, Int>", "Map.fromList([ (\"k\", 7) ])"),
+                Arguments.of("Map<Code, Int>", "Map.fromList([ (Code(\"k\"), 7) ])"),
+                Arguments.of("Map<Date, Int>", "Map.fromList([ (Date(\"2026-01-01\"), 7) ])"),
+                Arguments.of("Map<Time, Int>", "Map.fromList([ (Time(\"09:30:00\"), 7) ])"),
+                Arguments.of("Map<Instant, Int>",
+                        "Map.fromList([ (Instant(\"2026-01-01T09:00:00Z\"), 7) ])"),
+                Arguments.of("Map<DateTime, Int>",
+                        "Map.fromList([ (DateTime(\"2026-01-01T09:00\"), 7) ])"),
+                Arguments.of("Map<Outcome, Int>", "Map.fromList([ (Won, 7) ])"),
+                // A newtype over a temporal, which holds the two paths to one key rendering: each
+                // renders a named key through that type's own encoder, so neither can learn a base
+                // the other does not have.
+                Arguments.of("Map<Day, Int>", "Map.fromList([ (Day(Date(\"2026-01-01\")), 7) ])"),
+                // and at depth, where the key is not the type the behavior declared
+                Arguments.of("List<Map<Code, Int>>", "[ Map.fromList([ (Code(\"k\"), 7) ]) ]"),
+                Arguments.of("Map<String, Map<Code, Int>>",
+                        "Map.fromList([ (\"a\", Map.fromList([ (Code(\"k\"), 7) ])) ])"),
+                Arguments.of("List<Map<Day, Int>>",
+                        "[ Map.fromList([ (Day(Date(\"2026-01-01\")), 7) ]) ]"));
     }
-
-    @Test
-    void aStringIsWrittenTheSameBothWays() throws Exception {
-        writtenAlike("String", "\"k\"");
-    }
-
-    @Test
-    void aDateIsWrittenTheSameBothWays() throws Exception {
-        writtenAlike("Date", "Date(\"2026-01-01\")");
-    }
-
-    @Test
-    void aNewtypeIsWrittenTheSameBothWays() throws Exception {
-        writtenAlike("Code", "Code(\"c\")");
-    }
-
-    @Test
-    void anEnumerationIsWrittenTheSameBothWays() throws Exception {
-        writtenAlike("Outcome", "Won");
-    }
-
-    @Test
-    void aUnitIsWrittenTheSameBothWays() throws Exception {
-        writtenAlike("Closed", "Closed");
-    }
-
-    // === the collections ===
-
-    @Test
-    void aListIsWrittenTheSameBothWays() throws Exception {
-        writtenAlike("List<Int>", "[ 1, 2 ]");
-    }
-
-    @Test
-    void aSetIsWrittenTheSameBothWays() throws Exception {
-        writtenAlike("Set<String>", "Set.fromList([ \"b\", \"a\" ])");
-    }
-
-    @Test
-    void aMapValueOfANamedTypeIsWrittenTheSameBothWays() throws Exception {
-        writtenAlike("Map<String, Code>", "Map.fromList([ (\"k\", Code(\"v\")) ])");
-    }
-
-    // === the kinds a boundary map may be keyed by ===
-
-    @Test
-    void aStringKeyedMapIsWrittenTheSameBothWays() throws Exception {
-        writtenAlike("Map<String, Int>", "Map.fromList([ (\"k\", 7) ])");
-    }
-
-    @Test
-    void aNewtypeKeyedMapIsWrittenTheSameBothWays() throws Exception {
-        writtenAlike("Map<Code, Int>", "Map.fromList([ (Code(\"k\"), 7) ])");
-    }
-
-    @Test
-    void aDateKeyedMapIsWrittenTheSameBothWays() throws Exception {
-        writtenAlike("Map<Date, Int>", "Map.fromList([ (Date(\"2026-01-01\"), 7) ])");
-    }
-
-    @Test
-    void aTimeKeyedMapIsWrittenTheSameBothWays() throws Exception {
-        writtenAlike("Map<Time, Int>", "Map.fromList([ (Time(\"09:30:00\"), 7) ])");
-    }
-
-    @Test
-    void anInstantKeyedMapIsWrittenTheSameBothWays() throws Exception {
-        writtenAlike("Map<Instant, Int>",
-                "Map.fromList([ (Instant(\"2026-01-01T09:00:00Z\"), 7) ])");
-    }
-
-    @Test
-    void aDateTimeKeyedMapIsWrittenTheSameBothWays() throws Exception {
-        writtenAlike("Map<DateTime, Int>", "Map.fromList([ (DateTime(\"2026-01-01T09:00\"), 7) ])");
-    }
-
-    @Test
-    void anEnumerationKeyedMapIsWrittenTheSameBothWays() throws Exception {
-        writtenAlike("Map<Outcome, Int>", "Map.fromList([ (Won, 7) ])");
-    }
-
-    /** A newtype over a temporal. This is the row that holds the two paths to one key rendering:
-     *  each renders a named key through that type's own encoder, so neither can learn a base the
-     *  other does not have (issue #636). */
-    @Test
-    void aWrappedTemporalKeyedMapIsWrittenTheSameBothWays() throws Exception {
-        writtenAlike("Map<Day, Int>", "Map.fromList([ (Day(Date(\"2026-01-01\")), 7) ])");
-    }
-
-    // === and at depth, where the key is not the type the behavior declared ===
-
-    @Test
-    void aListOfNewtypeKeyedMapsIsWrittenTheSameBothWays() throws Exception {
-        writtenAlike("List<Map<Code, Int>>", "[ Map.fromList([ (Code(\"k\"), 7) ]) ]");
-    }
-
-    @Test
-    void aMapOfNewtypeKeyedMapsIsWrittenTheSameBothWays() throws Exception {
-        writtenAlike("Map<String, Map<Code, Int>>",
-                "Map.fromList([ (\"a\", Map.fromList([ (Code(\"k\"), 7) ])) ])");
-    }
-
-    @Test
-    void aListOfWrappedTemporalKeyedMapsIsWrittenTheSameBothWays() throws Exception {
-        writtenAlike("List<Map<Day, Int>>", "[ Map.fromList([ (Day(Date(\"2026-01-01\")), 7) ]) ]");
-    }
-
-    // === the two paths ===
 
     /** The value written bare, and written as the sole field of a data — the second being the first
      *  inside an object, since the field's own codec is what a data's encoder calls. */
-    private void writtenAlike(String type, String value) throws Exception {
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("everyTypeAndAValueOfIt")
+    void aValueIsWrittenTheSameBothWays(String type, String value) throws Exception {
         String bare = written(type, value, "bare");
         String wrapped = written(type, value, "wrapped");
         assertEquals("{\"v\":" + bare + "}", wrapped,

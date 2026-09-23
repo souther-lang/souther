@@ -138,4 +138,11 @@ class AUnionHoldsItsMembersInTheOrderTheyAreShownTest {
                     "a union is its members, and these are the same members");
         }
     }
+
+    /** The order a reader is shown, said out loud, so that changing it is a change somebody made. */
+    @Test
+    void theOrderShownIsTheOneNamesAreShownIn() {
+        assertEquals("Adult | Minor | Pensioner",
+                Type.show(Type.union(everyWayOfHoldingThem().getFirst())));
+    }
 }

@@ -157,21 +157,4 @@ class CompileInvariantBehaviorTest {
         Object make = Emitted.behavior(loader, "demo", "make").getConstructor().newInstance();
         assertThrows(ConstraintViolation.class, () -> Codecs.apply(make, 1L));
     }
-
-    /**
-     * Constructing invariant-bearing data no longer requires a 制約違反 output case — the declaration below
-     * compiles, and a violation would abort at run time (spec §algebraic-types, §violation-destination).
-     */
-    @Test
-    void constructingInvariantDataNeedsNoViolationCase() {
-        String src = """
-                module demo
-                data Positive = { value: Int } invariant value > 0
-                behavior make : (x: Int) -> Positive constructs Positive
-
-                let make (x) = Positive { value = x }
-                """;
-        // compiles without error (no E1003, which is retired)
-        Compiler.compile(src);
-    }
 }

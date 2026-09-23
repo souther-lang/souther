@@ -284,12 +284,6 @@ public sealed interface ValueOrigin<K> {
         return null;
     }
 
-    /** The operation standing over this value, or null where none does. Only the outermost: what a
-     *  rule would have to be followed back through first is the one it was written over. */
-    default ValueName appliedOperation() {
-        return this instanceof Applied<K> applied ? applied.operation() : null;
-    }
-
     /**
      * What this walk asks its caller for: what depends on the reader's environment, and nothing
      * else.

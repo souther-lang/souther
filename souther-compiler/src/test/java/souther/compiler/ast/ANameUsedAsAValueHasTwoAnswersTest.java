@@ -1,6 +1,5 @@
 package souther.compiler.ast;
 
-import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.SourceReferenceOrigin;
@@ -117,22 +116,7 @@ class ANameUsedAsAValueHasTwoAnswersTest {
                 () -> new Hir.Var.Denoting(WrittenName.of("spin", POS), null, null, null));
     }
 
-    /**
-     * Each answer keeps its own kind when the expression it is gets a new extent — a name the author
-     * parenthesized is written over five characters and is an expression over nine.
-     */
-    @Test
-    void anExtentDoesNotChangeWhichOfTheTwoItIs() {
-        WrittenName name = WrittenName.synthetic("spin", POS);
-        Region wider = new Region(POS, new SourcePos(1, 10));
-
-        assertEquals(Hir.Var.Unanswered.class,
-                Hir.withRegion(unanswered(name), wider).getClass());
-        assertEquals(Hir.Var.Denoting.class,
-                Hir.withRegion(denoting(name), wider).getClass());
-    }
-
-    /** And there is no third kind for an extent to keep. */
+    /** And there is no third kind. */
     @Test
     void aNameNothingHasReadIsNotOneOfThem() {
         assertEquals(Set.of(Hir.Var.Denoting.class, Hir.Var.Unanswered.class),

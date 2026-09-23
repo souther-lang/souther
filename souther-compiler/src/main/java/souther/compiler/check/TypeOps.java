@@ -1919,20 +1919,6 @@ public final class TypeOps {
         return inner == Type.INT || inner == Type.DECIMAL ? inner : null;
     }
 
-    /** The single-value numeric newtype a closed {@code +}/{@code -} over {@code lt} and {@code rt}
-     * yields — whichever operand is such a newtype — or {@code null} if neither is. Callers that have
-     * already passed the type checker's admissibility gate (codegen, the invariant analysis) use this
-     * to pick the result without re-deriving the rule. */
-    public static Type closedNewtypeArithResult(Type lt, Type rt, Symbols symbols) {
-        if (directNumericNewtypeBase(lt, symbols) != null) {
-            return lt;
-        }
-        if (directNumericNewtypeBase(rt, symbols) != null) {
-            return rt;
-        }
-        return null;
-    }
-
     public static Type primType(Hir.RawKind kind) {
         return switch (kind) {
             case TEXT -> Type.STRING;

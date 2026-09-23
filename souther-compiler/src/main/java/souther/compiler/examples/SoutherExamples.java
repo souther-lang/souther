@@ -119,11 +119,6 @@ public final class SoutherExamples {
                 : settled(Compilation.ofSources(sources, dependencies));
     }
 
-    /** The same, of sources that import no other user module. */
-    public static SoutherExamples ofSources(List<String> sources) {
-        return ofSources(sources, ModulePath.EMPTY);
-    }
-
     /** One module's text, which may leave its {@code module} header off as a lone file may. */
     public static SoutherExamples ofSource(String source, ModulePath dependencies) {
         return settled(Compilation.ofSource(source, "Main", dependencies));

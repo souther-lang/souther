@@ -18,21 +18,12 @@ import java.util.List;
  *
  * <p>A module's fn bodies and its invariants are rewritten at different points, because they are
  * settled at different points: an invariant is spread, qualified and inlined before the bodies are,
- * so {@link #rewriteInvariants} runs where that settling ends and {@link #rewrite} runs one question
- * later. Both spellings reach every stage as a {@code NewData} either way, which is the property a
- * stage is written against.
+ * so {@link #rewriteInvariantsOf} runs where that settling ends and {@link #rewriteOf} runs one
+ * question later. Both spellings reach every stage as a {@code NewData} either way, which is the
+ * property a stage is written against.
  */
 public final class NewtypeDesugar {
     private NewtypeDesugar() {}
-
-    /** Rewrites every {@code Call(newtype, [arg])} in the module's fn bodies to a {@code NewData}. */
-    public static Hir.Module rewrite(Hir.Module m, DeclarationNewtypes newtypes) {
-        List<Hir.FnDef> fns = new ArrayList<>();
-        for (Hir.FnDef fn : m.fns()) {
-            fns.add(rewriteOf(fn, newtypes));
-        }
-        return m.withFns(fns);
-    }
 
     /**
      * One definition's body, with each newtype construction written in it rewritten to the
@@ -52,22 +43,10 @@ public final class NewtypeDesugar {
     }
 
     /**
-     * Rewrites every {@code Call(newtype, [arg])} in each declaration's {@code invariant} to a
-     * {@code NewData}. Run where the invariants are settled — after the helpers an invariant names
-     * are expanded into it — so a construction written in a helper arrives here as the construction
-     * it is, and every check over an invariant reads one spelling rather than two.
-     */
-    public static Hir.Module rewriteInvariants(Hir.Module m, DeclarationNewtypes newtypes) {
-        List<Hir.Def> defs = new ArrayList<>();
-        for (Hir.Def def : m.defs()) {
-            defs.add(rewriteInvariantsOf(def, newtypes));
-        }
-        return m.withDefs(defs);
-    }
-
-    /**
      * One declaration's invariants, with each newtype construction written in them rewritten to the
-     * construction it is.
+     * construction it is. Run where the invariants are settled — after the helpers an invariant
+     * names are expanded into it — so a construction written in a helper arrives here as the
+     * construction it is, and every check over an invariant reads one spelling rather than two.
      *
      * <p>A declaration at a time, because what is wrong with one clause is wrong with the
      * declaration that wrote it and with nothing else. Rewriting them together would answer for a
