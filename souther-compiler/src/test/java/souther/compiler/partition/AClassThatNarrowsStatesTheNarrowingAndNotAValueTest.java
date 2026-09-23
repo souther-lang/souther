@@ -97,7 +97,7 @@ class AClassThatNarrowsStatesTheNarrowingAndNotAValueTest {
                     guards.noLine(), guards.singled(), guards.between(),
                 souther.compiler.values.Allowance.of(souther.compiler.regex.PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS));
         }
-        FillResult filled = Generator.fill(
+        FillResult filled = GenerationFixtures.fill(
                 MeasuredInput.of("use", domain.reading(rules), axes),
                 List.of(), Generator.CandidateCheck.ANY, Budgets.generation());
         assertEquals(List.of(), filled.unresolved(), filled.unresolved().toString());

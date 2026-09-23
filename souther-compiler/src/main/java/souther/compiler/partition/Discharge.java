@@ -29,13 +29,15 @@ import java.util.Set;
  * #toString}), which is what a message about one run reading the same way twice wanted of it.
  *
  * <p><b>{@link #answers} is the one canonical map, and the sole authority for every view below
- * it.</b> {@link #classes}, {@link #arms}, {@link #pairs} and the single-obligation {@code at}
- * overloads are read off {@code answers} on every call rather than cached beside it — so there is
- * nothing for a kind added to {@link GenerationObligation} to fall out of step with, and no second
- * map for a reader to find stale. A single-obligation lookup wraps the target in the obligation it
- * belongs to and asks {@code answers} directly, which costs no walk of the others; a kind that
- * wants every entry of itself has no way to avoid visiting them, cached or not. See {@link
- * GenerationAnswer} for why the values these project are not one shared disposition type either.
+ * it.</b> {@link #classes} and {@link #pairs} are read off {@code answers} on every call rather
+ * than cached beside it, and so is a single-obligation lookup at a class, a pair or a meeting: it
+ * wraps the target in the obligation it belongs to and asks {@code answers} directly, which costs
+ * no walk of the others. {@link #arms} is the one projection still cached — {@link
+ * #at(souther.compiler.coverage.ArmProbe)} is asked once per finding of a behavior, over every
+ * arm, by a reader holding no obligation to wrap a key from; caching it once here is what spares
+ * that reader the walk of every answer {@code arms} would otherwise cost on every finding. See
+ * {@link GenerationAnswer} for why the values these project are not one shared disposition type
+ * either.
  *
  * <p>Not a record, for the same reason: what {@link #equals} and {@link #hashCode} answer with is
  * {@link #plan} and {@link #answers} alone, held in no order — the derived views are computed from
@@ -45,6 +47,7 @@ public final class Discharge {
 
     private final GenerationPlan plan;
     private final Map<GenerationObligation, GenerationAnswer> answers;
+    private final Map<Generator.ArmOwed, ArmDisposition> arms;
 
     public Discharge(GenerationPlan plan, Map<GenerationObligation, GenerationAnswer> answers) {
         Objects.requireNonNull(plan, "a discharge answers a plan");
@@ -65,6 +68,15 @@ public final class Discharge {
         }
         this.plan = plan;
         this.answers = validated;
+        // The one projection worth walking once here rather than rebuilding on every finding a
+        // reader asks at(ArmProbe) for — see the class comment.
+        Map<Generator.ArmOwed, ArmDisposition> arms = new LinkedHashMap<>();
+        for (GenerationAnswer each : validated.values()) {
+            if (each instanceof GenerationAnswer.Arm(var obligation, var disposition)) {
+                arms.put(obligation.target(), disposition);
+            }
+        }
+        this.arms = Collections.unmodifiableMap(arms);
     }
 
     /**
@@ -137,13 +149,7 @@ public final class Discharge {
 
     /** One arm apiece, or none where the plan named none. */
     public Map<Generator.ArmOwed, ArmDisposition> arms() {
-        Map<Generator.ArmOwed, ArmDisposition> out = new LinkedHashMap<>();
-        for (GenerationAnswer each : answers.values()) {
-            if (each instanceof GenerationAnswer.Arm(var obligation, var disposition)) {
-                out.put(obligation.target(), disposition);
-            }
-        }
-        return Collections.unmodifiableMap(out);
+        return arms;
     }
 
     /** One combination of two classes apiece, or none where the plan named none. */
@@ -177,8 +183,7 @@ public final class Discharge {
 
     /** What became of one arm, or null where this run was not asked about it. */
     public ArmDisposition at(Generator.ArmOwed owed) {
-        return answers.get(new GenerationObligation.Arm(owed))
-                instanceof GenerationAnswer.Arm(var _, var disposition) ? disposition : null;
+        return arms.get(owed);
     }
 
     /**
@@ -202,7 +207,7 @@ public final class Discharge {
     public ArmDisposition at(souther.compiler.coverage.ArmProbe probe) {
         ArmDisposition only = null;
         int claiming = 0;
-        for (Map.Entry<Generator.ArmOwed, ArmDisposition> each : arms().entrySet()) {
+        for (Map.Entry<Generator.ArmOwed, ArmDisposition> each : arms.entrySet()) {
             if (each.getKey().recordedAt(probe)) {
                 claiming++;
                 only = each.getValue();

@@ -206,9 +206,9 @@ class AGroupTooWideToWalkSaysSoTest {
         Model narrow = Model.of(TWELVE);
 
         Set<ArmProbe> fromWide =
-                Generator.everyArmACombinationMayTake(wide.subject(), wide.groups(), Budgets.generation());
+                GenerationFixtures.everyArmACombinationMayTake(wide.subject(), wide.groups(), Budgets.generation());
         Set<ArmProbe> fromNarrow =
-                Generator.everyArmACombinationMayTake(narrow.subject(), narrow.groups(), Budgets.generation());
+                GenerationFixtures.everyArmACombinationMayTake(narrow.subject(), narrow.groups(), Budgets.generation());
 
         assertFalse(fromWide.isEmpty(),
                 "the arms behind the group the limit held back are still named");
@@ -233,7 +233,7 @@ class AGroupTooWideToWalkSaysSoTest {
     void anArmBehindTheHeldGroupIsAnsweredFromTheWayIntoIt() {
         Model model = Model.of(THIRTEEN);
 
-        FillResult composed = Generator.fill(model.subject(), List.of(),
+        FillResult composed = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(), Generator.Trial.NOTHING_RUNS, Budgets.generation());
 
         assertFalse(composed.discharge().arms().values().isEmpty(), () -> "the arms are answered: " + composed.discharge().arms().values());
@@ -263,7 +263,7 @@ class AGroupTooWideToWalkSaysSoTest {
     void aGroupNothingWasAskedForBehindIsNotReported() {
         Model model = Model.of(THIRTEEN);
 
-        FillResult asked = Generator.fill(model.subject(), List.of(),
+        FillResult asked = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(), Generator.Trial.NOTHING_RUNS,
                 List.of(), List.of(), List.of(), Budgets.generation());
 
@@ -385,12 +385,12 @@ class AGroupTooWideToWalkSaysSoTest {
         assertEquals(1, offered.notOffered().size(), "the outer group is past the budget");
         assertEquals(3, offered.groups().size(), "and the three inner ones are offered");
 
-        FillResult composed = Generator.fill(model.subject(), List.of(),
+        FillResult composed = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(), Generator.Trial.NOTHING_RUNS, budget);
 
         // The held group is one arms were owed behind: without this, the answer below would hold of
         // a group that claimed nothing and would say nothing about when a group is named.
-        Set<ArmProbe> owed = Generator.everyArmACombinationMayTake(
+        Set<ArmProbe> owed = GenerationFixtures.everyArmACombinationMayTake(
                 model.subject(), model.groups(), budget);
         Set<ArmProbe> behindTheHeldGroup = new LinkedHashSet<>(armsIn(offered.notOffered().get(0)));
         behindTheHeldGroup.retainAll(owed);

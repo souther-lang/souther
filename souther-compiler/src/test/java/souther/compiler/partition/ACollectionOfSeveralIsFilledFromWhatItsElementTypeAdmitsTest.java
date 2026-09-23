@@ -72,7 +72,7 @@ class ACollectionOfSeveralIsFilledFromWhatItsElementTypeAdmitsTest {
                 InputDomain.of(sigs.get("countThem"), rules, ReadAs.THE_COMPILATION_DOES);
         Partitions.Partitioning partitioning =
                 Partitions.of("countThem", domain, rules, ReadAs.THE_COMPILATION_DOES);
-        return Generator.fill(MeasuredInput.of("countThem", domain.reading(rules), partitioning),
+        return GenerationFixtures.fill(MeasuredInput.of("countThem", domain.reading(rules), partitioning),
                 List.of(), Generator.CandidateCheck.ANY, Budgets.generation());
     }
 

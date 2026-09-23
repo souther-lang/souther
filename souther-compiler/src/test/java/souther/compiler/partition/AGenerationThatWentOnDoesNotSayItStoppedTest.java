@@ -121,7 +121,7 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
         });
 
         FillResult filled =
-                Generator.fill(subject, List.of(Generator.ObservedRow.unseen(row)),
+                GenerationFixtures.fill(subject, List.of(Generator.ObservedRow.unseen(row)),
                         Generator.CandidateCheck.ANY, Budgets.generation());
 
         assertFalse(filled.rows().isEmpty(), "the positions it could read were filled");
