@@ -242,13 +242,21 @@ public final class Main {
             System.err.println(Usage.of(CliCommand.COMPILE));
             return 2;
         }
+        CompilationSources read;
+        try {
+            read = read(sources);
+        } catch (IOException e) {
+            System.err.println("io error: " + e.getMessage());
+            return 1;
+        }
+        SourceContextResolver contexts = read.contexts();
         List<Located> warnings = new ArrayList<>();
         try {
             Map<String, ClassFileImage> classes =
-                    compiledClasses(sources, classPath, warnings, measure);
+                    compiledClasses(read, classPath, warnings, measure);
             // Before the written files: the warnings are about the source, and a long list of paths
             // between them and the command would bury them.
-            report(warnings, sources, render);
+            report(warnings, contexts, render);
             if (refuseWarnings && !warnings.isEmpty()) {
                 return refused(render);
             }
@@ -257,12 +265,12 @@ public final class Main {
             }
             return 0;
         } catch (CompileException e) {
-            reportCompileError(e, sources, render);
+            reportCompileError(e, contexts, render);
             return 1;
         } catch (IOException e) {
             // The compile itself finished — these warnings are the whole set, and what stopped the
             // command was writing the classes out, which says nothing about the source.
-            report(warnings, sources, render);
+            report(warnings, contexts, render);
             System.err.println("io error: " + e.getMessage());
             return 1;
         }
@@ -342,9 +350,16 @@ public final class Main {
             System.err.println(Usage.of(CliCommand.EXAMPLES));
             return 2;
         }
+        CompilationSources read;
+        try {
+            read = read(sources);
+        } catch (IOException e) {
+            System.err.println("io error: " + e.getMessage());
+            return 1;
+        }
+        SourceContextResolver contexts = read.contexts();
         List<Located> warnings = new ArrayList<>();
         try {
-            CompilationSources read = read(sources);
             ModulePath path = classPath.isEmpty() ? ModulePath.EMPTY
                     : ModulePath.ofClassPath(classPath);
             // The analysing entry point, not the compiling one. What the rows cover is a question
@@ -357,7 +372,7 @@ public final class Main {
             List<Located> errors = compilation.errors();
             List<Located> said = new ArrayList<>(errors);
             said.addAll(warnings);
-            report(said, sources, render);
+            report(said, contexts, render);
             // Before the report, because a name that names nothing is not something a report can
             // say. Filtering one after the fact leaves an empty document whose every word is about
             // what was measured, and nothing measured anything.
@@ -421,10 +436,7 @@ public final class Main {
             }
             return 0;
         } catch (CompileException e) {
-            reportCompileError(e, sources, render);
-            return 1;
-        } catch (IOException e) {
-            System.err.println("io error: " + e.getMessage());
+            reportCompileError(e, contexts, render);
             return 1;
         }
     }
@@ -710,25 +722,34 @@ public final class Main {
         if (args == null) {
             return 2;
         }
-        Path source = firstSource(args);
-        List<Path> sources = source == null ? List.of() : List.of(source);
+        Runner.Invocation invocation;
+        CompilationSources read;
+        try {
+            invocation = Runner.parse(args);
+            read = invocation.sources();
+        } catch (Runner.RunException e) {
+            // Raised before anything is compiled, so there is nothing to report beside it.
+            System.err.println(e.localized(render.locale()));
+            return e.exitCode;
+        }
+        SourceContextResolver contexts = read.contexts();
         List<Located> warnings = new ArrayList<>();
         try {
-            String output = Runner.runCli(args, warnings);
+            String output = Runner.run(invocation, read, warnings);
             // The warnings go to stderr and the behavior's output to stdout, so a caller piping the
             // result reads JSON and nothing else.
-            report(warnings, sources, render);
+            report(warnings, contexts, render);
             System.out.println(output);
             return 0;
         } catch (Runner.RunException e) {
             // The compile finished before the run began, so these warnings are the whole set — and a
             // run that aborted on an invariant is where a warning that the construction was unproven
-            // is worth most. A usage error is raised before any of it and carries none.
-            report(warnings, sources, render);
+            // is worth most.
+            report(warnings, contexts, render);
             System.err.println(e.localized(render.locale()));
             return e.exitCode;
         } catch (CompileException e) {
-            reportCompileError(e, sources, render);
+            reportCompileError(e, contexts, render);
             sayHowRunReachesAModule(e, render);
             return 1;
         }
@@ -769,30 +790,16 @@ public final class Main {
         }
     }
 
-    /**
-     * What to quote for each source a diagnostic points into, under the id the compile gave it.
-     *
-     * <p>Read the way the compile read them, so a report quotes a file under the name and the id the
-     * compile knew it by. A file that cannot be read leaves every snippet out rather than quoting some
-     * of them — a snippet-less rendering is the honest fallback.
-     */
-    private static SourceContextResolver sourcesOf(List<Path> sources) {
-        try {
-            return read(sources).contexts();
-        } catch (IOException _) {
-            return SourceContextResolver.none();
-        }
-    }
-
     /** Renders a compile error: an Elm-style snippet (or JSON) in the chosen locale, or the legacy
      * one-line form when the error is not yet structured. An error that carries several diagnostics
      * — every failing {@code example} row — prints each, so none of the reasons is lost. */
-    private static void reportCompileError(CompileException e, List<Path> sources, RenderOptions render) {
+    private static void reportCompileError(CompileException e, SourceContextResolver contexts,
+                                           RenderOptions render) {
         if (e.diagnostic() == null) {
             System.err.println(e.getMessage());
             return;
         }
-        report(e.locatedDiagnostics(), sources, render);
+        report(e.locatedDiagnostics(), contexts, render);
     }
 
     /**
@@ -811,36 +818,22 @@ public final class Main {
         return 1;
     }
 
-    /** Prints each diagnostic to stderr as the chosen renderer renders it, quoting the file it
-     * belongs to. Errors and warnings take the same path; only where they come from differs. */
-    private static void report(List<Located> located, List<Path> sources, RenderOptions render) {
+    /**
+     * Prints each diagnostic to stderr as the chosen renderer renders it, quoting the file it
+     * belongs to. Errors and warnings take the same path; only where they come from differs.
+     *
+     * <p>Handed the contexts of the sources that were compiled, and never a way to read them again: a
+     * diagnostic's position is a position in the text the compile read, and a file read a second
+     * time may no longer be that text.
+     */
+    private static void report(List<Located> located, SourceContextResolver contexts,
+                               RenderOptions render) {
         Locale locale = render.locale();
         DiagnosticRenderer renderer = render.json()
                 ? new JsonRenderer() : new HumanRenderer(render.useColor());
-        for (String line : DiagnosticRenderer.renderAll(
-                located, sourcesOf(sources), renderer, locale)) {
+        for (String line : DiagnosticRenderer.renderAll(located, contexts, renderer, locale)) {
             System.err.println(line);
         }
-    }
-
-    /**
-     * The first non-option argument of {@code run} — the source file, for the error snippet.
-     *
-     * <p>Every option that takes a value is skipped with it, including the short one: {@code -cp} is
-     * a path and not a file to quote, and reading it as one made the snippet name a file the author
-     * never wrote.
-     */
-    private static Path firstSource(String[] args) {
-        for (int i = 0; i < args.length; i++) {
-            String a = args[i];
-            if (a.equals("--behavior") || a.equals("--input")
-                    || a.equals("-cp") || a.equals("--class-path")) {
-                i++;
-            } else if (!a.startsWith("--")) {
-                return Path.of(a);
-            }
-        }
-        return null;
     }
 
     /**
@@ -1068,9 +1061,17 @@ public final class Main {
     static Map<String, ClassFileImage> compiledClasses(List<Path> sources, List<Path> classPath,
                                                List<Located> warningsOut, Adequacy.Asked measure)
             throws IOException {
+        return compiledClasses(read(sources), classPath, warningsOut, measure);
+    }
+
+    /** As above, of sources already read. */
+    private static Map<String, ClassFileImage> compiledClasses(CompilationSources sources,
+                                                               List<Path> classPath,
+                                                               List<Located> warningsOut,
+                                                               Adequacy.Asked measure) {
         ModulePath path = classPath.isEmpty() ? ModulePath.EMPTY : ModulePath.ofClassPath(classPath);
         List<Located> compileWarnings = new ArrayList<>();
-        Compilation compilation = Compiler.compiled(read(sources), path, compileWarnings, measure);
+        Compilation compilation = Compiler.compiled(sources, path, compileWarnings, measure);
         warningsOut.addAll(compileWarnings);
         return compilation.classes();
     }

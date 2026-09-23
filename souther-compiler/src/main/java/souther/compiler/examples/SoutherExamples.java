@@ -245,7 +245,6 @@ public final class SoutherExamples {
         return List.copyOf(sigs.keySet());
     }
 
-    /** What a lone file's module is called when it leaves its `module` header off. */
     private static String read(Path source) {
         try {
             return Files.readString(source);

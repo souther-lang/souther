@@ -12,7 +12,6 @@ import souther.compiler.check.Sig;
 import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.BoundaryOutput;
 import souther.compiler.meta.ModulePath;
-import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
@@ -128,10 +127,25 @@ public final class Runner {
         return new RunException(key, message, 1, null, args);
     }
 
-    /** Parses the {@code run} subcommand's arguments (everything after {@code run}) and runs it,
-     *  collecting the compile's warnings into {@code warningsOut} for the caller to render —
-     *  running a module says what compiling it would have said. */
-    static String runCli(String[] args, List<Located> warningsOut) {
+    /**
+     * A {@code run} command line, read.
+     *
+     * @param file the source to run
+     * @param behaviorName the behavior to drive, or null to take the only runnable one
+     * @param inputJson the input, or null for a behavior that takes none
+     * @param path what an import naming no module in the file resolves against
+     */
+    record Invocation(Path file, String behaviorName, String inputJson, ModulePath path) {
+
+        /** The file, read — what the compile is handed and what a report about it quotes. */
+        CompilationSources sources() {
+            return CompilationSources.files(
+                    List.of(new SourceFile(file.toString(), read(file))));
+        }
+    }
+
+    /** Parses the {@code run} subcommand's arguments (everything after {@code run}). */
+    static Invocation parse(String[] args) {
         Path file = null;
         String behaviorName = null;
         String inputJson = null;
@@ -155,7 +169,7 @@ public final class Runner {
         if (file == null) {
             throw usage("run.usage.nofile", "no source file given");
         }
-        return run(file, behaviorName, inputJson, warningsOut, pathOf(classPath));
+        return new Invocation(file, behaviorName, inputJson, pathOf(classPath));
     }
 
     /** A class path as its entries, in the order they are searched. */
@@ -200,14 +214,26 @@ public final class Runner {
      */
     static String run(Path file, String behaviorName, String inputJson, List<Located> warningsOut,
                       ModulePath path) {
-        CompilationSources sources =
-                CompilationSources.files(List.of(new SourceFile(file.toString(), read(file))));
+        Invocation invocation = new Invocation(file, behaviorName, inputJson, path);
+        return run(invocation, invocation.sources(), warningsOut);
+    }
+
+    /**
+     * Compiles {@code sources} — the invocation's file, as the caller read it — and drives the
+     * behavior it names.
+     *
+     * <p>Handed the sources rather than reading them, so a caller rendering what the compile said
+     * quotes the text that was compiled and not a later reading of the file.
+     */
+    static String run(Invocation invocation, CompilationSources sources,
+                      List<Located> warningsOut) {
+        String behaviorName = invocation.behaviorName();
+        String inputJson = invocation.inputJson();
 
         // One compilation answers all of it. Re-reading the source here to find the behavior and
         // its signature would resolve every name a second time, against a tree this compile has
         // already produced.
-        Compilation compilation =
-                Compiler.compiled(sources, path, warningsOut, Adequacy.Asked.NOTHING);
+        Compilation compilation = Compiler.compiled(sources, invocation.path(), warningsOut);
         // The module this file declares, and not one it reached: what the path holds is read for its
         // declarations and is no part of what this compilation declares.
         Prepared module = compilation.module(compilation.modules().get(0));

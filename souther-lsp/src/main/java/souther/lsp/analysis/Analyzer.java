@@ -238,8 +238,7 @@ public final class Analyzer {
             // failing one (E1805) surfaces as an editor diagnostic. What it imports is resolved like
             // any other import, against a path this document is given none of.
             List<Located> warnings = new ArrayList<>();
-            Compiler.compiled(CompilationSources.text(text), ModulePath.EMPTY, warnings,
-                    Adequacy.Asked.NOTHING);
+            Compiler.compiled(CompilationSources.text(text), ModulePath.EMPTY, warnings);
             for (Located w : warnings) {
                 out.add(fromDiagnostic(text, lines, w.diagnostic()));
             }

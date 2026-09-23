@@ -9,7 +9,6 @@ import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.Compiler;
-import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.meta.ModulePath;
 
@@ -87,8 +86,7 @@ public final class SoutherProcessor extends AbstractProcessor {
             // there is nothing to configure.
             ModulePath path = compileClassPath();
             List<Located> warnings = new ArrayList<>();
-            Compilation compilation =
-                    Compiler.compiled(sources, path, warnings, Adequacy.Asked.NOTHING);
+            Compilation compilation = Compiler.compiled(sources, path, warnings);
             // A warning is the whole of what the checker has to say about an unproven construction,
             // so a build that never reports one lets them accumulate while staying green.
             for (String reported : render(warnings, sources)) {

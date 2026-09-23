@@ -184,9 +184,25 @@ public final class Compiler {
      * imports reach the path whatever the file is named.
      */
     public static Compilation compiled(CompilationSources sources, ModulePath path,
+                                       List<Located> warningsOut) {
+        return compiled(sources, path, warningsOut, Adequacy.Asked.NOTHING);
+    }
+
+    /** As above, telling the compile how much of the rows' coverage to measure and warn about. */
+    public static Compilation compiled(CompilationSources sources, ModulePath path,
                                        List<Located> warningsOut, Adequacy.Asked measure) {
         return driven(() -> accepted(sources.compilation(path), warningsOut, measure,
                 null, null, null));
+    }
+
+    /**
+     * The compilation of one source handed over as a string, named {@code defaultModuleName} where
+     * it writes no header, resolving an import that names no module in it against {@code path}.
+     */
+    public static Compilation compiled(String source, String defaultModuleName,
+                                       List<Located> warningsOut, ModulePath path) {
+        return driven(() -> accepted(Compilation.ofSource(source, defaultModuleName, path),
+                warningsOut, Adequacy.Asked.NOTHING, null, null, null));
     }
 
     private static Compilation compiled(String source, String defaultModuleName,
@@ -237,6 +253,13 @@ public final class Compiler {
     public static Compilation analyzed(CompilationSources sources, ModulePath path,
                                        List<Located> warningsOut, Adequacy.Asked measure) {
         return answered(sources.compilation(path), warningsOut, measure);
+    }
+
+    /** As {@link #analyzed(CompilationSources, ModulePath, List, Adequacy.Asked)}, measuring
+     *  nothing of what the rows cover. */
+    public static Compilation analyzed(CompilationSources sources, ModulePath path,
+                                       List<Located> warningsOut) {
+        return analyzed(sources, path, warningsOut, Adequacy.Asked.NOTHING);
     }
 
     /** As {@link #analyzed(CompilationSources, ModulePath, List, Adequacy.Asked)}, of one source

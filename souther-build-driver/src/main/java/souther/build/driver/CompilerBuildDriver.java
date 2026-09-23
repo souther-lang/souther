@@ -15,7 +15,6 @@ import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
-import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
 import java.io.IOException;
@@ -42,7 +41,7 @@ public final class CompilerBuildDriver implements SoutherBuildDriver {
             List<Located> warnings = new ArrayList<>();
             Compilation compilation;
             try {
-                compilation = Compiler.compiled(sources, path, warnings, Adequacy.Asked.NOTHING);
+                compilation = Compiler.compiled(sources, path, warnings);
             } catch (CompileException e) {
                 return new BuildResult(false,
                         rendered(e.locatedDiagnostics(), sources, locale, Severity.ERROR));
