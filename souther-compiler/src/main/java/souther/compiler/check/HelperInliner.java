@@ -575,6 +575,23 @@ public final class HelperInliner {
         return List.copyOf(result);
     }
 
+    /** The call cycle {@code reference} is on, as the graph that answers {@link #recursiveHelpers}
+     *  has it ({@link HelperGraph#callCycleOf}). */
+    public List<ReachName.Declaration> callCycleOf(ReachName.Declaration reference) {
+        return graph.callCycleOf(reference);
+    }
+
+    /** The declaration {@code call} applies as the call graph reads it — what a sugar is written out
+     *  as, where it is one — or null where what it applies reaches no declaration. */
+    ReachName.Declaration called(Hir.Apply call) {
+        return calledHelper(table.library(), call);
+    }
+
+    /** The library this expansion's table was built over. */
+    Stdlib library() {
+        return table.library();
+    }
+
     /**
      * What this expansion left standing: every recursive helper a call of it survived to, in the
      * order they were met.
@@ -803,7 +820,7 @@ public final class HelperInliner {
      * sugar it takes rewrites to. Null where what is applied is not a name that reaches a
      * declaration: a binding holding a lambda is applied by the expression and reaches nothing.
      */
-    private static ReachName.Declaration calledHelper(Stdlib stdlib, Hir.Apply call) {
+    static ReachName.Declaration calledHelper(Stdlib stdlib, Hir.Apply call) {
         if (!(call.function() instanceof Hir.Var.Denoting callee)) {
             return null;
         }
@@ -3509,27 +3526,13 @@ public final class HelperInliner {
      *
      * <p>Static because the value-cycle check asks it of a table it builds for itself, before an
      * inliner exists. One walk either way: an edge of this graph is what it is, and a reader that
-     * counted a different set of them would be reading a different graph.
+     * counted a different set of them would be reading a different graph. The edges are
+     * {@link HelperEdges#calls}.
      */
     public static void helperCallsIn(Stdlib stdlib, Hir.Expr e,
                                      Map<ReachName.Declaration, HelperEntry> table,
                                      Set<ReachName.Declaration> out) {
-        // Applying a function-typed parameter, or a binding holding a function, is not a call to
-        // whatever else bears that name. The call carries what it resolved to, so it is asked rather
-        // than matched against the helper table — a parameter named like a helper was reaching the
-        // graph as a call to that helper, which made `let f (g: (Int) -> Int) = g(1)` recursive.
-        if (e instanceof Hir.Apply call) {
-            // A sugar is written out before inlining, so a body that folds reaches the recursive
-            // `foldFrom` — recursion classification and what a module has to emit must see that.
-            ReachName.Declaration fn = calledHelper(stdlib, call);
-            if (fn != null && table.containsKey(fn)) {
-                out.add(fn);
-            }
-        }
-        if (e instanceof Hir.ValueInvocation call && table.containsKey(call.target())) {
-            out.add(call.target());
-        }
-        forEachChild(e, c -> helperCallsIn(stdlib, c, table, out));
+        out.addAll(HelperEdges.in(stdlib, e, table).calls());
     }
 
     /** Applies {@code f} to every direct subexpression of {@code e}; the one exhaustive walk

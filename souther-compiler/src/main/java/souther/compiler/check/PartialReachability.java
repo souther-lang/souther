@@ -1,12 +1,13 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.ReachName;
-import souther.compiler.types.ValueName;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -77,14 +78,24 @@ final class PartialReachability {
 
     private final HelperInliner inliner;
 
+    /** What an expression's edges are read against: the library and the declarations the inliner
+     *  reached when this was made, so an expression asked about later is read against the same. */
+    private final Stdlib stdlib;
+    private final Map<ReachName.Declaration, HelperEntry> reachable;
+
     private PartialReachability(Map<ReachName.Declaration, List<ReachName.Declaration>> calls,
-                                Set<ReachName.Declaration> reachingPartial, HelperInliner inliner) {
+                                Set<ReachName.Declaration> reachingPartial, HelperInliner inliner,
+                                Stdlib stdlib, Map<ReachName.Declaration, HelperEntry> reachable) {
         this.calls = calls;
         this.reachingPartial = reachingPartial;
         this.inliner = inliner;
+        this.stdlib = stdlib;
+        this.reachable = reachable;
     }
 
     static PartialReachability of(HelperInliner inliner) {
+        Stdlib stdlib = inliner.library();
+        Map<ReachName.Declaration, HelperEntry> reachable = inliner.reachable();
         Map<ReachName.Declaration, List<ReachName.Declaration>> calls = new LinkedHashMap<>();
         for (HelperEntry entry : inliner.held().values()) {
             // Only what this module declared is a node. What it took on to emit — a prelude helper,
@@ -95,11 +106,12 @@ final class PartialReachability {
                 continue;
             }
             if (entry.definition().body() instanceof Hir.FnBody.Written written) {
-                calls.put(entry.reachedAs(), reachedBy(written.expr(), inliner));
+                calls.put(entry.reachedAs(), reachedBy(written.expr(), stdlib, reachable));
             }
             // an intrinsic declares no body to read what it reaches out of
         }
-        return new PartialReachability(calls, reachingPartial(calls, inliner), inliner);
+        return new PartialReachability(calls, reachingPartial(calls, inliner), inliner, stdlib,
+                reachable);
     }
 
     /** Every node of {@code calls} from which a {@code partial} one is reachable, the
@@ -172,7 +184,7 @@ final class PartialReachability {
      * reaches none. The expression is not on the path — its caller names what it is.
      */
     Optional<List<ReachName.Declaration>> fromExpression(Hir.Expr e) {
-        return search(reachedBy(e, inliner));
+        return search(reachedBy(e, stdlib, reachable));
     }
 
     /** A path as a report writes it: {@code depth -> measure -> spin}. Each node renders as this
@@ -238,66 +250,31 @@ final class PartialReachability {
     }
 
     /**
-     * The helpers {@code e} runs, in name order: the ones it applies, and the values it reads.
-     *
-     * <p>A {@code let} written with no parameter list is a value, and reading its name runs its body —
-     * it is substituted at the reference (ADR-0072), so what it reaches is reached from here. A name
-     * that stands for a helper <em>taking</em> arguments is a different thing: written where a value
-     * goes it becomes a function, and a {@code partial} one may not be written there at all
-     * (spec §fn-rules), which is checked on its own and is why no edge is made for it here.
-     */
-    private static List<ReachName.Declaration> reachedBy(Hir.Expr e, HelperInliner inliner) {
-        // In the order the names render, which is what "in name order" was and is what a report
-        // walking this reads out.
-        Set<ReachName.Declaration> reached =
-                new TreeSet<>(java.util.Comparator.comparing(ReachName.Declaration::rendered));
-        collectReached(e, inliner, reached);
-        return List.copyOf(reached);
-    }
-
-    private static void collectReached(Hir.Expr e, HelperInliner inliner, Set<ReachName.Declaration> out) {
-        switch (e) {
-            // A name nothing answered reaches no declaration, so it makes no edge.
-            case Hir.Apply call when call.answered() != null -> {
-                Hir.FnDef applied = declarationOf(call.answered(), inliner);
-                if (applied != null) {
-                    out.add(keyOf(call.answered()));
-                }
-            }
-            case Hir.Var.Denoting v -> {
-                Hir.FnDef read = declarationOf(v, inliner);
-                if (read != null && read.params().isEmpty()) {
-                    out.add(keyOf(v));
-                }
-            }
-            default -> { }
-        }
-        Hir.forEachChild(e, child -> collectReached(child, inliner, out));
-    }
-
-    /**
-     * The key {@code denotes} is filed under, or null where it denotes nothing a helper table holds.
-     *
-     * <p>The one place a name becomes a node. Every question here goes through it — the graph's edges,
-     * the marker lookup and the value-position check — so none of them can disagree about which
-     * declaration a name reached, and none of them depends on how it was spelled.
+     * The helpers {@code e} runs, in name order: the ones it calls and the values it reads, both as
+     * {@link HelperEdges} finds them. A read is an edge here and not in the call graph, because a
+     * value's body runs where it is read.
      *
      * <p>A library name is a node like any other. The standard library declares nothing {@code partial}
      * today, so keeping it changes no answer; leaving it out would make that a premise of the check
      * rather than a fact about the library, and one the library could stop honouring in silence.
      */
-    private static ReachName.Declaration keyOf(Hir.Var.Denoting named) {
-        return switch (named.denotes()) {
-            // Which node it is, the reference is: settled where the name was resolved and carried
-            // here. What decides whether there is a node at all is what the name denotes — a binding
-            // spelled like a helper reaches no declaration however it is written.
-            case ValueName.Helper _, ValueName.Stdlib _ -> named.reachesADeclaration();
-            case null, default -> null;
-        };
+    private static List<ReachName.Declaration> reachedBy(
+            Hir.Expr e, Stdlib stdlib, Map<ReachName.Declaration, HelperEntry> reachable) {
+        HelperEdges edges = HelperEdges.in(stdlib, e, reachable);
+        // In the order the names render, which is what "in name order" was and is what a report
+        // walking this reads out.
+        Set<ReachName.Declaration> reached =
+                new TreeSet<>(Comparator.comparing(ReachName.Declaration::rendered));
+        reached.addAll(edges.calls());
+        reached.addAll(edges.valueReads());
+        return List.copyOf(reached);
     }
 
+    /** The declaration {@code named} reaches, or null where it reaches none a helper table holds.
+     *  Which one it is, the reference says: settled where the name was resolved, so a binding spelled
+     *  like a helper reaches no declaration however it is written. */
     private static Hir.FnDef declarationOf(Hir.Var.Denoting named, HelperInliner inliner) {
-        ReachName.Declaration key = keyOf(named);
-        return key == null ? null : inliner.helper(key);
+        ReachName.Declaration reference = named.reachesADeclaration();
+        return reference == null ? null : inliner.helper(reference);
     }
 }

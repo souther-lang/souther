@@ -1,7 +1,9 @@
 package souther.compiler.check;
 
+import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -11,6 +13,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -55,15 +59,13 @@ final class TotalityChecker {
         // is the table's answer ({@link HelperInliner#heldAt}), so this walk matches a call by what
         // it reaches and goes on naming what the author wrote, without keeping a correspondence of
         // its own.
-        Map<String, Hir.FnDef> own = new java.util.LinkedHashMap<>();
+        Map<String, Hir.FnDef> own = new LinkedHashMap<>();
         inliner.held().values().forEach(
                 entry -> own.put(entry.address().text(), entry.definition()));
-        Map<String, Set<String>> ownEdges = ownCallGraph(own, inliner);
-        Set<String> handled = new HashSet<>();
-        for (souther.compiler.types.ReachName.Declaration reference : inliner.recursiveHelpers()) {
-            souther.compiler.ast.DefinitionName at = inliner.heldAt(reference);
-            String name = at == null ? null : at.text();
-            Hir.FnDef h = name == null ? null : own.get(name);
+        Set<ReachName.Declaration> handled = new HashSet<>();
+        for (ReachName.Declaration reference : inliner.recursiveHelpers()) {
+            DefinitionName at = inliner.heldAt(reference);
+            Hir.FnDef h = at == null ? null : own.get(at.text());
             // Only what this module declared is checked. A recursive helper it took on to emit — a
             // prelude `List.foldFrom`, one another module published — carries its declaring module's
             // guarantee (ADR-0098), and its own module proved it. Asked of the declaration: the name
@@ -72,25 +74,53 @@ final class TotalityChecker {
             if (h == null || !h.declaredBy(inliner.moduleName())) {
                 continue;
             }
-            Set<String> group = cycleMembers(name, ownEdges);   // the strongly-connected group (>= 1)
-            if (!handled.add(name)) {
+            if (!handled.add(reference)) {
                 continue;   // a sibling of an already-analyzed group
             }
-            handled.addAll(group);
+            Map<ReachName.Declaration, String> group = groupOf(reference, inliner, own);
+            handled.addAll(group.keySet());
+            Set<String> names = new LinkedHashSet<>(group.values());
             // `partial` opts out; a `partial` anywhere in a mutual group opts the whole group out.
-            if (group.stream().anyMatch(m -> own.get(m).partial())) {
+            if (names.stream().anyMatch(m -> own.get(m).partial())) {
                 continue;
             }
-            Built built = buildScgs(group, own);
+            Built built = buildScgs(group, own, inliner);
             Set<Scg> closure = close(built.scgs());
             if (closure == null) {
-                throw tooComplex(group, own);
+                throw tooComplex(names, own);
             }
             if (isSizeChangeTerminating(closure)) {
                 continue;
             }
-            throw notTerminating(group, own, built.firstCall());
+            throw notTerminating(names, own, built.firstCall());
         }
+    }
+
+    /**
+     * The group {@code reference} is checked in: the call cycle it is on, each member at the address
+     * this module holds it.
+     *
+     * <p>The cycle is the one the call graph answers ({@link HelperInliner#callCycleOf}), which is the
+     * graph that said {@code reference} recurses. A group read again off the bodies could come out
+     * without it — and the size-change criterion holds of no graphs at all, so an empty group is one
+     * proven total.
+     *
+     * <p>Every member is held here. A cycle through a helper this module declared stays among its
+     * own: nothing it reaches — an import, the library — calls back into it.
+     */
+    private static Map<ReachName.Declaration, String> groupOf(ReachName.Declaration reference,
+                                                           HelperInliner inliner,
+                                                           Map<String, Hir.FnDef> own) {
+        Map<ReachName.Declaration, String> group = new LinkedHashMap<>();
+        for (ReachName.Declaration member : inliner.callCycleOf(reference)) {
+            DefinitionName at = inliner.heldAt(member);
+            if (at == null || !own.containsKey(at.text())) {
+                throw new IllegalStateException("`" + member.rendered() + "` is on the call cycle of `"
+                        + reference.rendered() + "` and is not held by the module that declared it");
+            }
+            group.put(member, at.text());
+        }
+        return group;
     }
 
     /** The rejection for a group that is not size-change terminating. A group of one keeps the
@@ -158,11 +188,14 @@ final class TotalityChecker {
      * source position for a rejection message — recorded here so the reject path need not re-walk). */
     private record Built(List<Scg> scgs, Map<String, Hir.Apply> firstCall) {}
 
-    /** Builds the per-call-edge size-change graphs for every member of {@code group}. */
-    private static Built buildScgs(Set<String> group, Map<String, Hir.FnDef> own) {
+    /** Builds the per-call-edge size-change graphs for every member of {@code group}. A call is
+     * matched to a member by the declaration it applies, and a graph is labelled with where the
+     * member is held. */
+    private static Built buildScgs(Map<ReachName.Declaration, String> group,
+                                   Map<String, Hir.FnDef> own, HelperInliner inliner) {
         List<Scg> scgs = new ArrayList<>();
         Map<String, Hir.Apply> firstCall = new HashMap<>();
-        for (String f : group) {
+        for (String f : group.values()) {
             Hir.FnDef def = own.get(f);
             List<Hir.FnParam> params = def.params();
             // which bindings the parameters are, not what they are spelled: a `let` inside the
@@ -174,7 +207,8 @@ final class TotalityChecker {
                 idxOf.put(params.get(i).binder().id(), i);
             }
             List<RecCall> calls = new ArrayList<>();
-            walk(def.writtenBody(), group, paramNames, new HashMap<>(), new HashMap<>(), calls);
+            walk(def.writtenBody(), new Members(group, inliner), paramNames, new HashMap<>(),
+                    new HashMap<>(), calls);
             for (RecCall rc : calls) {
                 firstCall.putIfAbsent(f, rc.call());
                 int toArity = own.get(rc.callee()).params().size();
@@ -292,6 +326,19 @@ final class TotalityChecker {
      * parameters already settled at the call. */
     private record RecCall(String callee, Hir.Apply call, List<ArgRelation> args) {}
 
+    /** The group a walk records calls to: each member by the declaration it is, at the address it is
+     * held. */
+    private record Members(Map<ReachName.Declaration, String> heldAt, HelperInliner inliner) {
+
+        /** Where the member {@code call} applies is held, or null where it applies none. Asked the
+         * way the call graph asks it ({@link HelperInliner#called}), so a call recorded here is an
+         * edge of the cycle the group was taken from. */
+        String calledAt(Hir.Apply call) {
+            ReachName.Declaration applied = inliner.called(call);
+            return applied == null ? null : heldAt.get(applied);
+        }
+    }
+
     /**
      * Walks {@code e}, threading {@code lt} (each local -&gt; the parameters it is a strictly smaller
      * part of) and {@code eq} (each local -&gt; the parameters it is exactly equal to, e.g. a {@code let}
@@ -305,7 +352,7 @@ final class TotalityChecker {
      * {@link ArgRelation}s it already asked for). A DFS backtracks, so no branch this returns to
      * ever needed a binding another branch added.
      */
-    private static void walk(Hir.Expr e, Set<String> group, Set<BindingId> paramNames,
+    private static void walk(Hir.Expr e, Members group, Set<BindingId> paramNames,
                              Map<BindingId, Set<BindingId>> lt, Map<BindingId, Set<BindingId>> eq,
                              List<RecCall> calls) {
         switch (e) {
@@ -343,17 +390,17 @@ final class TotalityChecker {
                 }
             }
             case Hir.Apply call -> {
-                // Named by what it reaches, which is what the group holds and what the definitions
-                // are keyed by. The spelling is what a report quotes: a helper of another module is
-                // written qualified where a reader reaches it and bare where its author wrote it,
-                // and the same call answers both.
-                if (call.answered() != null && group.contains(call.answered().reaches())) {
+                // Matched by the declaration it applies, and recorded at the address that member is
+                // held, which is what the definitions are keyed by. The spelling is what a report
+                // quotes and decides neither.
+                String callee = group.calledAt(call);
+                if (callee != null) {
                     List<ArgRelation> args = new ArrayList<>();
                     for (Hir.Expr arg : call.args()) {
                         args.add(new ArgRelation(strictSmaller(arg, lt, eq, paramNames),
                                 rootParams(arg, lt, eq, paramNames)));
                     }
-                    calls.add(new RecCall(call.answered().reaches(), call, args));
+                    calls.add(new RecCall(callee, call, args));
                 }
                 Combinators.Written handed = Combinators.handedTo(call);
                 for (Hir.Expr arg : call.args()) {
@@ -446,67 +493,6 @@ final class TotalityChecker {
             sb.append('`').append(sorted.get(i)).append('`');
         }
         return sb.toString();
-    }
-
-    // --- call graph over module-own helpers (for grouping mutual recursion) ---
-
-    private static Map<String, Set<String>> ownCallGraph(Map<String, Hir.FnDef> own,
-                                                        HelperInliner inliner) {
-        Map<String, Set<String>> edges = new HashMap<>();
-        for (Map.Entry<String, Hir.FnDef> h : own.entrySet()) {
-            Set<String> called = new HashSet<>();
-            collectOwnCalls(h.getValue().writtenBody(), inliner, own.keySet(), called);
-            edges.put(h.getKey(), called);
-        }
-        return edges;
-    }
-
-    /**
-     * Every call in {@code e} that reaches something this module holds, as the address it holds it
-     * at.
-     *
-     * <p>Matched on what the call reaches and recorded as where that is held. Matched on the
-     * spelling and recorded as the spelling — which is what this did — a module's own helper
-     * written through its own module reaches {@code f} and is recorded as {@code app.own.f}, so the
-     * edge goes to a name the graph has no node for and the cycle it is on is not found.
-     */
-    private static void collectOwnCalls(Hir.Expr e, HelperInliner inliner, Set<String> own,
-                                        Set<String> out) {
-        if (e instanceof Hir.Apply call && call.answered() != null) {
-            souther.compiler.types.ReachName.Declaration reaches =
-                    call.answered().reachesADeclaration();
-            souther.compiler.ast.DefinitionName at =
-                    reaches == null ? null : inliner.heldAt(reaches);
-            if (at != null && own.contains(at.text())) {
-                out.add(at.text());
-            }
-        }
-        forEachChild(e, c -> collectOwnCalls(c, inliner, own, out));
-    }
-
-    /** The helpers on {@code name}'s recursive cycle: those reachable from {@code name} that also reach
-     * {@code name} back. Includes {@code name} when it is (self- or mutually-) recursive. */
-    private static Set<String> cycleMembers(String name, Map<String, Set<String>> edges) {
-        Set<String> forward = reachable(name, edges);
-        Set<String> cycle = new HashSet<>();
-        for (String m : forward) {
-            if (reachable(m, edges).contains(name)) {
-                cycle.add(m);
-            }
-        }
-        return cycle;
-    }
-
-    private static Set<String> reachable(String from, Map<String, Set<String>> edges) {
-        Set<String> seen = new HashSet<>();
-        java.util.Deque<String> work = new java.util.ArrayDeque<>(edges.getOrDefault(from, Set.of()));
-        while (!work.isEmpty()) {
-            String n = work.poll();
-            if (seen.add(n)) {
-                work.addAll(edges.getOrDefault(n, Set.of()));
-            }
-        }
-        return seen;
     }
 
     /** Said at the helper's own name: `let` comes first, and a report anchored at the definition
