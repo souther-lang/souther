@@ -34,7 +34,8 @@ enum CliOption {
 
     DIRECTORY("compile/init", "<path>", "where what this command writes goes", "-d", "--dir"),
     ADEQUACY("compile", adequacyLevels("|"),
-            "how much of the model to measure and warn about (default off)", "--adequacy"),
+            "how much of the model to measure and warn about (default "
+                    + Adequacy.Level.OFF.spelling() + ")", "--adequacy"),
     WARNINGS("compile", "report|error", "refuse a compile that warns (default report)",
             "--warnings"),
     BEHAVIOR("run/examples", "<name>", "report only this behavior", "--behavior"),

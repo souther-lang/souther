@@ -55,17 +55,18 @@ class TheShippedServerNamesTheVersionItWasBuiltAsIT {
     void theHandshakeFromTheUberJarStatesWhatThisBuildIs() throws Exception {
         // Launched the way an editor launches it: with the JVM arguments the jar's own tooling
         // metadata states, read out of the archive without starting it.
-        List<String> command = new ArrayList<>();
-        command.add(Path.of(System.getProperty("java.home"), "bin", "java").toString());
+        JsonNode tooling;
         try (ZipFile archive = new ZipFile(jar.toFile())) {
             ZipEntry entry = archive.getEntry(ToolingMetadata.RESOURCE);
             assertNotNull(entry, "the uber jar carries " + ToolingMetadata.RESOURCE);
             try (InputStream in = archive.getInputStream(entry)) {
-                for (JsonNode argument : JSON.readTree(in).get("runtime").get("java")
-                        .get("requiredJvmArgs")) {
-                    command.add(argument.asString());
-                }
+                tooling = JSON.readTree(in);
             }
+        }
+        List<String> command = new ArrayList<>();
+        command.add(Path.of(System.getProperty("java.home"), "bin", "java").toString());
+        for (JsonNode argument : tooling.get("runtime").get("java").get("requiredJvmArgs")) {
+            command.add(argument.asString());
         }
         command.add("-jar");
         command.add(jar.toString());
@@ -94,6 +95,9 @@ class TheShippedServerNamesTheVersionItWasBuiltAsIT {
         assertEquals(System.getProperty("souther.version"),
                 handshake.get("result").get("serverInfo").get("version").asString(),
                 "the artifact an editor launches names the version this build is");
+        assertEquals(tooling.get("compilerVersion").asString(),
+                handshake.get("result").get("serverInfo").get("version").asString(),
+                "the metadata read out of the jar and the handshake name one version");
     }
 
     private static String message(Integer id, String method, Object params) {
