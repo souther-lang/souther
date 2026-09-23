@@ -344,7 +344,8 @@ public final class LspServer {
                 yield NOTHING;
             }
             case DID_CHANGE_WATCHED_FILES -> {
-                workspace.markChanged();   // a file changed on disk; drop the cached scan and re-read
+                InboundDecoders.decode(InboundDecoders.WATCHED_FILES, params).ifPresentOrElse(
+                        p -> workspace.filesChanged(p.uris()), workspace::markChanged);
                 diagnosticsAreStale = true;
                 yield NOTHING;
             }

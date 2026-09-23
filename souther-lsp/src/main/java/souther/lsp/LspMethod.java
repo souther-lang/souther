@@ -1,6 +1,7 @@
 package souther.lsp;
 
 import souther.lsp.analysis.Analyzer;
+import souther.lsp.analysis.Workspace;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -36,7 +37,7 @@ public enum LspMethod {
     DID_OPEN("textDocument/didOpen", Announced.TEXT_DOCUMENT_SYNC),
     DID_CHANGE("textDocument/didChange", Announced.TEXT_DOCUMENT_SYNC),
     DID_CLOSE("textDocument/didClose", Announced.TEXT_DOCUMENT_SYNC),
-    DID_CHANGE_WATCHED_FILES("workspace/didChangeWatchedFiles", Announced.SOU_FILE_WATCHER),
+    DID_CHANGE_WATCHED_FILES("workspace/didChangeWatchedFiles", Announced.WORKSPACE_FILE_WATCHER),
     // `changeNotifications` is what tells a client it may send this; `supported` alone says only
     // that folders given at initialize are read.
     DID_CHANGE_WORKSPACE_FOLDERS("workspace/didChangeWorkspaceFolders",
@@ -98,9 +99,27 @@ public enum LspMethod {
         static final Advertisement SEMANTIC_TOKENS =
                 new Advertisement.StaticCapability("semanticTokensProvider", semanticTokens());
 
-        static final Advertisement SOU_FILE_WATCHER = new Advertisement.DynamicRegistration(
-                "souther-sou-watcher",
-                Map.of("watchers", List.of(Map.of("globPattern", "**/*.sou"))));
+        static final Advertisement WORKSPACE_FILE_WATCHER = new Advertisement.DynamicRegistration(
+                "souther-workspace-watcher", Map.of("watchers", workspaceWatchers()));
+
+        /**
+         * Every change to a source, and a class output appearing or going.
+         *
+         * <p>Only creation and deletion under a class output: what the workspace holds of one is that
+         * it is there, and a build rewriting its classes would otherwise report every one of them.
+         */
+        private static List<Map<String, Object>> workspaceWatchers() {
+            List<Map<String, Object>> watchers = new ArrayList<>();
+            watchers.add(Map.of("globPattern", Workspace.sourceGlob()));
+            for (String glob : Workspace.classOutputGlobs()) {
+                watchers.add(Map.of("globPattern", glob, "kind", WATCH_CREATE | WATCH_DELETE));
+            }
+            return List.copyOf(watchers);
+        }
+
+        /** {@code WatchKind.Create} and {@code WatchKind.Delete}, which a watcher's kind combines. */
+        private static final int WATCH_CREATE = 1;
+        private static final int WATCH_DELETE = 4;
 
         private static Map<String, Object> semanticTokens() {
             Map<String, Object> options = new LinkedHashMap<>();

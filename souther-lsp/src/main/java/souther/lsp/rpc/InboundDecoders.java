@@ -46,6 +46,11 @@ public final class InboundDecoders {
                     field("contentChanges", list(field("text", string()).asDecoder())))
                     .map((uri, texts) -> new Params.DidChange(uri, texts.get(texts.size() - 1)));
 
+    /** {@code { changes: [ { uri, type }, ... ] }} — which way a file changed is not read. */
+    public static final Decoder<JsonNode, Params.WatchedFiles> WATCHED_FILES =
+            field("changes", list(field("uri", string()).asDecoder())).asDecoder()
+                    .map(Params.WatchedFiles::new);
+
     /** {@code [ { uri, name }, ... ]} — the name is the client's label for a folder and not read. */
     private static final Decoder<JsonNode, List<String>> FOLDER_URIS =
             list(field("uri", string()).asDecoder());
