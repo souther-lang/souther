@@ -938,11 +938,16 @@ public final class CstParser {
 
     /** A brace-delimited block: {@code let}/{@code guard} statements then a result expression. */
     private void blockExpr() {
-        start(SyntaxKind.BLOCK_EXPR);
-        expect(SyntaxKind.LBRACE, Reading.AN_EXPRESSION);
-        blockStatements();
-        expect(SyntaxKind.RBRACE, Reading.AN_EXPRESSION);
-        finish();
+        boolean saved = admitLambda();
+        try {
+            start(SyntaxKind.BLOCK_EXPR);
+            expect(SyntaxKind.LBRACE, Reading.AN_EXPRESSION);
+            blockStatements();
+            expect(SyntaxKind.RBRACE, Reading.AN_EXPRESSION);
+            finish();
+        } finally {
+            noLambda = saved;
+        }
     }
 
     /** The statement sequence a behavior body is: {@code let}/{@code guard} lines then one result. */
@@ -1148,17 +1153,18 @@ public final class CstParser {
     /** Set where an expression is followed by a `->` that belongs to the enclosing form rather than
      * to the expression: an example row's `with` value. A parenthesised value there has exactly the
      * shape of a lambda's parameter list, and the enclosing form has the prior claim. An expression
-     * a bracket encloses cannot end the one the flag was set for, so {@link #bracketed} clears it
-     * again inside. */
+     * a bracket encloses cannot end the one the flag was set for, so every production that reads
+     * a bracket pair clears it for what is inside, through {@link #admitLambda}. */
     private boolean noLambda = false;
 
-    /** Reads what {@code read} reads with a lambda admitted: what a bracket pair encloses ends at
-     * its closing bracket, so no `->` after it can be taken for a lambda's. */
-    private void bracketed(Runnable read) {
+    /** Admits a lambda for what a bracket pair encloses, and answers what to put back when the
+     * pair is closed. What is inside ends at the closing bracket, so no `->` after it can be taken
+     * for a lambda's. The production reading the pair does this itself rather than its callers,
+     * so a caller added later cannot leave it out. */
+    private boolean admitLambda() {
         boolean saved = noLambda;
         noLambda = false;
-        read.run();
-        noLambda = saved;
+        return saved;
     }
 
     private void expr() {
@@ -1263,7 +1269,7 @@ public final class CstParser {
             } else if (at(SyntaxKind.LPAREN) && !lineBreakBeforeNextToken()) {
                 int m = markForFieldAccess();
                 wrap(m, SyntaxKind.APPLY_EXPR);
-                bracketed(this::argList);
+                argList();
                 finish();
             } else {
                 return;
@@ -1312,9 +1318,9 @@ public final class CstParser {
                 bump();
                 finish();
             }
-            case LPAREN -> bracketed(this::parenOrTuple);
-            case LBRACKET -> bracketed(this::listExpr);
-            case LBRACE -> bracketed(this::blockExpr);
+            case LPAREN -> parenOrTuple();
+            case LBRACKET -> listExpr();
+            case LBRACE -> blockExpr();
             case IDENT -> identExpr();
             default -> {
                 error(new ParseMessage.AnExpressionWasExpected());
@@ -1361,38 +1367,56 @@ public final class CstParser {
 
     /** {@code ( e )} or {@code ( e1, e2, ... )} — a parenthesised expression or a tuple. */
     private void parenOrTuple() {
-        start(SyntaxKind.PAREN_EXPR);
-        bump();   // (
-        expr();
-        if (at(SyntaxKind.COMMA)) {
-            // a tuple: retag the just-opened PAREN_EXPR as a TUPLE_EXPR
-            while (eat(SyntaxKind.COMMA)) {
-                if (at(SyntaxKind.RPAREN)) {
-                    break;
+        boolean saved = admitLambda();
+        try {
+            start(SyntaxKind.PAREN_EXPR);
+            bump();   // (
+            expr();
+            if (at(SyntaxKind.COMMA)) {
+                // a tuple: retag the just-opened PAREN_EXPR as a TUPLE_EXPR
+                while (eat(SyntaxKind.COMMA)) {
+                    if (at(SyntaxKind.RPAREN)) {
+                        break;
+                    }
+                    expr();
                 }
-                expr();
+                expect(SyntaxKind.RPAREN, Reading.AN_EXPRESSION);
+                retagTop(SyntaxKind.TUPLE_EXPR);
+                finish();
+                return;
             }
             expect(SyntaxKind.RPAREN, Reading.AN_EXPRESSION);
-            retagTop(SyntaxKind.TUPLE_EXPR);
             finish();
-            return;
+        } finally {
+            noLambda = saved;
         }
-        expect(SyntaxKind.RPAREN, Reading.AN_EXPRESSION);
-        finish();
     }
 
     /** {@code [e, ...]} (a literal) or {@code [element | guard, ...]} (a guard comprehension). */
     private void listExpr() {
-        start(SyntaxKind.LIST_EXPR);
-        bump();   // [
-        if (at(SyntaxKind.RBRACKET)) {
-            bump();
-            finish();
-            return;
-        }
-        expr();
-        if (eat(SyntaxKind.PIPE)) {
+        boolean saved = admitLambda();
+        try {
+            start(SyntaxKind.LIST_EXPR);
+            bump();   // [
+            if (at(SyntaxKind.RBRACKET)) {
+                bump();
+                finish();
+                return;
+            }
             expr();
+            if (eat(SyntaxKind.PIPE)) {
+                expr();
+                while (eat(SyntaxKind.COMMA)) {
+                    if (at(SyntaxKind.RBRACKET)) {
+                        break;
+                    }
+                    expr();
+                }
+                expect(SyntaxKind.RBRACKET, Reading.AN_EXPRESSION);
+                retagTop(SyntaxKind.LIST_COMP);
+                finish();
+                return;
+            }
             while (eat(SyntaxKind.COMMA)) {
                 if (at(SyntaxKind.RBRACKET)) {
                     break;
@@ -1400,18 +1424,10 @@ public final class CstParser {
                 expr();
             }
             expect(SyntaxKind.RBRACKET, Reading.AN_EXPRESSION);
-            retagTop(SyntaxKind.LIST_COMP);
             finish();
-            return;
+        } finally {
+            noLambda = saved;
         }
-        while (eat(SyntaxKind.COMMA)) {
-            if (at(SyntaxKind.RBRACKET)) {
-                break;
-            }
-            expr();
-        }
-        expect(SyntaxKind.RBRACKET, Reading.AN_EXPRESSION);
-        finish();
     }
 
     private void ifExpr() {
@@ -1596,7 +1612,7 @@ public final class CstParser {
             // past its dots before the brace decides what this is. Whether the name reaches a type
             // is resolution's answer: a dotted name here is read as one name and not as a field
             // taken of something.
-            bracketed(this::newDataExpr);
+            newDataExpr();
         } else {
             start(SyntaxKind.VAR_EXPR);
             bump();   // ident
@@ -1605,21 +1621,26 @@ public final class CstParser {
     }
 
     private void newDataExpr() {
-        start(SyntaxKind.NEW_DATA_EXPR);
-        bump();   // Type
-        dottedTail();   // written through its module or an alias, as a type is named anywhere
-        expect(SyntaxKind.LBRACE, Reading.AN_EXPRESSION);
-        if (!at(SyntaxKind.RBRACE)) {
-            initElem();
-            while (eat(SyntaxKind.COMMA)) {
-                if (at(SyntaxKind.RBRACE)) {
-                    break;
-                }
+        boolean saved = admitLambda();
+        try {
+            start(SyntaxKind.NEW_DATA_EXPR);
+            bump();   // Type
+            dottedTail();   // written through its module or an alias, as a type is named anywhere
+            expect(SyntaxKind.LBRACE, Reading.AN_EXPRESSION);
+            if (!at(SyntaxKind.RBRACE)) {
                 initElem();
+                while (eat(SyntaxKind.COMMA)) {
+                    if (at(SyntaxKind.RBRACE)) {
+                        break;
+                    }
+                    initElem();
+                }
             }
+            expect(SyntaxKind.RBRACE, Reading.AN_EXPRESSION);
+            finish();
+        } finally {
+            noLambda = saved;
         }
-        expect(SyntaxKind.RBRACE, Reading.AN_EXPRESSION);
-        finish();
     }
 
     private void initElem() {
@@ -1644,19 +1665,24 @@ public final class CstParser {
     }
 
     private void argList() {
-        start(SyntaxKind.ARG_LIST);
-        expect(SyntaxKind.LPAREN, Reading.AN_EXPRESSION);
-        if (!at(SyntaxKind.RPAREN)) {
-            arg();
-            while (eat(SyntaxKind.COMMA)) {
-                if (at(SyntaxKind.RPAREN)) {
-                    break;
-                }
+        boolean saved = admitLambda();
+        try {
+            start(SyntaxKind.ARG_LIST);
+            expect(SyntaxKind.LPAREN, Reading.AN_EXPRESSION);
+            if (!at(SyntaxKind.RPAREN)) {
                 arg();
+                while (eat(SyntaxKind.COMMA)) {
+                    if (at(SyntaxKind.RPAREN)) {
+                        break;
+                    }
+                    arg();
+                }
             }
+            expect(SyntaxKind.RPAREN, Reading.AN_EXPRESSION);
+            finish();
+        } finally {
+            noLambda = saved;
         }
-        expect(SyntaxKind.RPAREN, Reading.AN_EXPRESSION);
-        finish();
     }
 
     /** An argument is an expression, including a bare lambda {@code x -> e} / {@code (a, b) -> e}. */
