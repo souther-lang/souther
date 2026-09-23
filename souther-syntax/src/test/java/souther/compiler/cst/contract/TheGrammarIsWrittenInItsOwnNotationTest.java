@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -95,6 +96,80 @@ class TheGrammarIsWrittenInItsOwnNotationTest {
             }
         });
         assertEquals(List.of(), unreached, "productions nothing reaches");
+    }
+
+    /**
+     * {@code ~Lambda} reaches every expression that can end the one it was stated on, and only a
+     * bracket pair gives a lambda back: nothing after the closing bracket can be taken for a
+     * lambda's {@code ->}. So wherever the grammar is read with {@code Lambda} off, a reference
+     * that turns it on stands between an opening and its closing bracket, and nowhere else.
+     *
+     * <p>The walk follows what a reading with {@code Lambda} off can reach: a reference that passes
+     * the parameter on, one that turns it off, and one to a production that takes no parameter,
+     * which is read inside the same expression. It does not follow an alternative that
+     * {@code <if Lambda>} keeps out, nor anything between a bracket pair.
+     */
+    @Test
+    void aLambdaIsAdmittedAgainOnlyInsideABracketPair() {
+        List<String> leaks = new ArrayList<>();
+        Set<String> visited = new HashSet<>();
+        List<String> pending = new ArrayList<>();
+        for (Grammar.Production each : GRAMMAR.productions()) {
+            for (Grammar.Reference reference : Grammar.references(each.body())) {
+                if (Boolean.FALSE.equals(reference.arguments().get("Lambda"))) {
+                    pending.add(reference.name());
+                }
+            }
+        }
+        assertFalse(pending.isEmpty(), "nothing turns Lambda off, so this walks nothing");
+        while (!pending.isEmpty()) {
+            String name = pending.removeLast();
+            if (visited.add(name)) {
+                walkWithLambdaOff(name, GRAMMAR.production(name).body(), leaks, pending);
+            }
+        }
+        assertEquals(List.of(), leaks, "a lambda admitted outside a bracket pair");
+    }
+
+    private static final Set<String> OPENING = Set.of("(", "[", "{");
+
+    private static final Set<String> CLOSING = Set.of(")", "]", "}");
+
+    private static void walkWithLambdaOff(String in, Grammar.Expr expr, List<String> leaks,
+            List<String> pending) {
+        switch (expr) {
+            case Grammar.Reference it -> {
+                Boolean given = it.arguments().get("Lambda");
+                if (Boolean.TRUE.equals(given)) {
+                    leaks.add(in + " turns Lambda on for " + it.name());
+                } else {
+                    pending.add(it.name());
+                }
+            }
+            case Grammar.Sequence it -> {
+                int depth = 0;
+                for (Grammar.Expr part : it.parts()) {
+                    if (part instanceof Grammar.If condition && condition.parameter().equals("Lambda")) {
+                        return;
+                    }
+                    if (part instanceof Grammar.Terminal terminal && OPENING.contains(terminal.text())) {
+                        depth++;
+                    } else if (part instanceof Grammar.Terminal terminal
+                            && CLOSING.contains(terminal.text())) {
+                        depth--;
+                    } else if (depth == 0) {
+                        walkWithLambdaOff(in, part, leaks, pending);
+                    }
+                }
+            }
+            case Grammar.Choice it -> it.alternatives().forEach(part -> walkWithLambdaOff(in, part, leaks, pending));
+            case Grammar.Optional it -> walkWithLambdaOff(in, it.body(), leaks, pending);
+            case Grammar.Repetition it -> walkWithLambdaOff(in, it.body(), leaks, pending);
+            case Grammar.Except it -> walkWithLambdaOff(in, it.from(), leaks, pending);
+            case Grammar.If _, Grammar.NotAhead _, Grammar.Terminal _, Grammar.Special _,
+                 Grammar.Condition _ -> {
+            }
+        }
     }
 
     /**

@@ -347,9 +347,9 @@ statement = let-binding | let-destructuring | guard-statement ;
 (* tag::attempt-departures[] *)
 else-body[Lambda] = else-arms | expression ;
 
-@node else-arms = else-arm, { <pipe-owner>, else-arm } ;
+@node else-arms[Lambda] = else-arm, { <pipe-owner>, else-arm } ;
 
-@node else-arm = "|", ( identifier | discard ), "->", expression[+Lambda] ;
+@node else-arm[Lambda] = "|", ( identifier | discard ), "->", expression ;
 (* end::attempt-departures[] *)
 
 (* tag::attempted-construction[] *)

@@ -129,6 +129,30 @@ example t
       (integer-literal))))
 
 ================================================================================
+an else arm in a with value is not a lambda, and the row's arrow follows it
+================================================================================
+
+example t
+    | (1) with d = if c then 0 else | e -> x -> 2
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (example-declaration
+    (identifier)
+    (example-row
+      (argument-list (integer-literal))
+      (with-clause
+        (with-binding
+          (qualified-name (identifier))
+          (if-expression
+            (variable (identifier))
+            (integer-literal)
+            (else-arms
+              (else-arm (identifier) (variable (identifier)))))))
+      (integer-literal))))
+
+================================================================================
 an else's arms take a pipe at the enclosing match's arm column
 ================================================================================
 
