@@ -3,11 +3,13 @@ rem Runs the shaded jar under this script's own directory on a Java the machine 
 rem where the other distribution's launcher sits, so whichever of the two was unpacked, the directory
 rem to put on a path is the same one.
 rem
-rem -Xss4m is the stack this compiler is supported on. What a definition may say is bounded
+rem -Xss is given the stack this compiler is supported on. What a definition may say is bounded
 rem ([#source-structural-complexity-is-bounded]), and holding that bound is what the flag is for:
 rem every phase descends what it builds by recursion, and a source at the bound needs about a
 rem megabyte. The default is a platform's rather than this compiler's, so without the flag a source
-rem that compiles here would depend on where it was compiled.
+rem that compiles here would depend on where it was compiled. The size, and the Java this refuses to
+rem run below, are the root pom's `souther.jvm.stack` and `souther.java.minimum`, filled in when this
+rem script is packaged.
 rem
 rem The version of the Java it found is read out of the `release` file of the image that Java belongs
 rem to, rather than by starting it and asking. Asking costs a JVM start on every command run, and
@@ -45,10 +47,10 @@ set "major="
 if defined image if exist "%image%\release" for /f "usebackq tokens=2 delims==" %%v in (`findstr /b /c:"JAVA_VERSION=" "%image%\release"`) do call :majorof %%v
 if not defined major goto :run
 for /f "delims=0123456789" %%x in ("%major%") do goto :run
-if %major% LSS 25 goto :oldjava
+if %major% LSS @souther.java.minimum@ goto :oldjava
 
 :run
-"%java%" -Xss4m -jar "%~dp0lib\souther.jar" %*
+"%java%" -Xss@souther.jvm.stack@ -jar "%~dp0lib\souther.jar" %*
 exit /b %ERRORLEVEL%
 
 rem The image is the directory the `bin` holding that java is in.
@@ -57,20 +59,20 @@ for %%d in ("%~dp1..") do set "image=%%~fd"
 exit /b
 
 rem A release states its version the way Java numbers them, so the part before the first dot is the
-rem one that has to be 25 or more. An eight states 1.8, and answers this question with a one.
+rem one that has to be at least the minimum. An eight states 1.8, and answers this question with a one.
 :majorof
 set "stated=%~1"
 for /f "tokens=1 delims=." %%m in ("%stated%") do set "major=%%m"
 exit /b
 
 :nojava
-1>&2 echo souther found no Java: set JAVA_HOME to a JDK 25, or put its java on PATH. A JDK rather
+1>&2 echo souther found no Java: set JAVA_HOME to a JDK @souther.java.minimum@, or put its java on PATH. A JDK rather
 1>&2 echo than a JRE, because `souther japi` reads javadoc through a compiler. The distribution
 1>&2 echo without `nojdk` in its name carries a runtime of its own and needs neither.
 exit /b 1
 
 :oldjava
-1>&2 echo souther needs Java 25 and "%image%" states Java %major%. Point JAVA_HOME at a JDK 25, or
+1>&2 echo souther needs Java @souther.java.minimum@ and "%image%" states Java %major%. Point JAVA_HOME at a JDK @souther.java.minimum@, or
 1>&2 echo put its java on PATH. The distribution without `nojdk` in its name carries a runtime of
 1>&2 echo its own and needs neither.
 exit /b 1

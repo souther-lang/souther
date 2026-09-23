@@ -51,6 +51,7 @@ enum CliCommand {
             Map.of(CliOption.CLASS_PATH, Reads.saying("where to find the jar to read"))),
     MCP("mcp", "", "serve doc, api and japi over MCP stdio"),
     LSP("lsp", "", "serve the language server over LSP stdio"),
+    TOOLING("tooling", "", "what an editor needs to start and configure the server, as JSON"),
     HELP("help", "[<command>]", "what a command takes, and what its options mean"),
     VERSION("version", "", "which Souther this is");
 

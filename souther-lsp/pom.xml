@@ -75,6 +75,26 @@
              `souther lsp` and would then be shading an uber jar into an uber jar. What that module
              resolves is `souther-lsp.jar`, which this build leaves as javac wrote it. -->
         <finalName>souther-lsp</finalName>
+        <resources>
+            <!-- What a client has to know before it starts a JVM, filled in from the properties the
+                 build itself is compiled and launched with, so the metadata and the build cannot
+                 say two things. Here rather than in the command line's module because both jars
+                 carry this one: the command line depends on this module. -->
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+                <includes>
+                    <include>META-INF/souther/tooling.json</include>
+                </includes>
+            </resource>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+                <excludes>
+                    <exclude>META-INF/souther/tooling.json</exclude>
+                </excludes>
+            </resource>
+        </resources>
         <plugins>
             <!-- The `*IT` tests launch the uber jar an editor launches. What only packaging decides
                  is whether the manifest reaches it: the version the handshake states is read from

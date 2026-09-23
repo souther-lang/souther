@@ -73,6 +73,9 @@ public final class LspServer {
      * same nothing. */
     private static final Outcome NOTHING = new Outcome.Nothing();
 
+    /** {@code MessageType.Warning}, as {@code window/showMessage} numbers it. */
+    private static final int MESSAGE_TYPE_WARNING = 2;
+
     private final MessageConnection conn;
     private final DocumentStore documents = new DocumentStore();
     private final Analyzer analyzer = new Analyzer();
@@ -81,6 +84,13 @@ public final class LspServer {
     private boolean readsSnippets;
     /** Whether this client sent the {@code shutdown} request. What the exit code answers. */
     private boolean askedToShutDown;
+    /**
+     * What the client wrote in {@code initializationOptions.souther} that could not be read, held
+     * from {@code initialize} until {@code initialized}: the protocol lets a server send a
+     * notification once the client has said it is ready for one, and not while it is waiting for
+     * the handshake's answer.
+     */
+    private List<String> optionsUnread = List.of();
     private final Workspace workspace = new Workspace();
     private int nextRequestId = 1;
 
@@ -326,7 +336,7 @@ public final class LspServer {
     private Outcome answer(LspMethod method, JsonNode id, JsonNode params) {
         return switch (method) {
             case INITIALIZE -> { captureRoots(params); yield new Outcome.Answered(initializeResult()); }
-            case INITIALIZED -> { registerDynamically(); yield NOTHING; }
+            case INITIALIZED -> { registerDynamically(); tellWhatWasNotRead(); yield NOTHING; }
             case SET_TRACE, DID_CHANGE_CONFIGURATION -> NOTHING;   // no-op
             case DID_OPEN -> {
                 InboundDecoders.decode(InboundDecoders.DID_OPEN, params)
@@ -409,7 +419,10 @@ public final class LspServer {
             roots.add(rootUri.asString());
         }
         workspace.setRoots(roots);
-        analyzer.measure(adequacyAsked(params));
+        SoutherInitializationOptions options =
+                SoutherInitializationOptions.decode(params.get("initializationOptions"));
+        analyzer.measure(Adequacy.Asked.reportOnly(options.adequacy()));
+        optionsUnread = options.unread();
         readsSnippets = snippetSupportAsked(params);
         analyzer.resolvesActions(resolvesEditsAsked(params));
     }
@@ -476,38 +489,18 @@ public final class LspServer {
     }
 
     /**
-     * How much of what the rows cover this client asked to be told, from
-     * {@code initializationOptions.souther.adequacy}: {@code off}, {@code witness} or {@code all}.
-     *
-     * <p>Off unless asked, and one setting rather than one per measure. What separates them is what
-     * they cost: {@code witness} reads what the compile already ran, and {@code all} generates a
-     * second set of classes and runs every row again — on every save, in an editor. Nothing that
-     * costs that should arrive by default.
-     */
-    private static Adequacy.Asked adequacyAsked(JsonNode params) {
-        JsonNode options = params.get("initializationOptions");
-        JsonNode souther = options == null ? null : options.get("souther");
-        JsonNode asked = souther == null ? null : souther.get("adequacy");
-        if (asked == null || asked.isNull()) {
-            return Adequacy.Asked.NOTHING;
-        }
-        return switch (asked.asString()) {
-            case "witness" -> Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS);
-            case "all" -> Adequacy.Asked.reportOnly(Adequacy.Level.ALL);
-            default -> Adequacy.Asked.NOTHING;
-        };
-    }
-
-    /**
-     * What the client is told it may call, drawn from the methods that are answered.
+     * What the client is told it may call, drawn from the methods that are answered, and which of
+     * the {@code initializationOptions.souther} members it may send are read here.
      *
      * <p>The version is read where every other reader of it reads it, and is not stated here. Told
      * as a literal it was told once and then left behind, so an editor was being shown a version
      * this server is not — and which Souther this is has one answer whoever asks.
      */
     private Map<String, Object> initializeResult() {
+        Map<String, Object> capabilities = new LinkedHashMap<>(LspMethod.serverCapabilities());
+        capabilities.put("experimental", Map.of("souther", SoutherExtension.advertised()));
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("capabilities", LspMethod.serverCapabilities());
+        result.put("capabilities", capabilities);
         result.put("serverInfo",
                 Map.of("name", "souther-lsp", "version", ModuleMetadata.compilerVersion()));
         return result;
@@ -1082,6 +1075,18 @@ public final class LspServer {
         message.put("method", method);
         message.put("params", params);
         conn.write(JSON.writeValueAsString(message));
+    }
+
+    /**
+     * Tells the client, as a warning it shows its user, each setting it sent that was read as
+     * absent. Shown rather than logged, because the one who wrote the setting is the one reading the
+     * editor, and a log is where they would not look for why a feature they turned on is not there.
+     */
+    private void tellWhatWasNotRead() {
+        for (String unread : optionsUnread) {
+            notify("window/showMessage", Map.of("type", MESSAGE_TYPE_WARNING, "message", unread));
+        }
+        optionsUnread = List.of();
     }
 
     /** Announces the methods no capability carries — asking the client to watch the workspace's

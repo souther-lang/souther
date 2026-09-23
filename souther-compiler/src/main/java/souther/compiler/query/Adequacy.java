@@ -186,6 +186,31 @@ public final class Adequacy {
         public boolean readsRows() {
             return this != OFF;
         }
+
+        /**
+         * The word a caller writes for this level: {@code souther --adequacy}, and the language
+         * server's {@code initializationOptions.souther.adequacy}.
+         *
+         * <p>A switch with no default, so a level added here is a level without a word until it is
+         * given one, and both callers read it from the same place rather than each keeping a table.
+         */
+        public String spelling() {
+            return switch (this) {
+                case OFF -> "off";
+                case WITNESS -> "witness";
+                case ALL -> "all";
+            };
+        }
+
+        /** The level {@code word} is the {@link #spelling} of, or empty where it names none. */
+        public static Optional<Level> spelled(String word) {
+            for (Level level : values()) {
+                if (level.spelling().equals(word)) {
+                    return Optional.of(level);
+                }
+            }
+            return Optional.empty();
+        }
     }
 
     /**

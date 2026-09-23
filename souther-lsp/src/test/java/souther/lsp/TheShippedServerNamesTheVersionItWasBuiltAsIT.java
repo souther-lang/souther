@@ -9,12 +9,17 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -48,10 +53,23 @@ class TheShippedServerNamesTheVersionItWasBuiltAsIT {
 
     @Test
     void theHandshakeFromTheUberJarStatesWhatThisBuildIs() throws Exception {
-        // Launched the way the editors are told to launch it, stack flag included.
-        Process process = new ProcessBuilder(
-                Path.of(System.getProperty("java.home"), "bin", "java").toString(),
-                "-Xss4m", "-jar", jar.toString()).start();
+        // Launched the way an editor launches it: with the JVM arguments the jar's own tooling
+        // metadata states, read out of the archive without starting it.
+        List<String> command = new ArrayList<>();
+        command.add(Path.of(System.getProperty("java.home"), "bin", "java").toString());
+        try (ZipFile archive = new ZipFile(jar.toFile())) {
+            ZipEntry entry = archive.getEntry(ToolingMetadata.RESOURCE);
+            assertNotNull(entry, "the uber jar carries " + ToolingMetadata.RESOURCE);
+            try (InputStream in = archive.getInputStream(entry)) {
+                for (JsonNode argument : JSON.readTree(in).get("runtime").get("java")
+                        .get("requiredJvmArgs")) {
+                    command.add(argument.asString());
+                }
+            }
+        }
+        command.add("-jar");
+        command.add(jar.toString());
+        Process process = new ProcessBuilder(command).start();
         MessageConnection answers = new MessageConnection(
                 process.getInputStream(), OutputStream.nullOutputStream());
         process.getOutputStream().write(frames(

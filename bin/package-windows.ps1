@@ -33,7 +33,10 @@ foreach ($file in @($jar, $launcher)) {
 
 # The build stamps the version into the jar, and asking the jar is asking the thing being packaged:
 # a version read from anywhere else is a second answer that can differ from this one.
+# What the JVM has to be given is asked of the jar for the same reason: the jar states what it needs
+# to run in the tooling metadata every client reads, and the image is one more client.
 $Version = $null
+$tooling = $null
 $open = [IO.Compression.ZipFile]::OpenRead($jar)
 try {
     $stamp = $open.GetEntry('META-INF/maven/org.souther-lang/souther-cli/pom.properties')
@@ -45,9 +48,17 @@ try {
         }
     }
     finally { $reader.Dispose() }
+
+    $metadata = $open.GetEntry('META-INF/souther/tooling.json')
+    if (-not $metadata) { throw "$jar carries no tooling metadata" }
+    $reader = New-Object IO.StreamReader($metadata.Open())
+    try { $tooling = $reader.ReadToEnd() | ConvertFrom-Json }
+    finally { $reader.Dispose() }
 }
 finally { $open.Dispose() }
 if (-not $Version) { throw "$jar states no version" }
+$jvmArgs = @($tooling.runtime.java.requiredJvmArgs)
+if ($jvmArgs.Count -eq 0) { throw "$jar states no JVM arguments" }
 Write-Host "packaging souther $Version"
 
 # jpackage takes a version of one to three integers. A Maven version carries a qualifier after a
@@ -69,7 +80,8 @@ Copy-Item $jar $staged
 
 # --win-console is what makes the launcher a command: without it the image is a windowed
 # application, whose standard output and error reach nobody and whose exit code reaches no shell.
-# The stack is the one every launcher hands the JVM, and the launchers beside this one say why.
+# The JVM arguments are the ones every launcher hands the JVM, and the launchers beside this one say
+# why.
 $bundled = Join-Path $dist 'bundled'
 jpackage --type app-image `
     --name souther `
@@ -79,7 +91,7 @@ jpackage --type app-image `
     --main-jar souther.jar `
     --main-class souther.cli.Main `
     --add-modules $modules `
-    --java-options '-Xss4m' `
+    --java-options ($jvmArgs -join ' ') `
     --win-console `
     --vendor 'souther-lang' `
     --description 'The Souther compiler and command line'
