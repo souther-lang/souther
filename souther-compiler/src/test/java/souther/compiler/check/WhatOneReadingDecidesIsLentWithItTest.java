@@ -132,9 +132,9 @@ class WhatOneReadingDecidesIsLentWithItTest {
         Compilation compilation = compiled(MODULE);
         FieldDomains canonical = asTheCompilationReads(compilation, "Held");
         FieldDomains settled = FieldDomains.of(declared("Held"),
-                RuleReadings.of(compilation, "demo"), ReadAs.THE_COMPILATION_DOES,
-                Map.of(RuleKey.of("lo"), Count.of(500)),
-                compilation.db().readings());
+                RuleReadingContext.of(RuleReadings.of(compilation, "demo"),
+                        ReadAs.THE_COMPILATION_DOES, compilation.db().readings()),
+                Map.of(RuleKey.of("lo"), Count.of(500)));
 
         assertNotSame(canonical, settled,
                 "a reading with a coordinate fixed is not the declaration's own reading");
@@ -153,9 +153,10 @@ class WhatOneReadingDecidesIsLentWithItTest {
         FieldDomains canonical = asTheCompilationReads(compilation, "Held");
         TypeSymbol.AtModule held = declared("Held");
         RuleReadingSource source = RuleReadings.of(compilation, "demo");
-        FieldDomains granting = FieldDomains.granting(held, source,
-                ReadAs.THE_COMPILATION_DOES, Set.of(declared("Common")),
-                compilation.db().readings());
+        FieldDomains granting = FieldDomains.granting(held,
+                RuleReadingContext.of(source, ReadAs.THE_COMPILATION_DOES,
+                        compilation.db().readings()),
+                Set.of(declared("Common")));
 
         assertNotSame(canonical, granting,
                 "a reading that supposes a declaration has values is not the declaration's own");
@@ -177,15 +178,14 @@ class WhatOneReadingDecidesIsLentWithItTest {
         LentReadings lender = new LentReadings(DeclarationReadings.NONE, () -> world[0],
                 StoreWork.UNWATCHED);
 
-        FieldDomains read = FieldDomains.of(declared("Held"), source,
-                ReadAs.THE_COMPILATION_DOES, lender);
-        assertSame(read, FieldDomains.of(declared("Held"), source,
-                        ReadAs.THE_COMPILATION_DOES, lender),
+        RuleReadingContext reading =
+                RuleReadingContext.of(source, ReadAs.THE_COMPILATION_DOES, lender);
+        FieldDomains read = FieldDomains.of(declared("Held"), reading);
+        assertSame(read, FieldDomains.of(declared("Held"), reading),
                 "what this world's reading came to is handed on while it is this world");
 
         world[0]++;
-        assertNotSame(read, FieldDomains.of(declared("Held"), source,
-                        ReadAs.THE_COMPILATION_DOES, lender),
+        assertNotSame(read, FieldDomains.of(declared("Held"), reading),
                 "and is not handed into the next, which its reading is not a reading of");
     }
 
@@ -215,8 +215,8 @@ class WhatOneReadingDecidesIsLentWithItTest {
         Compilation compilation = compiled(MODULE);
         FieldDomains lent = asTheCompilationReads(compilation, "Held");
         FieldDomains ofItsOwn = FieldDomains.of(declared("Held"),
-                RuleReadings.of(compilation, "demo"), ReadAs.THE_COMPILATION_DOES,
-                borrowingMachinesAndNoReading(compilation));
+                RuleReadingContext.of(RuleReadings.of(compilation, "demo"),
+                        ReadAs.THE_COMPILATION_DOES, borrowingMachinesAndNoReading(compilation)));
 
         assertNotSame(lent, ofItsOwn, "the reader of its own read for itself");
         assertFalse(lent.movedEnds().isEmpty(),
@@ -265,8 +265,9 @@ class WhatOneReadingDecidesIsLentWithItTest {
     /** What the rules of {@code declaration} leave, asked the way the compilation asks it. */
     private static FieldDomains asTheCompilationReads(Compilation compilation,
                                                      String declaration) {
-        return FieldDomains.of(declared(declaration), RuleReadings.of(compilation, "demo"),
-                ReadAs.THE_COMPILATION_DOES, compilation.db().readings());
+        return FieldDomains.of(declared(declaration),
+                RuleReadingContext.of(RuleReadings.of(compilation, "demo"),
+                        ReadAs.THE_COMPILATION_DOES, compilation.db().readings()));
     }
 
     private static TypeSymbol.AtModule declared(String declaration) {

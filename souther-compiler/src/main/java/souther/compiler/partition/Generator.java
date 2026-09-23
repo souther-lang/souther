@@ -5,12 +5,10 @@ import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
-import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleKey;
 import souther.compiler.check.DeclaredBounds;
-import souther.compiler.check.DeclarationReadings;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
@@ -5188,8 +5186,8 @@ public final class Generator {
         // reading of the parameter the values are chosen against. A list built around an element
         // has to meet that too: a row holding an element in the class and breaking the rule about
         // how many the list holds is not a row.
-        FieldDomains under = rulesOf(subject.types().get(p), subject.rules(),
-                subject.inputs().policy(), under(root, settled), subject.machines());
+        FieldDomains under = rulesOf(subject.types().get(p), subject.ruleReading(),
+                under(root, settled));
         ConstructionPlan.Result planned = ConstructionPlan.of(subject.types().get(p), root,
                 subject.rules().inners(), subject.symbols(), subject.rules().published(),
                 decided.keySet(), additional,
@@ -5573,8 +5571,7 @@ public final class Generator {
         // turn is answered by taking what the positions before it took onto this, which is the
         // reading a settling states and not a second one of the declaration.
         ConditionedCandidates candidates = new ConditionedCandidates(subject.ruleReading(),
-                rulesOf(subject.types().get(p), subject.rules(), subject.inputs().policy(),
-                        Map.of(), subject.machines()));
+                rulesOf(subject.types().get(p), subject.ruleReading(), Map.of()));
         FixtureTemplate built = descend(subject, p, plan, positions, 0, new LinkedHashMap<>(),
                 new LinkedHashMap<>(settled), decided, check, budget, candidates);
         if (built != null) {
@@ -5737,16 +5734,13 @@ public final class Generator {
                                      Map<TermPath, List<FixtureTemplate>> decided,
                                      Map<TermPath, Place> settled) {
         RuleReadingContext reading = subject.ruleReading();
-        RuleReadingSource ruleSource = reading.source();
-        ReadingPolicy policy = reading.policy();
         TermPath at = TermPath.of(subject.parameters().get(p));
         List<TermPath> paths = new ArrayList<>(decided.keySet());
         List<List<FixtureTemplate>> values = new ArrayList<>(decided.values());
         // A position the caller fixed holds nothing back: it was given the value it is to take.
         List<List<FixtureTemplate>> reserves = new ArrayList<>(
                 java.util.Collections.nCopies(paths.size(), List.<FixtureTemplate>of()));
-        FieldDomains left = rulesOf(subject.types().get(p), ruleSource, policy, under(at, settled),
-                subject.machines());
+        FieldDomains left = rulesOf(subject.types().get(p), reading, under(at, settled));
         for (ConstructionPlan.Slot slot : plan.slots()) {
             if (paths.contains(slot.at())) {
                 continue;   // an axis decides here
@@ -5926,16 +5920,16 @@ public final class Generator {
      * them, so a reading here that borrowed nothing would build every one of those machines again
      * for each value probed.
      */
-    private static FieldDomains rulesOf(Type type, RuleReadingSource source, ReadingPolicy policy,
-                                        Map<RuleKey, Count> settled,
-                                        DeclarationReadings machines) {
+    private static FieldDomains rulesOf(Type type, RuleReadingContext reading,
+                                        Map<RuleKey, Count> settled) {
+        RuleReadingSource source = reading.source();
         // Whether the position is a record, and which record, are one answer and it is the
         // reading's. The rules are then read on the declaration the fields came off — a position
         // written under a name takes its fields from what that name wraps, and reading the rules on
         // the name instead would be asking a declaration that has no such field.
         return TypeView.of(type, source.inners(), source.symbols(), source.published()).shape()
                         instanceof Shape.Product(TypeSymbol.AtModule declared, Map<String, Type> _)
-                ? FieldDomains.of(declared, source, policy, settled, machines) : FieldDomains.NONE;
+                ? FieldDomains.of(declared, reading, settled) : FieldDomains.NONE;
     }
 
     /**

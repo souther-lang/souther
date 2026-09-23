@@ -38,22 +38,21 @@ public record CardinalityPremise(Set<Long> counts, boolean everyRuleReached) {
     }
 
     /**
-     * What {@code declared} settles, read under {@code source} and {@code policy}.
+     * What {@code declared} settles, read in {@code reading}.
      *
      * <p>A data is the only declaration with a rule to be short of: what the language declares
      * answers with the clauses it has, and a sum's cases are declarations of their own and are
      * reached as those.
      */
     public static CardinalityPremise of(TypeSymbol named, Hir.Def declared,
-                                        RuleReadingSource source, ReadingPolicy policy,
-                                        DeclarationReadings machines) {
+                                        RuleReadingContext reading) {
         if (!(declared instanceof Hir.Data data) || !(named instanceof TypeSymbol.AtModule at)) {
             return NOTHING;
         }
-        InvariantChecker.Seeded read = InvariantChecker.seedFields(at, source, policy, machines);
+        InvariantChecker.Seeded read = InvariantChecker.seedFields(at, reading);
         OccurrenceCounts held = OccurrenceCounts.of(read);
         Set<Long> counts = new HashSet<>();
-        for (RuleKey path : paths(data, at, source)) {
+        for (RuleKey path : paths(data, at, reading.source())) {
             long least = held.leastHeldAt(path);
             if (least > 0) {
                 counts.add(least);

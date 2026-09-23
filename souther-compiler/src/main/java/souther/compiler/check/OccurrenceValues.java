@@ -40,22 +40,8 @@ public final class OccurrenceValues {
     }
 
     /** What the declaration {@code named} is leaves the values at each of its names. */
-    public static OccurrenceValues of(TypeSymbol.AtModule named, RuleReadingSource source,
-                                      ReadingPolicy policy, DeclarationReadings machines) {
-        return of(named, source, policy, Set.of(), machines);
-    }
-
-    /** The same, reading for itself. */
-    public static OccurrenceValues of(TypeSymbol.AtModule named, RuleReadingSource source,
-                                      ReadingPolicy policy) {
-        return of(named, source, policy, Set.of(), DeclarationReadings.NONE);
-    }
-
-    /** The same, with the declarations {@code granted} names supposed to hold values, reading for
-     *  itself. */
-    static OccurrenceValues of(TypeSymbol.AtModule named, RuleReadingSource source,
-                                 ReadingPolicy policy, Set<TypeSymbol> granted) {
-        return of(named, source, policy, granted, DeclarationReadings.NONE);
+    public static OccurrenceValues of(TypeSymbol.AtModule named, RuleReadingContext reading) {
+        return of(named, reading, Set.of());
     }
 
     /**
@@ -65,13 +51,11 @@ public final class OccurrenceValues {
      * rules are what say it has none — its own, and the ones under whatever it wraps — so supposing
      * it has a value is not reading it at all.
      */
-    static OccurrenceValues of(TypeSymbol.AtModule named, RuleReadingSource source,
-                                 ReadingPolicy policy,
-                                 Set<TypeSymbol> granted,
-                                 DeclarationReadings machines) {
+    static OccurrenceValues of(TypeSymbol.AtModule named, RuleReadingContext reading,
+                               Set<TypeSymbol> granted) {
         return new OccurrenceValues(
-                InvariantChecker.seedFields(named, source, policy, java.util.Map.of(),
-                        InvariantChecker.Reach.stoppingAt(granted), machines));
+                InvariantChecker.seedFields(named, reading, java.util.Map.of(),
+                        InvariantChecker.Reach.stoppingAt(granted)));
     }
 
     /**

@@ -44,8 +44,8 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
         assertNotNull(symbols, "the model under test compiles");
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
         assertNotNull(symbols.declaredNode(named.key()), "no `" + type + "` declared");
-        return FieldDomains.of(named, RuleReadings.of(compilation, module),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        return FieldDomains.of(named, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
     }
 
     private static final String MEASURED = """

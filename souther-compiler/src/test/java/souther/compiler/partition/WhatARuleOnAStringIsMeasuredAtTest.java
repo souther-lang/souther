@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.RuleReadingContext;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.DeclaredSig;
@@ -177,8 +178,8 @@ class WhatARuleOnAStringIsMeasuredAtTest {
         GuardThresholds.Guards guards = GuardThresholds.of("f",
                 checked.analysisBodies().get("f"), body, plan,
                 compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("f"), rules);
-        InputDomain read = InputDomain.of(sigs.get("f"), rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        InputDomain read = InputDomain.of(sigs.get("f"), RuleReadingContext.unshared(rules,
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
         souther.compiler.inputs.Quantities reading = read.quantities(rules);
         RuleReadingContext ruleReading = RuleReadingContext.unshared(rules,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);

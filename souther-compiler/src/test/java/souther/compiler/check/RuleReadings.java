@@ -70,8 +70,8 @@ public final class RuleReadings {
         Symbols symbols = souther.compiler.query.Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = souther.compiler.types.TypeSymbols.declared(
                 new souther.compiler.types.TypeKey(symbols.module(), "N"));
-        return String.valueOf(FieldDomains.of(name, of(compilation, "demo"),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES).admits(RuleKey.THE_VALUE));
+        return String.valueOf(FieldDomains.of(name, RuleReadingContext.unshared(of(compilation, "demo"),
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES)).admits(RuleKey.THE_VALUE));
     }
 
     /** A reading over the discharge tree of a scope no declaration of which wrote a clause, for a

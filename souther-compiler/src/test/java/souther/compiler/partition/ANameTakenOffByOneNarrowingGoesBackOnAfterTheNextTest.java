@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.DeclaredSig;
@@ -157,6 +158,7 @@ class ANameTakenOffByOneNarrowingGoesBackOnAfterTheNextTest {
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         DeclaredSig declared = sigs.get("look");
         return new Read(declared.inputs().get(0).name(), declared, rules,
-                InputDomain.of(declared, rules, ReadAs.THE_COMPILATION_DOES));
+                InputDomain.of(declared,
+                        RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES)));
     }
 }

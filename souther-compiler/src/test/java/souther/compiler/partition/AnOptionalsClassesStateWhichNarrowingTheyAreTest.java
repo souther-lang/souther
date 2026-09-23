@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.DeclaredSig;
@@ -155,8 +156,9 @@ class AnOptionalsClassesStateWhichNarrowingTheyAreTest {
     private static Partitions.Partitioning partitioningOf() {
         Read read = read(FLAGGED);
         return Partitions.of("look",
-                souther.compiler.inputs.InputDomain.of(read.sig(), read.rules(),
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                souther.compiler.inputs.InputDomain.of(read.sig(),
+                        RuleReadingContext.unshared(read.rules(),
+                                souther.compiler.query.ReadAs.THE_COMPILATION_DOES)),
                 read.rules(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 

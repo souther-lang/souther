@@ -688,26 +688,19 @@ public final class InvariantChecker {
         }
     }
 
-    /** {@link Seeded} for one declaration, asking {@code machines} for what somebody has already
-     * made of its string rules before building any of it. A declaration this cannot read is one
-     * whose fields it says nothing about, which is the same answer as a declaration with no rules —
-     * so nothing about the declaration throws. {@link Terms.OneTermTwoKinds} is not about the
-     * declaration, and nothing below here catches it. */
-    static Seeded seedFields(TypeSymbol.AtModule named, RuleReadingSource source,
-                             ReadingPolicy policy, DeclarationReadings machines) {
-        return seedFields(named, source, policy, Map.of(), Reach.EVERYTHING, machines);
-    }
-
     /**
-     * The same, read in the world a walk carries.
+     * {@link Seeded} for one declaration, read in the world a walk carries, asking where that world
+     * borrows from for what somebody has already made of its string rules before building any of
+     * it. A declaration this cannot read is one whose fields it says nothing about, which is the
+     * same answer as a declaration with no rules — so nothing about the declaration throws.
+     * {@link Terms.OneTermTwoKinds} is not about the declaration, and nothing below here catches it.
      *
-     * <p>What a reader under a walk asks. It is handed the world the reading it stands inside was
-     * made in, so where it borrows from is already decided — including where that world was bounded
-     * for a reading under way ({@link RuleReadingContext#whileTheAnswerIsMade}), which a reader
-     * choosing a lender for itself would be choosing past.
+     * <p>Where it borrows from is decided by the world it is handed — including where that world
+     * was bounded for a reading under way ({@link RuleReadingContext#whileTheAnswerIsMade}), which a
+     * reader choosing a lender for itself would be choosing past.
      */
     static Seeded seedFields(TypeSymbol.AtModule named, RuleReadingContext reading) {
-        return seedFields(named, reading.source(), reading.policy(), reading.readings());
+        return seedFields(named, reading, Map.of(), Reach.EVERYTHING);
     }
 
     /**
@@ -730,16 +723,15 @@ public final class InvariantChecker {
      * nothing of its own to suppose asks for that one reading, and there is nothing to tell two of
      * them apart — the same declaration, the same world, the same terms. So the first is made and
      * the rest are lent it, for as long as the world it was read from is the one it was read from,
-     * which is what {@code readings} is answering for.
+     * which is what the world's lender is answering for.
      *
      * <p>A reading with something settled or something left out is not that reading and is made
      * here every time. It belongs to the question that asked for it: what it leaves out is that
      * question's, and the next question leaves out something else.
      */
-    static Seeded seedFields(TypeSymbol.AtModule named, RuleReadingSource source,
-                             ReadingPolicy policy, Map<NumberAt<RuleKey>, Count> settled,
-                             Reach reach, DeclarationReadings readings) {
-        return readFields(named, source, policy, settled, reach, readings).seeded();
+    static Seeded seedFields(TypeSymbol.AtModule named, RuleReadingContext reading,
+                             Map<NumberAt<RuleKey>, Count> settled, Reach reach) {
+        return readFields(named, reading, settled, reach).seeded();
     }
 
     /**
@@ -756,20 +748,20 @@ public final class InvariantChecker {
      * the same kind of thing, so no reader downstream has to put the question again to know what it
      * may keep.
      */
-    static DeclarationReading readFields(TypeSymbol.AtModule named, RuleReadingSource source,
-                                         ReadingPolicy policy, Map<NumberAt<RuleKey>, Count> settled,
-                                         Reach reach, DeclarationReadings readings) {
+    static DeclarationReading readFields(TypeSymbol.AtModule named, RuleReadingContext reading,
+                                         Map<NumberAt<RuleKey>, Count> settled, Reach reach) {
         // What the declaration's string rules came to, asked for before anything else. Where a store
         // is answering, making that answer is what makes the declaration's canonical reading — so a
         // borrower asks for the machines and then looks for the reading, rather than reading for
         // itself and standing a second reading beside the answer's.
+        DeclarationReadings readings = reading.readings();
         StringMachineAnswers answers = readings.of(named.key());
         if (!settled.isEmpty() || !reach.everything()) {
             return DeclarationReading.of(
-                    seedFieldsFresh(named, source, policy, settled, reach, readings, answers));
+                    seedFieldsFresh(named, reading, settled, reach, answers));
         }
-        return readings.reading(named.key(), source, policy,
-                () -> seedFieldsFresh(named, source, policy, settled, reach, readings, answers));
+        return readings.reading(named.key(), reading.source().origin(), reading.policy(),
+                () -> seedFieldsFresh(named, reading, settled, reach, answers));
     }
 
     /**
@@ -799,16 +791,14 @@ public final class InvariantChecker {
      * does not arrive back at the borrowing entry it is answering for, and so that what counts as a
      * reading made is where the reading is made.
      */
-    private static Seeded seedFieldsFresh(TypeSymbol.AtModule named, RuleReadingSource source,
-                             ReadingPolicy policy, Map<NumberAt<RuleKey>, Count> settled,
-                             Reach reach, DeclarationReadings machines,
+    private static Seeded seedFieldsFresh(TypeSymbol.AtModule named, RuleReadingContext world,
+                             Map<NumberAt<RuleKey>, Count> settled, Reach reach,
                              StringMachineAnswers answers) {
         READINGS.incrementAndGet();
-        Symbols symbols = source.symbols();
-        // The three this was handed, put back together to hand on. Not a world of its own: nothing
-        // here chooses any of them, and a reader below is given what this reader was given.
-        InvariantChecker c =
-                new InvariantChecker(RuleReadingContext.of(source, policy, machines));
+        Symbols symbols = world.source().symbols();
+        ReadingPolicy policy = world.policy();
+        // The world this was handed, handed on: a reader below is given what this reader was given.
+        InvariantChecker c = new InvariantChecker(world);
         c.answers = answers;
         // A newtype's value is the same location as the newtype, so it is at no name of its own and
         // its fields are the first step there is. Read from the world rather than off a node handed

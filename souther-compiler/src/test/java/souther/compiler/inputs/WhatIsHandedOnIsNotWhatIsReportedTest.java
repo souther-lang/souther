@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
@@ -167,6 +168,7 @@ class WhatIsHandedOnIsNotWhatIsReportedTest {
             throw new AssertionError("the model under test compiles");
         }
         Type type = sigs.get("take").inputTypes().get(0);
-        return PlacedRules.of(TermPath.of(parameter), type, rules, ReadAs.THE_COMPILATION_DOES);
+        return PlacedRules.of(TermPath.of(parameter), type,
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES));
     }
 }

@@ -53,8 +53,8 @@ class AQuestionExistsBecauseTheModelStatesItAndNotBecauseAReadingSucceededTest {
         assertNotNull(symbols);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Length"));
         assertNotNull(symbols.declaredNode(named.key()), "no `Length` declared");
-        return FieldDomains.of(named, RuleReadings.of(compilation, module),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        return FieldDomains.of(named, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
     }
 
     /** What the one clause of the one declaration raises. */
@@ -290,8 +290,8 @@ class AQuestionExistsBecauseTheModelStatesItAndNotBecauseAReadingSucceededTest {
         assertNotNull(symbols);
         TypeSymbol.AtModule at = TypeSymbols.declared(new TypeKey(module, named));
         assertNotNull(symbols.declaredNode(at.key()), "no `" + named + "` declared");
-        return FieldDomains.of(at, RuleReadings.of(compilation, module),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        return FieldDomains.of(at, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
     }
 
     /** The same of a declaration over strings, since a run is a statement about those. */
@@ -309,8 +309,9 @@ class AQuestionExistsBecauseTheModelStatesItAndNotBecauseAReadingSucceededTest {
         assertNotNull(symbols);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Code"));
         assertNotNull(symbols.declaredNode(named.key()), "no `Code` declared");
-        FieldDomains domains = FieldDomains.of(named, RuleReadings.of(compilation, module),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        FieldDomains domains = FieldDomains.of(named,
+                RuleReadingContext.unshared(RuleReadings.of(compilation, module),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
         assertEquals(1, domains.required().size(),
                 () -> "one clause, one rule: " + domains.required().keySet());
         Set<CoverageObligation> out = new LinkedHashSet<>();

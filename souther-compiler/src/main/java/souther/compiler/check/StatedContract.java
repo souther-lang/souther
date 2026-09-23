@@ -142,13 +142,9 @@ public record StatedContract(ValueName.Behavior behavior, List<Param> params, Ty
      * @param helpers the signatures a rule may reach without a binding
      */
     public static StatedContract of(BehaviorContract contract, ClausesForDischarge declaring,
-                                    Symbols symbols, PublishedDeclarations published,
-                                    DeclarationKinds kinds, NewtypeInners inners,
-                                    EffectiveFieldTypes fieldTypes, FieldLayout layout,
+                                    Symbols symbols, DeclarationAccess declarations,
                                     Map<String, Type> helpers) {
-        CheckContext ctx =
-                CheckContext.of(symbols, published, kinds, inners, fieldTypes, layout)
-                        .forDischarge();
+        CheckContext ctx = CheckContext.of(symbols, declarations).forDischarge();
         List<StatedRule> rules = new ArrayList<>();
         for (BehaviorContract.Clause clause : contract.clauses()) {
             for (Rule rule : clause.rules()) {

@@ -217,6 +217,6 @@ class WhatARuleLeavesDoesNotTurnOnHowItsAuthorSpeltTheBooleanTest {
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Box"));
-        return FieldDomains.of(named, rules, ReadAs.THE_COMPILATION_DOES);
+        return FieldDomains.of(named, RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES));
     }
 }

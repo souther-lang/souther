@@ -58,7 +58,9 @@ final class CardinalityTransfer {
     private CardinalityTransfer() {}
 
     /**
-     * What {@code def}, declared as {@code named}, comes to under {@code answers}.
+     * What {@code def}, declared as {@code named}, comes to under {@code answers}, asking where
+     * {@code reading} borrows from for what somebody has already made of the declaration's string
+     * rules before building any of it.
      *
      * @param granted the declarations taken to have values whatever their own rules say. Their
      *                clauses are left out of every reading here, because a declaration said to have
@@ -66,17 +68,8 @@ final class CardinalityTransfer {
      *                reached: a record holding it would otherwise be told it holds nothing by the
      *                very rules the supposing was about.
      */
-    static Cardinality upperOf(TypeSymbol named, Hir.Def def, RuleReadingSource source,
-                               ReadingPolicy policy, Answers answers,
-                               Set<TypeSymbol> granted) {
-        return upperOf(named, def, source, policy, answers, granted, DeclarationReadings.NONE);
-    }
-
-    /** The same, asking {@code machines} for what somebody has already made of the declaration's
-     *  string rules before building any of it. */
-    static Cardinality upperOf(TypeSymbol named, Hir.Def def, RuleReadingSource source,
-                               ReadingPolicy policy, Answers answers,
-                               Set<TypeSymbol> granted, DeclarationReadings machines) {
+    static Cardinality upperOf(TypeSymbol named, Hir.Def def, RuleReadingContext reading,
+                               Answers answers, Set<TypeSymbol> granted) {
         return switch (def) {
             case Hir.UnitData _ -> Cardinality.atMost(1);
             case Hir.SumData sum -> ofCases(namedCases(sum), answers);
@@ -84,7 +77,7 @@ final class CardinalityTransfer {
             // one, so a name reaching here that is not a module's is a declaration world and a
             // graph of names that have stopped agreeing.
             case Hir.Data data -> named instanceof TypeSymbol.AtModule at
-                    ? ofData(at, data, source, policy, answers, granted, machines)
+                    ? ofData(at, data, reading, answers, granted)
                     : Declared.notAModules(named, data);
         };
     }
@@ -130,20 +123,21 @@ final class CardinalityTransfer {
         return across != null ? across : Cardinality.none(new Emptiness.AcrossEveryCase(without));
     }
 
-    private static Cardinality ofData(TypeSymbol.AtModule named, Hir.Data data, RuleReadingSource source,
-                                      ReadingPolicy policy, Answers answers,
-                                      Set<TypeSymbol> granted, DeclarationReadings machines) {
+    private static Cardinality ofData(TypeSymbol.AtModule named, Hir.Data data,
+                                      RuleReadingContext reading, Answers answers,
+                                      Set<TypeSymbol> granted) {
+        RuleReadingSource source = reading.source();
         // Rules that cannot all hold leave nothing to count, and the ends they would have been
         // counted between are gone with them. Asked before the positions, which have nothing to say
         // about a value the declaration as a whole refuses, and nearer than anything they could say.
         Optional<Emptiness> contradiction =
-                FieldDomains.granting(named, source, policy, granted, machines)
-                        .holdsNothing(machines.of(named.key()));
+                FieldDomains.granting(named, reading, granted)
+                        .holdsNothing(reading.readings().of(named.key()));
         if (contradiction.isPresent()) {
             return Cardinality.none(contradiction.get());
         }
-        OccurrenceCounts counts = OccurrenceCounts.of(named, source, policy, granted, machines);
-        OccurrenceValues values = OccurrenceValues.of(named, source, policy, granted, machines);
+        OccurrenceCounts counts = OccurrenceCounts.of(named, reading, granted);
+        OccurrenceValues values = OccurrenceValues.of(named, reading, granted);
         Map<String, Type> fields = TypeOps.fieldTypes(data, source.symbols());
         if (data.newtype()) {
             // A newtype is one value under a name, so its value sits where it sits: the rules written

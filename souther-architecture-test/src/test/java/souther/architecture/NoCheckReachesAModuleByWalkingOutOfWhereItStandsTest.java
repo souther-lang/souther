@@ -110,8 +110,9 @@ class NoCheckReachesAModuleByWalkingOutOfWhereItStandsTest {
                 "souther/architecture/NoCheckReachesAModuleByWalkingOutOfWhereItStandsTest"
                         + "$SaidOnlyInAnAnnotation"));
         assertEquals(List.of(SENTINEL, SENTINEL + "/and-another"),
-                said.get("souther.architecture.NoCheckReachesAModuleByWalkingOutOfWhereItStands"
-                        + "Test$SaidOnlyInAnAnnotation#takesItsSubjectsFromAnAnnotation"),
+                said.get(AMethod.of("souther.architecture.NoCheckReachesAModuleByWalkingOutOf"
+                        + "WhereItStandsTest$SaidOnlyInAnAnnotation",
+                        "takesItsSubjectsFromAnAnnotation", "(Ljava/lang/String;)V")),
                 "what the annotation says, in the order it says it: " + said);
     }
 

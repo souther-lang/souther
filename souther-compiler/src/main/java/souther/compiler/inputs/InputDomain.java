@@ -248,21 +248,8 @@ public final class InputDomain {
     public record Parameter(String name, BindingId binding, Type type) {}
 
     /** Every position of an input, in the order the parameters are declared and descended into. */
-    public static InputDomain of(List<Parameter> parameters, RuleReadingSource source,
-                                 ReadingPolicy policy, DeclarationReadings machines) {
-        return of(parameters, source, policy, InputDemand.NONE, machines);
-    }
-
-    /** The same, reading for itself. */
-    public static InputDomain of(List<Parameter> parameters, RuleReadingSource source,
-                                 ReadingPolicy policy) {
-        return of(parameters, source, policy, InputDemand.NONE, DeclarationReadings.NONE);
-    }
-
-    /** The same, closed over the finite paths a behavior's measurement names, reading for itself. */
-    public static InputDomain of(List<Parameter> parameters, RuleReadingSource source,
-                                 ReadingPolicy policy, InputDemand demand) {
-        return of(parameters, source, policy, demand, DeclarationReadings.NONE);
+    public static InputDomain of(List<Parameter> parameters, RuleReadingContext reading) {
+        return of(parameters, reading, InputDemand.NONE);
     }
 
     /**
@@ -280,14 +267,13 @@ public final class InputDomain {
      * asked for — is taken from it once. So a path nobody demanded is a path this has no position
      * for, whoever asks and whenever.
      *
-     * <p>{@code machines} is where each declaration this opens borrows what somebody has already
-     * made of it. A capability and not a part of the reading: handed to every reading this walk
-     * opens, kept by nothing the walk answers with, and kept here for the readers of those same
-     * declarations that come after the walk ({@link #machines}).
+     * <p>{@code reading} is the world the walk reads in and hands down whole, and where each
+     * declaration this opens borrows what somebody has already made of it. What outlives the walk
+     * is the policy and the lender alone, kept here for the readers of those same declarations
+     * that come after the walk ({@link #machines}).
      */
-    public static InputDomain of(List<Parameter> parameters, RuleReadingSource source,
-                                 ReadingPolicy policy, InputDemand demand,
-                                 DeclarationReadings machines) {
+    public static InputDomain of(List<Parameter> parameters, RuleReadingContext reading,
+                                 InputDemand demand) {
         List<Position> found = new ArrayList<>();
         List<RuleRoot> roots = new ArrayList<>();
         Map<BindingId, String> read = new LinkedHashMap<>();
@@ -308,14 +294,14 @@ public final class InputDomain {
             }
             TermPath at = TermPath.of(parameter.name());
             roots.add(new RuleRoot(at, parameter.type(), new RootOpening.Taken()));
-            PlacedRules rules = PlacedRules.of(at, parameter.type(), source, policy, machines);
+            PlacedRules rules = PlacedRules.of(at, parameter.type(), reading);
             account.from(rules);
             // One walk, carrying the paths the measurement named under this parameter. Walked once
             // per demand instead, two paths sharing a prefix would open that prefix's declaration
             // twice, place its rules twice, and record a second answer where the ledger of what was
             // handed on keeps one — so a reading assembled from replays would depend on how many
             // demands ran through it.
-            walk(at, parameter.type(), ExpansionTrace.NONE, source, policy, rules, found, roots,
+            walk(at, parameter.type(), ExpansionTrace.NONE, reading, rules, found, roots,
                     java.util.Set.of(), handoffs, observed, account,
                     Reach.enumerating(demand.under(at)));
         }
@@ -331,8 +317,8 @@ public final class InputDomain {
         // was not: it holds the parameters it was given, the policy it was read under and the names
         // it reached. Answered with a value standing for no reading at all, an input nobody could
         // read would be the same value as an input there was nothing to read.
-        return new InputDomain(settled, read, parameters, roots, policy, observed.reach(),
-                account.placed(), account.clauses(), observed.cases(), machines);
+        return new InputDomain(settled, read, parameters, roots, reading.policy(), observed.reach(),
+                account.placed(), account.clauses(), observed.cases(), reading.retainedReadings());
     }
 
     /**
@@ -369,20 +355,6 @@ public final class InputDomain {
      * admitted them. What is put beside them here is the implementation: which binding a body's
      * reads of a parameter carry.
      *
-     * @param arriving which binder each declared input arrives in, or empty where nothing
-     *                 implements this behavior — an injected behavior has positions and no body to
-     *                 read them in
-     */
-    public static InputDomain of(DeclaredSig declared,
-                                 List<SpecImplementation.ParameterBinding.AnInput> arriving,
-                                 RuleReadingSource source, ReadingPolicy policy,
-                                 DeclarationReadings machines) {
-        return of(declared, arriving, source, policy, InputDemand.NONE, machines);
-    }
-
-    /**
-     * The same, asking {@code machines} first.
-     *
      * <p>{@code arriving} says which binder each declared input arrives in, where something
      * implements the behavior. It is asked of {@link SpecImplementation} and not measured off the
      * front of the implementation's parameter list: a behavior takes the behaviors it depends on
@@ -396,8 +368,7 @@ public final class InputDomain {
      */
     public static InputDomain of(DeclaredSig declared,
                                  List<SpecImplementation.ParameterBinding.AnInput> arriving,
-                                 RuleReadingSource source, ReadingPolicy policy, InputDemand demand,
-                                 DeclarationReadings machines) {
+                                 RuleReadingContext reading, InputDemand demand) {
         Map<Integer, BindingId> bindings = new LinkedHashMap<>();
         for (SpecImplementation.ParameterBinding.AnInput input : arriving) {
             bindings.put(input.at(), input.written().binder().binding());
@@ -407,7 +378,7 @@ public final class InputDomain {
         for (DeclaredSig.Input input : declared.inputs()) {
             parameters.add(new Parameter(input.name(), bindings.get(at++), input.type()));
         }
-        return of(parameters, source, policy, demand, machines);
+        return of(parameters, reading, demand);
     }
 
     /**
@@ -418,32 +389,8 @@ public final class InputDomain {
      * same spelling. So this is the reading for a caller with no body in hand, and a caller with one
      * that used it would find every claim and every comparison naming nothing.
      */
-    public static InputDomain of(DeclaredSig declared, RuleReadingSource source,
-                                 ReadingPolicy policy, DeclarationReadings machines) {
-        return of(declared, List.of(), source, policy, machines);
-    }
-
-    /** The same, reading for itself. */
-    public static InputDomain of(DeclaredSig declared, RuleReadingSource source,
-                                 ReadingPolicy policy) {
-        return of(declared, List.of(), source, policy, DeclarationReadings.NONE);
-    }
-
-    /** The same, of an input nothing reads a body against, reading for itself. */
-    public static InputDomain of(DeclaredSig declared,
-                                 List<SpecImplementation.ParameterBinding.AnInput> arriving,
-                                 RuleReadingSource source, ReadingPolicy policy) {
-        return of(declared, arriving, source, policy, InputDemand.NONE,
-                DeclarationReadings.NONE);
-    }
-
-    /** The same, closed over the finite paths this behavior's measurement names, reading for
-     *  itself. */
-    public static InputDomain of(DeclaredSig declared,
-                                 List<SpecImplementation.ParameterBinding.AnInput> arriving,
-                                 RuleReadingSource source, ReadingPolicy policy,
-                                 InputDemand demand) {
-        return of(declared, arriving, source, policy, demand, DeclarationReadings.NONE);
+    public static InputDomain of(DeclaredSig declared, RuleReadingContext reading) {
+        return of(declared, List.of(), reading, InputDemand.NONE);
     }
 
     /** The positions, in the order they were read. */
@@ -839,6 +786,10 @@ public final class InputDomain {
      * comparison written about it. Built at the top of whatever is walking, and handed down.
      */
     public Quantities quantities(RuleReadingSource source) {
+        // The world this reading was made in, put back together from what it kept: the same rules
+        // under the same budget, borrowing what this reading's own walk made.
+        RuleReadingContext world =
+                source == null ? null : RuleReadingContext.of(source, policy, machines);
         Map<TermPath, OpenedRules> byRoot = new LinkedHashMap<>();
         for (RuleRoot root : roots) {
             // The first reading under a path stands, for the same reason the first reading of a
@@ -850,19 +801,17 @@ public final class InputDomain {
             // an input between them.
             byRoot.computeIfAbsent(root.at(),
                     at -> new OpenedRules(
-                            PlacedRules.of(at, root.type(), source, policy, machines),
+                            PlacedRules.of(at, root.type(), world),
                             root.opening()));
         }
         // Where a term's subject stands, handed over already answered. What comes back asks a
         // position first and the declarations under one the reading stopped above, which is the one
         // resolution of it — worked out again from the positions this hands over, a rule about a
         // name every case of a sum spreads would be read as naming nothing.
-        // The world this reading was made in, handed on whole. What a quantity reaches below is a
-        // declaration this reading already reached, so it is read from the same rules under the
-        // same budget and borrows what this reading's own made of it.
+        // The same world, handed on whole. What a quantity reaches below is a declaration this
+        // reading already reached, so it is read from the same rules under the same budget.
         return ReadQuantities.of(byRoot, byRoot.keySet(), byPath, cases,
-                path -> typeAt(path, source),
-                source == null ? null : RuleReadingContext.of(source, policy, machines));
+                path -> typeAt(path, source), world);
     }
 
     /**
@@ -999,11 +948,12 @@ public final class InputDomain {
      * it — and a reader that gives a position up in favour of its fields finds them read either
      * way.
      */
-    private static void walk(TermPath path, Type type, ExpansionTrace ancestry, RuleReadingSource source,
-                             ReadingPolicy policy, PlacedRules placed, List<Position> found,
+    private static void walk(TermPath path, Type type, ExpansionTrace ancestry,
+                             RuleReadingContext reading, PlacedRules placed, List<Position> found,
                              List<RuleRoot> roots, java.util.Set<Type> visited,
                              RuleHandoffs handoffs, NameReach.Observed observed,
                              Gathered account, Reach reach) {
+        RuleReadingSource source = reading.source();
         // The proof first, and before anything is read off the position. A shape a reading is not
         // made of is this compiler disagreeing with itself about what may stand at a position, and
         // it is refused here rather than arriving further down as a position nothing divides.
@@ -1028,7 +978,7 @@ public final class InputDomain {
                 ? StructuralInspection.stoppedAt(
                         new BlockReason.RecursiveExpansion(unfolds, already))
                 : StructuralInspection.of(input.shape(), declared);
-        Position here = read(input, path, source, policy, placed, structure, declared);
+        Position here = read(input, path, reading, placed, structure, declared);
         // Passing through an occurrence is not finding a position. A reading following a path the
         // model named opens every declaration on the way — that is how it knows which step to take
         // and whose rules reach the end of it — and what it reports is the end. Published all the
@@ -1059,7 +1009,7 @@ public final class InputDomain {
                     if (!on.enters()) {
                         continue;
                     }
-                    walk(path.then(field.getKey()), field.getValue(), deeper, source, policy,
+                    walk(path.then(field.getKey()), field.getValue(), deeper, reading,
                             // A field is a value of its own, so a sum met under it is one this walk
                             // has not taken apart however many were taken apart above.
                             placed, found, roots, java.util.Set.of(), handoffs, observed, account,
@@ -1067,8 +1017,8 @@ public final class InputDomain {
                 }
             }
             case StructuralInspection.Retained retained ->
-                    under(retained.continuation(), here, path, input, deeper, source,
-                            policy, placed, found, roots, visited, handoffs, observed, account,
+                    under(retained.continuation(), here, path, input, deeper, reading,
+                            placed, found, roots, visited, handoffs, observed, account,
                             reach, already != null);
         }
     }
@@ -1111,7 +1061,7 @@ public final class InputDomain {
      */
     private static void under(StructuralInspection.Continuation continuation, Position here,
                               TermPath path, ReadablePosition input, ExpansionTrace ancestry,
-                              RuleReadingSource source, ReadingPolicy policy,
+                              RuleReadingContext reading,
                               PlacedRules placed, List<Position> found, List<RuleRoot> roots,
                               java.util.Set<Type> visited, RuleHandoffs handoffs,
                               NameReach.Observed observed, Gathered account,
@@ -1137,10 +1087,9 @@ public final class InputDomain {
                 // Nothing crosses into what a sequence holds: what a clause of the value out here
                 // says is written about the sequence, and an element is a value with a declaration
                 // of its own.
-                takeTheRulesOver(placed.root(), path, at, elements.element(), ancestry, source,
-                        policy, found, roots, java.util.Set.of(), handoffs, observed, null,
-                        new RootOpening.Inside(placed.root(), path), account, on,
-                        placed.machines());
+                takeTheRulesOver(placed.root(), path, at, elements.element(), ancestry, reading,
+                        found, roots, java.util.Set.of(), handoffs, observed, null,
+                        new RootOpening.Inside(placed.root(), path), account, on);
             }
             case StructuralInspection.Continuation.Branches branches -> {
                 // Asked where the branches are, which is the only place a name can cross one.
@@ -1197,11 +1146,10 @@ public final class InputDomain {
                     // standing under no narrowing — that is what the opening beside this says.
                     PlacedRules.Reaching reaching =
                             shared.isEmpty() ? null : new PlacedRules.Reaching(placed, crossing);
-                    walkBranch(branch, placed.root(), path, ancestry, source, policy, found, roots,
+                    walkBranch(branch, placed.root(), path, ancestry, reading, found, roots,
                             visited, handoffs, observed, reaching,
                             new RootOpening.Refined(placed.root(), crossing), account,
-                            reach.into(path.refine(branch.refinement()), stopped),
-                            placed.machines());
+                            reach.into(path.refine(branch.refinement()), stopped));
                     crossed(observed, crossing, found, before);
                 }
             }
@@ -1282,14 +1230,12 @@ public final class InputDomain {
      * evidence that something was read (#1072).
      */
     private static void takeTheRulesOver(TermPath by, TermPath at, TermPath opened, Type type,
-                                         ExpansionTrace ancestry, RuleReadingSource source,
-                                         ReadingPolicy policy,
+                                         ExpansionTrace ancestry, RuleReadingContext reading,
                                          List<Position> found, List<RuleRoot> roots,
                                          java.util.Set<Type> visited, RuleHandoffs handoffs,
                                          NameReach.Observed observed,
                                          PlacedRules.Reaching crossing, RootOpening opening,
-                                         Gathered account, Reach reach,
-                                         DeclarationReadings machines) {
+                                         Gathered account, Reach reach) {
         roots.add(new RuleRoot(opened, type, opening));
         // Said where a reading is actually opened, so that a case recorded as opened is one there
         // is somewhere to ask about. Said where the branch was chosen instead, a descent that turns
@@ -1301,11 +1247,11 @@ public final class InputDomain {
         if (reach.handedOn()) {
             handoffs.accepts(by, at, opened);
         }
-        PlacedRules rules = PlacedRules.of(opened, type, source, policy, crossing, machines);
+        PlacedRules rules = PlacedRules.of(opened, type, reading, crossing);
         // Said as the reading of this value is opened, so that what a build has to account for is
         // what the rules of the values it read actually placed.
         account.from(rules);
-        walk(opened, type, ancestry, source, policy, rules, found, roots, visited,
+        walk(opened, type, ancestry, reading, rules, found, roots, visited,
                 handoffs, observed, account, reach);
     }
 
@@ -1322,12 +1268,12 @@ public final class InputDomain {
      * root begins here and the reading of the sum's own value has nothing to say below it.
      */
     private static void walkBranch(StructuralInspection.Branch branch, TermPath by, TermPath path,
-                                   ExpansionTrace ancestry, RuleReadingSource source, ReadingPolicy policy,
+                                   ExpansionTrace ancestry, RuleReadingContext reading,
                                    List<Position> found, List<RuleRoot> roots,
                                    java.util.Set<Type> visited, RuleHandoffs handoffs,
                                    NameReach.Observed observed, PlacedRules.Reaching crossing,
                                    RootOpening opening,
-                                   Gathered account, Reach reach, DeclarationReadings machines) {
+                                   Gathered account, Reach reach) {
         // <b>A descent that costs no level stops only where it returns to a value it has already
         // been at without a step into one.</b> That is the whole of the rule, and what it is keyed
         // on is the value reached and never the narrowing taken: a narrowing is an edge and the
@@ -1352,8 +1298,8 @@ public final class InputDomain {
         java.util.Set<Type> deeper = new java.util.LinkedHashSet<>(visited);
         deeper.add(branch.under());
         takeTheRulesOver(by, path, path.refine(branch.refinement()), branch.under(), ancestry,
-                source, policy, found, roots, deeper, handoffs, observed, crossing, opening,
-                account, reach, machines);
+                reading, found, roots, deeper, handoffs, observed, crossing, opening,
+                account, reach);
     }
 
     /**
@@ -1379,10 +1325,10 @@ public final class InputDomain {
      * are one reading: the numbers come off the type, and every end an author placed is placed on
      * one of them.
      */
-    private static Position read(ReadablePosition input, TermPath path, RuleReadingSource source,
-                                 ReadingPolicy policy,
+    private static Position read(ReadablePosition input, TermPath path, RuleReadingContext world,
                                  PlacedRules placed, StructuralInspection structure,
                                  List<Case> declared) {
+        RuleReadingSource source = world.source();
         TypeView view = input.view();
         Type type = view.declared();
         Carrier carried =
@@ -1399,7 +1345,7 @@ public final class InputDomain {
         // reading of the clauses as they are written ({@code boundsOn}), and a second answer about
         // the same clauses is one this would have to choose between rather than intersect.
         List<FieldDomains.Placed> constrained =
-                DeclaredCoordinates.placedOnItsOwnValue(type, source, policy, placed.machines());
+                DeclaredCoordinates.placedOnItsOwnValue(type, world);
         // And the ends the value's own conjuncts state that no comparison says: a rule about the
         // strings places no comparison, and a conjunct that placed no end can still move one.
         List<FieldDomains.Placed> movedHere = placed.ownEndsAt(path);

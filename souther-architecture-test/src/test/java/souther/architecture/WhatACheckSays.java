@@ -43,8 +43,10 @@ final class WhatACheckSays {
     /**
      * Everything {@code check} says, by where it says it.
      *
-     * <p>The key is what a rule names when it reports: {@code class#method} for a method's own, and
-     * the class's name for what is written outside one.
+     * <p>The key is what a rule names when it reports: the method with what it takes
+     * ({@link AMethod}) for a method's own, and the class's name for what is written outside one.
+     * With what it takes, because two overloads keyed alike would leave one of them saying what the
+     * other said and the other saying nothing.
      */
     static Map<String, List<String>> of(ClassModel check) {
         String named = check.thisClass().asInternalName().replace('/', '.');
@@ -83,7 +85,8 @@ final class WhatACheckSays {
                     .ifPresent(taken -> taken.parameterAnnotations()
                             .forEach(each -> each.forEach(one -> valuesOf(one, here))));
             if (!here.isEmpty()) {
-                said.put(named + "#" + method.methodName().stringValue(), here);
+                said.put(AMethod.of(named, method.methodName().stringValue(),
+                        method.methodTypeSymbol()), here);
             }
         }
         return said;

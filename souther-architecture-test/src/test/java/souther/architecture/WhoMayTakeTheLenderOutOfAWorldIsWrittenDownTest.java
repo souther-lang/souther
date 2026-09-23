@@ -34,10 +34,17 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * RuleReadingContext} in {@code souther.compiler.check} may read it, and the walk this is about
  * lives in that package. The rows below are what says which methods do.
  *
- * <p>Written per method and not per class. What is entitled is a bridge to the shape that still
- * takes the three apart, and it is entitled because it hands all three on unchanged. A class
- * holding one such bridge is not a class whose every method may reach the lender — least of all the
- * ones that are the walk.
+ * <p>Written per method and not per class, and per overload: a method is named with what it takes
+ * ({@link AMethod}), so a way out added to another overload of a method written down here is a row
+ * of its own. What is entitled is a method that uses the lender
+ * itself — borrows from it, or keeps what the revision worked out about where sets stop — or a
+ * result the walk builds that keeps the lender for readers arriving after the walk. A class holding
+ * one such method is not a class whose every method may reach the lender — least of all the ones
+ * that are the walk.
+ *
+ * <p>Both ways out are watched. One is for the readers inside {@code souther.compiler.check}; the
+ * other, {@code retainedReadings}, is for a result that outlives the walk, and is public because
+ * such results are built elsewhere. A way out nobody watched would be where the lender went next.
  *
  * <p>Read off the compiled classes, and a reader that hands the accessor over to be called later is
  * one of these: a method handed to something that will call it reads the lender as surely as
@@ -53,26 +60,60 @@ class WhoMayTakeTheLenderOutOfAWorldIsWrittenDownTest {
 
     private static final String OWNER = CHECK + "RuleReadingContext";
 
+    /** What a method taking a world takes it as. */
+    private static final String A_WORLD = "L" + OWNER + ";";
+
+    private static final String INPUTS = "souther/compiler/inputs/";
+
+    /** The way out for a reader under the walk that uses the lender itself. */
     private static final String THE_LENDER = "readings";
+
+    /** The way out for a result the walk builds, which keeps the lender for readers after it. */
+    private static final String KEPT_PAST_THE_WALK = "retainedReadings";
 
     private static final CompiledOutputs COMPILED = CompiledOutputs.ofWhatThisRepositoryPublishes();
 
     /**
      * Every method that reaches it, and why each of them is entitled to.
      *
-     * <p>Both are ways in to the shape that takes the rules, the budget and the lender apart, and
-     * both hand over the three they were given. A reader calling one of these is reading in the
-     * world it was handed, which is what the shape taking three arguments cannot say on its own.
+     * <p>The reading itself borrows the declaration's reading and its string machines
+     * ({@code InvariantChecker#readFields}), and the question whether a declaration's rules leave
+     * anything is answered out of the machines the same way ({@code CardinalityTransfer#ofData}).
+     * A checker and a declaration's field domains keep what the revision worked out about where a
+     * set's strings stop, which is a fact the revision has rather than a place to borrow a reading
+     * from. They are rows all the same: what they hold is the lender, and a method that has the
+     * lender can do anything with it that this is about.
      *
-     * <p>The seeding's way in also reads it for what the revision worked out about where a set's
-     * strings stop, which is a fact the revision has rather than a place to borrow a reading from.
-     * It is a row all the same: what it holds is the lender, and a method that has the lender can
-     * do anything with it that this is about.
+     * <p>An input's reading and the rules it places keep the lender past the walk, so that what a
+     * position is offered afterwards borrows what the walk made.
      */
     private static final List<String> TAKING_IT_OUT = List.of(
-            CHECK + "FieldDomains#of -> " + OWNER + "#" + THE_LENDER,
-            CHECK + "InvariantChecker#<init> -> " + OWNER + "#" + THE_LENDER,
-            CHECK + "InvariantChecker#seedFields -> " + OWNER + "#" + THE_LENDER);
+            AMethod.of(CHECK + "CardinalityTransfer", "ofData",
+                    "(Lsouther/compiler/types/TypeSymbol$AtModule;Lsouther/compiler/ast/Hir$Data;"
+                            + A_WORLD + "L" + CHECK + "Answers;Ljava/util/Set;)L" + CHECK
+                            + "Cardinality;")
+                    + " -> " + OWNER + "#" + THE_LENDER,
+            AMethod.of(CHECK + "FieldDomains", "leftBy",
+                    "(L" + CHECK + "InvariantChecker$Seeded;Lsouther/compiler/types/TypeSymbol$AtModule;"
+                            + A_WORLD + "Ljava/util/Map;L" + CHECK + "InvariantChecker$Reach;)L"
+                            + CHECK + "FieldDomains;")
+                    + " -> " + OWNER + "#" + THE_LENDER,
+            AMethod.of(CHECK + "InvariantChecker", "<init>",
+                    "(" + A_WORLD + "Ljava/util/Map;L" + CHECK + "ValueTemplates;)V")
+                    + " -> " + OWNER + "#" + THE_LENDER,
+            AMethod.of(CHECK + "InvariantChecker", "readFields",
+                    "(Lsouther/compiler/types/TypeSymbol$AtModule;" + A_WORLD
+                            + "Ljava/util/Map;L" + CHECK + "InvariantChecker$Reach;)L" + CHECK
+                            + "DeclarationReading;")
+                    + " -> " + OWNER + "#" + THE_LENDER,
+            AMethod.of(INPUTS + "InputDomain", "of",
+                    "(Ljava/util/List;" + A_WORLD + "L" + INPUTS + "InputDemand;)L" + INPUTS
+                            + "InputDomain;")
+                    + " -> " + OWNER + "#" + KEPT_PAST_THE_WALK,
+            AMethod.of(INPUTS + "PlacedRules", "of",
+                    "(L" + INPUTS + "TermPath;Lsouther/compiler/types/Type;" + A_WORLD + "L" + INPUTS
+                            + "PlacedRules$Reaching;)L" + INPUTS + "PlacedRules;")
+                    + " -> " + OWNER + "#" + KEPT_PAST_THE_WALK);
 
     @Test
     void everyMethodThatTakesTheLenderOutOfAWorldIsWrittenDown() {
@@ -80,50 +121,53 @@ class WhoMayTakeTheLenderOutOfAWorldIsWrittenDownTest {
                 () -> "the methods that take the lender out of a world are not the ones written"
                         + " down.\n  found: " + takingItOut() + "\n  written down: " + TAKING_IT_OUT
                         + "\nRead in the world rather than out of it, or say here why this method"
-                        + " hands the lender on unchanged.");
+                        + " uses the lender or keeps it past the walk.");
     }
 
-    /** Every method naming the accessor, as the method and what it named. */
+    /** Every method naming either accessor, as the method and what it named. */
     private static Set<String> takingItOut() {
         Set<String> found = new TreeSet<>();
         for (ClassModel model : COMPILED.all()) {
-            String owner = model.thisClass().name().stringValue();
             for (MethodModel method : model.methods()) {
                 for (Instruction instruction : instructionsOf(method)) {
-                    if (namesTheLender(instruction)) {
-                        found.add(owner + "#" + method.methodName().stringValue()
-                                + " -> " + OWNER + "#" + THE_LENDER);
-                    }
+                    namedWayOut(instruction).ifPresent(way -> found.add(
+                            AMethod.of(model, method) + " -> " + OWNER + "#" + way));
                 }
             }
         }
         return found;
     }
 
+    private static boolean isAWayOut(String name) {
+        return THE_LENDER.equals(name) || KEPT_PAST_THE_WALK.equals(name);
+    }
+
     /**
-     * Whether an instruction names it: by calling it, or by handing it over to be called later.
+     * Which way out an instruction names, if any: by calling it, or by handing it over to be called
+     * later.
      *
      * <p>The second arrives as a handle among the arguments a bootstrap is given, which is what a
      * method reference comes to. A reader passing one along reaches the lender the same way a caller
      * does.
      */
-    private static boolean namesTheLender(Instruction instruction) {
+    private static Optional<String> namedWayOut(Instruction instruction) {
         return switch (instruction) {
             case InvokeInstruction call -> OWNER.equals(call.owner().name().stringValue())
-                    && THE_LENDER.equals(call.name().stringValue());
+                    && isAWayOut(call.name().stringValue())
+                    ? Optional.of(call.name().stringValue()) : Optional.empty();
             case InvokeDynamicInstruction handed -> {
                 for (LoadableConstantEntry each : handed.invokedynamic().bootstrap().arguments()) {
                     if (each instanceof MethodHandleEntry handle) {
                         MemberRefEntry member = handle.reference();
                         if (OWNER.equals(member.owner().name().stringValue())
-                                && THE_LENDER.equals(member.name().stringValue())) {
-                            yield true;
+                                && isAWayOut(member.name().stringValue())) {
+                            yield Optional.of(member.name().stringValue());
                         }
                     }
                 }
-                yield false;
+                yield Optional.empty();
             }
-            default -> false;
+            default -> Optional.empty();
         };
     }
 

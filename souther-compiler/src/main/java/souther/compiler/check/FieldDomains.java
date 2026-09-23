@@ -76,7 +76,7 @@ public final class FieldDomains {
                     Map.of(), Map.of(), new ReadingEvidence(), Map.of(),
                     Map.of(RuleKey.THE_VALUE, Set.of(new RulesMissed.NoReadingWasMade())), Set.of(),
                     NOTHING_NAMED,
-                    ConstraintState.top(FactSubject.inOneOrder()), null, null, null, Map.of(),
+                    ConstraintState.top(FactSubject.inOneOrder()), null, null, Map.of(),
                     Set.of(RuleKey.THE_VALUE),
                     Map.of(), Map.of(), List.of(), Map.of(), StringFacts.NONE, KnownExtents.NONE,
                     Map.of(), Map.of(), BoundaryState.nothing(),
@@ -255,7 +255,7 @@ public final class FieldDomains {
                          Map<RuleKey, Set<RulesMissed>> notGathered, Set<RuleKey> handedOn,
                          SequencedMap<FactSubject, RuleKey> namedBy,
                          ConstraintState<FactSubject> constraints, TypeSymbol.AtModule named,
-                         RuleReadingSource source, ReadingPolicy policy,
+                         RuleReadingContext readIn,
                          Map<NumberAt<RuleKey>, Count> settled,
                          Set<RuleKey> unreadOfEveryValue,
                          Map<RuleKey, FactSubject> atomAt, Map<RuleKey, Counted> countAt,
@@ -270,6 +270,11 @@ public final class FieldDomains {
         this.derived = derived;
         this.settledOrder = settledOrder;
         this.stringMachines = stringMachines;
+        // What is kept of the world this was read in: the rules and the budget, to read again
+        // under. Not the lender — a counterfactual of this reading borrows what this reading made
+        // ({@link #borrowingMachines}) — and nothing where no reading was made.
+        this.source = readIn == null ? null : readIn.source();
+        this.policy = readIn == null ? null : readIn.policy();
         this.known = known;
         this.byName = byName;
         this.heldByName = heldByName;
@@ -291,8 +296,6 @@ public final class FieldDomains {
         this.namedBy = namedBy;
         this.constraints = constraints;
         this.named = named;
-        this.source = source;
-        this.policy = policy;
         this.settled = settled;
         this.unreadOfEveryValue = unreadOfEveryValue;
         this.atomAt = atomAt;
@@ -366,43 +369,12 @@ public final class FieldDomains {
      * a caller made to fetch one has a declaration in its hands for a question that was never its
      * own, and can read the record's structure back out of it.
      *
-     * <p>Where the reading comes from is said. A reader with a store to ask hands it over; one
-     * with none says so, and the overloads that leave it out read for themselves and are a test's
-     * to call — what keeps a reading of this compiler's own from quietly becoming one of those is
-     * checked over the compiled classes rather than left to which overload was to hand.
-     */
-    public static FieldDomains of(TypeSymbol.AtModule named, RuleReadingSource source,
-                                  ReadingPolicy policy, DeclarationReadings machines) {
-        return of(named, source, policy, Map.of(), machines);
-    }
-
-    /**
-     * The same, read in the world a walk carries.
-     *
-     * <p>What a reader under a walk asks, and the shape that leaves it nothing to choose. Handed
-     * the three apart, a reader picks a lender for the reading it is about to make; handed the
-     * world it was given, it reads in the one its caller read in and hands the same one on.
+     * <p>Read in the world a walk carries, which leaves a reader nothing to choose: handed the world
+     * it was given, it reads in the one its caller read in and hands the same one on. A reader with
+     * no store behind it says so where it makes that world ({@link RuleReadingContext#unshared}).
      */
     public static FieldDomains of(TypeSymbol.AtModule named, RuleReadingContext reading) {
         return of(named, reading, Map.of());
-    }
-
-    /** The same, with some fields already settled at a value. */
-    public static FieldDomains of(TypeSymbol.AtModule named, RuleReadingContext reading,
-                                  Map<RuleKey, Count> settled) {
-        return of(named, reading.source(), reading.policy(), settled, reading.readings());
-    }
-
-    /** The same, reading for itself. */
-    public static FieldDomains of(TypeSymbol.AtModule named, RuleReadingSource source,
-                                  ReadingPolicy policy) {
-        return of(named, source, policy, Map.of(), DeclarationReadings.NONE);
-    }
-
-    /** The same, with some fields already settled at a value and reading for itself. */
-    public static FieldDomains of(TypeSymbol.AtModule named, RuleReadingSource source,
-                                  ReadingPolicy policy, Map<RuleKey, Count> settled) {
-        return of(named, source, policy, settled, DeclarationReadings.NONE);
     }
 
     /**
@@ -413,16 +385,14 @@ public final class FieldDomains {
      * not read off {@code endsAt}'s own range — which still runs from 1 — but off what is left of it
      * once the other end is fixed, which is 1440 and nothing else.
      */
-    public static FieldDomains of(TypeSymbol.AtModule named, RuleReadingSource source,
-                                  ReadingPolicy policy, Map<RuleKey, Count> settled,
-                                  DeclarationReadings machines) {
+    public static FieldDomains of(TypeSymbol.AtModule named, RuleReadingContext reading,
+                                  Map<RuleKey, Count> settled) {
         // A name declaring no record leaves nothing about fields it has not got, which is what
         // nothing written comes to here. The same answer the other readers of a declaration give
         // when handed such a name, because it is the same fact about the name rather than three
         // opinions about the caller.
-        return source.kinds().of(named.key()) == DeclarationKind.PRODUCT
-                ? of(named, source, policy, atValues(settled),
-                        InvariantChecker.Reach.EVERYTHING, machines)
+        return reading.source().kinds().of(named.key()) == DeclarationKind.PRODUCT
+                ? of(named, reading, atValues(settled), InvariantChecker.Reach.EVERYTHING)
                 : NONE;
     }
 
@@ -443,18 +413,15 @@ public final class FieldDomains {
      * record holding it is otherwise told it holds nothing by the very rules the supposing was
      * about.
      */
-    static FieldDomains granting(TypeSymbol.AtModule named, RuleReadingSource source,
-                                 ReadingPolicy policy,
-                                 Set<TypeSymbol> granted,
-                                 DeclarationReadings machines) {
-        return of(named, source, policy, Map.of(),
-                InvariantChecker.Reach.stoppingAt(granted), machines);
+    static FieldDomains granting(TypeSymbol.AtModule named, RuleReadingContext reading,
+                                 Set<TypeSymbol> granted) {
+        return of(named, reading, Map.of(), InvariantChecker.Reach.stoppingAt(granted));
     }
 
     /** The same, reading only as far as {@code reach} says — see {@link #narrowedBy}. */
-    private static FieldDomains of(TypeSymbol.AtModule named, RuleReadingSource source,
-                                   ReadingPolicy policy, Map<NumberAt<RuleKey>, Count> settled,
-                                   InvariantChecker.Reach reach, DeclarationReadings machines) {
+    private static FieldDomains of(TypeSymbol.AtModule named, RuleReadingContext reading,
+                                   Map<NumberAt<RuleKey>, Count> settled,
+                                   InvariantChecker.Reach reach) {
         // A newtype is read the same way, and only its bounds are not worth handing back: its value
         // is the value it is, so there are no siblings to relate. Everything else is the same
         // question — its own rules can hold a hole no range keeps, and they can contradict, and both
@@ -465,17 +432,16 @@ public final class FieldDomains {
         // declaration again without each of them — so a second asker working this out again puts
         // the whole attribution a second time. Which readings are kept and which belong to one
         // question is settled where a reading is asked for, and is not asked again here.
-        return InvariantChecker.readFields(named, source, policy, settled, reach, machines)
-                .fields(seeded -> leftBy(seeded, named, source, policy, settled, reach,
-                        machines));
+        return InvariantChecker.readFields(named, reading, settled, reach)
+                .fields(seeded -> leftBy(seeded, named, reading, settled, reach));
     }
 
     /** What the reading {@code seeded} leaves the fields able to hold, under the terms it was made
      *  with. */
     private static FieldDomains leftBy(InvariantChecker.Seeded seeded, TypeSymbol.AtModule named,
-                                       RuleReadingSource source,
-                                       ReadingPolicy policy, Map<NumberAt<RuleKey>, Count> settled,
-                                       InvariantChecker.Reach reach, DeclarationReadings machines) {
+                                       RuleReadingContext reading,
+                                       Map<NumberAt<RuleKey>, Count> settled,
+                                       InvariantChecker.Reach reach) {
         Map<RuleKey, NumericDomain.Bounds> out = new LinkedHashMap<>();
         seeded.atoms().forEach((field, atom) -> {
             // The value itself is at no name of its own, and its range is the one thing not worth
@@ -528,9 +494,12 @@ public final class FieldDomains {
                 seeded.reading().standing(), seeded.took(),
                 seeded.reading().narrowers(),
                 seeded.notGathered(), seeded.handedOn(), placeOf,
-                seeded.constraints(), named, source, policy, settled,
+                seeded.constraints(), named, reading, settled,
                 seeded.unreadOfEveryValue(), seeded.atoms(), seeded.held(),
-                seeded.readings(), seeded.spacing(), seeded.stringMachines(), machines.extents(),
+                seeded.readings(), seeded.spacing(), seeded.stringMachines(),
+                // Where the sets this reading met were found to stop, which is the revision's and
+                // is what a counterfactual of this reading walks them by.
+                reading.readings().extents(),
                 seeded.endsLeftOpen(), seeded.boundsLeftOpen(), seeded.derived(),
                 seeded.settledOrder());
     }
@@ -892,7 +861,8 @@ public final class FieldDomains {
      */
     private FieldDomains counterfactual(LeftOut omitted) {
         return counterfactuals.computeIfAbsent(omitted,
-                left -> of(named, source, policy, settled, left.reach(), borrowingMachines()));
+                left -> of(named, RuleReadingContext.of(source, policy, borrowingMachines()),
+                        settled, left.reach()));
     }
 
     /**
