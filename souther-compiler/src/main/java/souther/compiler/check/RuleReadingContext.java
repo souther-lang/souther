@@ -26,7 +26,9 @@ import souther.compiler.values.StringMachineAnswers;
  * keeps what it needs of this ({@link #retainedReadings}) and not the context: held in a result,
  * the rules and the budget would be carried into what somebody else compares.
  *
- * <p>Three accessors and nothing else. A context that answered questions of its own — what a name
+ * <p>What it was made of and nothing else: the rules, the budget, and the lender — once for a
+ * reader under the walk that uses it and once for a result that keeps it past the walk. A context
+ * that answered questions of its own — what a name
  * resolves to, what a declaration's fields leave — would be where a reader goes instead of where a
  * reader gets what it was given, and every such answer is one somebody already owns.
  *
@@ -90,10 +92,11 @@ public final class RuleReadingContext {
     /**
      * Where it borrows what has already been made of a declaration.
      *
-     * <p>For whoever still takes the three apart, and for nobody under a walk. A reader below is
-     * handed this and reads in it; reaching past it for the lender is how a reader comes to hand
-     * some other lender down, and {@link #whileTheAnswerIsMade} is what a reader that has to bound
-     * one uses instead.
+     * <p>For a reader that uses the lender itself — borrows a reading or its string machines from
+     * it, or keeps where the revision found sets to stop — and not for handing it on to another step
+     * under the walk. A step below is handed this context and reads in it; handed the lender apart,
+     * it could put some other world together around it, and {@link #whileTheAnswerIsMade} is what a
+     * reader that has to bound one uses instead.
      */
     DeclarationReadings readings() {
         return readings;
