@@ -74,7 +74,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), named));
         return new Read(FieldDomains.of(name,
-                RuleReadings.of(compilation, "demo"), policy), symbols);
+                RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"), policy)), symbols);
     }
 
     private static FieldDomains of(String source, String named) {
@@ -98,8 +98,8 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), named));
         return FieldDomains.of(name,
-                RuleReadings.of(compilation, "demo"),
-                ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),
+                        ReadAs.THE_COMPILATION_DOES));
     }
 
     private static final Value A = Value.text("A");

@@ -30,8 +30,8 @@ class HowManyValuesAPositionHasIsNotHowMuchItHoldsTest {
                 "the model this reads has to be one somebody could write");
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         return OccurrenceValues.of(TypeSymbols.declared(new TypeKey(symbols.module(), name)),
-                RuleReadings.of(compilation, "demo"),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
+                RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES))
                 .wholeValuesAt(path);
     }
 

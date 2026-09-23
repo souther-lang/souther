@@ -263,10 +263,8 @@ public final class BehaviorChecker {
                                            DeclarationKinds kinds) {
         Core condition = Elaborator.elaborate(Lower.desugarExpr(rule.statement()),
                 scopeOf(contract, rule).reaching(helpers),
-                CheckContext.executableEnsures(symbols, published, kinds,
-                        NewtypeInners.asWritten(symbols),
-                        EffectiveFieldTypes.asWritten(symbols),
-                        FieldLayout.asWritten(symbols)));
+                CheckContext.executableEnsures(symbols,
+                        DeclarationAccess.asWritten(symbols, published, kinds)));
         if (condition.type() != Type.BOOL) {
             throw CompileException.of(Diagnostic.at(rule.statement().pos())
                     .say(new BehaviorMessage.AnEnsuresExpressionIsNotBool(

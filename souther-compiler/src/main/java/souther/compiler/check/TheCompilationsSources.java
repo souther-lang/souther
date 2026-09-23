@@ -32,13 +32,9 @@ public final class TheCompilationsSources {
 
     private final Function<String, Symbols> scopeOf;
     private final ExpandedClauseLookup clauses;
-    private final PublishedDeclarations published;
-    private final DeclarationKinds kinds;
+    private final Function<Symbols, DeclarationAccess> declarationsOver;
     private final DeclarationNewtypes newtypes;
-    private final NewtypeInners inners;
-    private final FieldBindings bindings;
-    private final EffectiveFieldTypes fieldTypes;
-    private final FieldLayout layout;
+    private final Function<Symbols, FieldBindings> bindingsOver;
     private final ClauseLocations written;
 
     /** Which mint this is, told to nobody: what it stamps says this and what another stamps says
@@ -55,27 +51,13 @@ public final class TheCompilationsSources {
      * to read.
      */
     public TheCompilationsSources(Function<String, Symbols> scopeOf, ExpandedClauseLookup clauses,
-                                  PublishedDeclarations published, DeclarationKinds kinds,
-                                  DeclarationNewtypes newtypes, NewtypeInners inners,
-                                  FieldBindings bindings, EffectiveFieldTypes fieldTypes,
-                                  FieldLayout layout, ClauseLocations written) {
-        if (scopeOf == null || clauses == null || published == null || kinds == null
-                || newtypes == null || written == null) {
-            throw new IllegalArgumentException(
-                    "a compilation reads its modules under a scope, reads clauses somewhere, reads"
-                            + " what a declaration says somewhere, and reads where one is written"
-                            + " somewhere");
+                                  DeclarationAccess declarations, DeclarationNewtypes newtypes,
+                                  FieldBindings bindings, ClauseLocations written) {
+        if (declarations == null || bindings == null) {
+            throw new IllegalArgumentException("a compilation's sources are handed the"
+                    + " compilation's answers, so they are handed every one of them");
         }
-        this.scopeOf = scopeOf;
-        this.clauses = clauses;
-        this.published = published;
-        this.kinds = kinds;
-        this.newtypes = newtypes;
-        this.inners = inners;
-        this.bindings = bindings;
-        this.fieldTypes = fieldTypes;
-        this.layout = layout;
-        this.written = written;
+        this(scopeOf, clauses, _ -> declarations, newtypes, _ -> bindings, written);
     }
 
     /** The same, for a compilation whose sources read what a declaration wraps off the scope they
@@ -83,11 +65,34 @@ public final class TheCompilationsSources {
     public TheCompilationsSources(Function<String, Symbols> scopeOf, ExpandedClauseLookup clauses,
                                   PublishedDeclarations published, DeclarationKinds kinds,
                                   DeclarationNewtypes newtypes, ClauseLocations written) {
-        // Null rather than an answer of its own: what a declaration wraps, which binding each of
-        // its fields is, what each of them holds and
-        // where they stand are read off the scope the source is made over, and which scope that is
-        // is not known until a module is named.
-        this(scopeOf, clauses, published, kinds, newtypes, null, null, null, null, written);
+        // Read once a module is named: what a declaration wraps, which binding each of its fields
+        // is, what each of them holds and where they stand are read off the scope the source is
+        // made over, and which scope that is is not known until then.
+        if (published == null || kinds == null) {
+            throw new IllegalArgumentException("a compilation's sources ask what a declaration says"
+                    + " and which form it is somewhere");
+        }
+        this(scopeOf, clauses, scope -> DeclarationAccess.asWritten(scope, published, kinds),
+                newtypes, FieldBindings::asWritten, written);
+    }
+
+    private TheCompilationsSources(Function<String, Symbols> scopeOf, ExpandedClauseLookup clauses,
+                                   Function<Symbols, DeclarationAccess> declarationsOver,
+                                   DeclarationNewtypes newtypes,
+                                   Function<Symbols, FieldBindings> bindingsOver,
+                                   ClauseLocations written) {
+        if (scopeOf == null || clauses == null || newtypes == null || written == null) {
+            throw new IllegalArgumentException(
+                    "a compilation reads its modules under a scope, reads clauses somewhere, asks"
+                            + " what a declaration says somewhere, and reads where one is written"
+                            + " somewhere");
+        }
+        this.scopeOf = scopeOf;
+        this.clauses = clauses;
+        this.declarationsOver = declarationsOver;
+        this.newtypes = newtypes;
+        this.bindingsOver = bindingsOver;
+        this.written = written;
     }
 
     /** The source {@code module}'s rules are read under, or null where the compilation resolves no
@@ -95,11 +100,7 @@ public final class TheCompilationsSources {
     public RuleReadingSource of(String module) {
         Symbols scope = scopeOf.apply(module);
         return scope == null ? null
-                : new RuleReadingSource(scope, clauses, published, kinds, newtypes,
-                        inners == null ? NewtypeInners.asWritten(scope) : inners,
-                        bindings == null ? FieldBindings.asWritten(scope) : bindings,
-                        fieldTypes == null ? EffectiveFieldTypes.asWritten(scope) : fieldTypes,
-                        layout == null ? FieldLayout.asWritten(scope) : layout,
-                        written, new AModulesRules(mint, module));
+                : new RuleReadingSource(scope, clauses, declarationsOver.apply(scope), newtypes,
+                        bindingsOver.apply(scope), written, new AModulesRules(mint, module));
     }
 }

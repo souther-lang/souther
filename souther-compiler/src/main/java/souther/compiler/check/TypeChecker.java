@@ -94,9 +94,7 @@ public final class TypeChecker {
      * because the body check reads the same two and they must be the same two.
      */
     public static Reported checkModule(Hir.Module module, DerivedSymbols symbols,
-                                       PublishedDeclarations published, DeclarationKinds kinds,
-                                       NewtypeInners inners, EffectiveFieldTypes fieldTypes,
-                                       FieldLayout layout,
+                                       DeclarationAccess declarations,
                                        UninhabitableTypes.WithNoValue withNoValue,
                                        DeclarationLocations declaredAt,
                                        ReadingPolicy policy,
@@ -121,7 +119,7 @@ public final class TypeChecker {
         List<CompileException> errors = new ArrayList<>();
         boolean stopped = false;
         try {
-            checkRecovering(module, symbols, published, kinds, inners, fieldTypes, layout,
+            checkRecovering(module, symbols, declarations,
                     withNoValue,
                     declaredAt,
                     policy, sigs,
@@ -156,16 +154,14 @@ public final class TypeChecker {
                                      Hir.Expr loweredBody,
                                     ReadingPolicy policy,
                                      InvariantChecker.Source discharge,
-                                     Symbols symbols, PublishedDeclarations published,
-                                     DeclarationKinds kinds, NewtypeInners inners,
-                                     EffectiveFieldTypes fieldTypes, FieldLayout layout,
+                                     Symbols symbols, DeclarationAccess declarations,
                                      Map<ValueName.Behavior, ReqSig> calleeSigs,
                                      Map<ValueName.Behavior, ReqSig> reqSigs, HelperInliner inliner,
                                      Map<String, Type> recursiveHelperFns,
                                      Map<String, DataChecker.Constructs> recHelperConstructs,
                                      Preserved.SettledValues settledValues) {
-        return SpecChecker.checkSpecFn(spec, fn, loweredBody, discharge, symbols, published, kinds,
-                inners, fieldTypes, layout, policy,
+        return SpecChecker.checkSpecFn(spec, fn, loweredBody, discharge, symbols, declarations,
+                policy,
                 calleeSigs, reqSigs, inliner, recursiveHelperFns, recHelperConstructs,
                 settledValues);
     }
@@ -245,9 +241,7 @@ public final class TypeChecker {
      * throw straight out — its caller treats that as fail-fast and abandons the module.
      */
     static void checkRecovering(Hir.Module module, DerivedSymbols symbols,
-                                        PublishedDeclarations published, DeclarationKinds kinds,
-                                        NewtypeInners inners, EffectiveFieldTypes fieldTypes,
-                                        FieldLayout layout,
+                                        DeclarationAccess declarations,
                                         UninhabitableTypes.WithNoValue withNoValue,
                                         DeclarationLocations declaredAt,
                                        ReadingPolicy policy,
@@ -262,6 +256,8 @@ public final class TypeChecker {
                                         Map<String, Hir.FnDef> publishedToHere,
                                         Set<String> settled,
                                         Map<TypeSymbol.AtModule, ValueShape> shapes) {
+        PublishedDeclarations published = declarations.published();
+        DeclarationKinds kinds = declarations.kinds();
         // Both components, because what reads this walks both: a helper is checked whether the module
         // declared it or took it on to emit, and one missing here is a helper checked against a body
         // it does not have.
@@ -365,8 +361,7 @@ public final class TypeChecker {
                         if (symbols.declarations().declaration(data.declares())
                                 instanceof Derived.Data derived) {
                             DataChecker.checkData(derived,
-                                    CheckContext.of(symbols, published, kinds, inners, fieldTypes,
-                                            layout).forData(data));
+                                    CheckContext.of(symbols, declarations).forData(data));
                         }
                     }
                     case Hir.SumData sum -> DataChecker.checkSum(sum, symbols, kinds, published);

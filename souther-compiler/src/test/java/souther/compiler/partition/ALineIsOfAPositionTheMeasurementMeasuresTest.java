@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Carrier;
@@ -64,7 +65,8 @@ class ALineIsOfAPositionTheMeasurementMeasuresTest {
         for (String each : parameters) {
             declared.add(new InputDomain.Parameter(each, null, Type.INT));
         }
-        return InputDomain.of(declared, SYMBOLS, ReadAs.THE_COMPILATION_DOES).reading(SYMBOLS);
+        return InputDomain.of(declared,
+                RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES)).reading(SYMBOLS);
     }
 
     private static NumericTerm.ValueOf number(String parameter) {

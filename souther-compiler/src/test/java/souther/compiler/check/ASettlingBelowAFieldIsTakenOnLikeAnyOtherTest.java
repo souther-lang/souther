@@ -49,17 +49,17 @@ class ASettlingBelowAFieldIsTakenOnLikeAnyOtherTest {
     @Test
     void aNameReachingBelowAFieldLeavesWhatAReadingUnderItLeaves() {
         Read read = read();
-        FieldDomains base = FieldDomains.of(read.declared(), read.source(), read.policy(),
-                DeclarationReadings.NONE);
+        FieldDomains base = FieldDomains.of(read.declared(),
+                RuleReadingContext.unshared(read.source(), read.policy()));
 
         RuleKey below = RuleKey.of("interval").then("startsAt");
         // That the reading files a coordinate under the whole name, said as what a settling beside
         // it does: with nothing settled the clause stops nothing, since what it holds the name
         // against is open. Asked first, because every comparison below would hold of a name the
         // rules say nothing about — two derivations agreeing that nothing is known is not this.
-        assertTrue(FieldDomains.of(read.declared(), read.source(), read.policy(),
-                        Map.of(RuleKey.of("cap"), new Count(BigDecimal.valueOf(5))),
-                        DeclarationReadings.NONE)
+        assertTrue(FieldDomains.of(read.declared(),
+                        RuleReadingContext.unshared(read.source(), read.policy()),
+                        Map.of(RuleKey.of("cap"), new Count(BigDecimal.valueOf(5))))
                         .at(below).bounds() != null,
                 "`" + below + "` is a name this record's rules reach, and settling `cap` beside it "
                         + "stops it nowhere");
@@ -68,8 +68,8 @@ class ASettlingBelowAFieldIsTakenOnLikeAnyOtherTest {
                 RuleKey.of("interval").then("endsAt"))) {
             for (long at : new long[] {0, 1, 5}) {
                 Map<RuleKey, Count> settling = Map.of(settledAt, new Count(BigDecimal.valueOf(at)));
-                FieldDomains readUnder = FieldDomains.of(read.declared(), read.source(),
-                        read.policy(), settling, DeclarationReadings.NONE);
+                FieldDomains readUnder = FieldDomains.of(read.declared(),
+                        RuleReadingContext.unshared(read.source(), read.policy()), settling);
                 FieldDomains.Composing takenOn = base.composing(FieldDomains.atValues(settling));
                 for (RuleKey asked : List.of(below, RuleKey.of("interval").then("endsAt"),
                         RuleKey.of("cap"), RuleKey.of("interval"))) {
@@ -97,8 +97,8 @@ class ASettlingBelowAFieldIsTakenOnLikeAnyOtherTest {
     @Test
     void settlingTheNameBelowAFieldMovesWhatIsLeftBesideIt() {
         Read read = read();
-        FieldDomains base = FieldDomains.of(read.declared(), read.source(), read.policy(),
-                DeclarationReadings.NONE);
+        FieldDomains base = FieldDomains.of(read.declared(),
+                RuleReadingContext.unshared(read.source(), read.policy()));
         RuleKey below = RuleKey.of("interval").then("startsAt");
         Map<RuleKey, Count> settling = Map.of(below, new Count(BigDecimal.valueOf(5)));
 

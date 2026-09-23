@@ -36,8 +36,8 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         assertNotNull(symbols, "the model did not compile");
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
         assertNotNull(symbols.declaredNode(named.key()), "no `" + type + "` in " + module);
-        return FieldDomains.of(named, RuleReadings.of(compilation, module),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        return FieldDomains.of(named, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
     }
 
     /** What the rules leave the field the record's own clauses call {@code field}. */
@@ -316,8 +316,8 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         assertNotNull(symbols, "the model did not compile");
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("example.report", "Forecast"));
         FieldDomains domains = FieldDomains.of(named,
-                RuleReadings.of(compilation,"example.report"),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(RuleReadings.of(compilation,"example.report"),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
 
         assertTrue(domains.projection().isCertified(),
                 "the rule is `value >= 0.0m` wherever it is declared");
@@ -414,8 +414,8 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         compilation.answerEverything();
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("example.pair", "Pair"));
         FieldDomains domains = FieldDomains.of(named,
-                RuleReadings.of(compilation,"example.pair"),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(RuleReadings.of(compilation,"example.pair"),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
 
         assertBounds(at(domains, "a"), 0, 9);
         assertBounds(at(domains, "b"), 1, 10);
@@ -516,8 +516,8 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         compilation.answerEverything();
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("example.report", "Pair"));
         FieldDomains domains = FieldDomains.of(named,
-                RuleReadings.of(compilation,"example.report"),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(RuleReadings.of(compilation,"example.report"),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
 
         assertBounds(at(domains, "a"), 0, 9);
         assertBounds(at(domains, "b"), 1, 10);

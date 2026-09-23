@@ -8,6 +8,7 @@ import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.CheckContext;
 import souther.compiler.check.DataChecker;
+import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.EffectiveFieldTypes;
 import souther.compiler.check.FieldLayout;
 import souther.compiler.check.ReqSig;
@@ -232,9 +233,9 @@ final class BodyGen {
             // What each field holds is read off the world here, for the reason the context this
             // takes its other answers from reads what a name wraps off it: this backend is handed
             // no answer of the compilation's to read either from.
-            return new CheckContext(symbols, ctx.published, ctx.kinds, ctx.inners,
-                    EffectiveFieldTypes.asWritten(symbols), FieldLayout.asWritten(symbols),
-                    data, reqSigs());
+            return new CheckContext(symbols, new DeclarationAccess(ctx.published, ctx.kinds,
+                    ctx.inners, EffectiveFieldTypes.asWritten(symbols),
+                    FieldLayout.asWritten(symbols)), data, reqSigs());
         }
 
         /**

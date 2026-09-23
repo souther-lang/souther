@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.InvariantChecker;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Emptiness;
@@ -363,13 +364,14 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
                 souther.compiler.types.TypeSymbols.declared(
                 new souther.compiler.types.TypeKey(read.rules().symbols().module(), "P"));
         souther.compiler.check.FieldDomains whole = souther.compiler.check.FieldDomains.of(
-                name, read.rules(), ReadAs.THE_COMPILATION_DOES);
+                name, RuleReadingContext.unshared(read.rules(), ReadAs.THE_COMPILATION_DOES));
 
         for (int at = 0; at <= 5; at++) {
             Map<souther.compiler.check.RuleKey, Count> settled =
                     Map.of(souther.compiler.check.RuleKey.of("x"), count(at));
             souther.compiler.check.FieldDomains readIn = souther.compiler.check.FieldDomains.of(
-                    name, read.rules(), ReadAs.THE_COMPILATION_DOES, settled);
+                    name, RuleReadingContext.unshared(read.rules(), ReadAs.THE_COMPILATION_DOES),
+                    settled);
             souther.compiler.check.FieldDomains.Carried<String> taken = whole.given(Map.of(
                     souther.compiler.check.NumberAt
                             .valueOf(souther.compiler.check.RuleKey.of("x")), count(at)))
@@ -521,7 +523,7 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
-        return new Read(InputDomain.of(sigs.get(behavior), rules,
-                ReadAs.THE_COMPILATION_DOES), rules);
+        return new Read(InputDomain.of(sigs.get(behavior),
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES)), rules);
     }
 }

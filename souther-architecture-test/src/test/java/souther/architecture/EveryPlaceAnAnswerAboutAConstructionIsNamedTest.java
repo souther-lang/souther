@@ -342,9 +342,7 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
             ClassModel model = each;
             for (MethodModel method : model.methods()) {
                 if (namesAnAnswer(method)) {
-                    found.add(model.thisClass().name().stringValue() + "#"
-                            + method.methodName().stringValue()
-                            + method.methodType().stringValue());
+                    found.add(AMethod.of(model, method));
                 }
             }
         }
@@ -376,8 +374,7 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
         Set<String> found = new TreeSet<>();
         for (ClassModel each : COMPILED.all()) {
             for (MethodModel method : each.methods()) {
-                found.add(each.thisClass().name().stringValue() + "#"
-                        + method.methodName().stringValue() + method.methodType().stringValue());
+                found.add(AMethod.of(each, method));
             }
         }
         return found;
@@ -489,8 +486,7 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
         for (ClassModel each : COMPILED.all()) {
             ClassModel model = each;
             for (MethodModel method : model.methods()) {
-                String caller = each.thisClass().asInternalName() + "#" + method.methodName().stringValue()
-                        + method.methodType().stringValue();
+                String caller = AMethod.of(each, method);
                 method.code().ifPresent(code -> {
                     for (CodeElement element : code) {
                         if (element instanceof InvokeInstruction invoked) {
@@ -511,8 +507,7 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
             }
             ClassModel model = each;
             for (MethodModel method : model.methods()) {
-                found.add(model.thisClass().name().stringValue() + "#"
-                        + method.methodName().stringValue() + method.methodType().stringValue());
+                found.add(AMethod.of(model, method));
             }
         }
         return found;

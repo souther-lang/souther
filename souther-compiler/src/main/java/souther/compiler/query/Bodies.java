@@ -954,9 +954,7 @@ public final class Bodies {
                                 name, signatures.value().get(each.getKey()),
                                 Shapes.publishedDeclarations(db), Shapes.declarationKinds(db));
                         out.put(each.getKey(), StatedContract.of(contract, declaring, scope.value(),
-                                Shapes.publishedDeclarations(db), Shapes.declarationKinds(db),
-                                Shapes.newtypeInners(db), Shapes.effectiveFieldTypes(db),
-                                Shapes.fieldLayout(db), helpers.value()));
+                                Shapes.declarationAccess(db), helpers.value()));
                     } catch (Unanswerable | CompileException _) {
                         // The declaration could not be read, which is said where it is held to its
                         // rules. There is nothing to read into a term, and a behavior that cannot be
@@ -2274,9 +2272,7 @@ public final class Bodies {
             try {
                 return Answer.of(TemplateChecker.check(
                         lowered.value().value().writtenBody(), lowered.value().provenance(),
-                        scope.value(), Shapes.publishedDeclarations(db),
-                        Shapes.declarationKinds(db), Shapes.newtypeInners(db),
-                        Shapes.effectiveFieldTypes(db), Shapes.fieldLayout(db),
+                        scope.value(), Shapes.declarationAccess(db),
                         reqSigs.value(), sigs.value(), valuesChecked.value().settledValues()));
             } catch (Unanswerable _) {
                 return Answer.absent();
@@ -2907,13 +2903,9 @@ public final class Bodies {
                             RuleReadingContext.of(
                                     new RuleReadingSource(scope.value(),
                                             Shapes.expandedClauses(db),
-                                            Shapes.publishedDeclarations(db),
-                                            Shapes.declarationKinds(db),
+                                            Shapes.declarationAccess(db),
                                             Shapes.declarationNewtypes(db),
-                                            Shapes.newtypeInners(db),
                                             Shapes.fieldBindings(db),
-                                            Shapes.effectiveFieldTypes(db),
-                                            Shapes.fieldLayout(db),
                                             Shapes.clauseLocations(db)),
                                     policy, db.readings()),
                             contracts.present() ? contracts.value() : Map.of(),
@@ -2924,9 +2916,7 @@ public final class Bodies {
                         TypeChecker.checkBehavior(spec.value(), fn.value(),
                         body.value().value().definition().writtenBody(),
                         policy,
-                        dischargeSource, scope.value(), Shapes.publishedDeclarations(db),
-                        Shapes.declarationKinds(db), Shapes.newtypeInners(db),
-                        Shapes.effectiveFieldTypes(db), Shapes.fieldLayout(db),
+                        dischargeSource, scope.value(), Shapes.declarationAccess(db),
                         calleeSigs.value(), reqSigs.value(),
                         inliner.value(), sigs.value(), constructs.value(),
                         valuesChecked.value().settledValues());
@@ -3200,9 +3190,7 @@ public final class Bodies {
                     }
                 }
                 reported = TypeChecker.checkModule(lowering.value().settled(), scope.value(),
-                        Shapes.publishedDeclarations(db), Shapes.declarationKinds(db),
-                        Shapes.newtypeInners(db), Shapes.effectiveFieldTypes(db),
-                        Shapes.fieldLayout(db),
+                        Shapes.declarationAccess(db),
                         withNoValue.value(), Shapes.declarationLocations(db),
                         db.ask(new Front.Reading()).value(),
                         signatures.present() ? signatures.value() : null,

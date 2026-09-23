@@ -32,12 +32,11 @@ public final class TemplateChecker {
      */
     public static InvariantChecker.Template check(
             Hir.Expr body, ElementProvenance elements, Symbols symbols,
-            PublishedDeclarations published, DeclarationKinds kinds, NewtypeInners inners,
-            EffectiveFieldTypes fieldTypes, FieldLayout layout,
+            DeclarationAccess declarations,
             Map<ValueName.Behavior, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns,
             Preserved.SettledValues settledValues) {
         CheckContext context =
-                new CheckContext(symbols, published, kinds, inners, fieldTypes, layout, null, reqSigs)
+                new CheckContext(symbols, declarations, null, reqSigs)
                         .forDischarge(settledValues);
         Core typed = Elaborator.elaborate(body, Scope.NONE.reaching(recursiveHelperFns), context,
                 null);

@@ -170,10 +170,8 @@ final class WhoHoldsWhatAReaderHandedOver {
             }
         }
         for (ClassModel each : read) {
-            String owner = each.thisClass().name().stringValue();
             for (MethodModel method : each.methods()) {
-                String what = owner + "#" + method.methodName().stringValue()
-                        + method.methodType().stringValue();
+                String what = AMethod.of(each, method);
                 byWhatItIs.put(what, method);
                 if (hasSomewhereToPutAWalk(method)) {
                     canBeHandedAWalk.add(what);

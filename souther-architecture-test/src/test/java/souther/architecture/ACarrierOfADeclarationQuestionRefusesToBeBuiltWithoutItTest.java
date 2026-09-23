@@ -74,12 +74,18 @@ class ACarrierOfADeclarationQuestionRefusesToBeBuiltWithoutItTest {
      * <p>Named here rather than found by what implements something. They are separate interfaces
      * because they are separate questions, so there is nothing they share for this to look for —
      * and a marker they all carried would be a category invented to let this be written.
+     *
+     * <p>{@code DeclarationAccess} is among them though it is no question of its own: it holds
+     * several of them together, and a carrier handed nothing for it has been handed nothing for
+     * every one of those.
      */
     private static final Set<String> QUESTIONS = Set.of(
             "Lsouther/compiler/check/PublishedDeclarations;",
             "Lsouther/compiler/check/DeclarationKinds;",
             "Lsouther/compiler/check/NewtypeInners;",
             "Lsouther/compiler/check/EffectiveFieldTypes;",
+            "Lsouther/compiler/check/FieldLayout;",
+            "Lsouther/compiler/check/DeclarationAccess;",
             "Lsouther/compiler/check/DeclarationNewtypes;",
             "Lsouther/compiler/check/FieldBindings;",
             "Lsouther/compiler/check/ClauseLocations;",

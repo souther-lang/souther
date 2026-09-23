@@ -93,7 +93,9 @@ class AnAllowanceIsHeldByWhoeverIsBuildingAnAnswerTest {
      * one of those having grown a way to spend. A getter is a row too, since what it hands back is
      * the purse itself.
      */
-    private static final List<String> NAMING_AN_ALLOWANCE = List.of("meet");
+    private static final List<String> NAMING_AN_ALLOWANCE = List.of(
+            AMethod.of(CONJUNCTION, "meet",
+                    "(L" + CONJUNCTION + ";L" + ALLOWANCE + ";)L" + CONJUNCTION + ";"));
 
     @Test
     void everyHolderOfAnAllowanceIsBuildingAnAnswer() {
@@ -224,8 +226,9 @@ class AnAllowanceIsHeldByWhoeverIsBuildingAnAnswerTest {
     private static final Pattern NAMED = Pattern.compile("L([^;<>]+)[;<]");
 
     /**
-     * The methods of {@code owner} a caller can reach whose signature mentions an allowance, by
-     * name.
+     * The methods of {@code owner} a caller can reach whose signature mentions an allowance, each
+     * with what it takes ({@link AMethod}), so that a second overload of one of them is a second
+     * row.
      *
      * <p>What a caller can reach, because the rule is about which of a value's questions come with
      * a purse. A private helper is part of how one of them is written and spends what that
@@ -244,11 +247,10 @@ class AnAllowanceIsHeldByWhoeverIsBuildingAnAnswerTest {
                 if (!here.equals(owner) && !here.startsWith(owner + "$")) {
                     continue;
                 }
-                String within = here.equals(owner) ? "" : here.substring(owner.length() + 1) + ".";
                 for (MethodModel method : each.methods()) {
                     if (!method.flags().has(AccessFlag.PRIVATE)
                             && typesIn(declared(method)).contains(ALLOWANCE)) {
-                        out.add(within + method.methodName().stringValue());
+                        out.add(AMethod.of(each, method));
                     }
                 }
             }

@@ -6,6 +6,7 @@ import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.RuleKey;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.numeric.Count;
@@ -158,8 +159,9 @@ class AModelWithNoRoomIsAnsweredBeforeAFigureOfThisCompilersTest {
         RuleReadingSource rules = RuleReadings.of(measured(), "example.placing");
         assertNotNull(rules, "the model under test compiles");
         FieldDomains read = FieldDomains.of(
-                TypeSymbols.declared(new TypeKey("example.placing", "Box")), rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES, settled);
+                TypeSymbols.declared(new TypeKey("example.placing", "Box")),
+                RuleReadingContext.unshared(rules,
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES), settled);
         return Partitions.heldRange(
                 new Type.ListOf(new Type.Ref(
                         TypeSymbols.declared(new TypeKey("example.placing", "Awkward")))),

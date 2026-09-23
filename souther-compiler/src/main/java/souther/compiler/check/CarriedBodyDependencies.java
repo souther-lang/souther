@@ -47,7 +47,7 @@ public final class CarriedBodyDependencies {
                                               PublishedDeclarations published,
                                               DeclarationKinds kinds,
                                               Map<String, Type> standingCalls) {
-        NewtypeInners inners = NewtypeInners.asWritten(symbols);
+        DeclarationAccess declarations = DeclarationAccess.asWritten(symbols, published, kinds);
         Type declared = closed.declaredReturn() == null
                 ? null : TypeOps.successType(closed.declaredReturn());
         Core typed;
@@ -55,14 +55,12 @@ public final class CarriedBodyDependencies {
             Scope env = HelperTyping.parameterScope(closed, closed.writtenBody(), symbols,
                     published, kinds, standingCalls);
             typed = Elaborator.elaborate(closed.writtenBody(), env.reaching(standingCalls),
-                    new CheckContext(symbols, published, kinds, inners,
-                            EffectiveFieldTypes.asWritten(symbols), FieldLayout.asWritten(symbols),
-                            null, Map.of(), Map.of(), false, Preserved.NONE),
+                    new CheckContext(symbols, declarations, null, Map.of()),
                     declared);
         } catch (CompileException e) {
             throw new IllegalStateException("`" + closed.name() + "` was typed on its own and could"
                     + " not be typed as its reader types it: " + e.getMessage(), e);
         }
-        return EmittedClassReferences.of(typed, inners, symbols, kinds, published);
+        return EmittedClassReferences.of(typed, declarations.inners(), symbols, kinds, published);
     }
 }

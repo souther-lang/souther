@@ -141,18 +141,13 @@ public sealed interface Rules {
     }
 
     /**
-     * What is written about a value of {@code type}.
+     * What is written about a value of {@code type}, asking where {@code reading} borrows from for
+     * what somebody has already made of the string rules before building any of it.
      *
      * @param named the declaration the value is read under, or null where the type names none
      */
-    static Rules of(TypeSymbol named, RuleReadingSource source, ReadingPolicy policy) {
-        return of(named, source, policy, DeclarationReadings.NONE);
-    }
-
-    /** The same, asking {@code machines} for what somebody has already made of the string rules
-     *  before building any of it. */
-    static Rules of(TypeSymbol named, RuleReadingSource source, ReadingPolicy policy,
-                    DeclarationReadings machines) {
+    static Rules of(TypeSymbol named, RuleReadingContext reading) {
+        RuleReadingSource source = reading.source();
         if (named == null) {
             return new NoneWritten();
         }
@@ -163,7 +158,7 @@ public sealed interface Rules {
                 // that. Exhaustive over the forms, so one added to the language arrives here as a
                 // compile error rather than as a value the model states no rule about.
                 case DeclarationKind.PRODUCT ->
-                        new Read(FieldDomains.of(at, source, policy, machines));
+                        new Read(FieldDomains.of(at, reading));
                 // A sum names which cases a value can be and carries no clause of its own; a unit
                 // data has one value and may write no rule about it (spec §unit-data). Both are
                 // declarations this looked at and found nothing written on, which is not the same
@@ -199,13 +194,7 @@ public sealed interface Rules {
     }
 
     /** The same, for a value whose type may name no declaration at all. */
-    static Rules of(Type type, RuleReadingSource source, ReadingPolicy policy) {
-        return of(type, source, policy, DeclarationReadings.NONE);
-    }
-
-    /** The same, asking {@code machines} first. */
-    static Rules of(Type type, RuleReadingSource source, ReadingPolicy policy,
-                    DeclarationReadings machines) {
-        return of(type instanceof Type.Ref ref ? ref.name() : null, source, policy, machines);
+    static Rules of(Type type, RuleReadingContext reading) {
+        return of(type instanceof Type.Ref ref ? ref.name() : null, reading);
     }
 }

@@ -65,13 +65,13 @@ public final class TypeCardinality {
         CardinalityPremise of(TypeSymbol named);
 
         /** The premises a count reads for itself, for a caller with nowhere to ask. */
-        static Premises read(RuleReadingSource source, ReadingPolicy policy,
-                             DeclarationReadings machines) {
+        static Premises read(RuleReadingContext reading) {
             return named -> {
-                Hir.Def declared = source.symbols().declaredNode(named) instanceof Hir.Def def
-                        ? def : null;
+                Hir.Def declared =
+                        reading.source().symbols().declaredNode(named) instanceof Hir.Def def
+                                ? def : null;
                 return declared == null ? CardinalityPremise.NOTHING
-                        : CardinalityPremise.of(named, declared, source, policy, machines);
+                        : CardinalityPremise.of(named, declared, reading);
             };
         }
     }
@@ -105,9 +105,8 @@ public final class TypeCardinality {
      * see, and holding them alike is what says the decomposition changed nothing.
      */
     static Cardinalities overTheWholeGraph(List<? extends TypeSymbol> roots,
-                                           RuleReadingSource source, ReadingPolicy policy,
-                                           DeclarationReadings machines, Premises premises) {
-        Symbols symbols = source.symbols();
+                                           RuleReadingContext reading, Premises premises) {
+        Symbols symbols = reading.source().symbols();
         Map<TypeSymbol, Hir.Def> declared = reached(roots, symbols);
         Map<TypeSymbol, Set<TypeSymbol>> edges = new LinkedHashMap<>();
         declared.forEach((name, def) -> edges.put(name, read(def, symbols, declared.keySet())));
@@ -117,10 +116,8 @@ public final class TypeCardinality {
         CardinalityCuts cuts = CardinalityCuts.keeping(read.counts());
         List<List<TypeSymbol>> components = TypeComponents.of(edges);
         return new Cardinalities(
-                Map.copyOf(pass(components, declared, edges, cuts, source, policy, Set.of(),
-                        machines)),
-                components, declared, edges, cuts, source, policy, machines,
-                read.everyRuleReached());
+                Map.copyOf(pass(components, declared, edges, cuts, reading, Set.of())),
+                components, declared, edges, cuts, reading, read.everyRuleReached());
     }
 
     /**
@@ -192,12 +189,10 @@ public final class TypeCardinality {
      * written in terms of it asks no declaration what counts its rules turn on.
      */
     public static Map<TypeSymbol, Cardinality> ofComponent(List<TypeSymbol> component,
-                                                           RuleReadingSource source,
-                                                           ReadingPolicy policy,
-                                                           DeclarationReadings machines,
+                                                           RuleReadingContext reading,
                                                            Premises premises,
                                                            Counts outside) {
-        Symbols symbols = source.symbols();
+        Symbols symbols = reading.source().symbols();
         Map<TypeSymbol, Hir.Def> declared = new LinkedHashMap<>();
         for (TypeSymbol each : component) {
             if (symbols.declaredNode(each) instanceof Hir.Def def) {
@@ -215,7 +210,7 @@ public final class TypeCardinality {
                         ofTheDeclarations(reached(members, symbols).keySet(), premises).counts())
                 : CardinalityCuts.keeping(Set.of());
         Answers answers = Answers.over(outside);
-        settle(members, declared, edges, cuts, source, policy, Set.of(), machines, answers);
+        settle(members, declared, edges, cuts, reading, Set.of(), answers);
         return answers.everySettled();
     }
 
@@ -228,10 +223,10 @@ public final class TypeCardinality {
      * hold are read off the declarations; they are what the question about which declarations are at
      * fault for a lack is asked of, and none of them is a count.
      */
-    public static Cardinalities assembled(List<? extends TypeSymbol> roots, RuleReadingSource source,
-                                          ReadingPolicy policy, DeclarationReadings machines,
+    public static Cardinalities assembled(List<? extends TypeSymbol> roots,
+                                          RuleReadingContext reading,
                                           Premises premises, Counts counted) {
-        Symbols symbols = source.symbols();
+        Symbols symbols = reading.source().symbols();
         Map<TypeSymbol, Hir.Def> declared = reached(roots, symbols);
         Map<TypeSymbol, Set<TypeSymbol>> edges = new LinkedHashMap<>();
         declared.forEach((name, def) -> edges.put(name, read(def, symbols, declared.keySet())));
@@ -245,7 +240,7 @@ public final class TypeCardinality {
             upper.put(each, count == null ? Cardinality.UNKNOWN : count);
         }
         return new Cardinalities(Map.copyOf(upper), TypeComponents.of(edges), declared, edges, cuts,
-                source, policy, machines, read.everyRuleReached() && everyCountArrived);
+                reading, read.everyRuleReached() && everyCountArrived);
     }
 
     /**
@@ -263,28 +258,22 @@ public final class TypeCardinality {
         private final Map<TypeSymbol, Hir.Def> declared;
         private final Map<TypeSymbol, Set<TypeSymbol>> edges;
         private final CardinalityCuts cuts;
-        private final RuleReadingSource source;
-        private final ReadingPolicy policy;
-        /** Where the readings taken again here borrow what has already been made of a declaration:
-         *  the same place the first pass borrowed from, because it is the same declarations. */
-        private final DeclarationReadings machines;
+        /** The world the readings taken again here are made in, borrowing from the same place the
+         *  first pass borrowed from, because it is the same declarations. */
+        private final RuleReadingContext reading;
         private final boolean everyRuleReached;
 
         private Cardinalities(Map<TypeSymbol, Cardinality> upper, List<List<TypeSymbol>> components,
                               Map<TypeSymbol, Hir.Def> declared,
                               Map<TypeSymbol, Set<TypeSymbol>> edges, CardinalityCuts cuts,
-                              RuleReadingSource source, ReadingPolicy policy,
-                              DeclarationReadings machines,
-                              boolean everyRuleReached) {
-            this.machines = machines;
+                              RuleReadingContext reading, boolean everyRuleReached) {
+            this.reading = reading;
             this.everyRuleReached = everyRuleReached;
             this.upper = upper;
             this.components = components;
             this.declared = declared;
             this.edges = edges;
             this.cuts = cuts;
-            this.source = source;
-            this.policy = policy;
         }
 
         /** Whether every rule this count read could be read. A count that was short of one says
@@ -360,7 +349,7 @@ public final class TypeCardinality {
             // another had values, and no reading with something supposed is a declaration's own —
             // but what has already been made of the declarations is borrowed all the same: what a
             // rule's strings come to is settled by the rule and not by what is supposed beside it.
-            return pass(within, declared, edges, cuts, source, policy, supposed, machines);
+            return pass(within, declared, edges, cuts, reading, supposed);
         }
 
         /** {@code these} and every declaration they read, at whatever remove. */
@@ -391,13 +380,11 @@ public final class TypeCardinality {
     private static Map<TypeSymbol, Cardinality> pass(List<List<TypeSymbol>> components,
                                                    Map<TypeSymbol, Hir.Def> declared,
                                                    Map<TypeSymbol, Set<TypeSymbol>> edges,
-                                                   CardinalityCuts cuts, RuleReadingSource source,
-                                                   ReadingPolicy policy,
-                                                   Set<TypeSymbol> granted,
-                                                   DeclarationReadings machines) {
+                                                   CardinalityCuts cuts, RuleReadingContext reading,
+                                                   Set<TypeSymbol> granted) {
         Answers answers = Answers.empty();
         for (List<TypeSymbol> component : components) {
-            settle(component, declared, edges, cuts, source, policy, granted, machines, answers);
+            settle(component, declared, edges, cuts, reading, granted, answers);
         }
         return answers.everySettled();
     }
@@ -412,8 +399,7 @@ public final class TypeCardinality {
      */
     private static void settle(List<TypeSymbol> component, Map<TypeSymbol, Hir.Def> declared,
                                Map<TypeSymbol, Set<TypeSymbol>> edges, CardinalityCuts cuts,
-                               RuleReadingSource source, ReadingPolicy policy,
-                               Set<TypeSymbol> granted, DeclarationReadings machines,
+                               RuleReadingContext reading, Set<TypeSymbol> granted,
                                Answers answers) {
         List<TypeSymbol> asked = new ArrayList<>();
         for (TypeSymbol each : component) {
@@ -428,11 +414,10 @@ public final class TypeCardinality {
         }
         if (asked.size() == 1 && !TypeComponents.recurses(component, edges)) {
             TypeSymbol one = asked.get(0);
-            answers.settle(one, transfer(
-                    one, declared.get(one), source, policy, answers, granted, machines));
+            answers.settle(one, transfer(one, declared.get(one), reading, answers, granted));
             return;
         }
-        rise(asked, declared, policy, source, cuts, answers, granted, machines);
+        rise(asked, declared, reading, cuts, answers, granted);
     }
 
     /**
@@ -443,10 +428,8 @@ public final class TypeCardinality {
      * place the rising needs it.
      */
     private static void rise(List<TypeSymbol> component, Map<TypeSymbol, Hir.Def> declared,
-                             ReadingPolicy policy,
-                             RuleReadingSource source, CardinalityCuts cuts,
-                             Answers answers, Set<TypeSymbol> granted,
-                             DeclarationReadings machines) {
+                             RuleReadingContext reading, CardinalityCuts cuts,
+                             Answers answers, Set<TypeSymbol> granted) {
         component.forEach(answers::atBottom);
         boolean moved = true;
         while (moved) {
@@ -454,8 +437,7 @@ public final class TypeCardinality {
             for (TypeSymbol each : component) {
                 Cardinality before = answers.settledAt(each);
                 Cardinality next = round(cuts, transfer(
-                        each, declared.get(each), source, policy, answers, granted,
-                        machines));
+                        each, declared.get(each), reading, answers, granted));
                 // Written every round, and the rising is over the counts alone. Two readings that
                 // come to none are the same answer to rise through however they were shown, so
                 // comparing the proofs would keep a settled rising moving; and taking the earlier
@@ -467,7 +449,7 @@ public final class TypeCardinality {
                 }
             }
         }
-        settleUnrounded(component, declared, source, policy, answers, granted, machines);
+        settleUnrounded(component, declared, reading, answers, granted);
         discharge(component, answers);
     }
 
@@ -486,13 +468,12 @@ public final class TypeCardinality {
      * what each comes to is settled by the rising and not by where it sits among the others.
      */
     private static void settleUnrounded(List<TypeSymbol> component,
-                                        Map<TypeSymbol, Hir.Def> declared, RuleReadingSource source,
-                                        ReadingPolicy policy, Answers answers,
-                                        Set<TypeSymbol> granted, DeclarationReadings machines) {
+                                        Map<TypeSymbol, Hir.Def> declared,
+                                        RuleReadingContext reading, Answers answers,
+                                        Set<TypeSymbol> granted) {
         Map<TypeSymbol, Cardinality> found = new LinkedHashMap<>();
         for (TypeSymbol each : component) {
-            found.put(each, transfer(
-                    each, declared.get(each), source, policy, answers, granted, machines));
+            found.put(each, transfer(each, declared.get(each), reading, answers, granted));
         }
         found.forEach(answers::settle);
     }
@@ -511,11 +492,10 @@ public final class TypeCardinality {
      * is asked from — a declaration that settles alone and a declaration in a rising component —
      * are the same spending.
      */
-    private static Cardinality transfer(TypeSymbol named, Hir.Def def, RuleReadingSource source,
-                                        ReadingPolicy policy, Answers answers,
-                                        Set<TypeSymbol> granted, DeclarationReadings machines) {
+    private static Cardinality transfer(TypeSymbol named, Hir.Def def, RuleReadingContext reading,
+                                        Answers answers, Set<TypeSymbol> granted) {
         TRANSFERS.incrementAndGet();
-        return CardinalityTransfer.upperOf(named, def, source, policy, answers, granted, machines);
+        return CardinalityTransfer.upperOf(named, def, reading, answers, granted);
     }
 
     /**

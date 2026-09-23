@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.TypeView;
@@ -315,7 +316,8 @@ class ANarrowingIsSpelledByTheOneThatOwnsItTest {
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         return new Read(
-                InputDomain.of(sigs.get("visit"), rules, ReadAs.THE_COMPILATION_DOES),
+                InputDomain.of(sigs.get("visit"),
+                        RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES)),
                 checked.behaviorBodies().get("visit"), rules);
     }
 }

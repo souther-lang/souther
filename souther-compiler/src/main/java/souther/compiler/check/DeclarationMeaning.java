@@ -55,9 +55,11 @@ public sealed interface DeclarationMeaning {
         // it is not a reading under the one the caller handed over and does not say it is.
         return of(declared, new Clauses(
                 new RuleReadingSource(source.symbols(), source.invariants(),
-                        besidesItself(declared.declares().key(), source.published()),
-                        source.kinds(), source.newtypes(), source.inners(), source.bindings(),
-                        source.fieldTypes(), source.layout(), source.written())));
+                        new DeclarationAccess(
+                                besidesItself(declared.declares().key(), source.published()),
+                                source.kinds(), source.inners(), source.fieldTypes(),
+                                source.layout()),
+                        source.newtypes(), source.bindings(), source.written())));
     }
 
     /**

@@ -179,13 +179,9 @@ public final class Db implements StoreWork {
         if (sources == null) {
             sources = new TheCompilationsSources(this::scopeOf,
                     named -> ask(new Shapes.ClausesExpandedFor(named)).value(),
-                    Shapes.publishedDeclarations(this),
-                    Shapes.declarationKinds(this),
+                    Shapes.declarationAccess(this),
                     Shapes.declarationNewtypes(this),
-                    Shapes.newtypeInners(this),
                     Shapes.fieldBindings(this),
-                    Shapes.effectiveFieldTypes(this),
-                    Shapes.fieldLayout(this),
                     Shapes.clauseLocations(this));
         }
         return sources.of(module);

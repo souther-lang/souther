@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.DeclaredSig;
@@ -112,8 +113,8 @@ class WhichReadingStoppedDecidesWhatAPositionIsShortOfTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         return Partitions.of("check",
-                        InputDomain.of(sigs.get("check"), rules,
-                                ReadAs.THE_COMPILATION_DOES),
+                        InputDomain.of(sigs.get("check"),
+                                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES)),
                         rules, ReadAs.THE_COMPILATION_DOES)
                 .undivided().stream()
                 .map(each -> each.at() + "=" + each.why().getClass().getSimpleName())

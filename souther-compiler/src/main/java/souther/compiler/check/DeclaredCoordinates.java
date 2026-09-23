@@ -26,13 +26,12 @@ public final class DeclaredCoordinates {
      * a side answers nothing for {@code String.length(value) * 2 >= 4}, whose sides are neither a
      * name nor a measure of one.
      *
-     * <p>{@code machines} is asked for what somebody has already made of the declaration's string
-     * rules before building any of it.
+     * <p>Where {@code reading} borrows from is asked for what somebody has already made of the
+     * declaration's string rules before building any of it.
      */
-    public static List<FieldDomains.Placed> placedOnItsOwnValue(
-            Type type, RuleReadingSource source, ReadingPolicy policy,
-            DeclarationReadings machines) {
-        return Rules.of(type, source, policy, machines).bounds().placedAt(RuleKey.THE_VALUE);
+    public static List<FieldDomains.Placed> placedOnItsOwnValue(Type type,
+                                                               RuleReadingContext reading) {
+        return Rules.of(type, reading).bounds().placedAt(RuleKey.THE_VALUE);
     }
 
     private DeclaredCoordinates() {}

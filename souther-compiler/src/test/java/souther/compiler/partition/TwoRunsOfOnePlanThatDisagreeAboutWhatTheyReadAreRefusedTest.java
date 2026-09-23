@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.Numberings;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Symbols;
@@ -222,7 +223,8 @@ class TwoRunsOfOnePlanThatDisagreeAboutWhatTheyReadAreRefusedTest {
                 List.of());
         MeasuredInput subject = MeasuredInput.of("fee",
                 InputDomain.of(List.of(new InputDomain.Parameter("days", null, Type.INT)),
-                        SYMBOLS, ReadAs.THE_COMPILATION_DOES).reading(SYMBOLS),
+                        RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES))
+                        .reading(SYMBOLS),
                 AxesATestWrote.asAMeasurement("fee", List.of(days)));
         return GenerationPlan.of(subject, classes, List.of(), List.of(), List.of());
     }

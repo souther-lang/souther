@@ -335,7 +335,8 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
         compilation.answerEverything();
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         FieldDomains domains = FieldDomains.of(named(symbols, "Held"),
-                RuleReadings.of(compilation, "demo"), ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),
+                        ReadAs.THE_COMPILATION_DOES));
         Map<NumberAt<RuleKey>, Count> fixed = new LinkedHashMap<>();
         fixed.put(NumberAt.valueOf(RuleKey.of("y")), new Count(BigDecimal.valueOf(at)));
         return domains.given(fixed)
