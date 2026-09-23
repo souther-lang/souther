@@ -7,7 +7,6 @@ import java.lang.classfile.CodeBuilder;
 import java.lang.classfile.Label;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.DirectMethodHandleDesc;
-import java.lang.constant.DynamicCallSiteDesc;
 import java.lang.constant.MethodHandleDesc;
 import java.lang.constant.MethodTypeDesc;
 
@@ -146,25 +145,17 @@ final class CanonicalizeAtCrossing {
      *  gap than {@code List<String>} for that reason. */
     private static void emitAsFunction(CodeBuilder code, Type type) {
         if (type instanceof Type.Prim p && p == Type.STRING) {
-            code.invokedynamic(DynamicCallSiteDesc.of(
-                    BSM_METAFACTORY, "apply",
-                    MethodTypeDesc.of(CD_Function),                          // no captures
-                    MethodTypeDesc.of(CD_Object, CD_Object),                 // samMethodType
-                    MethodHandleDesc.ofMethod(
-                            DirectMethodHandleDesc.Kind.STATIC, CD_Normalization, "nfc", MTD_nfc),
-                    MTD_nfc));
+            code.invokedynamic(CodecGen.normalizationNfcCallSite());
             return;
         }
         if (type instanceof Type.MapOf t) {
             emitFunctionOrIdentity(code, t.key());
             emitFunctionOrIdentity(code, t.value());
-            code.invokedynamic(DynamicCallSiteDesc.of(
-                    BSM_METAFACTORY, "apply",
-                    MethodTypeDesc.of(CD_Function, CD_Function, CD_Function),   // captures key, value
-                    MethodTypeDesc.of(CD_Object, CD_Object),                   // samMethodType
+            code.invokedynamic(Lambdas.callSite(Lambdas.Sam.FUNCTION,
                     MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, CD_Maps,
                             "canonicalizeWithCaptured", MTD_mapsCanonicalizeWithCaptured),
-                    MethodTypeDesc.of(CD_Map, CD_Map)));                       // instantiatedMethodType
+                    MethodTypeDesc.of(CD_Map, CD_Map),
+                    CD_Function, CD_Function));                                // captures key, value
             return;
         }
         Type element = switch (type) {
@@ -196,11 +187,9 @@ final class CanonicalizeAtCrossing {
             mtd = MTD_optionMapWith;
             container = CD_Option;
         }
-        code.invokedynamic(DynamicCallSiteDesc.of(
-                BSM_METAFACTORY, "apply",
-                MethodTypeDesc.of(CD_Function, CD_Function),                 // captures the element Function
-                MethodTypeDesc.of(CD_Object, CD_Object),                     // samMethodType
+        code.invokedynamic(Lambdas.callSite(Lambdas.Sam.FUNCTION,
                 MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, runtime, method, mtd),
-                MethodTypeDesc.of(container, container)));                  // instantiatedMethodType
+                MethodTypeDesc.of(container, container),
+                CD_Function));                                                // captures the element Function
     }
 }

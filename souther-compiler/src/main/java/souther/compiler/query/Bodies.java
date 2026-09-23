@@ -102,6 +102,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.SequencedMap;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * What the code in a module comes to: the signatures of the behaviors it declares and of the ones
@@ -179,7 +181,7 @@ public final class Bodies {
     }
 
     private static Answer<Set<String>> where(Db db, String module,
-                                             java.util.function.Predicate<BehaviorImplementation> is) {
+                                             Predicate<BehaviorImplementation> is) {
         Answer<Map<String, BehaviorImplementation>> states =
                 db.ask(new Implementation(module));
         // Absent rather than empty. A module whose classification could not be asked has not been
@@ -281,10 +283,7 @@ public final class Bodies {
 
         @Override
         public Answer<Set<ValueName.Behavior>> compute(Db db) {
-            if (db.ask(new Front.Available(name)).value() == null) {
-                return Answer.of(Set.of());
-            }
-            return Answer.of(Ordered.set(borrowedWhere(db, name, Dependencies::new)));
+            return borrowedWhere(db, name, Dependencies::new);
         }
     }
 
@@ -319,15 +318,21 @@ public final class Bodies {
 
     /**
      * The behaviors this module borrows that {@code asks} answers yes about where they are
-     * declared — an injection target, one that may be called by name, one that requires something.
+     * declared — an injection target, one that may be called by name, one that requires something,
+     * one nobody has written.
      *
-     * <p>One walk for the three, so that which of them a borrowed behavior falls into is asked of
+     * <p>One walk for the four, so that which of them a borrowed behavior falls into is asked of
      * the module that declares it in one way. Asked of the declaration and not of a name: the
      * question is about that module's own behavior, so the name it goes by there is the whole of
      * what is handed over, and what this module happens to write for it never enters.
+     *
+     * <p>A module with no source borrows nothing, and that is the answer rather than an absence.
      */
-    private static Set<ValueName.Behavior> borrowedWhere(
-            Db db, String module, java.util.function.Function<String, Key<Set<String>>> asks) {
+    private static Answer<Set<ValueName.Behavior>> borrowedWhere(
+            Db db, String module, Function<String, Key<Set<String>>> asks) {
+        if (db.ask(new Front.Available(module)).value() == null) {
+            return Answer.of(Set.of());
+        }
         Set<ValueName.Behavior> out = new LinkedHashSet<>();
         for (ValueName.Behavior each : borrowed(db, module)) {
             Set<String> there = db.ask(asks.apply(each.module())).value();
@@ -335,7 +340,7 @@ public final class Bodies {
                 out.add(each);
             }
         }
-        return out;
+        return Answer.of(Ordered.set(out));
     }
 
     /**
@@ -374,10 +379,7 @@ public final class Bodies {
 
         @Override
         public Answer<Set<ValueName.Behavior>> compute(Db db) {
-            if (db.ask(new Front.Available(name)).value() == null) {
-                return Answer.of(Set.of());
-            }
-            return Answer.of(Ordered.set(borrowedWhere(db, name, Callable::new)));
+            return borrowedWhere(db, name, Callable::new);
         }
     }
 
@@ -1069,10 +1071,7 @@ public final class Bodies {
 
         @Override
         public Answer<Set<ValueName.Behavior>> compute(Db db) {
-            if (db.ask(new Front.Available(name)).value() == null) {
-                return Answer.of(Set.of());
-            }
-            return Answer.of(Ordered.set(borrowedWhere(db, name, Injected::new)));
+            return borrowedWhere(db, name, Injected::new);
         }
     }
 
@@ -1086,10 +1085,7 @@ public final class Bodies {
 
         @Override
         public Answer<Set<ValueName.Behavior>> compute(Db db) {
-            if (db.ask(new Front.Available(name)).value() == null) {
-                return Answer.of(Set.of());
-            }
-            return Answer.of(Ordered.set(borrowedWhere(db, name, Unwritten::new)));
+            return borrowedWhere(db, name, Unwritten::new);
         }
     }
 

@@ -68,7 +68,7 @@ public record PartitionClass(String id, String label, Recognition recognises,
     public static PartitionClass ungeneratable(String id, String label,
                                                Recognition recognises, String why) {
         return new PartitionClass(id, label, recognises,
-                new RepresentativeSource.Ungeneratable(why), null, null, null);
+                new RepresentativeSource.NothingProducible(why), null, null, null);
     }
 
     /**

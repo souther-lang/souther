@@ -322,19 +322,11 @@ final class Intrinsics {
      * <p>The one reading of a declared type this backend has. What a kernel is called at is built
      * out of it in {@link #slotsOf} and nowhere else, so nothing outside needs it. */
     private static ClassDesc boundaryDesc(Type t) {
+        // A primitive is handed over in the form a body computes it in, which is what makes the
+        // descriptor true of what is on the stack.
         if (t instanceof Type.Prim p) {
-            return switch (p) {
-                case INT -> ConstantDescs.CD_long;
-                case BOOL -> ConstantDescs.CD_boolean;
-                case DECIMAL -> CD_BigDecimal;
-                case STRING -> CD_String;
-                case DATE -> CD_LocalDate;
-                case TIME -> CD_LocalTime;
-                case DATETIME -> CD_LocalDateTime;
-                case INSTANT -> CD_Instant;
-                case RATIONAL -> CD_Rational;
-                case RAW -> CD_Object;
-            };
+            ClassDesc carrier = JvmTypes.primCarrier(p);
+            return carrier == null ? CD_Object : carrier;
         }
         if (t instanceof Type.ListOf) {
             return CD_List;

@@ -12,8 +12,6 @@ import java.lang.constant.ConstantDescs;
 import java.lang.constant.MethodTypeDesc;
 import java.util.List;
 
-import static souther.compiler.codegen.Descriptors.*;
-
 /**
  * The two conversions between a Souther value and a behavior's result union as the JVM carries it.
  *
@@ -54,7 +52,7 @@ final class ResultBoundary {
             code.new_(bridge);
             code.dup();
             code.aload(slot);
-            unwrapTo(code, held, ctx);
+            JvmTypes.castFromObject(code, held, ctx);
             code.invokespecial(bridge, "<init>",
                     MethodTypeDesc.of(ConstantDescs.CD_void, JvmTypes.jvmType(held, ctx)));
             code.areturn();
@@ -89,18 +87,5 @@ final class ResultBoundary {
         }
         code.aload(slot);
         code.labelBinding(done);
-    }
-
-    /** Casts the {@code Object} on the stack to what a bridge case holds, unboxing a primitive. */
-    private static void unwrapTo(CodeBuilder code, Type held, CodegenContext ctx) {
-        if (held == Type.INT) {
-            code.checkcast(CD_Long);
-            code.invokevirtual(CD_Long, "longValue", MethodTypeDesc.of(ConstantDescs.CD_long));
-        } else if (held == Type.BOOL) {
-            code.checkcast(CD_Boolean);
-            code.invokevirtual(CD_Boolean, "booleanValue", MethodTypeDesc.of(ConstantDescs.CD_boolean));
-        } else {
-            code.checkcast(JvmTypes.jvmType(held, ctx));
-        }
     }
 }

@@ -74,7 +74,6 @@ import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -5520,30 +5519,6 @@ public final class Adequacy {
     }
 
     /**
-     * Which question of this compiler's the account is answered by.
-     *
-     * <p>Two questions and one account. What a surface acts on is the account; what it costs to
-     * answer is a question about this compiler's work, and the two are told apart here so that
-     * neither is spelled as the other. A surface with a reader for the whole of it asks for the
-     * whole of it; one that will say nothing about a part names the kinds it reads and pays for
-     * what those come out of.
-     */
-    public enum AccountPart {
-
-        /** {@link Findings}: everything the measures over a behavior's rows and its model found. */
-        THE_MEASURES,
-
-        /**
-         * {@link DecisionFindings}: the rules of the decision each body states.
-         *
-         * <p>Apart from the rest because of what settling one costs. The rules of a body are its
-         * ways, which multiply, and each one nothing was seen taking has a value composed and run
-         * against it — so a build that will say nothing about them is not asked to pay for them.
-         */
-        THE_DECISION
-    }
-
-    /**
      * Where a report about {@code finding} belongs.
      *
      * <p>The one place this is decided. Two surfaces write sentences about a finding — the warnings
@@ -6927,54 +6902,38 @@ public final class Adequacy {
      * differently for two callers is not an account of anything, and a consumer comparing two
      * surfaces of one run would be comparing two definitions.
      *
-     * <p>What it costs to answer is a separate question and is asked by {@link
-     * #whatAWarningCouldBeAbout}, which is not this and does not claim to be.
+     * <p>A question this compile could not answer leaves the account unanswered rather than short
+     * by one part of it. Read as an empty list, a surface would gate on the rest and say nothing
+     * about the half nobody could read.
      */
     public static List<Finding> accountOf(Db db, String module) {
-        return partsOfTheAccount(db, module, EnumSet.allOf(AccountPart.class));
+        List<Finding> measures = db.ask(new Findings(module)).value();
+        if (measures == null) {
+            return null;
+        }
+        List<Finding> decision = db.ask(new DecisionFindings(module)).value();
+        if (decision == null) {
+            return null;
+        }
+        List<Finding> out = new ArrayList<>(measures.size() + decision.size());
+        out.addAll(measures);
+        out.addAll(decision);
+        return List.copyOf(out);
     }
 
     /**
      * The findings a build could be warned about, which is the whole account.
      *
-     * <p>Every question of it, because both of them answer about obligations: the decision's rules
-     * and everything the measures count. This used to work that out by asking each kind whether it
-     * was about an obligation and collecting the questions those name — an answer that came to the
-     * whole account on every input there is, spelled as a choice.
+     * <p>Every finding in the account is about an obligation — the decision's rules and everything
+     * the measures count — so every one of them is something a build may be warned about.
      *
-     * <p>Beside {@link #accountOf} and not instead of it. The two ask the same questions today and
-     * say different things: this is what a build may be warned about, and that is the account a
-     * report writes. A question added that answers about nothing a row is owed for is where they
-     * part, and where this gets something to leave out.
+     * <p>Beside {@link #accountOf} and not instead of it. The two are the same list today and say
+     * different things: this is what a build may be warned about, and that is the account a report
+     * writes. A finding the account comes to hold that is about nothing a row is owed for is left
+     * out here, and what the account means does not change for it.
      */
     public static List<Finding> whatAWarningCouldBeAbout(Db db, String module) {
-        return partsOfTheAccount(db, module, EnumSet.allOf(AccountPart.class));
-    }
-
-    /**
-     * What {@code asked} of the account comes to, put together in one place.
-     *
-     * <p>Private, because which parts of it a caller gets is not a caller's to choose: the two
-     * above are the two questions anybody here asks, and a third would be a third meaning of the
-     * word account.
-     */
-    private static List<Finding> partsOfTheAccount(Db db, String module,
-                                                   Set<AccountPart> asked) {
-        List<Finding> out = new ArrayList<>();
-        for (AccountPart part : asked) {
-            List<Finding> found = switch (part) {
-                case THE_MEASURES -> db.ask(new Findings(module)).value();
-                case THE_DECISION -> db.ask(new DecisionFindings(module)).value();
-            };
-            // A question this compile could not answer leaves the account unanswered rather than
-            // short by one part of it. Read as an empty list, a surface would gate on the rest and
-            // say nothing about the half nobody could read.
-            if (found == null) {
-                return null;
-            }
-            out.addAll(found);
-        }
-        return List.copyOf(out);
+        return accountOf(db, module);
     }
 
     /**
