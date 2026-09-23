@@ -1145,11 +1145,21 @@ public final class CstParser {
 
     // --- expressions (precedence ladder; left-associative via wrap) ---
 
-    private boolean noConstruct = false;
     /** Set where an expression is followed by a `->` that belongs to the enclosing form rather than
      * to the expression: an example row's `with` value. A parenthesised value there has exactly the
-     * shape of a lambda's parameter list, and the enclosing form has the prior claim. */
+     * shape of a lambda's parameter list, and the enclosing form has the prior claim. An expression
+     * a bracket encloses cannot end the one the flag was set for, so {@link #bracketed} clears it
+     * again inside. */
     private boolean noLambda = false;
+
+    /** Reads what {@code read} reads with a lambda admitted: what a bracket pair encloses ends at
+     * its closing bracket, so no `->` after it can be taken for a lambda's. */
+    private void bracketed(Runnable read) {
+        boolean saved = noLambda;
+        noLambda = false;
+        read.run();
+        noLambda = saved;
+    }
 
     private void expr() {
         pipeExpr();
@@ -1253,7 +1263,7 @@ public final class CstParser {
             } else if (at(SyntaxKind.LPAREN) && !lineBreakBeforeNextToken()) {
                 int m = markForFieldAccess();
                 wrap(m, SyntaxKind.APPLY_EXPR);
-                argList();
+                bracketed(this::argList);
                 finish();
             } else {
                 return;
@@ -1302,9 +1312,9 @@ public final class CstParser {
                 bump();
                 finish();
             }
-            case LPAREN -> parenOrTuple();
-            case LBRACKET -> listExpr();
-            case LBRACE -> blockExpr();
+            case LPAREN -> bracketed(this::parenOrTuple);
+            case LBRACKET -> bracketed(this::listExpr);
+            case LBRACE -> bracketed(this::blockExpr);
             case IDENT -> identExpr();
             default -> {
                 error(new ParseMessage.AnExpressionWasExpected());
@@ -1438,10 +1448,7 @@ public final class CstParser {
     private void matchExpr() {
         start(SyntaxKind.MATCH_EXPR);
         bump();   // match
-        boolean saved = noConstruct;
-        noConstruct = true;
         expr();   // scrutinee
-        noConstruct = saved;
         expect(SyntaxKind.WITH_KW, Reading.AN_EXPRESSION);
         int enclosing = matchArmColumns.isEmpty() ? -1 : matchArmColumns.peek();
         // this match's arm column: the leading `|` when written, else the first case's own column
@@ -1583,13 +1590,13 @@ public final class CstParser {
      * left to resolution, which knows the bindings in force.
      */
     private void identExpr() {
-        if (!noConstruct && nth(pastDottedName(0)) == SyntaxKind.LBRACE) {
-            // construction `Type { ... }` (unless suppressed, as in a match scrutinee). The type is
-            // named the way a type is named anywhere — bare, through an alias, or through the
-            // module that declares it — so the name is read past its dots before the brace decides
-            // what this is. Whether the name reaches a type is resolution's answer: a dotted name
-            // here is read as one name and not as a field taken of something.
-            newDataExpr();
+        if (nth(pastDottedName(0)) == SyntaxKind.LBRACE) {
+            // construction `Type { ... }`. The type is named the way a type is named anywhere —
+            // bare, through an alias, or through the module that declares it — so the name is read
+            // past its dots before the brace decides what this is. Whether the name reaches a type
+            // is resolution's answer: a dotted name here is read as one name and not as a field
+            // taken of something.
+            bracketed(this::newDataExpr);
         } else {
             start(SyntaxKind.VAR_EXPR);
             bump();   // ident
