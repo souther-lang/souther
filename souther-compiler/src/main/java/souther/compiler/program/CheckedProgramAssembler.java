@@ -163,6 +163,9 @@ final class CheckedProgramAssembler {
             for (CheckedValue value : module.values()) {
                 roots.add(value.body());
             }
+            for (CheckedValueEntry entry : module.valueEntries()) {
+                roots.add(entry.body());
+            }
         }
         return roots;
     }
@@ -519,7 +522,7 @@ final class CheckedProgramAssembler {
                         read.requirements().getOrDefault(named.name(), List.of()))));
         Emitted emitted = emittedBy(read.name(), read.checked());
         return new CheckedModule(read.name(), behaviors, emitted.helpers(), emitted.values(),
-                read.data(), read.published());
+                emitted.valueEntries(), read.data(), read.published());
     }
 
     /**
@@ -907,14 +910,16 @@ final class CheckedProgramAssembler {
     }
 
     /**
-     * What this module emits as methods of its own: the helpers it carries and the values it builds.
+     * What this module emits as methods of its own: the helpers it carries, the values it builds,
+     * and the entries it publishes for them.
      *
-     * <p>Which of the two each method is was answered where the method was lowered, and is read here
-     * as it was answered. Nothing is worked out again from what a method takes or what it is named:
-     * a value's method takes the values its root region demands, and the name a method is filed under
-     * is where the module holds it.
+     * <p>Which of the three each method is was answered where the method was lowered, and is read
+     * here as it was answered. Nothing is worked out again from what a method takes or what it is
+     * named: a value's method takes the values its root region demands, and the name a method is
+     * filed under is where the module holds it.
      */
-    private record Emitted(List<CheckedHelper> helpers, List<CheckedValue> values) {}
+    private record Emitted(List<CheckedHelper> helpers, List<CheckedValue> values,
+                           List<CheckedValueEntry> valueEntries) {}
 
     /**
      * {@link Emitted} for {@code module}, off what its check emitted.
@@ -922,10 +927,16 @@ final class CheckedProgramAssembler {
      * <p>What each method takes and its body are the check's, read whole; what the calls in this
      * module reach it by is its role's. Both are read here so that a call reaching a method reaches
      * something the snapshot holds.
+     *
+     * <p>{@link LoweringRole.RowValue} and {@link LoweringRole.PublishedValueEntry} are answered by
+     * separate arms even though a row's harness value still comes out as a {@link CheckedHelper}: an
+     * entry is not a helper — it is nullary by ADR-0074 and {@link CheckedModule} answers its
+     * publication — and folding the two into one arm is the projection issue #1885 refused.
      */
     private static Emitted emittedBy(String module, Bodies.Elaborated checked) {
         List<CheckedHelper> helpers = new ArrayList<>();
         List<CheckedValue> values = new ArrayList<>();
+        List<CheckedValueEntry> valueEntries = new ArrayList<>();
         checked.emittedDefinitions().forEach((name, emitted) -> {
             switch (emitted.role()) {
                 case LoweringRole.ValueHome home ->
@@ -934,15 +945,27 @@ final class CheckedProgramAssembler {
                 case LoweringRole.Helper helper ->
                         helpers.add(new CheckedHelper(helper.declaration(), parametersOf(emitted),
                                 emitted.body()));
-                // What the harness and another module call, under the name the module holds the
-                // method at, which no source declares and which is the only reference to it.
-                case LoweringRole.RowValue _, LoweringRole.PublishedValueEntry _ ->
+                // What the harness calls, under the name the module holds the method at, which no
+                // source declares and which is the only reference to it.
+                case LoweringRole.RowValue _ ->
                         helpers.add(new CheckedHelper(
                                 new ReachName.Own(new ValueName.Helper(module, name)),
                                 parametersOf(emitted), emitted.body()));
+                case LoweringRole.PublishedValueEntry entry -> {
+                    if (!emitted.parameters().isEmpty()) {
+                        // ADR-0074: the entry takes nothing and answers with the value. A parameter
+                        // here is `ValueEntries` having stopped minting the nullary bridge it
+                        // promises, which this refuses rather than carries into a program a reader
+                        // takes as nullary on that promise.
+                        throw new IllegalStateException("`" + entry.value() + "`'s published entry"
+                                + " takes " + emitted.parameters().size() + " parameter(s), and ADR-"
+                                + "0074 says it takes none");
+                    }
+                    valueEntries.add(new CheckedValueEntry(entry.value(), emitted.body()));
+                }
             }
         });
-        return new Emitted(helpers, values);
+        return new Emitted(helpers, values, valueEntries);
     }
 
     /** What a helper's method takes: what its source wrote. */

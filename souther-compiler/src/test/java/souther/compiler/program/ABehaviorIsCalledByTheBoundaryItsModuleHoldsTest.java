@@ -91,7 +91,7 @@ class ABehaviorIsCalledByTheBoundaryItsModuleHoldsTest {
                 EnsuresEnforcement.NoContract.INSTANCE, List.of(), List.of());
         return new CheckedProgram(
                 List.of(new CheckedModule("demo", List.of(behavior), List.of(), List.of(), List.of(),
-                        Set.of())),
+                        List.of(), Set.of())),
                 List.of(), List.of(), index,
                 KernelContracts.of(DefaultStdlib.get().kernelSignatures()),
                 AbortSites.of(List.of(),

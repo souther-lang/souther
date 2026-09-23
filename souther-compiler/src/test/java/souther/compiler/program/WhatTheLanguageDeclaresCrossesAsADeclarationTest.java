@@ -96,6 +96,7 @@ class WhatTheLanguageDeclaresCrossesAsADeclarationTest {
     }
 
     private static CheckedModule module(String name, CheckedData declares) {
-        return new CheckedModule(name, List.of(), List.of(), List.of(), List.of(declares), Set.of());
+        return new CheckedModule(name, List.of(), List.of(), List.of(), List.of(), List.of(declares),
+                Set.of());
     }
 }
