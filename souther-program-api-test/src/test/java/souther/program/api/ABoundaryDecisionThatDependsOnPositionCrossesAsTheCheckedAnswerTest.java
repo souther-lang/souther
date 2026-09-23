@@ -136,7 +136,8 @@ class ABoundaryDecisionThatDependsOnPositionCrossesAsTheCheckedAnswerTest {
 
         CheckedAlternativesForm.Discriminated discriminated =
                 assertInstanceOf(CheckedAlternativesForm.Discriminated.class, outcome.representation());
-        assertEquals("type", discriminated.key());
+        assertEquals("type", discriminated.tagKey());
+        assertEquals("value", discriminated.contentsKey());
     }
 
     /** The same rule, asked at a behavior's answer instead of a named sum's declaration — both

@@ -377,7 +377,8 @@ public final class TypeOps {
      * What a sum's encoding adds to this case, or a behavior's answer to this member — read from the
      * declaration the name denotes (spec §encoder-derivation). A braced data lays its fields beside the
      * discriminator, a data with no contents is the discriminator alone, and a newtype or a primitive
-     * puts its standalone representation under {@code "value"}.
+     * puts its standalone representation under the discriminated form's contents key — a newtype over
+     * a record too, whose representation is an object.
      *
      * <p>The one place code generation classifies a case's representation. The encoder of a named
      * sum, the encoder of a behavior's anonymous answer, the decoder that hands a case what it wrote

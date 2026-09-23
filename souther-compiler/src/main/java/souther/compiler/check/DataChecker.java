@@ -455,13 +455,13 @@ public final class DataChecker {
         // cannot come to be checked against different keys — and an enumeration, which writes no key,
         // is not asked.
         if (Boundary.of(Type.ref(sum.declares()), kinds, published).representation()
-                instanceof Boundary.Representation.Discriminated(String key)) {
+                instanceof Boundary.Representation.Discriminated(String tagKey, String _)) {
             TypeSymbol carrying =
-                    TypeOps.memberCarryingField(Type.ref(sum.declares()), key, symbols, published);
+                    TypeOps.memberCarryingField(Type.ref(sum.declares()), tagKey, symbols, published);
             if (carrying != null) {
                 throw CompileException.of(Diagnostic
                                 .at(sum.pos())
-                                .hint(new DataMessage.TheTagAndTheFieldWantOneKey(key)).say(new DataMessage.ACaseDeclaresTheDiscriminatorField(carrying.name(), key, sum.name())).build());
+                                .hint(new DataMessage.TheTagAndTheFieldWantOneKey(tagKey)).say(new DataMessage.ACaseDeclaresTheDiscriminatorField(carrying.name(), tagKey, sum.name())).build());
             }
         }
     }

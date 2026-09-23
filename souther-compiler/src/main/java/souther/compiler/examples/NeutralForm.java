@@ -181,7 +181,25 @@ final class NeutralForm {
 
     /**
      * Writes the discriminator the type declared at this position reads the case under, where it
-     * reads it through a sum at all.
+     * reads it through a sum at all ({@link #taggingAt}).
+     *
+     * <p>A field the fixture wrote itself is never replaced. A case whose own field is named like its
+     * sum's discriminator is already ambiguous at the boundary — the case encoder and the sum encoder
+     * both claim that key — and overwriting here would hide that behind an example that passes while
+     * decoding something the author did not write. Leaving the written value in place makes the row
+     * fail on the tag it cannot match, which is the honest outcome.
+     */
+    void tagged(Position position, TypeSymbol caseName, Map<String, Object> map) {
+        Tagging tagging = taggingAt(position, caseName);
+        if (tagging != null) {
+            map.putIfAbsent(tagging.form().tagKey(), tagging.tag());
+        }
+    }
+
+    /**
+     * How the type declared at this position reads the case: the discriminated form of the sum it is
+     * read through, with the tag the case wears there. {@code null} where the position reads the
+     * case as itself.
      *
      * <p>What is written is decided by the type the position declares (spec §encode-law): a case's own
      * decoder reads no discriminator and its sum's reads one, so `承認 { id = 1 }` is `{"id":1}` where
@@ -207,38 +225,35 @@ final class NeutralForm {
      * <p>A behavior's answer union does not arrive here. It has no declaration to read a
      * discriminator off, and where its members are all units it is written as a bare tag before this
      * is reached ({@link #readsABareName}) — which is what its generated encoder writes.
-     *
-     * <p>A field the fixture wrote itself is never replaced. A case whose own field is named like its
-     * sum's discriminator is already ambiguous at the boundary — the case encoder and the sum encoder
-     * both claim that key — and overwriting here would hide that behind an example that passes while
-     * decoding something the author did not write. Leaving the written value in place makes the row
-     * fail on the tag it cannot match, which is the honest outcome.
      */
-    void tagged(Position position, TypeSymbol caseName, Map<String, Object> map) {
+    private Tagging taggingAt(Position position, TypeSymbol caseName) {
         if (caseName == null) {
-            return;
+            return null;
         }
         // Anything but a sum reads the case as itself: its own type, a union — which is written only
         // as a behavior's own answer and has no decoder — and a place nothing reads.
         if (!(position.opened() instanceof Position.At(Type type))
                 || !(type instanceof Type.Ref ref)
                 || !(symbols.declaredNode(ref.name()) instanceof Hir.SumData)) {
-            return;
+            return null;
         }
         // What the sum's own decoder reads, read from where that is settled rather than from a copy
         // of it kept on the declaration. A fixture that wrote a tag of its own would be a value the
         // generated decoder cannot read.
         Boundary.Alternatives alternatives = Boundary.of(type, kinds, published);
-        if (!(alternatives.representation() instanceof Boundary.Representation.Discriminated(String key))) {
-            return;
+        if (!(alternatives.representation() instanceof Boundary.Representation.Discriminated form)) {
+            return null;
         }
         for (Boundary.WireCase wire : alternatives.wireCases()) {
             if (caseName.equals(wire.atom())) {
-                map.putIfAbsent(key, wire.tag());
-                return;
+                return new Tagging(form, wire.tag());
             }
         }
+        return null;
     }
+
+    /** A case read through a sum: the form the sum travels in and the tag the case wears in it. */
+    private record Tagging(Boundary.Representation.Discriminated form, String tag) {}
 
     /** Gives a value the neutral shape its declared type decodes from. A {@code Map} is written as a
      * list of {@code (key, value)} pairs — Elm's {@code Dict.fromList}, and the same list literal a
@@ -287,25 +302,27 @@ final class NeutralForm {
      * only where the position reads it through a sum that lists it.
      *
      * <p>A newtype case read through its sum decodes from the adjacent form that sum's decoder reads —
-     * the inner value under {@code value}, next to the discriminator (spec §sum-discrimination) — while
-     * a fixture names the case the way the domain constructs it,
+     * the inner value under the form's contents key, next to the discriminator (spec
+     * §sum-discrimination) — while a fixture names the case the way the domain constructs it,
      * {@code アクティベート済み(メールアドレス("a@example.com"))}.
      *
-     * <p>The {@code "value"} envelope is not part of a newtype's representation — it is what
-     * membership adds, which is why a standalone newtype is bare (spec §sum-discrimination). So the
-     * position decides it, the way it decides whether a unit case travels as a bare name, and what
-     * some other declaration does with the type does not reach a fixture written at the type itself.
+     * <p>The envelope is not part of a newtype's representation — it is what membership adds, which
+     * is why a standalone newtype is bare (spec §sum-discrimination). So the position decides it, the
+     * way it decides whether a unit case travels as a bare name, and what some other declaration does
+     * with the type does not reach a fixture written at the type itself. Both keys come from the form
+     * the position reads the case in, which is the one the sum's decoder reads.
      *
      * <p>Takes a case already resolved: a name spelled here would have to be one
      * {@link Symbols#declaredNode} answers to, which an imported type's declared name is not.
      */
     Object newtypeAt(Position position, TypeSymbol caseName, Object inner) {
-        Map<String, Object> envelope = new LinkedHashMap<>();
-        tagged(position, caseName, envelope);
-        if (envelope.isEmpty()) {
+        Tagging tagging = taggingAt(position, caseName);
+        if (tagging == null) {
             return inner;   // read as itself: the newtype's own form is its inner value
         }
-        envelope.put("value", inner);
+        Map<String, Object> envelope = new LinkedHashMap<>();
+        envelope.put(tagging.form().tagKey(), tagging.tag());
+        envelope.put(tagging.form().contentsKey(), inner);
         return envelope;
     }
 

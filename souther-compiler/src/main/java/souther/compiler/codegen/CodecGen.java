@@ -265,7 +265,7 @@ final class CodecGen {
     }
 
     byte[] generateSumEncoder(Hir.SumData sum, Boundary.Alternatives alternatives) {
-        String key = discriminator(alternatives);
+        Boundary.Representation.Discriminated form = discriminated(alternatives);
         ClassDesc cdEnc = cd(new GeneratedClass.Encoder(valueOf(sum)));
         return build(cdEnc, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
@@ -281,7 +281,7 @@ final class CodecGen {
                     code.instanceOf(cd(caseName));
                     Label next = code.newLabel();
                     code.ifeq(next);
-                    emitTagged(code, TypeOps.caseShape(caseName, symbols), key, v.tag(), () -> {
+                    emitTagged(code, TypeOps.caseShape(caseName, symbols), form, v.tag(), () -> {
                         invokeCodec(code, caseName, "encoder", MTD_Rencoder);
                         code.aload(1);
                         code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);
@@ -298,7 +298,7 @@ final class CodecGen {
     }
 
     byte[] generateSumDecoder(Hir.SumData sum, Boundary.Alternatives alternatives, Src src) {
-        String key = discriminator(alternatives);
+        Boundary.Representation.Discriminated form = discriminated(alternatives);
         List<Boundary.WireCase> wireCases = alternatives.wireCases();
         ClassDesc cdDec = cd(decoderOf(sum, src));
         return build(cdDec, cb -> {
@@ -312,8 +312,8 @@ final class CodecGen {
             cb.withMethodBody("decode", MTD_Rdecode, ClassFile.ACC_PUBLIC, code -> {
                 // this=0, in=1, path=2, so 3 is the first free slot for the guard to hold the node in.
                 emitObjectGuard(code, src, 3);
-                code.loadConstant(key);
-                code.loadConstant(key);
+                code.loadConstant(form.tagKey());
+                code.loadConstant(form.tagKey());
                 emitStringLeaf(code, srcLeafOwner(src));
                 code.invokestatic(srcFieldOwner(src), "field", srcFieldMtd(src));
                 // `field` answers a CombinePart, and `discriminate` takes a Decoder — the conversion
@@ -328,11 +328,12 @@ final class CodecGen {
                     pushInt(code, i);
                     code.loadConstant(v.tag());
                     // The mirror of what the encoder wrote: a case that wears the envelope is handed
-                    // what is under `"value"` and reads it as the standalone value it is, while a
-                    // product and a unit read the discriminated object they are part of. So a wrapped
-                    // case is read from under a key, which is not always this source's own decoder.
+                    // what is under the contents key and reads it as the standalone value it is,
+                    // while a product and a unit read the discriminated object they are part of. So a
+                    // wrapped case is read from under a key, which is not always this source's own
+                    // decoder.
                     if (TypeOps.caseShape(v.atom(), symbols) == CaseShape.WRAPPED) {
-                        code.loadConstant(CaseShape.ENVELOPE_KEY);
+                        code.loadConstant(form.contentsKey());
                         emitUnderAKeyDecoder(code, v.atom(), src);
                         code.invokestatic(srcFieldOwner(src), "field", srcFieldMtd(src));
                         code.invokeinterface(CD_CombinePart, "asDecoder", MTD_asDecoder);
@@ -2011,8 +2012,8 @@ final class CodecGen {
 
     /**
      * The encoder of a behavior's anonymous output union: dispatch on the member, encode it as that
-     * member writes itself, and write the discriminator {@code "type"} — what a named sum over the
-     * same leaves does (spec §encoder-derivation). Without it the same value would travel two ways depending on
+     * member writes itself, and write the discriminator under the keys of the form it was handed —
+     * what a named sum over the same leaves does (spec §encoder-derivation). Without it the same value would travel two ways depending on
      * where it sat, since a member's own encoder writes no discriminator.
      *
      * <p>A member this module declared is the case itself; any other arrives in its bridge case, and
@@ -2025,7 +2026,7 @@ final class CodecGen {
         ClassDesc cdEnc = cd(new GeneratedClass.Encoder(union));
         boolean enumeration =
                 alternatives.representation() instanceof Boundary.Representation.Enumeration;
-        String key = enumeration ? null : discriminator(alternatives);
+        Boundary.Representation.Discriminated form = enumeration ? null : discriminated(alternatives);
         return build(cdEnc, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_REncoder);
@@ -2040,7 +2041,7 @@ final class CodecGen {
                     if (enumeration) {
                         code.loadConstant(member.tag());
                     } else {
-                        emitMemberEncode(code, member, key);
+                        emitMemberEncode(code, member, form);
                     }
                     code.areturn();
                     code.labelBinding(next);
@@ -2054,8 +2055,9 @@ final class CodecGen {
     }
 
     /** Leaves the member on the stack encoded and tagged, the value in slot 1. */
-    private void emitMemberEncode(CodeBuilder code, Boundary.WireCase member, String key) {
-        emitTagged(code, TypeOps.caseShape(member.atom(), symbols), key, member.tag(), () -> {
+    private void emitMemberEncode(CodeBuilder code, Boundary.WireCase member,
+                                  Boundary.Representation.Discriminated form) {
+        emitTagged(code, TypeOps.caseShape(member.atom(), symbols), form, member.tag(), () -> {
             pushMemberEncoder(code, member.atom());
             pushMemberValue(code, member.atom());
             code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);
@@ -2066,19 +2068,21 @@ final class CodecGen {
      * Leaves a discriminated case on the stack: what the case writes on its own, plus what standing
      * in this sum — or in a behavior's answer, which is the same rule — adds to it (spec §encoder-derivation). A
      * product lays its fields beside the discriminator and a unit is the discriminator alone, so both
-     * carry it in the object they already are; a newtype and a primitive have no key of their own to
-     * put it on, so their representation goes under {@code "value"} beside it.
+     * carry it in the object membership gives them; a newtype and a primitive are wrapped, so their
+     * standalone representation goes unchanged under the form's contents key beside it — a newtype
+     * over a record included, although that representation is an object. {@code shape} picks which
+     * of the two and is read from the declaration; every key written comes from {@code form}.
      *
      * @param encoded leaves the case's own encoded form on the stack
      */
-    private void emitTagged(CodeBuilder code, CaseShape shape, String key, String tag,
-                            Runnable encoded) {
+    private void emitTagged(CodeBuilder code, CaseShape shape,
+                            Boundary.Representation.Discriminated form, String tag, Runnable encoded) {
         switch (shape) {
             case PRODUCT, UNIT -> {
                 encoded.run();
                 code.checkcast(CD_Map);
                 code.dup();
-                code.loadConstant(key);
+                code.loadConstant(form.tagKey());
                 code.loadConstant(tag);
                 code.invokeinterface(CD_Map, "put", MTD_Map_put);
                 code.pop();
@@ -2088,12 +2092,12 @@ final class CodecGen {
                 code.dup();
                 code.invokespecial(CD_LinkedHashMap, "<init>", MTD_void);
                 code.dup();
-                code.loadConstant(key);
+                code.loadConstant(form.tagKey());
                 code.loadConstant(tag);
                 code.invokeinterface(CD_Map, "put", MTD_Map_put);
                 code.pop();
                 code.dup();
-                code.loadConstant(CaseShape.ENVELOPE_KEY);
+                code.loadConstant(form.contentsKey());
                 encoded.run();
                 code.invokeinterface(CD_Map, "put", MTD_Map_put);
                 code.pop();
@@ -2139,15 +2143,15 @@ final class CodecGen {
     }
 
     /**
-     * The key an alternative's tag stands under.
+     * The discriminated form the alternatives travel in, with the keys it writes them under.
      *
-     * <p>Asked of the settled representation rather than written here. An enumeration has none — the
-     * value is the tag — so a caller reaching this for one is asking about a form it does not have,
-     * and that is a mistake in the caller rather than a key to invent.
+     * <p>Asked of the settled representation rather than written here. An enumeration has no keys —
+     * the value is the tag — so a caller reaching this for one is asking about a form it does not
+     * have, and that is a mistake in the caller rather than a key to invent.
      */
-    private static String discriminator(Boundary.Alternatives alternatives) {
+    private static Boundary.Representation.Discriminated discriminated(Boundary.Alternatives alternatives) {
         return switch (alternatives.representation()) {
-            case Boundary.Representation.Discriminated d -> d.key();
+            case Boundary.Representation.Discriminated d -> d;
             case Boundary.Representation.Enumeration _ -> throw new IllegalStateException(
                     "an enumeration travels as its tag and writes it under no key");
         };
