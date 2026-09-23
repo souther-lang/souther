@@ -126,7 +126,8 @@ public final class Analyzer {
      * one, because it is a compile of one file with nothing else in sight.
      */
     private Compilation workspaceCompile;
-    /** Which modules on the path {@link #workspaceCompile} was built for. Different ones — another
+    /** Which modules on the path {@link #workspaceCompile} was built for, and only that: the modules
+     * a compile uses are the ones the graph it is asked about carries. Different ones — another
      * place, or the same place written again — are a different set of modules to resolve an import
      * against, so the compile is started again. */
     private ModulesOnThePath compiledAgainst;
@@ -287,15 +288,12 @@ public final class Analyzer {
      * syntax error stays out of the shared compile (it cannot join the graph). The remaining files are
      * compiled together, and each semantic diagnostic is published on the file of the module that owns
      * it — so an error in an imported module lands on that module's document, not on its importer.
+     *
+     * <p>An import that names no module in the workspace is resolved against the graph's path —
+     * what the projects beside this one have already built — so an import the build resolves is
+     * not reported here as unknown.
      */
     public Map<String, List<LspDiagnostic>> diagnostics(ModuleGraph graph) {
-        return diagnostics(graph, ModulesOnThePath.NONE);
-    }
-
-    /** As {@link #diagnostics(ModuleGraph)}, resolving an import that names no module in the
-     * workspace against {@code path} — what the projects beside this one have already built — so
-     * an import the build resolves is not reported here as unknown. */
-    public Map<String, List<LspDiagnostic>> diagnostics(ModuleGraph graph, ModulesOnThePath path) {
         Map<String, List<LspDiagnostic>> out = new LinkedHashMap<>();
         Map<String, String> compileSet = new LinkedHashMap<>();   // uri -> text, syntactically clean only
         Set<String> brokenModules = new HashSet<>();   // names of files held out for their syntax errors
@@ -325,7 +323,7 @@ public final class Analyzer {
 
         Map<SourceId, List<Located>> byUri;
         try {
-            byUri = compileOf(graph, path, compileSet, brokenModules).diagnostics();
+            byUri = compileOf(graph, compileSet, brokenModules).diagnostics();
         } catch (RuntimeException | StackOverflowError e) {
             // Which file broke the walk is not known here, so every file that entered the compile is
             // marked. Silence would leave the whole workspace looking clean.
@@ -372,11 +370,11 @@ public final class Analyzer {
      * with a workspace comes through here, and a file created or deleted on disk reaches it as a
      * diagnose, so the gap is observed wherever there is one.
      */
-    private Compilation compileOf(ModuleGraph graph, ModulesOnThePath path,
-                                  Map<String, String> sources, Set<String> broken) {
+    private Compilation compileOf(ModuleGraph graph, Map<String, String> sources, Set<String> broken) {
         elsewhere.forgetAllBut(graph.uris());
         behaviorsOwed.forgetAllBut(graph.uris());
         readings.keySet().retainAll(Set.copyOf(graph.uris()));
+        ModulesOnThePath path = graph.onThePath();
         if (workspaceCompile == null || !path.equals(compiledAgainst)) {
             workspaceCompile = Compilation.ofDocuments(sources, broken, path.path());
             workspaceCompile.measure(measure);
@@ -391,10 +389,8 @@ public final class Analyzer {
     }
 
     /**
-     * The same compile, for a request that arrives with a graph and no path — navigation. A file
-     * that will not parse is left out of it, as it is for diagnostics: it cannot join a module set.
-     * The path is whichever the last diagnose used, which is current, because a diagnose runs on
-     * every change.
+     * The same compile, for a request — navigation. A file that will not parse is left out of it,
+     * as it is for diagnostics: it cannot join a module set.
      */
     private Compilation compileOf(ModuleGraph graph) {
         return compileOf(graph, sorted(graph));
@@ -402,7 +398,7 @@ public final class Analyzer {
 
     /** The same, for a request that has already read which documents can join a compile. */
     private Compilation compileOf(ModuleGraph graph, Sorted sorted) {
-        return compileOf(graph, pathCompiledAgainst(), sorted.joining(), sorted.broken());
+        return compileOf(graph, sorted.joining(), sorted.broken());
     }
 
     /**
@@ -420,9 +416,9 @@ public final class Analyzer {
      * takes the offer, and a compile held between two of those would answer from the documents as
      * they were when the first one was taken.
      */
-    private Compilation composingRowsOf(Sorted sorted) {
+    private Compilation composingRowsOf(ModuleGraph graph, Sorted sorted) {
         Compilation composing = Compilation.ofDocuments(sorted.joining(), sorted.broken(),
-                pathCompiledAgainst().path());
+                graph.onThePath().path());
         composing.observe(RowObservation.RECORD_ARMS);
         composing.measure(measure);
         composing.abandonWhen(abandonment);
@@ -456,9 +452,6 @@ public final class Analyzer {
         return new Sorted(joining, broken);
     }
 
-    private ModulesOnThePath pathCompiledAgainst() {
-        return compiledAgainst == null ? ModulesOnThePath.NONE : compiledAgainst;
-    }
 
     /**
      * What one document was found to be: whether it can join a compile, and — where it cannot — the
@@ -1003,7 +996,7 @@ public final class Analyzer {
         //
         // An id stands for itself here: a workspace compilation is keyed on the document URIs this
         // server was given, so what identifies a source is already what this server calls it.
-        Compilation composing = composingRowsOf(sorted);
+        Compilation composing = composingRowsOf(graph, sorted);
         souther.compiler.report.GeneratedRows.Block block =
                 souther.compiler.report.GeneratedRows.of(composing, offer.module(),
                         offer.behavior(),
@@ -1639,7 +1632,7 @@ public final class Analyzer {
         // The buffer as it stands where it parses, and finished off where it does not: a call is
         // asked about while its closing bracket is not typed, which is most of the time.
         SemanticProbe.Reading reading =
-                probe.of(rest, sorted.broken(), pathCompiledAgainst(), uri, text, cursor,
+                probe.of(rest, sorted.broken(), graph.onThePath(), uri, text, cursor,
                         abandonment);
         Compilation compilation = reading == null ? compileOf(graph) : reading.compilation();
         String parsed = reading == null ? text : reading.repaired();
@@ -1956,7 +1949,7 @@ public final class Analyzer {
         Map<String, String> rest = new LinkedHashMap<>(sorted.joining());
         rest.remove(uri);
         SemanticProbe.Reading reading =
-                probe.of(rest, sorted.broken(), pathCompiledAgainst(), uri, text, cursor,
+                probe.of(rest, sorted.broken(), graph.onThePath(), uri, text, cursor,
                         abandonment);
         if (reading == null) {
             return List.of();

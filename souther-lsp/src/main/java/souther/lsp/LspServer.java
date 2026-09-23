@@ -1011,7 +1011,7 @@ public final class LspServer {
      */
     private void publishAll() {
         ModuleGraph graph = workspace.snapshot(documents.openDocuments());
-        Map<String, List<LspDiagnostic>> byUri = analyzer.diagnostics(graph, workspace.modulesOnThePath());
+        Map<String, List<LspDiagnostic>> byUri = analyzer.diagnostics(graph);
         for (String uri : documents.uris()) {
             abandonment.stopIfAsked();
             publish(uri, byUri.getOrDefault(uri, List.of()));

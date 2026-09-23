@@ -112,7 +112,8 @@ public final class Workspace {
     /**
      * The current module graph: every {@code .sou} file under the roots, read from disk, with the
      * given {@code openBuffers} (keyed by document URI) overlaid — an open buffer's unsaved text wins,
-     * and an open document outside the roots is still included.
+     * and an open document outside the roots is still included — and the {@link #modulesOnThePath}
+     * of the same roots, so the two are read of one workspace.
      */
     public ModuleGraph snapshot(Map<String, String> openBuffers) {
         if (diskScan == null) {
@@ -120,7 +121,7 @@ public final class Workspace {
         }
         Map<String, String> sources = new LinkedHashMap<>(diskScan);
         sources.putAll(openBuffers);
-        return ModuleGraph.of(sources);
+        return ModuleGraph.of(sources, modulesOnThePath());
     }
 
     /**
@@ -181,7 +182,7 @@ public final class Workspace {
      * as a jar in the local repository is not found — knowing about that means reading the build,
      * which the language server does not do.
      */
-    public ModulesOnThePath modulesOnThePath() {
+    ModulesOnThePath modulesOnThePath() {
         if (onThePath == null) {
             onThePath = new ModulesOnThePath(classOutputs(), pathRevision);
         }

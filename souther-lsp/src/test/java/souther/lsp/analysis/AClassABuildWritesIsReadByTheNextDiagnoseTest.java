@@ -55,8 +55,8 @@ class AClassABuildWritesIsReadByTheNextDiagnoseTest {
         Workspace workspace = new Workspace();
         workspace.setRoots(List.of(root.toUri().toString()));
         Analyzer analyzer = new Analyzer();
-        assertFalse(analyzer.diagnostics(workspace.snapshot(Map.of()), workspace.modulesOnThePath())
-                .get(uri).isEmpty(), "nothing is built yet, so the import names no module");
+        assertFalse(analyzer.diagnostics(workspace.snapshot(Map.of())).get(uri).isEmpty(),
+                "nothing is built yet, so the import names no module");
 
         List<String> written = new ArrayList<>();
         for (Map.Entry<String, ClassFileImage> built : Compiler.compileModules(List.of(LIB)).entrySet()) {
@@ -67,8 +67,8 @@ class AClassABuildWritesIsReadByTheNextDiagnoseTest {
         }
         workspace.filesChanged(written);
 
-        assertEquals(List.of(), analyzer.diagnostics(workspace.snapshot(Map.of()),
-                workspace.modulesOnThePath()).get(uri), "the build is read");
+        assertEquals(List.of(), analyzer.diagnostics(workspace.snapshot(Map.of())).get(uri),
+                "the build is read");
     }
 
     /** The probe keeps a compile of its own between requests, and holds it to the same thing. */
