@@ -56,6 +56,11 @@ class EncoderPathAgreementTest {
         writtenAlike("Outcome", "Won");
     }
 
+    @Test
+    void aUnitIsWrittenTheSameBothWays() throws Exception {
+        writtenAlike("Closed", "Closed");
+    }
+
     // === the collections ===
 
     @Test
@@ -158,6 +163,7 @@ class EncoderPathAgreementTest {
                 data Code = String
                 data Day = Date
                 data Outcome = Won | Lost
+                data Closed
                 data Holder = { v: %s }
                 behavior bare : (n: Int) -> %s%s
                 let bare (n) = %s
@@ -170,7 +176,7 @@ class EncoderPathAgreementTest {
 
     /** What the value expression builds that belongs in `constructs`, for the clause both behaviors
      *  need. A row builds at most one of the module's data types, which is what keeps this a lookup
-     *  rather than a parse. A row writing `Won` builds a unit, which is in no construction set
+     *  rather than a parse. A row writing `Won` or `Closed` builds a unit, which is in no construction set
      *  (spec §constructs-excludes-unit-data), so it leaves the clause empty. */
     private static String builtBy(String value) {
         if (value.contains("Code(")) {

@@ -450,7 +450,8 @@ final class CodecGen {
         });
     }
 
-    /** Encodes a unit to an empty Map; the sum encoder adds the discriminator tag. */
+    /** Encodes a unit to an empty Map, the form spec §encoder-derivation gives a unit on its own; a
+     *  sum encoder puts the discriminator tag in it, and an enumeration writes the case's name instead. */
     byte[] generateUnitEncoder(ClassDesc cdEnc) {
         return build(cdEnc, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
