@@ -9,7 +9,6 @@ import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.StatedComparison;
-import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.RuleAt;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
@@ -617,64 +616,13 @@ public final class GuardThresholds {
         // same thing about one rule, and asking apiece would let them come to say two.
         RuleReportAnchor anchor = reaches.anchorOf(wrote, where);
         publish(behavior, wrote, anchor, read, withoutALine);
-        switch (read) {
-            case ComparisonAssessment.AtAPosition placed -> {
-                LineOrigin.ComparisonOrigin drawn =
-                        originOf(behavior, stated, at, wrote, anchor,placed.cutting());
-                // The value a row is owed against this line, which the reading of the comparison
-                // already answered. Taken off the level the rule was written with, a rule that wrote
-                // a multiple of the position named a class at a number the position never holds.
-                // Which kind of evidence this is and what it carries, from the one reading of what
-                // the rule placed. Asked twice — once to choose the branch and once for the side —
-                // the two are free to disagree, and the side is a question only one of them
-                // answers.
-                switch (placed.cutting().claim()) {
-                    // The value the rule names, which is where its line falls and not the value
-                    // beside it. A rule that names no value of the position singles nothing out
-                    // here — the position is divided all the same, and what divides it is the line.
-                    case ComparisonClaim.Singled _ -> {
-                        if (placed.value() != null) {
-                            out.add(new RuleEvidence.Singles(
-                                    new Guards.Singled(placed.position(), placed.value(), drawn)));
-                        }
-                    }
-                    case ComparisonClaim.Cut order -> out.add(new RuleEvidence.Divides(
-                            new Threshold(placed.position(), placed.cutting().seam(),
-                                    order.valueBelongs(), drawn)));
-                }
-                // And the line itself, where the position has no value beside it for a row to be
-                // owed at. It divides the position — the classes either side are what the model
-                // tells apart — and the border is drawn on the quantity the rule wrote, which can
-                // name where the line falls. Left out, a rule that cuts at a third had its classes
-                // counted and nothing said about its line at all.
-                if (placed.value() == null && placed.drawsABorder()) {
-                    between.add(new LineDrawn(placed.cutting(), drawn));
-                }
-            }
-            // A line on something that is not one position's own values. What the partition could
-            // not read here it still could not read, and a boundary answering does not answer for
-            // it (spec §example-partition).
-            //
-            // Collected rather than turned into a border here. What a border owes away from
-            // its line is a run of the arrangement every rule about that quantity makes
-            // together, and a border built where its comparison was read knows only its own
-            // line — so a second rule over one form left the first one's run going to the end
-            // of the order, past it.
-            case ComparisonAssessment.AcrossPositions over -> {
-                // A value singled out on such a quantity has no sides, so there is nothing for a
-                // border to owe a row away from: `a == b` puts the whole of one arm on the place
-                // the two meet, and that arm is a row the branch measure already asks for.
-                if (over.drawsABorder()) {
-                    between.add(new LineDrawn(over.cutting(),
-                            originOf(behavior, stated, at, wrote, anchor,over.cutting())));
-                }
-            }
-            case ComparisonAssessment.AnswerDependent _, ComparisonAssessment.NoInput _,
-                 ComparisonAssessment.CutsNothing _, ComparisonAssessment.OutsideTheDomain _,
-                 ComparisonAssessment.NothingArrivesAtItsLine _,
-                 ComparisonAssessment.NoFeasibleInput _,
-                 ComparisonAssessment.Unread _ -> { }
-        }
+        // The geometry itself is not this reader's own — {@link ComparisonGeometry} reads it the
+        // same way a clause does. Only where a line's origin comes from is: a guard's is where
+        // the run meets the comparison, which is this reading's own place to say.
+        ComparisonGeometry geometry = ComparisonGeometry.of(read,
+                cutting -> originOf(behavior, stated, at, wrote, anchor, cutting));
+        out.addAll(geometry.evidence());
+        between.addAll(geometry.between());
     }
 
     /**

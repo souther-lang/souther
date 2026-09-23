@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Comparison;
 import souther.compiler.check.RuleReadingSource;
-import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.StatedContract;
 import souther.compiler.core.Contract;
@@ -231,64 +230,12 @@ public final class EnsuresThresholds {
         // reader, and a case added to an assessment had to be answered in both.
         reportRuleWithoutLine(rule.ref(), e, rule.value(),
                 assessed.whatEachPlaceIsLeftWith(), out.noLine());
-        // And the geometry, which is this reader's own. Only the two arms that draw something have
-        // anything to add here.
-        switch (assessed) {
-            // A line on one position's own values. The value the classes meet at was answered by the
-            // reading of the comparison; taken off the level the rule was written with, a rule that
-            // wrote a multiple of the position named a class at a number the position never holds.
-            case ComparisonAssessment.AtAPosition at -> {
-                LineOrigin.EnsuresOrigin origin = originOf(said, at.cutting());
-                // From the one reading of what the rule placed, the way a body's rule is read:
-                // which kind of evidence this is and what it carries are one answer, and the side
-                // is a question only one of the two kinds has.
-                switch (at.cutting().claim()) {
-                    // The value the rule names, for the reason a body's rule gets: where its line
-                    // falls and not the value beside it.
-                    case ComparisonClaim.Singled _ -> {
-                        if (at.value() != null) {
-                            out.evidence().add(new RuleEvidence.Singles(
-                                    new GuardThresholds.Guards.Singled(
-                                            at.position(), at.value(), origin)));
-                        }
-                    }
-                    case ComparisonClaim.Cut order ->
-                            out.evidence().add(new RuleEvidence.Divides(
-                                    new Threshold(at.position(), at.cutting().seam(),
-                                            order.valueBelongs(), origin)));
-                }
-                // And the line itself, where the position has no value beside it for a row to be
-                // owed at: the classes either side are what the model tells apart, and the border is
-                // drawn on the quantity the rule wrote, which can name where it falls.
-                if (at.value() == null && at.drawsABorder()) {
-                    out.between().add(new LineDrawn(at.cutting(), origin));
-                }
-            }
-            // A line on something that is not one position's own values: it divides no position, so
-            // it travels beside the partition rather than on an axis. Met by writing the values,
-            // which is this reader's own answer and not the one the same shape of line gets from a
-            // guard — a guard's is met by getting the comparison to answer, because what it is about
-            // is a place in a body.
-            //
-            // Collected rather than turned into a border here, for the reason a body's lines are:
-            // what a border owes away from its line is a run of the arrangement every rule about
-            // that quantity makes together.
-            case ComparisonAssessment.AcrossPositions over -> {
-                // A value singled out on such a quantity has no sides, so there is nothing for a
-                // border to owe a row away from.
-                if (over.drawsABorder()) {
-                    out.between().add(new LineDrawn(over.cutting(),
-                            originOf(said, over.cutting())));
-                }
-            }
-            // Nothing this reader draws at any of them. What each leaves the positions is said
-            // above, in the one place that answers it for both readers of a comparison.
-            case ComparisonAssessment.Unread _, ComparisonAssessment.CutsNothing _,
-                 ComparisonAssessment.OutsideTheDomain _,
-                 ComparisonAssessment.NothingArrivesAtItsLine _,
-                 ComparisonAssessment.NoFeasibleInput _,
-                 ComparisonAssessment.AnswerDependent _, ComparisonAssessment.NoInput _ -> { }
-        }
+        // And the geometry. Read the same way a guard reads it ({@link ComparisonGeometry}); only
+        // where a line's origin comes from is this reader's own — a clause's is which conjunct
+        // stated it, not a place a run met.
+        ComparisonGeometry geometry = ComparisonGeometry.of(assessed, cutting -> originOf(said, cutting));
+        out.evidence().addAll(geometry.evidence());
+        out.between().addAll(geometry.between());
     }
 
     /** How a row meets a line this clause drew, which is the clause's own answer and no other
