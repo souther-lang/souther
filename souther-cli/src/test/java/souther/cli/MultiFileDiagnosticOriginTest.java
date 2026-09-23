@@ -1,6 +1,5 @@
 package souther.cli;
 
-import souther.compiler.cst.SourceLayout;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.Compiler;
@@ -164,17 +163,19 @@ class MultiFileDiagnosticOriginTest {
         CompileException e = assertThrows(CompileException.class,
                 () -> Main.compileToDir(List.of(a, b), dir.resolve("out")));
 
-        assertEquals(b, Main.sourceOf(List.of(a, b), e));
+        assertEquals("b.sou", Main.read(List.of(a, b)).contexts().sourceOf(e.sourceId()).fileName());
     }
 
     @Test
-    void anUntaggedMultiFileErrorStillRendersWithoutASnippet(@TempDir Path dir) {
+    void anUntaggedMultiFileErrorStillRendersWithoutASnippet(@TempDir Path dir) throws IOException {
         Path a = dir.resolve("a.sou");
         Path b = dir.resolve("b.sou");
+        Files.writeString(a, A);
+        Files.writeString(b, B);
         CompileException untagged = new CompileException(
                 Diagnostic.literal(new SourcePos(1, 1), "boom"), "boom");
 
-        assertNull(Main.sourceOf(List.of(a, b), untagged));
+        assertNull(Main.read(List.of(a, b)).contexts().sourceOf(untagged.sourceIdOf(0)));
     }
 
     @Test
@@ -186,10 +187,8 @@ class MultiFileDiagnosticOriginTest {
 
         CompileException e = assertThrows(CompileException.class,
                 () -> Main.compileToDir(List.of(a, b), dir.resolve("out")));
-        Path source = Main.sourceOf(List.of(a, b), e);
-        String rendered = new HumanRenderer(false).render(e.diagnostic(),
-                new SourceContext(source.getFileName().toString(), Files.readString(source), SourceLayout.of(Files.readString(source))),
-                Locale.ENGLISH);
+        SourceContext source = Main.read(List.of(a, b)).contexts().sourceOf(e.sourceId());
+        String rendered = new HumanRenderer(false).render(e.diagnostic(), source, Locale.ENGLISH);
 
         assertTrue(rendered.contains("b.sou:6:"), rendered);
         assertTrue(rendered.contains("let f (who) = Out { v = who }"), rendered);

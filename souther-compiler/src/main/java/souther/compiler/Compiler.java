@@ -22,18 +22,20 @@ import java.util.Set;
 
 /**
  * The compiler pipeline facade: source → parse → derive → type check → ClassFile bytecode
- * (spec §compiler-pipeline). {@link #compile} handles a single self-contained module;
- * {@link #compileModules} links several modules through explicit imports (spec §modules).
+ * (spec §compiler-pipeline). {@link #compiled(CompilationSources, ModulePath, List, Adequacy.Asked)}
+ * and {@link #analyzed(CompilationSources, ModulePath, List, Adequacy.Asked)} take any sources and
+ * any path; {@link #compile} and {@link #compileModules} are the short forms for one string and for
+ * a module set (spec §modules).
  */
 public final class Compiler {
 
     private Compiler() {}
 
-    /** Compiles a single self-contained module (no imports) into binary class name → bytecode.
-     * A source that omits the {@code module} header is named {@code Main} (the string API has no
-     * file name to derive from; {@code souther run} passes the file-name stem instead). */
+    /** Compiles one source into binary class name → bytecode. A source that omits the
+     * {@code module} header is named {@link ImplicitModuleName#OF_A_TEXT}: a string has no file name
+     * to derive one from. */
     public static Map<String, ClassFileImage> compile(String source) {
-        return compile(source, "Main");
+        return compile(source, ImplicitModuleName.OF_A_TEXT);
     }
 
     /**
@@ -53,7 +55,7 @@ public final class Compiler {
 
     /** Compiles and returns the classes together with any invariant-discharge warnings. */
     public static Compiled compileWithWarnings(String source) {
-        return compileWithWarnings(source, "Main");
+        return compileWithWarnings(source, ImplicitModuleName.OF_A_TEXT);
     }
 
     /** As {@link #compileWithWarnings(String)}, but a header-less source is named
@@ -116,12 +118,10 @@ public final class Compiler {
     }
 
     /**
-     * Compiles one self-contained source by asking one compilation for its classes.
+     * Compiles one source by asking one compilation for its classes.
      *
      * <p>This differs from {@link #linking} in what it lets a source be, not in what it does with
-     * it: a source with no {@code module} header takes a name, and a failing example is reported
-     * with its own position rather than tagged with the file it came from, because there is only
-     * the one.
+     * it: a source with no {@code module} header takes a name.
      */
     private static Map<String, ClassFileImage> compiling(String source, String defaultModuleName,
                                                  List<Located> warningsOut) {
@@ -129,7 +129,7 @@ public final class Compiler {
     }
 
     /**
-     * The compilation of one self-contained source, driven to completion, with the first error
+     * The compilation of one source with no path, driven to completion, with the first error
      * raised. A caller that wants more than the classes — what a module declares, what a behavior's
      * signature is — asks the compilation rather than parsing the source a second time.
      */
@@ -176,28 +176,50 @@ public final class Compiler {
     }
 
     /**
-     * The compilation of one source, resolving an import that names no module in it against
-     * {@code path} — what {@code run} asks for, holding one file and a class path.
+     * The compilation of {@code sources}, resolving an import that names none of them against
+     * {@code path}, driven to completion with the first error raised.
+     *
+     * <p>What the sources are and what they may reach are handed over apart, and neither decides the
+     * other: a lone file is named the way a lone file is named whatever the path holds, and its
+     * imports reach the path whatever the file is named.
+     */
+    public static Compilation compiled(CompilationSources sources, ModulePath path,
+                                       List<Located> warningsOut) {
+        return compiled(sources, path, warningsOut, Adequacy.Asked.NOTHING);
+    }
+
+    /** As above, telling the compile how much of the rows' coverage to measure and warn about. */
+    public static Compilation compiled(CompilationSources sources, ModulePath path,
+                                       List<Located> warningsOut, Adequacy.Asked measure) {
+        return driven(() -> accepted(sources.compilation(path), warningsOut, measure,
+                null, null, null));
+    }
+
+    /**
+     * The compilation of one source handed over as a string, named {@code defaultModuleName} where
+     * it writes no header, resolving an import that names no module in it against {@code path}.
      */
     public static Compilation compiled(String source, String defaultModuleName,
                                        List<Located> warningsOut, ModulePath path) {
-        return driven(() -> compilingSource(source, defaultModuleName, warningsOut,
-                Adequacy.Asked.NOTHING, null, null, null, path));
+        return driven(() -> accepted(Compilation.ofSource(source, defaultModuleName, path),
+                warningsOut, Adequacy.Asked.NOTHING, null, null, null));
     }
 
     private static Compilation compiled(String source, String defaultModuleName,
                                         List<Located> warningsOut, Adequacy.Asked measure,
                                         java.time.Duration exampleBudget, JvmExampleDeadlines arrangement,
                                         EvaluationPolicy policy) {
-        return driven(() -> compilingSource(source, defaultModuleName, warningsOut, measure,
-                exampleBudget, arrangement, policy, ModulePath.EMPTY));
+        return driven(() -> accepted(Compilation.ofSource(source, defaultModuleName),
+                warningsOut, measure, exampleBudget, arrangement, policy));
     }
 
-    private static Compilation compilingSource(String source, String defaultModuleName,
-                                               List<Located> warningsOut, Adequacy.Asked measure,
-                                               java.time.Duration exampleBudget, JvmExampleDeadlines arrangement,
-                                               EvaluationPolicy policy, ModulePath path) {
-        Compilation compilation = Compilation.ofSource(source, defaultModuleName, path);
+    /**
+     * Asks {@code compilation} whether the language accepts it, raising the first thing it refuses,
+     * on the terms a caller gave — {@code null} takes the default for each.
+     */
+    private static Compilation accepted(Compilation compilation, List<Located> warningsOut,
+                                        Adequacy.Asked measure, java.time.Duration exampleBudget,
+                                        JvmExampleDeadlines arrangement, EvaluationPolicy policy) {
         // The terms first and the wait after, because the wait is one of them: said the other way
         // round, a caller that asked for both would have the policy put the default wait back over
         // the one it asked for, and nothing would say so.
@@ -228,16 +250,30 @@ public final class Compiler {
      * have. What refused the compilation is refused still: it is in the reports, and the caller reads
      * it there rather than catching it.
      */
+    public static Compilation analyzed(CompilationSources sources, ModulePath path,
+                                       List<Located> warningsOut, Adequacy.Asked measure) {
+        return answered(sources.compilation(path), warningsOut, measure);
+    }
+
+    /** As {@link #analyzed(CompilationSources, ModulePath, List, Adequacy.Asked)}, measuring
+     *  nothing of what the rows cover. */
+    public static Compilation analyzed(CompilationSources sources, ModulePath path,
+                                       List<Located> warningsOut) {
+        return analyzed(sources, path, warningsOut, Adequacy.Asked.NOTHING);
+    }
+
+    /** As {@link #analyzed(CompilationSources, ModulePath, List, Adequacy.Asked)}, of one source
+     *  handed over as a string, named {@code defaultModuleName} where it writes no header. */
     public static Compilation analyzed(String source, String defaultModuleName,
                                        List<Located> warningsOut, Adequacy.Asked measure) {
         return answered(Compilation.ofSource(source, defaultModuleName), warningsOut, measure);
     }
 
-    /** As {@link #analyzed}, for a module set resolved against {@code path} — what
-     *  {@link #compiledModules} is to {@link #compiled}. */
+    /** As {@link #analyzed(CompilationSources, ModulePath, List, Adequacy.Asked)}, for sources
+     *  linked as a module set — what {@link #compiledModules} is to {@link #compiled}. */
     public static Compilation analyzedModules(List<String> sources, ModulePath path,
                                               List<Located> warningsOut, Adequacy.Asked measure) {
-        return answered(Compilation.ofSources(sources, path), warningsOut, measure);
+        return analyzed(CompilationSources.modules(sources), path, warningsOut, measure);
     }
 
     /**
@@ -358,31 +394,8 @@ public final class Compiler {
                                       List<Located> warningsOut, Adequacy.Asked measure,
                                       java.time.Duration exampleBudget, JvmExampleDeadlines arrangement,
                                       EvaluationPolicy policy) {
-        return driven(() -> linkingSources(sources, path, warningsOut, measure, exampleBudget,
-                arrangement, policy));
-    }
-
-    private static Compilation linkingSources(List<String> sources, ModulePath path,
-                                              List<Located> warningsOut, Adequacy.Asked measure,
-                                              java.time.Duration exampleBudget, JvmExampleDeadlines arrangement,
-                                              EvaluationPolicy policy) {
-        Compilation compilation = Compilation.ofSources(sources, path);
-        // The terms first and the wait after, for the reason compilingSource gives.
-        if (policy != null) {
-            compilation.withEvaluationPolicy(policy);
-        }
-        if (exampleBudget != null) {
-            compilation.withExampleBudget(exampleBudget);
-        }
-        if (arrangement != null) {
-            compilation.withJvmExampleDeadlines(arrangement);
-        }
-        compilation.measure(measure);
-
-        // What the language refuses over, asked where it is written down. Read here rather than
-        // repeated: a second reading is a second answer to whether this program is accepted.
-        Acceptance.of(compilation, warningsOut);
-        return compilation;
+        return driven(() -> accepted(CompilationSources.modules(sources).compilation(path),
+                warningsOut, measure, exampleBudget, arrangement, policy));
     }
     /**
      * Links a module set like {@link #compileModules}, but collects diagnostics per source — keyed by

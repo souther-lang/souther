@@ -147,16 +147,16 @@ class CompilerBuildDriverTest {
                 dir.resolve("app").resolve("state"), "en"));
 
         assertTrue(result.succeeded(), () -> String.valueOf(result.diagnostics()));
-        assertTrue(Files.exists(classes.resolve("Main/Order.class")));
+        assertTrue(Files.exists(classes.resolve("orders/Order.class")),
+                "named after its file, whatever it imports");
     }
 
     /**
-     * A single source with no {@code module} header is a self-contained module rather than a module
-     * set of one, and the compiler is asked differently for it — a distinction a build has no way to
-     * make itself.
+     * A single source with no {@code module} header is named after the file it was read from, as the
+     * specification names one — the same name the command line gives the same file.
      */
     @Test
-    void aLoneSourceWithNoModuleHeaderIsCompiledAsASelfContainedModule(@TempDir Path dir)
+    void aLoneSourceWithNoModuleHeaderIsNamedAfterItsFile(@TempDir Path dir)
             throws IOException {
         Path sources = Files.createDirectories(dir.resolve("src"));
         Files.writeString(sources.resolve("amount.sou"), """
@@ -169,9 +169,9 @@ class CompilerBuildDriverTest {
                 .compile(new BuildRequest(List.of(sources), List.of(), classes, dir.resolve("state"), "en"));
 
         assertTrue(result.succeeded(), () -> String.valueOf(result.diagnostics()));
-        assertTrue(Files.exists(classes.resolve("Main/Amount.class")),
-                "named the way the annotation processor names one, so the same source compiles the "
-                        + "same way whichever integration a project uses");
+        assertTrue(Files.exists(classes.resolve("amount/Amount.class")),
+                "named the way the command line and the annotation processor name one, so the same "
+                        + "source compiles the same way whichever integration a project uses");
     }
 
     /** One unproven construction, on line 10. */

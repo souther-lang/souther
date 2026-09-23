@@ -11,7 +11,6 @@ import souther.compiler.diag.Located;
 import souther.compiler.diag.ReportContext;
 import souther.compiler.diag.SourceContextResolver;
 
-import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -50,12 +49,9 @@ class HowManyFilesWereHandedOverDoesNotDecideWhatIsQuotedTest {
             let g (x: Int): Int = x
             """;
 
-    /** The command line's own resolver over {@code files} — the thing that used to answer the one
-     *  file it had for whatever it was asked. */
+    /** The command line's own resolver over {@code files}: the contexts of the sources it read. */
     private static SourceContextResolver resolverOf(List<Path> files) throws Exception {
-        Method sourcesOf = Main.class.getDeclaredMethod("sourcesOf", List.class);
-        sourcesOf.setAccessible(true);
-        return (SourceContextResolver) sourcesOf.invoke(null, files);
+        return Main.read(files).contexts();
     }
 
     private static String rendered(List<Path> files, CompileException e) throws Exception {

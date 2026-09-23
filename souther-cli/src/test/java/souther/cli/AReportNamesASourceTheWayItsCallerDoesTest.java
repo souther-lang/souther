@@ -4,6 +4,8 @@ import souther.compiler.source.SourceId;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.CompilationSources;
+import souther.compiler.CompilationSources.SourceFile;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Compilation;
 
@@ -167,17 +169,13 @@ class AReportNamesASourceTheWayItsCallerDoesTest {
     /**
      * An id this command did not hand out is left as it is, and not read as the only file there is.
      *
-     * <p>Two lookups run over the same list of files and answer differently, because they are asked
-     * different questions. A diagnostic may name no source at all — a compile of one file tags its
-     * problems with nothing, and the file handed over is the answer however the diagnostic is tagged
-     * — so that lookup takes the single source whatever the id reads. A reason in a report always
-     * names one, so an id that is none of these files is about a source this command did not hand
-     * over, and answering with the only file would invent the correspondence this whole change is
-     * about not guessing at.
+     * <p>An id that is none of these files is about a source this command did not hand over, and
+     * answering with the only file would invent a correspondence nothing established.
      */
     @Test
     void anIdThisCommandDidNotHandOverIsNotResolvedToItsOnlyFile() {
-        SourceNameResolver names = Main.namesOf(List.of(Path.of("a", "zeroname.sou")));
+        SourceNameResolver names = CompilationSources.files(List.of(
+                new SourceFile(Path.of("a", "zeroname.sou").toString(), ""))).names();
 
         assertEquals("zeroname.sou", names.nameOf(Compilation.idOfSourceIndex(0)));
         assertEquals("elsewhere.sou", names.nameOf(new SourceId("elsewhere.sou")),

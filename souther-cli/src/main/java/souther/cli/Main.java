@@ -1,10 +1,9 @@
 package souther.cli;
 
-import souther.compiler.cst.SourceLayout;
-import souther.compiler.source.SourceId;
-
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.JvmClassName;
+import souther.compiler.CompilationSources;
+import souther.compiler.CompilationSources.SourceFile;
 import souther.compiler.Compiler;
 import souther.compiler.CanonicalNames;
 import souther.compiler.cst.CstError;
@@ -17,11 +16,8 @@ import souther.compiler.diag.HumanRenderer;
 import souther.compiler.diag.JsonRenderer;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
-import souther.compiler.diag.SourceContext;
 import souther.compiler.diag.SourceContextResolver;
-import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.diag.SourceRendering;
-import souther.compiler.diag.SourceNames;
 import souther.compiler.doc.ApiCommand;
 import souther.compiler.doc.DocCommand;
 import souther.compiler.doc.JapiCommand;
@@ -246,13 +242,21 @@ public final class Main {
             System.err.println(Usage.of(CliCommand.COMPILE));
             return 2;
         }
+        CompilationSources read;
+        try {
+            read = read(sources);
+        } catch (IOException e) {
+            System.err.println("io error: " + e.getMessage());
+            return 1;
+        }
+        SourceContextResolver contexts = read.contexts();
         List<Located> warnings = new ArrayList<>();
         try {
             Map<String, ClassFileImage> classes =
-                    compiledClasses(sources, classPath, warnings, measure);
+                    compiledClasses(read, classPath, warnings, measure);
             // Before the written files: the warnings are about the source, and a long list of paths
             // between them and the command would bury them.
-            report(warnings, sources, render);
+            report(warnings, contexts, render);
             if (refuseWarnings && !warnings.isEmpty()) {
                 return refused(render);
             }
@@ -261,12 +265,12 @@ public final class Main {
             }
             return 0;
         } catch (CompileException e) {
-            reportCompileError(e, sources, render);
+            reportCompileError(e, contexts, render);
             return 1;
         } catch (IOException e) {
             // The compile itself finished — these warnings are the whole set, and what stopped the
             // command was writing the classes out, which says nothing about the source.
-            report(warnings, sources, render);
+            report(warnings, contexts, render);
             System.err.println("io error: " + e.getMessage());
             return 1;
         }
@@ -346,28 +350,29 @@ public final class Main {
             System.err.println(Usage.of(CliCommand.EXAMPLES));
             return 2;
         }
+        CompilationSources read;
+        try {
+            read = read(sources);
+        } catch (IOException e) {
+            System.err.println("io error: " + e.getMessage());
+            return 1;
+        }
+        SourceContextResolver contexts = read.contexts();
         List<Located> warnings = new ArrayList<>();
         try {
-            List<String> texts = new ArrayList<>();
-            for (Path source : sources) {
-                texts.add(Files.readString(source));
-            }
             ModulePath path = classPath.isEmpty() ? ModulePath.EMPTY
                     : ModulePath.ofClassPath(classPath);
-            // The analysing entry points, not the compiling ones. What the rows cover is a question
+            // The analysing entry point, not the compiling one. What the rows cover is a question
             // this command answers from whatever was observed, and taking the compilation from an
             // entry point that raises the first error made every failure the report describes the
             // one thing that stopped it being written.
-            Compilation compilation = texts.size() == 1 && classPath.isEmpty()
-                    ? Compiler.analyzed(texts.get(0), Runner.moduleName(sources.get(0)), warnings,
-                            measure)
-                    : Compiler.analyzedModules(texts, path, warnings, measure);
+            Compilation compilation = Compiler.analyzed(read, path, warnings, measure);
             // Said first, and whatever the command answers with after. What is wrong with the source
             // is the same news whether the rest of this reports, refuses, or succeeds.
             List<Located> errors = compilation.errors();
             List<Located> said = new ArrayList<>(errors);
             said.addAll(warnings);
-            report(said, sources, render);
+            report(said, contexts, render);
             // Before the report, because a name that names nothing is not something a report can
             // say. Filtering one after the fact leaves an empty document whose every word is about
             // what was measured, and nothing measured anything.
@@ -392,7 +397,7 @@ public final class Main {
             AdequacyReport report = assessed.only(module, behavior);
             if (assessable) {
                 SourceRendering rendering =
-                        new SourceRendering(namesOf(sources), compilation.texts());
+                        new SourceRendering(read.names(), compilation.texts());
                 String rendered = render.json()
                         ? report.json(rendering) + System.lineSeparator()
                         : report.human(rendering);
@@ -431,10 +436,7 @@ public final class Main {
             }
             return 0;
         } catch (CompileException e) {
-            reportCompileError(e, sources, render);
-            return 1;
-        } catch (IOException e) {
-            System.err.println("io error: " + e.getMessage());
+            reportCompileError(e, contexts, render);
             return 1;
         }
     }
@@ -720,25 +722,34 @@ public final class Main {
         if (args == null) {
             return 2;
         }
-        Path source = firstSource(args);
-        List<Path> sources = source == null ? List.of() : List.of(source);
+        Runner.Invocation invocation;
+        CompilationSources read;
+        try {
+            invocation = Runner.parse(args);
+            read = invocation.sources();
+        } catch (Runner.RunException e) {
+            // Raised before anything is compiled, so there is nothing to report beside it.
+            System.err.println(e.localized(render.locale()));
+            return e.exitCode;
+        }
+        SourceContextResolver contexts = read.contexts();
         List<Located> warnings = new ArrayList<>();
         try {
-            String output = Runner.runCli(args, warnings);
+            String output = Runner.run(invocation, read, warnings);
             // The warnings go to stderr and the behavior's output to stdout, so a caller piping the
             // result reads JSON and nothing else.
-            report(warnings, sources, render);
+            report(warnings, contexts, render);
             System.out.println(output);
             return 0;
         } catch (Runner.RunException e) {
             // The compile finished before the run began, so these warnings are the whole set — and a
             // run that aborted on an invariant is where a warning that the construction was unproven
-            // is worth most. A usage error is raised before any of it and carries none.
-            report(warnings, sources, render);
+            // is worth most.
+            report(warnings, contexts, render);
             System.err.println(e.localized(render.locale()));
             return e.exitCode;
         } catch (CompileException e) {
-            reportCompileError(e, sources, render);
+            reportCompileError(e, contexts, render);
             sayHowRunReachesAModule(e, render);
             return 1;
         }
@@ -779,115 +790,16 @@ public final class Main {
         }
     }
 
-    /**
-     * The file whose line the error should quote: the only source of a single-file compile, or — when
-     * several were linked — the one the compiler was working on, which it tags the error with. Null
-     * when a multi-file error names no source, so the snippet is left out rather than quoting a line
-     * from the wrong file.
-     */
-    static Path sourceOf(List<Path> sources, CompileException e) {
-        return sourceOf(sources, e, 0);
-    }
-
-    /** The file the {@code i}-th diagnostic should quote. */
-    static Path sourceOf(List<Path> sources, CompileException e, int i) {
-        return pathOf(sources, e.sourceIdOf(i));
-    }
-
-    /**
-     * Which of the files handed over a source id names, or null when it names none of them.
-     *
-     * <p>Matched on the id, like everything else this command resolves. A report says which source
-     * it points into, so a caller with one file to hand has nothing to guess at and a caller with
-     * several has nothing to work out.
-     */
-    private static Path pathOf(List<Path> sources, SourceId sourceId) {
-        int at = indexOf(sources, sourceId);
-        return at < 0 ? null : sources.get(at);
-    }
-
-    /** What to quote for each source a diagnostic points into, read once per file, under names no
-     *  two of these files share. */
-    private static SourceContextResolver sourcesOf(List<Path> sources) {
-        List<String> names = displayNames(sources);
-        return SourceContextResolver.memoized(id -> {
-            int at = indexOf(sources, id);
-            return at < 0 ? null : read(sources.get(at), names.get(at));
-        });
-    }
-
-    /**
-     * What to call each source a report names, which is what a diagnostic calls it.
-     *
-     * <p>The report identifies a source by the id this command handed it over as — a position in the
-     * list — and the name for one is this command's answer, since only it knows which files are in
-     * front of the reader. Both renderings go through {@link #displayNames}, so a run cannot quote a
-     * line from {@code a/model.sou} and then say the rows of {@code model.sou} were not read.
-     *
-     * <p>Matched on the id and nothing else, as {@link #indexOf} is. An id that is none of these
-     * files is an id about a source this command did not hand over, and answering with the only file
-     * there happens to be would be inventing the very correspondence this is here to stop being
-     * guessed at.
-     */
-    static SourceNameResolver namesOf(List<Path> sources) {
-        List<String> names = displayNames(sources);
-        return id -> {
-            for (int i = 0; i < sources.size(); i++) {
-                if (Compilation.idOfSourceIndex(i).equals(id)) {
-                    return names.get(i);
-                }
-            }
-            return id.value();
-        };
-    }
-
-    /** What each of these files is called in front of a reader, in the order they were given. */
-    private static List<String> displayNames(List<Path> sources) {
-        return SourceNames.of(sources.stream().map(Path::toString).toList());
-    }
-
-    /**
-     * Which of the files handed over a source id names, or -1 when it names none of them.
-     *
-     * <p>On the id and nothing else. The one file handed over used to be the answer for whatever it
-     * was asked, including for no id at all, because a report could arrive here without one and the
-     * single file was the only guess to be had. A report says which source it points into now, so
-     * there is nothing left to guess — and the guess was answering for reports it had no business
-     * answering for: handed one file and a report about another, it quoted that file at the
-     * report's numbers, which put a caret past the end of a line the author never wrote.
-     */
-    private static int indexOf(List<Path> sources, SourceId sourceId) {
-        for (int i = 0; i < sources.size(); i++) {
-            if (Compilation.idOfSourceIndex(i).equals(sourceId)) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    /** A file as a snippet source under the name a reader is shown it by, or null when it cannot be
-     *  read — a snippet-less rendering is the honest fallback. */
-    private static SourceContext read(Path source, String name) {
-        if (source == null) {
-            return null;
-        }
-        try {
-            String text = Files.readString(source);
-            return new SourceContext(name, text, SourceLayout.of(text));
-        } catch (IOException _) {
-            return null;
-        }
-    }
-
     /** Renders a compile error: an Elm-style snippet (or JSON) in the chosen locale, or the legacy
      * one-line form when the error is not yet structured. An error that carries several diagnostics
      * — every failing {@code example} row — prints each, so none of the reasons is lost. */
-    private static void reportCompileError(CompileException e, List<Path> sources, RenderOptions render) {
+    private static void reportCompileError(CompileException e, SourceContextResolver contexts,
+                                           RenderOptions render) {
         if (e.diagnostic() == null) {
             System.err.println(e.getMessage());
             return;
         }
-        report(e.locatedDiagnostics(), sources, render);
+        report(e.locatedDiagnostics(), contexts, render);
     }
 
     /**
@@ -906,36 +818,22 @@ public final class Main {
         return 1;
     }
 
-    /** Prints each diagnostic to stderr as the chosen renderer renders it, quoting the file it
-     * belongs to. Errors and warnings take the same path; only where they come from differs. */
-    private static void report(List<Located> located, List<Path> sources, RenderOptions render) {
+    /**
+     * Prints each diagnostic to stderr as the chosen renderer renders it, quoting the file it
+     * belongs to. Errors and warnings take the same path; only where they come from differs.
+     *
+     * <p>Handed the contexts of the sources that were compiled, and never a way to read them again: a
+     * diagnostic's position is a position in the text the compile read, and a file read a second
+     * time may no longer be that text.
+     */
+    private static void report(List<Located> located, SourceContextResolver contexts,
+                               RenderOptions render) {
         Locale locale = render.locale();
         DiagnosticRenderer renderer = render.json()
                 ? new JsonRenderer() : new HumanRenderer(render.useColor());
-        for (String line : DiagnosticRenderer.renderAll(
-                located, sourcesOf(sources), renderer, locale)) {
+        for (String line : DiagnosticRenderer.renderAll(located, contexts, renderer, locale)) {
             System.err.println(line);
         }
-    }
-
-    /**
-     * The first non-option argument of {@code run} — the source file, for the error snippet.
-     *
-     * <p>Every option that takes a value is skipped with it, including the short one: {@code -cp} is
-     * a path and not a file to quote, and reading it as one made the snippet name a file the author
-     * never wrote.
-     */
-    private static Path firstSource(String[] args) {
-        for (int i = 0; i < args.length; i++) {
-            String a = args[i];
-            if (a.equals("--behavior") || a.equals("--input")
-                    || a.equals("-cp") || a.equals("--class-path")) {
-                i++;
-            } else if (!a.startsWith("--")) {
-                return Path.of(a);
-            }
-        }
-        return null;
     }
 
     /**
@@ -1163,21 +1061,28 @@ public final class Main {
     static Map<String, ClassFileImage> compiledClasses(List<Path> sources, List<Path> classPath,
                                                List<Located> warningsOut, Adequacy.Asked measure)
             throws IOException {
-        List<String> texts = new ArrayList<>();
-        for (Path source : sources) {
-            texts.add(Files.readString(source));
-        }
+        return compiledClasses(read(sources), classPath, warningsOut, measure);
+    }
+
+    /** As above, of sources already read. */
+    private static Map<String, ClassFileImage> compiledClasses(CompilationSources sources,
+                                                               List<Path> classPath,
+                                                               List<Located> warningsOut,
+                                                               Adequacy.Asked measure) {
         ModulePath path = classPath.isEmpty() ? ModulePath.EMPTY : ModulePath.ofClassPath(classPath);
-        // A single header-less file is named after the file (F#/Elm; ADR-0043); a multi-file build
-        // links by imports, so each must declare its own module header. One file that imports another
-        // project's module is a module set of one, not a self-contained module.
         List<Located> compileWarnings = new ArrayList<>();
-        Compilation compilation = texts.size() == 1 && classPath.isEmpty()
-                ? Compiler.compiled(texts.get(0), Runner.moduleName(sources.get(0)),
-                        compileWarnings, measure)
-                : Compiler.compiledModules(texts, path, compileWarnings, measure);
+        Compilation compilation = Compiler.compiled(sources, path, compileWarnings, measure);
         warningsOut.addAll(compileWarnings);
         return compilation.classes();
+    }
+
+    /** The files, read, in the order the compile identifies them by. */
+    static CompilationSources read(List<Path> sources) throws IOException {
+        List<SourceFile> files = new ArrayList<>();
+        for (Path source : sources) {
+            files.add(new SourceFile(source.toString(), Files.readString(source)));
+        }
+        return CompilationSources.files(files);
     }
 
     /** Writes each class under {@code outDir}, and answers with the paths written, in order. */
