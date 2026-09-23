@@ -2,7 +2,6 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
@@ -29,11 +28,6 @@ class CompileNamedSumStageTest {
             // classify outputs AB (= A | B); handleA accepts A, so A routes in and B retires.
             behavior pipe = classify >-> handleA
             """;
-
-    @Test
-    void aNamedSumStageOutputRoutesOverItsCases() {
-        assertDoesNotThrow(() -> Compiler.compile(MODULE));
-    }
 
     @Test
     void theAcceptedCaseRoutesIntoTheNextStage() throws Exception {

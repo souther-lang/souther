@@ -34,25 +34,6 @@ class CompileCallBehaviorTest {
             """;
 
     @Test
-    void aBehaviorOfThisModuleIsCalledByName() {
-        assertDoesNotThrow(() -> Compiler.compile("""
-                module same exposing ( A, B, Out, a2b, use )
-
-                data A = { n: Int }
-                data B = { m: Int }
-                data Out = { o: Int }
-
-                behavior a2b : (a: A) -> B
-                    constructs B
-                let a2b (a) = B { m = a.n * 2 }
-
-                behavior use : (a: A) -> Out
-                    constructs Out
-                let use (a) = Out { o = a2b(a).m }
-                """));
-    }
-
-    @Test
     void anImportedBehaviorIsCalledTheSameWay() {
         assertDoesNotThrow(() -> Compiler.compileModules(List.of(UP, """
                 module down exposing ( Out, use )
@@ -284,7 +265,7 @@ class CompileCallBehaviorTest {
     }
 
     /**
-     * Run rather than merely compiled. An {@code example} is evaluated during the compile and a row
+     * A behavior of this module is called by name, and run rather than merely compiled. An {@code example} is evaluated during the compile and a row
      * that does not hold is a compile error, so this passing is the emitted call working — a
      * cross-module call that compiles is not evidence that it links.
      */

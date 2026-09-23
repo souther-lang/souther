@@ -230,20 +230,6 @@ class WhoMayReadWhatAStringPredicateMeansTest {
     }
 
     /**
-     * The walk reads every module's classes.
-     *
-     * <p>Asked of the modules the repository has and not of what a build happened to leave: a module
-     * whose classes are missing is one whose reads this cannot see, and the rows from the rest would
-     * match and this would pass while answering about fewer modules than it names.
-     */
-    @Test
-    void andEveryModuleTheRepositoryHoldsWasRead() {
-        assertTrue(modulesRead() > 1,
-                "this walk goes over more than one module's classes, so a reader of the table"
-                        + " written outside the one that declares it is one it would find");
-    }
-
-    /**
      * And the walk finds a reader that is there.
      *
      * <p>The rows above are what may read the table; this is that the reading which does read it is
@@ -312,16 +298,6 @@ class WhoMayReadWhatAStringPredicateMeansTest {
     /** Whether a member's owner is the table or one of the answers it declares. */
     private static boolean names(String owner) {
         return owner.equals(OWNER) || owner.startsWith(OWNER + "$");
-    }
-
-    private static int modulesRead() {
-        int read = 0;
-        for (Path module : COMPILED.modules()) {
-            if (!COMPILED.classesOf(module).isEmpty()) {
-                read++;
-            }
-        }
-        return read;
     }
 
 

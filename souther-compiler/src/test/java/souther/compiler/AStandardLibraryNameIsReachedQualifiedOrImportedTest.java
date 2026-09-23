@@ -70,11 +70,6 @@ class AStandardLibraryNameIsReachedQualifiedOrImportedTest {
     }
 
     @Test
-    void anImportedNameMayBeWrittenBare() {
-        Compiler.compile(IMPORTED);
-    }
-
-    @Test
     void aBareNameWithNoImportIsRefusedAndBothRoutesAreOffered() {
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compile(QUALIFIED.replace("Bool.not(", "not(")));

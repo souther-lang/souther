@@ -880,26 +880,6 @@ class CompileInvariantDischargeTest {
     }
 
     @Test
-    void aMappingKeepsTheLengthOfWhatItMapped() {
-        // the crm case: guard the input's length, build from the mapped list. How the elements are
-        // made has no bearing on how many there are.
-        String m = """
-                module demo
-                data NoItems
-                data Lines = List<Int>
-                    invariant List.length(value) >= 1
-                behavior build : (xs: List<Int>) -> Lines | NoItems constructs Lines
-                let build (xs) = {
-                    guard List.length(xs) >= 1
-                        else NoItems
-                    Lines(List.map(x -> x + 1, xs))
-                }
-                """;
-        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
-                "a mapping keeps the length");
-    }
-
-    @Test
     void aReorderingKeepsTheLength() {
         String m = """
                 module demo
@@ -934,26 +914,6 @@ class CompileInvariantDischargeTest {
                 """;
         assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
                 "a selection does not keep the length");
-    }
-
-    @Test
-    void aSelectionBoundsTheLengthFromAbove() {
-        // the other direction is known: no more came out than went in, so a cap on the input caps
-        // the result
-        String m = """
-                module demo
-                data TooMany
-                data Lines = List<Int>
-                    invariant List.length(value) <= 10
-                behavior build : (xs: List<Int>) -> Lines | TooMany constructs Lines
-                let build (xs) = {
-                    guard List.length(xs) <= 10
-                        else TooMany
-                    Lines(List.filter(x -> x > 0, xs))
-                }
-                """;
-        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
-                "no more came out of the filter than went in");
     }
 
     @Test

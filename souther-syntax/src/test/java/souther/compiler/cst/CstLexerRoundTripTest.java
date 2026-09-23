@@ -2,17 +2,9 @@ package souther.compiler.cst;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
-import souther.test.RepositoryLayout;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
-import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -20,8 +12,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The lossless invariant of the trivia-preserving lexer: concatenating every token's text (trivia,
  * comments, and error tokens included) reproduces the source exactly. This is the property the
- * formatter and incremental reparse rest on, so it is exercised over the bundled prelude and a set
- * of tricky literals.
+ * formatter and incremental reparse rest on, so it is exercised over a set of tricky literals. The
+ * bundled prelude is swept by {@link CstParserRoundTripTest}, whose tree is built from these tokens
+ * and reproduces the source only where they do.
  */
 class CstLexerRoundTripTest {
 
@@ -53,24 +46,6 @@ class CstLexerRoundTripTest {
     })
     void relexingReproducesTheSource(String source) {
         assertEquals(source, relex(source));
-    }
-
-    private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
-
-    static Stream<Path> preludeSources() {
-        return REPOSITORY.preludeSources().stream();
-    }
-
-    @ParameterizedTest
-    @MethodSource("preludeSources")
-    void relexingReproducesEveryPreludeSource(Path source) {
-        String text;
-        try {
-            text = Files.readString(source, StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-        assertEquals(text, relex(text), "round-trip mismatch for " + source);
     }
 
     @Test

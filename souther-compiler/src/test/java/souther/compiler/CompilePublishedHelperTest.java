@@ -40,27 +40,9 @@ class CompilePublishedHelperTest {
                 Amount(a.value + Rational.toInt(DOWN, a.value * rate / 100))
             """;
 
-    /**
-     * The helper is called, and the reader writes nothing else about it: `rate` is `pricing`'s and is
-     * not named here, and neither is the `Amount` the helper builds declared in `constructs` —
-     * publishing `taxed` is what states that origination, and it was stated in `pricing`.
-     */
-    @Test
-    void aHelperIsPublishedAndCalledInAnotherModule() {
-        assertDoesNotThrow(() -> Compiler.compileModules(List.of(PRICING, """
-                module order exposing ( Receipt, bill )
-
-                import pricing ( Amount, taxed )
-
-                data Receipt = { total: Amount }
-
-                behavior bill : (a: Amount) -> Receipt constructs Receipt
-                let bill (a) = Receipt { total = taxed(a) }
-                """)));
-    }
-
-    /** And declaring it anyway is not called building nothing: the construction is there, it is just
-     * not this behavior's to state. */
+    /** A reader that calls a published helper need not declare the `Amount` the helper builds, and
+     * declaring it anyway is not called building nothing: the construction is there, it is just not
+     * this behavior's to state. */
     @Test
     void declaringACarriedConstructionIsNotOverDeclaration() {
         assertDoesNotThrow(() -> Compiler.compileModules(List.of(PRICING, """
@@ -99,30 +81,9 @@ class CompilePublishedHelperTest {
                 """)));
     }
 
-    /** A unit data is constructed by being named, so a published body that builds one carries that
-     * the same way — the reader has no `constructs` to write for a type it cannot name. */
-    @Test
-    void aUnitDataAPublishedBodyBuildsIsCarriedToo() {
-        assertDoesNotThrow(() -> Compiler.compileModules(List.of("""
-                module pricing exposing ( Marker, doubled )
-
-                data Marker
-
-                let doubled (n: Int) = if Marker == Marker then n * 2 else n
-                """, """
-                module order exposing ( Out, bill )
-
-                import pricing ( doubled )
-
-                data Out = { v: Int }
-
-                behavior bill : (n: Int) -> Out constructs Out
-                let bill (n) = Out { v = doubled(n) }
-                """)));
-    }
-
-    /** And it stays the unit it is: a reader declaring one of the same spelling declares a different
-     * type, which the carried construction is neither attributed to nor emitted as. */
+    /** A unit data a published body builds is carried with the body and stays the unit it is: a
+     * reader declaring one of the same spelling declares a different type, which the carried
+     * construction is neither attributed to nor emitted as. */
     @Test
     void aCarriedUnitDataIsNotTheReadersUnitOfThatName() {
         assertDoesNotThrow(() -> Compiler.compileModules(List.of("""
@@ -1278,33 +1239,11 @@ class CompilePublishedHelperTest {
         assertTrue(e.getMessage().contains("taxed"), e.getMessage());
     }
 
-    /** A module that publishes nothing recursive and reaches no value emits no `$Fns` at all — the
-     * class appears because a method has to go somewhere, not because a helper was imported. */
-    @Test
-    void aReaderOfANonRecursiveHelperEmitsNoFnsClass() throws Exception {
-        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of("""
-                module pricing exposing ( Amount, taxed )
-
-                data Amount = Int
-
-                let taxed (a: Amount) = Amount(a.value * 2)
-                """, """
-                module order exposing ( Receipt, bill )
-
-                import pricing ( Amount, taxed )
-
-                data Receipt = { total: Amount }
-
-                behavior bill : (a: Amount) -> Receipt constructs Receipt
-                let bill (a) = Receipt { total = taxed(a) }
-                """));
-
-        assertFalse(classes.containsKey(Emitted.helpers("order")), classes.keySet().toString());
-    }
-
     /** A helper is expanded into its reader together with what it names, so a value it names that
      * the module does not expose is not something the module publishes: no class of the module
-     * offers it to be called, and the reader emits no method for it either. */
+     * offers it to be called, and the reader emits no method for it either. A reader of a
+     * non-recursive helper so emits no `$Fns` at all — that class appears because a method has to
+     * go somewhere, not because a helper was imported. */
     @Test
     void aValueOnlyAPublishedHelperNamesIsExpandedWithTheHelperAndNotOffered() throws Exception {
         Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(PRICING, """

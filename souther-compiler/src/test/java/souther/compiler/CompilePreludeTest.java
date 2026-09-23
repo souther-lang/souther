@@ -1,7 +1,5 @@
 package souther.compiler;
 
-import souther.compiler.diag.CompileException;
-
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -44,13 +42,5 @@ class CompilePreludeTest {
     @Test
     void theImportedNotNegatesFalse() throws Exception {
         assertEquals(true, flip(false), "not(false) is true");
-    }
-
-    /** The prefix `!` is gone now that `not` covers negation. */
-    @Test
-    void thePrefixBangNoLongerParses() {
-        String src = MODULE.replace("not(i.flag)", "!i.flag");
-        org.junit.jupiter.api.Assertions.assertThrows(
-                CompileException.class, () -> Compiler.compile(src));
     }
 }

@@ -25,6 +25,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * A contract belongs to the compilation that owns the behavior, and reaching across a module
  * boundary for one is a different question from checking it.
  *
+ * <p>The same call declared and made within one module is checked at its crossing
+ * ({@link souther.compiler.WhoHoldsABehaviorToWhatItDeclaredTest}), which is what says the
+ * difference here is the module boundary and not the shape of the call.
+ *
  * <p>What is settled here is which behaviors a compilation is the checker of: the ones it declares.
  * For those, the check is emitted in exactly one place — the behavior's own {@code apply}, or the
  * crossing each caller makes — and that is the whole of what this stage is responsible for.
@@ -151,26 +155,5 @@ class CrossModuleContractOwnershipIsItsOwnBoundaryTest {
         assertInstanceOf(EnsuresEnforcement.NoContract.class,
                 decidedByDown(new ValueName.Behavior("down", "use")),
                 "`down` read `use` and found no clause");
-    }
-
-    /** The same behavior, declared and called in one module, is checked at the crossing — which is
-     *  what says the difference above is the module boundary and not the shape of the call. */
-    @Test
-    void theSameCallWithinOneModuleIsCheckedAtItsCrossing() {
-        Map<String, ClassFileImage> classes = Compiler.compile("""
-                module up
-
-                data Amount = Int
-
-                behavior fetch : (a: Amount) -> Amount
-                    ensures doubled = value.value == a.value * 2
-
-                behavior use : (a: Amount) -> Amount
-                    depends on fetch
-                let use (a, fetch) = fetch(a)
-                """);
-
-        assertEquals(1, checksOf(classes.get("up.Use$Impl").bytes(), "up/Fetch$Ensures"),
-                "one module, one checker, one crossing");
     }
 }

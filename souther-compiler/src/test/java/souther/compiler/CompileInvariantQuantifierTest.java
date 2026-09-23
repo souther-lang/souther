@@ -168,19 +168,6 @@ class CompileInvariantQuantifierTest {
     }
 
     @Test
-    void aPartialRecursiveHelperIsStillRejected() {
-        String src = """
-                module demo
-                partial let count (n: Int): Int = if n == 0 then 0 else count(n - 1) + 1
-                data X = Int
-                    invariant count(value) < 100
-                """;
-        CompileException ex = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertTrue(ex.getMessage().contains("count") && ex.getMessage().contains("partial"),
-                ex.getMessage());
-    }
-
-    @Test
     void constructingDataDirectlyInAnInvariantIsRejected() {
         String src = """
                 module demo

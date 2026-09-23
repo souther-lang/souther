@@ -180,26 +180,6 @@ class ARowOfferedForACombinationIsRunWhereAnythingCanRunItTest {
         }
     }
 
-    /**
-     * Nothing is held back over a combination, nobody being owed one.
-     *
-     * <p>This used to count the combinations a written row might have filled and say how many, so
-     * that silence did not read as coverage. What made the count necessary was the search treating
-     * a combination as a thing owed a row: it could neither offer one over a row that might already
-     * fill it nor pass over it in silence. Neither question arises now — an arm is owed a row only
-     * where the measure established that no row reaches it, and a row that might have is a row that
-     * was read.
-     */
-    @Test
-    void nothingIsHeldBackOverACombination() {
-        for (Adequacy.Level level : List.of(Adequacy.Level.WITNESS, Adequacy.Level.ALL)) {
-            assertEquals(List.of(),
-                    generationOf(WRITTEN, "shippingFee", level).composed().reasons().stream()
-                            .filter(GenerationReason.SearchLimit.class::isInstance).toList(),
-                    level::name);
-        }
-    }
-
     /** The values of each row the search offers, as a person reads them in the block. */
     private static List<List<String>> valuesOfferedBy(Adequacy.Level level) {
         return generationOf(WRITTEN, "shippingFee", level).composed().rows().stream()

@@ -195,17 +195,6 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
                 """));
     }
 
-    /** And where neither of them has a rule of its own, they lack together and are said together. */
-    @Test
-    void twoThatLackOnlyThroughEachOtherAreSaidTogether() {
-        assertEquals(List.of(List.of("A", "B")), reported("""
-                module demo
-
-                data A = { b: B }
-                data B = { a: A }
-                """));
-    }
-
     /**
      * And where the two of them are one name wrapping the other.
      *

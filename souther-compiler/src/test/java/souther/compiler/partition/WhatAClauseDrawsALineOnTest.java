@@ -19,7 +19,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -61,6 +60,13 @@ class WhatAClauseDrawsALineOnTest {
                 .map(each -> each.path() + " = " + each.value().spelled()).toList();
     }
 
+    /**
+     * A comparison a clause states outright draws a line.
+     *
+     * <p>On a behavior nothing implements, which is the case a clause reaches and a {@code guard}
+     * cannot: an injected behavior has no body, so what its declaration states is the whole of what
+     * a report can hold an implementation to.
+     */
     @Test
     void aComparisonARuleStatesOutrightDrawsALine() {
         EnsuresThresholds.Clauses clauses = drawn("""
@@ -471,30 +477,6 @@ class WhatAClauseDrawsALineOnTest {
         assertEquals(2, Border.allOf(clauses.between()).stream()
                         .map(Border::origin).distinct().count(),
                 "one line, two rules, and a row on it shows which of them was written");
-    }
-
-    /**
-     * A behavior nothing implements draws its clause's lines all the same.
-     *
-     * <p>Which is the case a clause reaches and a {@code guard} cannot: an injected behavior has no
-     * body, so what its declaration states is the whole of what a report can hold an implementation
-     * to.
-     */
-    @Test
-    void anInjectedBehaviorsClauseDrawsItsLine() {
-        EnsuresThresholds.Clauses clauses = drawn("""
-                module g
-
-                data TodoId = Int
-                data Todo = { id: TodoId }
-                data NotFound = { asked: TodoId }
-
-                behavior findTodo : (id: TodoId) -> Todo | NotFound
-                    ensures asked = NotFound -> id.value > 0
-                """, "findTodo");
-
-        assertFalse(clauses.thresholds().isEmpty(),
-                "nothing implements this behavior and its declaration still draws a line");
     }
 
     /**

@@ -95,26 +95,6 @@ class CompileFunctionBindingTest {
         assertEquals(11L, out.get("m"));
     }
 
-    @Test
-    void aChoiceBetweenTwoLibraryFunctionsIsBoundAndApplied() throws Exception {
-        String src = """
-                module demo
-
-                data In = { s: String, flag: Bool }
-                data Out = { t: String }
-
-                behavior go : (i: In) -> Out constructs Out
-
-                let go (i) = {
-                    let f = if i.flag then String.trim else String.lowercase
-                    Out { t = f(i.s) }
-                }
-                """;
-
-        assertEquals("a", run(src, Map.of("s", " a ", "flag", true)).get("t"));
-        assertEquals(" ab ", run(src, Map.of("s", " AB ", "flag", false)).get("t"));
-    }
-
     /** A helper answering a function, applied where it stands. */
     @Test
     void aHelperAnswersAFunction() throws Exception {

@@ -2,21 +2,15 @@ package souther.compiler.reading;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.RuleReadingSource;
-import souther.compiler.check.RuleReadings;
-import souther.compiler.core.Core;
-import souther.compiler.inputs.InputDomain;
-import souther.compiler.query.Adequacy;
-import souther.compiler.query.Bodies;
-import souther.compiler.query.Compilation;
-
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static souther.compiler.reading.ReadInteractions.reachKinds;
+import static souther.compiler.reading.ReadInteractions.read;
+import static souther.compiler.reading.ReadInteractions.shape;
 
 /**
  * An operator that stops as soon as its answer is settled has paths to a value, and they are its
@@ -132,27 +126,6 @@ class AShortCircuitOperatorsPathsToAValueAreItsOutcomesTest {
             }
             """;
 
-    private static List<Interaction> read(String source, String behavior) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        String module = compilation.modules().get(0);
-        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
-        assertNotNull(checked, "the model under test compiles");
-        Core body = checked.behaviorBodies().get(behavior);
-        assertNotNull(body, "the behavior under test has a body");
-        RuleReadingSource rules = RuleReadings.of(compilation, module);
-        InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
-        return CoverageRead.of(behavior, body,
-                checked.plan(), inputs, rules).interactions();
-    }
-
-    /** The sizes of each group's factors, which is the shape of the space a row is owed for. */
-    private static List<List<Integer>> shape(List<Interaction> found) {
-        return found.stream()
-                .map(group -> group.factors().stream().map(f -> f.outcomes().size()).toList())
-                .toList();
-    }
-
     /**
      * What each factor of each group is settled by, for holding one model's reading against
      * another's.
@@ -197,15 +170,6 @@ class AShortCircuitOperatorsPathsToAValueAreItsOutcomesTest {
             }
         }
         return out.toString();
-    }
-
-    /** What each group's way in is made of, said by the kind of condition each decision is. */
-    private static List<List<String>> reachKinds(List<Interaction> found) {
-        return found.stream()
-                .map(group -> group.reach().stream()
-                        .map(decision -> decision.constrains().getClass().getSimpleName())
-                        .toList())
-                .toList();
     }
 
     /**

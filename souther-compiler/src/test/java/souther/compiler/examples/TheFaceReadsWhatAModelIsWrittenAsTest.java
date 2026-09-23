@@ -131,8 +131,10 @@ class TheFaceReadsWhatAModelIsWrittenAsTest {
     void aKeyCannotBeWrittenForARowNothingAnswersTo() throws Exception {
         BoundExamples examples = bound();
 
-        assertThrows(IllegalArgumentException.class,
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> examples.rowKey("findTodo", "a todo that was never written"));
+        assertTrue(refused.getMessage().contains("a todo that was never written"),
+                refused.getMessage());
         assertEquals(0, RowKey.class.getConstructors().length,
                 "nothing outside the package makes one");
 

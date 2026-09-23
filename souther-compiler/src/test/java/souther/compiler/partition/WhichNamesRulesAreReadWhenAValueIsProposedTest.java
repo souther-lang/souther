@@ -15,7 +15,6 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Which of the names a value wears has its rules read when a value is proposed for it.
@@ -88,9 +87,8 @@ class WhichNamesRulesAreReadWhenAValueIsProposedTest {
                     invariant tagged = startsWith("X", value)
                 """, "A");
 
-        assertEquals(List.of("A(B(\"X\"))", "A(B(\"x\"))"), proposed);
-        assertTrue(proposed.stream().anyMatch(each -> each.contains("X")),
-                "the rule on the outer name proposed what it asks for: " + proposed);
+        assertEquals(List.of("A(B(\"X\"))", "A(B(\"x\"))"), proposed,
+                "the rule on the outer name proposed what it asks for");
     }
 
     /**

@@ -13,6 +13,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -67,11 +68,24 @@ class AMeetingTheMeasureWouldNotWalkLeavesTheBehaviorPartialTest {
                 | (Total(5000), Standard, Express) -> Fee(500)
             """;
 
-    /** At one combination per group, the group is not walked and the behavior is not whole. */
+    /**
+     * At one combination per group, the group is not walked and the behavior is not whole.
+     *
+     * <p>It is still held to the combinations of its decisions. Which criterion a behavior is
+     * measured against is a question about the body, and a limit is a question about this run — so
+     * a group too wide to walk leaves the criterion where the model put it rather than falling back
+     * to the pair space.
+     */
     @Test
     void aBehaviorWhoseGroupWentUnwalkedIsNotComplete() {
         AdequacyReport.BehaviorReport narrow = behaviorUnder(1);
 
+        assertInstanceOf(CombinationCriterion.Interactions.class, narrow.evidence().combinations(),
+                "the body's decisions meet, whatever this run could afford to walk");
+        assertEquals(List.of(), narrow.reported().stream()
+                        .filter(each -> each.finding().kind() == Adequacy.Kind.PAIR_UNCOVERED)
+                        .toList(),
+                "nothing is owed at a combination of two classes: that is the other criterion");
         assertFalse(narrow.evidence().interaction().asked().notMeasured().isEmpty(),
                 "the group is one the walk would not take");
         assertEquals(MeasurementStatus.PARTIAL, narrow.status(),

@@ -206,6 +206,26 @@ class CommentSurvivalTest {
         assertEquals(formatted, Formatter.format(formatted));
     }
 
+    /** A {@code //} on a line the group had collapsed would swallow the rest of it, so a literal
+     *  holding one is laid out a member per line. */
+    @Test
+    void aCommentForcesTheLiteralToBreak() {
+        String formatted = Formatter.format("""
+                module m
+                data O = { a: Int, b: Int }
+                behavior f : (n: Int) -> O constructs O
+                let f (n) = O { a = n,
+                  // the comment
+                  b = n * 2 }
+                """);
+
+        int comment = formatted.indexOf("// the comment");
+        int b = formatted.indexOf("b = n * 2");
+        assertTrue(comment >= 0 && comment < b, formatted);
+        assertTrue(formatted.substring(comment, b).contains("\n"),
+                "the member starts on its own line: " + formatted);
+    }
+
     private static int occurrences(String haystack, String needle) {
         int n = 0;
         for (int i = haystack.indexOf(needle); i >= 0; i = haystack.indexOf(needle, i + needle.length())) {

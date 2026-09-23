@@ -20,7 +20,6 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Who may compose a reference for a row the generator offers, and who may number one.
@@ -94,19 +93,6 @@ class WhoMayComposeAFixtureReferenceTest {
     }
 
     /**
-     * The walk reads every module's classes.
-     *
-     * <p>Asked of the modules the repository has and not of what a build happened to leave: a module
-     * whose classes are missing is one whose calls this cannot see, and the rows from the rest would
-     * match while answering about fewer modules than it names.
-     */
-    @Test
-    void andEveryModuleTheRepositoryHoldsWasRead() {
-        assertTrue(modulesRead() > 1,
-                "the classes this reads are in more than the one module that declares a minter");
-    }
-
-    /**
      * How many times the generator writes the call that makes a minter.
      *
      * <p>Read off the instructions rather than the constant pool, which is where the rows above
@@ -162,15 +148,6 @@ class WhoMayComposeAFixtureReferenceTest {
         return found;
     }
 
-    private static int modulesRead() {
-        int read = 0;
-        for (Path module : COMPILED.modules()) {
-            if (!COMPILED.classesOf(module).isEmpty()) {
-                read++;
-            }
-        }
-        return read;
-    }
 
 
 

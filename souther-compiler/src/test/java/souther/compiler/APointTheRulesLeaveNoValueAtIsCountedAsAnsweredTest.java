@@ -9,6 +9,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.ObligationSummary;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -61,6 +62,17 @@ class APointTheRulesLeaveNoValueAtIsCountedAsAnsweredTest {
                         line.contains("nothing could show a row can be written")),
                 () -> "nothing here was stopped and no search fell short, so there is no open"
                         + " question to name: " + said);
+        assertTrue(said.stream().anyMatch(line -> line.contains("the rules leave no value at")),
+                () -> "no row is at the line the guards close between them, which is the rules'"
+                        + " answer and not a search that stopped: " + said);
+    }
+
+    /** And no figure of this compiler's is named anywhere in what is said. */
+    @Test
+    void andNoFigureOfThisCompilersIsNamed() {
+        assertFalse(report().contains("a figure of this compiler's"),
+                () -> "nothing here needed searching for, so there is no number to raise:\n"
+                        + report());
     }
 
     /** And the account it is counted in says the same thing. */
@@ -114,7 +126,8 @@ class APointTheRulesLeaveNoValueAtIsCountedAsAnsweredTest {
     void andTheBorderNothingNarrowsIsSaidAsItWas() {
         List<String> said = about("comparison@6:13");
 
-        assertFalse(said.stream().anyMatch(line -> line.contains("no row can stand at")),
+        assertFalse(said.stream().anyMatch(line -> line.contains("no row can stand at")
+                        || line.contains("the rules leave no value at")),
                 () -> "the declarations leave this border's distance every value it has: " + said);
         assertEquals(4, said.stream()
                         .filter(line -> line.contains("undecided whether a row is at")).count(),
@@ -134,7 +147,7 @@ class APointTheRulesLeaveNoValueAtIsCountedAsAnsweredTest {
      * reading one of the two reads half of what an author does.
      */
     private static List<String> about(String comparison) {
-        List<String> out = new java.util.ArrayList<>();
+        List<String> out = new ArrayList<>();
         boolean under = false;
         for (String line : report().lines().map(String::strip).toList()) {
             if (line.startsWith("·") && !line.contains("no row can stand at")) {

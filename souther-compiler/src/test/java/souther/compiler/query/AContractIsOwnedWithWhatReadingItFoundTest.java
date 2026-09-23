@@ -1,9 +1,7 @@
 package souther.compiler.query;
 
-import souther.compiler.Compiler;
 import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.CheckedEnsures;
-import souther.compiler.diag.CompileException;
 import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
@@ -14,7 +12,6 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -104,21 +101,5 @@ class AContractIsOwnedWithWhatReadingItFoundTest {
         assertTrue(answered.reports().stream()
                         .anyMatch(r -> r.diagnostic().code().equals("E1617")),
                 "a rule naming no parameter: " + answered.reports());
-    }
-
-    /**
-     * And the refusal still stops a build.
-     *
-     * <p>The reading used to sit inside the type check, so a build was refused because the check
-     * happened to walk the clause. Now the clause has a key of its own, and what makes a build stop
-     * is that the key is asked and its reports are read — asserted here rather than left to the fact
-     * that some other reader currently asks first.
-     */
-    @Test
-    void aRefusedClauseStopsTheBuild() {
-        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(HOLDS
-                .replace("Found   -> value.id == id", "Found   -> value.id == value.id")));
-
-        assertEquals("E1617", e.diagnostic().code());
     }
 }

@@ -8,7 +8,6 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -22,11 +21,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * one — so a caller asking for rows says it needs the recording, and what it is then offered is the
  * same whatever the build asked to be told about.
  *
- * <p>Beside the level-independence of the lines rather than inside it
- * ({@link WhatARequestIsOfferedDoesNotTurnOnWhatTheBuildMeasuresTest}). Which lines a request is
- * answered at follows from the request; what the arms show is available or not, and a compilation
- * whose rows recorded nothing has nothing to say about them. So what is held here is that the
- * report's dial does not decide it, and the control below is that the recording does.
+ * <p>That the report's dial does not decide what a recording build is offered is held over every
+ * level in {@link OneRequestIsAnsweredAlikeWhateverTheBuildMeasuresTest}, on this model among
+ * others. What is held here is the other half: what the arms show is available or not, and a
+ * compilation whose rows recorded nothing has nothing to say about them.
  */
 class WhatTheArmsShowAnOfferingComesFromTheRunAndNotTheReportTest {
 
@@ -69,35 +67,19 @@ class WhatTheArmsShowAnOfferingComesFromTheRunAndNotTheReportTest {
             """;
 
     /**
-     * One request, two builds recording the arms and measuring differently, offered the same rows.
+     * A build whose rows recorded nothing has nothing to offer for them.
      *
-     * <p>The narrower build reports nothing about the arms and records them all the same, because
-     * something reaching it asked for the rows. What it is offered is what the wider one is.
+     * <p>Which meetings the rows made is read off what the rows recorded, so a run that recorded
+     * nothing leaves the account unable to say a meeting was missed — which is what makes asking for
+     * the recording part of asking for the rows rather than a dial beside it.
      */
     @Test
-    void aBuildThatRecordsTheArmsIsOfferedTheSameRowsWhateverItReports() {
-        List<String> reportingLess = rowsOffered(
+    void aBuildThatRecordedNothingIsOfferedNoneOfWhatTheArmsShow() {
+        List<String> recorded = rowsOffered(
                 Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS), ArmObservation.RECORD);
-        assertFalse(reportingLess.isEmpty(),
-                "the model leaves meetings unmade, so rows are offered for them");
-        assertEquals(reportingLess,
-                rowsOffered(Adequacy.Asked.fullReport(), ArmObservation.RECORD),
-                "and the build that reports everything is offered the same ones");
-    }
-
-    /**
-     * And a build whose rows recorded nothing has nothing to offer for them.
-     *
-     * <p>The control, and the reason the sentence above is about the recording rather than about
-     * nothing. Which meetings the rows made is read off what the rows recorded, so a run that
-     * recorded nothing leaves the account unable to say a meeting was missed — which is what makes
-     * asking for the recording part of asking for the rows rather than a dial beside it.
-     */
-    @Test
-    void andOneThatRecordedNothingIsOfferedNoneOfThem() {
-        assertNotEquals(
-                rowsOffered(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS),
-                        ArmObservation.RECORD),
+        assertFalse(recorded.isEmpty(),
+                "the model leaves meetings unmade, so a recording build is offered rows for them");
+        assertNotEquals(recorded,
                 rowsOffered(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS),
                         ArmObservation.OMIT),
                 "what the arms show is available because the run recorded it");

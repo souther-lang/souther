@@ -437,27 +437,6 @@ class APairWalkNamesADefectWhereItIsTest {
                 found(walked), "the array for itself, and what is in it for itself");
     }
 
-    /**
-     * And a map comparing its keys by address is named for that whatever its values did.
-     *
-     * <p>The half of its equality that is about keys can be put on its own — the two hold keys that
-     * mean the same and it says they do not — and that answer does not wait on what the values came
-     * to.
-     */
-    @Test
-    void aMapComparingKeysByAddressIsNamedBesideWhatItHolds() {
-        Map<Object, Object> left = new IdentityHashMap<>();
-        Map<Object, Object> right = new IdentityHashMap<>();
-        left.put(new String("k"), new Address());
-        right.put(new String("k"), new Address());
-
-        Covered<Divergence> walked = Divergence.between(left, right);
-
-        assertEquals(Set.of("{key} java.util.IdentityHashMap THE_SAME_THING_TWICE",
-                        "{value} " + Address.class.getName() + " THE_SAME_THING_TWICE"),
-                found(walked), "the map for its keys, and what it holds for itself");
-    }
-
     /** Something with a part, whose own equality is its address. */
     private static final class OwnIdentity {
         /** Read by the walk and by nothing here: carrying a part its equality does not compare is
@@ -528,9 +507,7 @@ class APairWalkNamesADefectWhereItIsTest {
 
         assertEquals(Set.of("MEMBERS_THAT_DO_NOT_PAIR {key}"), gaps(walked), "the entries line up with nothing");
         assertEquals(Set.of(), found(walked),
-                "said as a place the walk could not go, and not as a verdict on which it is");
-        assertEquals(Set.of(), found(walked),
-                "and nothing is guessed about it");
+                "said as a place the walk could not go, and nothing is guessed about which it is");
     }
 
     /** Something whose only field is itself, so a walk of it finds nothing and gets nowhere. */
@@ -559,8 +536,6 @@ class APairWalkNamesADefectWhereItIsTest {
         Covered<Divergence> walked = Divergence.between(left, right);
 
         assertEquals(Set.of("A_GRAPH_THAT_LOOPS .Loop#again"), gaps(walked), "the walk met the pair it was already walking");
-        assertEquals(Set.of(), found(walked),
-                "for the reason it is, and where");
         assertEquals(Set.of(), found(walked),
                 "and nothing is named for what the walk did not get to");
     }

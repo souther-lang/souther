@@ -2,7 +2,6 @@ package souther.compiler.query;
 
 import souther.compiler.partition.AdequacyPolicy;
 import souther.compiler.partition.Budgets;
-import souther.compiler.regex.PatternPlan;
 import souther.compiler.report.AdequacyReport;
 
 import org.junit.jupiter.api.Test;
@@ -10,7 +9,6 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -24,8 +22,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * moves with a number nobody in the model wrote. That is ADR-0089's criterion switching, arriving
  * as a default rather than as a decision.
  *
- * <p>So both halves are held: what the behavior is held to is the same under a budget that stops
- * the walk, and what the run could not measure is said rather than answered from elsewhere.
+ * <p>A limit on the measure's walk is held in
+ * {@link AMeetingTheMeasureWouldNotWalkLeavesTheBehaviorPartialTest}; a limit on what a generation
+ * may write is held here.
  */
 class ABudgetRunningOutDoesNotChangeWhatABehaviorIsHeldToTest {
 
@@ -64,29 +63,7 @@ class ABudgetRunningOutDoesNotChangeWhatABehaviorIsHeldToTest {
             """;
 
     /**
-     * A group too wide for the measure to walk is a group all the same.
-     *
-     * <p>At one combination per group the walk offers nothing, and the six this body has go
-     * uncounted. The behavior is still held to them: the meeting is what the reading found, and
-     * whether the measure could afford to walk it is a fact about this run.
-     */
-    @Test
-    void aGroupTheMeasureWouldNotWalkIsStillWhatTheBehaviorIsHeldTo() {
-        AdequacyReport.BehaviorReport narrow = behaviorUnder(
-                new AdequacyPolicy.OfTheMeasures(Budgets.measures().pairSpace(), 1,
-                        PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS),
-                Budgets.generation());
-
-        assertInstanceOf(CombinationCriterion.Interactions.class, narrow.evidence().combinations(),
-                "the body's decisions meet, whatever this run could afford to walk");
-        assertFalse(narrow.evidence().interaction().asked().notMeasured().isEmpty(),
-                "and the group the walk would not take is named as one nothing was measured of");
-        assertEquals(List.of(), findingsOf(narrow, Adequacy.Kind.PAIR_UNCOVERED),
-                "nothing is owed at a combination of two classes: that is the other criterion");
-    }
-
-    /**
-     * And lowering what a generation may write changes what is offered, not what is owed.
+     * Lowering what a generation may write changes what is offered, not what is owed.
      *
      * <p>A row limit is spent after the requirements are known. The same combinations are unmade
      * under both, and the narrow run says it stopped rather than reporting fewer.
