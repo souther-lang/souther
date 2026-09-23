@@ -148,7 +148,7 @@ public final class CstLexer {
                 identifier(start);
             } else if (c == '_') {
                 underscore(start);
-            } else if (beginsANumber(c)) {
+            } else if (isDigit(c)) {
                 number(start);
             } else if (c == '"') {
                 string(start);
@@ -174,10 +174,49 @@ public final class CstLexer {
     }
 
     private void lineComment(int start) {
-        while (pos < src.length() && src.charAt(pos) != '\n') {
+        while (pos < src.length() && lineTerminatorAt(src, pos) == 0) {
             pos++;
         }
         emit(SyntaxKind.LINE_COMMENT, start);
+    }
+
+    /**
+     * How many characters the line terminator beginning at {@code i} is written with: one for an
+     * LF, two for a CR an LF follows, and none where no line terminator begins.
+     *
+     * <p>The one definition of a line every reading here asks: where a comment and a string
+     * literal end, whether a line break stands before an argument list, and where a column is
+     * counted from. A CR on its own is whitespace and ends no line.
+     */
+    static int lineTerminatorAt(CharSequence text, int i) {
+        if (i >= text.length()) {
+            return 0;
+        }
+        if (text.charAt(i) == '\n') {
+            return 1;
+        }
+        return text.charAt(i) == '\r' && i + 1 < text.length() && text.charAt(i + 1) == '\n' ? 2 : 0;
+    }
+
+    /** Whether a line terminator is written anywhere in {@code text}. */
+    static boolean holdsALineTerminator(CharSequence text) {
+        return endOfLastLineTerminator(text) >= 0;
+    }
+
+    /** Where the last line terminator in {@code text} ends, or -1 where it holds none. */
+    static int endOfLastLineTerminator(CharSequence text) {
+        int end = -1;
+        int i = 0;
+        while (i < text.length()) {
+            int written = lineTerminatorAt(text, i);
+            if (written > 0) {
+                i += written;
+                end = i;
+            } else {
+                i++;
+            }
+        }
+        return end;
     }
 
     private void identifier(int start) {
@@ -221,35 +260,31 @@ public final class CstLexer {
     }
 
     /**
-     * Whether a numeric literal begins here.
-     *
-     * <p>{@link #number} reads a literal by UTF-16 unit, and this says what it can read, because a
-     * scan that began a literal on a character that function then reads nothing of would leave
-     * {@code pos} where it was and go round again. A digit outside the basic plane is therefore an
-     * unexpected character, which is what it was before the scan moved to code points. Which digits
-     * a literal may be written with at all is the numeric literal's question, and it is not settled
-     * here — this only keeps the two ends of one decision from disagreeing.
+     * Whether {@code c} is a digit a numeric literal is written in: {@code 0} to {@code 9} and no
+     * others. A digit of another script is not one of them — nor a name, which no digit begins —
+     * so it is a character the language has no token for.
      */
-    private static boolean beginsANumber(int c) {
-        return Character.charCount(c) == 1 && Character.isDigit((char) c);
+    private static boolean isDigit(int c) {
+        return c >= '0' && c <= '9';
     }
 
     private void number(int start) {
-        while (pos < src.length() && Character.isDigit(src.charAt(pos))) {
+        while (pos < src.length() && isDigit(src.charAt(pos))) {
             pos++;
         }
         boolean fractional = false;
-        if (pos + 1 < src.length() && src.charAt(pos) == '.' && Character.isDigit(src.charAt(pos + 1))) {
+        if (pos + 1 < src.length() && src.charAt(pos) == '.' && isDigit(src.charAt(pos + 1))) {
             fractional = true;
             pos++;   // the dot
-            while (pos < src.length() && Character.isDigit(src.charAt(pos))) {
+            while (pos < src.length() && isDigit(src.charAt(pos))) {
                 pos++;
             }
         }
-        // A Decimal literal carries the `m` suffix (F# form: `500m`, `1.5m`), counted only when it
-        // ends the literal — a following letter/digit makes it an identifier (`500money`).
+        // A Decimal literal carries the `m` suffix (F# form: `500m`, `1.5m`), counted only where
+        // nothing that carries a name on follows it: `500money` is `500` and a name, and so is
+        // `500m_total`, the `m` being where the name begins.
         boolean hasSuffix = pos < src.length() && src.charAt(pos) == 'm'
-                && !(pos + 1 < src.length() && Character.isLetterOrDigit(src.charAt(pos + 1)));
+                && !(pos + 1 < src.length() && IdentifierAlphabet.isContinue(src.codePointAt(pos + 1)));
         if (hasSuffix) {
             pos++;   // consume the `m`; the raw text keeps it, Lower strips it
             emit(SyntaxKind.DECIMAL_LIT, start);
@@ -272,12 +307,13 @@ public final class CstLexer {
      * <p>A newline closes nothing: a literal whose quote is missing is one line's mistake, and a
      * scan that ran past the line would take the rest of the file into it and report the loss
      * wherever it finally stopped. Written this way the reader is told where the quote is missing.
-     * A newline in a value is written {@code \n}.
+     * A newline in a value is written {@code \n}. A CR that no LF follows ends no line, so it is a
+     * character of the literal like any other.
      */
     private void string(int start) {
         pos++;   // opening quote
-        while (pos < src.length() && src.charAt(pos) != '"' && !endsTheLine(src.charAt(pos))) {
-            if (src.charAt(pos) == '\\' && pos + 1 < src.length() && !endsTheLine(src.charAt(pos + 1))) {
+        while (pos < src.length() && src.charAt(pos) != '"' && lineTerminatorAt(src, pos) == 0) {
+            if (src.charAt(pos) == '\\' && pos + 1 < src.length() && lineTerminatorAt(src, pos + 1) == 0) {
                 char escaped = src.charAt(pos + 1);
                 if (ESCAPES.indexOf(escaped) < 0) {
                     errors.add(CstError.of(pos, 2,
@@ -288,18 +324,13 @@ public final class CstLexer {
                 pos++;
             }
         }
-        if (pos >= src.length() || endsTheLine(src.charAt(pos))) {
+        if (pos >= src.length() || lineTerminatorAt(src, pos) > 0) {
             errors.add(CstError.of(start, pos - start, new ParseMessage.AStringLiteralIsNotClosed()));
             emit(SyntaxKind.STRING_LIT, start);   // stops at the line, keeping the tree lossless
             return;
         }
         pos++;   // closing quote
         emit(SyntaxKind.STRING_LIT, start);
-    }
-
-    /** Whether {@code c} ends the line, either spelling of it. */
-    private static boolean endsTheLine(char c) {
-        return c == '\n' || c == '\r';
     }
 
     /** A type variable {@code 'a}. Only the core writes these; the parser gates their use. The name

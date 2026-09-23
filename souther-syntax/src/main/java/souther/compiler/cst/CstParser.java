@@ -1457,17 +1457,18 @@ public final class CstParser {
         finish();
     }
 
-    /** The 0-based column of the token at {@code index}, walking back to the last newline in the
-     * trivia. A match arm's column is what decides which match it belongs to. */
+    /** The 0-based column of the token at {@code index}: the code points written between the last
+     * line terminator before it and the token. A match arm's column is what decides which match it
+     * belongs to. */
     private int columnOf(int index) {
         int column = 0;
         for (int i = index - 1; i >= 0; i--) {
             String text = tokens.get(i).text();
-            int newline = text.lastIndexOf('\n');
-            if (newline >= 0) {
-                return column + (text.length() - newline - 1);
+            int lineStart = CstLexer.endOfLastLineTerminator(text);
+            if (lineStart >= 0) {
+                return column + text.codePointCount(lineStart, text.length());
             }
-            column += text.length();
+            column += text.codePointCount(0, text.length());
         }
         return column;
     }
@@ -1867,7 +1868,7 @@ public final class CstParser {
             if (!tokens.get(i).kind().isTrivia()) {
                 return false;
             }
-            if (tokens.get(i).text().indexOf('\n') >= 0) {
+            if (CstLexer.holdsALineTerminator(tokens.get(i).text())) {
                 return true;
             }
         }
