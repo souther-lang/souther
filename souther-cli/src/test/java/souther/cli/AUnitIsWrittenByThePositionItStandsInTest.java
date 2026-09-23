@@ -33,12 +33,16 @@ class AUnitIsWrittenByThePositionItStandsInTest {
             data Door = Open | Closed
             data Phase = Pending | Closed
             data Holder = { state: Closed }
+            data Collected = { listed: List<Closed>, keyed: Map<String, Closed> }
 
             behavior alone : (c: Closed) -> Closed
             let alone (c) = c
 
             behavior held : (h: Holder) -> Holder
             let held (h) = h
+
+            behavior gathered : (c: Collected) -> Collected
+            let gathered (c) = c
 
             behavior discriminated : (d: Door) -> Door
             let discriminated (d) = d
@@ -68,6 +72,14 @@ class AUnitIsWrittenByThePositionItStandsInTest {
     @Test
     void asAFieldAUnitIsAnEmptyObject() throws Exception {
         assertEquals("{\"state\":{}}", run("held", "{\"state\":{}}"));
+    }
+
+    /** The element encoder a data's field hands a collection is the unit's own, so the element is
+     *  the same empty object the unit writes on its own. */
+    @Test
+    void asAnElementOfAFieldsCollectionAUnitIsAnEmptyObject() throws Exception {
+        String collected = "{\"listed\":[{},{}],\"keyed\":{\"k\":{}}}";
+        assertEquals(collected, run("gathered", collected));
     }
 
     @Test

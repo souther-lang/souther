@@ -1132,20 +1132,16 @@ public final class DataChecker {
                 }
             }
             case Hir.DataEnc d -> {
-                // Which kind of declaration it is, and not whether one wrote a representation: the
-                // element may be a product or a sum (`List<事前承認理由>` holds a sum, spec
-                // §encoder-derivation), and a unit writes nothing of its own to stand as an element.
-                boolean writesAnElement = switch (symbols.declaredNode(names(d.typeName()))) {
-                    case Hir.Data _, Hir.SumData _ -> true;
-                    case Hir.UnitData _ -> false;
-                    // The reference was minted from a shape a declaration was found to have, so
-                    // there is one. Reported as this compiler's own rather than as a disagreement
-                    // between the encoder and the element, which is what it is not.
-                    case null -> throw new IllegalStateException(
-                            "nothing declares `" + d.typeName().written()
-                                    + "`, which an element encoder was written against");
-                };
-                if (!elemType.equals(Type.ref(names(d.typeName()))) || !writesAnElement) {
+                // Every kind of declaration writes an element: a product, a sum (`List<事前承認理由>`
+                // holds a sum), and a unit, which writes the empty object it writes anywhere else
+                // (spec §encoder-derivation). The reference was minted from a shape a declaration
+                // was found to have, so there is one; its absence is this compiler's own failure
+                // rather than a disagreement between the encoder and the element.
+                if (symbols.declaredNode(names(d.typeName())) == null) {
+                    throw new IllegalStateException("nothing declares `" + d.typeName().written()
+                            + "`, which an element encoder was written against");
+                }
+                if (!elemType.equals(Type.ref(names(d.typeName())))) {
                     throw elemEncMismatch(d.typeName().written(), elemType, pos);
                 }
             }
