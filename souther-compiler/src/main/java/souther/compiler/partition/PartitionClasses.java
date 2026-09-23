@@ -255,7 +255,7 @@ final class PartitionClasses {
         // way: what is composed is an `Approved`, and what the row writes is `DecisionN(Approved
         // { id = 1 })`.
         return PartitionClass.of(idOfCase(leaf), leaf.name(), is,
-                RepresentativeSource.under(writes, new RepresentativeSource.Composed(declared)));
+                new RepresentativeSource.Compose(declared, writes));
     }
 
     /**

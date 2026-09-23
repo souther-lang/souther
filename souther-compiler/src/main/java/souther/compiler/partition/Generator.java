@@ -2977,8 +2977,8 @@ public final class Generator {
             // The class's own values, and only those: a class composed through a constructor is a
             // walk this does not do, and one nothing can produce a value for has nothing to put
             // here.
-            if (!(axis.classes().get(where[i]).representatives().evaluate()
-                    instanceof RepresentativeSource.Evaluation.Values values)) {
+            if (!(axis.classes().get(where[i]).representatives()
+                    instanceof RepresentativeSource.Values values)) {
                 return null;
             }
             // A field two of the moved axes are of. The baseline can be written for one of them or
@@ -5000,7 +5000,7 @@ public final class Generator {
             }
             required = merged.requirements();
             PartitionClass cls = axes.get(i).classes().get(where[i]);
-            switch (cls.representatives().evaluate()) {
+            switch (cls.representatives()) {
                 // A class that narrows the position states the narrowing and nothing else. What
                 // stands at the narrowed position is built there, out of the narrowed type — which
                 // is where the values this class would have offered came from in the first place.
@@ -5010,7 +5010,7 @@ public final class Generator {
                 // wraps, and taking the second as a value of the unnarrowed position is one
                 // location decided twice, under two names. The plan reads the first of them and the
                 // class fixed at the narrowed position is never looked at.
-                case RepresentativeSource.Evaluation.Values values -> {
+                case RepresentativeSource.Values values -> {
                     // The one composed for every number of this location where there was more than
                     // one, and the class's own where this class is the only one standing on it.
                     List<FixtureTemplate> write = answeringAllOfThem(together, cls);
@@ -5028,20 +5028,20 @@ public final class Generator {
                 // Not a value but how one is arrived at: the walk below builds one at this position,
                 // field by field, the way it builds every other record. What it is built through is
                 // already in the requirements, which is where the plan reads it.
-                case RepresentativeSource.Evaluation.Compose _ -> { }
+                case RepresentativeSource.Compose _ -> { }
                 // What the class said about itself. A class that recorded why nothing was produced
                 // for it knows something this does not, and the two answers are not the same claim:
                 // one is that nothing was arrived at, and the other is that nothing can be. Read as
                 // the first, a case somebody can write in one line is reported as a row that does
                 // not exist.
-                case RepresentativeSource.Evaluation.NothingProducible cannot -> {
+                case RepresentativeSource.NothingProducible cannot -> {
                     return new Attempt(null, UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, at,
                             Optional.of(cannot.why()));
                 }
                 // And the other of those two answers. Nothing was arrived at and the class says so
                 // as what stopped the arriving, which is a figure somebody can raise or work
                 // nobody has done — never that the class holds no value.
-                case RepresentativeSource.Evaluation.NotArrivedAt stopped -> {
+                case RepresentativeSource.NotArrivedAt stopped -> {
                     return new Attempt(null,
                             stopped.heldBack().isEmpty()
                                     ? UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED

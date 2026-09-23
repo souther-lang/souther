@@ -169,7 +169,7 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
      * <p>Held as one, a class offering nothing and saying nothing about why was a class the search
      * met and had no reading for, and what it wrote down was read as the position having no value.
      * A class that cannot produce one says so and says why, which is {@link
-     * RepresentativeSource.Ungeneratable}; there is nothing left for an empty list to mean.
+     * RepresentativeSource.NothingProducible}; there is nothing left for an empty list to mean.
      */
     @Test
     void aRecipeOfNoValuesCannotBeWritten() {

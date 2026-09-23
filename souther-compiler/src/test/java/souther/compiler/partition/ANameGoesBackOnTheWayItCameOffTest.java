@@ -105,9 +105,9 @@ class ANameGoesBackOnTheWayItCameOffTest {
      */
     @Test
     void aComposedValueCarriesTheNamesUntilThereIsSomethingToPutThemOn() {
-        RepresentativeSource.Evaluation.Compose compose = assertInstanceOf(
-                RepresentativeSource.Evaluation.Compose.class,
-                classOf("DecisionNN", "Approved").representatives().evaluate());
+        RepresentativeSource.Compose compose = assertInstanceOf(
+                RepresentativeSource.Compose.class,
+                classOf("DecisionNN", "Approved").representatives());
 
         assertEquals(named("Approved"), compose.through());
         assertEquals(List.of(reached("DecisionNN"), reached("DecisionN")), compose.worn());

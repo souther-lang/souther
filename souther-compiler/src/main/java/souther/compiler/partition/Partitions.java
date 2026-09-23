@@ -1283,7 +1283,7 @@ public final class Partitions {
             // No number was named beside the ones singled out, which is this compiler naming one
             // place in a run and not the order having none left.
             return PartitionClass.of(id, label, holding(orders, is),
-                    new RepresentativeSource.NotReached(java.util.Set.of(),
+                    new RepresentativeSource.NotArrivedAt(java.util.Set.of(),
                             java.util.Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED),
                             "nothing here composed " + what
                                     + ", which does not make one unwritable"));
@@ -1799,13 +1799,13 @@ public final class Partitions {
      */
     static List<FixtureTemplate> standingFor(RepresentativeSource source, RuleReadingContext reading,
                                              java.util.Set<TypeSymbol> expanding) {
-        return switch (source.evaluate()) {
-            case RepresentativeSource.Evaluation.Values values -> values.written();
-            case RepresentativeSource.Evaluation.Compose compose ->
+        return switch (source) {
+            case RepresentativeSource.Values values -> values.written();
+            case RepresentativeSource.Compose compose ->
                     composed(compose.through(), reading, expanding).stream()
                             .map(compose::written).toList();
-            case RepresentativeSource.Evaluation.NothingProducible _,
-                 RepresentativeSource.Evaluation.NotArrivedAt _ -> List.of();
+            case RepresentativeSource.NothingProducible _,
+                 RepresentativeSource.NotArrivedAt _ -> List.of();
         };
     }
 

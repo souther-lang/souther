@@ -5,23 +5,29 @@ import souther.compiler.types.TypeReachName;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
- * How a value standing for one equivalence class is arrived at.
+ * How a value standing for one equivalence class is arrived at: take these values, compose one this
+ * way, or report that there is none.
  *
  * <p>A recipe rather than a list of values, because the ways of arriving at one are not the same
  * kind of thing. Some classes name their values outright. A class whose values are records names
  * the constructor instead — a record's fields are chosen one at a time against the rules relating
- * them, which is the generator's walk and not a list anything here could hold. And a value at a
- * position written under a name is that value with the name put back on, which is neither of the
- * first two but a projection over one of them.
+ * them, which is the generator's walk and not a list anything here could hold.
  *
- * <p>The projection is why this is an algebra and not a list with two things beside it. A name can
- * be put on a value that does not exist yet: {@code Composed(Approved)} under {@code DecisionN} is
- * a row of {@code DecisionN(Approved { id = 1 })}, decided before anything has composed the
- * {@code Approved}. Held as an empty list of values with an optional constructor beside it, the
- * names had nowhere to be at all, and what reached a row declaring {@code DecisionN} was an
+ * <p>A value at a position written under a name is that value with the name put back on, and a
+ * name can be put on a value that does not exist yet: a class of {@code DecisionN} that composes an
+ * {@code Approved} is a row of {@code DecisionN(Approved { id = 1 })}, decided before anything has
+ * composed the {@code Approved}. So the names are part of what a composition carries, and go on
+ * when the value is made. Held as an empty list of values with an optional constructor beside it,
+ * the names would have nowhere to be, and what reached a row declaring {@code DecisionN} would be an
  * {@code Approved} — which is not a value of it.
+ *
+ * <p>Held in the one form a reader acts on. Putting names on a recipe is worked out where it is done
+ * ({@link #under(List, RepresentativeSource)}) and not kept as a recipe over a recipe, so what a
+ * class holds says what to do and nothing about how it was put together: two classes that come to
+ * the same thing are equal, and a reader has four cases to answer and none to read through.
  *
  * <p>More than one value, where there are values, because building a candidate can fail for a
  * reason that is about the combination and not about the class: two classes each covering a wide
@@ -31,97 +37,77 @@ import java.util.List;
  */
 public sealed interface RepresentativeSource {
 
-    /**
-     * What arriving at a value of this class comes to, with every name the position wears already
-     * taken into account.
-     *
-     * <p>One closed answer, and what a reader deciding what to do reads. The cases of this interface
-     * are how a recipe is <em>written</em> — a projection sits over another recipe, and reading it
-     * means reading what is under it — whereas an {@link Evaluation} is what a reader has to
-     * <em>do</em>, and the two are not the same set of things. A reader that asked "is there a
-     * constructor", "are there values", "was a reason given" separately would be recovering the
-     * variant from three answers, and could meet combinations no recipe can be in.
-     */
-    Evaluation evaluate();
+    /** Values ready to be written at the position, in the order to try them, under every name it
+     *  wears. Never empty: a class with nothing to write is {@link NothingProducible}, which says
+     *  why. */
+    record Values(List<FixtureTemplate> written) implements RepresentativeSource {
 
-    /**
-     * What a reader does about one class: take these values, compose one this way, or report that
-     * there is none.
-     *
-     * <p>Closed and flat. A projection is not a case here because it is not something to do — it is
-     * accounted for in what the other cases carry, which is what makes putting the names back on
-     * the one thing it is.
-     */
-    sealed interface Evaluation {
-
-        /** Values ready to be written at the position, in the order to try them, under every name
-         *  it wears. Never empty: a class with nothing to write is {@link NothingProducible}. */
-        record Values(List<FixtureTemplate> written) implements Evaluation {
-
-            public Values {
-                written = List.copyOf(written);
-                if (written.isEmpty()) {
-                    throw new IllegalArgumentException(
-                            "no values is `NothingProducible`, which says why");
-                }
+        public Values {
+            written = List.copyOf(written);
+            if (written.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "no values is `NothingProducible`, which says why");
             }
         }
+    }
 
-        /**
-         * A value composed through {@code through}, field by field, and written under
-         * {@code worn}.
-         *
-         * <p>{@code through} is not the position's type: the declared type is still the sum, and
-         * only the value being built is narrowed. {@code worn} is what the position writes that
-         * value under, outermost first — a fact about the position rather than about the
-         * constructor.
-         */
-        record Compose(TypeSymbol.AtModule through, List<TypeReachName.Written> worn)
-                implements Evaluation {
+    /**
+     * A value composed through {@code through}, field by field, and written under {@code worn}.
+     *
+     * <p>{@code through} is not the position's type: the declared type is still the sum, and only
+     * the value being built is narrowed. {@code worn} is what the position writes that value under,
+     * outermost first — a fact about the position rather than about the constructor.
+     */
+    record Compose(TypeSymbol.AtModule through, List<TypeReachName.Written> worn)
+            implements RepresentativeSource {
 
-            public Compose {
-                worn = List.copyOf(worn);
-            }
-
-            /** What was composed, under the names the position writes it under. */
-            public FixtureTemplate written(FixtureTemplate composed) {
-                return under(worn, composed);
-            }
+        public Compose {
+            worn = List.copyOf(worn);
         }
 
-        /**
-         * Nothing can produce a value for this class, and why.
-         *
-         * <p>What the class knows about itself. A reader told only that there are no values would
-         * report a case somebody can write in one line as a row that does not exist.
-         */
-        record NothingProducible(String why) implements Evaluation {}
+        /** What was composed, under the names the position writes it under. */
+        public FixtureTemplate written(FixtureTemplate composed) {
+            return under(worn, composed);
+        }
+    }
 
-        /**
-         * Nothing was produced for this class and nothing here says none can be.
-         *
-         * <p>Apart from {@link NothingProducible}, and the difference is what a reader may say
-         * about the model. That one is a search that looked everywhere it was going to look; this
-         * one stopped — at a figure of this compiler's, or short of a population it writes some of
-         * — so the class may hold values and this did not reach one.
-         *
-         * <p>Run together, the sentence an author reads says nothing writes a value in a range
-         * whose values this compiler simply did not walk to. Which is the same mistake as reporting
-         * a compiler's own shortfall in words about the model, one layer up from where it was
-         * fixed.
-         *
-         * @param heldBack which figures of this compiler's stopped it, each a number somebody can
-         *                 raise to have the search go on
-         * @param notAllOf what it wrote some of rather than all of, which no figure reaches
-         * @param why      what to tell a reader, in words that are about this compiler
-         */
-        record NotArrivedAt(java.util.Set<CompositionBudget> heldBack,
-                            java.util.Set<CompositionRepertoire> notAllOf, String why)
-                implements Evaluation {
+    /**
+     * Nothing can produce a value for this class, and why.
+     *
+     * <p>What the class knows about itself. A reader told only that there are no values would
+     * report a case somebody can write in one line as a row that does not exist.
+     */
+    record NothingProducible(String why) implements RepresentativeSource {}
 
-            public NotArrivedAt {
-                heldBack = java.util.Set.copyOf(heldBack);
-                notAllOf = java.util.Set.copyOf(notAllOf);
+    /**
+     * Nothing was produced for this class and nothing here says none can be.
+     *
+     * <p>Apart from {@link NothingProducible}, and the difference is what a reader may say about the
+     * model. That one is a search that looked everywhere it was going to look; this one stopped — at
+     * a figure of this compiler's, or short of a population it writes some of — so the class may
+     * hold values and this did not reach one.
+     *
+     * <p>Run together, the sentence an author reads says nothing writes a value in a range whose
+     * values this compiler simply did not walk to. Which is the same mistake as reporting a
+     * compiler's own shortfall in words about the model, one layer up from where it was fixed.
+     *
+     * @param heldBack which figures of this compiler's stopped it, each a number somebody can raise
+     *                 to have the search go on
+     * @param notAllOf what it wrote some of rather than all of, which no figure reaches
+     * @param why      what to tell a reader, in words that are about this compiler
+     */
+    record NotArrivedAt(Set<CompositionBudget> heldBack, Set<CompositionRepertoire> notAllOf,
+                        String why) implements RepresentativeSource {
+
+        public NotArrivedAt {
+            heldBack = Set.copyOf(heldBack);
+            notAllOf = Set.copyOf(notAllOf);
+            if (heldBack.isEmpty() && notAllOf.isEmpty()) {
+                // Nothing stopped it and it reached nothing, which is a search that looked
+                // everywhere — and that is the other case, which says so.
+                throw new IllegalArgumentException(
+                        "a class nothing reached a value for says what stopped the reaching: "
+                                + why);
             }
         }
     }
@@ -134,130 +120,52 @@ public sealed interface RepresentativeSource {
      * — the class is still counted, and rows that already reach it still count.
      */
     default boolean buildable() {
-        return switch (evaluate()) {
-            case Evaluation.Values _, Evaluation.Compose _ -> true;
+        return switch (this) {
+            case Values _, Compose _ -> true;
             // And a class nothing reached a value for is not one a caller may count on either. What
             // this answers is whether a value can be had, and a search that stopped has not said.
-            case Evaluation.NothingProducible _, Evaluation.NotArrivedAt _ -> false;
+            case NothingProducible _, NotArrivedAt _ -> false;
         };
     }
 
-    /**
-     * Values named outright, and at least one of them.
-     *
-     * <p>Empty used to be allowed and meant a class nothing produced a value for and nothing said
-     * why. Nothing wrote one — every producer already branched to {@link Ungeneratable} where its
-     * values ran out — and what the state bought was a reader with a fourth answer to give, which
-     * it gave as the position having no value. A class that cannot produce one says why.
-     */
-    record Ready(List<FixtureTemplate> values) implements RepresentativeSource {
-
-        public Ready {
-            values = List.copyOf(values);
-            if (values.isEmpty()) {
-                throw new IllegalArgumentException(
-                        "a class with no values is `Ungeneratable`, which says why");
-            }
-        }
-
-        @Override
-        public Evaluation evaluate() {
-            return new Evaluation.Values(values);
-        }
-    }
-
-    /** A class whose values are composed through {@code through}, field by field, by the walk that
-     *  composes every other record. */
-    record Composed(TypeSymbol.AtModule through) implements RepresentativeSource {
-
-        @Override
-        public Evaluation evaluate() {
-            return new Evaluation.Compose(through, List.of());
-        }
-    }
-
-    /**
-     * The same recipe, written under the names the position wears, outermost first.
-     *
-     * <p>A newtype is the value it wraps, so what a position divides into is read through the names
-     * — and what a row writes is the value with those names back on. Both directions are the same
-     * fact, which is why the projection sits over the recipe rather than being spelled by whoever
-     * happened to need it: a class of {@code data StageN = Stage} offers {@code StageN(Prospecting)}
-     * and a class of {@code data DecisionN = Decision} composes an {@code Approved} and hands back
-     * {@code DecisionN(Approved { id = 1 })}, by one rule.
-     */
-    record Projected(RepresentativeSource inner, List<TypeReachName.Written> wrappers)
-            implements RepresentativeSource {
-
-        public Projected {
-            wrappers = List.copyOf(wrappers);
-        }
-
-        @Override
-        public Evaluation evaluate() {
-            return switch (inner.evaluate()) {
-                case Evaluation.Values values -> new Evaluation.Values(
-                        values.written().stream().map(each -> under(wrappers, each)).toList());
-                // The names go on outside whatever the inner recipe already wears, which is the
-                // order they were read off the position in.
-                case Evaluation.Compose compose -> {
-                    List<TypeReachName.Written> both = new ArrayList<>(wrappers);
-                    both.addAll(compose.worn());
-                    yield new Evaluation.Compose(compose.through(), both);
-                }
-                // Nothing to put a name on. What the inner recipe says stands: a name wrapped round
-                // a value nothing composed does not make one, and does not change why there is
-                // none — nor whether anything looked.
-                case Evaluation.NothingProducible _, Evaluation.NotArrivedAt _ ->
-                        inner.evaluate();
-            };
-        }
-    }
-
-    /** A class nothing can produce a value for, and why. */
-    record Ungeneratable(String why) implements RepresentativeSource {
-
-        @Override
-        public Evaluation evaluate() {
-            return new Evaluation.NothingProducible(why);
-        }
-    }
-
-    /** A class this compiler did not reach a value for, and what stopped it. */
-    record NotReached(java.util.Set<CompositionBudget> heldBack,
-                      java.util.Set<CompositionRepertoire> notAllOf, String why)
-            implements RepresentativeSource {
-
-        public NotReached {
-            heldBack = java.util.Set.copyOf(heldBack);
-            notAllOf = java.util.Set.copyOf(notAllOf);
-            if (heldBack.isEmpty() && notAllOf.isEmpty()) {
-                // Nothing stopped it and it reached nothing, which is a search that looked
-                // everywhere — and that is the other case, which says so.
-                throw new IllegalArgumentException(
-                        "a class nothing reached a value for says what stopped the reaching: "
-                                + why);
-            }
-        }
-
-        @Override
-        public Evaluation evaluate() {
-            return new Evaluation.NotArrivedAt(heldBack, notAllOf, why);
-        }
-    }
-
     static RepresentativeSource of(FixtureTemplate... values) {
-        return new Ready(List.of(values));
+        return new Values(List.of(values));
     }
 
     static RepresentativeSource of(List<FixtureTemplate> values) {
-        return new Ready(values);
+        return new Values(values);
     }
 
-    /** {@code inner}, written under {@code wrappers} — or {@code inner} itself where the position
-     *  wears no name, so that a recipe carries no projection over nothing. */
-    static RepresentativeSource under(List<TypeReachName.Written> wrappers, RepresentativeSource inner) {
-        return wrappers.isEmpty() ? inner : new Projected(inner, wrappers);
+    /**
+     * {@code source}, written under {@code wrappers}, outermost first.
+     *
+     * <p>A newtype is the value it wraps, so what a position divides into is read through the names
+     * — and what a row writes is the value with those names back on. Both directions are the same
+     * fact, which is why this is one operation rather than spelled by whoever happened to need it: a
+     * class of {@code data StageN = Stage} offers {@code StageN(Prospecting)} and a class of
+     * {@code data DecisionN = Decision} composes an {@code Approved} and hands back
+     * {@code DecisionN(Approved { id = 1 })}, by one rule.
+     */
+    static RepresentativeSource under(List<TypeReachName.Written> wrappers,
+                                      RepresentativeSource source) {
+        if (wrappers.isEmpty()) {
+            return source;
+        }
+        return switch (source) {
+            case Values values -> new Values(
+                    values.written().stream().map(each -> under(wrappers, each)).toList());
+            // The names go on outside whatever the composition already wears, which is the order
+            // they were read off the position in.
+            case Compose compose -> {
+                List<TypeReachName.Written> both = new ArrayList<>(wrappers);
+                both.addAll(compose.worn());
+                yield new Compose(compose.through(), both);
+            }
+            // Nothing to put a name on. What the class says stands: a name wrapped round a value
+            // nothing composed does not make one, and does not change why there is none — nor
+            // whether anything looked.
+            case NothingProducible _, NotArrivedAt _ -> source;
+        };
     }
 
     /**

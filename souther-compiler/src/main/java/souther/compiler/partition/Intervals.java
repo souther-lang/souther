@@ -261,12 +261,12 @@ final class Intervals {
             // in it whichever of the two is why.
             case TermRealizations.Realization.NoNumberTheRulesAdmit _,
                  TermRealizations.Realization.None _ ->
-                    new RepresentativeSource.Ungeneratable("nothing here writes " + what);
-            case TermRealizations.Realization.Stopped stopped -> new RepresentativeSource.NotReached(
+                    new RepresentativeSource.NothingProducible("nothing here writes " + what);
+            case TermRealizations.Realization.Stopped stopped -> new RepresentativeSource.NotArrivedAt(
                     stopped.by(), stopped.notAllOf(),
                     "nothing here composed " + what + ", which does not make one unwritable");
             case TermRealizations.Realization.Unexhausted some ->
-                    new RepresentativeSource.NotReached(java.util.Set.of(), some.notAllOf(),
+                    new RepresentativeSource.NotArrivedAt(java.util.Set.of(), some.notAllOf(),
                             "nothing here composed " + what
                                     + ", which does not make one unwritable");
         };
