@@ -12,11 +12,8 @@ import souther.compiler.query.Shapes;
 import souther.compiler.types.ValueName;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.cst.CstLexer;
-import souther.compiler.cst.CstParser;
-import souther.compiler.cst.SyntaxElement;
+import souther.compiler.cst.GreenToken;
 import souther.compiler.cst.SyntaxKind;
-import souther.compiler.cst.SyntaxNode;
-import souther.compiler.cst.SyntaxToken;
 import souther.compiler.cst.TopLevelForm;
 import souther.test.ClosedWorldContract;
 
@@ -56,31 +53,27 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 @ClosedWorldContract
 class AConformanceCorpusReachesEveryConstructTheLanguageDeclaresTest {
 
-    /** Every meaningful token of every source in the corpus, one list per source. */
-    private static List<List<SyntaxToken>> sources() {
-        List<List<SyntaxToken>> out = new ArrayList<>();
+    /**
+     * Every meaningful token of every source in the corpus, one list per source, as the lexer hands
+     * them over.
+     *
+     * <p>The lexer's and not the tree's: {@link TopLevelForm} is matched against the tokens ahead of
+     * a parse, where a contextual word is still the name it lexes as.
+     */
+    private static List<List<GreenToken>> sources() {
+        List<List<GreenToken>> out = new ArrayList<>();
         for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
             for (String source : corpus.sources()) {
-                List<SyntaxToken> tokens = new ArrayList<>();
-                meaningful(CstParser.parse(source).root(), tokens);
-                out.add(tokens);
+                out.add(CstLexer.lex(source).tokens().stream()
+                        .filter(token -> !token.kind().isTrivia())
+                        .toList());
             }
         }
         return out;
     }
 
-    private static void meaningful(SyntaxNode node, List<SyntaxToken> out) {
-        for (SyntaxElement element : node.children()) {
-            if (element instanceof SyntaxNode child) {
-                meaningful(child, out);
-            } else if (element instanceof SyntaxToken token && !token.isTrivia()) {
-                out.add(token);
-            }
-        }
-    }
-
     /** A reader of the tokens ahead of one position, which is what {@link TopLevelForm} asks for. */
-    private record Ahead(List<SyntaxToken> tokens, int from) implements TopLevelForm.Lookahead {
+    private record Ahead(List<GreenToken> tokens, int from) implements TopLevelForm.Lookahead {
 
         @Override
         public SyntaxKind kindAt(int i) {
@@ -108,7 +101,7 @@ class AConformanceCorpusReachesEveryConstructTheLanguageDeclaresTest {
     @Test
     void everyTopLevelFormIsWrittenSomewhere() {
         Set<TopLevelForm> opened = new LinkedHashSet<>();
-        for (List<SyntaxToken> tokens : sources()) {
+        for (List<GreenToken> tokens : sources()) {
             for (int i = 0; i < tokens.size(); i++) {
                 TopLevelForm.at(new Ahead(tokens, i)).ifPresent(opened::add);
             }
@@ -134,8 +127,8 @@ class AConformanceCorpusReachesEveryConstructTheLanguageDeclaresTest {
     @Test
     void everyReservedWordIsWrittenSomewhere() {
         Set<String> written = new LinkedHashSet<>();
-        for (List<SyntaxToken> tokens : sources()) {
-            for (SyntaxToken token : tokens) {
+        for (List<GreenToken> tokens : sources()) {
+            for (GreenToken token : tokens) {
                 if (token.kind() != SyntaxKind.IDENT) {
                     written.add(token.text());
                 }
@@ -167,7 +160,7 @@ class AConformanceCorpusReachesEveryConstructTheLanguageDeclaresTest {
     void everyStandardLibraryModuleIsUsed() {
         Set<String> called = new LinkedHashSet<>();
         Set<String> named = new LinkedHashSet<>();
-        for (List<SyntaxToken> tokens : sources()) {
+        for (List<GreenToken> tokens : sources()) {
             for (int i = 0; i < tokens.size(); i++) {
                 if (tokens.get(i).kind() != SyntaxKind.IDENT) {
                     continue;
@@ -271,8 +264,8 @@ class AConformanceCorpusReachesEveryConstructTheLanguageDeclaresTest {
      */
     @Test
     void somethingIsNamedInJapanese() {
-        for (List<SyntaxToken> tokens : sources()) {
-            for (SyntaxToken token : tokens) {
+        for (List<GreenToken> tokens : sources()) {
+            for (GreenToken token : tokens) {
                 if (token.kind() == SyntaxKind.IDENT && !token.text().codePoints().allMatch(
                         c -> c < 0x80)) {
                     return;

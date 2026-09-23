@@ -1,5 +1,7 @@
 package souther.lsp;
 
+import java.util.List;
+
 /**
  * What tells a client that a {@link LspMethod} can be called.
  *
@@ -16,11 +18,25 @@ public sealed interface Advertisement {
     /**
      * A field of the {@code capabilities} object the initialize result answers with.
      *
-     * <p>The value is the field's whole value, not a flag: some capabilities are a boolean and
+     * <p>Named by its path from the top of that object, because the protocol nests some of them:
+     * {@code workspace.workspaceFolders} is a field of {@code workspace}, which other capabilities
+     * share. The value is the field's whole value, not a flag: some capabilities are a boolean and
      * others an options object, and which one a capability takes is part of the capability rather
      * than something a caller decides.
      */
-    record StaticCapability(String key, Object value) implements Advertisement {
+    record StaticCapability(List<String> path, Object value) implements Advertisement {
+
+        public StaticCapability {
+            path = List.copyOf(path);
+            if (path.isEmpty()) {
+                throw new IllegalArgumentException("a capability is a field, and a field has a name");
+            }
+        }
+
+        /** A field at the top of the capabilities object. */
+        public StaticCapability(String key, Object value) {
+            this(List.of(key), value);
+        }
     }
 
     /**

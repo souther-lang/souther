@@ -348,6 +348,14 @@ public final class LspServer {
                 diagnosticsAreStale = true;
                 yield NOTHING;
             }
+            case DID_CHANGE_WORKSPACE_FOLDERS -> {
+                InboundDecoders.decode(InboundDecoders.WORKSPACE_FOLDERS_CHANGE, params).ifPresent(p -> {
+                    if (workspace.changeRoots(p.added(), p.removed())) {
+                        diagnosticsAreStale = true;
+                    }
+                });
+                yield NOTHING;
+            }
             case DOCUMENT_SYMBOL -> new Outcome.Answered(documentSymbols(params));
             case SEMANTIC_TOKENS_FULL -> new Outcome.Answered(semanticTokens(params));
             case HOVER -> new Outcome.Answered(hover(params));
@@ -1002,7 +1010,7 @@ public final class LspServer {
      */
     private void publishAll() {
         ModuleGraph graph = workspace.snapshot(documents.openDocuments());
-        Map<String, List<LspDiagnostic>> byUri = analyzer.diagnostics(graph, workspace.modulePath());
+        Map<String, List<LspDiagnostic>> byUri = analyzer.diagnostics(graph);
         for (String uri : documents.uris()) {
             abandonment.stopIfAsked();
             publish(uri, byUri.getOrDefault(uri, List.of()));

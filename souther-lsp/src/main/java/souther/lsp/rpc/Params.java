@@ -3,6 +3,8 @@ package souther.lsp.rpc;
 import souther.lsp.protocol.Position;
 import souther.lsp.protocol.Range;
 
+import java.util.List;
+
 /** The inbound LSP request/notification payloads the server decodes (only the fields it uses). */
 public final class Params {
 
@@ -15,6 +17,10 @@ public final class Params {
 
     /** {@code textDocument/didChange} under full-sync: the uri and the whole new text. */
     public record DidChange(String uri, String text) {
+    }
+
+    /** {@code workspace/didChangeWorkspaceFolders}: the uris of the folders that joined and left. */
+    public record WorkspaceFoldersChange(List<String> added, List<String> removed) {
     }
 
     /** A request that names a document ({@code didClose}, {@code documentSymbol},
@@ -33,7 +39,7 @@ public final class Params {
      * <p>Several, because an editor may hold several cursors, and each of them widens through its
      * own nesting. One answer per place asked about, in the order they were asked.
      */
-    public record PositionsParams(String uri, java.util.List<Position> positions) {
+    public record PositionsParams(String uri, List<Position> positions) {
     }
 
     /** {@code workspace/symbol}: what is being looked for. Empty asks for everything, which is what

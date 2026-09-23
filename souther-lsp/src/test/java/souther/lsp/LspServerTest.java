@@ -531,6 +531,32 @@ class LspServerTest {
                 .contains("-> <?>"), resolved.toString());
     }
 
+    /** A folder the client adds after the handshake is searched, and one it removes is not. */
+    @Test
+    void aWorkspaceFolderChangedAfterStartupChangesWhatIsSearched() throws Exception {
+        Path first = Files.createTempDirectory("ws");
+        Path second = Files.createTempDirectory("ws");
+        Files.writeString(first.resolve("a.sou"), "module a\ndata InTheFirst = { v: Int }\n");
+        Files.writeString(second.resolve("b.sou"), "module b\ndata InTheSecond = { v: Int }\n");
+
+        byte[] input = frames(
+                message(1, "initialize", Map.of("workspaceFolders",
+                        List.of(Map.of("uri", first.toUri().toString(), "name", "first")))),
+                message(null, "initialized", Map.of()),
+                message(null, "workspace/didChangeWorkspaceFolders", Map.of("event", Map.of(
+                        "added", List.of(Map.of("uri", second.toUri().toString(), "name", "second")),
+                        "removed", List.of(Map.of("uri", first.toUri().toString(), "name", "first"))))),
+                message(2, "workspace/symbol", Map.of("query", "InThe")));
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        new LspServer(new MessageConnection(new ByteArrayInputStream(input), out)).run();
+
+        List<String> names = new ArrayList<>();
+        for (JsonNode symbol : responseFor(readFrames(out.toByteArray()), 2)) {
+            names.add(symbol.get("name").asString());
+        }
+        assertEquals(List.of("InTheSecond"), names);
+    }
+
     // --- helpers: build and read framed JSON-RPC messages ---
 
     /** The {@code result} array of the response to request {@code id}. */

@@ -9,13 +9,16 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Abandonment;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Stream;
 
 /**
  * The Souther sources of a workspace: the {@code .sou} files under the roots the client announced at
- * initialize, with any open editor buffer overlaid on the on-disk text. A {@link #snapshot} is the
+ * initialize or has added since, with any open editor buffer overlaid on the on-disk text. A {@link #snapshot} is the
  * immutable {@link ModuleGraph} the {@link Analyzer} resolves diagnostics and names against — the
  * same module set the batch compiler would link.
  */
@@ -23,7 +26,7 @@ public final class Workspace {
 
     private static final String SUFFIX = ".sou";
 
-    private final List<Path> roots = new ArrayList<>();
+    private final Set<Path> roots = new LinkedHashSet<>();
 
     /** What stops a walk of the workspace short. Reading the files under a root is not a question put
      * to a store, so what abandons the compile does not reach it; this is where it is asked, at every
@@ -44,24 +47,52 @@ public final class Workspace {
         diskScan = null;   // the set of files to scan changed
         roots.clear();
         for (String uri : rootUris) {
-            if (uri == null) {
-                continue;
-            }
-            try {
-                URI parsed = URI.create(uri);
-                if ("file".equals(parsed.getScheme())) {
-                    roots.add(Path.of(parsed));
-                }
-            } catch (IllegalArgumentException _) {
-                // a malformed root URI is skipped rather than failing the session
-            }
+            rootOf(uri).ifPresent(roots::add);
+        }
+    }
+
+    /**
+     * Takes {@code removed} out of the roots and then puts {@code added} in, as the client reports
+     * folders leaving and joining the workspace.
+     *
+     * <p>Whether the roots changed is asked of the set before and after, not of each step: a folder
+     * named on both sides leaves the set as it was, and the disk scan still describes it.
+     *
+     * @return whether the set of roots is now different
+     */
+    public boolean changeRoots(List<String> added, List<String> removed) {
+        Set<Path> before = Set.copyOf(roots);
+        for (String uri : removed) {
+            rootOf(uri).ifPresent(roots::remove);
+        }
+        for (String uri : added) {
+            rootOf(uri).ifPresent(roots::add);
+        }
+        boolean changed = !roots.equals(before);
+        if (changed) {
+            diskScan = null;
+        }
+        return changed;
+    }
+
+    /** The directory a root's {@code file://} URI names, or empty for any other URI. */
+    private static Optional<Path> rootOf(String uri) {
+        if (uri == null) {
+            return Optional.empty();
+        }
+        try {
+            URI parsed = URI.create(uri);
+            return "file".equals(parsed.getScheme()) ? Optional.of(Path.of(parsed)) : Optional.empty();
+        } catch (IllegalArgumentException _) {
+            return Optional.empty();   // a malformed root URI is skipped rather than failing the session
         }
     }
 
     /**
      * The current module graph: every {@code .sou} file under the roots, read from disk, with the
      * given {@code openBuffers} (keyed by document URI) overlaid — an open buffer's unsaved text wins,
-     * and an open document outside the roots is still included.
+     * and an open document outside the roots is still included — and the {@link #modulePath} of the
+     * same roots, so the two are read of one workspace.
      */
     public ModuleGraph snapshot(Map<String, String> openBuffers) {
         if (diskScan == null) {
@@ -69,7 +100,7 @@ public final class Workspace {
         }
         Map<String, String> sources = new LinkedHashMap<>(diskScan);
         sources.putAll(openBuffers);
-        return ModuleGraph.of(sources);
+        return ModuleGraph.of(sources, modulePath());
     }
 
     /** Invalidates the cached disk scan, so the next {@link #snapshot} re-reads the workspace. Called
@@ -87,7 +118,7 @@ public final class Workspace {
      * as a jar in the local repository is not found — knowing about that means reading the build,
      * which the language server does not do.
      */
-    public ModulePath modulePath() {
+    ModulePath modulePath() {
         List<Path> outputs = new ArrayList<>();
         for (Path root : roots) {
             if (!Files.isDirectory(root)) {

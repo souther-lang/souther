@@ -92,7 +92,7 @@ class WhatTheServerAdvertisesIsWhatItAnswersTest {
                     message(2, method.wire(), everyShape())), 2);
             if (error != null) {
                 assertNotEquals(METHOD_NOT_FOUND, error.get("code").asInt(),
-                        capability.key() + " invites " + method.wire() + ", which is refused");
+                        capability.path() + " invites " + method.wire() + ", which is refused");
             }
         }
     }
@@ -110,7 +110,13 @@ class WhatTheServerAdvertisesIsWhatItAnswersTest {
          * the very request behind them, and a server sending one while answering that request is
          * back to answering what it did not advertise.
          */
-        record Capability(String key, Predicate<JsonNode> offers, String offering) implements Told {
+        record Capability(List<String> path, Predicate<JsonNode> offers, String offering)
+                implements Told {
+
+            /** A field at the top of the capabilities object. */
+            Capability(String key, Predicate<JsonNode> offers, String offering) {
+                this(List.of(key), offers, offering);
+            }
         }
 
         /** Announced after the handshake by {@code client/registerCapability}. */
@@ -179,6 +185,19 @@ class WhatTheServerAdvertisesIsWhatItAnswersTest {
         return full != null && (full.isObject() || (full.isBoolean() && full.booleanValue()));
     }
 
+    /**
+     * Folders that change after the handshake, which the options say twice over: {@code supported}
+     * that folders are read at all, and {@code changeNotifications} — {@code true}, or an id to
+     * register the notification under — that a change may be sent.
+     */
+    private static boolean folderChangesNotified(JsonNode value) {
+        JsonNode supported = value.isObject() ? value.get("supported") : null;
+        JsonNode notified = value.isObject() ? value.get("changeNotifications") : null;
+        return supported != null && supported.isBoolean() && supported.booleanValue()
+                && notified != null
+                && ((notified.isBoolean() && notified.booleanValue()) || notified.isString());
+    }
+
     private static Protocol offered(LspMethod method, String wire, String key) {
         return new Protocol(method, wire,
                 new Told.Capability(key, WhatTheServerAdvertisesIsWhatItAnswersTest::trueOrOptions,
@@ -223,6 +242,12 @@ class WhatTheServerAdvertisesIsWhatItAnswersTest {
                             "a sync kind that syncs, or options whose `openClose` is on")),
             new Protocol(LspMethod.DID_CHANGE_WATCHED_FILES, "workspace/didChangeWatchedFiles",
                     new Told.Registration()),
+            new Protocol(LspMethod.DID_CHANGE_WORKSPACE_FOLDERS,
+                    "workspace/didChangeWorkspaceFolders",
+                    new Told.Capability(List.of("workspace", "workspaceFolders"),
+                            WhatTheServerAdvertisesIsWhatItAnswersTest::folderChangesNotified,
+                            "options whose `supported` is on and whose `changeNotifications` is"
+                                    + " on or an id")),
             offered(LspMethod.DOCUMENT_SYMBOL, "textDocument/documentSymbol",
                     "documentSymbolProvider"),
             new Protocol(LspMethod.SEMANTIC_TOKENS_FULL, "textDocument/semanticTokens/full",
@@ -268,11 +293,11 @@ class WhatTheServerAdvertisesIsWhatItAnswersTest {
                     Advertisement.StaticCapability declared = assertInstanceOf(
                             Advertisement.StaticCapability.class, row.method().advertisement(),
                             row.method() + " is announced by a capability");
-                    assertEquals(told.key(), declared.key(),
+                    assertEquals(told.path(), declared.path(),
                             "the capability a client reads before sending " + row.wire());
-                    JsonNode sent = capabilities.get(told.key());
-                    assertNotNull(sent, told.key() + " is in the handshake");
-                    assertTrue(told.offers().test(sent), told.key() + " has to be "
+                    JsonNode sent = at(capabilities, told.path());
+                    assertNotNull(sent, told.path() + " is in the handshake");
+                    assertTrue(told.offers().test(sent), told.path() + " has to be "
                             + told.offering() + " to offer " + row.wire() + ", and is " + sent);
                 }
                 case Told.Registration _ -> assertInstanceOf(
@@ -295,20 +320,58 @@ class WhatTheServerAdvertisesIsWhatItAnswersTest {
         JsonNode capabilities = responseFor(
                 exchange(message(1, "initialize", Map.of())), 1).get("capabilities");
 
-        Set<String> announced = new LinkedHashSet<>();
+        Set<List<String>> announced = new LinkedHashSet<>();
         for (LspMethod method : LspMethod.values()) {
             if (method.advertisement() instanceof Advertisement.StaticCapability capability) {
-                announced.add(capability.key());
+                announced.add(capability.path());
             }
         }
 
-        Set<String> sent = new LinkedHashSet<>();
-        for (String key : capabilities.propertyNames()) {
-            sent.add(key);
+        List<List<String>> missing = new ArrayList<>();
+        for (List<String> path : announced) {
+            if (at(capabilities, path) == null) {
+                missing.add(path);
+            }
         }
+        List<List<String>> unannounced = new ArrayList<>();
+        unannounced(capabilities, List.of(), announced, unannounced);
 
-        assertEquals(announced, sent,
+        assertEquals(List.of(), missing, "advertised and not in the handshake");
+        assertEquals(List.of(), unannounced,
                 "the handshake is the methods' advertisements and nothing written beside them");
+    }
+
+    /** The value at {@code path} under {@code object}, or null where nothing is. */
+    private static JsonNode at(JsonNode object, List<String> path) {
+        JsonNode node = object;
+        for (String key : path) {
+            node = node == null || !node.isObject() ? null : node.get(key);
+        }
+        return node;
+    }
+
+    /**
+     * Every field under {@code node} that no advertisement is at.
+     *
+     * <p>An object is descended into only where an advertisement lies further down it. Anywhere
+     * else it is a value in its own right, and one nobody announced.
+     */
+    private static void unannounced(JsonNode node, List<String> at, Set<List<String>> announced,
+                                    List<List<String>> out) {
+        for (String key : node.propertyNames()) {
+            List<String> path = new ArrayList<>(at);
+            path.add(key);
+            if (announced.contains(path)) {
+                continue;
+            }
+            boolean leadsToOne = announced.stream().anyMatch(
+                    p -> p.size() > path.size() && p.subList(0, path.size()).equals(path));
+            if (leadsToOne && node.get(key).isObject()) {
+                unannounced(node.get(key), path, announced, out);
+            } else {
+                out.add(path);
+            }
+        }
     }
 
     @Test

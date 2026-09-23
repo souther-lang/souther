@@ -7,6 +7,7 @@ import souther.lsp.protocol.Position;
 import souther.lsp.protocol.Range;
 import tools.jackson.databind.JsonNode;
 
+import java.util.List;
 import java.util.Optional;
 
 import static net.unit8.raoh.json.JsonDecoders.combine;
@@ -44,6 +45,16 @@ public final class InboundDecoders {
             combine(field("textDocument", field("uri", string()).asDecoder()),
                     field("contentChanges", list(field("text", string()).asDecoder())))
                     .map((uri, texts) -> new Params.DidChange(uri, texts.get(texts.size() - 1)));
+
+    /** {@code [ { uri, name }, ... ]} — the name is the client's label for a folder and not read. */
+    private static final Decoder<JsonNode, List<String>> FOLDER_URIS =
+            list(field("uri", string()).asDecoder());
+
+    /** {@code { event: { added: [ { uri, name } ], removed: [ { uri, name } ] } }} */
+    public static final Decoder<JsonNode, Params.WorkspaceFoldersChange> WORKSPACE_FOLDERS_CHANGE =
+            field("event", combine(field("added", FOLDER_URIS), field("removed", FOLDER_URIS))
+                    .map(Params.WorkspaceFoldersChange::new))
+                    .asDecoder();
 
     /** {@code { textDocument: { uri } }} */
     public static final Decoder<JsonNode, Params.DocRef> DOC_REF =

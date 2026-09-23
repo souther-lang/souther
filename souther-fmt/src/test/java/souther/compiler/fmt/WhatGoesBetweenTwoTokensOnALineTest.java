@@ -548,6 +548,7 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             ARROW MATCH_KW
             ARROW TYPEVAR
             ARROW UNREACHABLE_KW
+            ASSIGN CONTEXTUAL_KW
             ASSIGN DOT
             ASSIGN FALSE_KW
             ASSIGN IDENT
@@ -574,10 +575,14 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             COMMA TRUE_KW
             COMMA TYPEVAR
             CONSTRUCTS_KW IDENT
+            CONTEXTUAL_KW CONTEXTUAL_KW
+            CONTEXTUAL_KW IDENT
+            CONTEXTUAL_KW LET_KW
+            CONTEXTUAL_KW STRING_LIT
             DATA_KW IDENT
             DECIMAL_LIT MINUS
             DECIMAL_LIT THEN_KW
-            DEPENDS_KW IDENT
+            DEPENDS_KW CONTEXTUAL_KW
             ELSE_KW IDENT
             ELSE_KW IF_KW
             ELSE_KW INT_LIT
@@ -606,7 +611,6 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             IDENT IDENT
             IDENT LBRACE
             IDENT LE
-            IDENT LET_KW
             IDENT OR
             IDENT PIPE
             IDENT PIPEFWD
@@ -614,7 +618,6 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             IDENT PLUSPLUS
             IDENT RBRACE
             IDENT STAR
-            IDENT STRING_LIT
             IDENT THEN_KW
             IDENT VPIPE
             IDENT WITH_KW
