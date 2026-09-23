@@ -1,0 +1,277 @@
+================================================================================
+cases one per pipe
+================================================================================
+
+let f = match x with
+    | A -> 1
+    | B -> 2
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (match-expression
+      (variable (identifier))
+      (match-case (qualified-name (identifier)) (integer-literal))
+      (match-case (qualified-name (identifier)) (integer-literal)))))
+
+================================================================================
+the leading pipe is optional
+================================================================================
+
+let f = match x with A -> 1 | B -> 2
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (match-expression
+      (variable (identifier))
+      (match-case (qualified-name (identifier)) (integer-literal))
+      (match-case (qualified-name (identifier)) (integer-literal)))))
+
+================================================================================
+a pipe back at the enclosing arm column ends the inner match
+================================================================================
+
+let f = match x with
+    | A ->
+        match y with
+            | C -> 1
+            | D -> 2
+    | B -> 3
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (match-expression
+      (variable (identifier))
+      (match-case
+        (qualified-name (identifier))
+        (match-expression
+          (variable (identifier))
+          (match-case (qualified-name (identifier)) (integer-literal))
+          (match-case (qualified-name (identifier)) (integer-literal))))
+      (match-case (qualified-name (identifier)) (integer-literal)))))
+
+================================================================================
+a pipe past the enclosing arm column is the inner match's own
+================================================================================
+
+let f = match x with
+    | A -> match y with
+        | C -> 1
+      | D -> 2
+    | B -> 3
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (match-expression
+      (variable (identifier))
+      (match-case
+        (qualified-name (identifier))
+        (match-expression
+          (variable (identifier))
+          (match-case (qualified-name (identifier)) (integer-literal))
+          (match-case (qualified-name (identifier)) (integer-literal))))
+      (match-case (qualified-name (identifier)) (integer-literal)))))
+
+================================================================================
+on one line the inner match takes every pipe after it
+================================================================================
+
+let f = match x with | A -> match y with | C -> 1 | B -> 2
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (match-expression
+      (variable (identifier))
+      (match-case
+        (qualified-name (identifier))
+        (match-expression
+          (variable (identifier))
+          (match-case (qualified-name (identifier)) (integer-literal))
+          (match-case (qualified-name (identifier)) (integer-literal)))))))
+
+================================================================================
+a column counts code points, so a character outside the basic plane is one column
+================================================================================
+
+let f = match 𠮷 with | A -> match y with | C -> 1
+                      | D -> 2
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (match-expression
+      (variable (identifier))
+      (match-case
+        (qualified-name (identifier))
+        (match-expression
+          (variable (identifier))
+          (match-case (qualified-name (identifier)) (integer-literal))
+          (match-case (qualified-name (identifier)) (integer-literal)))))))
+
+================================================================================
+a tab is one column
+================================================================================
+
+let f = match x with
+    | A -> match y with
+        | C -> 1
+	| D -> 2
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (match-expression
+      (variable (identifier))
+      (match-case
+        (qualified-name (identifier))
+        (match-expression
+          (variable (identifier))
+          (match-case (qualified-name (identifier)) (integer-literal))))
+      (match-case (qualified-name (identifier)) (integer-literal)))))
+
+================================================================================
+a match inside an argument list reads the column of the arm it is written in
+================================================================================
+
+let f = match x with
+    | A -> g(match y with
+        | C -> 1
+        | D -> 2)
+    | B -> 3
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (match-expression
+      (variable (identifier))
+      (match-case
+        (qualified-name (identifier))
+        (application
+          (variable (identifier))
+          (argument-list
+            (match-expression
+              (variable (identifier))
+              (match-case (qualified-name (identifier)) (integer-literal))
+              (match-case (qualified-name (identifier)) (integer-literal))))))
+      (match-case (qualified-name (identifier)) (integer-literal)))))
+
+================================================================================
+case patterns
+================================================================================
+
+let f = match r with
+    | Submitted | Pending as s -> 1
+    | Some v -> 2
+    | Activated(EmailAddress(s)) -> 3
+    | Member { id, mail = m } as whole -> 4
+    | billing.Paid -> 5
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (match-expression
+      (variable (identifier))
+      (match-case
+        (qualified-name (identifier))
+        (qualified-name (identifier))
+        (as-binding (identifier))
+        (integer-literal))
+      (match-case
+        (qualified-name (identifier))
+        (positional-binding (identifier))
+        (integer-literal))
+      (match-case
+        (qualified-name (identifier))
+        (case-unwrap
+          (qualified-name (identifier))
+          (case-unwrap (qualified-name (identifier))))
+        (integer-literal))
+      (match-case
+        (qualified-name (identifier))
+        (record-pattern
+          (field-pattern (identifier))
+          (field-pattern (identifier) (identifier)))
+        (as-binding (identifier))
+        (integer-literal))
+      (match-case
+        (qualified-name (identifier) (identifier))
+        (integer-literal)))))
+
+================================================================================
+a construction is read in a scrutinee
+================================================================================
+
+let f = match Foo { a = 1 } with
+    | A -> 1
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (match-expression
+      (construction
+        (qualified-name (identifier))
+        (field-initializer (identifier) (integer-literal)))
+      (match-case (qualified-name (identifier)) (integer-literal)))))
+
+================================================================================
+a construction is read in an argument list in a scrutinee
+================================================================================
+
+let f = match g(Foo { a = 1 }) with
+    | A -> 1
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (match-expression
+      (application
+        (variable (identifier))
+        (argument-list
+          (construction
+            (qualified-name (identifier))
+            (field-initializer (identifier) (integer-literal)))))
+      (match-case (qualified-name (identifier)) (integer-literal)))))
+
+================================================================================
+an arm says its combination cannot arise
+================================================================================
+
+let f = match x with
+    | A -> unreachable "ruled out by the model"
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (match-expression
+      (variable (identifier))
+      (match-case
+        (qualified-name (identifier))
+        (unreachable-expression (string-literal))))))

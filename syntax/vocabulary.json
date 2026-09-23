@@ -1,0 +1,32 @@
+{
+  "formatVersion": 1,
+  "reservedWords": [
+    "module", "import", "exposing",
+    "data", "invariant",
+    "behavior", "constructs", "depends", "ensures",
+    "match", "with", "as",
+    "let", "if", "then", "else",
+    "guard", "unreachable",
+    "true", "false"
+  ],
+  "contextualWords": [
+    "examples", "for", "example", "fake", "private", "partial", "on", "intrinsic"
+  ],
+  "fixedSpellings": [
+    "module", "import", "exposing",
+    "data", "invariant",
+    "behavior", "constructs", "depends", "ensures",
+    "match", "with", "as",
+    "let", "if", "then", "else",
+    "guard", "unreachable",
+    "true", "false",
+    "{", "}", "(", ")", "[", "]",
+    ":", ",", ".", "...", "=", "|", "->", ">->", "|>", "?", "_", "<?>",
+    "==", "/=", "<", "<=", ">", ">=", "&&", "||",
+    "+", "-", "*", "/", "++"
+  ],
+  "openTokens": [
+    "identifier", "integer-literal", "decimal-literal", "string-literal", "type-variable",
+    "line-comment", "whitespace"
+  ]
+}

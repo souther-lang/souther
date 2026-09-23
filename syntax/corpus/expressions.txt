@@ -1,0 +1,299 @@
+================================================================================
+an argument list on the callee's line applies to it
+================================================================================
+
+let f = g(x)
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (application
+      (variable (identifier))
+      (argument-list (variable (identifier))))))
+
+================================================================================
+a parenthesis that opens a line is the block's result
+================================================================================
+
+let f = {
+    let a = g
+    (x)
+}
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (block
+      (let-binding (identifier) (variable (identifier)))
+      (parenthesized-expression (variable (identifier))))))
+
+================================================================================
+a comment at the end of the callee's line does not join the lines
+================================================================================
+
+let f = {
+    let a = g // the callee
+    (x)
+}
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (block
+      (let-binding (identifier) (variable (identifier)))
+      (parenthesized-expression (variable (identifier))))))
+
+================================================================================
+what is applied is any expression
+================================================================================
+
+let f = adder(1)(x)
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (application
+      (application
+        (variable (identifier))
+        (argument-list (integer-literal)))
+      (argument-list (variable (identifier))))))
+
+================================================================================
+a name through its module is a field taken of a variable
+================================================================================
+
+let f = String.trim(s)
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (application
+      (field-access (variable (identifier)) (identifier))
+      (argument-list (variable (identifier))))))
+
+================================================================================
+precedence of the arithmetic operators
+================================================================================
+
+let f = a + b * c - -d
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (additive-expression
+      (additive-expression
+        (variable (identifier))
+        (multiplicative-expression (variable (identifier)) (variable (identifier))))
+      (negation (variable (identifier))))))
+
+================================================================================
+precedence of comparison and logic
+================================================================================
+
+let f = a == b && c < d || e
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (or-expression
+      (and-expression
+        (comparison (variable (identifier)) (variable (identifier)))
+        (comparison (variable (identifier)) (variable (identifier))))
+      (variable (identifier)))))
+
+================================================================================
+the value pipe binds most loosely and to the left
+================================================================================
+
+let f = xs |> List.map(.value) |> sum
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (pipe-expression
+      (pipe-expression
+        (variable (identifier))
+        (application
+          (field-access (variable (identifier)) (identifier))
+          (argument-list (field-getter (identifier)))))
+      (variable (identifier)))))
+
+================================================================================
+a lambda with a bare parameter
+================================================================================
+
+let f = List.map(x -> x + 1, xs)
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (application
+      (field-access (variable (identifier)) (identifier))
+      (argument-list
+        (lambda
+          (identifier)
+          (additive-expression (variable (identifier)) (integer-literal)))
+        (variable (identifier))))))
+
+================================================================================
+a lambda whose parameters are patterns
+================================================================================
+
+let f = ((a, b), Amount(n), { total }) -> n
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (lambda
+      (tuple-pattern
+        (pattern-name (identifier))
+        (pattern-name (identifier)))
+      (constructor-pattern
+        (qualified-name (identifier))
+        (pattern-name (identifier)))
+      (record-pattern (field-pattern (identifier)))
+      (variable (identifier)))))
+
+================================================================================
+parentheses around one expression, and tuples
+================================================================================
+
+let f = [(a), (a,), (a, b)]
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (list-expression
+      (parenthesized-expression (variable (identifier)))
+      (tuple-expression (variable (identifier)))
+      (tuple-expression (variable (identifier)) (variable (identifier))))))
+
+================================================================================
+a list comprehension
+================================================================================
+
+let f = [Line { n = n } | n > 0, n < 10]
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (list-comprehension
+      (construction
+        (qualified-name (identifier))
+        (field-initializer (identifier) (variable (identifier))))
+      (comparison (variable (identifier)) (integer-literal))
+      (comparison (variable (identifier)) (integer-literal)))))
+
+================================================================================
+a construction, through a module, with a spread
+================================================================================
+
+let f = billing.Invoice { ...draft.lines, total = 500m, note }
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (construction
+      (qualified-name (identifier) (identifier))
+      (record-spread (identifier) (identifier))
+      (field-initializer (identifier) (decimal-literal))
+      (field-initializer (identifier)))))
+
+================================================================================
+literals
+================================================================================
+
+let f = [1, 1.5m, "s", true, false]
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (list-expression
+      (integer-literal)
+      (decimal-literal)
+      (string-literal)
+      (boolean-literal)
+      (boolean-literal))))
+
+================================================================================
+an if with an attempted construction and departures per clause
+================================================================================
+
+let f = if Order(v) as o then o else
+    | nonEmpty -> NoLines
+    | _ -> Invalid
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (if-expression
+      (application
+        (variable (identifier))
+        (argument-list (variable (identifier))))
+      (as-binding (identifier))
+      (variable (identifier))
+      (else-arms
+        (else-arm (identifier) (variable (identifier)))
+        (else-arm (discard) (variable (identifier)))))))
+
+================================================================================
+statements in a block
+================================================================================
+
+let f = {
+    let (a, b) = p
+    let n: Int = a
+    guard Amount(n) as m else Invalid
+    m
+}
+
+--------------------------------------------------------------------------------
+
+(source-file
+  (let-definition
+    (identifier)
+    (block
+      (let-destructuring
+        (tuple-pattern (pattern-name (identifier)) (pattern-name (identifier)))
+        (variable (identifier)))
+      (let-binding
+        (identifier)
+        (type-reference (qualified-name (identifier)))
+        (variable (identifier)))
+      (guard-statement
+        (application
+          (variable (identifier))
+          (argument-list (variable (identifier))))
+        (as-binding (identifier))
+        (variable (identifier)))
+      (variable (identifier)))))

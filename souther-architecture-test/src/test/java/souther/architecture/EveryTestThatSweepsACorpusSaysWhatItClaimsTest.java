@@ -83,15 +83,17 @@ class EveryTestThatSweepsACorpusSaysWhatItClaimsTest {
      * What hands out a population, as binary names.
      *
      * <p>Each reads something the repository carries and hands it out to be swept: the conformance
-     * corpora and the models compiled beside them, and the sources the formatter is held to. A test
-     * that reaches one of these is asking about all of what it hands out.
+     * corpora and the models compiled beside them, the sources the formatter is held to, and the
+     * cases of the published syntax contract. A test that reaches one of these is asking about all
+     * of what it hands out.
      */
     private static final Set<String> CORPORA = Set.of(
             "souther/compiler/conformance/ConformanceCorpus",
             "souther/compiler/conformance/RepositoryModels",
             "souther/compiler/fmt/FormatterCorpus",
             "souther/compiler/fmt/WhatGoesBetweenTwoTokensOnALineTest",
-            "souther/bench/Corpus");
+            "souther/bench/Corpus",
+            "souther/compiler/cst/contract/SyntaxCorpus");
 
     @Test
     void everyTestReachingACorpusDeclaresWhatItClaims() {

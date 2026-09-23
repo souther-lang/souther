@@ -1,0 +1,480 @@
+(* The Souther grammar.
+
+   This file is normative. It states which texts are Souther source and, for each one, the
+   contract syntax tree an implementation reads it as. The compiler in this repository is one
+   implementation of it and is tested against it; it is not where the grammar comes from.
+
+   tag::notation[]
+   Notation
+
+   The grammar is written in ISO/IEC 14977 EBNF: `,` joins, `|` separates alternatives, `[ ]` is
+   optional, `{ }` repeats zero or more times, `( )` groups, and `-` excepts. A production is
+   `name = expression ;`, and a name is lower-case words joined by `-`. A terminal is written in
+   double quotes, or in single quotes when it holds a double quote. `? text ?` is a set of
+   characters stated in words. Beyond that, four additions.
+
+   `@node` before a production makes it a node of the contract syntax tree, and its name is the
+   node's stable identifier. A production without it is grammar only: it names a part of a rule
+   and is transparent in the tree, which holds the nodes of what it matched in its place. A
+   terminal is not a node, except where a production marked `@node` matches only that terminal.
+   A comment and whitespace are not in the tree.
+
+   A quoted word that the vocabulary does not list as reserved is a contextual word. It matches
+   an identifier spelled that way, and an identifier it matches is a keyword in the tree and not
+   an `identifier` node.
+
+   `name[Lambda]` declares that a production takes the parameter `Lambda`, which is on or off. A
+   reference writes `name[+Lambda]` to turn it on or `name[~Lambda]` to turn it off; a reference
+   that writes neither passes on the value the enclosing production has, and so is written only in
+   a production that takes the parameter too. There are two parameters. `Lambda` decides whether
+   a lambda may begin here, and `Union` whether a type may be an anonymous union.
+
+   `< >` is a restriction: it matches no text and holds or does not hold where it stands, and an
+   alternative or a repetition standing behind one is taken only where it holds.
+
+   `<if Lambda>`:: the parameter is on.
+   `<no-line-break>`:: no line terminator stands between the meaningful token before this point
+   and the one after it.
+   `<not-ahead X>`:: the text from here does not begin with anything X matches.
+   `<arm-column>`:: the match-arm column rule, below.
+   `<pipe-owner>`:: the pipe ownership rule, below.
+   end::notation[]
+
+   tag::layout[]
+   Lines and columns
+
+   A line terminator is an LF, or a CR immediately followed by an LF. A CR not followed by an LF
+   is whitespace and is not a line terminator. A column is the number of Unicode code points
+   between the end of the last line terminator before a point, or the start of the text, and that
+   point, counted from zero. A tab is one code point and so one column.
+
+   A meaningful token is a token that is not whitespace and not a comment.
+
+   Match-arm column rule. The arm column of a `match-expression` is the column of the `|` before
+   its first case, where one is written, and otherwise the column of the first token of its first
+   case. The enclosing match of a `match-expression` is the `match-expression` of the nearest
+   `match-case` the `match-expression` is written inside, if any. A `|` after one of a match's
+   cases is taken as the start of another case of it only where the `|` stands at a column
+   greater than the arm column of its enclosing match; where there is no enclosing match, every
+   such `|` is. Nothing else in the grammar reads a column.
+
+   Pipe ownership rule. A `|`-led sequence is one of: a match's cases, an `else`'s arms, an
+   `ensures` clause's arms, an example's rows, a fake's rows. A `|` belongs to the innermost
+   `|`-led sequence that can continue at that point, before a sequence or a form enclosing it may
+   take it; a match's cases can continue at a `|` only where the match-arm column rule lets them.
+   Which sequence a `|` belongs to is decided by the `|` and what encloses it, before the row, arm
+   or case after it is read. If that row, arm or case is then malformed, the text is not read
+   again with the `|` given to an enclosing sequence.
+
+   The same holds wherever this grammar decides between readings with `<not-ahead X>`: the
+   reading the restriction leaves is the one taken, and a failure later inside it is a syntax
+   error rather than a reason to read the text the other way.
+   end::layout[]
+*)
+
+
+(* ---- Lexical grammar ------------------------------------------------------------------- *)
+
+(* tag::lexical[] *)
+line-terminator = ? LF ? | ? CR ?, ? LF ? ;
+
+whitespace = whitespace-character, { whitespace-character } ;
+
+whitespace-character = ? U+0020 space ? | ? U+0009 tab ? | ? U+000D CR ? | ? U+000A LF ? ;
+
+line-comment = "//", { comment-character } ;
+
+comment-character = ? any code point other than LF, and other than a CR that an LF follows ? ;
+
+@node identifier = identifier-word - reserved-word ;
+
+identifier-word = identifier-start, { identifier-continue } ;
+
+identifier-start = ? a code point with the Unicode property XID_Start ? ;
+
+identifier-continue = ? a code point with the Unicode property XID_Continue ? ;
+
+reserved-word = ? a word the vocabulary lists as reserved ? ;
+
+@node type-variable = "'", identifier-word ;
+
+@node integer-literal = digit, { digit } ;
+
+@node decimal-literal = digit, { digit }, [ ".", digit, { digit } ], "m" ;
+
+digit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
+
+@node string-literal = '"', { string-character | escape }, '"' ;
+
+string-character = ? any code point other than a double quote, a backslash, LF, and a CR that an
+                     LF follows ? ;
+
+escape = "\", ( "n" | "t" | "r" | '"' | "\" ) ;
+(* end::lexical[] *)
+
+(* tag::tokens[]
+   The text is read as a sequence of tokens from its start, each token the longest that a
+   production above, a reserved word, or a fixed spelling of the vocabulary matches there. An
+   identifier word that a reserved word spells is that reserved word. The `m` of a
+   `decimal-literal` is its suffix only where no identifier-continue code point follows it; where
+   one does, the digits are an `integer-literal` and the word after them begins with the `m`. A `_` that an
+   identifier-continue code point follows is no token. A text that is
+   not a sequence of these tokens, whitespace and comments is not Souther source.
+   end::tokens[] *)
+
+
+(* ---- Files ----------------------------------------------------------------------------- *)
+
+(* tag::modules[] *)
+@node source-file = [ examples-file-header | module-header ], { import-declaration },
+                    { top-level-form } ;
+
+top-level-form = data-declaration | behavior-declaration | let-definition
+               | example-declaration | fake-declaration ;
+
+@node module-header = "module", qualified-name, [ exposing-clause ] ;
+(* end::modules[] *)
+
+(* tag::exposed-values[] *)
+@node exposing-clause = "exposing", "(", [ exposed-entry, { ",", exposed-entry }, [ "," ] ], ")" ;
+
+@node exposed-entry = qualified-name, [ ":", type[+Union] ] ;
+(* end::exposed-values[] *)
+
+(* tag::imports[] *)
+@node import-declaration = "import", qualified-name, [ import-alias ], [ name-list ] ;
+
+@node import-alias = "as", identifier ;
+
+@node name-list = "(", [ identifier, { ",", identifier }, [ "," ] ], ")" ;
+(* end::imports[] *)
+
+(* tag::qualified-reference[] *)
+@node qualified-name = identifier, { ".", identifier } ;
+(* end::qualified-reference[] *)
+
+
+(* ---- Data ------------------------------------------------------------------------------ *)
+
+(* tag::data[] *)
+@node data-declaration = "data", identifier, [ "=", data-body ], { invariant-clause } ;
+
+data-body = product-body | sum-body | newtype-body ;
+(* end::data[] *)
+
+(* tag::product-data[] *)
+@node product-body = "{", [ product-member, { ",", product-member }, [ "," ] ], "}" ;
+
+product-member = field | field-spread ;
+
+@node field = identifier, ":", type[~Union] ;
+(* end::product-data[] *)
+
+(* tag::field-spread[] *)
+@node field-spread = "...", identifier ;
+(* end::field-spread[] *)
+
+(* tag::sum-data[] *)
+@node sum-body = identifier, "|", identifier, { "|", identifier } ;
+(* end::sum-data[] *)
+
+(* tag::newtype[] *)
+@node newtype-body = <not-ahead "(">, type[~Union] ;
+(* end::newtype[] *)
+
+(* tag::invariant-declaration[] *)
+@node invariant-clause = "invariant", [ clause-name, "=" ], expression[+Lambda] ;
+
+clause-name = identifier | discard ;
+(* end::invariant-declaration[] *)
+
+
+(* ---- Behaviors ------------------------------------------------------------------------- *)
+
+(* tag::behavior-io[] *)
+@node behavior-declaration = "behavior", identifier,
+                             ( ":", behavior-signature | "=", composition, { ensures-clause } ) ;
+
+@node behavior-signature = parameter-list, "->", type[+Union],
+                           { constructs-clause | depends-clause | ensures-clause } ;
+
+@node parameter-list = "(", [ parameter, { ",", parameter }, [ "," ] ], ")" ;
+
+@node parameter = identifier, ":", type[+Union] ;
+(* end::behavior-io[] *)
+
+(* tag::constructs[] *)
+@node constructs-clause = "constructs", qualified-name, { ",", qualified-name }, [ "," ] ;
+(* end::constructs[] *)
+
+(* tag::depends-on[] *)
+@node depends-clause = "depends", "on", qualified-name, { ",", qualified-name }, [ "," ] ;
+(* end::depends-on[] *)
+
+(* tag::ensures[] *)
+@node ensures-clause = "ensures", [ clause-name, "=" ], ensures-body ;
+
+ensures-body = ensures-arm, { <pipe-owner>, "|", ensures-arm }
+             | <not-ahead ensures-arm-head>, expression[+Lambda] ;
+
+@node ensures-arm = ensures-arm-head, expression[+Lambda] ;
+
+ensures-arm-head = qualified-name, { "|", qualified-name }, "->" ;
+(* end::ensures[] *)
+
+(* tag::sequential-composition[] *)
+@node composition = qualified-name, { ">->", qualified-name }, [ "->", type[+Union] ] ;
+(* end::sequential-composition[] *)
+
+
+(* ---- Definitions ----------------------------------------------------------------------- *)
+
+(* tag::fn-declaration[] *)
+@node let-definition = [ private-modifier ], [ partial-modifier ], "let", identifier,
+                       [ function-parameter-list ], [ ":", type[+Union] ], "=", definition-body ;
+
+@node private-modifier = "private" ;
+
+@node partial-modifier = "partial" ;
+
+@node function-parameter-list = "(", function-parameter, { ",", function-parameter }, [ "," ], ")" ;
+
+@node function-parameter = ( identifier | destructuring-pattern ), [ ":", type[+Union] ] ;
+
+definition-body = intrinsic-body | block | <not-ahead "{">, expression[+Lambda] ;
+
+@node intrinsic-body = "intrinsic", string-literal ;
+(* end::fn-declaration[] *)
+
+
+(* ---- Examples and fakes ---------------------------------------------------------------- *)
+
+(* tag::examples[] *)
+@node example-declaration = "example", identifier, "|", example-row,
+                            { <pipe-owner>, "|", example-row } ;
+
+@node example-row = [ string-literal, ":" ], argument-list, [ with-clause ], "->",
+                    ( answer-owed | expression[+Lambda] ) ;
+(* end::examples[] *)
+
+(* tag::example-answer-owed[] *)
+@node answer-owed = "<?>" ;
+(* end::example-answer-owed[] *)
+
+(* tag::example-fakes[] *)
+@node with-clause = "with", with-binding, { ",", with-binding }, [ "," ] ;
+
+@node with-binding = qualified-name, "=", expression[~Lambda] ;
+
+@node fake-declaration = "fake", qualified-name, "|", fake-row, { <pipe-owner>, "|", fake-row } ;
+
+@node fake-row = ( argument-list | discard ), "->", expression[+Lambda] ;
+(* end::example-fakes[] *)
+
+(* tag::example-placement[] *)
+@node examples-file-header = "examples", "for", qualified-name ;
+(* end::example-placement[] *)
+
+
+(* ---- Types ----------------------------------------------------------------------------- *)
+
+(* tag::a-type-is-written-in-a-type-position[] *)
+(* `type[+Union]` is read where a whole type is: a behavior's parameter and output, a
+   composition's declared output, a definition's parameter and declared result, a binding's
+   annotation, and a function type's parameter and result. `type[~Union]` is a data field's type
+   and a newtype's base. A type argument and a tuple type's member are a `type-term`. *)
+type[Union] = type-core | optional-type ;
+
+@node optional-type[Union] = type-core, "?" ;
+
+type-core[Union] = type-term | <if Union>, union-type ;
+
+@node union-type = type-term, "|", type-term, { "|", type-term } ;
+
+type-term = type-reference | tuple-type | parenthesized-type | function-type ;
+
+@node type-reference = qualified-name, [ type-arguments ] | type-variable ;
+
+@node type-arguments = "<", type-term, { ",", type-term }, [ "," ], ">" ;
+
+@node tuple-type = "(", [ type-term, ",", [ type-term, { ",", type-term }, [ "," ] ] ], ")" ;
+
+@node parenthesized-type = "(", type-term, ")" ;
+
+@node function-type = "(", [ type[+Union], { ",", type[+Union] }, [ "," ] ], ")", "->",
+                      type[+Union] ;
+(* end::a-type-is-written-in-a-type-position[] *)
+
+
+(* ---- Blocks and statements ------------------------------------------------------------- *)
+
+(* tag::block-expression[] *)
+@node block = "{", { statement }, expression[+Lambda], "}" ;
+
+statement = let-binding | let-destructuring | guard-statement ;
+(* end::block-expression[] *)
+
+(* tag::let[] *)
+@node let-binding = "let", identifier, [ ":", type[+Union] ], "=", expression[+Lambda] ;
+
+@node let-destructuring = "let", destructuring-pattern, "=", expression[+Lambda] ;
+(* end::let[] *)
+
+(* tag::guard[] *)
+@node guard-statement = "guard", expression[+Lambda], [ as-binding ], "else",
+                        else-body[+Lambda] ;
+(* end::guard[] *)
+
+(* tag::attempt-departures[] *)
+else-body[Lambda] = else-arms | expression ;
+
+@node else-arms = else-arm, { <pipe-owner>, else-arm } ;
+
+@node else-arm = "|", ( identifier | discard ), "->", expression[+Lambda] ;
+(* end::attempt-departures[] *)
+
+(* tag::attempted-construction[] *)
+@node as-binding = "as", identifier ;
+(* end::attempted-construction[] *)
+
+
+(* ---- Patterns -------------------------------------------------------------------------- *)
+
+(* tag::binding-patterns[] *)
+pattern = pattern-name | destructuring-pattern ;
+
+destructuring-pattern = tuple-pattern | record-pattern | constructor-pattern ;
+
+@node pattern-name = identifier | discard ;
+
+@node tuple-pattern = "(", [ pattern, { ",", pattern }, [ "," ] ], ")" ;
+
+@node record-pattern = "{", [ field-pattern, { ",", field-pattern }, [ "," ] ], "}" ;
+
+@node field-pattern = identifier, [ "=", identifier ] ;
+
+@node constructor-pattern = qualified-name, "(", pattern, ")" ;
+
+@node discard = "_" ;
+(* end::binding-patterns[] *)
+
+
+(* ---- Expressions ----------------------------------------------------------------------- *)
+
+(* tag::pipe[] *)
+expression[Lambda] = disjunction | pipe-expression ;
+
+@node pipe-expression[Lambda] = expression, "|>", disjunction ;
+(* end::pipe[] *)
+
+(* tag::operators[] *)
+disjunction[Lambda] = conjunction | or-expression ;
+
+@node or-expression[Lambda] = disjunction, "||", conjunction ;
+
+conjunction[Lambda] = comparand | and-expression ;
+
+@node and-expression[Lambda] = conjunction, "&&", comparand ;
+
+comparand[Lambda] = sum | comparison ;
+
+@node comparison[Lambda] = sum, ( "==" | "/=" | "<" | "<=" | ">" | ">=" ), sum ;
+
+sum[Lambda] = product | additive-expression ;
+
+@node additive-expression[Lambda] = sum, ( "+" | "-" | "++" ), product ;
+
+product[Lambda] = unary | multiplicative-expression ;
+
+@node multiplicative-expression[Lambda] = product, ( "*" | "/" ), unary ;
+
+unary[Lambda] = postfix | negation ;
+
+@node negation[Lambda] = "-", unary ;
+(* end::operators[] *)
+
+(* tag::application[] *)
+postfix[Lambda] = primary | field-access | application ;
+
+@node field-access[Lambda] = postfix, ".", identifier ;
+
+@node application[Lambda] = postfix, <no-line-break>, argument-list ;
+
+@node argument-list = "(", [ expression[+Lambda], { ",", expression[+Lambda] }, [ "," ] ], ")" ;
+(* end::application[] *)
+
+(* tag::expressions[] *)
+primary[Lambda] = <if Lambda>, lambda
+                | field-getter
+                | match-expression
+                | if-expression
+                | unreachable-expression
+                | literal
+                | parenthesized-expression
+                | tuple-expression
+                | list-expression
+                | list-comprehension
+                | block
+                | construction
+                | variable ;
+
+literal = integer-literal | decimal-literal | string-literal | boolean-literal ;
+
+@node boolean-literal = "true" | "false" ;
+
+@node variable = <not-ahead qualified-name, "{">, identifier ;
+(* end::expressions[] *)
+
+(* tag::blocks[] *)
+@node lambda = identifier, "->", expression[+Lambda]
+             | "(", pattern, { ",", pattern }, [ "," ], ")", "->", expression[+Lambda] ;
+
+@node field-getter = ".", identifier ;
+(* end::blocks[] *)
+
+(* tag::tuple[] *)
+@node parenthesized-expression = "(", expression[+Lambda], ")" ;
+
+@node tuple-expression = "(", expression[+Lambda], ",",
+                         [ expression[+Lambda], { ",", expression[+Lambda] }, [ "," ] ], ")" ;
+(* end::tuple[] *)
+
+(* tag::stdlib-list[] *)
+@node list-expression = "[", [ expression[+Lambda], { ",", expression[+Lambda] }, [ "," ] ], "]" ;
+
+@node list-comprehension = "[", expression[+Lambda], "|", expression[+Lambda],
+                           { ",", expression[+Lambda] }, [ "," ], "]" ;
+(* end::stdlib-list[] *)
+
+(* tag::record-literal[] *)
+@node construction = qualified-name, "{",
+                     [ construction-member, { ",", construction-member }, [ "," ] ], "}" ;
+
+construction-member = field-initializer | record-spread ;
+
+@node field-initializer = identifier, [ "=", expression[+Lambda] ] ;
+
+@node record-spread = "...", identifier, { ".", identifier } ;
+(* end::record-literal[] *)
+
+(* tag::if[] *)
+@node if-expression[Lambda] = "if", expression, [ as-binding ], "then", expression, "else",
+                              else-body ;
+(* end::if[] *)
+
+(* tag::match[] *)
+@node match-expression[Lambda] = "match", expression, "with", [ "|" ], match-case,
+                                 { <arm-column>, <pipe-owner>, "|", match-case } ;
+
+@node match-case[Lambda] = qualified-name, { "|", qualified-name },
+                           [ case-unwrap | positional-binding ], [ record-pattern ],
+                           [ as-binding ], "->", expression ;
+
+@node case-unwrap = "(", qualified-name, [ case-unwrap ], ")" ;
+
+@node positional-binding = identifier ;
+(* end::match[] *)
+
+(* tag::unreachable[] *)
+@node unreachable-expression = "unreachable", string-literal ;
+(* end::unreachable[] *)
