@@ -124,81 +124,105 @@ record Grammar(List<Production> productions, List<Region> regions) {
     }
 
     /**
-     * Every terminal the productions outside {@code except} write. The lexical grammar writes
-     * characters a token is made of, and the rest write tokens; which is which is the region a
-     * production lies in.
+     * The productions of the lexical grammar. The grammar's head names the region tagged
+     * {@code lexical} as the boundary: what is inside says how characters make tokens, and every
+     * production after it is the structural grammar, which says how tokens make the tree.
      */
-    Set<String> terminalsOutside(Region except) {
+    Set<String> lexical() {
+        return new LinkedHashSet<>(region("lexical").productions());
+    }
+
+    /** Every terminal the structural grammar writes: each one a token, not a character. */
+    Set<String> structuralTerminals() {
         Set<String> out = new LinkedHashSet<>();
-        for (Production each : productions) {
-            if (!except.productions().contains(each.name())) {
-                collectTerminals(each.body(), out);
+        for (Production each : structural()) {
+            for (Expr part : everyPart(each.body())) {
+                if (part instanceof Terminal it) {
+                    out.add(it.text());
+                }
             }
         }
         return out;
     }
 
-    private static void collectTerminals(Expr expr, Set<String> into) {
-        switch (expr) {
-            case Terminal it -> into.add(it.text());
-            case Sequence it -> it.parts().forEach(part -> collectTerminals(part, into));
-            case Choice it -> it.alternatives().forEach(part -> collectTerminals(part, into));
-            case Optional it -> collectTerminals(it.body(), into);
-            case Repetition it -> collectTerminals(it.body(), into);
-            case Except it -> {
-                collectTerminals(it.from(), into);
-                collectTerminals(it.excepted(), into);
-            }
-            case NotAhead it -> collectTerminals(it.ahead(), into);
-            case Reference _, Special _, If _, Condition _ -> {
+    /** The lexical productions the structural grammar names, which are the tokens it reads. */
+    Set<String> lexicalNamedByTheStructure() {
+        Set<String> lexical = lexical();
+        Set<String> out = new LinkedHashSet<>();
+        for (Production each : structural()) {
+            for (Reference reference : references(each.body())) {
+                if (lexical.contains(reference.name())) {
+                    out.add(reference.name());
+                }
             }
         }
+        return out;
+    }
+
+    private List<Production> structural() {
+        Set<String> lexical = lexical();
+        return productions.stream().filter(each -> !lexical.contains(each.name())).toList();
+    }
+
+    /** Every {@code ? text ?} the productions write, in the order they write them. */
+    List<Special> specials() {
+        List<Special> out = new ArrayList<>();
+        for (Production each : productions) {
+            for (Expr part : everyPart(each.body())) {
+                if (part instanceof Special it) {
+                    out.add(it);
+                }
+            }
+        }
+        return out;
     }
 
     /** Every reference {@code expr} makes, in the order it makes them. */
     static List<Reference> references(Expr expr) {
         List<Reference> out = new ArrayList<>();
-        collectReferences(expr, out);
-        return out;
-    }
-
-    private static void collectReferences(Expr expr, List<Reference> into) {
-        switch (expr) {
-            case Reference it -> into.add(it);
-            case Sequence it -> it.parts().forEach(part -> collectReferences(part, into));
-            case Choice it -> it.alternatives().forEach(part -> collectReferences(part, into));
-            case Optional it -> collectReferences(it.body(), into);
-            case Repetition it -> collectReferences(it.body(), into);
-            case Except it -> {
-                collectReferences(it.from(), into);
-                collectReferences(it.excepted(), into);
-            }
-            case NotAhead it -> collectReferences(it.ahead(), into);
-            case Terminal _, Special _, If _, Condition _ -> {
+        for (Expr part : everyPart(expr)) {
+            if (part instanceof Reference it) {
+                out.add(it);
             }
         }
+        return out;
     }
 
     /** Every {@code <if P>} {@code expr} writes. */
     static List<If> conditionsOnParameters(Expr expr) {
         List<If> out = new ArrayList<>();
-        collectIfs(expr, out);
+        for (Expr part : everyPart(expr)) {
+            if (part instanceof If it) {
+                out.add(it);
+            }
+        }
         return out;
     }
 
-    private static void collectIfs(Expr expr, List<If> into) {
+    /**
+     * {@code expr} and every expression inside it, outermost first. The one walk every question
+     * above is asked of, so a kind of expression added to the notation is walked into by all of
+     * them or by none.
+     */
+    static List<Expr> everyPart(Expr expr) {
+        List<Expr> out = new ArrayList<>();
+        collectParts(expr, out);
+        return out;
+    }
+
+    private static void collectParts(Expr expr, List<Expr> into) {
+        into.add(expr);
         switch (expr) {
-            case If it -> into.add(it);
-            case Sequence it -> it.parts().forEach(part -> collectIfs(part, into));
-            case Choice it -> it.alternatives().forEach(part -> collectIfs(part, into));
-            case Optional it -> collectIfs(it.body(), into);
-            case Repetition it -> collectIfs(it.body(), into);
+            case Sequence it -> it.parts().forEach(part -> collectParts(part, into));
+            case Choice it -> it.alternatives().forEach(part -> collectParts(part, into));
+            case Optional it -> collectParts(it.body(), into);
+            case Repetition it -> collectParts(it.body(), into);
             case Except it -> {
-                collectIfs(it.from(), into);
-                collectIfs(it.excepted(), into);
+                collectParts(it.from(), into);
+                collectParts(it.excepted(), into);
             }
-            case NotAhead it -> collectIfs(it.ahead(), into);
-            case Reference _, Terminal _, Special _, Condition _ -> {
+            case NotAhead it -> collectParts(it.ahead(), into);
+            case Reference _, Terminal _, Special _, If _, Condition _ -> {
             }
         }
     }

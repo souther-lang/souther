@@ -1,5 +1,6 @@
 {
   "formatVersion": 1,
+  "unicodeVersion": "17.0.0",
   "reservedWords": [
     "module", "import", "exposing",
     "data", "invariant",
@@ -27,6 +28,9 @@
   ],
   "openTokens": [
     "identifier", "integer-literal", "decimal-literal", "string-literal", "type-variable",
+    "line-comment", "whitespace"
+  ],
+  "trivia": [
     "line-comment", "whitespace"
   ]
 }

@@ -5,6 +5,23 @@
    implementation of it and is tested against it; it is not where the grammar comes from.
 
    tag::notation[]
+   Text, tokens and trees
+
+   A source is a file encoded in UTF-8, and its text is the sequence of Unicode scalar values the
+   file decodes to. A file that is not well-formed UTF-8 is not Souther source. U+FEFF means
+   nothing special at the start of a file or anywhere else, so a file that begins with a byte order
+   mark begins with a character no token begins. Where this grammar names a Unicode property, it
+   is the property as the Unicode version `vocabulary.json` names as `unicodeVersion` defines it,
+   and the grammar writes that version where it names one.
+
+   The grammar is in two parts. The lexical grammar says how the characters of a text make
+   tokens, and is the productions of the region tagged `lexical`. The token classes are the
+   lexical productions `vocabulary.json` lists as `openTokens`, together with its fixed spellings;
+   every other lexical production names a part of a token and is no token of its own. The open
+   token classes it lists as `trivia` separate tokens and are in no tree. The structural grammar is every production after the lexical grammar. It says how
+   tokens make the contract syntax tree, and it refers to the lexical grammar only through the
+   token classes.
+
    Notation
 
    The grammar is written in ISO/IEC 14977 EBNF: `,` joins, `|` separates alternatives, `[ ]` is
@@ -17,11 +34,13 @@
    node's stable identifier. A production without it is grammar only: it names a part of a rule
    and is transparent in the tree, which holds the nodes of what it matched in its place. A
    terminal is not a node, except where a production marked `@node` matches only that terminal.
-   A comment and whitespace are not in the tree.
+   Trivia is not in the tree.
 
-   A quoted word that the vocabulary does not list as reserved is a contextual word. It matches
-   an identifier spelled that way, and an identifier it matches is a keyword in the tree and not
-   an `identifier` node.
+   In the structural grammar, a quoted word that `vocabulary.json` lists as one of its
+   `contextualWords` is a contextual word. It matches an identifier spelled that way, and an
+   identifier it matches is a keyword in the tree and not an `identifier` node. Every other
+   terminal of the structural grammar is a fixed spelling and matches the token so spelled. A
+   terminal of the lexical grammar is a character or a run of characters, and nothing else.
 
    `name[Lambda]` declares that a production takes the parameter `Lambda`, which is on or off. A
    reference writes `name[+Lambda]` to turn it on or `name[~Lambda]` to turn it off; a reference
@@ -44,11 +63,11 @@
    Lines and columns
 
    A line terminator is an LF, or a CR immediately followed by an LF. A CR not followed by an LF
-   is whitespace and is not a line terminator. A column is the number of Unicode code points
-   between the end of the last line terminator before a point, or the start of the text, and that
-   point, counted from zero. A tab is one code point and so one column.
+   is whitespace and is not a line terminator. A column is the number of scalar values between
+   the end of the last line terminator before a point, or the start of the text, and that point,
+   counted from zero. A tab is one scalar value and so one column.
 
-   A meaningful token is a token that is not whitespace and not a comment.
+   A meaningful token is a token that is not trivia.
 
    Match-arm column rule. The arm column of a `match-expression` is the column of the `|` before
    its first case, where one is written, and otherwise the column of the first token of its first
@@ -84,17 +103,17 @@ whitespace-character = ? U+0020 space ? | ? U+0009 tab ? | ? U+000D CR ? | ? U+0
 
 line-comment = "//", { comment-character } ;
 
-comment-character = ? any code point other than LF, and other than a CR that an LF follows ? ;
+comment-character = ? any scalar value other than LF, and other than a CR that an LF follows ? ;
 
 @node identifier = identifier-word - reserved-word ;
 
 identifier-word = identifier-start, { identifier-continue } ;
 
-identifier-start = ? a code point with the Unicode property XID_Start ? ;
+identifier-start = ? a scalar value with the property XID_Start in Unicode 17.0.0 ? ;
 
-identifier-continue = ? a code point with the Unicode property XID_Continue ? ;
+identifier-continue = ? a scalar value with the property XID_Continue in Unicode 17.0.0 ? ;
 
-reserved-word = ? a word the vocabulary lists as reserved ? ;
+reserved-word = ? a word vocabulary.json lists as one of its reservedWords ? ;
 
 @node type-variable = "'", identifier-word ;
 
@@ -106,20 +125,20 @@ digit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
 
 @node string-literal = '"', { string-character | escape }, '"' ;
 
-string-character = ? any code point other than a double quote, a backslash, LF, and a CR that an
-                     LF follows ? ;
+string-character = ? any scalar value other than a double quote, a backslash, LF, and a CR that
+                     an LF follows ? ;
 
 escape = "\", ( "n" | "t" | "r" | '"' | "\" ) ;
 (* end::lexical[] *)
 
 (* tag::tokens[]
-   The text is read as a sequence of tokens from its start, each token the longest that a
-   production above, a reserved word, or a fixed spelling of the vocabulary matches there. An
-   identifier word that a reserved word spells is that reserved word. The `m` of a
-   `decimal-literal` is its suffix only where no identifier-continue code point follows it; where
-   one does, the digits are an `integer-literal` and the word after them begins with the `m`. A `_` that an
-   identifier-continue code point follows is no token. A text that is
-   not a sequence of these tokens, whitespace and comments is not Souther source.
+   The text is read as a sequence of tokens from its start, each token the longest that a token
+   class matches there: an open token class, or a fixed spelling. An identifier word that a
+   reserved word spells is that reserved word, which is a fixed spelling, and not an
+   `identifier`. The `m` of a `decimal-literal` is its suffix only where no identifier-continue
+   scalar value follows it; where one does, the digits are an `integer-literal` and the word after
+   them begins with the `m`. A `_` that an identifier-continue scalar value follows is no token. A
+   text that is not a sequence of tokens is not Souther source.
    end::tokens[] *)
 
 

@@ -8,11 +8,19 @@ this comes from.
   `@node` marking the productions that are nodes of the contract syntax tree, two grammatical
   parameters, and restrictions for what plain EBNF does not say — a line break before an argument
   list, which `match` a `|` belongs to, and the readings a prefix commits to.
-- `vocabulary.json` lists the reserved words, the contextual words, the fixed spellings and the open
-  token classes the grammar is written in.
-- `corpus/` holds sources in tree-sitter's test format. A case either gives the contract tree its
-  source is, or is marked `:error` and says only that the source is not Souther. Where a reading of
-  a refused source stops, and what it recovers, is not part of the contract.
+- `vocabulary.json` lists the reserved words, the contextual words, the fixed spellings, the open
+  token classes and which of them are trivia, and the Unicode version every Unicode property the
+  grammar names is read in.
+- `corpus/` holds sources each paired with what the contract says of it. A case either gives the
+  contract tree its source is, or says only that the source is not Souther. Where a reading of a
+  refused source stops, and what it recovers, is not part of the contract.
+
+The corpus is written in the part of tree-sitter's test format that a tree-sitter grammar's
+`test/corpus` reads as it is, and in nothing else. A case is a line of `=`, its name, an optional
+`:error` line, a line of `=`, the source, a line of `-`, and the expected tree as an S-expression
+of the `@node` names, which is empty for an `:error` case. A source keeps every character written
+between the lines around it, a CR included, apart from the blank lines at either end. No other
+attribute and no field name is used.
 
 `corpus/line-terminators.txt` writes LF, CR LF and a CR on its own where each case needs one, and is
 kept byte for byte (see `.gitattributes`).
