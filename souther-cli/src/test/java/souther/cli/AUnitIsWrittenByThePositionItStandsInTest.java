@@ -9,16 +9,17 @@ import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * One unit, {@code Closed}, written in every position a unit crosses in. On its own and as a field
- * it writes its own form, the empty object; as a case of a sum with a field-bearing case the sum
- * puts the tag in that object; as a case of an enumeration the sum writes the case's name instead
- * (spec §encoder-derivation, §sum-discrimination). The four rows are the ones the specification's
- * example under §encoder-derivation writes, over the same declarations.
+ * One unit, {@code Closed}, written in the positions spec §encoder-derivation names for it. Wherever
+ * the unit is the declared type — a behavior's input or output, a field, a {@code List} or
+ * {@code Set} element, a {@code Map} value, at any depth and as an optional's present value — it
+ * writes its own form, the empty object. As a case of a sum with a field-bearing case the sum puts
+ * the tag in that object, and as a case of an enumeration the sum writes the case's name instead
+ * (spec §sum-discrimination). The standalone, field and case rows are the specification's example
+ * under §encoder-derivation, over the same declarations.
  *
- * <p>The positions are held together because the four answers are one rule read four times: the
- * unit's own form, and what the declared position adds to it. {@code Closed} is a case of both
- * sums, so the bare name cannot be the unit's own form without the discriminated sum disagreeing
- * with it.
+ * <p>The positions are held together because the answers are one rule: the unit's own form, and
+ * what the declared position adds to it. {@code Closed} is a case of both sums, so the bare name
+ * cannot be the unit's own form without the discriminated sum disagreeing with it.
  */
 class AUnitIsWrittenByThePositionItStandsInTest {
 
@@ -33,7 +34,14 @@ class AUnitIsWrittenByThePositionItStandsInTest {
             data Door = Open | Closed
             data Phase = Pending | Closed
             data Holder = { state: Closed }
-            data Collected = { listed: List<Closed>, keyed: Map<String, Closed> }
+            data Collected = {
+                listed: List<Closed>
+                , kept: Set<Closed>
+                , keyed: Map<String, Closed>
+                , nested: List<List<Closed>>
+                , maybe: Closed?
+                , gaps: List<Option<Closed>>
+            }
 
             behavior alone : (c: Closed) -> Closed
             let alone (c) = c
@@ -43,6 +51,9 @@ class AUnitIsWrittenByThePositionItStandsInTest {
 
             behavior gathered : (c: Collected) -> Collected
             let gathered (c) = c
+
+            behavior counted : (xs: List<Closed>) -> List<Closed>
+            let counted (xs) = xs
 
             behavior discriminated : (d: Door) -> Door
             let discriminated (d) = d
@@ -74,23 +85,30 @@ class AUnitIsWrittenByThePositionItStandsInTest {
         assertEquals("{\"state\":{}}", run("held", "{\"state\":{}}"));
     }
 
-    /** The element encoder a data's field hands a collection is the unit's own, so the element is
-     *  the same empty object the unit writes on its own. */
+    /** The element encoder a field hands a collection is the unit's own, so every element — at any
+     *  depth, and an optional element that is present — is the empty object the unit writes on its
+     *  own, while an absent one is {@code null} as it is for any element. */
     @Test
-    void asAnElementOfAFieldsCollectionAUnitIsAnEmptyObject() throws Exception {
-        String collected = "{\"listed\":[{},{}],\"keyed\":{\"k\":{}}}";
+    void asTheElementOfAFieldsCollectionAUnitIsAnEmptyObject() throws Exception {
+        String collected = "{\"listed\":[{},{}],\"kept\":[{}],\"keyed\":{\"k\":{}},"
+                + "\"nested\":[[{}]],\"maybe\":{},\"gaps\":[{},null]}";
         assertEquals(collected, run("gathered", collected));
     }
 
     @Test
+    void asTheElementOfABehaviorsListAUnitIsAnEmptyObject() throws Exception {
+        assertEquals("[{},{}]", run("counted", "[{},{}]"));
+    }
+
+    @Test
     void asACaseOfADiscriminatedSumAUnitIsItsTagAlone() throws Exception {
-        assertEquals("{\"type\":\"Closed\"}", run("discriminated","{\"type\":\"Closed\"}"));
+        assertEquals("{\"type\":\"Closed\"}", run("discriminated", "{\"type\":\"Closed\"}"));
         assertEquals("{\"type\":\"Closed\"}", run("mixed", "0"));
     }
 
     @Test
     void asACaseOfAnEnumerationAUnitIsItsName() throws Exception {
-        assertEquals("\"Closed\"", run("named","\"Closed\""));
+        assertEquals("\"Closed\"", run("named", "\"Closed\""));
         assertEquals("\"Closed\"", run("enumerated", "0"));
     }
 }

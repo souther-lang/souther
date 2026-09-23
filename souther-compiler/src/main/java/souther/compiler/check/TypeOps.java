@@ -1063,6 +1063,38 @@ public final class TypeOps {
         return FieldExpansion.layout(expansionOf(data.declares(), data, symbols), REFUSING);
     }
 
+    /**
+     * The first spread, at any depth of what {@code data} reaches, whose name declares nothing in
+     * {@code symbols} — or null where every spread reaches a declaration.
+     *
+     * <p>{@link #fieldTypes} and {@link #fieldLayout} take in no field from such a spread, which is
+     * right for a reader that only lists fields and wrong for one that answers what the declaration
+     * is: a declaration missing what one of its spreads brings is not the declaration the author
+     * wrote. The name was reported where it is written, or where what it names failed to come out,
+     * so this answers where it is and says nothing more.
+     */
+    static Hir.Name spreadNamingNothing(Hir.Data data, Symbols symbols) {
+        return spreadNamingNothing(expansionOf(data.declares(), data, symbols));
+    }
+
+    private static Hir.Name spreadNamingNothing(FieldExpansion.Of of) {
+        for (FieldExpansion.Include include : of.includes()) {
+            switch (include) {
+                case FieldExpansion.Include.NamesNothing nothing -> {
+                    return nothing.written();
+                }
+                case FieldExpansion.Include.Expanded expanded -> {
+                    Hir.Name deeper = spreadNamingNothing(expanded.target());
+                    if (deeper != null) {
+                        return deeper;
+                    }
+                }
+                case FieldExpansion.Include.BackEdge _, FieldExpansion.Include.NotAProduct _ -> { }
+            }
+        }
+        return null;
+    }
+
     /** What a declaration reaches, read off {@code symbols}. */
     private static FieldExpansion.Of expansionOf(TypeSymbol.AtModule declared, Hir.Data data,
                                                  Symbols symbols) {

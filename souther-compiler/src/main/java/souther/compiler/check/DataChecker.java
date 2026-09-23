@@ -8,7 +8,6 @@ import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.diag.msg.InvariantMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.TypeMessage;
-import souther.compiler.diag.msg.CodecMessage;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
@@ -28,8 +27,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * The declaration-level checks: a {@code data}'s fields and invariant, a sum's cases, the decoder
- * and encoder written against them, and every construction of an invariant-bearing type.
+ * The declaration-level checks: a {@code data}'s fields and invariant, a sum's cases, and every
+ * construction of an invariant-bearing type — and, as the derivation's postcondition, that the
+ * decoder and encoder derived for a declaration agree with it.
  *
  * <p>These run per definition, so a failure in one is collected and the next is still checked
  * (see {@code TypeChecker.collect}).
@@ -739,8 +739,18 @@ public final class DataChecker {
      * {@link Derived.Data} rather than being looked for: a product that reached this stage has a
      * decoder and an encoder, and taking them from what says so is what leaves no state here in
      * which a check is skipped because a declaration turned out to have none.
+     *
+     * <p>A declaration one of whose spreads names nothing here is given up rather than checked. Its
+     * fields as read here are short of what that spread brings, so every question about them would
+     * be answered about a declaration the author did not write — a decoder derived where the spread
+     * was reached would construct a field this reading says is none of the type's. The name was
+     * reported where the failure is.
      */
     static void checkData(Derived.Data derived, CheckContext ctx) {
+        Hir.Name unreached = TypeOps.spreadNamingNothing(ctx.data(), ctx.symbols());
+        if (unreached != null) {
+            throw new Unanswerable(unreached.pos());
+        }
         Map<String, Type> fields = TypeOps.fieldTypes(ctx.data(), ctx.symbols());
 
         // A newtype wraps one value and takes its representation, so there is nothing for it to be
@@ -791,8 +801,35 @@ public final class DataChecker {
         // is what having one owner is for.
         checkClauseNames(ctx.data(), ctx.symbols());
 
-        checkDecoder(derived.decoder(), ctx, fields);
-        checkEncoder(derived.encoder(), ctx);
+        verifyDerivedCodecs(derived, ctx, fields);
+    }
+
+    /**
+     * That the codecs derived for the declaration are well-typed against it: a postcondition of the
+     * derivation, and not a check of anything an author wrote. No codec is written in Souther — a
+     * hand-written one is Java beside the boundary (spec §custom-codec) — so every codec here is
+     * the compiler's own, and a disagreement is the compiler's failure.
+     *
+     * <p>Whatever the verification reports is therefore turned into one here, the ordinary checks
+     * it reuses included: a construction is checked by the same code a body's construction is, and
+     * a finding from it is not a finding about the author's source. The verification asks whether
+     * each part of the codec is for the type standing where it is; whether a declaration has a
+     * representation at all is the derivation's question, and is not answered a second time here.
+     */
+    private static void verifyDerivedCodecs(Derived.Data derived, CheckContext ctx,
+                                            Map<String, Type> fields) {
+        try {
+            checkDecoder(derived.decoder(), ctx, fields);
+            checkEncoder(derived.encoder(), ctx);
+        } catch (CompileException e) {
+            throw new IllegalStateException(
+                    "the codecs derived for `" + ctx.data().name() + "` do not agree with it", e);
+        }
+    }
+
+    /** A part of a derived codec that is not for the type standing where it is. */
+    private static IllegalStateException derivedCodecDisagrees(String part, Type given) {
+        return new IllegalStateException(part + " was derived against " + Type.show(given));
     }
 
     /**
@@ -861,10 +898,8 @@ public final class DataChecker {
     private static void checkConstruct(Hir.Construct c, CheckContext ctx, Map<String, Type> fields,
                                        Scope env) {
         if (!names(c.typeName()).equals(ctx.data().declares())) {
-            throw CompileException.of(Diagnostic.at(c.pos())
-                    .say(new CodecMessage.TheDecoderBuildsAnotherType(ctx.data().name(),
-                            c.typeName().written()))
-                    .build());
+            throw new IllegalStateException("the decoder derived for `" + ctx.data().name()
+                    + "` constructs `" + c.typeName().written() + "`");
         }
         // nothing builds a decoder's construction with a spread, so there is no binding to copy from
         // here; whether a field left out is one it had to write is the node's answer, as it is for
@@ -1070,17 +1105,13 @@ public final class DataChecker {
                     case INT, STRING, BOOL, DECIMAL, RATIONAL, RAW -> false;
                 };
                 if (!temporal) {
-                    throw CompileException.of(Diagnostic.at(t.pos())
-                            .say(new CodecMessage.AnIsoTextEncoderTakesATemporalValue(Type.show(at)))
-                            .build());
+                    throw derivedCodecDisagrees("an ISO text encoder", at);
                 }
             }
             case Hir.OptionRaw o -> {
                 Type at = Elaborator.typeOf(o.access(), env, ctx);
                 if (!(at instanceof Type.OptionOf oo)) {
-                    throw CompileException.of(Diagnostic.at(o.pos())
-                            .say(new CodecMessage.AnOptionalEncoderTakesAnOptional(Type.show(at)))
-                            .build());
+                    throw derivedCodecDisagrees("an optional encoder", at);
                 }
                 checkRawExpr(o.inner(), env.with(o.elem(), oo.element()), ctx);
             }
@@ -1096,92 +1127,75 @@ public final class DataChecker {
             case Hir.ListEnc le -> {
                 Type st = Elaborator.typeOf(le.source(), env, ctx);
                 if (!(st instanceof Type.ListOf lo)) {
-                    throw CompileException.of(Diagnostic.at(le.pos())
-                            .say(new CodecMessage.AListEncoderTakesAList(Type.show(st)))
-                            .build());
+                    throw derivedCodecDisagrees("a list encoder", st);
                 }
-                checkEncElem(le.elem(), lo.element(), le.pos(), ctx.symbols());
+                checkEncElem(le.elem(), lo.element());
             }
             case Hir.SetEnc se -> {
                 Type st = Elaborator.typeOf(se.source(), env, ctx);
                 if (!(st instanceof Type.SetOf so)) {
-                    throw CompileException.of(Diagnostic.at(se.pos())
-                            .say(new CodecMessage.ASetEncoderTakesASet(Type.show(st)))
-                            .build());
+                    throw derivedCodecDisagrees("a set encoder", st);
                 }
-                checkEncElem(se.elem(), so.element(), se.pos(), ctx.symbols());
+                checkEncElem(se.elem(), so.element());
             }
             case Hir.MapEnc me -> {
                 Type st = Elaborator.typeOf(me.source(), env, ctx);
                 if (!(st instanceof Type.MapOf mo)) {
-                    throw CompileException.of(Diagnostic.at(me.pos())
-                            .say(new CodecMessage.AMapEncoderTakesAMap(Type.show(st)))
-                            .build());
+                    throw derivedCodecDisagrees("a map encoder", st);
                 }
-                checkEncElem(me.elem(), mo.value(), me.pos(), ctx.symbols());
+                checkEncElem(me.elem(), mo.value());
             }
         }
     }
 
-    private static void checkEncElem(Hir.EncElem elem, Type elemType, SourcePos pos,
-                                     Symbols symbols) {
+    /**
+     * That an element encoder is for the element type standing where it is. The encoder names a type
+     * because the derivation found that type written there, and whether that type has a
+     * representation was the derivation's answer; what is left to verify is that the two name one
+     * type, level by level.
+     */
+    private static void checkEncElem(Hir.EncElem elem, Type elemType) {
         switch (elem) {
             case Hir.PrimEnc p -> {
                 if (!elemType.equals(TypeOps.primType(p.kind()))) {
-                    throw elemEncMismatch(Type.show(TypeOps.primType(p.kind())), elemType, pos);
+                    throw derivedCodecDisagrees("the element encoder for "
+                            + Type.show(TypeOps.primType(p.kind())), elemType);
                 }
             }
             case Hir.DataEnc d -> {
-                // Every kind of declaration writes an element: a product, a sum (`List<事前承認理由>`
-                // holds a sum), and a unit, which writes the empty object it writes anywhere else
-                // (spec §encoder-derivation). The reference was minted from a shape a declaration
-                // was found to have, so there is one; its absence is this compiler's own failure
-                // rather than a disagreement between the encoder and the element.
-                if (symbols.declaredNode(names(d.typeName())) == null) {
-                    throw new IllegalStateException("nothing declares `" + d.typeName().written()
-                            + "`, which an element encoder was written against");
-                }
                 if (!elemType.equals(Type.ref(names(d.typeName())))) {
-                    throw elemEncMismatch(d.typeName().written(), elemType, pos);
+                    throw derivedCodecDisagrees(
+                            "the element encoder for `" + d.typeName().written() + "`", elemType);
                 }
             }
             // a collection element is itself a collection: descend both the encoder and the type
             case Hir.ListElemEnc l -> {
                 if (!(elemType instanceof Type.ListOf lo)) {
-                    throw elemEncMismatch("List", elemType, pos);
+                    throw derivedCodecDisagrees("a list element encoder", elemType);
                 }
-                checkEncElem(l.elem(), lo.element(), pos, symbols);
+                checkEncElem(l.elem(), lo.element());
             }
             case Hir.SetElemEnc s -> {
                 if (!(elemType instanceof Type.SetOf so)) {
-                    throw elemEncMismatch("Set", elemType, pos);
+                    throw derivedCodecDisagrees("a set element encoder", elemType);
                 }
-                checkEncElem(s.elem(), so.element(), pos, symbols);
+                checkEncElem(s.elem(), so.element());
             }
             case Hir.MapElemEnc m -> {
                 if (!(elemType instanceof Type.MapOf mo)) {
-                    throw elemEncMismatch("Map", elemType, pos);
+                    throw derivedCodecDisagrees("a map element encoder", elemType);
                 }
-                checkEncElem(m.value(), mo.value(), pos, symbols);
+                checkEncElem(m.value(), mo.value());
             }
             // an absent member is written null, so the element encoder is one level above what the
             // option holds, as the type is
             case Hir.OptionElemEnc o -> {
                 if (!(elemType instanceof Type.OptionOf oo)) {
-                    throw elemEncMismatch("Option", elemType, pos);
+                    throw derivedCodecDisagrees("an optional element encoder", elemType);
                 }
-                checkEncElem(o.elem(), oo.element(), pos, symbols);
+                checkEncElem(o.elem(), oo.element());
             }
         }
-    }
-
-    /** The element encoder and the element type disagree, both named as they are written — the
-     * encoder by the type it encodes (`String`, `商品ID`, `List`), the element by {@link Type#show}. */
-    private static CompileException elemEncMismatch(String encoder, Type elemType, SourcePos pos) {
-        return CompileException.of(Diagnostic.at(pos)
-                .say(new CodecMessage.TheElementEncoderIsNotForTheElementType(
-                        "`" + encoder + "`", Type.show(elemType)))
-                .build());
     }
 
 }

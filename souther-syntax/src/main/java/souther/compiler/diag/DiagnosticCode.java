@@ -217,9 +217,6 @@ public enum DiagnosticCode {
     E2107("source-structural-complexity-is-bounded", "e2107.title"),
     E2108("running-out-of-room-is-reported", "e2108.title"),
 
-    // --- the external representation ---
-    E2201("a-custom-codec-agrees-with-its-type", "check.codec.title"),
-
     // --- the text as written ---
     E2301("declaration-syntax", "parse.title"),
     E2302("expression-syntax", "parse.title"),
