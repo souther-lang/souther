@@ -44,18 +44,36 @@ final class JvmTypes {
             case Type.Prim p -> switch (p) {
                 case INT -> CD_Long;
                 case BOOL -> CD_Boolean;
-                case DECIMAL -> CD_BigDecimal;
-                case STRING -> CD_String;
-                case DATE -> CD_LocalDate;
-                case TIME -> CD_LocalTime;
-                case DATETIME -> CD_LocalDateTime;
-                case INSTANT -> CD_Instant;
-                case RATIONAL -> CD_Rational;
-                case RAW -> null;
+                case DECIMAL, STRING, DATE, TIME, DATETIME, INSTANT, RATIONAL, RAW -> primCarrier(p);
             };
             case Type.Ref _, Type.ListOf _, Type.MapOf _, Type.SetOf _, Type.OptionOf _,
                  Type.Union _, Type.FnOf _, Type.Open _, Type.Nothing _, Type.Never _,
                  Type.TupleOf _, Type.Erroneous _ -> null;
+        };
+    }
+
+    /**
+     * The JVM class carrying a value of {@code p}, or {@code null} for {@code Raw}, which no stage
+     * produces and so has none.
+     *
+     * <p>One fact read at two boundaries. A value a body computes is in this form, and a kernel of
+     * the runtime is called with a primitive in this form too: {@code Intrinsics} boxes an argument
+     * only where its slot is {@code Object} and hands anything else over as it was produced. Written
+     * twice, the two could name different classes, and a call would leave on the stack what its
+     * descriptor does not say. What {@code Raw} is at each boundary is that boundary's to say.
+     */
+    static ClassDesc primCarrier(Type.Prim p) {
+        return switch (p) {
+            case INT -> ConstantDescs.CD_long;
+            case BOOL -> ConstantDescs.CD_boolean;
+            case DECIMAL -> CD_BigDecimal;
+            case STRING -> CD_String;
+            case DATE -> CD_LocalDate;
+            case TIME -> CD_LocalTime;
+            case DATETIME -> CD_LocalDateTime;
+            case INSTANT -> CD_Instant;
+            case RATIONAL -> CD_Rational;
+            case RAW -> null;
         };
     }
 
@@ -196,19 +214,14 @@ final class JvmTypes {
      * interface, a data reference through {@link CodegenContext#caseClass}. */
     static ClassDesc jvmType(Type type, CodegenContext ctx) {
         return switch (type) {
-            case Type.Prim p -> switch (p) {
-                case INT -> ConstantDescs.CD_long;
-                case STRING -> CD_String;
-                case BOOL -> ConstantDescs.CD_boolean;
-                case DECIMAL -> CD_BigDecimal;
-                case DATE -> CD_LocalDate;
-                case TIME -> CD_LocalTime;
-                case DATETIME -> CD_LocalDateTime;
-                case INSTANT -> CD_Instant;
-                case RATIONAL -> CD_Rational;
+            case Type.Prim p -> {
+                ClassDesc carrier = primCarrier(p);
                 // reserved: no stage produces one, so none reaches codegen
-                case RAW -> throw new IllegalStateException("no JVM carrier for Raw");
-            };
+                if (carrier == null) {
+                    throw new IllegalStateException("no JVM carrier for Raw");
+                }
+                yield carrier;
+            }
             case Type.OptionOf _ -> CD_Option;
             case Type.ListOf _ -> CD_List;
             case Type.MapOf _ -> CD_Map;
