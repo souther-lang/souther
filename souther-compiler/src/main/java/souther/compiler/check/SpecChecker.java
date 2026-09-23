@@ -572,17 +572,17 @@ public final class SpecChecker {
             // (`DataChecker`). Written here as a constant of its own, this checker and the codec that
             // writes the key were two places the language's own spelling was kept.
             if (!(Boundary.of(sig.outputType(), kinds, published).representation()
-                    instanceof Boundary.Representation.Discriminated(String key, String _))) {
+                    instanceof Boundary.Representation.Discriminated(String tagKey, String _))) {
                 continue;
             }
             TypeSymbol carrying =
-                    TypeOps.memberCarryingField(sig.outputType(), key, symbols, published);
+                    TypeOps.memberCarryingField(sig.outputType(), tagKey, symbols, published);
             if (carrying == null) {
                 continue;
             }
             throw CompileException.of(Diagnostic
                             .at(b.pos())
-                            .hint(new DataMessage.TheTagAndTheFieldWantOneKey(key)).say(new DataMessage.AMemberDeclaresTheDiscriminatorField(carrying.name(), key, b.name())).build());
+                            .hint(new DataMessage.TheTagAndTheFieldWantOneKey(tagKey)).say(new DataMessage.AMemberDeclaresTheDiscriminatorField(carrying.name(), tagKey, b.name())).build());
         }
     }
 

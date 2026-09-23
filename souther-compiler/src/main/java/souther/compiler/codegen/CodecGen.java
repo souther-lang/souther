@@ -2012,8 +2012,8 @@ final class CodecGen {
 
     /**
      * The encoder of a behavior's anonymous output union: dispatch on the member, encode it as that
-     * member writes itself, and write the discriminator {@code "type"} — what a named sum over the
-     * same leaves does (spec §encoder-derivation). Without it the same value would travel two ways depending on
+     * member writes itself, and write the discriminator under the keys of the form it was handed —
+     * what a named sum over the same leaves does (spec §encoder-derivation). Without it the same value would travel two ways depending on
      * where it sat, since a member's own encoder writes no discriminator.
      *
      * <p>A member this module declared is the case itself; any other arrives in its bridge case, and

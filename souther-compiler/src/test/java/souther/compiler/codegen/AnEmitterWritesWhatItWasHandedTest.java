@@ -109,6 +109,18 @@ class AnEmitterWritesWhatItWasHandedTest {
                 "the decoder did not read the contents key it was handed");
     }
 
+    /** A behavior's answer union is written by the same rule as a named sum, through its own
+     *  emitter, and that emitter takes both keys from the form it was handed too. */
+    @Test
+    void theAnswerUnionEncoderWritesBothKeysItWasHanded() {
+        String written = text(codec.generateResultUnionEncoder(
+                new GeneratedClass.BehaviorResult("m", "settle"), theNewtypeCase("Payment")));
+        assertTrue(written.contains(SENTINEL_KEY),
+                "the answer union's encoder did not write the key it was handed");
+        assertTrue(written.contains(SENTINEL_CONTENTS_KEY),
+                "the answer union's encoder did not write the contents key it was handed");
+    }
+
     /**
      * Handed one alternative of the three, the encoder dispatches over that one.
      *
