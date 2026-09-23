@@ -92,8 +92,14 @@ public record HelperGraph(Map<ReachName.Declaration, Set<ReachName.Declaration>>
 
     /**
      * The declarations on a call cycle with {@code reference}: those it reaches through calls that
-     * reach it back, itself among them. Empty where it does not recurse, so what this answers for a
-     * declaration {@link #recurses} holds always holds that declaration.
+     * reach it back, itself among them. Empty where it does not recurse.
+     *
+     * <p>Membership is asked with the predicate {@link #of} decides {@code recursive} with, and
+     * {@code reference} is a member exactly when it reaches itself — which is that predicate asked
+     * of it. So a declaration {@link #recurses} holds is on the cycle this answers for it, and one it
+     * does not hold has no cycle, by the one computation and not by two that happen to agree. A
+     * reader that relies on this — a group proven total is a group of no graphs where it is empty —
+     * still holds it to that ({@link TotalityChecker}).
      *
      * <p>In the order the table holds them, which is the order they were declared. Worked out of the
      * edges when asked rather than kept beside them: a graph's {@code equals} is what an answer built
@@ -101,32 +107,14 @@ public record HelperGraph(Map<ReachName.Declaration, Set<ReachName.Declaration>>
      * only agree with them or be wrong.
      */
     public List<ReachName.Declaration> callCycleOf(ReachName.Declaration reference) {
-        Set<ReachName.Declaration> onward = reachedFrom(calls(reference));
-        Set<ReachName.Declaration> back = reaching(reference);
         List<ReachName.Declaration> cycle = new ArrayList<>();
         for (ReachName.Declaration member : callsOf.keySet()) {
-            if (onward.contains(member) && back.contains(member)) {
+            if (reaches(callsOf, reference, member, new HashSet<>())
+                    && reaches(callsOf, member, reference, new HashSet<>())) {
                 cycle.add(member);
             }
         }
         return List.copyOf(cycle);
-    }
-
-    /** Everything that reaches {@code target} through one call or more. */
-    private Set<ReachName.Declaration> reaching(ReachName.Declaration target) {
-        Map<ReachName.Declaration, List<ReachName.Declaration>> callers = new LinkedHashMap<>();
-        callsOf.forEach((caller, called) -> called.forEach(
-                callee -> callers.computeIfAbsent(callee, _ -> new ArrayList<>()).add(caller)));
-        Set<ReachName.Declaration> reached = new LinkedHashSet<>();
-        Deque<ReachName.Declaration> work = new ArrayDeque<>(List.of(target));
-        while (!work.isEmpty()) {
-            for (ReachName.Declaration caller : callers.getOrDefault(work.poll(), List.of())) {
-                if (reached.add(caller)) {
-                    work.add(caller);
-                }
-            }
-        }
-        return reached;
     }
 
     /** What {@code reference}'s body calls directly, or an empty set where it calls nothing this

@@ -76,19 +76,24 @@ final class PartialReachability {
      */
     private final Set<ReachName.Declaration> reachingPartial;
 
-    private final HelperInliner inliner;
-
-    /** What an expression's edges are read against: the library and the declarations the inliner
-     *  reached when this was made, so an expression asked about later is read against the same. */
+    /**
+     * What every question here is read against: the library, and the declarations the inliner reached
+     * when this was made.
+     *
+     * <p>One reading for all of them. {@link #reachingPartial} is an answer about the search, taken
+     * ahead of it, and it may only stand in for the search where both read the same marker off the
+     * same declarations. The inliner's own table is narrowed while it expands a recursive body, so a
+     * marker read there later could say {@code partial} where the lookup was built saying not, or
+     * the other way round — and a lookup that says no ends the search before it starts.
+     */
     private final Stdlib stdlib;
     private final Map<ReachName.Declaration, HelperEntry> reachable;
 
     private PartialReachability(Map<ReachName.Declaration, List<ReachName.Declaration>> calls,
-                                Set<ReachName.Declaration> reachingPartial, HelperInliner inliner,
-                                Stdlib stdlib, Map<ReachName.Declaration, HelperEntry> reachable) {
+                                Set<ReachName.Declaration> reachingPartial, Stdlib stdlib,
+                                Map<ReachName.Declaration, HelperEntry> reachable) {
         this.calls = calls;
         this.reachingPartial = reachingPartial;
-        this.inliner = inliner;
         this.stdlib = stdlib;
         this.reachable = reachable;
     }
@@ -110,14 +115,14 @@ final class PartialReachability {
             }
             // an intrinsic declares no body to read what it reaches out of
         }
-        return new PartialReachability(calls, reachingPartial(calls, inliner), inliner, stdlib,
-                reachable);
+        return new PartialReachability(calls, reachingPartial(calls, reachable), stdlib, reachable);
     }
 
     /** Every node of {@code calls} from which a {@code partial} one is reachable, the
      * {@code partial} ones included. */
-    private static Set<ReachName.Declaration> reachingPartial(Map<ReachName.Declaration, List<ReachName.Declaration>> calls,
-                                                  HelperInliner inliner) {
+    private static Set<ReachName.Declaration> reachingPartial(
+            Map<ReachName.Declaration, List<ReachName.Declaration>> calls,
+            Map<ReachName.Declaration, HelperEntry> reachable) {
         Map<ReachName.Declaration, List<ReachName.Declaration>> back = new LinkedHashMap<>();
         Set<ReachName.Declaration> nodes = new LinkedHashSet<>(calls.keySet());
         calls.forEach((from, tos) -> {
@@ -129,8 +134,7 @@ final class PartialReachability {
         Set<ReachName.Declaration> reaching = new LinkedHashSet<>();
         Deque<ReachName.Declaration> work = new ArrayDeque<>();
         for (ReachName.Declaration node : nodes) {
-            Hir.FnDef declared = inliner.helper(node);
-            if (declared != null && declared.partial() && reaching.add(node)) {
+            if (isPartial(node, reachable) && reaching.add(node)) {
                 work.add(node);
             }
         }
@@ -154,8 +158,14 @@ final class PartialReachability {
      * soundness rule may not rest on it.
      */
     private boolean isPartial(ReachName.Declaration reference) {
-        Hir.FnDef declared = inliner.helper(reference);
-        return declared != null && declared.partial();
+        return isPartial(reference, reachable);
+    }
+
+    /** The same, of {@code reachable} — the one reading the lookup is built with and the search asks. */
+    private static boolean isPartial(ReachName.Declaration reference,
+                                     Map<ReachName.Declaration, HelperEntry> reachable) {
+        HelperEntry entry = reachable.get(reference);
+        return entry != null && entry.definition().partial();
     }
 
     /**
@@ -166,7 +176,7 @@ final class PartialReachability {
         if (!(v instanceof Hir.Var.Denoting named)) {
             return false;   // it names no helper, partial or otherwise
         }
-        Hir.FnDef declared = declarationOf(named, inliner);
+        Hir.FnDef declared = declarationOf(named);
         return declared != null && declared.partial() && !declared.params().isEmpty();
     }
 
@@ -273,8 +283,9 @@ final class PartialReachability {
     /** The declaration {@code named} reaches, or null where it reaches none a helper table holds.
      *  Which one it is, the reference says: settled where the name was resolved, so a binding spelled
      *  like a helper reaches no declaration however it is written. */
-    private static Hir.FnDef declarationOf(Hir.Var.Denoting named, HelperInliner inliner) {
+    private Hir.FnDef declarationOf(Hir.Var.Denoting named) {
         ReachName.Declaration reference = named.reachesADeclaration();
-        return reference == null ? null : inliner.helper(reference);
+        HelperEntry entry = reference == null ? null : reachable.get(reference);
+        return entry == null ? null : entry.definition();
     }
 }

@@ -64,14 +64,21 @@ final class TotalityChecker {
                 entry -> own.put(entry.address().text(), entry.definition()));
         Set<ReachName.Declaration> handled = new HashSet<>();
         for (ReachName.Declaration reference : inliner.recursiveHelpers()) {
+            // What the inliner answers is what this module holds, so each has an address here. One
+            // without is refused rather than passed over: passed over, it is a recursion nobody
+            // proved total.
             DefinitionName at = inliner.heldAt(reference);
             Hir.FnDef h = at == null ? null : own.get(at.text());
+            if (h == null) {
+                throw new IllegalStateException("`" + reference.rendered()
+                        + "` is a recursive helper of this module and is held nowhere in it");
+            }
             // Only what this module declared is checked. A recursive helper it took on to emit — a
             // prelude `List.foldFrom`, one another module published — carries its declaring module's
             // guarantee (ADR-0098), and its own module proved it. Asked of the declaration: the name
             // it is reached by here says nothing about who wrote it, and `List.foldFrom` does not
             // even hold the module it came from.
-            if (h == null || !h.declaredBy(inliner.moduleName())) {
+            if (!h.declaredBy(inliner.moduleName())) {
                 continue;
             }
             if (!handled.add(reference)) {
@@ -101,9 +108,11 @@ final class TotalityChecker {
      * this module holds it.
      *
      * <p>The cycle is the one the call graph answers ({@link HelperInliner#callCycleOf}), which is the
-     * graph that said {@code reference} recurses. A group read again off the bodies could come out
-     * without it — and the size-change criterion holds of no graphs at all, so an empty group is one
-     * proven total.
+     * graph that said {@code reference} recurses. The size-change criterion holds of no graphs at all,
+     * so a group that came out without {@code reference} would be proven total without its calls ever
+     * being read. The graph answers the two with one predicate; this still refuses a cycle that does
+     * not hold {@code reference}, because an answer that could leave it out is one this check would
+     * otherwise accept in silence.
      *
      * <p>Every member is held here. A cycle through a helper this module declared stays among its
      * own: nothing it reaches — an import, the library — calls back into it.
@@ -111,8 +120,13 @@ final class TotalityChecker {
     private static Map<ReachName.Declaration, String> groupOf(ReachName.Declaration reference,
                                                            HelperInliner inliner,
                                                            Map<String, Hir.FnDef> own) {
+        List<ReachName.Declaration> cycle = inliner.callCycleOf(reference);
+        if (!cycle.contains(reference)) {
+            throw new IllegalStateException("`" + reference.rendered()
+                    + "` recurses and is not on the call cycle answered for it");
+        }
         Map<ReachName.Declaration, String> group = new LinkedHashMap<>();
-        for (ReachName.Declaration member : inliner.callCycleOf(reference)) {
+        for (ReachName.Declaration member : cycle) {
             DefinitionName at = inliner.heldAt(member);
             if (at == null || !own.containsKey(at.text())) {
                 throw new IllegalStateException("`" + member.rendered() + "` is on the call cycle of `"

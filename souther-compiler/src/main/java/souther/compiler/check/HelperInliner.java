@@ -566,9 +566,9 @@ public final class HelperInliner {
     public java.util.List<ReachName.Declaration> recursiveHelpers() {
         java.util.List<ReachName.Declaration> result = new java.util.ArrayList<>();
         for (ReachName.Declaration reference : graph.recursive()) {
-            // Held here, which is asked at the address this module puts what it reaches that way —
-            // the entry says both, so neither is worked out from the other.
-            if (table.held().containsKey(DefinitionName.of(reference))) {
+            // Held here, which the entries answer: each pairs how it is reached with where it is
+            // held, so neither is worked out from the other.
+            if (table.holds(reference)) {
                 result.add(reference);
             }
         }

@@ -240,6 +240,23 @@ public final class HelperTable {
     }
 
     /**
+     * Whether one of the fns this module holds ({@link #held}) is the one {@code reference} reaches.
+     *
+     * <p>Asked of the entries, each of which already pairs the reference it is reached by with where
+     * it is held. An address worked out of the reference would be a second statement of that pairing,
+     * and where the two came apart a held fn would be answered as not held. Unaffected by
+     * {@link #hiding}, which narrows what a call reaches and not what this module holds.
+     */
+    public boolean holds(ReachName.Declaration reference) {
+        for (HelperEntry entry : emits.values()) {
+            if (entry.reachedAs().equals(reference)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * What this module holds at {@code address}, or null where it holds nothing there.
      *
      * <p>An address lookup and not a resolution. What comes back is the entry that was filed there,
