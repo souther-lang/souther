@@ -326,6 +326,13 @@ class WhatTheServerAdvertisesIsWhatItAnswersTest {
                 announced.add(capability.path());
             }
         }
+        // The options this server reads are the one thing announced that is not a method, and they
+        // come from their own table.
+        for (SoutherExtension extension : SoutherExtension.values()) {
+            List<String> path = new ArrayList<>(LspMethod.EXTENSIONS);
+            path.add(extension.member());
+            announced.add(path);
+        }
 
         List<List<String>> missing = new ArrayList<>();
         for (List<String> path : announced) {

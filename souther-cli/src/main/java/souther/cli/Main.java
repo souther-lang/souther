@@ -37,6 +37,7 @@ import souther.compiler.query.Offering;
 import souther.compiler.report.GeneratedRows;
 import souther.compiler.report.UnifiedDiff;
 import souther.lsp.LspServer;
+import souther.lsp.ToolingMetadata;
 import souther.cli.init.InitCommand;
 
 import java.io.Console;
@@ -175,6 +176,7 @@ public final class Main {
             case JAPI -> () -> JapiCommand.run(rest, System.out, System.err);
             case MCP -> () -> mcpSubcommand(rest);
             case LSP -> () -> lspSubcommand(rest);
+            case TOOLING -> () -> toolingSubcommand(rest);
             case HELP -> () -> helpSubcommand(rest);
             case VERSION -> () -> versionSubcommand(rest);
         };
@@ -215,7 +217,8 @@ public final class Main {
                 case "--adequacy" -> {
                     Adequacy.Asked named = adequacyAsked(args[++i]);
                     if (named == null) {
-                        System.err.println("`--adequacy` takes off, witness or all");
+                        System.err.println("`--adequacy` takes "
+                                + CliOption.adequacyLevels(", "));
                         return 2;
                     }
                     measure = named;
@@ -477,6 +480,25 @@ public final class Main {
     }
 
     /**
+     * {@code souther tooling}: the tooling metadata this jar carries, on stdout as it is written
+     * there.
+     *
+     * <p>Printed, not built. The file is what a client reads out of the jar when it cannot start
+     * this, and a command that assembled its own answer would be a second statement of it that could
+     * say something else.
+     */
+    private static int toolingSubcommand(String[] args) {
+        if (args.length > 0) {
+            System.err.println(Messages.get("cli.tooling.arguments",
+                    RenderOptions.asking(null).locale(), String.join(", ", args)));
+            System.err.println(Usage.of(CliCommand.TOOLING));
+            return 2;
+        }
+        System.out.print(ToolingMetadata.text());
+        return 0;
+    }
+
+    /**
      * {@code souther help [<command>]}: what this command line takes, asked rather than refused.
      *
      * <p>On stdout under a zero exit code, which is the whole point of it being a command. What it
@@ -560,12 +582,7 @@ public final class Main {
      * a criterion. What a build does about a gap it was told about is {@code --warnings}.
      */
     private static Adequacy.Asked adequacyAsked(String written) {
-        return switch (written) {
-            case "off" -> Adequacy.Asked.warningsAt(Adequacy.Level.OFF);
-            case "witness" -> Adequacy.Asked.warningsAt(Adequacy.Level.WITNESS);
-            case "all" -> Adequacy.Asked.warningsAt(Adequacy.Level.ALL);
-            default -> null;
-        };
+        return Adequacy.Level.spelled(written).map(Adequacy.Asked::warningsAt).orElse(null);
     }
 
     /**

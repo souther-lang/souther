@@ -127,6 +127,25 @@ public final class RepositoryLayout {
         return root;
     }
 
+    /**
+     * The value the root pom gives the property {@code name} in its own {@code properties}, as
+     * written there.
+     *
+     * <p>For a check holding something the build filled in, or could not fill in, to where the value
+     * is stated. Refused where the root pom does not state it, so a property renamed out from under
+     * a check stops the check rather than handing it an empty value to agree with.
+     */
+    public String rootProperty(String name) {
+        Element project = parse(root.resolve("pom.xml")).getDocumentElement();
+        for (Element properties : childElements(project, "properties")) {
+            List<Element> stated = childElements(properties, name);
+            if (!stated.isEmpty()) {
+                return stated.getFirst().getTextContent().trim();
+            }
+        }
+        throw new IllegalArgumentException("the root pom states no property called " + name);
+    }
+
     /** Every module directory the root pom names, in the order it names them. */
     public List<Path> modules() {
         return modules;

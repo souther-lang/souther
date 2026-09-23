@@ -2,6 +2,7 @@ package souther.cli;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.query.Adequacy;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.report.AdequacyReport;
 
@@ -78,7 +79,9 @@ class ABuildIsHeldToEveryObligationTheAccountDerivesTest {
         Run compiled = compile(ON_THE_LINE_ONLY, "thorough");
 
         assertEquals(2, compiled.code(), compiled.out() + compiled.err());
-        assertTrue(compiled.err().contains("off, witness or all"), compiled.err());
+        for (Adequacy.Level level : Adequacy.Level.values()) {
+            assertTrue(compiled.err().contains(level.spelling()), compiled.err());
+        }
     }
 
     /**

@@ -138,6 +138,10 @@ public enum LspMethod {
      */
     private static final Map<String, LspMethod> BY_WIRE = byWire();
 
+    /** Where the {@code souther} options the server reads are advertised. Before {@link #CAPABILITIES},
+     * which reads it as it is built. */
+    static final List<String> EXTENSIONS = List.of("experimental", "souther");
+
     private static final Map<String, Object> CAPABILITIES = capabilities();
 
     private static final List<Map<String, Object>> REGISTRATIONS = registrations();
@@ -190,6 +194,11 @@ public enum LspMethod {
      *
      * <p>Nor may one field sit inside another's value. The outer one's value is the whole of what
      * is there, so whichever were written second would replace or be replaced by the other.
+     *
+     * <p>The one field that announces no method is built here too: the {@code souther} options the
+     * server reads, at {@link #EXTENSIONS}, drawn from {@link SoutherExtension}. Built beside the
+     * methods rather than added to the object afterwards, so a method advertised at or around that
+     * path is refused by the same rule as two methods would be.
      */
     private static Map<String, Object> capabilities() {
         Map<List<String>, LspMethod> announcedBy = new LinkedHashMap<>();
@@ -217,6 +226,15 @@ public enum LspMethod {
                 }
             }
         }
+        for (Map.Entry<List<String>, LspMethod> announced : announcedBy.entrySet()) {
+            List<String> path = announced.getKey();
+            int shared = Math.min(path.size(), EXTENSIONS.size());
+            if (path.subList(0, shared).equals(EXTENSIONS.subList(0, shared))) {
+                throw new IllegalStateException(announced.getValue() + " advertises " + path
+                        + ", which overlaps " + EXTENSIONS + " where the options are advertised");
+            }
+        }
+        fields.put(EXTENSIONS, SoutherExtension.advertised());
         return object(fields);
     }
 

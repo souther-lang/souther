@@ -52,7 +52,14 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.release>25</maven.compiler.release>
+        <!-- What a Java has to be, and what it has to be given, to run this compiler. Each is written
+             here once: the classes are compiled for the one, the launchers and the tests hand the
+             JVM the other, and `META-INF/souther/tooling.json` states both to whatever has to know
+             before it starts a JVM. Where something cannot be filtered from here, a test holds it
+             to what is written here. -->
+        <souther.java.minimum>25</souther.java.minimum>
+        <souther.jvm.stack>4m</souther.jvm.stack>
+        <maven.compiler.release>${souther.java.minimum}</maven.compiler.release>
         <raoh.version>0.7.2</raoh.version>
         <jspecify.version>1.0.1</jspecify.version>
         <!-- Where compiled classes go, named so the `m2e` profile below can send the editor's
@@ -255,12 +262,11 @@
                              threads of every fork are competing for the cores the tests are on.
                              Measured on the compiler's suite, whole build, eight forks: 49s without
                              these, 27s with them. -->
-                        <!-- -Xss4m is the stack this compiler is supported on, and the tests are
-                             held to the same one: a source at the structural bound needs about a
-                             megabyte, and what is checked here has to be checked on the stack the
-                             bound was set for. A test that wants a smaller one makes its own
-                             thread. -->
-                        <argLine>${test.jvm.args} -Xss4m</argLine>
+                        <!-- The stack this compiler is supported on, and the tests are held to the
+                             same one: a source at the structural bound needs about a megabyte, and
+                             what is checked here has to be checked on the stack the bound was set
+                             for. A test that wants a smaller one makes its own thread. -->
+                        <argLine>${test.jvm.args} -Xss${souther.jvm.stack}</argLine>
                         <systemPropertyVariables>
                             <souther.example.step.limit>${test.example.step.limit}</souther.example.step.limit>
                         </systemPropertyVariables>
@@ -453,7 +459,7 @@
                             <!-- `@{}` rather than `${}`: the agent's arguments are set by a goal
                                  that runs after the model is read, and only a late reference sees
                                  them. -->
-                            <argLine>${test.jvm.args} -Xss4m @{jacoco.agent.args}</argLine>
+                            <argLine>${test.jvm.args} -Xss${souther.jvm.stack} @{jacoco.agent.args}</argLine>
                             <systemPropertyVariables>
                                 <souther.test.coverage.dir>${project.build.directory}/coverage-by-class</souther.test.coverage.dir>
                             </systemPropertyVariables>

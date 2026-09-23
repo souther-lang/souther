@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -555,6 +556,55 @@ class LspServerTest {
             names.add(symbol.get("name").asString());
         }
         assertEquals(List.of("InTheSecond"), names);
+    }
+
+    /**
+     * The handshake says which {@code souther} options this server reads, and a setting it could not
+     * read is told to the client after the client says it is ready, not refused.
+     */
+    @Test
+    void anUnreadableSettingIsToldAfterInitializedAndTheSessionGoesOn() {
+        List<JsonNode> said = handshakeWith(Map.of("souther", Map.of("adequacy", "witnes")));
+
+        int answered = indexOf(said, m -> m.has("id") && m.get("id").asInt() == 1
+                && m.has("result"));
+        JsonNode capabilities = said.get(answered).get("result").get("capabilities");
+        assertTrue(capabilities.path("experimental").path("souther").path("adequacy").isObject(),
+                capabilities.toString());
+
+        int told = indexOf(said, m -> m.has("method")
+                && "window/showMessage".equals(m.get("method").asString()));
+        assertTrue(told > answered, "told after the handshake was answered: " + said);
+        assertTrue(said.get(told).get("params").get("message").asString().contains("witnes"),
+                said.get(told).toString());
+    }
+
+    @Test
+    void aSettingThatWasReadIsNotRemarkedOn() {
+        List<JsonNode> said = handshakeWith(Map.of("souther", Map.of("adequacy", "witness")));
+
+        assertEquals(-1, indexOf(said, m -> m.has("method")
+                && "window/showMessage".equals(m.get("method").asString())), said.toString());
+    }
+
+    private static List<JsonNode> handshakeWith(Map<String, Object> initializationOptions) {
+        byte[] input = frames(
+                message(1, "initialize", Map.of("initializationOptions", initializationOptions)),
+                message(null, "initialized", Map.of()),
+                message(2, "shutdown", Map.of()),
+                message(null, "exit", Map.of()));
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        new LspServer(new MessageConnection(new ByteArrayInputStream(input), out)).run();
+        return readFrames(out.toByteArray());
+    }
+
+    private static int indexOf(List<JsonNode> messages, Predicate<JsonNode> which) {
+        for (int i = 0; i < messages.size(); i++) {
+            if (which.test(messages.get(i))) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     // --- helpers: build and read framed JSON-RPC messages ---
