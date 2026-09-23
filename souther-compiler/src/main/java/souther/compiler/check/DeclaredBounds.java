@@ -28,7 +28,7 @@ import java.util.Set;
  *
  * <p>A range, and only what a range can hold. What the rules leave out between their ends is not
  * here — a caller asking whether some particular value is admitted is asking the domain the rules
- * seed ({@link FieldDomains#mayHoldNothingAt}) and not this.
+ * seed ({@link OccurrenceCounts#mayHoldAtMost}) and not this.
  *
  * <p>Below whoever composes it with anything else. What a declaration's rules say is a fact about the
  * declaration, and a reader that had to reach a generator to ask it would be reaching past the

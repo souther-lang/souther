@@ -158,8 +158,8 @@ public final class StdlibLoader {
      *
      * <p>Each declaration is the declaration of the library module that writes it, and says so:
      * {@code souther.decimal} declares {@code RoundingMode}, so that is its identity. What a source
-     * writes it as is a separate question and a separate answer ({@link LibraryNames#identityOf}),
-     * because the module that declares one is not a qualifier anybody names it by.
+     * writes it as is a separate question and a separate answer, because the module that declares
+     * one is not a qualifier anybody names it by.
      */
     private static SyntaxSymbols symbolsFor(Parsed source, Map<String, Ast.Def> declares) {
         Map<String, Denotation> scope = new HashMap<>();
