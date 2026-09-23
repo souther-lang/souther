@@ -20,13 +20,12 @@ public enum SyntaxKind {
     LINE_COMMENT,
 
     // --- keywords ---
-    // `example` / `examples` / `for` are NOT reserved (they would collide with the `example.*`
-    // package/module names): the parser recognizes them by text at top-level position, like the
-    // contextual `intrinsic`. `on`, the second word of `depends on`, is read the same way, so a
-    // field or parameter may still be named on.
     MODULE_KW, IMPORT_KW, EXPOSING_KW, DATA_KW, INVARIANT_KW, ENSURES_KW, AS_KW, LET_KW, GUARD_KW, ELSE_KW,
     TRUE_KW, FALSE_KW, IF_KW, THEN_KW, BEHAVIOR_KW, DEPENDS_KW, CONSTRUCTS_KW, MATCH_KW, WITH_KW,
     UNREACHABLE_KW,
+    // A ContextualWord where the parser read it as a keyword. The lexer never produces one: the
+    // word lexes as an IDENT, and the parser writes it into the tree as this.
+    CONTEXTUAL_KW,
 
     // --- literals and identifiers ---
     IDENT, INT_LIT, DECIMAL_LIT, STRING_LIT, TYPEVAR,
@@ -170,8 +169,8 @@ public enum SyntaxKind {
      */
     public Lexis lexis() {
         return switch (this) {
-            case WHITESPACE, LINE_COMMENT, IDENT, INT_LIT, DECIMAL_LIT, STRING_LIT, TYPEVAR, EOF,
-                 ERROR_TOKEN -> Lexis.OPEN_TOKEN;
+            case WHITESPACE, LINE_COMMENT, IDENT, CONTEXTUAL_KW, INT_LIT, DECIMAL_LIT, STRING_LIT,
+                 TYPEVAR, EOF, ERROR_TOKEN -> Lexis.OPEN_TOKEN;
 
             case MODULE_KW, IMPORT_KW, EXPOSING_KW, DATA_KW, INVARIANT_KW, ENSURES_KW, AS_KW, LET_KW, GUARD_KW,
                  ELSE_KW, TRUE_KW, FALSE_KW, IF_KW, THEN_KW, BEHAVIOR_KW, DEPENDS_KW, CONSTRUCTS_KW,

@@ -554,15 +554,13 @@ public final class CstParser {
         finish();
     }
 
-    /** A {@code depends on} clause. {@code on} is a contextual soft-keyword (a bare identifier), so
-     * a field or a parameter may still be named on; only the position right after {@code depends}
-     * reads it as the second half of the keyword. */
+    /** A {@code depends on} clause. {@code on} is a contextual word, so a field or a parameter may
+     * still be named on; only the position right after {@code depends} reads it as the second half
+     * of the keyword. */
     private void dependsClause() {
         start(SyntaxKind.DEPENDS_CLAUSE);
         bump();   // depends
-        if (atContextual("on")) {
-            bump();   // on
-        } else {
+        if (!eat(ContextualWord.ON)) {
             error(new ParseMessage.ADependencyClauseIsTwoWords());
         }
         nameList();
@@ -608,14 +606,14 @@ public final class CstParser {
      * {@code let} (or before the other modifier and then a {@code let}) is read as one. */
     private void fnDef() {
         start(SyntaxKind.FN_DEF);
-        if (atContextual("private")) {
+        if (at(ContextualWord.PRIVATE)) {
             start(SyntaxKind.PRIVATE_MODIFIER);
-            bump();   // private (a contextual soft-keyword, kept out of the fn name)
+            expect(ContextualWord.PRIVATE, Reading.A_DECLARATION);
             finish();
         }
-        if (atContextual("partial")) {
+        if (at(ContextualWord.PARTIAL)) {
             start(SyntaxKind.PARTIAL_MODIFIER);
-            bump();   // partial (a contextual soft-keyword, kept out of the fn name)
+            expect(ContextualWord.PARTIAL, Reading.A_DECLARATION);
             finish();
         }
         bump();   // let
@@ -628,10 +626,9 @@ public final class CstParser {
             retType();
         }
         expect(SyntaxKind.ASSIGN, Reading.A_DECLARATION);
-        if (at(SyntaxKind.IDENT) && current() == SyntaxKind.IDENT
-                && tokenText(mi(0)).equals("intrinsic") && nth(1) == SyntaxKind.STRING_LIT) {
+        if (at(ContextualWord.INTRINSIC) && nth(1) == SyntaxKind.STRING_LIT) {
             start(SyntaxKind.INTRINSIC_BODY);
-            bump();   // intrinsic
+            expect(ContextualWord.INTRINSIC, Reading.A_DECLARATION);
             bump();   // "key"
             finish();
         } else if (at(SyntaxKind.LBRACE)) {
@@ -708,15 +705,12 @@ public final class CstParser {
 
     // --- example ---
 
-    /** {@code examples for <module.path>} — the header of an attached example-only file. {@code for}
-     * is a contextual soft-keyword (a bare identifier), so the {@code example.*} module namespace is
-     * unaffected. */
+    /** {@code examples for <module.path>} — the header of an attached example-only file. Both words
+     * are contextual, so the {@code example.*} module namespace is unaffected. */
     private void examplesFileHeader() {
         start(SyntaxKind.EXAMPLES_FILE_HEADER);
-        bump();   // examples
-        if (atContextual("for")) {
-            bump();   // for
-        } else {
+        expect(ContextualWord.EXAMPLES, Reading.A_DECLARATION);
+        if (!eat(ContextualWord.FOR)) {
             error(new ParseMessage.AnExampleOnlyFileStartsWithItsModule());
         }
         qualifiedName();   // target module path
@@ -727,7 +721,7 @@ public final class CstParser {
      * soft-keyword; the target names a behavior or a pure helper in this module. */
     private void exampleDef() {
         start(SyntaxKind.EXAMPLE_DEF);
-        bump();   // example
+        expect(ContextualWord.EXAMPLE, Reading.AN_EXAMPLE);
         expect(SyntaxKind.IDENT, Reading.AN_EXAMPLE);   // target name
         if (!at(SyntaxKind.PIPE)) {
             error(new ParseMessage.AnExampleNeedsAtLeastOneRow());
@@ -802,7 +796,7 @@ public final class CstParser {
      * is written anywhere else — bare, or qualified through the module that declares it. */
     private void fakeDef() {
         start(SyntaxKind.FAKE_DEF);
-        bump();   // fake
+        expect(ContextualWord.FAKE, Reading.AN_EXAMPLE);
         expect(SyntaxKind.IDENT, Reading.AN_EXAMPLE);   // target injected behavior
         dottedTail();
         if (!at(SyntaxKind.PIPE)) {
@@ -1741,10 +1735,7 @@ public final class CstParser {
 
     /** Flushes trivia preceding the next meaningful token, then emits that token. */
     private void bump() {
-        while (pos < tokens.size() && tokens.get(pos).kind().isTrivia()) {
-            stack.peek().children.add(tokens.get(pos));
-            pos++;
-        }
+        flushTrivia();
         if (pos < tokens.size()) {
             stack.peek().children.add(tokens.get(pos));
             if (tokens.get(pos).kind() != SyntaxKind.EOF) {
@@ -1753,12 +1744,24 @@ public final class CstParser {
         }
     }
 
-    /** Flushes trailing trivia and the final EOF token into the (root) frame. */
-    private void bumpEof() {
+    /** The same, emitting the token as {@code kind} with its text unchanged. Only for a word the
+     *  caller has seen is next, so it is never the end of input. */
+    private void bumpAs(SyntaxKind kind) {
+        flushTrivia();
+        stack.peek().children.add(new GreenToken(kind, tokens.get(pos).text()));
+        pos++;
+    }
+
+    private void flushTrivia() {
         while (pos < tokens.size() && tokens.get(pos).kind().isTrivia()) {
             stack.peek().children.add(tokens.get(pos));
             pos++;
         }
+    }
+
+    /** Flushes trailing trivia and the final EOF token into the (root) frame. */
+    private void bumpEof() {
+        flushTrivia();
         if (pos < tokens.size() && tokens.get(pos).kind() == SyntaxKind.EOF) {
             stack.peek().children.add(tokens.get(pos));
             pos++;
@@ -1769,17 +1772,30 @@ public final class CstParser {
         return current() == kind;
     }
 
-    /** True when the current meaningful token is an identifier with the given text — used for the
-     * contextual soft-keywords {@code example} / {@code examples} / {@code for}, which stay ordinary
-     * identifiers everywhere else. */
-    private boolean atContextual(String text) {
-        return contextualAt(0, text);
+    /** Whether the next meaningful token is {@code word}, which the lexer hands over as a name. */
+    private boolean at(ContextualWord word) {
+        return at(SyntaxKind.IDENT) && tokenText(mi(0)).equals(word.spelling());
     }
 
-    /** The same question about the {@code n}th meaningful token ahead, for a modifier that may be
-     * followed by another one. */
-    private boolean contextualAt(int n, String text) {
-        return nth(n) == SyntaxKind.IDENT && tokenText(mi(n)).equals(text);
+    /**
+     * Reads {@code word} as the keyword it is here, if it is next.
+     *
+     * <p>Reading one and recording what it was read as are one step, so the tree cannot hold a word
+     * the parse took for a keyword as the name the lexer said it was.
+     */
+    private boolean eat(ContextualWord word) {
+        if (!at(word)) {
+            return false;
+        }
+        bumpAs(SyntaxKind.CONTEXTUAL_KW);
+        return true;
+    }
+
+    /** Reads {@code word} as the keyword it is here, or says it was wanted. */
+    private void expect(ContextualWord word, Reading reading) {
+        if (!eat(word)) {
+            expected("`" + word.spelling() + "`", reading);
+        }
     }
 
     private boolean eat(SyntaxKind kind) {
@@ -1803,7 +1819,10 @@ public final class CstParser {
             bump();
             return;
         }
-        Object wanted = kind.display();
+        expected(kind.display(), reading);
+    }
+
+    private void expected(Object wanted, Reading reading) {
         Object found = current().display();
         error(switch (reading) {
             case A_DECLARATION -> new ParseMessage.ADeclarationExpectedSomethingElse(wanted, found);

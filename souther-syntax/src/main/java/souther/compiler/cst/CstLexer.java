@@ -29,7 +29,6 @@ public final class CstLexer {
             Map.entry("data", SyntaxKind.DATA_KW),
             Map.entry("invariant", SyntaxKind.INVARIANT_KW),
             Map.entry("ensures", SyntaxKind.ENSURES_KW),
-            // `intrinsic` is not reserved: it lexes as an identifier and is read by position.
             Map.entry("as", SyntaxKind.AS_KW),
             Map.entry("let", SyntaxKind.LET_KW),
             Map.entry("guard", SyntaxKind.GUARD_KW),
@@ -39,18 +38,24 @@ public final class CstLexer {
             Map.entry("if", SyntaxKind.IF_KW),
             Map.entry("then", SyntaxKind.THEN_KW),
             Map.entry("behavior", SyntaxKind.BEHAVIOR_KW),
-            // `on` is not reserved: it is read as a contextual word after `depends`, the way
-            // `for` is after `examples`, so an ordinary field or parameter may still be named on.
             Map.entry("depends", SyntaxKind.DEPENDS_KW),
             Map.entry("constructs", SyntaxKind.CONSTRUCTS_KW),
             Map.entry("match", SyntaxKind.MATCH_KW),
             Map.entry("with", SyntaxKind.WITH_KW),
             Map.entry("unreachable", SyntaxKind.UNREACHABLE_KW));
 
-    /** The reserved keywords, the single source of truth a syntax-highlighter grammar derives from. */
+    /** The reserved keywords, the single source of truth a syntax-highlighter grammar derives from.
+     *  A {@link ContextualWord} is not one of them: it lexes as a name everywhere. */
     public static Set<String> keywords() {
         return KEYWORDS.keySet();
     }
+
+    /** The kinds the reserved keywords lex as. */
+    public static Set<SyntaxKind> keywordKinds() {
+        return KEYWORD_KINDS;
+    }
+
+    private static final Set<SyntaxKind> KEYWORD_KINDS = Set.copyOf(KEYWORDS.values());
 
     /** The characters a backslash may be written before. */
     private static final String ESCAPES = "ntr\"\\";

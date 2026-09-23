@@ -183,7 +183,7 @@ public final class AstBuilder {
                             .example(n, target, named));
                 }
                 case FAKE_DEF -> {
-                    fakes.add(reading(new WrittenOwner.Fake(text, moduleName, nameAfter(n, 1)))
+                    fakes.add(reading(new WrittenOwner.Fake(text, moduleName, nameIn(n)))
                             .fake(n));
                 }
                 default -> { /* MODULE_HEADER handled above; ERROR nodes are reported already */ }
@@ -223,7 +223,7 @@ public final class AstBuilder {
                             .example(n, exampled, named));
                 }
                 case FAKE_DEF -> {
-                    fakes.add(reading(new WrittenOwner.Fake(text, moduleName, nameAfter(n, 1)))
+                    fakes.add(reading(new WrittenOwner.Fake(text, moduleName, nameIn(n)))
                             .fake(n));
                 }
                 case EXAMPLES_FILE_HEADER -> { /* the header itself */ }
@@ -274,19 +274,28 @@ public final class AstBuilder {
     }
 
     /**
-     * The dotted name written at {@code from} in {@code n}'s meaningful children.
+     * The dotted name {@code n} is written with, past the keywords it opens with.
      *
      * <p>The text and not a reference: this is what says which owner wrote the block, and the owner
      * is what a reference of it is counted within. Empty where the parser recovered from a form with
-     * no name at that position — what is wrong with the text was said where it was read.
+     * no name — what is wrong with the text was said where it was read.
      */
-    private String nameAfter(SyntaxNode n, int from) {
+    private String nameIn(SyntaxNode n) {
         List<SyntaxElement> es = meaningful(n);
-        if (from >= es.size() || !isToken(es.get(from), SyntaxKind.IDENT)) {
-            return "";
+        int[] at = {firstName(es)};
+        return at[0] < es.size() ? dottedName(es, at).name().canonical() : "";
+    }
+
+    /** Where the first name among {@code es} stands, or {@code es.size()} where none does. The
+     *  keywords in front of it are tokens of their own kinds, so this does not need to know which
+     *  or how many there are. */
+    private static int firstName(List<SyntaxElement> es) {
+        int at = 0;
+        while (at < es.size()
+                && !(es.get(at) instanceof SyntaxToken t && t.kind().standsWhereANameStands())) {
+            at++;
         }
-        int[] at = {from};
-        return dottedName(es, at).name().canonical();
+        return at;
     }
 
     /** A name as the source wrote it — bare, or qualified through a module or an import alias — read
@@ -304,12 +313,11 @@ public final class AstBuilder {
     }
 
     /** The comma-separated names of a {@code constructs}/{@code depends on} clause, each possibly
-     * qualified by its module. {@code skipIdents} drops the identifiers that belong to the keyword
-     * rather than to the list — the {@code on} of {@code depends on} lexes as one. */
-    private List<Ast.Name> dottedNames(SyntaxNode clause, int skipIdents) {
+     * qualified by its module. */
+    private List<Ast.Name> dottedNames(SyntaxNode clause) {
         List<Ast.Name> out = new ArrayList<>();
         List<SyntaxElement> es = meaningful(clause);
-        int[] at = {1 + skipIdents};              // past the clause keyword
+        int[] at = {firstName(es)};
         while (at[0] < es.size()) {
             if (isToken(es.get(at[0]), SyntaxKind.COMMA)) {
                 at[0]++;
@@ -320,12 +328,11 @@ public final class AstBuilder {
         return out;
     }
 
-    /** Which token names the behavior an {@code example} block writes rows for. The contextual
-     *  {@code example} lexes as an identifier, so the target is the second identifier token; where
-     *  the parser recovered from a block with no target there is none. */
+    /** Which token names the behavior an {@code example} block writes rows for; where the parser
+     *  recovered from a block with no target there is none. */
     private SyntaxToken exampleTarget(SyntaxNode n) {
         List<SyntaxToken> idents = identTokens(n);
-        return idents.size() >= 2 ? idents.get(1) : null;
+        return idents.isEmpty() ? null : idents.getFirst();
     }
 
     // --- who a top-level item is written by ---
@@ -519,19 +526,19 @@ public final class AstBuilder {
         }
 
         /**
-         * The dotted name written at {@code from} in {@code n}'s meaningful children, as a behavior
+         * The dotted name {@code n} is written with, past the keywords it opens with, as a behavior
          * reference.
          *
-         * <p>Empty where the parser recovered from a form with no name at that position. A name is
-         * what the following passes ask about, so there has to be one to ask about; what is wrong
-         * with the text was said where it was read.
+         * <p>Empty where the parser recovered from a form with no name. A name is what the following
+         * passes ask about, so there has to be one to ask about; what is wrong with the text was
+         * said where it was read.
          */
-        private Ast.Var behaviorNameAfter(SyntaxNode n, int from) {
+        private Ast.Var behaviorNameIn(SyntaxNode n) {
             List<SyntaxElement> es = meaningful(n);
-            if (from >= es.size() || !isToken(es.get(from), SyntaxKind.IDENT)) {
+            int[] at = {firstName(es)};
+            if (at[0] == es.size()) {
                 return Ast.Var.desugared("", pos(n), reference());
             }
-            int[] at = {from};
             return Ast.Var.written(dottedName(es, at).name(), reference());
         }
 
@@ -741,11 +748,9 @@ public final class AstBuilder {
                 // either clause may name through a module, so the idents of one name are joined and
                 // a comma starts the next
                 if (clause.kind() == SyntaxKind.CONSTRUCTS_CLAUSE) {
-                    constructs.addAll(dottedNames(clause, 0));
+                    constructs.addAll(dottedNames(clause));
                 } else if (clause.kind() == SyntaxKind.DEPENDS_CLAUSE) {
-                    // one ident past the keyword is the `on` of `depends on`, which lexes as an
-                    // ordinary identifier and is no part of the list
-                    for (Ast.Name dep : dottedNames(clause, 1)) {
+                    for (Ast.Name dep : dottedNames(clause)) {
                         dependsOn.add(Ast.Var.written(dep.name(), reference()));
                     }
                 } else if (clause.kind() == SyntaxKind.ENSURES_CLAUSE) {
@@ -1646,7 +1651,7 @@ public final class AstBuilder {
         List<Ast.With> withs = new ArrayList<>();
         n.child(SyntaxKind.WITH_CLAUSE).ifPresent(clause -> {
             for (SyntaxNode b : childNodes(clause, SyntaxKind.WITH_BINDING)) {
-                withs.add(new Ast.With(behaviorNameAfter(b, 0), expr(firstExprChild(b)), pos(b)));
+                withs.add(new Ast.With(behaviorNameIn(b), expr(firstExprChild(b)), pos(b)));
             }
         });
         return new Ast.ExampleRow(identity, inputs, withs, expected(n), pos(n));
@@ -1672,7 +1677,7 @@ public final class AstBuilder {
 
     /** {@code fake <target> | rows}, read for the owner it names. */
     private Ast.Fake fake(SyntaxNode n) {
-        Ast.Var target = behaviorNameAfter(n, 1);
+        Ast.Var target = behaviorNameIn(n);
         List<Ast.FakeRow> rows = new ArrayList<>();
         for (SyntaxNode row : childNodes(n, SyntaxKind.FAKE_ROW)) {
             rows.add(fakeRow(row));

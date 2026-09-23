@@ -1,5 +1,6 @@
 package souther.compiler.fmt;
 
+import souther.compiler.cst.ContextualWord;
 import souther.compiler.cst.CstParser;
 import souther.compiler.cst.SyntaxElement;
 import souther.compiler.cst.SyntaxKind;
@@ -788,13 +789,14 @@ public final class Formatter {
     // --- example ---
 
     private TokenDoc examplesFileHeader(SyntaxNode n, Place at) {
-        return TokenDoc.node(n.kind(), concat(ident("examples"), GAP, ident("for"), GAP,
+        return TokenDoc.node(n.kind(), concat(keyword(ContextualWord.EXAMPLES), GAP,
+                keyword(ContextualWord.FOR), GAP,
                 qualifiedName(n.child(SyntaxKind.QUALIFIED_NAME).orElseThrow(), at)));
     }
 
     private TokenDoc exampleDef(SyntaxNode n, Place at) {
-        List<SyntaxToken> ids = idents(n);   // ["example", target]
-        String target = ids.size() >= 2 ? ids.get(1).text() : "";
+        List<SyntaxToken> ids = idents(n);
+        String target = ids.isEmpty() ? "" : ids.getFirst().text();
         List<TokenDoc> rows = new ArrayList<>();
         for (SyntaxNode row : childNodes(n, SyntaxKind.EXAMPLE_ROW)) {
             Place r = places.under(at, row.kind(),
@@ -803,8 +805,8 @@ public final class Formatter {
             rows.add(TokenDoc.at(r, concat(exampleRow(row, r), TokenDoc.endsTheLineOf(r))));
         }
         rows.add(TokenDoc.carries(at, Carrier.AT_END));
-        return TokenDoc.node(n.kind(), concat(ident("example"), GAP, ident(target),
-                ids.size() >= 2 ? headerLine(at, ids.get(ids.size() - 1)) : TokenDoc.NIL, nest(INDENT, concat(rows))));
+        return TokenDoc.node(n.kind(), concat(keyword(ContextualWord.EXAMPLE), GAP, ident(target),
+                ids.isEmpty() ? TokenDoc.NIL : headerLine(at, ids.getLast()), nest(INDENT, concat(rows))));
     }
 
     /**
@@ -879,11 +881,10 @@ public final class Formatter {
     }
 
     private TokenDoc fakeDef(SyntaxNode n, Place at) {
-        // ["fake", target…]. The target is a name and may be written through the module that
-        // declares the behavior, so every identifier after the first belongs to it.
+        // The target is a name and may be written through the module that declares the behavior,
+        // so every identifier belongs to it.
         List<SyntaxToken> ids = idents(n);
-        TokenDoc target = ids.size() >= 2
-                ? dottedName(ids.subList(1, ids.size())) : TokenDoc.NIL;
+        TokenDoc target = ids.isEmpty() ? TokenDoc.NIL : dottedName(ids);
         List<TokenDoc> rows = new ArrayList<>();
         for (SyntaxNode row : childNodes(n, SyntaxKind.FAKE_ROW)) {
             Place r = places.under(at, row.kind(),
@@ -892,8 +893,8 @@ public final class Formatter {
             rows.add(TokenDoc.at(r, concat(fakeRow(row, r), TokenDoc.endsTheLineOf(r))));
         }
         rows.add(TokenDoc.carries(at, Carrier.AT_END));
-        return TokenDoc.node(n.kind(), concat(ident("fake"), GAP, target,
-                ids.size() >= 2 ? headerLine(at, ids.get(ids.size() - 1)) : TokenDoc.NIL, nest(INDENT, concat(rows))));
+        return TokenDoc.node(n.kind(), concat(keyword(ContextualWord.FAKE), GAP, target,
+                ids.isEmpty() ? TokenDoc.NIL : headerLine(at, ids.getLast()), nest(INDENT, concat(rows))));
     }
 
     private TokenDoc fakeRow(SyntaxNode n, Place at) {
@@ -1154,11 +1155,11 @@ public final class Formatter {
                 if (c.kind() == SyntaxKind.CONSTRUCTS_CLAUSE) {
                     listed = TokenDoc.node(c.kind(),
                             concat(TokenDoc.token(SyntaxKind.CONSTRUCTS_KW, "constructs"), GAP,
-                                    nameList(c, 0, clause)));
+                                    nameList(c, clause)));
                 } else if (c.kind() == SyntaxKind.DEPENDS_CLAUSE) {
                     listed = TokenDoc.node(c.kind(),
                             concat(TokenDoc.token(SyntaxKind.DEPENDS_KW, "depends"), GAP,
-                                    ident("on"), GAP, nameList(c, 1, clause)));
+                                    keyword(ContextualWord.ON), GAP, nameList(c, clause)));
                 } else {
                     listed = ensuresClause(c, clause);
                 }
@@ -1275,22 +1276,15 @@ public final class Formatter {
         return qualifiedName(n, at);
     }
 
-    /** The names a {@code constructs} / {@code depends on} clause lists. {@code skipIdents} drops
-     * the leading identifiers that belong to the keyword rather than the list — the {@code on} of
-     * {@code depends on}, which lexes as an ordinary identifier. */
-    private TokenDoc nameList(SyntaxNode clause, int skipIdents, Place at) {
+    /** The names a {@code constructs} / {@code depends on} clause lists. */
+    private TokenDoc nameList(SyntaxNode clause, Place at) {
         Place run = places.under(at, SyntaxKind.NAME_LIST, Opening.NONE, Written.of(clause));
         // an entry may name through a module, so the dots of one name are kept and only a comma
         // starts the next
         List<Member> names = new ArrayList<>();
         List<SyntaxToken> current = new ArrayList<>();
-        int skipped = 0;
         for (SyntaxElement e : meaningful(clause)) {
             if (!(e instanceof SyntaxToken t)) {
-                continue;
-            }
-            if (t.kind() == SyntaxKind.IDENT && skipped < skipIdents) {
-                skipped++;
                 continue;
             }
             switch (t.kind()) {
@@ -1299,7 +1293,7 @@ public final class Formatter {
                     names.add(named(run, names.isEmpty(), current));
                     current = new ArrayList<>();
                 }
-                default -> { }   // the dots of one name, and the `constructs` / `depends` keyword
+                default -> { }   // the dots of one name, and the clause's keywords
             }
         }
         if (!current.isEmpty()) {
@@ -1337,11 +1331,11 @@ public final class Formatter {
         List<TokenDoc> modifiers = new ArrayList<>();
         for (SyntaxNode modifier : childNodes(n, SyntaxKind.PRIVATE_MODIFIER)) {
             places.within(modifier, at);
-            modifiers.add(concat(ident("private"), GAP));
+            modifiers.add(concat(keyword(ContextualWord.PRIVATE), GAP));
         }
         for (SyntaxNode modifier : childNodes(n, SyntaxKind.PARTIAL_MODIFIER)) {
             places.within(modifier, at);
-            modifiers.add(concat(ident("partial"), GAP));
+            modifiers.add(concat(keyword(ContextualWord.PARTIAL), GAP));
         }
         TokenDoc keyword = concat(concat(modifiers), TokenDoc.token(SyntaxKind.LET_KW, "let"), GAP);
         var written = n.child(SyntaxKind.FN_PARAM_LIST);
@@ -1360,7 +1354,7 @@ public final class Formatter {
                     Opening.breaks(TokenDoc.Break.MAY), Written.of(intrinsic.get()));
             return TokenDoc.node(n.kind(), concat(head, GAP, ASSIGN,
                     group(nest(INDENT, TokenDoc.at(ofTheBody, concat(TokenDoc.node(intrinsic.get().kind(),
-                                    concat(ident("intrinsic"), GAP, token(body))),
+                                    concat(keyword(ContextualWord.INTRINSIC), GAP, token(body))),
                                     TokenDoc.endsTheLineOf(ofTheBody)))))));
         }
         var block = n.child(SyntaxKind.BLOCK_EXPR);
@@ -2600,20 +2594,15 @@ public final class Formatter {
 
     /**
      * A member the grammar writes as a bare identifier rather than as a node — a sum's cases, the
-     * names an import or a {@code constructs} clause lists. It has no node to be named by, so it is
-     * named by where its identifier is.
-     *
-     * <p>The identifier a {@code depends on} clause opens with is the {@code on}, which is the
-     * keyword and not a name.
+     * names an import or a {@code constructs} or {@code depends on} clause lists. It has no node to
+     * be named by, so it is named by where its identifier is.
      */
     private static boolean isBareMember(SyntaxToken t) {
         if (t.kind() != SyntaxKind.IDENT) {
             return false;
         }
-        SyntaxNode parent = t.parent();
-        return switch (parent.kind()) {
-            case SUM_BODY, NAME_LIST, CONSTRUCTS_CLAUSE -> true;
-            case DEPENDS_CLAUSE -> !t.equals(firstIdentToken(parent));
+        return switch (t.parent().kind()) {
+            case SUM_BODY, NAME_LIST, CONSTRUCTS_CLAUSE, DEPENDS_CLAUSE -> true;
             default -> false;
         };
     }
@@ -2643,14 +2632,6 @@ public final class Formatter {
         return false;
     }
 
-    private static SyntaxToken firstIdentToken(SyntaxNode n) {
-        for (SyntaxElement e : n.children()) {
-            if (e instanceof SyntaxToken t && t.kind() == SyntaxKind.IDENT) {
-                return t;
-            }
-        }
-        return null;
-    }
 
     /** Whether {@code t} is what closes a construct whose members take a line each — the place a
      * comment written under the last member goes. */
@@ -2758,6 +2739,11 @@ public final class Formatter {
      *  a token the output does not have. */
     private static TokenDoc ident(String text) {
         return TokenDoc.token(text.equals("_") ? SyntaxKind.UNDERSCORE : SyntaxKind.IDENT, text);
+    }
+
+    /** A contextual word the canonical form writes where the grammar reads it as a keyword. */
+    private static TokenDoc keyword(ContextualWord word) {
+        return TokenDoc.token(SyntaxKind.CONTEXTUAL_KW, word.spelling());
     }
 
     private static TokenDoc dottedName(List<SyntaxToken> idents) {

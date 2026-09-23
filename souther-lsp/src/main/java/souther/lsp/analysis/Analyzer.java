@@ -3247,10 +3247,6 @@ public final class Analyzer {
         if (parent == SyntaxKind.PATTERN_FIELD) {
             return afterFirstIdent ? T_VARIABLE : T_PROPERTY;
         }
-        // `depends on f`: the `on` lexes as an identifier but is the second word of the keyword
-        if (parent == SyntaxKind.DEPENDS_CLAUSE && !afterFirstIdent) {
-            return T_KEYWORD;
-        }
         return switch (parent) {
             case TYPE_REF, TYPE_ARGS, SUM_BODY, NEWTYPE_BODY, CONSTRUCTS_CLAUSE, DEPENDS_CLAUSE,
                  ENSURES_ARM,
@@ -3263,13 +3259,9 @@ public final class Analyzer {
         };
     }
 
+    /** A reserved word, or a contextual one the parse read as a keyword where it stands. */
     private static boolean isKeyword(SyntaxKind k) {
-        return switch (k) {
-            case MODULE_KW, IMPORT_KW, EXPOSING_KW, DATA_KW, INVARIANT_KW, ENSURES_KW, AS_KW, LET_KW, GUARD_KW,
-                 ELSE_KW, TRUE_KW, FALSE_KW, IF_KW, THEN_KW, BEHAVIOR_KW, DEPENDS_KW, CONSTRUCTS_KW,
-                 MATCH_KW, WITH_KW, UNREACHABLE_KW -> true;
-            default -> false;
-        };
+        return k == SyntaxKind.CONTEXTUAL_KW || CstLexer.keywordKinds().contains(k);
     }
 
 
