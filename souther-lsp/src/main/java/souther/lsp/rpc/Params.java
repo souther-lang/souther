@@ -19,6 +19,10 @@ public final class Params {
     public record DidChange(String uri, String text) {
     }
 
+    /** {@code workspace/didChangeWatchedFiles}: the uris of the files that changed on disk. */
+    public record WatchedFiles(List<String> uris) {
+    }
+
     /** {@code workspace/didChangeWorkspaceFolders}: the uris of the folders that joined and left. */
     public record WorkspaceFoldersChange(List<String> added, List<String> removed) {
     }

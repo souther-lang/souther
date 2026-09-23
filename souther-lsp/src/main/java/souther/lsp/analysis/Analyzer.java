@@ -14,7 +14,6 @@ import souther.compiler.check.Sig;
 import souther.compiler.check.Resolve;
 import souther.compiler.check.SpecImplementation;
 import souther.compiler.examples.ExampleProvisioning;
-import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Abandonment;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.ArmSummary;
@@ -127,10 +126,11 @@ public final class Analyzer {
      * one, because it is a compile of one file with nothing else in sight.
      */
     private Compilation workspaceCompile;
-    /** Which module path {@link #workspaceCompile} was built for, and only that: the path a compile
-     * uses is the one the graph it is asked about carries. A different one is a different set of
-     * modules to resolve an import against, so the compile is started again. */
-    private ModulePath compiledAgainst;
+    /** Which modules on the path {@link #workspaceCompile} was built for, and only that: the modules
+     * a compile uses are the ones the graph it is asked about carries. Different ones — another
+     * place, or the same place written again — are a different set of modules to resolve an import
+     * against, so the compile is started again. */
+    private ModulesOnThePath compiledAgainst;
 
     /** What each open document reaches from outside itself, as the last compile that could answer
      * said. Held across edits so completion has something to offer while the document being typed in
@@ -374,9 +374,9 @@ public final class Analyzer {
         elsewhere.forgetAllBut(graph.uris());
         behaviorsOwed.forgetAllBut(graph.uris());
         readings.keySet().retainAll(Set.copyOf(graph.uris()));
-        ModulePath path = graph.path();
+        ModulesOnThePath path = graph.onThePath();
         if (workspaceCompile == null || !path.equals(compiledAgainst)) {
-            workspaceCompile = Compilation.ofDocuments(sources, broken, path);
+            workspaceCompile = Compilation.ofDocuments(sources, broken, path.path());
             workspaceCompile.measure(measure);
             compiledAgainst = path;
         } else {
@@ -418,7 +418,7 @@ public final class Analyzer {
      */
     private Compilation composingRowsOf(ModuleGraph graph, Sorted sorted) {
         Compilation composing = Compilation.ofDocuments(sorted.joining(), sorted.broken(),
-                graph.path());
+                graph.onThePath().path());
         composing.observe(RowObservation.RECORD_ARMS);
         composing.measure(measure);
         composing.abandonWhen(abandonment);
@@ -1632,7 +1632,7 @@ public final class Analyzer {
         // The buffer as it stands where it parses, and finished off where it does not: a call is
         // asked about while its closing bracket is not typed, which is most of the time.
         SemanticProbe.Reading reading =
-                probe.of(rest, sorted.broken(), graph.path(), uri, text, cursor,
+                probe.of(rest, sorted.broken(), graph.onThePath(), uri, text, cursor,
                         abandonment);
         Compilation compilation = reading == null ? compileOf(graph) : reading.compilation();
         String parsed = reading == null ? text : reading.repaired();
@@ -1949,7 +1949,7 @@ public final class Analyzer {
         Map<String, String> rest = new LinkedHashMap<>(sorted.joining());
         rest.remove(uri);
         SemanticProbe.Reading reading =
-                probe.of(rest, sorted.broken(), graph.path(), uri, text, cursor,
+                probe.of(rest, sorted.broken(), graph.onThePath(), uri, text, cursor,
                         abandonment);
         if (reading == null) {
             return List.of();

@@ -42,9 +42,29 @@ public final class Workspace {
      * an edit to an open buffer does not re-walk and re-read the whole workspace on every keystroke. */
     private Map<String, String> diskScan;
 
+    /** The modules on the path as last found, or {@code null} when they must be looked for again.
+     *  Cached for the reason the disk scan is. */
+    private ModulesOnThePath onThePath;
+
+    /** The revision the next modules found on the path carry. */
+    private long pathRevision;
+
+    /**
+     * Forgets the modules on the path, and moves on the revision the next ones carry.
+     *
+     * <p>Both, every time. The directories found may well be the same ones — a build writes into
+     * the directory it wrote into before — and it is the revision that tells a compile holding the
+     * old classes that they are old.
+     */
+    private void pathMayHaveChanged() {
+        onThePath = null;
+        pathRevision++;
+    }
+
     /** Records the workspace roots from their {@code file://} URIs; non-file URIs are ignored. */
     public void setRoots(List<String> rootUris) {
         diskScan = null;   // the set of files to scan changed
+        pathMayHaveChanged();
         roots.clear();
         for (String uri : rootUris) {
             rootOf(uri).ifPresent(roots::add);
@@ -71,6 +91,7 @@ public final class Workspace {
         boolean changed = !roots.equals(before);
         if (changed) {
             diskScan = null;
+            pathMayHaveChanged();
         }
         return changed;
     }
@@ -91,8 +112,8 @@ public final class Workspace {
     /**
      * The current module graph: every {@code .sou} file under the roots, read from disk, with the
      * given {@code openBuffers} (keyed by document URI) overlaid — an open buffer's unsaved text wins,
-     * and an open document outside the roots is still included — and the {@link #modulePath} of the
-     * same roots, so the two are read of one workspace.
+     * and an open document outside the roots is still included — and the {@link #modulesOnThePath}
+     * of the same roots, so the two are read of one workspace.
      */
     public ModuleGraph snapshot(Map<String, String> openBuffers) {
         if (diskScan == null) {
@@ -100,13 +121,56 @@ public final class Workspace {
         }
         Map<String, String> sources = new LinkedHashMap<>(diskScan);
         sources.putAll(openBuffers);
-        return ModuleGraph.of(sources, modulePath());
+        return ModuleGraph.of(sources, modulesOnThePath());
     }
 
-    /** Invalidates the cached disk scan, so the next {@link #snapshot} re-reads the workspace. Called
-     * when the client reports on-disk changes ({@code workspace/didChangeWatchedFiles}). */
+    /**
+     * Drops what the files at {@code uris} changed, as the client reports them
+     * ({@code workspace/didChangeWatchedFiles}).
+     *
+     * <p>The client reports what {@link #sourceGlob()} and {@link #classOutputGlobs()} asked for and
+     * nothing else, so a file that is not a source is under a class output: a source changes the
+     * scan, and anything else changes what is on the path.
+     */
+    public void filesChanged(List<String> uris) {
+        boolean classes = false;
+        for (String uri : uris) {
+            if (uri.endsWith(SUFFIX)) {
+                diskScan = null;
+            } else {
+                classes = true;
+            }
+        }
+        if (classes) {
+            pathMayHaveChanged();
+        }
+    }
+
+    /** Drops everything read from disk, for a report of changes that could not be read. */
     public void markChanged() {
         diskScan = null;
+        pathMayHaveChanged();
+    }
+
+    /** The files a client is asked to report so the disk scan is dropped when one changes. */
+    public static String sourceGlob() {
+        return "**/*" + SUFFIX;
+    }
+
+    /**
+     * The class outputs a client is asked to report: the directory, for one appearing or going, and
+     * what is under it, for a class a build wrote there.
+     */
+    public static List<String> classOutputGlobs() {
+        List<String> globs = new ArrayList<>();
+        for (Path output : CLASS_OUTPUTS) {
+            List<String> names = new ArrayList<>();
+            output.forEach(name -> names.add(name.toString()));
+            String written = String.join("/", names);
+            globs.add("**/" + written);
+            globs.add("**/" + written + "/**");
+        }
+        return List.copyOf(globs);
     }
 
     /**
@@ -118,20 +182,40 @@ public final class Workspace {
      * as a jar in the local repository is not found — knowing about that means reading the build,
      * which the language server does not do.
      */
-    ModulePath modulePath() {
+    ModulesOnThePath modulesOnThePath() {
+        if (onThePath == null) {
+            onThePath = new ModulesOnThePath(classOutputs(), pathRevision);
+        }
+        return onThePath;
+    }
+
+    /**
+     * The class output of every project under the roots.
+     *
+     * <p>Only the projects are looked for. Where a project's build writes its classes is one of the
+     * layouts, so each is resolved against the project rather than walked down to, and nothing under
+     * a class output is ever read here.
+     */
+    private ModulePath classOutputs() {
         List<Path> outputs = new ArrayList<>();
         for (Path root : roots) {
             if (!Files.isDirectory(root)) {
                 continue;
             }
-            try (Stream<Path> walk = Files.walk(root, CLASS_OUTPUT_DEPTH)) {
+            try (Stream<Path> walk = Files.walk(root, PROJECT_DEPTH)) {
                 // Asked of every path the walk reaches, and not of the ones that turn out to be
-                // what is wanted. What costs time is the walk, and a root with no class output in
-                // it is a root this would read to the end after being told to stop.
-                walk.forEach(path -> {
+                // projects. What costs time is the walk, and a root with no project in it is a root
+                // this would read to the end after being told to stop.
+                walk.forEach(project -> {
                     abandonment.stopIfAsked();
-                    if (Files.isDirectory(path) && isClassOutput(path)) {
-                        outputs.add(path);
+                    if (!Files.isDirectory(project)) {
+                        return;
+                    }
+                    for (Path layout : CLASS_OUTPUTS) {
+                        Path output = project.resolve(layout);
+                        if (Files.isDirectory(output)) {
+                            outputs.add(output);
+                        }
                     }
                 });
             } catch (IOException _) {
@@ -141,17 +225,13 @@ public final class Workspace {
         return outputs.isEmpty() ? ModulePath.EMPTY : ModulePath.ofClassPath(outputs);
     }
 
-    /** How far under a root a project's class output is looked for: `<root>/<project>/target/classes`
-     * is three, and a root that is itself the project is one. */
-    private static final int CLASS_OUTPUT_DEPTH = 4;
+    /** Where a project's build writes its classes, under the project: Maven's and Gradle's. */
+    private static final List<Path> CLASS_OUTPUTS = List.of(
+            Path.of("target", "classes"), Path.of("build", "classes", "java", "main"));
 
-    private static boolean isClassOutput(Path dir) {
-        Path parent = dir.getParent();
-        return parent != null
-                && ((dir.getFileName().toString().equals("classes")
-                                && parent.getFileName().toString().equals("target"))
-                        || dir.endsWith(Path.of("build", "classes", "java", "main")));
-    }
+    /** How many directories down from a root a project may be: the root itself, a project in it,
+     *  or a project in a directory that groups several. */
+    private static final int PROJECT_DEPTH = 2;
 
     private Map<String, String> scanDisk() {
         Map<String, String> sources = new LinkedHashMap<>();

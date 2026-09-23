@@ -1,7 +1,5 @@
 package souther.lsp.analysis;
 
-import souther.compiler.meta.ModulePath;
-
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -13,28 +11,29 @@ import java.util.Set;
  * {@link Analyzer} reads it to resolve names and diagnostics across the whole module set, the way
  * the batch compiler does.
  *
- * <p>The path is here and not remembered by whoever compiles, because a compile reads both and both
- * have to be one reading of the workspace. A request answered between a change to the roots and the
- * next diagnose would otherwise read the sources as they now are against the path as it was.
+ * <p>The modules on the path are here and not remembered by whoever compiles, because a compile
+ * reads both and both have to be one reading of the workspace. A request answered between a change
+ * and the next diagnose would otherwise read the sources as they now are against the path as it was.
  */
 public final class ModuleGraph {
 
     private final Map<String, String> sources;
-    private final ModulePath path;
+    private final ModulesOnThePath onThePath;
 
-    private ModuleGraph(Map<String, String> sources, ModulePath path) {
+    private ModuleGraph(Map<String, String> sources, ModulesOnThePath onThePath) {
         this.sources = sources;
-        this.path = path;
+        this.onThePath = onThePath;
     }
 
     /** A graph over the given {@code uri -> source text} map, with nothing built beside it. */
     public static ModuleGraph of(Map<String, String> sources) {
-        return of(sources, ModulePath.EMPTY);
+        return of(sources, ModulesOnThePath.NONE);
     }
 
-    /** A graph over the given sources, resolving what they import from elsewhere against {@code path}. */
-    public static ModuleGraph of(Map<String, String> sources, ModulePath path) {
-        return new ModuleGraph(new LinkedHashMap<>(sources), path);
+    /** A graph over the given sources, resolving what they import from elsewhere against
+     *  {@code onThePath}. */
+    public static ModuleGraph of(Map<String, String> sources, ModulesOnThePath onThePath) {
+        return new ModuleGraph(new LinkedHashMap<>(sources), onThePath);
     }
 
     /** Every document URI in the workspace. */
@@ -47,8 +46,8 @@ public final class ModuleGraph {
         return sources.get(uri);
     }
 
-    /** What the projects beside this one have already built. */
-    public ModulePath path() {
-        return path;
+    /** What the projects beside this one have already built, as this snapshot read it. */
+    public ModulesOnThePath onThePath() {
+        return onThePath;
     }
 }
