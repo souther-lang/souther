@@ -3,6 +3,8 @@ package souther.compiler.cst;
 import souther.compiler.diag.msg.ParseMessage;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -50,12 +52,14 @@ public final class CstLexer {
         return KEYWORDS.keySet();
     }
 
-    /** The kinds the reserved keywords lex as. */
+    /** The kinds the reserved keywords lex as. An {@link EnumSet}, because a reader asks it once per
+     *  token it classifies. */
     public static Set<SyntaxKind> keywordKinds() {
         return KEYWORD_KINDS;
     }
 
-    private static final Set<SyntaxKind> KEYWORD_KINDS = Set.copyOf(KEYWORDS.values());
+    private static final Set<SyntaxKind> KEYWORD_KINDS =
+            Collections.unmodifiableSet(EnumSet.copyOf(KEYWORDS.values()));
 
     /** The characters a backslash may be written before. */
     private static final String ESCAPES = "ntr\"\\";
