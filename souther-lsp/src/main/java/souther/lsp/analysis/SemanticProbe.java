@@ -7,7 +7,6 @@ import souther.compiler.cst.GreenToken;
 import souther.compiler.cst.SyntaxKind;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Abandonment;
 import souther.compiler.query.Compilation;
 import souther.compiler.source.SourceId;
@@ -120,7 +119,7 @@ final class SemanticProbe {
     }
 
     private Compilation compile;
-    private ModulePath compiledAgainst;
+    private ModulesOnThePath compiledAgainst;
 
     /**
      * What {@code text} would be with what the cursor is in the middle of finished off, or null
@@ -256,7 +255,7 @@ final class SemanticProbe {
      * over, because which of the two a document is is a question with one answer, and a second
      * reading of it here would be a second answer free to differ.
      */
-    Reading of(Map<String, String> joining, Set<String> broken, ModulePath path, String uri,
+    Reading of(Map<String, String> joining, Set<String> broken, ModulesOnThePath path, String uri,
                String text, int cursor, Abandonment abandonment) {
         Repair repair = repair(text, cursor);
         if (repair == null) {
@@ -265,7 +264,7 @@ final class SemanticProbe {
         Map<String, String> sources = new LinkedHashMap<>(joining);
         sources.put(uri, repair.text());
         if (compile == null || !path.equals(compiledAgainst)) {
-            compile = Compilation.ofDocuments(sources, broken, path);
+            compile = Compilation.ofDocuments(sources, broken, path.path());
             compiledAgainst = path;
         } else {
             compile.update(sources, broken);

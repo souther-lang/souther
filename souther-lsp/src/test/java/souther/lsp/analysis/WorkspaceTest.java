@@ -3,16 +3,15 @@ package souther.lsp.analysis;
 import org.junit.jupiter.api.Test;
 import souther.compiler.meta.ModulePath;
 
-import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.PathMatcher;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -121,53 +120,64 @@ class WorkspaceTest {
     }
 
     @Test
-    void theModulePathIsWalkedOnceUntilAClassOutputIsReported() throws Exception {
+    void whatIsOnThePathIsFoundOnceUntilAClassOutputIsReported() throws Exception {
         Path dir = Files.createTempDirectory("ws");
         Workspace ws = new Workspace();
         ws.setRoots(List.of(dir.toUri().toString()));
-        assertSame(ModulePath.EMPTY, ws.modulePath(), "nothing has been built");
+        ModulesOnThePath unbuilt = ws.modulesOnThePath();
+        assertSame(ModulePath.EMPTY, unbuilt.path(), "nothing has been built");
 
         Path output = Files.createDirectories(dir.resolve("p/build/classes/java/main"));
-        assertSame(ModulePath.EMPTY, ws.modulePath(), "the walk is not repeated on its own");
+        assertSame(unbuilt, ws.modulesOnThePath(), "it is not looked for again on its own");
 
         ws.filesChanged(List.of(dir.resolve("p/src/a.sou").toUri().toString()));
-        assertSame(ModulePath.EMPTY, ws.modulePath(), "a source says nothing about class output");
+        assertSame(unbuilt, ws.modulesOnThePath(), "a source says nothing about class output");
 
         ws.filesChanged(List.of(output.resolve("A.class").toUri().toString()));
-        assertEquals(ModulePath.ofClassPath(List.of(output)), ws.modulePath(),
+        ModulesOnThePath built = ws.modulesOnThePath();
+        assertEquals(ModulePath.ofClassPath(List.of(output)), built.path(),
                 "a build reported under a class output is found");
+
+        ws.filesChanged(List.of(output.resolve("A.class").toUri().toString()));
+        ModulesOnThePath rebuilt = ws.modulesOnThePath();
+        assertEquals(built.path(), rebuilt.path(), "built again into the same place");
+        assertNotEquals(built, rebuilt,
+                "and still not the same modules: what is in that place was written again");
     }
 
     @Test
-    void aChangeOfRootsWalksForClassOutputAgain() throws Exception {
+    void aChangeOfRootsLooksForClassOutputAgain() throws Exception {
         Path first = Files.createTempDirectory("ws");
         Path second = Files.createTempDirectory("ws");
         Path output = Files.createDirectories(second.resolve("build/classes/java/main"));
         Workspace ws = new Workspace();
         ws.setRoots(List.of(first.toUri().toString()));
-        assertSame(ModulePath.EMPTY, ws.modulePath());
+        assertSame(ModulePath.EMPTY, ws.modulesOnThePath().path());
 
         ws.changeRoots(List.of(second.toUri().toString()), List.of());
-        assertEquals(ModulePath.ofClassPath(List.of(output)), ws.modulePath());
+        assertEquals(ModulePath.ofClassPath(List.of(output)), ws.modulesOnThePath().path());
     }
 
-    /** The client reports what the globs match, so they have to match what is dropped for. */
+    /** A project two directories down from a root, the deepest one is looked for at. */
     @Test
-    void theGlobsReportSourcesAndClassOutputAndNothingElse() {
-        List<PathMatcher> classOutput = Workspace.classOutputGlobs().stream()
-                .map(glob -> FileSystems.getDefault().getPathMatcher("glob:" + glob))
-                .toList();
-        PathMatcher source = FileSystems.getDefault()
-                .getPathMatcher("glob:" + Workspace.sourceGlob());
+    void theClassOutputOfAProjectInAGroupIsFound() throws Exception {
+        Path root = Files.createTempDirectory("ws");
+        Path output = Files.createDirectories(root.resolve("group/project/build/classes/java/main"));
+        Files.createDirectories(root.resolve("group/project/deeper/build/classes/java/main"));
+        Workspace ws = new Workspace();
+        ws.setRoots(List.of(root.toUri().toString()));
 
-        for (String written : List.of(
-                "/w/p/build/classes/java/main", "/w/p/build/classes/java/main/a/B.class")) {
-            assertTrue(classOutput.stream().anyMatch(m -> m.matches(Path.of(written))), written);
-        }
-        for (String written : List.of("/w/p/build/generated/B.class", "/w/p/src/a.sou")) {
-            assertFalse(classOutput.stream().anyMatch(m -> m.matches(Path.of(written))), written);
-        }
-        assertTrue(source.matches(Path.of("/w/p/src/a.sou")));
+        assertEquals(ModulePath.ofClassPath(List.of(output)), ws.modulesOnThePath().path(),
+                "and one further down is not a project this looks for");
+    }
+
+    /** What the client is asked to watch, as the protocol's glob text: the output and what is in it. */
+    @Test
+    void aClassOutputIsWatchedAsTheDirectoryAndWhatIsUnderIt() {
+        assertTrue(Workspace.classOutputGlobs().containsAll(List.of(
+                "**/build/classes/java/main", "**/build/classes/java/main/**")),
+                Workspace.classOutputGlobs().toString());
+        assertEquals("**/*.sou", Workspace.sourceGlob());
     }
 
     @Test

@@ -84,7 +84,12 @@ public interface ModulePath {
     /**
      * A class path, by its entries. It is a value rather than a lambda so that two paths over the
      * same entries are the same path: a language server rebuilds one on every request, and a
-     * compilation it wants to keep between edits has to be able to tell that nothing moved.
+     * compilation it wants to keep between edits has to be able to tell that the path did not move.
+     *
+     * <p>That the path did not move, and nothing more. The classes are read from the entries when
+     * they are asked for, and a build writes new ones to the same entries, so two equal paths may
+     * hold different modules. A caller keeping a compilation across builds needs a second question
+     * answered, about the classes, and it is not one this value can answer.
      */
     record ClassPath(List<Path> entries) implements ModulePath {
         @Override

@@ -68,7 +68,7 @@ class ALinkedLocationSaysWhatItStandsInForTest {
         analyzer.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
         Map<String, List<LspDiagnostic>> byUri = analyzer.diagnostics(
                 ModuleGraph.of(Map.of(URI, MODEL)),
-                ModulePath.of(Compiler.compile(PUBLISHED)));
+                new ModulesOnThePath(ModulePath.of(Compiler.compile(PUBLISHED)), 0));
 
         List<LspDiagnostic> edges = byUri.getOrDefault(URI, List.of()).stream()
                 .filter(d -> "E1916".equals(d.code()))

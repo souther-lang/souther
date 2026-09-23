@@ -39,7 +39,7 @@ class AWalkOfTheWorkspaceIsStoppedWhereItIsReadingTest {
     void aRootWithNothingBuiltInItIsStillARootBeingRead() throws IOException {
         Workspace workspace = readingOnly(aRootOfOtherPeoplesFiles());
 
-        assertThrows(Abandoned.class, workspace::modulePath,
+        assertThrows(Abandoned.class, workspace::modulesOnThePath,
                 "and looking for what a build left is the same walk over the same paths");
     }
 

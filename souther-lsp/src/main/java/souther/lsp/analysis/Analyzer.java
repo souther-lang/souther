@@ -126,9 +126,10 @@ public final class Analyzer {
      * one, because it is a compile of one file with nothing else in sight.
      */
     private Compilation workspaceCompile;
-    /** Which module path {@link #workspaceCompile} was built for. A different one is a different
-     * set of modules to resolve an import against, so the compile is started again. */
-    private souther.compiler.meta.ModulePath compiledAgainst;
+    /** Which modules on the path {@link #workspaceCompile} was built for. Different ones — another
+     * place, or the same place written again — are a different set of modules to resolve an import
+     * against, so the compile is started again. */
+    private ModulesOnThePath compiledAgainst;
 
     /** What each open document reaches from outside itself, as the last compile that could answer
      * said. Held across edits so completion has something to offer while the document being typed in
@@ -288,14 +289,13 @@ public final class Analyzer {
      * it — so an error in an imported module lands on that module's document, not on its importer.
      */
     public Map<String, List<LspDiagnostic>> diagnostics(ModuleGraph graph) {
-        return diagnostics(graph, souther.compiler.meta.ModulePath.EMPTY);
+        return diagnostics(graph, ModulesOnThePath.NONE);
     }
 
     /** As {@link #diagnostics(ModuleGraph)}, resolving an import that names no module in the
      * workspace against {@code path} — what the projects beside this one have already built — so
      * an import the build resolves is not reported here as unknown. */
-    public Map<String, List<LspDiagnostic>> diagnostics(ModuleGraph graph,
-                                                       souther.compiler.meta.ModulePath path) {
+    public Map<String, List<LspDiagnostic>> diagnostics(ModuleGraph graph, ModulesOnThePath path) {
         Map<String, List<LspDiagnostic>> out = new LinkedHashMap<>();
         Map<String, String> compileSet = new LinkedHashMap<>();   // uri -> text, syntactically clean only
         Set<String> brokenModules = new HashSet<>();   // names of files held out for their syntax errors
@@ -372,13 +372,13 @@ public final class Analyzer {
      * with a workspace comes through here, and a file created or deleted on disk reaches it as a
      * diagnose, so the gap is observed wherever there is one.
      */
-    private Compilation compileOf(ModuleGraph graph, souther.compiler.meta.ModulePath path,
+    private Compilation compileOf(ModuleGraph graph, ModulesOnThePath path,
                                   Map<String, String> sources, Set<String> broken) {
         elsewhere.forgetAllBut(graph.uris());
         behaviorsOwed.forgetAllBut(graph.uris());
         readings.keySet().retainAll(Set.copyOf(graph.uris()));
         if (workspaceCompile == null || !path.equals(compiledAgainst)) {
-            workspaceCompile = Compilation.ofDocuments(sources, broken, path);
+            workspaceCompile = Compilation.ofDocuments(sources, broken, path.path());
             workspaceCompile.measure(measure);
             compiledAgainst = path;
         } else {
@@ -422,7 +422,7 @@ public final class Analyzer {
      */
     private Compilation composingRowsOf(Sorted sorted) {
         Compilation composing = Compilation.ofDocuments(sorted.joining(), sorted.broken(),
-                pathCompiledAgainst());
+                pathCompiledAgainst().path());
         composing.observe(RowObservation.RECORD_ARMS);
         composing.measure(measure);
         composing.abandonWhen(abandonment);
@@ -456,8 +456,8 @@ public final class Analyzer {
         return new Sorted(joining, broken);
     }
 
-    private souther.compiler.meta.ModulePath pathCompiledAgainst() {
-        return compiledAgainst == null ? souther.compiler.meta.ModulePath.EMPTY : compiledAgainst;
+    private ModulesOnThePath pathCompiledAgainst() {
+        return compiledAgainst == null ? ModulesOnThePath.NONE : compiledAgainst;
     }
 
     /**

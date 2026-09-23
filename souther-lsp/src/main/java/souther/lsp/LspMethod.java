@@ -103,23 +103,19 @@ public enum LspMethod {
                 "souther-workspace-watcher", Map.of("watchers", workspaceWatchers()));
 
         /**
-         * Every change to a source, and a class output appearing or going.
+         * Every change to a source, and every change to a class output.
          *
-         * <p>Only creation and deletion under a class output: what the workspace holds of one is that
-         * it is there, and a build rewriting its classes would otherwise report every one of them.
+         * <p>Every kind of change, a class rewritten in place included: a build writes its classes
+         * over the ones it wrote before, and a compile that read the old ones has to hear of it.
          */
         private static List<Map<String, Object>> workspaceWatchers() {
             List<Map<String, Object>> watchers = new ArrayList<>();
             watchers.add(Map.of("globPattern", Workspace.sourceGlob()));
             for (String glob : Workspace.classOutputGlobs()) {
-                watchers.add(Map.of("globPattern", glob, "kind", WATCH_CREATE | WATCH_DELETE));
+                watchers.add(Map.of("globPattern", glob));
             }
             return List.copyOf(watchers);
         }
-
-        /** {@code WatchKind.Create} and {@code WatchKind.Delete}, which a watcher's kind combines. */
-        private static final int WATCH_CREATE = 1;
-        private static final int WATCH_DELETE = 4;
 
         private static Map<String, Object> semanticTokens() {
             Map<String, Object> options = new LinkedHashMap<>();
