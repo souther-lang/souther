@@ -11,11 +11,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * {@code souther tooling} answers with the tooling metadata the jar carries, byte for byte, and not
- * with an answer of its own: a client that read the file out of the jar and one that asked the
- * command are told the same thing.
+ * {@code souther tooling} answers with the tooling metadata file, byte for byte, and not with an
+ * answer of its own. Here that file is the one on the class path; whether the shipped jar still
+ * carries it after the shade is {@link TheShippedJarAnswersFromWhatItCarriesIT}'s question.
  */
-class ToolingPrintsTheMetadataTheJarCarriesTest {
+class ToolingPrintsTheMetadataFileTest {
 
     private record Said(int code, String err, String out) {}
 

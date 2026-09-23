@@ -4,12 +4,16 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.query.Adequacy;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.JsonNodeFactory;
+import tools.jackson.databind.node.ObjectNode;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -29,12 +33,45 @@ class TheInitializationOptionsSchemaIsWhatTheServerReadsTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
+    /** As sets: the order of an object's members says nothing in JSON, so it is not held here. */
     @Test
     void theMembersTheSchemaNamesAreTheOnesTheServerAdvertises() {
-        List<String> named = new ArrayList<>();
+        Set<String> named = new HashSet<>();
         schema().get("properties").propertyNames().forEach(named::add);
 
-        assertEquals(List.copyOf(SoutherExtension.advertised().keySet()), named);
+        assertEquals(SoutherExtension.advertised().keySet(), named);
+    }
+
+    /**
+     * Every member the server advertises is one it reads and checks: a value its schema does not
+     * allow comes back as unread under that member's name. Advertising a member is not evidence of
+     * this, since the advertisement and the expectation above are both drawn from the same table.
+     */
+    @Test
+    void everyAdvertisedMemberIsReadAndItsValueChecked() {
+        for (SoutherExtension extension : SoutherExtension.values()) {
+            for (JsonNode written : List.<JsonNode>of(JSON.valueToTree(notAllowedFor(extension)),
+                    JsonNodeFactory.instance.nullNode())) {
+                ObjectNode souther = JSON.createObjectNode();
+                souther.set(extension.member(), written);
+                ObjectNode options = JSON.createObjectNode();
+                options.set("souther", souther);
+
+                SoutherInitializationOptions read = SoutherInitializationOptions.decode(options);
+
+                assertEquals(1, read.unread().size(), extension + " " + written + ": " + read);
+                assertTrue(read.unread().getFirst().contains("souther." + extension.member() + " "),
+                        read.unread().getFirst());
+            }
+        }
+    }
+
+    /** A value no schema for the member allows. A switch with no default, so a member added to the
+     * table is a test that does not compile until it says how that member is misused. */
+    private static Object notAllowedFor(SoutherExtension extension) {
+        return switch (extension) {
+            case ADEQUACY -> 42;
+        };
     }
 
     @Test
@@ -78,12 +115,19 @@ class TheInitializationOptionsSchemaIsWhatTheServerReadsTest {
         }
     }
 
+    /** JSON {@code null} is written, and is not an object; only a member that is not there is absent. */
     @Test
     void aSoutherMemberThatIsNotAnObjectIsSaidToBeUnread() {
-        SoutherInitializationOptions read = decode(Map.of("souther", "witness"));
+        for (JsonNode written : List.<JsonNode>of(JSON.valueToTree("witness"),
+                JsonNodeFactory.instance.nullNode())) {
+            ObjectNode options = JSON.createObjectNode();
+            options.set("souther", written);
 
-        assertEquals(Adequacy.Level.OFF, read.adequacy());
-        assertEquals(1, read.unread().size(), read.unread().toString());
+            SoutherInitializationOptions read = SoutherInitializationOptions.decode(options);
+
+            assertEquals(Adequacy.Level.OFF, read.adequacy());
+            assertEquals(1, read.unread().size(), written + ": " + read.unread());
+        }
     }
 
     private static SoutherInitializationOptions decode(Object initializationOptions) {

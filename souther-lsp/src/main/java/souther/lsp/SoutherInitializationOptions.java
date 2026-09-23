@@ -36,13 +36,24 @@ record SoutherInitializationOptions(Adequacy.Level adequacy, List<String> unread
         unread = List.copyOf(unread);
     }
 
-    /** Reads {@code initializationOptions}, which may be absent or be something else entirely. */
+    /**
+     * Reads {@code initializationOptions}, which may be absent or be something else entirely.
+     *
+     * <p>Absent is a member that is not there. A member written as JSON {@code null} is there, and
+     * is a value like any other: the schema allows it nowhere, so it is read as unset and said to
+     * be. What {@code initializationOptions} itself holds is the protocol's and other servers', so
+     * only the {@code souther} member is held to the schema.
+     *
+     * <p>Every member this server advertises is read here, by a switch over {@link SoutherExtension}
+     * with no default: a member added to that table is a member this method does not compile
+     * without reading, so the handshake cannot announce an option nothing reads.
+     */
     static SoutherInitializationOptions decode(JsonNode initializationOptions) {
         if (initializationOptions == null || !initializationOptions.isObject()) {
             return NONE;
         }
         JsonNode souther = initializationOptions.get("souther");
-        if (souther == null || souther.isNull()) {
+        if (souther == null) {
             return NONE;
         }
         if (!souther.isObject()) {
@@ -51,26 +62,36 @@ record SoutherInitializationOptions(Adequacy.Level adequacy, List<String> unread
                             + " none of it was read"));
         }
         List<String> unread = new ArrayList<>();
-        Adequacy.Level adequacy = adequacy(souther.get(SoutherExtension.ADEQUACY.member()), unread);
+        Adequacy.Level adequacy = Adequacy.Level.OFF;
+        for (SoutherExtension extension : SoutherExtension.values()) {
+            JsonNode written = souther.get(extension.member());
+            if (written == null) {
+                continue;
+            }
+            Optional<String> allowed = switch (extension) {
+                case ADEQUACY -> {
+                    Optional<Adequacy.Level> named = written.isString()
+                            ? Adequacy.Level.spelled(written.asString())
+                            : Optional.empty();
+                    if (named.isPresent()) {
+                        adequacy = named.get();
+                        yield Optional.empty();
+                    }
+                    yield Optional.of(levels());
+                }
+            };
+            allowed.ifPresent(values -> unread.add("initializationOptions.souther."
+                    + extension.member() + " is " + written + ", which is none of " + values
+                    + "; it is read as unset"));
+        }
         return new SoutherInitializationOptions(adequacy, unread);
     }
 
-    private static Adequacy.Level adequacy(JsonNode written, List<String> unread) {
-        if (written == null || written.isNull()) {
-            return Adequacy.Level.OFF;
-        }
-        Optional<Adequacy.Level> named = written.isString()
-                ? Adequacy.Level.spelled(written.asString())
-                : Optional.empty();
-        if (named.isPresent()) {
-            return named.get();
-        }
+    private static String levels() {
         StringJoiner levels = new StringJoiner(", ");
         for (Adequacy.Level level : Adequacy.Level.values()) {
             levels.add(level.spelling());
         }
-        unread.add("initializationOptions.souther." + SoutherExtension.ADEQUACY.member() + " is "
-                + written + ", which is none of " + levels + "; nothing is measured");
-        return Adequacy.Level.OFF;
+        return levels.toString();
     }
 }

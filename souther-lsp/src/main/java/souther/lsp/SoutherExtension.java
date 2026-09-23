@@ -12,6 +12,9 @@ import java.util.Map;
  * the initialization-options schema's to say, not this table's, so nothing here grows a version or
  * a list of values.
  *
+ * <p>Advertised here and read in {@link SoutherInitializationOptions#decode}, which switches over
+ * this table with no default, so a member added here does not compile until it is read.
+ *
  * <p>The advertisement arrives in the answer to {@code initialize}, after the options were sent. It
  * tells a client what this server did with them, and what to send the next server it starts from the
  * same artifact; what a client may send before it has started one is in the schema the tooling

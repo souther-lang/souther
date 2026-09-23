@@ -2,14 +2,19 @@ package souther.cli;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import souther.lsp.ToolingMetadata;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -52,6 +57,28 @@ class TheShippedJarAnswersFromWhatItCarriesIT {
 
         assertEquals(0, answer.code(), answer.err());
         assertEquals("souther " + System.getProperty("souther.version"), answer.out().strip());
+    }
+
+    /**
+     * The tooling metadata survives the shade, and {@code souther tooling} prints the file the jar
+     * carries: a client that reads it out of the archive and one that runs the command are told the
+     * same thing.
+     */
+    @Test
+    void theToolingCommandPrintsTheMetadataTheJarCarries() throws Exception {
+        String carried;
+        try (ZipFile archive = new ZipFile(jar.toFile())) {
+            ZipEntry entry = archive.getEntry(ToolingMetadata.RESOURCE);
+            assertNotNull(entry, "the shipped jar carries " + ToolingMetadata.RESOURCE);
+            try (InputStream in = archive.getInputStream(entry)) {
+                carried = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            }
+        }
+
+        Answer answer = souther("tooling");
+
+        assertEquals(0, answer.code(), answer.err());
+        assertEquals(carried, answer.out());
     }
 
     @Test
