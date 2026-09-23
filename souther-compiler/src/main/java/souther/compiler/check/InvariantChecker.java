@@ -710,26 +710,6 @@ public final class InvariantChecker {
         return seedFields(named, reading.source(), reading.policy(), reading.readings());
     }
 
-    /** The same, reading for itself. */
-    static Seeded seedFields(TypeSymbol.AtModule named, RuleReadingSource source,
-                             ReadingPolicy policy) {
-        return seedFields(named, source, policy, DeclarationReadings.NONE);
-    }
-
-    /** The same, with some of the fields already settled at a value, reading for itself. */
-    static Seeded seedFields(TypeSymbol.AtModule named, RuleReadingSource source,
-                             ReadingPolicy policy, Map<NumberAt<RuleKey>, Count> settled) {
-        return seedFields(named, source, policy, settled, Reach.EVERYTHING,
-                DeclarationReadings.NONE);
-    }
-
-    /** The same, reading only as far as {@code reach} says, and reading for itself. */
-    static Seeded seedFields(TypeSymbol.AtModule named, RuleReadingSource source,
-                             ReadingPolicy policy, Map<NumberAt<RuleKey>, Count> settled,
-                             Reach reach) {
-        return seedFields(named, source, policy, settled, reach, DeclarationReadings.NONE);
-    }
-
     /**
      * The same, with some of the fields settled at a value and reading only as far as {@code reach}
      * says at each name it meets.

@@ -441,18 +441,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             java.util.Objects.requireNonNull(at, "a reported finding is shown somewhere");
         }
 
-        /**
-         * The same, where this report was assembled without asking what a run would offer.
-         *
-         * <p>Which is every report but the one printed beside the rows. What is offered is settled
-         * by composing and reducing, and a report that asked for it would pay for a generation
-         * nobody requested — so a report written on its own names what the measurement saw, and
-         * that is the finding's own answer.
-         */
-        public ReportedFinding(Adequacy.Finding finding, Citation at) {
-            this(finding, at, null);
-        }
-
         /** What it is about, for a reader that wants the fact and not the page. */
         public About about() {
             return finding.about();

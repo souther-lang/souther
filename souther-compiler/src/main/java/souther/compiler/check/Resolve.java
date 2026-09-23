@@ -217,7 +217,7 @@ public final class Resolve {
         }
 
         /**
-         * What writing {@code name} here would mean.
+         * What writing {@code name} here would mean, over a table {@link #byName} already answered.
          *
          * <p>Three answers, and the third is why this is asked rather than looked up. A name an
          * import line was to bring in and could not is in scope denoting nothing: what is wrong was
@@ -225,16 +225,12 @@ public final class Resolve {
          * use is reported as a name nothing declares, and the author is sent to a body where
          * nothing is wrong — which is the same reasoning the type namespace was written to
          * ({@link Denotation}), and the same three answers.
+         *
+         * <p>Package-private, so the only readers are the ones that got the table from here: the
+         * rule about what a spelling means is this one, and a caller that assembled a table of its
+         * own would be asking it of something else. {@code Resolve} reads every name a module
+         * writes, and rebuilding the table for each of them is what taking the table saves.
          */
-        public Reach reach(String name) {
-            return reachIn(byName(), name);
-        }
-
-        /** The same, over a table {@link #byName} already answered. Package-private, so the only
-         *  readers are the ones that got the table from here: the rule about what a spelling means
-         *  is this one, and a caller that assembled a table of its own would be asking it of
-         *  something else. {@code Resolve} reads every name a module writes, and rebuilding the
-         *  table for each of them is what this saves. */
         Reach reachIn(Map<String, ValueName> reached, String name) {
             ValueName named = reached.get(name);
             if (named != null) {

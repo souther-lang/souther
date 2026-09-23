@@ -26,25 +26,6 @@ import java.util.Set;
 public final class ReportedReason {
 
     /**
-     * The words for what the parts of a rule left a question standing on, in the order they were
-     * written.
-     *
-     * <p><b>Carried and not claimed.</b> The order arrives already said — it was said where a
-     * reading's own record of a clause was still in hand — and this maps each member to the word a
-     * document writes. Handed a bare list instead, this stated an order it had nothing to see: it
-     * was right while every member came from one producer, and stopped being right when a second
-     * arrived with nobody in a position to notice.
-     *
-     * <p>Each projected on its own and the words made distinct afterwards, never the other way
-     * round. What a document promises is deliberately coarser than what this compiler records, so
-     * two reasons a reader is not offered to tell apart come out as one word — and that is this
-     * projection saying they are one thing to lift, rather than a reader dropping one of them.
-     */
-    public static SourceOrdered<Stop> asWritten(AuthoredOrder<RuleReasons.Said> stopped) {
-        return SourceOrdered.carrying(stopped.map(ReportedReason::stop));
-    }
-
-    /**
      * One thing a question stands on, in the words a document promises, and where to go about it.
      *
      * <p>The pair and not the word, because the word is deliberately coarser than what produced it

@@ -81,11 +81,6 @@ public record DecisionReading(String behavior, List<Ruled> found, Enumeration en
         public Ruled {
             shownBy = List.copyOf(shownBy);
         }
-
-        /** Whether every condition on the path is one a run through can be recognised. */
-        public boolean everyConditionIsRecorded() {
-            return shownBy.stream().noneMatch(ShownBy.NothingIsRecorded.class::isInstance);
-        }
     }
 
     /** The rules themselves, for a reader that asks what the body decides and not where. */

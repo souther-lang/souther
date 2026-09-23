@@ -74,9 +74,5 @@ public sealed interface Requirement {
             }
             why = java.util.List.copyOf(why);
         }
-
-        BoundaryUndetermined(RuleKey at, BlockReason.RuleReadingStopped one) {
-            this(at, java.util.List.of(one));
-        }
     }
 }

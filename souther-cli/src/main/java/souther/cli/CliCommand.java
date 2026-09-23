@@ -29,26 +29,24 @@ enum CliCommand {
 
     INIT("init", "[<groupId>:<artifactId>]", "start a project, or add Souther to one",
             Map.of(CliOption.MODULE,
-                    Reads.saying("the `.sou` module header (default: the coordinate)"),
-                    CliOption.DIRECTORY, Reads.saying(
-                            "where to write it (default: the artifactId, or here when adding)"))),
+                    "the `.sou` module header (default: the coordinate)",
+                    CliOption.DIRECTORY,
+                    "where to write it (default: the artifactId, or here when adding)")),
     COMPILE("compile", "<file.sou>...", "compile to .class files",
-            Map.of(CliOption.DIRECTORY,
-                    Reads.saying("where the generated .class files are written"))),
+            Map.of(CliOption.DIRECTORY, "where the generated .class files are written")),
     RUN("run", "<file.sou>", "run one behavior and print its output",
-            Map.of(CliOption.BEHAVIOR,
-                    Reads.saying("which behavior to run (default: the only one)"))),
+            Map.of(CliOption.BEHAVIOR, "which behavior to run (default: the only one)")),
     FMT("fmt", "<file.sou>...", "format source, to stdout or in place"),
     EXAMPLES("examples", "<file.sou>...", "how well the `example`s cover the model",
-            Map.of(CliOption.FORMAT, Reads.saying("how to render the report, and any compile "
-                    + "error (default human)"))),
+            Map.of(CliOption.FORMAT, "how to render the report, and any compile "
+                    + "error (default human)")),
     DOC("doc", "[<anchor> | <error-code> | <set>/<topic>[/<section>]]",
             "read the language specification"),
     API("api", "[<Module>[.<name>]]", "the stdlib surface and its signatures",
-            Map.of(CliOption.SEARCH, Reads.saying("the published names whose signature or "
-                    + "document says the term"))),
+            Map.of(CliOption.SEARCH, "the published names whose signature or "
+                    + "document says the term")),
     JAPI("japi", "<class-or-package>[#<member>]", "a dependency jar's public API, with javadoc",
-            Map.of(CliOption.CLASS_PATH, Reads.saying("where to find the jar to read"))),
+            Map.of(CliOption.CLASS_PATH, "where to find the jar to read")),
     MCP("mcp", "", "serve doc, api and japi over MCP stdio"),
     LSP("lsp", "", "serve the language server over LSP stdio"),
     TOOLING("tooling", "", "what an editor needs to start and configure the server, as JSON"),
@@ -74,13 +72,13 @@ enum CliCommand {
     private final String summary;
 
     /** What an option of this command's means here, where that is not what it means on its own. */
-    private final Map<CliOption, Reads> reads;
+    private final Map<CliOption, String> reads;
 
     CliCommand(String spelling, String operands, String summary) {
         this(spelling, operands, summary, Map.of());
     }
 
-    CliCommand(String spelling, String operands, String summary, Map<CliOption, Reads> reads) {
+    CliCommand(String spelling, String operands, String summary, Map<CliOption, String> reads) {
         this.spelling = spelling;
         this.operands = operands;
         this.summary = summary;
@@ -119,44 +117,6 @@ enum CliCommand {
      * option.
      */
     String describe(CliOption option) {
-        Reads read = reads.get(option);
-        return read != null ? read.description() : option.description();
-    }
-
-    /**
-     * Which values the option takes under this command.
-     *
-     * <p>Beside {@link #describe} because a command reading an option its own way can take fewer
-     * values with it, and the two go together. Written once in the table, the usage offered a value
-     * the command refuses — and the table exists so that what is printed and what is parsed cannot
-     * come apart.
-     */
-    String valueSpelling(CliOption option) {
-        Reads read = reads.get(option);
-        return read != null && read.valueSpelling() != null
-                ? read.valueSpelling() : option.valueSpelling();
-    }
-
-    /**
-     * What a command says about an option it reads its own way.
-     *
-     * <p>One value and not two maps keyed alike. What an option means here and which values it
-     * takes here are one statement about one option, and holding them apart is two lists to keep
-     * in step.
-     *
-     * @param description   the sentence a section prints under this command
-     * @param valueSpelling the values it takes here, or null where those are the option's own
-     */
-    record Reads(String description, String valueSpelling) {
-
-        /** Read differently, and taking whatever the option takes. */
-        static Reads saying(String description) {
-            return new Reads(description, null);
-        }
-
-        /** Read differently and taking fewer values than the option's own spelling offers. */
-        static Reads taking(String valueSpelling, String description) {
-            return new Reads(description, valueSpelling);
-        }
+        return reads.getOrDefault(option, option.description());
     }
 }

@@ -372,17 +372,6 @@ public record Seam(CutPosition at, Level below, Level above) {
     }
 
     /**
-     * One value of the quantity that this seam is at, for a reader putting several of them in the
-     * order their values are in.
-     *
-     * <p>Either end will do and neither is the seam: the two are one step apart on an order that
-     * steps, and where only one of them exists it is the one that says where the values part.
-     */
-    Level somewhere() {
-        return below != null ? below : above != null ? above : at.asALevelOfTheQuantity();
-    }
-
-    /**
      * The nearest value the quantity takes on one side of the cut.
      *
      * <p>The value beside the cut where the quantity takes the cut, and the first value it does take

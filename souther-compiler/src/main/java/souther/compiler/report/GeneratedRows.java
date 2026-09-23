@@ -692,10 +692,6 @@ public final class GeneratedRows {
                 case GenerationReason.NothingToBuildAgainst none -> String.format(
                         "// generation stopped for `%s`: there was nothing to build a candidate"
                                 + " against%n", none.behavior());
-                case GenerationReason.NoValuesWereAskedFor none -> String.format(
-                        "// no rows offered at the lines of `%s`: this build composed no values,"
-                                + " and a row at a line is a value that went through the"
-                                + " decoders%n", none.behavior());
                 case GenerationReason.LinkageFailed failed -> String.format(
                         "// generation stopped for `%s`: the generated classes would not link, so"
                                 + " the decoders a candidate is built through were out of reach%n",

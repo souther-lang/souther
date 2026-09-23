@@ -53,15 +53,9 @@ public final class Suggest {
                 .toList();
     }
 
-    /** {@code " (did you mean `X`?)"} for the closest candidate within bound, or {@code ""}. */
-    public static String hint(String name, Collection<String> candidates) {
-        String best = candidate(name, candidates);
-        return best == null ? "" : " (did you mean `" + best + "`?)";
-    }
-
     /**
-     * The closest in-scope candidate to {@code name} within the closeness bound, or {@code null}.
-     * The structured form of {@link #hint}, for a diagnostic's {@code suggestion} field.
+     * The closest in-scope candidate to {@code name} within the closeness bound, or {@code null},
+     * for a diagnostic's {@code suggestion} field.
      *
      * <p>Answered through {@link #nearest} so that two candidates at the same distance are decided
      * by the same total order both ways of asking use. The collections a caller offers are sets and

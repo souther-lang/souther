@@ -584,11 +584,6 @@ sealed interface StatedByClauses {
         return out;
     }
 
-    /** Nothing read, so nothing ruled out. */
-    static StatedByClauses top(Map<FactSubject, Carrier> carriers) {
-        return new Said(Confinement.Planned.top(carriers), Part.nothing());
-    }
-
     /**
      * Whether {@code read} is the tree {@code clause} was written as, in the world {@code view}
      * describes.

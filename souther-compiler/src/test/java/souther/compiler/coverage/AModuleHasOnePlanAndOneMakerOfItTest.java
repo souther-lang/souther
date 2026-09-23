@@ -137,8 +137,6 @@ class AModuleHasOnePlanAndOneMakerOfItTest {
             "method instruments(souther.compiler.types.ConstructOccurrence) : boolean",
             "method emissionSiteOf(souther.compiler.types.ConstructOccurrence) :"
                     + " java.util.Optional<souther.compiler.coverage.ComparisonEmissionSite>",
-            "method requireEmissionSiteOf(souther.compiler.types.ConstructOccurrence) :"
-                    + " souther.compiler.coverage.ComparisonEmissionSite",
             "method outcomeOf(souther.compiler.types.ConstructOccurrence,boolean) :"
                     + " java.util.Optional<"
                     + "souther.compiler.coverage.ControlPlace$Outcome>",

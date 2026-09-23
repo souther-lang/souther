@@ -3,7 +3,6 @@ package souther.compiler.check;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.Reserved;
 import souther.compiler.ast.Ast;
-import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeSymbol;
@@ -455,11 +454,6 @@ public final class Scoping {
          *  written. */
         public SyntaxSymbols writtenSymbols(Registry<Ast.Def> registry, Stdlib stdlib) {
             return SyntaxSymbols.of(module, registry, denoting(), stdlib);
-        }
-
-        /** The same over a stage of the declarations something has resolved. */
-        public ResolvedSymbols symbolsOver(Registry<Hir.Def> registry, Stdlib stdlib) {
-            return ResolvedSymbols.over(module, registry, denoting(), stdlib);
         }
 
         /** These meanings as the operations a scope performs on them — what a reader that already

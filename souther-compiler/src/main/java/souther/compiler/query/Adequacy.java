@@ -4065,18 +4065,6 @@ public final class Adequacy {
         public GenerationDisposition {
             item = item == null ? Optional.empty() : item;
         }
-
-        /**
-         * The finding and what came of it, for a finding nothing offers a row for.
-         *
-         * <p>Empty and not a name for the finding: what a row would be offered for is the thing an
-         * offering answers, and a measure this compiler could not make is not one of those. A
-         * reader asking whether something else answers this has nothing to ask about, which is what
-         * having no item says.
-         */
-        public GenerationDisposition(Finding finding, GenerationOutcome outcome) {
-            this(finding, Optional.empty(), outcome);
-        }
     }
 
     /**
@@ -5528,31 +5516,6 @@ public final class Adequacy {
         /** The code a build is told this under, where it is told at all. */
         public Optional<DiagnosticCode> code() {
             return Optional.ofNullable(code);
-        }
-
-        /**
-         * Which question of the account answers about findings of this kind.
-         *
-         * <p>Here so that a surface reading part of the account names the kinds it has a reader for
-         * and is handed the questions those come out of. Written at each surface instead, which
-         * query answers about which kind was a condition somebody had to keep true by hand, and a
-         * surface that got it wrong would gate on an account missing exactly the kinds it was
-         * gating on.
-         *
-         * <p>A {@code switch} with nothing to fall through to: a kind added below is a kind some
-         * question has to be named for.
-         */
-        public AccountPart answeredBy() {
-            return switch (this) {
-                case DECISION_RULE_UNCOVERED -> AccountPart.THE_DECISION;
-                case INTERACTION_UNCOVERED, PAIR_UNCOVERED -> AccountPart.THE_MEASURES;
-                case OUTPUT_CASE_UNSPECIFIED, INPUT_CASE_UNSPECIFIED, BOUNDARY_UNMET,
-                     ARM_UNREACHED, UNANSWERED_ROW, OUTPUT_CASE_UNVERIFIED, AXIS_CLASS_UNCOVERED,
-                     DOMAIN_POINT_UNCOVERED, BOUNDARY_NOT_TOLD_FROM_ANOTHER,
-                     PARTITION_NOT_DERIVABLE, PARTITION_NOT_READ,
-                     RULE_UNACCOUNTED, PARTITION_RULES_NOT_REACHED,
-                     PARTITION_VALUES_NOT_SEPARATED -> AccountPart.THE_MEASURES;
-            };
         }
     }
 

@@ -89,16 +89,6 @@ public final class SemanticSnapshot {
         return receiverOf(sites.innermostContaining(cursor));
     }
 
-    /**
-     * The same, for a caller that has the access's extent rather than a place inside it.
-     *
-     * <p>Two entry points and not one method that guesses which it was handed. What an editor has is
-     * a cursor; what a reader that already walked the tree has is an extent, and an extent that is
-     * an occurrence is one occurrence while a place is inside several.
-     */
-    public Optional<MemberReceiver> memberReceiverOf(Region extent) {
-        return receiverOf(sites.site(extent));
-    }
 
     private Optional<MemberReceiver> receiverOf(SourceSiteId site) {
         return switch (sites.written(site)) {

@@ -1118,17 +1118,6 @@ final class CodecGen {
         int inputSlot = gen.slot(inputType);
         unbox(code, inputType, inputSlot);
         gen.bind(prim.input().binding(), prim.input().name(), inputSlot, inputType);
-
-        for (Hir.DecStmt stmt : prim.stmts()) {
-            switch (stmt) {
-                case Hir.Let let -> {
-                    Type t = gen.expr(let.value());
-                    int slot = gen.slot(t);
-                    store(code, slot, t);
-                    gen.bind(let.binder().binding(), let.binder().name(), slot, t);
-                }
-            }
-        }
         emitConstructCall(code, gen, cdName, prim.result(), fields);
     }
 

@@ -56,7 +56,7 @@ class WhatAPositionIsOfferedDoesNotTurnOnHowTheRuleWasSpeltTest {
 
         /** And how many it may. */
         int most(String type) {
-            return DeclaredBounds.mostCountOf(view(type), reading());
+            return DeclaredBounds.countsHeld(view(type), reading(), null).most();
         }
 
         /** What the position is offered, written as a row would write it. */

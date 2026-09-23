@@ -197,8 +197,8 @@ class NothingHereStartsAReadingSomebodyElseHasAlreadyMadeTest {
 
         assertTrue(pairs.containsKey("souther/compiler/check/FieldDomains#of"),
                 () -> "what a record's rules leave has a way in that reads for itself: " + pairs);
-        assertTrue(pairs.containsKey("souther/compiler/check/InvariantChecker#seedFields"),
-                () -> "and so does the seeding it is read off: " + pairs);
+        assertTrue(pairs.containsKey("souther/compiler/check/OccurrenceCounts#of"),
+                () -> "and so does what a count at a name is read off: " + pairs);
     }
 
     /**

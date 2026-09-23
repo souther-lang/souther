@@ -712,11 +712,6 @@ final class CodegenContext {
         return TypeOps.successType(ret);
     }
 
-    /** Whether {@code name} is an imported type or behavior (declared in another module, spec §modules). */
-    boolean isImported(String name) {
-        return typePackage.containsKey(name);
-    }
-
     // --- synthetic-class sink ---
 
     /** The next id for an escaping lambda's generated {@code $Fn} class (spec §blocks). */

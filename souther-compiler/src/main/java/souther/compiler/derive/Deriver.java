@@ -114,7 +114,7 @@ public final class Deriver {
             Hir.Binder input = binders.binder("__in", pos);
             Hir.Construct result = new Hir.Construct(self,
                     List.of(new Hir.FieldInit(single.getKey(), Hir.Var.local(input, pos), pos)), pos);
-            return new Hir.PrimDecoder(kind, input, List.of(), result, pos);
+            return new Hir.PrimDecoder(kind, input, result, pos);
         }
         // a newtype over a non-primitive Y delegates the whole input to Y's decoder (spec §newtype)
         if (d.newtype()) {

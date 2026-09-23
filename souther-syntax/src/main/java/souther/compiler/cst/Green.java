@@ -46,9 +46,4 @@ public sealed interface Green permits GreenNode, GreenToken {
         }
         return new GreenNode(kind, w, d + 1, List.copyOf(children));
     }
-
-    /** A green leaf: a kind plus the exact source text it covers. */
-    static GreenToken token(SyntaxKind kind, String text) {
-        return new GreenToken(kind, text);
-    }
 }

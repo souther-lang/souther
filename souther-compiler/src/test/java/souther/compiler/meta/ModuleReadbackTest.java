@@ -12,7 +12,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -129,8 +128,6 @@ class ModuleReadbackTest {
                         "double", BehaviorImplementation.IMPLEMENTED,
                         "audited", BehaviorImplementation.UNIMPLEMENTED),
                 read.behaviorImplementations());
-        assertEquals(Set.of("record"), read.injectedBehaviors());
-        assertEquals(Set.of("audited"), read.unwrittenBehaviors());
     }
 
     /** A composition declares stages; what comes back is the signature it computes to, written in

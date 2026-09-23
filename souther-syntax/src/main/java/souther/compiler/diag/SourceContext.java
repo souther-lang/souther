@@ -16,11 +16,6 @@ package souther.compiler.diag;
  */
 public record SourceContext(String fileName, String text, LaidOutText laidOut) {
 
-    /** A context with nothing to quote — a name for a file whose text the reporter does not hold. */
-    public SourceContext(String fileName) {
-        this(fileName, null, null);
-    }
-
     /** The 1-based {@code n}-th line of the source, or {@code null} when out of range or unknown. */
     public String line(int n) {
         if (text == null || n < 1) {

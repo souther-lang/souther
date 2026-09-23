@@ -76,15 +76,6 @@ final class PathEngine {
         return terms.insideATemplate();
     }
 
-    PathEngine(RuleReadingContext reading) {
-        this(reading, Map.of(), Terms.Of.THE_DISCHARGE_TREE);
-    }
-
-    PathEngine(RuleReadingContext reading,
-               Map<ValueName.Behavior, AssumedContract> contracts) {
-        this(reading, contracts, Terms.Of.THE_DISCHARGE_TREE);
-    }
-
     /**
      * The same rules, told which tree they are being read over.
      *

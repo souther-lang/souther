@@ -199,11 +199,6 @@ public enum SyntaxKind {
         };
     }
 
-    /** A leaf, trivia included. What a node covers is the text of the leaves under it. */
-    public boolean isToken() {
-        return lexis() != Lexis.NODE;
-    }
-
     /** Whitespace and comments: kept in the tree, invisible to the parser's token cursor. */
     public boolean isTrivia() {
         return this == WHITESPACE || this == LINE_COMMENT;

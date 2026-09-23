@@ -866,19 +866,11 @@ public final class InputDomain {
     }
 
     /**
-     * What a body's read of {@code binding} names, or null where it is not one of these parameters.
+     * What a body's read of each binding names, for a reader that walks a tree.
      *
-     * <p>Asked of the binding and never of the spelling. A body may bind a name its own behavior
+     * <p>Keyed by the binding and never by the spelling. A body may bind a name its own behavior
      * already binds — {@code let f = defaulted(f)} — and the two are different values under one
      * word, so a reader matching the word reads the inner one as the outer.
-     */
-    public String parameterRead(BindingId binding) {
-        return binding == null ? null : read.get(binding);
-    }
-
-    /**
-     * The same, as the whole map, for a reader that walks a tree rather than asking about one
-     * binding.
      *
      * <p>A behavior's parameters are bound more than once. The implementation binds them where the
      * body reads them, and the declaration binds them where its own {@code ensures} clauses do; a

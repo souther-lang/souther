@@ -209,13 +209,6 @@ public final class CheckSurface implements Assembly {
         return settling.module().exposing();
     }
 
-    /** Whether {@code behavior}'s body is written here as a {@code let} of its own name, which a
-     *  composition's is not. Read from the declarations, so it answers whether or not this module
-     *  was elaborated. */
-    public boolean writesItsOwnBody(Hir.BehaviorDef behavior) {
-        return Requirements.writesItsOwnBody(module(), behavior);
-    }
-
     /** Whether {@code behavior} is a {@code >->} composition, whose arms, positions and lines are
      *  its stages' ({@link Requirements#isComposition}). */
     public boolean isComposition(Hir.BehaviorDef behavior) {

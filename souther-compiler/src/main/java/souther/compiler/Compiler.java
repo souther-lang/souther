@@ -3,7 +3,6 @@ package souther.compiler;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.jvm.ClassFileImage;
-import souther.compiler.jvm.JvmClassName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
@@ -15,9 +14,6 @@ import souther.compiler.query.Acceptance;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -156,20 +152,6 @@ public final class Compiler {
         return compiled(source, defaultModuleName, warningsOut, measure, null, null);
     }
 
-    /**
-     * As above, on a budget of its own for each row evaluated and each statement read.
-     *
-     * <p>{@code null} takes the default, which is what every caller outside this compiler's own tests
-     * wants: it is set so that no terminating row is cut short, and a build has no other requirement
-     * of it. What a shorter one is for is a model written so that a row does not come back — see
-     * {@link Compilation#withExampleBudget}.
-     */
-    static Compilation compiled(String source, String defaultModuleName,
-                                List<Located> warningsOut, Adequacy.Asked measure,
-                                java.time.Duration exampleBudget) {
-        return compiled(source, defaultModuleName, warningsOut, measure, exampleBudget, null);
-    }
-
     /** As above, on a policy of its own — the steps and the depth a row is decided by. */
     static Compilation compiled(String source, String defaultModuleName,
                                 List<Located> warningsOut, Adequacy.Asked measure,
@@ -177,8 +159,16 @@ public final class Compiler {
         return compiled(source, defaultModuleName, warningsOut, measure, null, null, policy);
     }
 
-    /** As above, running the rows under an arrangement of the caller's — for a test stating which
-     *  work does not come back rather than timing it. */
+    /**
+     * As above, on a budget of its own for each row evaluated and each statement read, running the
+     * rows under an arrangement of the caller's — for a test stating which work does not come back
+     * rather than timing it.
+     *
+     * <p>A {@code null} budget takes the default, which is what every caller outside this compiler's
+     * own tests wants: it is set so that no terminating row is cut short, and a build has no other
+     * requirement of it. What a shorter one is for is a model written so that a row does not come
+     * back — see {@link Compilation#withExampleBudget}.
+     */
     static Compilation compiled(String source, String defaultModuleName,
                                 List<Located> warningsOut, Adequacy.Asked measure,
                                 java.time.Duration exampleBudget, JvmExampleDeadlines arrangement) {
@@ -342,23 +332,17 @@ public final class Compiler {
                 linked(sources, path, warningsOut, Adequacy.Asked.NOTHING).classes()));
     }
 
-    /** As {@link #compiledModules(List, ModulePath, List, Adequacy.Asked)}, on a budget of its own
-     *  for each row evaluated — {@code null} takes the default. See
-     *  {@link #compiled(String, String, List, Adequacy.Asked, java.time.Duration)}. */
-    static Compilation compiledModules(List<String> sources, ModulePath path,
-                                       List<Located> warningsOut, Adequacy.Asked measure,
-                                       java.time.Duration exampleBudget) {
-        return linked(sources, path, warningsOut, measure, exampleBudget, null, null);
-    }
-
-    /** As above, on a policy of its own — the steps and the depth a row is decided by. */
+    /** As {@link #compiledModules(List, ModulePath, List, Adequacy.Asked)}, on a policy of its own
+     *  — the steps and the depth a row is decided by. */
     static Compilation compiledModules(List<String> sources, ModulePath path,
                                        List<Located> warningsOut, Adequacy.Asked measure,
                                        EvaluationPolicy policy) {
         return linked(sources, path, warningsOut, measure, null, null, policy);
     }
 
-    /** As above, running the rows under an arrangement of the caller's. */
+    /** As above, on a budget of its own for each row evaluated — {@code null} takes the default —
+     *  running the rows under an arrangement of the caller's. See
+     *  {@link #compiled(String, String, List, Adequacy.Asked, java.time.Duration, JvmExampleDeadlines)}. */
     static Compilation compiledModules(List<String> sources, ModulePath path,
                                        List<Located> warningsOut, Adequacy.Asked measure,
                                        java.time.Duration exampleBudget, JvmExampleDeadlines arrangement) {
@@ -453,13 +437,5 @@ public final class Compiler {
         java.util.regex.Matcher mt = java.util.regex.Pattern
                 .compile("(?m)^\\s*module\\s+([\\p{L}\\p{N}_.]+)").matcher(source);
         return mt.find() ? mt.group(1) : null;
-    }
-    /** Compiles source and writes each generated class under {@code outDir}. */
-    public static void compileToDir(String source, Path outDir) throws IOException {
-        for (Map.Entry<String, ClassFileImage> entry : compile(source).entrySet()) {
-            Path file = outDir.resolve(JvmClassName.classFile(entry.getKey()));
-            Files.createDirectories(file.getParent());
-            Files.write(file, entry.getValue().bytes());
-        }
     }
 }

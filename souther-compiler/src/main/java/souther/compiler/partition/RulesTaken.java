@@ -9,9 +9,7 @@ import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Which rule of a body's decision each run took.
@@ -187,22 +185,5 @@ public final class RulesTaken {
         return took == null
                 ? new WhichRule.CouldNotTell(WhichRule.Why.NO_RECOGNISABLE_RULE_MATCHES)
                 : new WhichRule.TookThis(took);
-    }
-
-    /**
-     * Which of the body's rules the runs {@code seen} took, and how many runs took each.
-     *
-     * <p>Over the runs and not over the rules: what a rule is owed is settled elsewhere, and this
-     * says only what was seen. A rule nothing took is absent rather than present with nothing, for
-     * the reason a reading answers the absence of a fact rather than a count of zero.
-     */
-    public Map<DecisionRule, List<AlignedObservation>> takenBy(List<AlignedObservation> seen) {
-        Map<DecisionRule, List<AlignedObservation>> out = new LinkedHashMap<>();
-        for (AlignedObservation each : seen) {
-            if (takenBy(each) instanceof WhichRule.TookThis took) {
-                out.computeIfAbsent(took.rule(), _ -> new ArrayList<>()).add(each);
-            }
-        }
-        return out;
     }
 }

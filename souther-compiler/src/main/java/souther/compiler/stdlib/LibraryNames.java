@@ -32,23 +32,6 @@ public record LibraryNames(Map<String, TypeSymbol> languageTypes, Set<String> pr
         candidates = Map.copyOf(candidates);
     }
 
-    /**
-     * What the language declares under the bare spelling {@code bare}, or null where it declares
-     * nothing under it.
-     *
-     * <p>The bare spelling and the identity, held together. What the library declares is written in
-     * one of its modules and carries that module in its identity; what a source may write it as is a
-     * bare name and nothing else, because the module that declares it is not a qualifier a source
-     * names it by. Those are two facts and this is where the second is answered — a reader that
-     * worked one out from the other would be reading a naming rule off an identity.
-     *
-     * <p>Partial, and a function. Two of the library's modules declaring one bare spelling is
-     * refused where the library is loaded, so a spelling reaches at most one declaration here.
-     */
-    public TypeSymbol identityOf(String bare) {
-        return languageTypes.get(bare);
-    }
-
     /** Whether {@code qualifiedName} is a standard-library function — a declared one, or a sugar
      *  for one. */
     public boolean isLibraryFunction(String qualifiedName) {

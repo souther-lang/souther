@@ -349,11 +349,6 @@ public final class LibraryDocs {
         return hits;
     }
 
-    /** The line of {@code topic} that says {@code term}, cut to a readable width. */
-    public String snippet(Topic topic, String term) {
-        return snippet(topic, List.of(DocName.canonical(term)), Match.ANYWHERE);
-    }
-
     /** The line of {@code topic} that says one of {@code terms}, cut to a readable width. */
     private String snippet(Topic topic, List<String> terms, Match how) {
         String line = own(topic).lines()

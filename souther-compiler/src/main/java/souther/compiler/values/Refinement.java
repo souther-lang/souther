@@ -85,11 +85,6 @@ public final class Refinement<A> {
         return new Refinement<>(finer, coarser, Collections.unmodifiableMap(up));
     }
 
-    /** The relation the blocks below are read against. */
-    public Sameness<A> coarser() {
-        return coarser;
-    }
-
     /**
      * The one block of the coarser relation holding every position of {@code block}.
      *

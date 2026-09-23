@@ -92,19 +92,14 @@ public record OrderedAffineBoundary(BorderQuantity of, Seam seam, Towards satisf
     }
 
     /**
-     * The positions of it a rule could write another weight for.
+     * The positions of a quantity a rule could write another weight for — for a caller working out
+     * whether there is a boundary of this kind to build at all.
      *
      * <p>Asked of each position's own order ({@link Carrier#canBeWeighed}).
      * A date counts from an origin nobody wrote, so a line weighing one of them two is a line
      * nobody can state — and the weights such a position has are the one pair a distance is written
      * with.
      */
-    public Set<NumericTerm> weighedByANumber() {
-        return weighedByANumber(of);
-    }
-
-    /** The same, asked of a quantity rather than of a boundary on it — for a caller working out
-     *  whether there is a boundary of this kind to build at all. */
     public static Set<NumericTerm> weighedByANumber(BorderQuantity of) {
         Set<NumericTerm> out = new LinkedHashSet<>();
         // A linked set answers in the order it was filled, so it is filled in the terms' own order

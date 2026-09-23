@@ -69,24 +69,6 @@ public final class Recounted {
         }
     }
 
-    /** Whether {@code bytes} names the counting context, i.e. has already been through here or was
-     * generated counted. Read by tests that hold the two apart. */
-    public static boolean counts(byte[] bytes) {
-        try {
-            for (java.lang.classfile.constantpool.PoolEntry entry
-                    : ClassFile.of().parse(bytes).constantPool()) {
-                if (entry instanceof java.lang.classfile.constantpool.ClassEntry named
-                        && named.asInternalName().equals(CD_CONTEXT.packageName().replace('.', '/')
-                                + "/" + CD_CONTEXT.displayName())) {
-                    return true;
-                }
-            }
-            return false;
-        } catch (RuntimeException _) {
-            return false;
-        }
-    }
-
     /**
      * One method's code, with the counted points put in.
      *

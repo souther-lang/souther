@@ -39,11 +39,6 @@ public record Expansion<T>(T value, SequencedSet<souther.compiler.types.ReachNam
         this(value, standing, ElementProvenance.NONE, souther.compiler.coverage.SuppliedRules.NONE);
     }
 
-    /** The same, of one nothing needs the rules of. */
-    public Expansion(T value, SequencedSet<souther.compiler.types.ReachName.Declaration> standing, ElementProvenance provenance) {
-        this(value, standing, provenance, souther.compiler.coverage.SuppliedRules.NONE);
-    }
-
     public Expansion {
         standing = Collections.unmodifiableSequencedSet(new LinkedHashSet<>(standing));
     }

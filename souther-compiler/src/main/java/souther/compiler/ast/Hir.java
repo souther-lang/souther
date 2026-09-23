@@ -657,12 +657,6 @@ public interface Hir {
                         List<EnsuresClause> ensures,
                         SourcePos pos) implements BehaviorDef {
 
-        /** A behavior a pass wrote, named but written nowhere. */
-        public SpecBehavior(String name, List<Param> params, RetType ret, List<Name> constructs,
-                            List<Var> dependsOn, List<EnsuresClause> ensures, SourcePos pos) {
-            this(WrittenName.synthetic(name, pos), params, ret, constructs, dependsOn, ensures, pos);
-        }
-
         /**
          * Which behaviors the clause names, which is what a row stands in for.
          *
@@ -696,11 +690,6 @@ public interface Hir {
     /** A behavior parameter. Its type may be an anonymous union of cases (spec §unmarked-output). */
     record Param(WrittenName written, RetType type) implements Hir {
 
-        /** A parameter a pass wrote. */
-        public Param(String name, RetType type, SourcePos pos) {
-            this(WrittenName.synthetic(name, pos), type);
-        }
-
         /** What the parameter is called. */
         public String name() {
             return written.canonical();
@@ -720,13 +709,7 @@ public interface Hir {
      * (E1604).
      */
     record PipeBehavior(WrittenName written, List<Var> stages, RetType declaredOut, SourcePos pos)
-            implements BehaviorDef {
-
-        /** A composition a pass wrote, named but written nowhere. */
-        public PipeBehavior(String name, List<Var> stages, RetType declaredOut, SourcePos pos) {
-            this(WrittenName.synthetic(name, pos), stages, declaredOut, pos);
-        }
-    }
+            implements BehaviorDef {}
 
     /**
      * What stands to the right of a definition's {@code =}: the expression the author wrote, or —
@@ -857,12 +840,6 @@ public interface Hir {
          */
         public RowPosition standsAt() {
             return role instanceof DefinitionRole.RowValue(RowPosition at) ? at : null;
-        }
-
-        /** Whether this is the entry its module publishes for one of its values, which is neither a
-         *  row's value nor a {@code let} the module wrote. */
-        public boolean isAValueEntry() {
-            return role instanceof DefinitionRole.PublishedValueEntry;
         }
 
         /** What the fn is called — the text of {@link #address}, for a report to quote and for a
@@ -1345,11 +1322,6 @@ public interface Hir {
             return type;
         }
 
-        /** The same reference, standing for {@code type} instead. */
-        public TypeRef denoting(Type type) {
-            return new TypeRef(written, arg, tupleElems, type, anchor);
-        }
-
         @Override
         public String toString() {
             return name() == null ? String.valueOf(type) : name();
@@ -1363,17 +1335,10 @@ public interface Hir {
 
     sealed interface DecoderDef extends Hir permits PrimDecoder, ObjectDecoder, NewtypeDecoder {}
 
-    /** {@code decoder from Text|Int as <input> { <stmts> <construct> }} (single value). */
-    record PrimDecoder(RawKind from,
-                       Binder input,
-                       List<DecStmt> stmts,
-                       Construct result,
-                       SourcePos pos) implements DecoderDef {
-
-        public String inputName() {
-            return input.name();
-        }
-    }
+    /** A single-value decoder: reads one primitive {@code input} and constructs {@code result}
+     *  from it. */
+    record PrimDecoder(RawKind from, Binder input, Construct result, SourcePos pos)
+            implements DecoderDef {}
 
     /** {@code decoder from Object { <binds> <construct> }} (multi-field, accumulating). */
     record ObjectDecoder(List<Bind> binds, Construct result, SourcePos pos) implements DecoderDef {}
@@ -1385,12 +1350,7 @@ public interface Hir {
      * sum, not {@code {value: ...}}.
      */
     record NewtypeDecoder(DecRef inner, Binder input, Construct result, SourcePos pos)
-            implements DecoderDef {
-
-        public String inputName() {
-            return input.name();
-        }
-    }
+            implements DecoderDef {}
 
     /** One field an object decoder reads: the key it is found under, how the value there is read,
      *  and the name the construction below refers to it by. Built by {@code Deriver}; no source
@@ -1436,16 +1396,6 @@ public interface Hir {
      * type says as much and a reader that switches on it needs no arm for what cannot be there. It is
      * also the classification the checker already made, carried here rather than worked out again. */
     record MapDecRef(DecRef value, MapKeyRepresentation key, SourcePos pos) implements DecRef.Bare {}
-
-    /** A statement in a single-value decoder body. */
-    sealed interface DecStmt extends Hir permits Let {}
-
-    record Let(Binder binder, Expr value, SourcePos pos) implements DecStmt {
-
-        public String name() {
-            return binder.name();
-        }
-    }
 
     /**
      * The construction a decoder ends in: {@code TypeName { field: expr, ... }}, one value per field.
@@ -1502,12 +1452,7 @@ public interface Hir {
 
     // --- encoders ---
 
-    record EncoderDef(Binder self, RawExpr result, SourcePos pos) implements Hir {
-
-        public String selfName() {
-            return self.name();
-        }
-    }
+    record EncoderDef(Binder self, RawExpr result, SourcePos pos) implements Hir {}
 
     /** A Raw-building expression. */
     sealed interface RawExpr extends Hir
@@ -1520,13 +1465,8 @@ public interface Hir {
     record MapEnc(Expr source, EncElem elem, MapKeyRepresentation key, SourcePos pos) implements RawExpr {}
 
     /** Encodes an optional field: {@code None} becomes {@code Raw.Null}, {@code Some(v)} encodes
-     * {@code v} via {@code inner}, which reads the unwrapped value bound to {@code elemVar}. */
-    record OptionRaw(Expr access, RawExpr inner, Binder elem, SourcePos pos) implements RawExpr {
-
-        public String elemVar() {
-            return elem.name();
-        }
-    }
+     * {@code v} via {@code inner}, which reads the unwrapped value bound to {@code elem}. */
+    record OptionRaw(Expr access, RawExpr inner, Binder elem, SourcePos pos) implements RawExpr {}
 
     record TextRaw(Expr arg, SourcePos pos) implements RawExpr {}
 
@@ -1652,11 +1592,6 @@ public interface Hir {
      */
     record LetIn(Binder binder, Expr value, RetType declaredType, boolean annotated, Name opens,
                  Expr body, SourcePos pos, Region region) implements Expr {
-        /** An ordinary {@code let x = e}: the bound name takes {@code e}'s inferred type. */
-        public LetIn(Binder binder, Expr value, Expr body, SourcePos pos, Region region) {
-            this(binder, value, null, false, null, body, pos, region);
-        }
-
         /** A binding carrying an inlined helper parameter's declared type. */
         public LetIn(Binder binder, Expr value, RetType declaredType, Expr body, SourcePos pos,
                      Region region) {
@@ -1970,17 +1905,6 @@ public interface Hir {
     record IfConstructed(Expr construct, Binder binder, Expr then, List<ElseArm> els,
                          SourceConstructOrigin origin, SourcePos pos, Region region) implements Expr {
 
-        /** The attempt whose failure is not told apart: one arm, naming no clause. */
-        public IfConstructed(Expr construct, Binder binder, Expr then, Expr els,
-                             SourceConstructOrigin origin, SourcePos pos, Region region) {
-            this(construct, binder, then, List.of(ElseArm.any(els)), origin, pos, region);
-        }
-
-        /** How the binding was written. */
-        public String binderName() {
-            return binder.name();
-        }
-
         /** Whether the failure is departed from per clause, rather than by one value for any of them. */
         public boolean mapsClauses() {
             return els.size() > 1 || els.get(0).clause().isPresent();
@@ -1997,11 +1921,6 @@ public interface Hir {
      * order the clauses are declared in (spec §invariant-declaration).
      */
     record ElseArm(Optional<String> clause, Expr body, SourcePos pos) implements Hir {
-
-        /** The arm taken for any failure — what {@code else e} and {@code | _ -> e} both mean. */
-        public static ElseArm any(Expr body) {
-            return new ElseArm(Optional.empty(), body, body.pos());
-        }
 
         /** The same arm over a rewritten body, so a rewriting stage keeps the clause it answers. */
         public ElseArm with(Expr rewritten) {
@@ -2028,9 +1947,6 @@ public interface Hir {
      */
     record Case(List<Name> caseTypes, Binder binding, Expr body, List<Name> unwrapAsserts,
                 SourcePos pos) implements Hir {
-        public Case(List<Name> caseTypes, Binder binding, Expr body, SourcePos pos) {
-            this(caseTypes, binding, body, null, pos);
-        }
 
         /** How the binding was written, or null where the arm binds nothing. */
         public String bindingName() {
@@ -2377,28 +2293,6 @@ public interface Hir {
          * answers and whether it answered cannot come apart. */
         default boolean unresolved() {
             return answered() == null;
-        }
-
-        /**
-         * The same name, as {@code reachedAs} reaches it.
-         *
-         * <p>One answer and not two. Which declaration this reaches and under what name it reaches
-         * it from here are the two halves of one question, and resolution answers them together;
-         * handed over separately, a caller could pair one name's denotation with another's route
-         * and nothing would say so. There is no state between: a name is answered or it is
-         * {@link Unanswered}.
-         */
-        default Var denoting(ReachName reachedAs) {
-            return new Var.Denoting(written(), reachedAs, origin(), region());
-        }
-
-        /** The same name, over {@code region} — whichever of the two it is. */
-        default Var over(Region region) {
-            return switch (this) {
-                case Var.Denoting d ->
-                        new Var.Denoting(d.written(), d.reachedAs(), d.origin(), region);
-                case Var.Unanswered u -> new Var.Unanswered(u.written(), u.origin(), region);
-            };
         }
 
         /** The same name, read and found to name nothing. */
@@ -2896,58 +2790,6 @@ public interface Hir {
      * and one predicate applied twice stays one ({@link SourceConstructOrigin}). */
     record Binary(BinOp op, Expr left, Expr right, SourceConstructOrigin origin, SourcePos pos,
                   Region region) implements Expr {}
-
-
-    /**
-     * {@code e} written over {@code region} instead of whatever it says now — for the one caller
-     * that knows a wider stretch of source than the node it is holding.
-     *
-     * <p>A form the parser reduces away is still characters in the file. {@code (a + 100)} leaves an
-     * {@code Hir.Binary} because the parentheses say nothing the tree needs to keep, and they are
-     * nine characters the author wrote as that argument all the same. A report that underlined seven
-     * of them would be pointing at an expression the reader has to work out is the one it means.
-     *
-     * <p>The reduction is the frontend's and so is this: nowhere downstream is there anything left
-     * saying the parentheses were ever there.
-     */
-    public static Expr withRegion(Expr e, Region region) {
-        return switch (e) {
-            case IntLit x -> new IntLit(x.value(), x.pos(), region);
-            case DecimalLit x -> new DecimalLit(x.value(), x.pos(), region);
-            case StringLit x -> new StringLit(x.value(), x.pos(), region);
-            case BoolLit x -> new BoolLit(x.value(), x.pos(), region);
-            case Var x -> x.over(region);
-            case Unreachable x -> new Unreachable(x.reason(), x.pos(), region);
-            case Neg x -> new Neg(x.operand(), x.pos(), region);
-            case FieldAccess x -> new FieldAccess(x.target(), x.name(), x.pos(), region);
-            case Binary x -> new Binary(x.op(), x.left(), x.right(), x.origin(), x.pos(), region);
-            case Apply x -> new Apply(x.function(), x.args(), x.origin(), x.applied(),
-                    x.application(), x.pos(), region);
-            case If x -> new If(x.cond(), x.then(), x.els(), x.origin(), x.pos(), region);
-            case IfConstructed x ->
-                    new IfConstructed(x.construct(), x.binder(), x.then(), x.els(), x.origin(), x.pos(),
-                            region);
-            case LetIn x -> new LetIn(x.binder(), x.value(), x.declaredType(), x.annotated(),
-                    x.opens(), x.body(), x.pos(), region);
-            case Expansion x -> new Expansion(x.callee(), x.application(), x.at(), x.bound(),
-                    x.given(),
-                    x.declaredReturn(), x.body(), x.pos(), region);
-            case Materialised x -> new Materialised(x.value(), x.site(), x.body(), x.pos(), region);
-            case ValueBuild x -> new ValueBuild(x.value(), x.reaches(), x.site(), x.pos(), region);
-            case ValueInvocation x ->
-                    new ValueInvocation(x.target(), x.site(), x.arguments(), x.pos(), region);
-            case Block x ->
-                    new Block(x.params(), x.body(), x.rule(), x.expandedFrom(), x.pos(), region);
-            case ListLit x -> new ListLit(x.elements(), x.origin(), x.pos(), region);
-            case RowCollection x -> new RowCollection(x.elements(), x.origin(), x.pos(), region);
-            case ListComp x -> new ListComp(x.element(), x.guards(), x.origin(), x.pos(), region);
-            case Tuple x -> new Tuple(x.elements(), x.pos(), region);
-            case TupleGet x -> new TupleGet(x.tuple(), x.index(), x.arity(), x.pos(), region);
-            case NewData x -> new NewData(x.typeName(), x.inits(), x.spreads(), x.origin(),
-                    x.fields(), x.pos(), region);
-            case Match x -> new Match(x.scrutinee(), x.cases(), x.origin(), x.pos(), region);
-        };
-    }
 
     /**
      * {@code e} with each of its slots replaced by what the operator for that slot answers, its own

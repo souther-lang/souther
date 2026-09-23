@@ -608,20 +608,6 @@ public final class CoverageSites {
         }
 
         /**
-         * The same, where the caller's own construction says there is one.
-         *
-         * <p>A boundary is read off a comparison this plan numbers, so the site was planned before
-         * the line was. Absent here is not a boundary that cannot be measured — it is this plan and
-         * the reader that found the comparison disagreeing about which comparisons are instrumented,
-         * which no measurement should paper over.
-         */
-        public ComparisonEmissionSite requireEmissionSiteOf(ConstructOccurrence which) {
-            return emissionSiteOf(which).orElseThrow(() -> new IllegalStateException(
-                    "no comparison site was planned for " + which
-                            + "; a line is read off a comparison this plan does not instrument"));
-        }
-
-        /**
          * The arms of one behavior, which is what a branch measure counts: those in its own body and
          * those in the methods it calls, each as owed by this behavior.
          *
