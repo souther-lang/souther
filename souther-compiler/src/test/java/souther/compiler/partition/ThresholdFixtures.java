@@ -9,6 +9,7 @@ import souther.compiler.check.StatedContract;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.RulesWithNoLine;
@@ -23,8 +24,8 @@ import java.util.List;
  *
  * <p>Each of these is a caller supplying a default or an assembled parameter and delegating whole
  * to the one production computation — {@link GuardThresholds#of(String, AnalysisBody, Core,
- * CoverageSites.Plan, InputDomain, RuleReadingContext, PathReachability.Answers,
- * RuleReachNumbering)}, {@link EnsuresThresholds#of(StatedContract, souther.compiler.inputs.InputReading)}
+ * CoverageSites.Plan, InputReading, ElementBindings, PathReachability.Answers,
+ * RuleReachNumbering)}, {@link EnsuresThresholds#of(StatedContract, InputReading)}
  * and {@link Partitions#withEvidence}. None of these fixtures reads a comparison or a clause a
  * second way; they only fill in what a caller with a narrower question does not need to say.
  */
