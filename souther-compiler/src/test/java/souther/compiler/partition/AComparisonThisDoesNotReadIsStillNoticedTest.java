@@ -76,7 +76,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
         assertNotNull(body);
         CoverageSites.Plan plan = checked.plan();
         return new Read(compilation,
-                GuardThresholds.of("pick", checked.analysisBodies().get("pick"), body, plan,
+                ThresholdFixtures.guardsOf("pick", checked.analysisBodies().get("pick"), body, plan,
                         compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module))
                                 .value().get("pick"), rules));
     }

@@ -1,14 +1,12 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Comparison;
-import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.StatedContract;
 import souther.compiler.core.Contract;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.inputs.BlockReason;
-import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.FilingCoordinate;
@@ -98,17 +96,6 @@ public final class EnsuresThresholds {
         }
     }
 
-
-    /**
-     * The same, reading the input's rules here.
-     *
-     * <p>For a caller that has no reading of them in hand. The pipeline that measures a behavior
-     * reads them once and hands the same one to everything that asks, since each of these reading
-     * its own is every rule of every parameter read again to arrive at the same answers.
-     */
-    static Clauses of(StatedContract stated, InputDomain inputs, RuleReadingSource source) {
-        return of(stated, inputs.reading(source));
-    }
 
     /**
      * The lines one behavior's clauses draw.

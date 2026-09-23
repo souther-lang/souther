@@ -2,6 +2,7 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.partition.DecisionRule;
+import souther.compiler.partition.GenerationAnswer;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.RuleSettlement;
@@ -112,10 +113,15 @@ class WhatTheSearchAnswersForDoesNotTurnOnHowCaseNamesCompareTest {
         assertTrue(filled != null && !filled.isEmpty(), "the module is searched");
         Map<String, String> out = new TreeMap<>();
         filled.forEach((behavior, filling) -> {
-            filling.composed().discharge().classes().forEach((owed, answer) ->
-                    out.put(behavior + " class " + owed, kindOf(answer)));
-            filling.composed().discharge().arms().forEach((owed, answer) ->
-                    out.put(behavior + " arm " + owed, kindOf(answer)));
+            filling.composed().discharge().answers().values().forEach(answer -> {
+                switch (answer) {
+                    case GenerationAnswer.Class(var obligation, var disposition) ->
+                            out.put(behavior + " class " + obligation.target(), kindOf(disposition));
+                    case GenerationAnswer.Arm(var obligation, var disposition) ->
+                            out.put(behavior + " arm " + obligation.target(), kindOf(disposition));
+                    case GenerationAnswer.Pair _, GenerationAnswer.Meeting _ -> { }
+                }
+            });
             // And what searching each rule of the decision established, which is the other half of
             // what a search answers for. A rule names the cases its way turns on, so the key is
             // said in the names the model under test is written in.

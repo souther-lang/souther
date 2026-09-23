@@ -87,7 +87,7 @@ class AClosureIsTheSameRuleHoweverItIsWrittenDownTest {
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
-        return GuardThresholds.of("pick", checked.analysisBodies().get("pick"),
+        return ThresholdFixtures.guardsOf("pick", checked.analysisBodies().get("pick"),
                 checked.behaviorBodies().get("pick"), checked.plan(),
                 compilation.db().ask(new Adequacy.Inputs(module)).value().get("pick"),
                 RuleReadings.of(compilation, module));
@@ -117,7 +117,7 @@ class AClosureIsTheSameRuleHoweverItIsWrittenDownTest {
         StatedContract stated =
                 compilation.db().ask(new Bodies.StatedContracts(module)).value().get("pick");
 
-        GuardThresholds.Guards guards = GuardThresholds.of("pick", states,
+        GuardThresholds.Guards guards = ThresholdFixtures.guardsOf("pick", states,
                 checked.behaviorBodies().get("pick"), checked.plan(), inputs, rules);
         BehaviorSetStatements.Read sets = BehaviorSetStatements.of("pick", states, stated,
                 inputs.reading(rules), inputs.parameterReads(),

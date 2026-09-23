@@ -28,16 +28,16 @@ import java.util.Set;
  * reading and a sentence could start saying. What is written out is written in one order ({@link
  * #toString}), which is what a message about one run reading the same way twice wanted of it.
  *
- * <p><b>{@link #answers} is the one canonical map, and the sole authority for every view below
- * it.</b> {@link #classes} and {@link #pairs} are read off {@code answers} on every call rather
- * than cached beside it, and so is a single-obligation lookup at a class, a pair or a meeting: it
- * wraps the target in the obligation it belongs to and asks {@code answers} directly, which costs
- * no walk of the others. {@link #arms} is the one projection still cached — {@link
- * #at(souther.compiler.coverage.ArmProbe)} is asked once per finding of a behavior, over every
- * arm, by a reader holding no obligation to wrap a key from; caching it once here is what spares
- * that reader the walk of every answer {@code arms} would otherwise cost on every finding. See
- * {@link GenerationAnswer} for why the values these project are not one shared disposition type
- * either.
+ * <p><b>{@link #answers} is the one canonical map, and the sole authority for every reader
+ * below it.</b> A single-obligation lookup at a class, a pair or a meeting wraps the target in
+ * the obligation it belongs to and asks {@code answers} directly, which costs no walk of the
+ * others — so there is nothing left to project as a whole map, and no reader asks for one; a
+ * caller that wants every class or every pair filters {@link #answers} itself. {@link #arms} is
+ * the one projection still cached — {@link #at(souther.compiler.coverage.ArmProbe)} is asked
+ * once per finding of a behavior, over every arm, by a reader holding no obligation to wrap a
+ * key from; caching it once here is what spares that reader the walk of every answer a fresh
+ * projection would otherwise cost on every finding. See {@link GenerationAnswer} for why the
+ * values these project are not one shared disposition type either.
  *
  * <p>Not a record, for the same reason: what {@link #equals} and {@link #hashCode} answer with is
  * {@link #plan} and {@link #answers} alone, held in no order — the derived views are computed from
@@ -136,31 +136,9 @@ public final class Discharge {
         return Objects.hash(plan, answers);
     }
 
-    /** One class of one position apiece, or none where the plan named none. */
-    public Map<ClassOfAPosition, ClassDisposition> classes() {
-        Map<ClassOfAPosition, ClassDisposition> out = new LinkedHashMap<>();
-        for (GenerationAnswer each : answers.values()) {
-            if (each instanceof GenerationAnswer.Class(var obligation, var disposition)) {
-                out.put(obligation.target(), disposition);
-            }
-        }
-        return Collections.unmodifiableMap(out);
-    }
-
     /** One arm apiece, or none where the plan named none. */
     public Map<Generator.ArmOwed, ArmDisposition> arms() {
         return arms;
-    }
-
-    /** One combination of two classes apiece, or none where the plan named none. */
-    public Map<ObligationIdentity.OfAFallbackPairCell, ClassDisposition> pairs() {
-        Map<ObligationIdentity.OfAFallbackPairCell, ClassDisposition> out = new LinkedHashMap<>();
-        for (GenerationAnswer each : answers.values()) {
-            if (each instanceof GenerationAnswer.Pair(var obligation, var disposition)) {
-                out.put(obligation.target(), disposition);
-            }
-        }
-        return Collections.unmodifiableMap(out);
     }
 
     /** What became of one combination of the body's decisions, or null where nothing asked. */

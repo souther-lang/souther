@@ -7,7 +7,6 @@ import souther.compiler.check.Choice;
 import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.PublishedDeclarations;
-import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.RuleAt;
 import souther.compiler.check.RuleCitation;
@@ -142,31 +141,6 @@ public final class GuardThresholds {
 
     }
 
-
-    /**
-     * The same, reading the input's rules here.
-     *
-     * <p>For a caller that has no reading of them in hand — nor of what arrives at each comparison,
-     * which reads as restricting nothing, so every line such a caller reads is kept as the
-     * declarations alone leave it. The pipeline that measures a behavior reads both once and hands
-     * the same ones to everything that asks, since each of these reading its own is every rule of
-     * every parameter read again to arrive at the same answers.
-     */
-    static Guards of(String behavior, AnalysisBody states, Core emitted,
-                            CoverageSites.Plan plan,
-                            InputDomain inputs, RuleReadingSource source) {
-        // The elements of this tree, read here rather than handed in as nothing. A caller with no
-        // reading of its own still asks about a body that walks something, and answered with none
-        // it would be told a rule over a run is a rule about nothing.
-        // And a numbering of its own, whose addresses nothing here goes on to read: such a caller
-        // is asking what the rules of a body come to and is writing no document, so there is
-        // nothing for the places it hands out addresses for to be shown in.
-        return states == null ? Guards.NONE
-                : of(behavior, states, emitted, plan, inputs.reading(source),
-                        ElementBindings.of(states, source.newtypes()),
-                        PathReachability.Answers.NONE,
-                        new RuleReachNumbering(source.symbols().module(), behavior));
-    }
 
     /** The thresholds one behavior's body compares its parameters against. {@code plan} supplies
      * the site each comparison's own value is recorded at, so a boundary can later ask whether the

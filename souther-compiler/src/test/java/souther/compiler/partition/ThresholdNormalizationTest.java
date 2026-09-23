@@ -54,7 +54,7 @@ class ThresholdNormalizationTest {
         Core body = checked.behaviorBodies().get(behavior);
         assertNotNull(body);
         CoverageSites.Plan plan = checked.plan();
-        GuardThresholds.Guards guards = GuardThresholds.of(behavior,
+        GuardThresholds.Guards guards = ThresholdFixtures.guardsOf(behavior,
                 checked.analysisBodies().get(behavior), body, plan,
                 compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get(behavior), rules);
         List<Threshold> thresholds = guards.thresholds();
@@ -62,7 +62,7 @@ class ThresholdNormalizationTest {
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         souther.compiler.inputs.Quantities reading = domain.quantities(rules);
         Partitions.Partitioning base = Partitions.of(behavior, domain, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
-        return new Read(Partitions.withThresholds(base, reading, thresholds,
+        return new Read(ThresholdFixtures.withThresholds(base, reading, thresholds,
                 RuleReadingContext.unshared(rules,
                         souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 souther.compiler.values.Allowance.of(souther.compiler.regex.PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS)), reading, thresholds, rules);

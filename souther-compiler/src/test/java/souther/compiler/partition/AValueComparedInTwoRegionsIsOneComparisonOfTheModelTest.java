@@ -67,7 +67,7 @@ class AValueComparedInTwoRegionsIsOneComparisonOfTheModelTest {
     void theReadingIsNotRefusedWhereTwoRegionsBuildTheValue() {
         Read read = read();
 
-        assertDoesNotThrow(() -> GuardThresholds.of("f", read.analysis(), read.emitted(),
+        assertDoesNotThrow(() -> ThresholdFixtures.guardsOf("f", read.analysis(), read.emitted(),
                 read.plan(), read.inputs(), read.rules()));
     }
 

@@ -91,7 +91,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
                 compilation.db().ask(new Bodies.StatedContracts(module)).value().get("pick");
         assertNotNull(states, "and its body is read");
 
-        GuardThresholds.Guards guards = GuardThresholds.of("pick", states, body, plan, inputs,
+        GuardThresholds.Guards guards = ThresholdFixtures.guardsOf("pick", states, body, plan, inputs,
                 rules);
         BehaviorSetStatements.Read sets = BehaviorSetStatements.of("pick", states, stated,
                 inputs.reading(rules), inputs.parameterReads(),
@@ -429,7 +429,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
                 compilation.db().ask(new Adequacy.Inputs(module)).value().get("pick");
         StatedContract stated =
                 compilation.db().ask(new Bodies.StatedContracts(module)).value().get("pick");
-        GuardThresholds.Guards guards = GuardThresholds.of("pick",
+        GuardThresholds.Guards guards = ThresholdFixtures.guardsOf("pick",
                 checked.analysisBodies().get("pick"), checked.behaviorBodies().get("pick"),
                 checked.plan(), inputs, rules);
         List<BehaviorSetStatements.ForkOfItsOwn> forks = BehaviorSetStatements.of("pick",

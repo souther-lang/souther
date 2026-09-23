@@ -153,17 +153,23 @@ final class GenerationFixtures {
     }
 
     /**
-     * Every class of every position no row the author wrote sits in.
+     * Every class of every position {@code existing} leaves no row in.
      *
-     * <p><b>Not what a build asks for, and not {@code Adequacy.RowsOwed}'s answer either.</b> Which
-     * classes are owed a row is what the partition measure established, and a build hands that in.
-     * This reads the written rows a second time instead, which is right only for a caller with no
-     * measure beside it to read — a test standing the search up on its own — and it says so by being
-     * a list the caller passes rather than one the search makes for itself.
+     * <p><b>Not what a build asks for, and not a stand-in for {@code Adequacy.RowsOwed}'s
+     * answer.</b> Which classes are owed a row is the measure's own answer
+     * ({@code PartitionEvidence#classesOwed}), read off {@code Measurement} states this has none of
+     * — {@code Complete}, {@code Partial}, and a {@code NotMeasured} whose reason decides between
+     * "every class" and "none", a distinction that only exists where a real measurement ran. There
+     * is no way to ask the measure this question instead: it reads a compiled module's own written
+     * examples, and {@code existing} is not those — a caller here is standing rows up itself,
+     * synthetic or reduced ones a real measurement never saw, the way a partition-layer unit test
+     * legitimately builds a synthetic {@link souther.compiler.coverage.ArmProbe} with no account
+     * identity behind it. This is that same kind of fixture, for classes rather than arms.
      *
      * <p>Read off the values the rows state, which needs nothing run: where a row stands is settled
-     * by what is written at each position. So the answer is the same one the measure reaches, and a
-     * build that ran nothing is not a build with nothing to generate for.
+     * by what is written at each position. Simpler than the measure on purpose — every axis here is
+     * read as fully reached, which is right for rows a caller built by hand and would be wrong to
+     * read out of a real, possibly-partial measurement.
      *
      * <p>A row of the author's can sit in more than one class of a position at once — a list with
      * one element under a line and one over it — and each of them is covered. Read as one class,
