@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.types.CaseShape;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
@@ -9,7 +10,7 @@ import java.util.List;
 /**
  * How the alternatives a value can be are written at a boundary: which form the set travels as, what
  * tag each alternative wears, and — where the form has them — the key that tag stands under and the
- * key a case's contents stand under when the case is no object to put the tag in.
+ * key a {@link CaseShape#WRAPPED} case's standalone representation stands under beside it.
  *
  * <p>A named sum and a behavior's output union are one question asked of two spellings. Both are a
  * set of alternatives that has to cross, and both are answered here through the same call, so
@@ -43,8 +44,8 @@ public final class Boundary {
     /** The key a derived codec writes an alternative's tag under (spec §encoder-derivation). */
     private static final String DISCRIMINATOR = "type";
 
-    /** The key a derived codec writes the contents of a case with no object of its own under, beside
-     *  the tag (spec §sum-discrimination). */
+    /** The key a derived codec writes a {@link CaseShape#WRAPPED} case's standalone representation
+     *  under, beside the tag (spec §sum-discrimination). */
     private static final String CONTENTS = "value";
 
     /**
@@ -126,14 +127,27 @@ public final class Boundary {
         record Enumeration() implements Representation {}
 
         /**
-         * An alternative carries something of its own, so the tag stands under {@code tagKey} beside
-         * it (spec §sum-discrimination).
+         * An alternative carries something of its own, so each alternative's tag stands under
+         * {@code tagKey} (spec §sum-discrimination).
          *
-         * <p>A case whose own form is an object takes the tag into that object. One whose form is not
-         * — a newtype, a primitive member of an answer — has nowhere to put it, and its form goes
-         * under {@code contentsKey} beside the tag. Which cases those are is {@link TypeOps#caseShape}'s
-         * answer; the two keys are this form's, and a reader writing it spells neither.
+         * <p>A {@link CaseShape#PRODUCT} or {@link CaseShape#UNIT} case carries the tag in the object
+         * membership gives it. A {@link CaseShape#WRAPPED} case keeps its standalone representation
+         * unchanged and places it under {@code contentsKey} beside the tag. Which shape a case has is
+         * {@link TypeOps#caseShape}'s answer, read from the declaration; the two keys are this form's,
+         * and a reader writing it spells neither.
+         *
+         * <p>The two keys differ. A wrapped case writes both into one object, and one key would leave
+         * the representation standing where the tag was, which no decoder reads back.
          */
-        record Discriminated(String tagKey, String contentsKey) implements Representation {}
+        record Discriminated(String tagKey, String contentsKey) implements Representation {
+
+            public Discriminated {
+                if (tagKey.equals(contentsKey)) {
+                    throw new IllegalArgumentException(
+                            "the tag and a wrapped case's representation cannot stand under one key: "
+                                    + tagKey);
+                }
+            }
+        }
     }
 }

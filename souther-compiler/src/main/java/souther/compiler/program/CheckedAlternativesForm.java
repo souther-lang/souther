@@ -1,5 +1,7 @@
 package souther.compiler.program;
 
+import souther.compiler.types.CaseShape;
+
 /**
  * The form a set of alternatives travels at a boundary — projected from
  * {@link souther.compiler.check.Boundary.Representation}, which is where it is decided. A reader
@@ -18,12 +20,28 @@ public sealed interface CheckedAlternativesForm {
     record Enumeration() implements CheckedAlternativesForm {}
 
     /**
-     * An alternative carries something of its own, so the tag stands under {@code tagKey} beside it
-     * (spec §sum-discrimination).
+     * An alternative carries something of its own, so each alternative's tag stands under
+     * {@code tagKey} (spec §sum-discrimination).
      *
-     * <p>A case whose own form is an object takes the tag into it; one whose form is not — a newtype
-     * case, a primitive member of an answer — writes its form under {@code contentsKey} beside the
-     * tag. Both keys are carried so that a reader writing this form spells neither of them.
+     * <p>A {@link CaseShape#PRODUCT} or {@link CaseShape#UNIT} case carries the tag in the object
+     * membership gives it. A {@link CaseShape#WRAPPED} case — a newtype case, a primitive member of
+     * an answer — keeps its standalone representation unchanged and places it under
+     * {@code contentsKey} beside the tag. Which shape a case has is read from its declaration, not
+     * from whether its standalone representation is an object: a newtype over a record writes an
+     * object and is still wrapped. Both keys are carried so that a reader writing this form spells
+     * neither of them.
+     *
+     * <p>The two keys differ. A wrapped case writes both into one object, and one key would leave
+     * the representation standing where the tag was, which no decoder reads back.
      */
-    record Discriminated(String tagKey, String contentsKey) implements CheckedAlternativesForm {}
+    record Discriminated(String tagKey, String contentsKey) implements CheckedAlternativesForm {
+
+        public Discriminated {
+            if (tagKey.equals(contentsKey)) {
+                throw new IllegalArgumentException(
+                        "the tag and a wrapped case's representation cannot stand under one key: "
+                                + tagKey);
+            }
+        }
+    }
 }

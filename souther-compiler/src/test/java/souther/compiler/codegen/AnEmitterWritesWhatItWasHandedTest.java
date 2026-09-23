@@ -90,7 +90,7 @@ class AnEmitterWritesWhatItWasHandedTest {
     }
 
     /**
-     * A newtype case has no object to take the tag, so its form goes under the second key the
+     * A newtype case is wrapped, so its standalone representation goes under the second key the
      * representation holds. The shape says that it goes under a key; which key is the form's, and an
      * emitter that spelled it from the shape writes the language's own and not the one handed in.
      */

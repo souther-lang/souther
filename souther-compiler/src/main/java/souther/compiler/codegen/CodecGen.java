@@ -2068,9 +2068,10 @@ final class CodecGen {
      * Leaves a discriminated case on the stack: what the case writes on its own, plus what standing
      * in this sum — or in a behavior's answer, which is the same rule — adds to it (spec §encoder-derivation). A
      * product lays its fields beside the discriminator and a unit is the discriminator alone, so both
-     * carry it in the object they already are; a newtype and a primitive have no key of their own to
-     * put it on, so their representation goes under the form's contents key beside it. The shape
-     * picks which of the two; every key written comes from {@code form}.
+     * carry it in the object membership gives them; a newtype and a primitive are wrapped, so their
+     * standalone representation goes unchanged under the form's contents key beside it — a newtype
+     * over a record included, although that representation is an object. {@code shape} picks which
+     * of the two and is read from the declaration; every key written comes from {@code form}.
      *
      * @param encoded leaves the case's own encoded form on the stack
      */
