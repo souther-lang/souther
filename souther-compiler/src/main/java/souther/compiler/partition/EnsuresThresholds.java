@@ -106,7 +106,7 @@ public final class EnsuresThresholds {
      * reads them once and hands the same one to everything that asks, since each of these reading
      * its own is every rule of every parameter read again to arrive at the same answers.
      */
-    public static Clauses of(StatedContract stated, InputDomain inputs, RuleReadingSource source) {
+    static Clauses of(StatedContract stated, InputDomain inputs, RuleReadingSource source) {
         return of(stated, inputs.reading(source));
     }
 

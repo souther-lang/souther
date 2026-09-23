@@ -152,7 +152,7 @@ public final class GuardThresholds {
      * the same ones to everything that asks, since each of these reading its own is every rule of
      * every parameter read again to arrive at the same answers.
      */
-    public static Guards of(String behavior, AnalysisBody states, Core emitted,
+    static Guards of(String behavior, AnalysisBody states, Core emitted,
                             CoverageSites.Plan plan,
                             InputDomain inputs, RuleReadingSource source) {
         // The elements of this tree, read here rather than handed in as nothing. A caller with no

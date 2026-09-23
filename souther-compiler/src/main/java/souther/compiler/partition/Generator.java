@@ -997,7 +997,7 @@ public final class Generator {
      * nothing consults a clock or a hash order — the same model and the same rows produce the same
      * rows twice. Nothing is asked about the body here, so no arm is looked for.
      */
-    public static FillResult fill(MeasuredInput subject, List<ObservedRow> existing,
+    static FillResult fill(MeasuredInput subject, List<ObservedRow> existing,
                                         CandidateCheck check,
                                         AdequacyPolicy.OfTheGeneration budget) {
         return fill(subject, existing, check,
@@ -1014,7 +1014,7 @@ public final class Generator {
      * is owed is one row, and a budget the arms spent first left a class the report names with
      * nothing offered for it.
      */
-    public static FillResult fill(MeasuredInput subject, List<ObservedRow> existing,
+    static FillResult fill(MeasuredInput subject, List<ObservedRow> existing,
                                         CandidateCheck check,
                                         souther.compiler.reading.CoverageRead.Read read,
                                         AdequacyPolicy.OfTheGeneration budget) {
@@ -1036,7 +1036,7 @@ public final class Generator {
      * is the plan-taking search's parameter, and a caller whose behavior requires one has to say
      * what it answers rather than reach a search that composes rows nothing can apply.
      */
-    public static FillResult fill(MeasuredInput subject, List<ObservedRow> existing,
+    static FillResult fill(MeasuredInput subject, List<ObservedRow> existing,
                                         CandidateCheck check,
                                         souther.compiler.reading.CoverageRead.Read read,
                                         Trial trial, AdequacyPolicy.OfTheGeneration budget) {
@@ -1055,7 +1055,7 @@ public final class Generator {
      * handed over here would leave that to whatever collection the caller happened to hold — so
      * this takes the answer rather than the collection it was kept in.
      */
-    public static GenerationPlan planOver(MeasuredInput subject, List<ClassOfAPosition> classes,
+    static GenerationPlan planOver(MeasuredInput subject, List<ClassOfAPosition> classes,
                                           List<ArmProbe> arms) {
         return GenerationPlan.of(subject, classes, arms.stream().map(ArmOwed::new).toList(),
                 List.of(), List.of());
@@ -1068,7 +1068,7 @@ public final class Generator {
      * the search is asked with — there is no way in that does not carry one — and this is where the
      * one such a caller holds is assembled.
      */
-    public static FillResult fill(MeasuredInput subject, List<ObservedRow> existing,
+    static FillResult fill(MeasuredInput subject, List<ObservedRow> existing,
                                         CandidateCheck check,
                                         souther.compiler.reading.CoverageRead.Read read,
                                         Trial trial, List<Baseline> baselines,
@@ -1099,7 +1099,7 @@ public final class Generator {
      * nothing to tell that from an arm nothing could be composed for. An arm asked for and not
      * found says what each place it was looked in came to.
      */
-    public static Set<ArmProbe> everyArmACombinationMayTake(
+    static Set<ArmProbe> everyArmACombinationMayTake(
             MeasuredInput subject, List<souther.compiler.reading.Interaction> groups,
             AdequacyPolicy.OfTheGeneration budget) {
         Set<ArmProbe> out = new LinkedHashSet<>();
@@ -1235,7 +1235,7 @@ public final class Generator {
      * one element under a line and one over it — and each of them is covered. Read as one class,
      * the rest would be asked for again, which is work the author has already done.
      */
-    public static List<ClassOfAPosition> everyClassNoRowSitsIn(MeasuredInput subject,
+    static List<ClassOfAPosition> everyClassNoRowSitsIn(MeasuredInput subject,
                                                        List<ObservedRow> existing) {
         // Gathered once apiece and handed over in the order the walk reached them, which is the
         // order the search fixes the positions in. The set is how "once apiece" is kept; what a

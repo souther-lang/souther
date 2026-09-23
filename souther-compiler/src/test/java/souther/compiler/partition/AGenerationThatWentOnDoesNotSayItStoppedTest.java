@@ -1,4 +1,4 @@
-package souther.compiler;
+package souther.compiler.partition;
 
 import souther.compiler.carrier.Lookup;
 import souther.compiler.diag.SourceLayouts;
@@ -11,13 +11,6 @@ import souther.compiler.check.DeclaredSig;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
-import souther.compiler.partition.Axis;
-import souther.compiler.partition.AxisId;
-import souther.compiler.partition.Budgets;
-import souther.compiler.partition.GenerationReason;
-import souther.compiler.partition.Generator;
-import souther.compiler.partition.MeasuredInput;
-import souther.compiler.partition.Partitions;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -87,7 +80,7 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
                         souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
     }
 
-    private static String written(souther.compiler.partition.FillResult result) {
+    private static String written(FillResult result) {
         // The composition and not what is offered: this filling is built here rather than searched
         // for, so there is no store to ask what its rows would settle.
         return GeneratedRows.of(souther.compiler.query.EveryRowOfIt.offered(
@@ -101,13 +94,11 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
     }
 
     /** A run asked for nothing, which is what a reason about the run alone is written against. */
-    private static souther.compiler.partition.FillResult stoppedWith(GenerationReason why) {
-        souther.compiler.partition.GenerationPlan plan =
-                souther.compiler.partition.GenerationPlan.of(subject(), List.of(), List.of(),
-                        List.of(), List.of());
-        return new souther.compiler.partition.FillResult(new LinkedHashMap<>(), List.of(),
-                List.of(why),
-                souther.compiler.partition.Discharge.nothingAskedOf(plan));
+    private static FillResult stoppedWith(GenerationReason why) {
+        GenerationPlan plan =
+                GenerationPlan.of(subject(), List.of(), List.of(), List.of(), List.of());
+        return new FillResult(new LinkedHashMap<>(), List.of(), List.of(why),
+                Discharge.nothingAskedOf(plan));
     }
 
     /**
@@ -129,7 +120,7 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
             put.put(second.id(), Classification.in(second.classes().get(0).id()));
         });
 
-        souther.compiler.partition.FillResult filled =
+        FillResult filled =
                 Generator.fill(subject, List.of(Generator.ObservedRow.unseen(row)),
                         Generator.CandidateCheck.ANY, Budgets.generation());
 
