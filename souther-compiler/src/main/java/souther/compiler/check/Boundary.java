@@ -63,13 +63,13 @@ public final class Boundary {
 
     /**
      * Whether the set travels as a bare tag: it is an alternative space, and every alternative in it
-     * carries nothing but which one it is (spec §sum-discrimination, issue #161).
+     * carries nothing but which one it is (spec §sum-discrimination).
      *
      * <p>Being an alternative space is a term of this and not a guard on {@link #of}. A standalone
      * unit is one atom and that atom is a unit, so the atoms alone would call it an enumeration —
-     * and a unit crosses on its own as an empty object, the tag being what admitting it into a sum
-     * adds ({@code CodecGen.generateUnitEncoder}). The atoms answer what the alternatives are; they
-     * do not answer whether there is a set of them.
+     * and a unit crosses on its own as an empty object, the bare name being the form of an
+     * enumeration and not of its unit cases (spec §encoder-derivation). The atoms answer what the
+     * alternatives are; they do not answer whether there is a set of them.
      */
     private static boolean isEnumerationForm(Type subject, List<TypeSymbol> atoms,
                                              DeclarationKinds kinds) {

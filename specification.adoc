@@ -1091,7 +1091,7 @@ data ClientCost
 data Staff
 ----
 
-Unit data appear frequently as sum cases (such as `+Staff+` in `+data Rank = Manager | Staff+`).
+Unit data appear frequently as sum cases (such as `+Staff+` in `+data Rank = Manager | Staff+`). A unit that crosses the boundary on its own is written `+{}+`; as a case, what the sum adds decides its form (<<a-unit-writes-an-empty-object>>).
 
 A unit written where a module *introduces* a type needs no declaration of its own: the name alone declares it. Three positions introduce a type — a sum's case list (<<sum-data>>), a behavior's output (<<behavior-io>>), and the output declared for a `+>->+` composition, written either on the composition or in `+exposing+` (<<declared-composition-output>>).
 
@@ -1952,6 +1952,7 @@ The default Decoder is derived from a data's shape by the following conventions.
 * A JSON key matches the field name. Each field of an Object is read from the key of the same name.
 * A newtype (`+data X = Y+`; <<newtype>>) is read directly from `+Y+`'s representation, not an Object (a bare scalar if `+Y+` is primitive, the derived Decoder of `+Y+` if a named data or sum). `+{ ... }+` is read as an Object even with a single field.
 * A nested named data is read recursively with that data's derived Decoder.
+* A unit data (<<unit-data>>) reads nothing: its Decoder answers the unit's one value and does not look at what it is given. The `+{}+` its Encoder writes therefore reads back as it (<<round-trip>>), and so does anything else. Under a sum it is the discriminator, or the enumeration's name, that decides a unit case was there (<<sum-discrimination>>).
 * `+List<T>+` is read element by element with `+T+`'s derived Decoder.
 * `+T?+` (Option; <<optional>>) at a field is `+None+` if the key is absent or the value is `+null+`, and `+Some+`-wrapped after reading `+T+` if a value is present. Where an optional stands with no key of its own — a `+List+`'s or a `+Set+`'s element, a `+Map+`'s value — `+null+` is the whole of what `+None+` is read from (<<absence-is-written-as-null>>).
 * Invariants are checked on construction; a violation becomes a failure (`+Issue+`) of Raoh's `+Result+`. Because decode always succeeds or fails, the destination of a violation always exists (<<violation-destination>>).
@@ -1986,7 +1987,7 @@ data TravelRequest = Drafting | Submitted | AwaitingPreApproval | PreApproved
 // derived Decoder: reads "type" and dispatches "Drafting" -> Drafting, "Submitted" -> Submitted, ...
 ----
 
-A sum every one of whose cases is a unit data (folded to the leaves) is an *enumeration*: it carries nothing but which case it is, so it travels as that case's name — a bare string — and not as an object holding a discriminator alone. This is the form a fieldless enumeration has everywhere else, and it is what lets such a sum key a `+Map+` at the boundary (<<collections>>): a JSON object's key cannot be an object. A name no case answers to fails the decode at that value's path. One field-bearing case is enough to make the sum an object with `+"type"+` again.
+A sum every one of whose cases is a unit data (folded to the leaves) is an *enumeration*: it carries nothing but which case it is, so it travels as that case's name — a bare string — and not as an object holding a discriminator alone. The name is the form of the enumeration, written wherever the enumeration is the declared type — a field, an element, a `+Map+`'s key — and not the form of the unit case: a unit declared on its own writes `+{}+` (<<a-unit-writes-an-empty-object>>), and one unit may be a case of several sums, some of them enumerations and some not. That the enumeration writes one form in every such position is what lets it key a `+Map+` at the boundary (<<collections>>): a JSON object's key cannot be an object. A name no case answers to fails the decode at that value's path. One field-bearing case is enough to make the sum an object with `+"type"+` again.
 
 [,souther]
 ----
@@ -2094,13 +2095,30 @@ The default Encoder is derived by rules symmetric to the Decoder.
 * A nested named data is converted by that data's derived Encoder.
 * `+List<T>+` is converted element by element with `+T+`'s derived Encoder.
 * `+T?+` (Option; <<optional>>) at a field: if `+Some(v)+`, write `+v+` at the key; if `+None+`, omit the key, which is read back as `+None+`. Where an optional stands with no key of its own — a `+List+`'s or a `+Set+`'s element, a `+Map+`'s value — `+Some(v)+` writes `+v+` and `+None+` writes `+null+`, which is read back as `+None+` (<<absence-is-written-as-null>>). The round-trip law (<<round-trip>>) holds either way.
+* [[a-unit-writes-an-empty-object]]A unit data (<<unit-data>>) writes an empty Object, `+{}+`. It has no fields, so the Object it writes has no members; this is what a unit writes wherever the unit itself is the declared type — a behavior's input or output, a field, a collection's element.
 * A sum data tags the discriminator field `+"type"+` with the case name and converts with the case's derived Encoder. A product case lays fields flatly, a unit case writes only the tag, a newtype case puts contents in `+"value"+` (<<sum-discrimination>>). A nested sum writes the leaf case's tag.
+
+A case's own Encoder writes what the case is on its own, and the sum's Encoder adds what membership adds: the tag in the case's Object, or beside its contents under `+"value"+`. A unit case's own Object is the empty one, so the tag is all that is left in it (`+{"type":"Staff"}+`). An enumeration is where the sum writes the case's name instead of an Object (<<sum-discrimination>>); that is the sum's form, and the unit's own form stays `+{}+`.
 
 [,souther]
 ----
 data Amount = Int
     invariant value >= 0
 // derived Encoder: Amount -> Int(self.value) (bare integer)
+
+data Closed
+data Open =
+    { since: Int
+    }
+data Door = Open | Closed
+data Phase = Pending | Closed
+data Holder =
+    { state: Closed
+    }
+// Closed on its own:                          {}
+// Closed as Holder's field:                   {"state":{}}
+// Closed as a case of Door (Open has fields): {"type":"Closed"}
+// Closed as a case of Phase (every case a unit, so an enumeration): "Closed"
 
 data Submitted =
     { ...TravelRequestCommon
