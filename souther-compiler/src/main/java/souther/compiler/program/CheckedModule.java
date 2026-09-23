@@ -5,6 +5,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -95,14 +96,20 @@ public final class CheckedModule {
                         + "` twice");
             }
         }
+        // ADR-0074, held as one equality rather than as two checks the constructor could agree with
+        // itself about arriving at separately: the values with an entry are exactly the values this
+        // module publishes — a constant's fold included, since the surface a module offers to Java
+        // does not depend on whether a value happens to fold, and never a value this module keeps,
+        // which nothing outside it can call through.
+        Set<ValueName.Helper> publishedValues = new LinkedHashSet<>();
         for (ValueName.Helper value : byName.keySet()) {
-            if (published.contains(value.name()) && !byEntry.containsKey(value)) {
-                // ADR-0074: a module publishes an entry for every value it lists, a constant's fold
-                // included — the surface a module offers to Java does not depend on whether a value
-                // happens to fold.
-                throw new IllegalStateException("`" + name + "` publishes the value `" + value
-                        + "` and holds no entry for it");
+            if (published.contains(value.name())) {
+                publishedValues.add(value);
             }
+        }
+        if (!byEntry.keySet().equals(publishedValues)) {
+            throw new IllegalStateException("`" + name + "` publishes " + publishedValues
+                    + " and holds an entry for " + byEntry.keySet());
         }
         this.valueEntryByValue = Map.copyOf(byEntry);
     }

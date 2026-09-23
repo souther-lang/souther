@@ -38,6 +38,6 @@ public final class CheckedValueEntry {
 
     @Override
     public String toString() {
-        return "$value." + value.name();
+        return "entry(" + value + ")";
     }
 }
