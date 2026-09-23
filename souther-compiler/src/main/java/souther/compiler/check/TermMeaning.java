@@ -303,6 +303,7 @@ public final class TermMeaning {
             case Core.LetIn x -> {
                 out.add(Core.LetIn.class);
                 out.add(x.binder());
+                out.add(x.bindType());
                 out.add(x.type());
                 project(x.value(), out);
                 project(x.body(), out);

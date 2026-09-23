@@ -200,7 +200,8 @@ public final class Elaborator {
                 // where it was written rather than under the binding it makes.
                 Scope inner = env.binding(li.binder(), bindType, li.value());
                 Core body = elaborate(li.body(), inner, ctx, expected);
-                yield new Core.LetIn(CoreBinders.of(li.binder()), value, body, body.type(), li.pos());
+                yield new Core.LetIn(CoreBinders.of(li.binder()), bindType, value, body, body.type(),
+                        li.pos());
             }
             case Hir.Expansion ex -> expansion(ex, env, ctx, expected);
             // A build of a value elaborates as the value does, in the copy the build is: the walk
@@ -799,7 +800,6 @@ public final class Elaborator {
     private static Core expansion(Hir.Expansion ex, Scope env, CheckContext ctx, Type expected) {
         Applied applied = arguments(ex, env, ctx);
         Substitution decided = applied.decided();
-        List<Core> values = applied.values();
         Scope inner = applied.inner();
         Type declaredResult = declaredResult(ex);
         // The declaration is what an empty collection inside the body has to go on: at a call site
@@ -836,17 +836,27 @@ public final class Elaborator {
             throw new IllegalStateException(
                     "an expansion answered with a type it had not decided: " + Type.show(type));
         }
-        // wrapped innermost-first, so the value parameters bind in declared order
-        Core out = body;
-        for (int i = ex.bound().size() - 1; i >= 0; i--) {
-            out = new Core.LetIn(CoreBinders.of(ex.bound().get(i).binder()), values.get(i), out, type,
-                    ex.pos());
-        }
-        return out;
+        return applied.wrap(body, type, ex.pos());
     }
 
     /** What reading this application's arguments decided, and the scope its body is read in. */
-    private record Applied(Substitution decided, List<Core> values, Scope inner) {}
+    private record Applied(Substitution decided, List<AppliedArgument> arguments, Scope inner) {
+
+        /** {@code body} under the bindings the arguments became, wrapped innermost-first so the
+         * value parameters bind in declared order. */
+        Core wrap(Core body, Type type, SourcePos pos) {
+            Core out = body;
+            for (AppliedArgument a : arguments.reversed()) {
+                out = new Core.LetIn(a.binder(), a.bindType(), a.value(), out, type, pos);
+            }
+            return out;
+        }
+    }
+
+    /** One argument as {@link #arguments} read it: the value, and the type its binding is in force
+     * at in the callee's body — the one {@code inner} holds it at, which a declared sum parameter
+     * makes wider than the value. */
+    private record AppliedArgument(Core.Binder binder, Type bindType, Core value) {}
 
     /**
      * The arguments of one application, read against the signature it instantiated.
@@ -859,7 +869,7 @@ public final class Elaborator {
      */
     private static Applied arguments(Hir.Expansion ex, Scope env, CheckContext ctx) {
         Substitution decided = new Substitution(ex.application(), env.decisions());
-        List<Core> values = new ArrayList<>();
+        List<AppliedArgument> arguments = new ArrayList<>();
         Scope inner = env;
         for (Hir.Bound b : ex.bound()) {
             // A lambda bound rather than applied needs to be told what it takes — it is a block, and a
@@ -880,7 +890,7 @@ public final class Elaborator {
                     bindType = carriedType(required, value.type(), ctx.kinds(), ctx.published());
                 }
             }
-            values.add(value);
+            arguments.add(new AppliedArgument(CoreBinders.of(b.binder()), bindType, value));
             // What the argument was, under what it was written against. It is elaborated in the
             // caller's scope above, so that is where a reader below reads it: read under the
             // bindings this expansion makes instead, a name in it would be answered by whatever
@@ -888,7 +898,7 @@ public final class Elaborator {
             inner = inner.binding(b.binder(), bindType, b.value(), env.values());
         }
         givenFunctions(ex, decided, env, ctx);
-        return new Applied(decided, values, inner);
+        return new Applied(decided, List.copyOf(arguments), inner);
     }
 
     /**
@@ -1380,19 +1390,16 @@ public final class Elaborator {
             // its arguments became, and what those captured is what the lambda closes over
             case Hir.Expansion ex -> {
                 Applied applied = arguments(ex, env, ctx);
-                Core out = elaborateFunctionValue(ex.body(), paramTypes, applied.inner(), ctx);
-                for (int i = ex.bound().size() - 1; i >= 0; i--) {
-                    out = new Core.LetIn(CoreBinders.of(ex.bound().get(i).binder()), applied.values().get(i), out,
-                            out.type(), ex.pos());
-                }
-                yield out;
+                Core body = elaborateFunctionValue(ex.body(), paramTypes, applied.inner(), ctx);
+                yield applied.wrap(body, body.type(), ex.pos());
             }
             case Hir.LetIn li -> {
                 // a capture binding around the function (e.g. `let $n = 5 in (x) -> x + $n`)
                 Core bound = elaborate(li.value(), env, ctx);
                 Scope inner = env.with(li.binder(), bound.type());
                 Core body = elaborateFunctionValue(li.body(), paramTypes, inner, ctx);
-                yield new Core.LetIn(CoreBinders.of(li.binder()), bound, body, body.type(), li.pos());
+                yield new Core.LetIn(CoreBinders.of(li.binder()), bound.type(), bound, body, body.type(),
+                        li.pos());
             }
             default -> elaborate(value, env, ctx);
         };

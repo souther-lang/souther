@@ -43,7 +43,7 @@ class ACachedBindingAnswersForTheEnvironmentItWasEnteredInTest {
         Core.Binder markerA = CoreBinders.of(binders.binder("markerA", POS));
         Core.Binder markerB = CoreBinders.of(binders.binder("markerB", POS));
 
-        Core.LetIn li = new Core.LetIn(yBinder,
+        Core.LetIn li = new Core.LetIn(yBinder, Type.INT,
                 new Core.Read("x", xBinder.binding(), Type.INT, POS),
                 new Core.Read("y", yBinder.binding(), Type.INT, POS), Type.INT, POS);
 

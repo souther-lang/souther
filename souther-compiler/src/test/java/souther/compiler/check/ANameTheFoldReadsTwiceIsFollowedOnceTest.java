@@ -113,7 +113,7 @@ class ANameTheFoldReadsTwiceIsFollowedOnceTest {
 
     private static Denotations bound(PathEngine engine, Core.Binder binder, Core value,
                                      Denotations at) {
-        return engine.bindLet(new Core.LetIn(binder, value, read(binder), Type.INT, POS),
+        return engine.bindLet(new Core.LetIn(binder, Type.INT, value, read(binder), Type.INT, POS),
                 Known.top(), at).at();
     }
 

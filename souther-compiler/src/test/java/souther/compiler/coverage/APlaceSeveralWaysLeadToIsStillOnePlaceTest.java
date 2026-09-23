@@ -54,7 +54,7 @@ class APlaceSeveralWaysLeadToIsStillOnePlaceTest {
     /** One {@code let} standing in both sides, which is two ways to one binder. */
     private static Core sharedBinder() {
         BindingId bound = new BindingId(new BindingOwner.OfValue("demo", "b"), 0);
-        Core let = new Core.LetIn(new Core.Binder("x", bound),
+        Core let = new Core.LetIn(new Core.Binder("x", bound), Type.INT,
                 new Core.Int(1, Type.INT, AT),
                 new Core.Read("x", bound, Type.INT, AT), Type.INT, AT);
         return new Core.Binary(BinOp.ADD, let, let, ConstructOccurrence.unwritten(), Type.INT, AT);

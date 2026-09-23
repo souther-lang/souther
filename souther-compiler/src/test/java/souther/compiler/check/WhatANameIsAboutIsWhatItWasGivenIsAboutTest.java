@@ -111,8 +111,8 @@ class WhatANameIsAboutIsWhatItWasGivenIsAboutTest {
     }
 
     private Core.LetIn letting(Core.Binder binder, Core value) {
-        return new Core.LetIn(binder, value, new Core.Read(binder.name(), binder.binding(), value.type(),
-                POS), value.type(), POS);
+        return new Core.LetIn(binder, value.type(), value,
+                new Core.Read(binder.name(), binder.binding(), value.type(), POS), value.type(), POS);
     }
 
     private static Core answer() {

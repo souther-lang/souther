@@ -91,7 +91,7 @@ class AnElementIsAnsweredByItsContainerAndNotByWhatItHoldsTest {
      */
     @Test
     void anExpressionThatBindsANameOfItsOwnIsReadUnderThatName() {
-        Core through = new Core.LetIn(new Core.Binder("x", LOCAL), parameter(),
+        Core through = new Core.LetIn(new Core.Binder("x", LOCAL), Type.INT, parameter(),
                 read("x", LOCAL), Type.INT, POS);
 
         assertEquals(new PathResolution.At(TermPath.of("n")), readingOf(through));
@@ -116,7 +116,7 @@ class AnElementIsAnsweredByItsContainerAndNotByWhatItHoldsTest {
         Core at = parameter();
         for (int i = 0; i < depth; i++) {
             BindingId binding = new BindingId(OWNER, 10 + i);
-            at = new Core.LetIn(new Core.Binder("x" + i, binding), at,
+            at = new Core.LetIn(new Core.Binder("x" + i, binding), Type.INT, at,
                     read("x" + i, binding), Type.INT, POS);
         }
         return at;
