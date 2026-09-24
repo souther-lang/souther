@@ -371,7 +371,7 @@ final class Intrinsics {
     /** The kernels whose runtime method has a second overload taking a comparator ahead of what the
      *  declaration names — the runtime ABI fact {@link #descriptorWithComparator} and {@link
      *  #emitWithComparator} answer for. Which call actually reaches it is a checker fact ({@link
-     *  Core.CallSettlement.OrderingSubject}), settled once in {@code CallElaborator} and read off the
+     *  Core.KernelFact.OrderingSubject}), settled once in {@code CallElaborator} and read off the
      *  call in {@code BodyGen}; this set says only which runtime methods exist to be reached that
      *  way, and does not decide that any particular call does. */
     static final Set<Kernel> COMPARATOR_OVERLOADS = Set.of(

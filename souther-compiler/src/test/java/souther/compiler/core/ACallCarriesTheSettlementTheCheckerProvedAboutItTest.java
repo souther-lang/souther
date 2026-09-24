@@ -18,11 +18,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A call carries what the checker settled about it beside what it applies and what it evaluates.
  *
- * <p>{@code String.matches}'s pattern is the case in point: the checker folds its first argument
- * under the bindings in force and asks {@code java.util.regex.Pattern} whether the composed text is
- * accepted, which settles one string. That fact belongs on the call it was settled for — not folded
- * into {@code args}, which is what the body evaluates at run time and a different question — and not
- * left for a reader below to derive a second time from a shape it happens to recognise.
+ * <p>A kernel's application settles what it takes each argument as, and the call holds each
+ * argument at exactly that. {@code String.matches}'s pattern is a fact settled beside it: the
+ * checker folds its first argument under the bindings in force and asks {@code
+ * java.util.regex.Pattern} whether the composed text is accepted, which settles one string. Both
+ * belong on the call they were settled for — not folded into {@code args}, which is what the body
+ * evaluates at run time and a different question — and not left for a reader below to derive a
+ * second time.
  */
 class ACallCarriesTheSettlementTheCheckerProvedAboutItTest {
 
@@ -37,25 +39,39 @@ class ACallCarriesTheSettlementTheCheckerProvedAboutItTest {
             new ReachName.OfLibrary(ValueName.Stdlib.operation("String", "trim")),
             Kernel.STRING_TRIM);
 
+    private static final Core.Reached.OfDeclaration HELPER = new Core.Reached.OfDeclaration(
+            new ReachName.Own(new ValueName.Helper("demo", "half")));
+
+    private static final List<Type> TWO_STRINGS = List.of(Type.STRING, Type.STRING);
+
     private static Core.Str str(String s) {
         return new Core.Str(s, Type.STRING, POS);
     }
 
-    @Test
-    void aStringMatchesCallCarriesItsSettledPattern() {
-        Core.Call call = new Core.Call(MATCHES, List.of(str("AB-[0-9]{4}"), str("AB-1234")),
-                UNWRITTEN, new Core.CallSettlement.StringMatches("AB-[0-9]{4}"), Type.BOOL, POS);
-
-        assertEquals(new Core.CallSettlement.StringMatches("AB-[0-9]{4}"), call.settlement());
+    private static Core.CallSettlement.AtKernel at(List<Type> takes, Core.KernelFact fact) {
+        return new Core.CallSettlement.AtKernel(takes, fact);
     }
 
-    /** A settlement is {@code String.matches}'s own fact, so a call reaching any other kernel is
+    private static Core.CallSettlement.AtKernel matching(String pattern) {
+        return at(TWO_STRINGS, new Core.KernelFact.StringMatches(pattern));
+    }
+
+    @Test
+    void aStringMatchesCallCarriesWhatItTakesAndItsSettledPattern() {
+        Core.Call call = new Core.Call(MATCHES, List.of(str("AB-[0-9]{4}"), str("AB-1234")),
+                UNWRITTEN, matching("AB-[0-9]{4}"), Type.BOOL, POS);
+
+        assertEquals(matching("AB-[0-9]{4}"), call.settlement());
+    }
+
+    /** A pattern is {@code String.matches}'s own fact, so a call reaching any other kernel is
      *  refused one. */
     @Test
-    void aCallToAnyOtherKernelIsRefusedAStringMatchesSettlement() {
+    void aCallToAnyOtherKernelIsRefusedAPattern() {
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> new Core.Call(TRIM, List.of(str("  x  ")), UNWRITTEN,
-                        new Core.CallSettlement.StringMatches("x"), Type.STRING, POS));
+                        at(List.of(Type.STRING), new Core.KernelFact.StringMatches("x")),
+                        Type.STRING, POS));
 
         assertTrue(e.getMessage().contains("String.trim"), e.getMessage());
     }
@@ -63,10 +79,63 @@ class ACallCarriesTheSettlementTheCheckerProvedAboutItTest {
     /** And a call that does reach {@code String.matches} is held to carrying one: the checker settles
      *  the pattern as part of typing the call, not as a step a later pass might skip. */
     @Test
-    void aStringMatchesCallIsRefusedNoSettlement() {
+    void aStringMatchesCallIsRefusedNoPattern() {
         assertThrows(IllegalArgumentException.class,
                 () -> new Core.Call(MATCHES, List.of(str("x"), str("x")), UNWRITTEN,
-                        Core.CallSettlement.None.INSTANCE, Type.BOOL, POS));
+                        at(TWO_STRINGS, Core.KernelFact.None.INSTANCE), Type.BOOL, POS));
+    }
+
+    /** A kernel's application always settles what it takes, so a call reaching a kernel with no
+     *  settlement is one whose arguments nobody said the types of. */
+    @Test
+    void aKernelCallIsRefusedNoSettlement() {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> new Core.Call(TRIM, List.of(str("  x  ")), UNWRITTEN,
+                        Core.CallSettlement.None.INSTANCE, Type.STRING, POS));
+
+        assertTrue(e.getMessage().contains("String.trim"), e.getMessage());
+    }
+
+    /** A kernel taking no argument settles that it takes none, which is a settlement like any
+     *  other. */
+    @Test
+    void aKernelTakingNothingSettlesThatItTakesNothing() {
+        Core.Call call = new Core.Call(TRIM, List.of(), UNWRITTEN,
+                at(List.of(), Core.KernelFact.None.INSTANCE), Type.STRING, POS);
+
+        assertEquals(List.of(), ((Core.CallSettlement.AtKernel) call.settlement()).takes());
+    }
+
+    /** A call to a declaration takes its arguments as the declaration says, so it is refused a
+     *  kernel's settlement — the way a rewrite that turned a kernel call into something else while
+     *  leaving the settlement behind would be. */
+    @Test
+    void aCallToADeclarationIsRefusedAKernelsSettlement() {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> new Core.Call(HELPER, List.of(str("x")), UNWRITTEN,
+                        at(List.of(Type.STRING), Core.KernelFact.None.INSTANCE), Type.STRING, POS));
+
+        assertTrue(e.getMessage().contains("half"), e.getMessage());
+    }
+
+    @Test
+    void aKernelCallIsRefusedASettlementTakingAnotherNumberOfArguments() {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> new Core.Call(TRIM, List.of(str("  x  ")), UNWRITTEN,
+                        at(TWO_STRINGS, Core.KernelFact.None.INSTANCE), Type.STRING, POS));
+
+        assertTrue(e.getMessage().contains("String.trim"), e.getMessage());
+    }
+
+    /** An argument of another type than the application takes it as is refused, and a narrower one
+     *  is no exception: where it may stand as the wider type, a {@link Core.Widen} says so. */
+    @Test
+    void aKernelCallIsRefusedAnArgumentOfAnotherTypeThanItTakes() {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> new Core.Call(TRIM, List.of(new Core.Int(1, Type.INT, POS)), UNWRITTEN,
+                        at(List.of(Type.STRING), Core.KernelFact.None.INSTANCE), Type.STRING, POS));
+
+        assertTrue(e.getMessage().contains("argument 1"), e.getMessage());
     }
 
     /**
@@ -76,10 +145,8 @@ class ACallCarriesTheSettlementTheCheckerProvedAboutItTest {
      */
     @Test
     void aRewriteOfACallsArgumentsKeepsItsSettlement() {
-        Core.CallSettlement.StringMatches settlement =
-                new Core.CallSettlement.StringMatches("AB-[0-9]{4}");
         Core.Call call = new Core.Call(MATCHES, List.of(str("AB-[0-9]{4}"), str("AB-1234")),
-                UNWRITTEN, settlement, Type.BOOL, POS);
+                UNWRITTEN, matching("AB-[0-9]{4}"), Type.BOOL, POS);
 
         Core rewritten = Core.mapChildren(call,
                 child -> child == call.args().get(1) ? str("AB-9999") : child,
@@ -89,48 +156,48 @@ class ACallCarriesTheSettlementTheCheckerProvedAboutItTest {
         assertEquals(List.of(str("AB-[0-9]{4}"), str("AB-9999")), ((Core.Call) rewritten).args());
     }
 
+    /** And keeps it rather than settling it again: a rewrite that hands an argument of another type
+     *  is refused, not followed. */
+    @Test
+    void aRewriteThatChangesAnArgumentsTypeIsRefused() {
+        Core.Call call = new Core.Call(MATCHES, List.of(str("AB-[0-9]{4}"), str("AB-1234")),
+                UNWRITTEN, matching("AB-[0-9]{4}"), Type.BOOL, POS);
+
+        assertThrows(IllegalArgumentException.class, () -> Core.mapChildren(call,
+                child -> child == call.args().get(1) ? new Core.Int(1, Type.INT, POS) : child,
+                name -> name, construct -> construct));
+    }
+
     /** A no-op rewrite still keeps the node it walked, settlement included. */
     @Test
     void aWalkThatChangesNothingKeepsTheCallItWalked() {
         Core.Call call = new Core.Call(MATCHES, List.of(str("AB-[0-9]{4}"), str("AB-1234")),
-                UNWRITTEN, new Core.CallSettlement.StringMatches("AB-[0-9]{4}"), Type.BOOL, POS);
+                UNWRITTEN, matching("AB-[0-9]{4}"), Type.BOOL, POS);
 
         assertSame(call, Core.mapChildren(call, c -> c, n -> n, b -> b));
     }
 
     /** {@code TRIM} carries no ordering constraint of its own, but the invariant does not hold a
      *  second table of which kernels may — that is CallElaborator's decision. It asks only that the
-     *  kernel is not {@code String.matches}, which has its own settlement and no other. */
+     *  kernel is not {@code String.matches}, which has its own fact and no other. */
     @Test
-    void anOrderingSubjectSettlementIsAcceptedOnAKernelCallOtherThanStringMatches() {
+    void anOrderingSubjectIsAcceptedOnAKernelCallOtherThanStringMatches() {
         Core.Call call = new Core.Call(TRIM, List.of(str("  x  ")), UNWRITTEN,
-                new Core.CallSettlement.OrderingSubject(Type.INT), Type.STRING, POS);
+                at(List.of(Type.STRING), new Core.KernelFact.OrderingSubject(Type.INT)),
+                Type.STRING, POS);
 
-        assertEquals(new Core.CallSettlement.OrderingSubject(Type.INT), call.settlement());
+        assertEquals(new Core.KernelFact.OrderingSubject(Type.INT),
+                ((Core.CallSettlement.AtKernel) call.settlement()).fact());
     }
 
-    /** {@code String.matches} carries its own settlement and no other — the same exclusivity
-     *  {@code aStringMatchesCallIsRefusedNoSettlement} states from the other side, which an
-     *  {@code OrderingSubject} case added later must not quietly open a way around. */
+    /** {@code String.matches} carries its own fact and no other — the same exclusivity
+     *  {@code aStringMatchesCallIsRefusedNoPattern} states from the other side, which an
+     *  {@code OrderingSubject} must not quietly open a way around. */
     @Test
-    void aStringMatchesCallIsRefusedAnOrderingSubjectSettlement() {
+    void aStringMatchesCallIsRefusedAnOrderingSubject() {
         assertThrows(IllegalArgumentException.class,
                 () -> new Core.Call(MATCHES, List.of(str("x"), str("x")), UNWRITTEN,
-                        new Core.CallSettlement.OrderingSubject(Type.INT), Type.BOOL, POS));
-    }
-
-    /** An {@code OrderingSubject} is a fact about a call this compilation reaches through a kernel —
-     *  a call to a declaration (a helper, a behavior) is refused one, the way a rewrite that turned a
-     *  kernel call into something else while leaving the settlement behind would be. */
-    @Test
-    void aCallToADeclarationIsRefusedAnOrderingSubjectSettlement() {
-        Core.Reached.OfDeclaration toAHelper = new Core.Reached.OfDeclaration(
-                new ReachName.Own(new ValueName.Helper("demo", "half")));
-
-        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-                () -> new Core.Call(toAHelper, List.of(str("x")), UNWRITTEN,
-                        new Core.CallSettlement.OrderingSubject(Type.INT), Type.STRING, POS));
-
-        assertTrue(e.getMessage().contains("half"), e.getMessage());
+                        at(TWO_STRINGS, new Core.KernelFact.OrderingSubject(Type.INT)),
+                        Type.BOOL, POS));
     }
 }

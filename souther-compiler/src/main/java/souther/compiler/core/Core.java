@@ -626,17 +626,14 @@ public sealed interface Core {
     }
 
     /**
-     * A call-specific fact the checker settled beyond {@link KernelSignature}'s declaration-level
-     * ones, carried on the {@link Call} it was settled for rather than derived from its arguments a
-     * second time downstream.
+     * What the checker settled about one application beyond its type, carried on the {@link Call}
+     * it was settled for rather than derived from its arguments a second time downstream.
      *
-     * <p>{@code String.matches}'s pattern is the first of these: the checker folds the argument
-     * under the bindings in force and asks {@code java.util.regex.Pattern} whether the result is
-     * accepted, which settles the exact text the call means. An output used to recover that text by
-     * walking the argument a second time, capable of reading only the shapes its own walk knew —
-     * which is a second, weaker constant evaluator kept in sync with this compiler's by hand. What
-     * is here is what the checker already proved, so an output reads the answer instead of deriving
-     * one of its own.
+     * <p>A kernel's signature ({@link KernelSignature}) is declared once with type variables, and
+     * each application settles them: what that application takes each argument as is the checker's
+     * answer, and an output reading it off here does not substitute the signature again under a rule
+     * of its own. A call to anything else takes its arguments as its declaration says, which leaves
+     * nothing for one application to settle.
      *
      * <p>Sealed on purpose: a fact belongs here because the checker settled it about one application
      * and it became part of that application's meaning, not because some pass found it convenient to
@@ -646,14 +643,48 @@ public sealed interface Core {
      */
     sealed interface CallSettlement {
 
-        /** The checker settled nothing about this call beyond its type. */
+        /** A call that is no kernel's application, so there is nothing about it for one application
+         *  to settle. */
         enum None implements CallSettlement {
             INSTANCE
         }
 
+        /**
+         * One application of a kernel: what it takes each of its arguments as, and whatever else the
+         * checker settled about it ({@link KernelFact}).
+         *
+         * <p>{@code takes} is the kernel's declared parameters under the substitution the checker
+         * settled for this application, and never the arguments' own types read back: the call
+         * holds each argument at exactly that type, which is a statement only while the two come
+         * from different places. What the application answers is the call's type, and not held a
+         * second time here.
+         */
+        record AtKernel(List<Type> takes, KernelFact fact) implements CallSettlement {
+
+            public AtKernel {
+                takes = List.copyOf(takes);
+                Objects.requireNonNull(fact, "a kernel's application carries its fact, `None` where"
+                        + " there is none");
+            }
+        }
+    }
+
+    /**
+     * A fact the checker settled about one kernel's application, beside what it takes its arguments
+     * as.
+     */
+    sealed interface KernelFact {
+
+        /** The checker settled nothing about this application beyond what it takes and answers. */
+        enum None implements KernelFact {
+            INSTANCE
+        }
+
         /** The pattern text {@code String.matches}'s first argument folds to, proven acceptable to
-         * {@code java.util.regex.Pattern} where the call was checked. */
-        record StringMatches(String pattern) implements CallSettlement {
+         * {@code java.util.regex.Pattern} where the call was checked: the checker folds the argument
+         * under the bindings in force, so an output reads the answer instead of evaluating the
+         * argument a second time. */
+        record StringMatches(String pattern) implements KernelFact {
 
             public StringMatches {
                 Objects.requireNonNull(pattern, "a settled pattern is settled to some text");
@@ -669,7 +700,7 @@ public sealed interface Core {
          * a compile error instead. Never a comparator, method symbol, or other backend
          * representation: a backend reads {@link #type()} and decides its own representation from
          * it. */
-        record OrderingSubject(Type type) implements CallSettlement {
+        record OrderingSubject(Type type) implements KernelFact {
 
             public OrderingSubject {
                 Objects.requireNonNull(type, "a settled ordering subject is settled to some type");
@@ -693,6 +724,12 @@ public sealed interface Core {
      * and what the checker proved about it at compile time are different questions, and folding the
      * second into the first would lose the tree a rewrite, an occurrence or a coverage obligation
      * still reads.
+     *
+     * <p>A kernel's application says what it takes each argument as, and each argument is of
+     * exactly that type — a {@link Widen} where the value is narrower. Held here as equality and not
+     * as whether one may stand as the other: that was decided where the Widen was placed. A rewrite
+     * that changes an argument's type without settling the application again is refused here rather
+     * than carried on to an output that would read the two as disagreeing.
      */
     record Call(CallTarget fn, List<Core> args, ConstructOccurrence occurrence,
                 CallSettlement settlement, Type type, SourcePos pos) implements Core {
@@ -711,32 +748,48 @@ public sealed interface Core {
                 throw new IllegalArgumentException(
                         "a call carries its settlement, `None` where there is none: " + fn.rendered());
             }
-            // Which kernel owns a settlement is asked of the settlement, exhaustively and with no
-            // `default`: a case added later to `CallSettlement` without a line here is a compile
-            // error at this constructor, not a call this refuses to notice was ever handed one. An
-            // `instanceof` of one arm compared as a boolean would answer the same for every case this
-            // has not been told about yet, which is the failure mode this switch is here to refuse.
+            // Which kind of call owns a settlement is asked of the settlement, exhaustively and with
+            // no `default`: a case added later to `CallSettlement` or `KernelFact` without a line
+            // here is a compile error at this constructor, not a call this refuses to notice was
+            // ever handed one. An `instanceof` of one arm compared as a boolean would answer the same
+            // for every case this has not been told about yet, which is the failure mode this switch
+            // is here to refuse.
             boolean agrees = switch (settlement) {
-                case CallSettlement.None _ ->
-                        !(fn instanceof Reached.OfKernel k && k.kernel() == Kernel.STRING_MATCHES);
-                case CallSettlement.StringMatches _ ->
-                        fn instanceof Reached.OfKernel k && k.kernel() == Kernel.STRING_MATCHES;
-                // Which kernels may carry this one is CallElaborator's decision, not a second table
-                // held here in agreement with it — this asks only that the settlement is attached
-                // to a kernel call at all, the way every settlement here is, and preserves the
-                // exclusivity the two cases above already hold: `String.matches` carries its own
-                // settlement and no other, the same fact the `None` and `StringMatches` arms state
-                // from their own sides. A rewrite that turned the call into something else (a
-                // helper, an injected behavior) while leaving the settlement behind is what the
-                // kernel check refuses; which kernel it is otherwise is not this constructor's to
-                // re-decide.
-                case CallSettlement.OrderingSubject _ ->
-                        fn instanceof Reached.OfKernel k && k.kernel() != Kernel.STRING_MATCHES;
+                case CallSettlement.None _ -> !(fn instanceof Reached.OfKernel);
+                case CallSettlement.AtKernel(_, KernelFact fact) ->
+                        fn instanceof Reached.OfKernel(_, Kernel kernel) && factAgrees(kernel, fact);
             };
             if (!agrees) {
                 throw new IllegalArgumentException("`" + fn.rendered() + "` and its settlement "
                         + settlement + " disagree about what kind of call this is");
             }
+            if (settlement instanceof CallSettlement.AtKernel(List<Type> takes, _)) {
+                if (takes.size() != args.size()) {
+                    throw new IllegalArgumentException("`" + fn.rendered() + "` takes "
+                            + takes.size() + " argument(s) and is handed " + args.size());
+                }
+                for (int i = 0; i < args.size(); i++) {
+                    if (!takes.get(i).equals(args.get(i).type())) {
+                        throw new IllegalArgumentException("argument " + (i + 1) + " of `"
+                                + fn.rendered() + "` stands as " + Type.show(args.get(i).type())
+                                + " where the application takes it as " + Type.show(takes.get(i)));
+                    }
+                }
+            }
+        }
+
+        /**
+         * Whether {@code fact} is one {@code kernel}'s application can carry. {@code String.matches}
+         * carries its pattern and nothing else, and no other kernel carries a pattern. Which kernels
+         * carry an ordering subject is the checker's to decide and not a second table held here:
+         * this asks only that it is not {@code String.matches}, which has its own.
+         */
+        private static boolean factAgrees(Kernel kernel, KernelFact fact) {
+            return switch (fact) {
+                case KernelFact.None _ -> kernel != Kernel.STRING_MATCHES;
+                case KernelFact.StringMatches _ -> kernel == Kernel.STRING_MATCHES;
+                case KernelFact.OrderingSubject _ -> kernel != Kernel.STRING_MATCHES;
+            };
         }
 
         /** The callee as it renders — the reach name for a call to one, the operation's own

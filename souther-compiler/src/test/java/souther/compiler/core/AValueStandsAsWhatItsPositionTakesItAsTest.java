@@ -65,6 +65,9 @@ class AValueStandsAsWhatItsPositionTakesItAsTest {
             behavior rounded : (d: Decimal) -> Decimal
             let rounded (d) = Decimal.round(2, HALF_UP, d)
 
+            behavior summed : (n: Int) -> Int
+            let summed (n) = List.sum([])
+
             behavior held : (n: Int) -> Holder
             let held (n) = Holder { s = Circle { r = n } }
 
@@ -170,6 +173,25 @@ class AValueStandsAsWhatItsPositionTakesItAsTest {
                 "a case handed to a parameter of its sum stands as the sum");
         assertEquals("RoundingMode", Type.show(mode.type()));
         assertEquals("HALF_UP", Type.show(mode.value().type()));
+    }
+
+    /**
+     * Over the empty list, the position the sum feeds settles the element it folds, and that
+     * settles the list the call takes as well as what it answers: the empty list stands as a list
+     * of what the call answers.
+     */
+    @Test
+    void aSumOverTheEmptyListTakesAListOfWhatItAnswers() {
+        Core.Call sum = only(body("summed"), Core.Call.class);
+        assertEquals(Type.INT, sum.type());
+        Core.CallSettlement.AtKernel settled = assertInstanceOf(
+                Core.CallSettlement.AtKernel.class, sum.settlement());
+        assertEquals(List.of(new Type.ListOf(Type.INT)), settled.takes(),
+                "the call takes a list of what it answers");
+        Core.Widen list = assertInstanceOf(Core.Widen.class, sum.args().getFirst(),
+                "the empty list stands as the list the call takes");
+        assertInstanceOf(Type.Nothing.class, ((Type.ListOf) list.value().type()).element(),
+                "while what it holds is the empty list, a list of nothing");
     }
 
     @Test
