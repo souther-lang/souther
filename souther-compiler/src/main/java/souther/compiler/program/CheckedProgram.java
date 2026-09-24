@@ -348,7 +348,8 @@ public final class CheckedProgram {
      *
      * <p>{@code site} is a {@code Core} an output actually holds — one this program handed over as
      * part of a behavior's body or a helper's, reached off {@link CheckedImplementation.Body#body}
-     * or {@link CheckedHelper#body}, or a node under one of those. A kernel site's answer already
+     * or {@link CheckedHelper#body}, a clause's condition a declared data holds its values to,
+     * reached off {@link CheckedData.WithFields#invariants}, or a node under one of those. A kernel site's answer already
      * reads {@link #kernel}'s {@link KernelContract#aborts}; an {@code ensures} crossing's already
      * reads {@link EnsuresEnforcement#aborts}; this is where the rest of a body — an arithmetic
      * operator, an {@code unreachable}, a construction — answers the same question.

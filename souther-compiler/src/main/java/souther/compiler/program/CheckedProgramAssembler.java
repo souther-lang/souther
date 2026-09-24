@@ -113,7 +113,7 @@ final class CheckedProgramAssembler {
             modules.add(moduleOf(module, types, targets));
         }
         KernelContracts kernels = KernelContracts.of(libraryOf(db).kernelSignatures());
-        AbortSites aborts = AbortSites.of(everyCoreRootOf(modules), kernels,
+        AbortSites aborts = AbortSites.of(everyCoreRootOf(modules, everyDeclaration), kernels,
                 constructedWithInvariants(everyDeclaration));
         return new CheckedProgram(modules, language, onThePath, targets, kernels, aborts);
     }
@@ -139,7 +139,15 @@ final class CheckedProgramAssembler {
 
     /**
      * Every {@code Core} a program's outputs are asked to emit: each behavior's body, where it has
-     * one this compile wrote, each helper's, and each value's.
+     * one this compile wrote, each helper's, each value's, and the condition of every clause a
+     * declared data holds its values to.
+     *
+     * <p>A clause is emitted wherever a value of its data is built, which is as much a body as a
+     * behavior's is: an {@code Int} {@code +} in one leaves the range the same way. Every
+     * declaration is asked, one on the path among them, since a construction of that data runs its
+     * clauses in whatever output builds it. A clause a spread takes in is the one {@code Core} in
+     * every data that includes it, and it is classified once: what it can end without a value for
+     * does not depend on which data is being built.
      *
      * <p>Not a behavior composed of stages, and not one this program only calls — an
      * {@link CheckedImplementation.Composed} has no {@code Core} of its own to classify, and
@@ -149,7 +157,8 @@ final class CheckedProgramAssembler {
      * already answers {@link AbortSet#NONE} at the site that reaches it
      * ({@link souther.compiler.abort.AbortSites}).
      */
-    private static List<Core> everyCoreRootOf(List<CheckedModule> modules) {
+    private static List<Core> everyCoreRootOf(List<CheckedModule> modules,
+                                              List<CheckedData> everyDeclaration) {
         List<Core> roots = new ArrayList<>();
         for (CheckedModule module : modules) {
             for (CheckedBehavior behavior : module.behaviors()) {
@@ -165,6 +174,13 @@ final class CheckedProgramAssembler {
             }
             for (CheckedValueEntry entry : module.valueEntries()) {
                 roots.add(entry.body());
+            }
+        }
+        for (CheckedData declared : everyDeclaration) {
+            if (declared instanceof CheckedData.WithFields fields) {
+                for (ValueShape.Invariant clause : fields.invariants()) {
+                    roots.add(clause.condition());
+                }
             }
         }
         return roots;
