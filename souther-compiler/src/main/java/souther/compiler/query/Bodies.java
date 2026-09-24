@@ -147,18 +147,7 @@ public final class Bodies {
             if (m == null) {
                 return Answer.of(new BehaviorBodies(name, Map.of()));
             }
-            Set<String> fns = new LinkedHashSet<>();
-            for (Ast.FnDef f : m.fns()) {
-                fns.add(f.name());
-            }
-            Map<String, BehaviorImplementation> states = new LinkedHashMap<>();
-            for (Ast.BehaviorDef b : m.behaviors()) {
-                states.put(b.name(), b instanceof Ast.SpecBehavior spec
-                        ? BehaviorImplementation.of(fns.contains(spec.name()),
-                                !spec.dependsOn().isEmpty())
-                        : BehaviorImplementation.IMPLEMENTED);
-            }
-            return Answer.of(new BehaviorBodies(name, states));
+            return Answer.of(BehaviorBodies.fromSource(m));
         }
     }
 

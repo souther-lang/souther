@@ -3,23 +3,18 @@ package souther.compiler.check;
 /**
  * Where a behavior's body comes from.
  *
- * <p>One reading of the declarations, made here and nowhere else. Whether a behavior has a
- * {@code let} used to be asked separately by the requirement walk, by the signatures a
- * {@code depends on} may name, by the emitter, by the rows and by the report, and each of them put
- * its own meaning on the answer. Two of those meanings disagree: to the rows, no {@code let} means
- * the body has not been written yet, and to the emitter it means Java supplies it. The disagreement
- * surfaces at {@code depends on}, which an injection target may not declare and an author writing a
- * model example-first has to (issue #936).
+ * <p>A behavior with no {@code let} is one of two things. To the rows, no {@code let} means the body
+ * has not been written yet, and to the emitter it means Java supplies it. The two are separate
+ * states here, and what tells them apart is the clause: a behavior that declares
+ * {@code depends on} takes those dependencies as arguments of a {@code let} (spec §depends-on),
+ * which is a Souther implementation, so with no {@code let} it is a Souther implementation nobody
+ * has written. A behavior declaring nothing to depend on and writing no {@code let} is what Java
+ * supplies (spec §injected-behavior).
  *
- * <p>So the two are separate states here, and what tells them apart is the clause. A behavior that
- * declares {@code depends on} takes those dependencies as arguments of a {@code let}
- * (spec §depends-on), which is a Souther implementation; with no {@code let} it is a Souther
- * implementation nobody has written. A behavior declaring nothing to depend on and writing no
- * {@code let} is what Java supplies (spec §injected-behavior).
- *
- * <p>Carried across a module boundary rather than worked out again there: a module read from the
- * path publishes no {@code let}, so an importer that re-derived would have only two states to put
- * three declarations into, which is the conflation this exists to remove.
+ * <p>The state is a fact about a module, decided once and held in {@link BehaviorBodies}. It is not
+ * derived from a tree, and not from whether a definition is at hand: a module read from the path
+ * publishes no {@code let}, so a reader that worked it out again would have only two states to put
+ * three declarations into.
  */
 public enum BehaviorImplementation {
 
@@ -31,26 +26,6 @@ public enum BehaviorImplementation {
 
     /** Java's to supply. An abstract base is emitted for an implementation to extend. */
     INJECTION_TARGET;
-
-    /**
-     * The one rule, for classifying a module from its source.
-     *
-     * <p>Two questions about the declaration and nothing else — no name to look up and no module to
-     * consult. It is asked where a module compiled here is classified into its
-     * {@link BehaviorBodies}, and nowhere else: a module read off the path was classified where it
-     * was compiled and carries the answer, and its tree has no {@code let} for the first question.
-     * A reader holding a tree asks the module's {@link BehaviorBodies} instead.
-     *
-     * @param hasBody whether an implementation of this behavior is written here: a {@code let} of
-     *                its name, or the {@code >->} the behavior is declared as
-     * @param declaresDependsOn whether the declaration writes a {@code depends on} clause
-     */
-    public static BehaviorImplementation of(boolean hasBody, boolean declaresDependsOn) {
-        if (hasBody) {
-            return IMPLEMENTED;
-        }
-        return declaresDependsOn ? UNIMPLEMENTED : INJECTION_TARGET;
-    }
 
     /** Whether Java supplies this one, so an abstract base is emitted and a caller injects it. */
     public boolean isInjectionTarget() {

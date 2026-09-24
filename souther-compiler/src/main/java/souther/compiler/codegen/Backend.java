@@ -18,7 +18,6 @@ import souther.compiler.ast.DefinitionRole;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.BehaviorBodies;
-import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.ReqSig;
 import souther.compiler.check.Requirements;
@@ -488,64 +487,84 @@ public final class Backend {
                 }
                 switch (bd) {
                     case Hir.SpecBehavior spec -> {
-                        // Bodies arrive with their helper calls already inlined (the Lower stage,
-                        // ADR-0021), and are emitted as-is.
-                        SpecImplementation.Implemented implemented =
-                                implementations.get(spec.name());
-                        if (implemented != null) {
-                            // The logic, where this elaboration entitles a class for it. What it
-                            // entitles is the emission, and it is asked here rather than worked out
-                            // beside it — so what is emitted and what the elaboration was numbered
-                            // over cannot be two answers. The bodies it holds are not that
-                            // question: a body may be here for a behavior whose implementation this
-                            // image may not carry, and a composition has no body at all.
-                            if (checked.emits().contains(spec.name())) {
-                                // What this emitter takes, said here rather than by the reading
-                                // that divided the parameters: an editor reads a definition whose
-                                // parameters do not line up and answers what it can about it, and
-                                // this may not run on one at all. The division is the same either
-                                // way; what differs is who may act on it.
-                                if (!implemented.hasCompleteShape()) {
-                                    throw new IllegalStateException("`" + module.name() + "."
-                                            + spec.name() + "` is emitted from an implementation"
-                                            + " whose parameters the declaration does not account"
-                                            + " for");
+                        // What this behavior is decided by where the module was classified. The
+                        // definition is what an implemented one is emitted from, and is asked for
+                        // only there: whether one is at hand says nothing of which of the three
+                        // this is.
+                        switch (bodies.of(named)) {
+                            case IMPLEMENTED -> {
+                                // Bodies arrive with their helper calls already inlined (the Lower
+                                // stage, ADR-0021), and are emitted as-is.
+                                SpecImplementation.Implemented implemented =
+                                        implementations.get(spec.name());
+                                if (implemented == null) {
+                                    throw new IllegalStateException("`" + named + "` was"
+                                            + " classified as implemented but has no"
+                                            + " implementation to emit");
                                 }
-                                // a fn-implemented behavior: the $Impl holds the logic, the public
-                                // interface (behaviorClass) is what Java code declares (spec
-                                // §jvm-anonymous-union).
-                                out.put(new GeneratedClass.BehaviorImpl(module.name(), spec.name()),
-                                        b.generateSpecFn(spec, implemented,
-                                                requiredSuccess, requiredParam));
-                            } else {
-                                // Written down where it is decided. What is missing from the classes
-                                // cannot say whether this compile owed one, and a row about the
-                                // behavior is told two different things by the two answers.
-                                out.leftOut(spec.name());
+                                // The logic, where this elaboration entitles a class for it. What
+                                // it entitles is the emission, and it is asked here rather than
+                                // worked out beside it — so what is emitted and what the
+                                // elaboration was numbered over cannot be two answers. The bodies
+                                // it holds are not that question: a body may be here for a
+                                // behavior whose implementation this image may not carry, and a
+                                // composition has no body at all.
+                                if (checked.emits().contains(spec.name())) {
+                                    // What this emitter takes, said here rather than by the
+                                    // reading that divided the parameters: an editor reads a
+                                    // definition whose parameters do not line up and answers what
+                                    // it can about it, and this may not run on one at all. The
+                                    // division is the same either way; what differs is who may
+                                    // act on it.
+                                    if (!implemented.hasCompleteShape()) {
+                                        throw new IllegalStateException("`" + module.name() + "."
+                                                + spec.name() + "` is emitted from an"
+                                                + " implementation whose parameters the"
+                                                + " declaration does not account for");
+                                    }
+                                    // a fn-implemented behavior: the $Impl holds the logic, the
+                                    // public interface (behaviorClass) is what Java code declares
+                                    // (spec §jvm-anonymous-union).
+                                    out.put(new GeneratedClass.BehaviorImpl(module.name(),
+                                                    spec.name()),
+                                            b.generateSpecFn(spec, implemented,
+                                                    requiredSuccess, requiredParam));
+                                } else {
+                                    // Written down where it is decided. What is missing from the
+                                    // classes cannot say whether this compile owed one, and a row
+                                    // about the behavior is told two different things by the two
+                                    // answers.
+                                    out.leftOut(spec.name());
+                                }
+                                // The declaration whether or not the logic behind it is here, so
+                                // what this module offers a caller is what its source says either
+                                // way.
+                                List<Type> pts = new ArrayList<>();
+                                for (Hir.Param p : spec.params()) {
+                                    pts.add(b.successType(p.type()));
+                                }
+                                out.put(new GeneratedClass.BehaviorInterface(module.name(),
+                                                spec.name()),
+                                        b.generateBehaviorInterface(spec.name(), pts,
+                                                b.successType(spec.ret()), requiredBy(spec)));
                             }
-                            // The declaration whether or not the logic behind it is here, so what
-                            // this module offers a caller is what its source says either way.
-                            List<Type> pts = new ArrayList<>();
-                            for (Hir.Param p : spec.params()) {
-                                pts.add(b.successType(p.type()));
+                            case UNIMPLEMENTED -> {
+                                // Souther's to implement and not written (spec
+                                // §unwritten-behavior). The declaration is emitted so its name
+                                // exists; nothing that would need the body it has not got is.
+                                List<Type> pts = new ArrayList<>();
+                                for (Hir.Param p : spec.params()) {
+                                    pts.add(b.successType(p.type()));
+                                }
+                                out.put(new GeneratedClass.BehaviorInterface(module.name(),
+                                                spec.name()),
+                                        b.generateUnwrittenBehaviorInterface(spec.name(), pts,
+                                                b.successType(spec.ret())));
                             }
-                            out.put(new GeneratedClass.BehaviorInterface(module.name(), spec.name()),
-                                    b.generateBehaviorInterface(spec.name(), pts, b.successType(spec.ret()),
-                                            requiredBy(spec)));
-                        } else if (bodies.of(new ValueName.Behavior(module.name(), spec.name()))
-                                == BehaviorImplementation.UNIMPLEMENTED) {
-                            // Souther's to implement and not written (spec §unwritten-behavior).
-                            // The declaration is emitted so its name exists; nothing that would need
-                            // the body it has not got is.
-                            List<Type> pts = new ArrayList<>();
-                            for (Hir.Param p : spec.params()) {
-                                pts.add(b.successType(p.type()));
+                            case INJECTION_TARGET -> {
+                                // Its abstract base was generated above (spec §java-base-class).
                             }
-                            out.put(new GeneratedClass.BehaviorInterface(module.name(), spec.name()),
-                                    b.generateUnwrittenBehaviorInterface(spec.name(), pts,
-                                            b.successType(spec.ret())));
                         }
-                        // else: injection target — its abstract base was generated above (spec §java-base-class)
                     }
                     case Hir.PipeBehavior pipe -> {
                         // The same question the body above asks, and asked of the same answer. A
