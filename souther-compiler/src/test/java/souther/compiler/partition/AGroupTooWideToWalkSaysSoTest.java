@@ -236,9 +236,9 @@ class AGroupTooWideToWalkSaysSoTest {
         FillResult composed = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(), Generator.Trial.NOTHING_RUNS, Budgets.generation());
 
-        assertFalse(composed.discharge().arms().values().isEmpty(), () -> "the arms are answered: " + composed.discharge().arms().values());
-        assertTrue(composed.discharge().arms().values().stream().allMatch(ArmDisposition.Built.class::isInstance),
-                () -> "each of them with a row through it: " + composed.discharge().arms().values());
+        assertFalse(GenerationFixtures.arms(composed.discharge()).values().isEmpty(), () -> "the arms are answered: " + GenerationFixtures.arms(composed.discharge()).values());
+        assertTrue(GenerationFixtures.arms(composed.discharge()).values().stream().allMatch(ArmDisposition.Built.class::isInstance),
+                () -> "each of them with a row through it: " + GenerationFixtures.arms(composed.discharge()).values());
 
         List<GenerationReason.GroupsNotOffered> said = composed.reasons().stream()
                 .filter(GenerationReason.GroupsNotOffered.class::isInstance)
@@ -270,7 +270,8 @@ class AGroupTooWideToWalkSaysSoTest {
         assertEquals(List.of(), asked.reasons().stream()
                         .filter(GenerationReason.GroupsNotOffered.class::isInstance).toList(),
                 () -> "nothing was owed behind it: " + asked.reasons());
-        assertEquals(Map.of(), asked.discharge().arms(), "and no arm was answered for");
+        assertEquals(Map.of(), GenerationFixtures.arms(asked.discharge()),
+                "and no arm was answered for");
     }
 
     /**
@@ -300,7 +301,8 @@ class AGroupTooWideToWalkSaysSoTest {
 
     /** What the compilation's own generation came to at each arm it was owed one at. */
     private static List<ArmDisposition> armsFor(String source) {
-        return List.copyOf(fillingFor(source).composed().discharge().arms().values());
+        return List.copyOf(
+                GenerationFixtures.arms(fillingFor(source).composed().discharge()).values());
     }
 
     private static List<GenerationReason.GroupsNotOffered> groupsNotOfferedFor(String source) {
@@ -397,8 +399,8 @@ class AGroupTooWideToWalkSaysSoTest {
         assertFalse(behindTheHeldGroup.isEmpty(),
                 "arms were owed behind the group that was held back");
 
-        assertTrue(composed.discharge().arms().values().stream().allMatch(ArmDisposition.Built.class::isInstance),
-                () -> "every arm behind it has a row through it: " + composed.discharge().arms().values());
+        assertTrue(GenerationFixtures.arms(composed.discharge()).values().stream().allMatch(ArmDisposition.Built.class::isInstance),
+                () -> "every arm behind it has a row through it: " + GenerationFixtures.arms(composed.discharge()).values());
         assertEquals(1, composed.reasons().stream()
                         .filter(GenerationReason.GroupsNotOffered.class::isInstance).count(),
                 () -> "and the walk that was not made is still said: " + composed.reasons());

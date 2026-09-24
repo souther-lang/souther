@@ -120,10 +120,8 @@ class ARowAlreadyComposedIsWhatACombinationIsAnsweredWithTest {
                     && disposition instanceof ClassDisposition.Built built) {
                 out.add(built.rowId());
             }
-        }
-        for (souther.compiler.partition.ArmDisposition each
-                : filled.discharge().arms().values()) {
-            if (each instanceof souther.compiler.partition.ArmDisposition.Built built) {
+            if (each instanceof GenerationAnswer.Arm(var _, var disposition)
+                    && disposition instanceof souther.compiler.partition.ArmDisposition.Built built) {
                 out.add(built.rowId());
             }
         }

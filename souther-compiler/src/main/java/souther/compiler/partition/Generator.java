@@ -1077,16 +1077,17 @@ public final class Generator {
                 throw new IllegalArgumentException(
                         "an arm a row can be steered to is recorded somewhere");
             }
+            // One place is one occurrence, and a walk over the occurrences would visit a place
+            // listed twice twice.
+            if (Set.copyOf(occurrences).size() != occurrences.size()) {
+                throw new IllegalArgumentException(
+                        "one place is named twice among an arm's occurrences: " + occurrences);
+            }
         }
 
         /** An arm the caller has one place for, which is what a search stood up on its own has. */
         public ArmOwed(ArmProbe probe) {
             this(List.of(probe));
-        }
-
-        /** Whether {@code probe} is one of the places a run through this arm is recorded at. */
-        public boolean recordedAt(ArmProbe probe) {
-            return occurrences.contains(probe);
         }
     }
 

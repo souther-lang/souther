@@ -1,8 +1,8 @@
 package souther.compiler.partition;
 
+import souther.compiler.coverage.ArmProbe;
 import souther.compiler.values.InOneOrder;
 
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -29,30 +29,24 @@ import java.util.Set;
  * #toString}), which is what a message about one run reading the same way twice wanted of it.
  *
  * <p><b>{@link #answers} is the one canonical map, and the sole authority for every reader
- * below it.</b> A single-obligation lookup at a class, a pair or a meeting wraps the target in
- * the obligation it belongs to and asks {@code answers} directly, which costs no walk of the
- * others — so there is nothing left to project as a whole map, and no reader asks for one; a
- * caller that wants every class or every pair filters {@link #answers} itself. {@link #arms} is
- * the one projection still cached — {@link #at(souther.compiler.coverage.ArmProbe)} is asked
- * once per finding of a behavior, over every arm, by a reader holding no obligation to wrap a
- * key from; caching it once here is what spares that reader the walk of every answer a fresh
- * projection would otherwise cost on every finding. See {@link GenerationAnswer} for why the
- * values these project are not one shared disposition type either.
+ * below it.</b> A single-obligation lookup wraps the target in the obligation it belongs to and
+ * asks {@code answers} directly, which costs no walk of the others — so there is nothing to
+ * project as a whole map, and no reader asks for one; a caller that wants every class or every arm
+ * filters {@link #answers} itself. A reader holding one place an arm is recorded at rather than
+ * the arm asks the plan which arm that place belongs to ({@code GenerationPlan.armAt}) and then
+ * asks {@code answers}: which arm a place belongs to is what the plan asked for, and nothing a run
+ * answered. See {@link GenerationAnswer} for why the values these answer with are not one shared
+ * disposition type either.
  *
- * <p>Not a record, for the same reason: what {@link #equals} and {@link #hashCode} answer with is
- * {@link #plan} and {@link #answers} alone, held in no order — the derived views are computed from
- * those two and add nothing a record's generated equality would need to see.
+ * @param plan    what this run was asked for
+ * @param answers the answers, filed by the obligation each is to, held in no order
  */
-public final class Discharge {
+public record Discharge(GenerationPlan plan, Map<GenerationObligation, GenerationAnswer> answers) {
 
-    private final GenerationPlan plan;
-    private final Map<GenerationObligation, GenerationAnswer> answers;
-    private final Map<Generator.ArmOwed, ArmDisposition> arms;
-
-    public Discharge(GenerationPlan plan, Map<GenerationObligation, GenerationAnswer> answers) {
+    public Discharge {
         Objects.requireNonNull(plan, "a discharge answers a plan");
-        Map<GenerationObligation, GenerationAnswer> validated = Ordered.byKey(answers);
-        for (Map.Entry<GenerationObligation, GenerationAnswer> each : validated.entrySet()) {
+        answers = Ordered.byKey(answers);
+        for (Map.Entry<GenerationObligation, GenerationAnswer> each : answers.entrySet()) {
             if (!each.getKey().equals(each.getValue().obligation())) {
                 throw new IllegalArgumentException(
                         "an answer filed under an obligation it does not answer: " + each.getKey()
@@ -60,23 +54,12 @@ public final class Discharge {
             }
         }
         Set<GenerationObligation> asked = new LinkedHashSet<>(plan.obligations());
-        if (!validated.keySet().equals(asked)) {
+        if (!answers.keySet().equals(asked)) {
             throw new IllegalStateException(
                     "the obligations this run was asked for and the ones it answered for are not"
                             + " the same: asked " + InOneOrder.of(asked)
-                            + ", answered " + InOneOrder.of(validated.keySet()));
+                            + ", answered " + InOneOrder.of(answers.keySet()));
         }
-        this.plan = plan;
-        this.answers = validated;
-        // The one projection worth walking once here rather than rebuilding on every finding a
-        // reader asks at(ArmProbe) for — see the class comment.
-        Map<Generator.ArmOwed, ArmDisposition> arms = new LinkedHashMap<>();
-        for (GenerationAnswer each : validated.values()) {
-            if (each instanceof GenerationAnswer.Arm(var obligation, var disposition)) {
-                arms.put(obligation.target(), disposition);
-            }
-        }
-        this.arms = Collections.unmodifiableMap(arms);
     }
 
     /**
@@ -104,16 +87,6 @@ public final class Discharge {
         return new Discharge(plan, Map.of());
     }
 
-    /** What this run was asked for. */
-    public GenerationPlan plan() {
-        return plan;
-    }
-
-    /** The answers, filed by the obligation each is to, held in no order. */
-    public Map<GenerationObligation, GenerationAnswer> answers() {
-        return answers;
-    }
-
     /** Every answer, in the plan's own order. */
     public List<GenerationAnswer> inPlanOrder() {
         return plan.obligations().stream().map(answers::get).toList();
@@ -123,22 +96,6 @@ public final class Discharge {
     @Override
     public String toString() {
         return "answers " + InOneOrder.of(inPlanOrder());
-    }
-
-    @Override
-    public boolean equals(Object other) {
-        return other instanceof Discharge that
-                && plan.equals(that.plan) && answers.equals(that.answers);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(plan, answers);
-    }
-
-    /** One arm apiece, or none where the plan named none. */
-    public Map<Generator.ArmOwed, ArmDisposition> arms() {
-        return arms;
     }
 
     /** What became of one combination of the body's decisions, or null where nothing asked. */
@@ -161,7 +118,7 @@ public final class Discharge {
 
     /** What became of one arm, or null where this run was not asked about it. */
     public ArmDisposition at(Generator.ArmOwed owed) {
-        return arms.get(owed);
+        return at(new GenerationObligation.Arm(owed));
     }
 
     /**
@@ -170,31 +127,16 @@ public final class Discharge {
      * <p>For a reader holding an occurrence rather than the arm — a finding names one site of the
      * arm it is about, and what the search was asked for is the arm and every splice of it. Asked
      * with the site's own probe as though it were the whole key, such a reader found nothing
-     * whenever the arm stood in the body more than once.
-     *
-     * <p>Every entry read and not the first that matches. A probe is one place in one body, so at
-     * most one arm is recorded at it — and answered with whichever entry came first, two writings
-     * of one discharge would answer a reader two ways wherever that stopped being true. So the
-     * answer is the one arm claiming the place, and several claiming it is refused.
-     *
-     * <p>Counted rather than gathered. What the refusal has to say is that a place is held twice,
-     * and which arms those are is read off the discharge by whoever is looking — gathered here they
-     * would be named in the order the entries happen to be held, which is the order this says
-     * nothing is answered from.
+     * whenever the arm stood in the body more than once. Which arm the place belongs to is the
+     * plan's answer, and the plan holds at most one arm at any place.
      */
-    public ArmDisposition at(souther.compiler.coverage.ArmProbe probe) {
-        ArmDisposition only = null;
-        int claiming = 0;
-        for (Map.Entry<Generator.ArmOwed, ArmDisposition> each : arms.entrySet()) {
-            if (each.getKey().recordedAt(probe)) {
-                claiming++;
-                only = each.getValue();
-            }
-        }
-        if (claiming > 1) {
-            throw new IllegalStateException("a place is recorded against more than one arm: "
-                    + probe + " is held by " + claiming + " of them");
-        }
-        return only;
+    public ArmDisposition at(ArmProbe probe) {
+        GenerationObligation.Arm owed = plan.armAt(probe);
+        return owed == null ? null : at(owed);
+    }
+
+    private ArmDisposition at(GenerationObligation.Arm owed) {
+        return answers.get(owed)
+                instanceof GenerationAnswer.Arm(var _, var disposition) ? disposition : null;
     }
 }
