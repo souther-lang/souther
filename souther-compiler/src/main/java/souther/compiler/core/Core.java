@@ -32,9 +32,13 @@ import java.util.Optional;
  * shape during emission becomes its own node here, so the backend only emits.
  *
  * <p>Every node carries {@link #type()}: the type the checker decided for it (issue #81). The
- * checker is the only producer of Core — it builds the tree as it types what was written
+ * checker is the only one that decides a type — it builds the tree as it types what was written
  * ({@code Elaborator.elaborate}) — so the backend reads those decisions instead of deciding them a
- * second time. A condition was the exception until #1080, and being the exception meant the last
+ * second time. A pass after checking ({@link GrowingFold}) rebuilds the tree it is handed, and what
+ * it puts there is either a decision it was handed or one its own rewrite determines, such as the
+ * type a binding is in force at once the list it stood for is no longer built. A {@link Widen} such
+ * a pass puts there restates one the checker decided, and never relates two types the checker did
+ * not. A condition was the exception until #1080, and being the exception meant the last
  * step of deciding what a clause meant sat inside a backend.
  *
  * <p>A name in a body is one of two nodes, not one: a read of something the body binds, and a unit

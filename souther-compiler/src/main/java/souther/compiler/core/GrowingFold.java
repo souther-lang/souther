@@ -340,15 +340,19 @@ public final class GrowingFold {
         if (adds(innerStep.body()) != 1) {
             return null;
         }
-        boolean[] refused = {false};
-        Core body = piped(innerStep.body(), outer, refused);
-        if (refused[0]) {
+        Set<BindingId> acc = aliases(innerStep.body(), innerStep.params().getFirst());
+        Piped piped = new Piped(outer);
+        Core body = answers(innerStep.body(), acc, new int[1], piped);
+        if (body == null || piped.reads != mentions(innerStep.body(), acc)) {
+            // A read of the accumulator the answering positions did not reach would go on reading
+            // it as the list in between.
             return null;
         }
-        // The inner step's parameters, read at what it read them at, around a body that now answers
-        // what the outer step answers. The positions the two steps stood at are gone with the calls
-        // they were arguments of, so what either stood as there is nobody's.
-        Core step = new Core.Block(innerStep.params(), innerStep.paramTypes(), body,
+        // The inner step's parameters, under the names it gave them: the accumulator is the outer
+        // step's, and the element is what the inner step read. The positions the two steps stood at
+        // are gone with the calls they were arguments of, so what either stood as there is nobody's.
+        Core step = new Core.Block(innerStep.params(),
+                List.of(outer.paramTypes().getFirst(), innerStep.paramTypes().get(1)), body,
                 innerStep.pos());
         return new Core.Call(BUILD, List.of(step, inner.args().get(1), inner.args().get(2)),
                 ConstructOccurrence.unwritten(), Core.CallSettlement.None.INSTANCE,
@@ -366,33 +370,64 @@ public final class GrowingFold {
         return n[0];
     }
 
-    /** {@code e} with the one add in it replaced by {@code outer} applied there: the accumulator the
-     *  add was given becomes the outer step's accumulator and the element it added becomes the outer
-     *  step's element, both bound rather than substituted, so a name the two steps happen to share
-     *  reads the value it was given here. */
-    private static Core piped(Core e, Core.Block outer, boolean[] refused) {
-        if (refused[0] || e instanceof Core.Block) {
-            return e;
+    /**
+     * The inner step's add replaced by {@code outer} applied there: the accumulator the add was given
+     * becomes the outer step's accumulator and the element it added becomes the outer step's
+     * element, both bound rather than substituted, so a name the two steps happen to share reads the
+     * value it was given here.
+     *
+     * <p>The accumulator is the outer step's from here on. The builder the inner step's names stand
+     * for is the one the outer step grows, so each of them is in force at what the outer step takes
+     * its accumulator at, and every position the step answers through answers what the outer step
+     * answers. That is the list in between going away, not one list standing as another, so none of
+     * it is a {@link Core.Widen}.
+     */
+    private static final class Piped implements Growth {
+
+        private final Core.Block outer;
+
+        /** How many reads of the accumulator this put at the outer step's type. */
+        private int reads;
+
+        Piped(Core.Block outer) {
+            this.outer = outer;
         }
-        if (e instanceof Core.Call c && c.fn() == GROW) {
-            if (!(Core.withoutStanding(c.args().get(1)) instanceof Core.ListLit lit)
+
+        @Override
+        public Core at(Core e, Set<BindingId> acc) {
+            if (!(e instanceof Core.Call c) || c.fn() != GROW
+                    || !(Core.withoutStanding(c.args().getFirst()) instanceof Core.Read builder)
+                    || !acc.contains(builder.binding())
+                    || !(Core.withoutStanding(c.args().get(1)) instanceof Core.ListLit lit)
                     || lit.elements().size() != 1) {
-                refused[0] = true;   // the add hands over a list, and the outer step takes an element
-                return e;
+                // Not one element added to the accumulator: an add handing over a list, where the
+                // outer step takes an element.
+                return null;
             }
-            // Each binding is in force at the type the outer step takes that parameter at, and what
-            // it is given stands as that type: the element was added to a list of what the outer
-            // step takes, and the builder is the one the outer step grows.
             List<Type> takes = outer.paramTypes();
             Core body = outer.body();
             Core element = new Core.LetIn(outer.params().get(1), takes.get(1),
-                    Core.standingAs(lit.elements().get(0), takes.get(1)), body, body.type(),
+                    Core.standingAs(lit.elements().getFirst(), takes.get(1)), body, body.type(),
                     c.pos());
-            return new Core.LetIn(outer.params().get(0), takes.get(0),
-                    Core.standingAs(c.args().get(0), takes.get(0)), element, body.type(), c.pos());
+            return new Core.LetIn(outer.params().getFirst(), takes.getFirst(), read(builder),
+                    element, body.type(), c.pos());
         }
-        return Core.mapChildren(e, child -> piped(child, outer, refused), s -> s,
-                nd -> Core.mapChildren(nd, child -> piped(child, outer, refused)));
+
+        @Override
+        public Core.Read read(Core.Read v) {
+            reads++;
+            return new Core.Read(v.name(), v.binding(), bound(v.type()), v.pos());
+        }
+
+        @Override
+        public Type bound(Type checked) {
+            return outer.paramTypes().getFirst();
+        }
+
+        @Override
+        public Type answering(Type checked) {
+            return outer.body().type();
+        }
     }
 
     /**
@@ -455,10 +490,31 @@ public final class GrowingFold {
         return new Core.Block(block.params(), block.paramTypes(), grown, block.pos());
     }
 
-    /** What an answering position of a growing step may hold besides the accumulator itself: the one
-     *  operation that grows it, rewritten to the one that writes into the builder. Null refuses. */
+    /**
+     * What an answering position of a growing step may hold besides the accumulator itself: the one
+     * operation that grows it, rewritten to the one that writes into the builder. Null refuses.
+     *
+     * <p>Turning an append into an add leaves what the accumulator is, so a read of it and every
+     * position it is answered through keep the type they were checked at. A join is the one growth
+     * that changes it, and it says so through the other two methods.
+     */
     private interface Growth {
         Core at(Core e, Set<BindingId> acc);
+
+        /** {@code v}, one of the accumulator's names, read at the type it is in force at now. */
+        default Core.Read read(Core.Read v) {
+            return v;
+        }
+
+        /** What one of the accumulator's names is in force at now, given what it was bound at. */
+        default Type bound(Type checked) {
+            return checked;
+        }
+
+        /** What a position the step answers through answers now, given what it was checked to. */
+        default Type answering(Type checked) {
+            return checked;
+        }
     }
 
     /** {@code acc ++ rhs} as an add to the builder. */
@@ -501,31 +557,41 @@ public final class GrowingFold {
                     yield null;
                 }
                 found[0]++;
-                yield v;
+                yield Core.standingAs(growth.read(v), growth.answering(v.type()));
             }
             case Core.If iff -> {
                 Core then = answers(iff.then(), acc, found, growth);
                 Core els = then == null ? null : answers(iff.els(), acc, found, growth);
                 yield els == null ? null
-                        : new Core.If(iff.cond(), then, els, iff.place(), iff.type(), iff.pos());
+                        : new Core.If(iff.cond(), then, els, iff.place(),
+                                growth.answering(iff.type()), iff.pos());
             }
             // What it holds is the answering position, and what that is rewritten to stands as what
-            // it stood as.
+            // the position answers.
             case Core.Widen w -> {
                 Core value = answers(w.value(), acc, found, growth);
-                yield value == null ? null : Core.standingAs(value, w.type());
+                yield value == null ? null : Core.standingAs(value, growth.answering(w.type()));
             }
             case Core.LetIn li -> {
-                if (acc.contains(li.binder().binding())
-                        && !(Core.withoutStanding(li.value()) instanceof Core.Read v
-                        && acc.contains(v.binding()))) {
+                Core body;
+                if (!acc.contains(li.binder().binding())) {
+                    body = answers(li.body(), acc, found, growth);
+                    yield body == null ? null
+                            : new Core.LetIn(li.binder(), li.bindType(), li.value(), body,
+                                    growth.answering(li.type()), li.pos());
+                }
+                if (!(Core.withoutStanding(li.value()) instanceof Core.Read v)
+                        || !acc.contains(v.binding())) {
                     // one of the accumulator's names now stands for something else
                     yield null;
                 }
-                Core body = answers(li.body(), acc, found, growth);
+                // Another name for the accumulator, in force at what the accumulator is.
+                body = answers(li.body(), acc, found, growth);
+                Type bindType = growth.bound(li.bindType());
+                Core value = growth.read(v);
                 yield body == null ? null
-                        : new Core.LetIn(li.binder(), li.bindType(), li.value(), body, li.type(),
-                                li.pos());
+                        : new Core.LetIn(li.binder(), bindType, Core.standingAs(value, bindType),
+                                body, growth.answering(li.type()), li.pos());
             }
             case Core.Match m -> answers(m, acc, found, growth);
             // A call a representation kept standing is not part of the tree a fold grows in: this
@@ -560,7 +626,8 @@ public final class GrowingFold {
             }
             cases.add(c.answering(body));
         }
-        return new Core.Match(m.scrutinee(), cases, m.place(), m.type(), m.pos());
+        return new Core.Match(m.scrutinee(), cases, m.place(), growth.answering(m.type()),
+                m.pos());
     }
 
     /**

@@ -111,7 +111,7 @@ class EverySlotHoldsWhatItsNodeTakesItAsTest {
     }
 
     /** What {@code node} says of a slot's type that the value in the slot does not have. */
-    private static List<String> disagreements(Core node) {
+    static List<String> disagreements(Core node) {
         List<String> out = new ArrayList<>();
         switch (node) {
             case Core.If fork -> {
@@ -167,7 +167,7 @@ class EverySlotHoldsWhatItsNodeTakesItAsTest {
      *
      * <p>Not the body a check hands on to be emitted. That one has been through the rewrite that
      * turns a fold growing a collection into a build ({@link GrowingFold}), which is a pass after
-     * checking and not held here.
+     * checking and not held here; {@link EveryTreeTheBackendIsHandedIsTypedTest} holds that one.
      */
     private static List<Core> trees() {
         if (trees != null) {
