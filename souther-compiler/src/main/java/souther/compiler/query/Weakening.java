@@ -489,4 +489,31 @@ public sealed interface Weakening {
             return RunSensitivity.MAY_CHANGE;
         }
     }
+
+    /**
+     * Some rule of the decision was read with fewer of the distinctions its way consults than the
+     * body draws, so what it is was not read in full.
+     *
+     * <p>Beside {@link DecisionReadingIncomplete} and not one of its reasons. There the rules are not
+     * in hand; here they are, and one of them is described by less than it turns on — so it may be
+     * one rule where the body has two, and a run seen doing every condition it carries has not been
+     * shown to have taken it. A fact about the derivation of the rules, and so a fact whether or not
+     * any row ran: a behavior nobody wrote a row for is short of it exactly as much.
+     *
+     * <p>Of the behavior and not of a rule. Which rules it bears on is each rule's own answer
+     * ({@link souther.compiler.partition.DecisionReading.Ruled#whole}), and it is asked of the rule
+     * where a finding about one is made ({@link DecisionEvidence#at}).
+     */
+    record DecisionRuleReadShort(String behavior) implements Weakening {
+
+        public DecisionRuleReadShort {
+            java.util.Objects.requireNonNull(behavior, "a decision is some body's");
+        }
+
+        /** What the reading has no words for is not given words by allowing it more. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
+        }
+    }
 }

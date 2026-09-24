@@ -198,14 +198,16 @@ class OnlyAProjectionSaysHowFarAMeasurementGotTest {
                                 + "Lsouther/compiler/query/ObligationCoverage;"
                                 + "Lsouther/compiler/query/About;)"
                                 + "Lsouther/compiler/query/Adequacy$Finding;",
-                        // A third thing that finds one: the reading of a body's decision. What it
-                        // went without is neither a measure's status nor a fold of the readings of
-                        // a line — a run it could not place among the rules and a row nothing
-                        // watched each leave a rule nothing was seen taking as one a row may
-                        // already take — and it is taken whole for the reason the two above are.
+                        // A third thing that finds one: the reading of one rule of a body's
+                        // decision. What it went without is neither a measure's status nor a fold
+                        // of the readings of a line — a run it could not place among the rules and
+                        // a row nothing watched each leave a rule nothing was seen taking as one a
+                        // row may already take — and of one rule, because a rule read short bears
+                        // on that rule and on no other. Taken whole for the reason the two above
+                        // are.
                         "souther.compiler.query.Adequacy$Finding#by("
                                 + "Lsouther/compiler/query/FindingSubject;"
-                                + "Lsouther/compiler/query/DecisionEvidence;"
+                                + "Lsouther/compiler/query/DecisionEvidence$OfOneRule;"
                                 + "Lsouther/compiler/query/About;)"
                                 + "Lsouther/compiler/query/Adequacy$Finding;",
                         // And the reading of one of a body's meetings, which is not the measure of

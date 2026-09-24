@@ -2,7 +2,6 @@ package souther.compiler.flow;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.Choice;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
@@ -152,7 +151,7 @@ class TheBoundOnWaysStopsTheWorkAndNotOnlyTheAnswerTest {
         }
 
         @Override
-        public Marks forkArm(Core fork, int part, Choice.Decides decidedBy) {
+        public Marks forkArm(Core fork, int part) {
             return mark(fork, "arm", part);
         }
 

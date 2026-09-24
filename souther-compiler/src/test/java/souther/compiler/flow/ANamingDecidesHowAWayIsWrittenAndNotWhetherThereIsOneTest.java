@@ -294,9 +294,10 @@ class ANamingDecidesHowAWayIsWrittenAndNotWhetherThereIsOneTest {
         }
 
         @Override
-        public Marks forkArm(Core fork, int part, Choice.Decides decidedBy) {
-            return mark(fork, decidedBy instanceof Choice.Decides.ACondition(Core cond, boolean _)
-                    ? cond : fork, "arm", part);
+        public Marks forkArm(Core fork, int part) {
+            return mark(fork, Choice.decidingArm(fork, part)
+                    instanceof Choice.Decides.ACondition(Core cond, boolean _) ? cond : fork,
+                    "arm", part);
         }
 
         private Marks mark(Core at, Core about, String what, int part) {

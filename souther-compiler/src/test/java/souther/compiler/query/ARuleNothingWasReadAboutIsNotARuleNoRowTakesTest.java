@@ -79,7 +79,7 @@ class ARuleNothingWasReadAboutIsNotARuleNoRowTakesTest {
 
         DecisionReading.Ruled ruled = partly.read().found().get(0);
         Adequacy.Finding finding = Adequacy.Finding.by(
-                new FindingSubject.OfABehavior("decides"), partly,
+                new FindingSubject.OfABehavior("decides"), partly.at(ruled),
                 new About.ARuleNoRowTakes("decides", ruled));
 
         assertEquals(Adequacy.Finding.Disposition.UNDECIDED,

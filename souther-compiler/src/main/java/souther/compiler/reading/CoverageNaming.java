@@ -169,13 +169,13 @@ final class CoverageNaming implements Naming<Outcome> {
      * written in the body, so there is no position to say it of and the arm is what names it.
      */
     @Override
-    public Outcome forkArm(Core fork, int part, Choice.Decides decidedBy) {
+    public Outcome forkArm(Core fork, int part) {
         ControlPlace.Arm place = armPoint(fork, part);
         ControlClaim claim = claimAt(place);
         if (claim == null) {
             return null;
         }
-        Condition what = switch (decidedBy) {
+        Condition what = switch (Choice.decidingArm(fork, part)) {
             case Choice.Decides.ACondition(Core cond, boolean holding) -> {
                 TermPath read = switch (reads.pathOf(cond, newtypes)) {
                     case PathResolution.At(var stands) -> stands;

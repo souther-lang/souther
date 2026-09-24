@@ -6624,6 +6624,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // acts on is that the rules are not known — which figure it was is this compiler's
             // policy and travels as the reason.
             case Weakening.DecisionReadingIncomplete _ -> WeakeningWord.DECISION_NOT_FULLY_READ;
+            case Weakening.DecisionRuleReadShort _ -> WeakeningWord.DECISION_RULE_READ_SHORT;
         };
     }
 

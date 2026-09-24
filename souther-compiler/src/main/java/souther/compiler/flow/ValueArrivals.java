@@ -598,7 +598,7 @@ public final class ValueArrivals<P> {
         if (waysTo(iff.cond(), want) instanceof Ways.Known<P> known && !known.paths().isEmpty()) {
             return known.paths().stream().map(this::whole).toList();
         }
-        return List.of(armWay(iff, part, Choice.Decides.ofCondition(iff, want), naming));
+        return List.of(armWay(iff, part, naming));
     }
 
     /**
@@ -606,8 +606,8 @@ public final class ValueArrivals<P> {
      * a condition comes out: a condition whose ways cannot all be written down, and an attempt,
      * whose arms are decided by whether an invariant held and by no condition written in the body.
      */
-    private Provenance<P> armWay(Core fork, int part, Choice.Decides decidedBy, Naming<P> naming) {
-        P named = naming.forkArm(fork, part, decidedBy);
+    private Provenance<P> armWay(Core fork, int part, Naming<P> naming) {
+        P named = naming.forkArm(fork, part);
         return named == null
                 ? new Provenance<>(naming.nowhere(), Completeness.PARTIAL) : whole(named);
     }
@@ -664,8 +664,7 @@ public final class ValueArrivals<P> {
             if (body instanceof Paths.Beyond) {
                 return body;
             }
-            out.under(armWay(constructed, part, arms.get(part).decidedBy(), naming), body.orNone(),
-                    naming);
+            out.under(armWay(constructed, part, naming), body.orNone(), naming);
             if (out.isBeyond()) {
                 return out.paths();
             }

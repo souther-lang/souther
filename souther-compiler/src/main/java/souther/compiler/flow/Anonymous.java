@@ -1,6 +1,5 @@
 package souther.compiler.flow;
 
-import souther.compiler.check.Choice;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.core.Core;
 
@@ -47,7 +46,7 @@ public final class Anonymous implements Naming<AnonymousPath> {
     }
 
     @Override
-    public AnonymousPath forkArm(Core fork, int part, Choice.Decides decidedBy) {
+    public AnonymousPath forkArm(Core fork, int part) {
         return AnonymousPath.INSTANCE;
     }
 

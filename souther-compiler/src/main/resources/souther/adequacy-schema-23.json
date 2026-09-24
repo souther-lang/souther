@@ -247,6 +247,7 @@
           "proof_contradicted",
           "arms_unsettled",
           "decision_not_fully_read",
+          "decision_rule_read_short",
           "decision_of_row_unreadable",
           "decision_run_not_watched"
         ]
@@ -3262,7 +3263,7 @@
               "$ref": "#/$defs/status"
             },
             "reason": {
-              "description": "Why there is no number, present exactly where `status` is `unavailable`. `not_asked` is a build that does not record where a run goes, which is a measure nobody made. The rest are a measure that was started and could not be finished, and each leaves what the rows take unknown rather than none: `the_body_was_not_read` is the model saying a body is written here and nothing having made it, `no_row_came_back` is rows written for this behavior that nothing could evaluate, `the_rows_carry_no_account` is rows that ran without the instrumentation a place is recorded by, and `no_rule_is_recognisable` is every rule of the body carrying a condition no run through it is recorded at. A behavior no row names is none of these: a reading over no rows was made, placed none and found no rule taken.",
+              "description": "Why there is no number, present exactly where `status` is `unavailable`. `not_asked` is a build that does not record where a run goes, which is a measure nobody made. The rest are a measure that was started and could not be finished, and each leaves what the rows take unknown rather than none: `the_body_was_not_read` is the model saying a body is written here and nothing having made it, `no_row_came_back` is rows written for this behavior that nothing could evaluate, `the_rows_carry_no_account` is rows that ran without the instrumentation a place is recorded by, and `no_rule_is_recognisable` is every rule of the body carrying a condition no run through it is recorded at or read with fewer conditions than its way consults. A behavior no row names is none of these: a reading over no rows was made, placed none and found no rule taken.",
               "enum": [
                 "not_asked",
                 "the_body_was_not_read",

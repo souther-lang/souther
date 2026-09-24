@@ -412,7 +412,7 @@ public final class CoverageRead {
      *  {@code why} that left it with this rather than with the ways. */
     private Reach fallbackWayIn(Core.If iff, int part, CoverageNaming naming,
                                 PathAccess.Unsupported.Why why) {
-        Outcome back = naming.forkArm(iff, part, Choice.Decides.ofCondition(iff, part == 0));
+        Outcome back = naming.forkArm(iff, part);
         return back == null
                 ? new Reach.Unnameable(PathAccess.Unsupported.Why.NO_WAY_IN_CAN_BE_NAMED)
                 : new Reach.Coarse(List.of(new WayIn(back.holds())), why);

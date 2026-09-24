@@ -132,8 +132,8 @@ final class DecisionNaming implements Naming<DecisionPath> {
      * of a {@code match} is.
      */
     @Override
-    public DecisionPath forkArm(Core fork, int part, Choice.Decides decidedBy) {
-        return switch (decidedBy) {
+    public DecisionPath forkArm(Core fork, int part) {
+        return switch (Choice.decidingArm(fork, part)) {
             case Choice.Decides.ACondition(Core cond, boolean holding) -> side(cond, holding);
             case Choice.Decides.ItWasBuilt(Core.IfConstructed attempt) -> atAnArm(
                     meanings.attempting(attempt, part, attempt.then().pos(), numbering),
