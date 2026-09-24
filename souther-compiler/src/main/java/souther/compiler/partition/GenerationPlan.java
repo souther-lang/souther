@@ -1,8 +1,13 @@
 package souther.compiler.partition;
 
+import souther.compiler.coverage.ArmProbe;
+
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -35,15 +40,31 @@ import java.util.Set;
  * is not the same order twice. Each obligation appears once, which is the whole of what being a set
  * gave.
  *
- * @param subject     the behavior a row would be written for
- * @param obligations every class, arm, combination of two classes and meeting of the body's
- *                    decisions this run is asked for, in the order gathered — classes, then arms,
- *                    then the combinations of two classes, then the meetings, which is the order
- *                    {@link #of} takes them in and the order {@link #obligations()} hands them back
+ * <p><b>Which arm a place belongs to is this plan's to say.</b> An arm is asked for under every
+ * place a run through it is recorded at, and a reader holding one of those places — a finding
+ * names one site — asks which arm it is. That is fixed by what this plan asks for and by nothing a
+ * run did, so it is answered here ({@code armAt}), once, from the obligations; a discharge asks it
+ * of its plan and answers with what became of the arm. Two arms of one plan claiming one place is
+ * a plan this refuses to build.
+ *
+ * <p>Not a record: {@link #equals} and {@link #hashCode} answer with {@link #subject} and {@link
+ * #obligations} alone, and the index from a place to its arm is derived from them.
  */
-public record GenerationPlan(MeasuredInput subject, List<GenerationObligation> obligations) {
+public final class GenerationPlan {
 
-    public GenerationPlan {
+    private final MeasuredInput subject;
+    private final List<GenerationObligation> obligations;
+    private final Map<ArmProbe, GenerationObligation.Arm> arms;
+
+    /**
+     * @param subject     the behavior a row would be written for
+     * @param obligations every class, arm, combination of two classes and meeting of the body's
+     *                    decisions this run is asked for, in the order gathered — classes, then
+     *                    arms, then the combinations of two classes, then the meetings, which is the
+     *                    order {@link #of} takes them in and the order {@link #obligations()} hands
+     *                    them back
+     */
+    public GenerationPlan(MeasuredInput subject, List<GenerationObligation> obligations) {
         obligations = List.copyOf(obligations);
         if (subject == null) {
             throw new IllegalArgumentException("a generation is asked for on behalf of a subject");
@@ -64,6 +85,53 @@ public record GenerationPlan(MeasuredInput subject, List<GenerationObligation> o
                                 + subject.behavior() + ": " + target);
             }
         }
+        Map<ArmProbe, GenerationObligation.Arm> arms = new HashMap<>();
+        for (GenerationObligation each : obligations) {
+            if (each instanceof GenerationObligation.Arm arm) {
+                for (ArmProbe place : arm.target().occurrences()) {
+                    GenerationObligation.Arm already = arms.putIfAbsent(place, arm);
+                    if (already != null) {
+                        throw new IllegalArgumentException("one place is recorded against two arms"
+                                + " of one plan: " + place + " is held by " + already + " and "
+                                + arm);
+                    }
+                }
+            }
+        }
+        this.subject = subject;
+        this.obligations = obligations;
+        this.arms = Map.copyOf(arms);
+    }
+
+    /** The behavior a row would be written for. */
+    public MeasuredInput subject() {
+        return subject;
+    }
+
+    /** Every obligation this run is asked for, in the order gathered. */
+    public List<GenerationObligation> obligations() {
+        return obligations;
+    }
+
+    /** The arm this plan asks for that is recorded at {@code place}, or null where none is. */
+    GenerationObligation.Arm armAt(ArmProbe place) {
+        return arms.get(place);
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof GenerationPlan that
+                && subject.equals(that.subject) && obligations.equals(that.obligations);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(subject, obligations);
+    }
+
+    @Override
+    public String toString() {
+        return "GenerationPlan[subject=" + subject + ", obligations=" + obligations + "]";
     }
 
     /**

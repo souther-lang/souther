@@ -113,9 +113,9 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
 
         assertEquals(List.of(), model.read().interactions(),
                 "nothing in this body consumes two decided values into one");
-        assertFalse(filled.discharge().arms().values().isEmpty(), "and every arm is answered");
-        assertTrue(filled.discharge().arms().values().stream().allMatch(ArmDisposition.Built.class::isInstance),
-                () -> "with a row through it: " + filled.discharge().arms().values());
+        assertFalse(GenerationFixtures.arms(filled.discharge()).values().isEmpty(), "and every arm is answered");
+        assertTrue(GenerationFixtures.arms(filled.discharge()).values().stream().allMatch(ArmDisposition.Built.class::isInstance),
+                () -> "with a row through it: " + GenerationFixtures.arms(filled.discharge()).values());
         assertTrue(inputsOf(filled).contains(List.of("Ready", "Reset")),
                 () -> "including the pair the tutorial's model is short of: " + inputsOf(filled));
         assertTrue(inputsOf(filled).contains(List.of("Running", "Reset")),
@@ -139,9 +139,9 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
                 Budgets.generation());
 
         assertEquals(4, model.read().arms().size(), "two arms in each of the two helpers");
-        assertTrue(filled.discharge().arms().values().stream().allMatch(ArmDisposition.Built.class::isInstance),
-                () -> "each answered: " + filled.discharge().arms().values());
-        assertTrue(filled.rows().size() < filled.discharge().arms().values().size(),
+        assertTrue(GenerationFixtures.arms(filled.discharge()).values().stream().allMatch(ArmDisposition.Built.class::isInstance),
+                () -> "each answered: " + GenerationFixtures.arms(filled.discharge()).values());
+        assertTrue(filled.rows().size() < GenerationFixtures.arms(filled.discharge()).values().size(),
                 () -> "in fewer rows than there are arms: " + inputsOf(filled));
         assertEquals(filled.rows().size(), new LinkedHashSet<>(inputsOf(filled)).size(),
                 () -> "and no two of them are the same line twice: " + inputsOf(filled));

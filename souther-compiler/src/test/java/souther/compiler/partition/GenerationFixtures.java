@@ -8,6 +8,7 @@ import souther.compiler.reading.Interaction;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -106,6 +107,22 @@ final class GenerationFixtures {
                                    List<ArmProbe> arms) {
         return GenerationPlan.of(subject, classes,
                 arms.stream().map(Generator.ArmOwed::new).toList(), List.of(), List.of());
+    }
+
+    /**
+     * What became of each arm a discharge answers for, in the plan's order.
+     *
+     * <p>For a test asking about the arms as a whole. Main asks one arm at a time, and this reads
+     * the same {@link Discharge#answers} those lookups read.
+     */
+    static Map<Generator.ArmOwed, ArmDisposition> arms(Discharge discharge) {
+        Map<Generator.ArmOwed, ArmDisposition> out = new LinkedHashMap<>();
+        for (GenerationAnswer each : discharge.inPlanOrder()) {
+            if (each instanceof GenerationAnswer.Arm(var obligation, var disposition)) {
+                out.put(obligation.target(), disposition);
+            }
+        }
+        return out;
     }
 
     /**

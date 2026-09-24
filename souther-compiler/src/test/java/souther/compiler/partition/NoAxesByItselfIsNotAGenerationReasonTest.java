@@ -59,7 +59,7 @@ class NoAxesByItselfIsNotAGenerationReasonTest {
         FillResult filled = filledOverOneArm();
 
         assertEquals(Map.of(new Generator.ArmOwed(ARM), new ArmDisposition.NoWayIn(NOT_ENUMERABLE)),
-                filled.discharge().arms(),
+                GenerationFixtures.arms(filled.discharge()),
                 "the arm's own entry, in the words the reading of the body used");
     }
 
