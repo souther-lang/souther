@@ -89,6 +89,8 @@ class ARuleReadShortOfItsWayIsTakenByNoRunTest {
                 () -> "a reading with a rule read short is not complete: " + evidence.took());
         assertEquals(WeakeningSet.of(new Weakening.DecisionRuleReadShort("decides")),
                 evidence.weakening(), "and what it went without is that rule");
+        assertEquals(WeakeningSet.none(), evidence.derivation(),
+                "which is about the rule and not about the list, which was read whole");
     }
 
     /** And the control: the same reading with the rule read in full is complete. */

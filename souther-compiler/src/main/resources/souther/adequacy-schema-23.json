@@ -3325,6 +3325,10 @@
                 "type": "boolean",
                 "description": "Whether a row was seen taking this rule. Absent where `coverage.status` is `unavailable`: a rule nothing was read about is not a rule no row takes, and `false` for both would be one word for two states."
               },
+              "weakening": {
+                "$ref": "#/$defs/weakening",
+                "description": "What the reading of this rule went without, which is about this entry rather than about the list: `decision_rule_read_short` is a rule read with fewer of the distinctions its way consults than the body draws. No run is placed at such a rule and a finding about it refuses no build; a rule beside it without this word is not weakened by it. Absent where the rule was read in full."
+              },
               "requirement": {
                 "description": "Whether a row is owed at this rule at all, where something asked. `required` is a rule something was shown standing in, `excluded` is one the model's own rules leave no value for, and `unsettled` is this compiler having looked without finding — which is neither covered nor a gap and is owed no row. Absent where nothing asked: the question is put of the rules no row took, so a rule some row takes carries `taken` and no word here.",
                 "enum": [

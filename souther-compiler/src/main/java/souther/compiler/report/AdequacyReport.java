@@ -5395,7 +5395,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *
      * <p>How far the rules themselves were read is beside them, because it is about the list rather
      * than about any entry. A reading that stopped comes back with some of the body's ways, so the
-     * entries here are of those and the ones it did not reach are in no document.
+     * entries here are of those and the ones it did not reach are in no document. How far one rule
+     * was read is that entry's, for the same reason turned round.
      */
     static void decision(ObjectNode into, BehaviorReport behavior, DocumentSources sources) {
         DecisionEvidence decision = behavior.evidence().decision();
@@ -5411,6 +5412,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             ObjectNode one = all.addObject();
             ruleId(one.putObject("obligationId"), behavior.name(), ruled.rule());
             placed.ifPresent(rows -> one.put("taken", rows.rules().contains(ruled.rule())));
+            // What this rule's own derivation went without, on the rule. The coverage above says
+            // the measure is short of some rule; which one is this entry's to say, and a consumer
+            // handed only the measure's word could not tell a rule read short from its neighbours.
+            weakening(one, decision.readShortOf(ruled));
             // Whether a row is owed here at all, where something asked. Beside `taken` and not
             // folded into it: a rule no row took and nothing could show a row for is not a gap,
             // and a consumer reading `taken` alone would count it as one.
