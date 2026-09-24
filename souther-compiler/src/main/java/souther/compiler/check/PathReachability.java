@@ -648,7 +648,7 @@ public final class PathReachability {
     /** The side of a comparison that is that one position, where there is exactly one. One
      *  decision for the proof above and the arrival, so the two cannot name different sides. */
     private Core comparedSideIn(Core cond, InputReads reads) {
-        if (!(cond instanceof Core.Binary b)) {
+        if (!(Core.withoutStanding(cond) instanceof Core.Binary b)) {
             return null;
         }
         TermPath left = pathUnder(b.left(), reads);
@@ -661,7 +661,8 @@ public final class PathReachability {
     private TermPath pathUnder(Core side, InputReads reads) {
         TermPath here = positionOf(side, reads);
         return here != null ? here
-                : side instanceof Core.FieldAccess field ? positionOf(field.target(), reads) : null;
+                : Core.withoutStanding(side) instanceof Core.FieldAccess field
+                        ? positionOf(field.target(), reads) : null;
     }
 
     /** Where {@code e} stands, and null where it stands nowhere or was not read — which are one

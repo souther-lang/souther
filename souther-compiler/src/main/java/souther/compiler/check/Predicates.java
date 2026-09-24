@@ -59,7 +59,7 @@ final class Predicates {
                     }
                 }
             }
-            if (!(source instanceof Core.PreservedCall call)) {
+            if (!(Core.withoutStanding(source) instanceof Core.PreservedCall call)) {
                 return found;
             }
             Source built = DischargeRules.builtFrom(call);
@@ -145,7 +145,7 @@ final class Predicates {
      * check can name, so a denied quantifier states nothing here.
      */
     private List<Quantified> quantifierStatedBy(Core e, boolean positive, Denotations at) {
-        if (!positive || !(e instanceof Core.PreservedCall call)
+        if (!positive || !(Core.withoutStanding(e) instanceof Core.PreservedCall call)
                 || !DischargeRules.isQuantifier(call.operation())) {
             return List.of();
         }
@@ -1423,7 +1423,7 @@ final class Predicates {
         }
         List<FactSubject> keys = new ArrayList<>();
         keys.add(written);
-        if (!(inv instanceof Core.PreservedCall call)) {
+        if (!(Core.withoutStanding(inv) instanceof Core.PreservedCall call)) {
             return keys;
         }
         Carrying carried = DischargeRules.carried(call);
@@ -1434,7 +1434,7 @@ final class Predicates {
         // construction's own expression, so the operations peeled off are the ones the body wrote.
         Core container = carried.container();
         Core.PreservedCall stated = call;
-        while (container instanceof Core.PreservedCall inner) {
+        while (Core.withoutStanding(container) instanceof Core.PreservedCall inner) {
             Source built = DischargeRules.builtFrom(inner);
             if (built == null) {
                 break;
@@ -1550,17 +1550,17 @@ final class Predicates {
 
         /** The expression the body produces, with what the bindings on the way there read taken in. */
         Core produced(Core body) {
-            Core cur = body;
+            Core cur = Core.withoutStanding(body);
             while (cur instanceof Core.LetIn li) {
                 chains.put(li.binder().binding(), chain(li.value()));
-                cur = li.body();
+                cur = Core.withoutStanding(li.body());
             }
             return cur;
         }
 
         /** The chain {@code e} reads off the element, or {@code null} if it reads anything else. */
         List<String> chain(Core e) {
-            return switch (e) {
+            return switch (Core.withoutStanding(e)) {
                 case Core.LetIn li -> {
                     Reads inner = new Reads(element);
                     inner.chains.putAll(chains);

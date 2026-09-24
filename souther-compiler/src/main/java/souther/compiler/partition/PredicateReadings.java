@@ -285,7 +285,7 @@ record PredicateReadings(List<Reading> predicates, Set<Core> statedAt,
             // which is what decides whether the template is.
             case Core.LetIn let -> {
                 Core given = let.value();
-                if (let.value() instanceof Core.MaterialisedValue build) {
+                if (Core.withoutStanding(let.value()) instanceof Core.MaterialisedValue build) {
                     given = builds.held().bodyOf(build);
                     builds.read(given, live && flow.reads(let));
                 } else {

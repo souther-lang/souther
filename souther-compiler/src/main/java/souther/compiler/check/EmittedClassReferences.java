@@ -119,7 +119,7 @@ final class EmittedClassReferences {
             case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
                  Core.Read _, Core.MaterialisedValue _, Core.Neg _, Core.PreservedCall _,
                  Core.If _, Core.IfConstructed _, Core.LetIn _, Core.ListLit _,
-                 Core.OptionSome _, Core.OptionNone _, Core.Tuple _ -> { }
+                 Core.OptionSome _, Core.OptionNone _, Core.Tuple _, Core.Widen _ -> { }
         }
         visitChildren(e, expected);
     }
@@ -152,6 +152,9 @@ final class EmittedClassReferences {
                 visit(binding.value(), binding.value().type());
                 visit(binding.body(), expected);
             }
+            // What it holds is asked for what the position it stands in asks for, as the emitter
+            // asks it.
+            case Core.Widen widen -> visit(widen.value(), expected);
             case Core.Call call -> {
                 for (int i = 0; i < call.args().size(); i++) {
                     Core arg = call.args().get(i);
@@ -161,7 +164,8 @@ final class EmittedClassReferences {
                     }
                     // What the emitter does with a function it is handed is asked of the call.
                     switch (call.functionArgument(i, symbols.theWalk())) {
-                        case RUNS_WHERE_IT_STANDS -> visitStepRunWhereItStands((Core.Block) arg);
+                        case RUNS_WHERE_IT_STANDS -> visitStepRunWhereItStands(
+                                call.stepRunWhereItStands(symbols.theWalk()));
                         // Replaced by `Fn.NEVER`: no class and no body of it is emitted.
                         case NEVER_APPLIED -> { }
                         case HANDED_OVER -> visit(arg, null);

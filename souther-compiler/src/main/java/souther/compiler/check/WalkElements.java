@@ -33,7 +33,7 @@ public final class WalkElements {
      */
     public static BindingId elementBindingOf(Core walk, InputReads where, Symbols symbols,
                                              DeclarationNewtypes newtypes) {
-        if (walk instanceof Core.PreservedCall call) {
+        if (Core.withoutStanding(walk) instanceof Core.PreservedCall call) {
             Combinators.Handed handed =
                     Combinators.handedTo(call,
                             closure -> blockOf(closure, where, symbols, newtypes));
@@ -47,7 +47,8 @@ public final class WalkElements {
      *  this wanted is its own. */
     private static Core.Block blockOf(Core closure, InputReads where, Symbols symbols,
                                       DeclarationNewtypes newtypes) {
-        return where.denotes(closure, symbols, newtypes).value() instanceof Core.Block block
+        return Core.withoutStanding(where.denotes(closure, symbols, newtypes).value())
+                instanceof Core.Block block
                 ? block : null;
     }
 }

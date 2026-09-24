@@ -249,7 +249,8 @@ final class DischargeRules {
     /** What {@code e} states through a measure, or null where it is not a shift this has a rule
      * about. */
     static BoundOperationFact.ShiftsBy shiftBy(Core e) {
-        return e instanceof Core.PreservedCall call ? facts().shiftsBy(call.operation()) : null;
+        return Core.withoutStanding(e) instanceof Core.PreservedCall call
+                ? facts().shiftsBy(call.operation()) : null;
     }
 
     /** Whether {@code operation} counts what two values stand apart by — the other side of the row a
@@ -267,8 +268,8 @@ final class DischargeRules {
     /** The cases {@code e} is defined in, or an empty list where it is not a call to an operation
      * that answers one of the values it was given. */
     static List<DefinitionCase<DeclaredArgument>> chosenBy(Core e) {
-        return e instanceof Core.PreservedCall call ? facts().isDefinedByCases(call.operation())
-                : List.of();
+        return Core.withoutStanding(e) instanceof Core.PreservedCall call
+                ? facts().isDefinedByCases(call.operation()) : List.of();
     }
 
     /**
@@ -376,7 +377,8 @@ final class DischargeRules {
      * operator is the only spelling its concatenation has. A rule keyed by operation reaches neither,
      * both being written as an operator and not as a call.
      */
-    static List<Core> noSmallerThan(Core e) {
+    static List<Core> noSmallerThan(Core standing) {
+        Core e = Core.withoutStanding(standing);
         if (e instanceof Core.Binary b && b.op() == BinOp.CONCAT) {
             return List.of(b.left(), b.right());
         }
@@ -484,15 +486,17 @@ final class DischargeRules {
     /** The one container {@code e} asks the size of, or null where it is not a size call over one
      * argument. Asked rather than tested, so no reader spells the shape of a size call itself. */
     static Core sizeArgOf(Core e) {
-        return e instanceof Core.PreservedCall call && isSize(call.operation())
-                && call.args().size() == 1 ? call.args().get(0) : null;
+        return Core.withoutStanding(e) instanceof Core.PreservedCall call
+                && isSize(call.operation()) && call.args().size() == 1 ? call.args().get(0) : null;
     }
 
     /** The container a size is really the size of: an operation that keeps the size of what it was
      * built from is peeled away, so {@code List.length(List.map(f, xs))} is the atom
      * {@code List.length(xs)}. How the elements are made has no bearing on how many there are, which
      * is why the closure does not enter the key. */
-    static Core sizeSource(Core e) {
+    static Core sizeSource(Core standing) {
+        // How many a value holds does not turn on the type it stands as.
+        Core e = Core.withoutStanding(standing);
         if (e instanceof Core.PreservedCall call) {
             Source built = builtFrom(call);
             if (built != null && built.size() == SizeAgainstItsSource.SAME) {

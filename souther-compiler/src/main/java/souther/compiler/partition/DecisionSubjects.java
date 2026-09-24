@@ -66,6 +66,8 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, PublishedDeclaratio
         Core under = e;
         InputReads reads = at;
         while (true) {
+            // Which answer a value is does not turn on the type it stands as.
+            under = Core.withoutStanding(under);
             // A newtype's value is the value it wraps, which is one subject and not a step inside
             // one. Read as a step, `riskScore(c).value` and `riskScore(c)` would be two columns
             // over one answer.
@@ -101,7 +103,8 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, PublishedDeclaratio
      * things asks about one.
      */
     private InjectedAnswer answerOf(Core e, InputReads at) {
-        if (!(e instanceof Core.Call call && call.fn() instanceof Core.Reached reached
+        if (!(Core.withoutStanding(e) instanceof Core.Call call
+                && call.fn() instanceof Core.Reached reached
                 && reached.denotes() instanceof ValueName.Behavior dependency
                 && dependencies.contains(dependency))) {
             return null;

@@ -174,7 +174,7 @@ public final class AbortSites {
                     Core.FieldAccess _, Core.PreservedCall _, Core.Apply _,
                     Core.If _, Core.IfConstructed _, Core.LetIn _,
                     Core.Block _, Core.ListLit _, Core.OptionSome _,
-                    Core.Tuple _, Core.TupleGet _, Core.Match _ ->
+                    Core.Tuple _, Core.TupleGet _, Core.Match _, Core.Widen _ ->
                     AbortSet.NONE;
         };
     }

@@ -45,7 +45,7 @@ public final class BinaryElaborator {
             throw new Unanswerable(bin.pos());
         }
         if (bin.op().joinsTwoConditions()) {
-            Elaborator.requireType(e, read.type(), Type.BOOL, ctx.published(),
+            return Elaborator.standing(e, read, Type.BOOL, ctx.published(),
                     "operand of logical operator");
         }
         return read;
@@ -97,9 +97,10 @@ public final class BinaryElaborator {
                     case ArithmeticCheck.DeferToPlainTypeCheck _ -> {
                         // One type against another: the found-versus-expected block says it better
                         // than a sentence would, and requireType raises or absorbs it.
-                        Elaborator.requireType(bin.right(), rt, lt, ctx.published(),
-                                "operand of arithmetic");
-                        yield new Core.Binary(bin.op(), left, right, ctx.occurrenceOf(bin.origin()), lt, bin.pos());
+                        yield new Core.Binary(bin.op(), left,
+                                Elaborator.standing(bin.right(), right, lt, ctx.published(),
+                                        "operand of arithmetic"),
+                                ctx.occurrenceOf(bin.origin()), lt, bin.pos());
                     }
                     case ArithmeticCheck.Refused no -> throw refused(bin, no.refusal(), lt, rt);
                 };
@@ -139,7 +140,11 @@ public final class BinaryElaborator {
                                     .hint(new TypeMessage.MakeEveryElementTheSameType())
                                     .say(new TypeMessage.TheTwoListsHoldDifferentElements()).build());
                 }
-                yield new Core.Binary(bin.op(), left, right, ctx.occurrenceOf(bin.origin()), Type.list(element), bin.pos());
+                // Each side stands as the list both of them join at.
+                Type joined = Type.list(element);
+                yield new Core.Binary(bin.op(), Core.standingAs(left, joined),
+                        Core.standingAs(right, joined), ctx.occurrenceOf(bin.origin()), joined,
+                        bin.pos());
             }
             case EQ, NE -> {
                 Type lt = left.type();

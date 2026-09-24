@@ -735,7 +735,8 @@ public sealed interface Core {
         public Block stepRunWhereItStands(ValueName theWalk) {
             boolean walks = fn == Emitted.BUILD_LIST || fn == Emitted.BUILD_MAP
                     || (fn instanceof Reached reached && theWalk.equals(reached.denotes())
-                    && args.size() > 3 && args.get(3) instanceof Int from && from.value() == 0);
+                    && args.size() > 3 && withoutStanding(args.get(3)) instanceof Int from
+                    && from.value() == 0);
             return walks ? runsWhereItStands(args.get(0)) : null;
         }
     }
@@ -745,7 +746,7 @@ public sealed interface Core {
      * at all, or a step that would never be applied because an element of it has no type to be.
      */
     static Block runsWhereItStands(Core step) {
-        return step instanceof Block block && block.type() instanceof Type.FnOf fn
+        return withoutStanding(step) instanceof Block block && block.type() instanceof Type.FnOf fn
                 && !neverRuns(fn) ? block : null;
     }
 
@@ -1241,6 +1242,72 @@ public sealed interface Core {
         }
     }
 
+    /**
+     * A value standing as a type other than its own, where the checker decided that it may.
+     *
+     * <p>{@code value} is what is evaluated, at the type it was worked out at; {@code type} is what
+     * the position it stands in takes it as. A branch answering one case of the sum its {@code if}
+     * joins at, an argument handed to a wider parameter, a list of a case given where a list of the
+     * sum is asked for, a function taking a sum given where one taking a case of it is asked for:
+     * each is this, the same way, with nothing about why the checker let it stand there. That is the
+     * checker's to answer, and a reader of this reads that it did rather than answering again.
+     *
+     * <p>Only where the two differ. A value standing as its own type is in its position as it is, and
+     * a node saying so would say nothing. So a slot the checker placed a value in at a type holds
+     * something of that type: the value itself where the two are equal, and this where they are not.
+     *
+     * <p>No operation. Whether standing as a wider type costs anything at run time is a question about
+     * how a backend lays the two types out, and not one this answers. A reader asking what a body
+     * does, rather than what it was checked to be, reads through it with {@link #withoutStanding}.
+     *
+     * <p>It has no place of its own: nothing was written for it.
+     */
+    record Widen(Core value, Type type) implements Core {
+
+        public Widen {
+            if (value == null || type == null) {
+                throw new IllegalArgumentException("a value stands as some type");
+            }
+            if (value.type().equals(type)) {
+                throw new IllegalArgumentException(
+                        "a value standing as its own type is not widened: " + type);
+            }
+            if (value instanceof Widen) {
+                throw new IllegalArgumentException(
+                        "a value stands at one position once, as what that position takes it as: "
+                                + value.type() + " as " + type);
+            }
+        }
+
+        @Override
+        public SourcePos pos() {
+            return value.pos();
+        }
+    }
+
+    /**
+     * {@code e} as what it evaluates, with the type it stands as at its position set aside: the value
+     * a {@link Widen} holds, and {@code e} itself where nothing widened it.
+     *
+     * <p>What a reader asking which expression is here asks through: whether it is a read, a call, a
+     * construction. Standing as a wider type changes none of that.
+     */
+    static Core withoutStanding(Core e) {
+        return e instanceof Widen w ? w.value() : e;
+    }
+
+    /**
+     * {@code value} standing as {@code type}: {@code value} itself where it already is of that type,
+     * and a {@link Widen} of it where it is not.
+     *
+     * <p>A {@code value} that is itself a {@link Widen} is set aside first, so that a value restated at
+     * a new position stands there as what that position takes it as, once.
+     */
+    static Core standingAs(Core value, Type type) {
+        Core bare = withoutStanding(value);
+        return bare.type().equals(type) ? bare : new Widen(bare, type);
+    }
+
     /** {@code unreachable "reason"}: the position it stands in gets no value, and the reason is the
      * message the abort carries. Its type is {@link Type.Never}, which fits whatever was expected. */
     record Unreachable(String reason, Type type, SourcePos pos) implements Core {
@@ -1303,6 +1370,12 @@ public sealed interface Core {
             case MaterialisedValue x -> x;
             case OptionNone x -> x;
             case Unreachable x -> x;
+            // What it holds is rewritten like any other value; the type it stands as is kept, and a
+            // rewrite that brings the value to that type leaves nothing to widen.
+            case Widen w -> {
+                Core value = atExpr.apply(w.value());
+                yield value == w.value() ? w : standingAs(value, w.type());
+            }
             case Neg n -> {
                 Core operand = atExpr.apply(n.operand());
                 yield operand == n.operand() ? n : new Neg(operand, n.type(), n.pos());

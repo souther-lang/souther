@@ -225,7 +225,7 @@ sealed interface ClauseExpr {
         // The scope first, so that what is read under it is read in the environment its names mean
         // something in. Everything below — a denial, a connective, a leaf — is then the same rule
         // written out, and a helper whose body denies or joins is this one rule and not another.
-        if (clause instanceof Core.LetIn let) {
+        if (Core.withoutStanding(clause) instanceof Core.LetIn let) {
             return new Scoped(spelled, positive, at, let, under(let.body(), positive, counted));
         }
         // A restatement is this shape said another way, so it keeps this occurrence rather than
@@ -234,7 +234,7 @@ sealed interface ClauseExpr {
         if (restated != null) {
             return restated;
         }
-        if (clause instanceof Core.Binary bin) {
+        if (Core.withoutStanding(clause) instanceof Core.Binary bin) {
             // Stated, a conjunction gives both sides; denied, it gives the choice between their
             // denials. And the same the other way round, which is the whole of what a denial does
             // to a connective, and is why the denial is applied to what the connective composes.
@@ -277,13 +277,14 @@ sealed interface ClauseExpr {
      */
     private static ClauseExpr restating(Core clause, boolean positive, List<Core> spelled,
                                         ClauseOccurrence at, int[] counted) {
-        if (clause instanceof Core.PreservedCall call && call.operation().equals(DischargeRules.NOT)
+        Core bare = Core.withoutStanding(clause);
+        if (bare instanceof Core.PreservedCall call && call.operation().equals(DischargeRules.NOT)
                 && call.args().size() == 1) {
             return of(call.args().get(0), !positive, spelled, at, counted);
         }
-        if (clause instanceof Core.If iff
-                && iff.then() instanceof Core.Bool t && !t.value()
-                && iff.els() instanceof Core.Bool f && f.value()) {
+        if (bare instanceof Core.If iff
+                && Core.withoutStanding(iff.then()) instanceof Core.Bool t && !t.value()
+                && Core.withoutStanding(iff.els()) instanceof Core.Bool f && f.value()) {
             return of(iff.cond(), !positive, spelled, at, counted);
         }
         return againstATruthValue(clause, positive, spelled, at, counted);
@@ -300,15 +301,15 @@ sealed interface ClauseExpr {
      */
     private static ClauseExpr againstATruthValue(Core clause, boolean positive,
                                                  List<Core> spelled, ClauseOccurrence at, int[] counted) {
-        if (!(clause instanceof Core.Binary bin)
+        if (!(Core.withoutStanding(clause) instanceof Core.Binary bin)
                 || (bin.op() != BinOp.EQ && bin.op() != BinOp.NE)) {
             return null;
         }
         boolean holds = bin.op() == BinOp.EQ;
-        if (bin.right() instanceof Core.Bool truth) {
+        if (Core.withoutStanding(bin.right()) instanceof Core.Bool truth) {
             return of(bin.left(), (truth.value() != holds) != positive, spelled, at, counted);
         }
-        return bin.left() instanceof Core.Bool truth
+        return Core.withoutStanding(bin.left()) instanceof Core.Bool truth
                 ? of(bin.right(), (truth.value() != holds) != positive, spelled, at, counted) : null;
     }
 }

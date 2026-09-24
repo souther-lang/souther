@@ -118,6 +118,7 @@ public record BlockReaches(
             }
             case Core.ListLit lit -> lit.elements().forEach(x -> walk(x, bound, acc));
             case Core.OptionSome so -> walk(so.value(), bound, acc);
+            case Core.Widen w -> walk(w.value(), bound, acc);
             case Core.Tuple t -> t.elements().forEach(x -> walk(x, bound, acc));
             case Core.TupleGet tg -> walk(tg.tuple(), bound, acc);
             case Core.OptionNone _ -> { }

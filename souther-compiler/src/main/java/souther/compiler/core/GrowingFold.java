@@ -69,7 +69,7 @@ public final class GrowingFold {
      * nothing.
      */
     private static boolean applies(Core e, Kernel kernel) {
-        return e instanceof Core.Call call
+        return Core.withoutStanding(e) instanceof Core.Call call
                 && call.fn() instanceof Core.Reached.OfKernel(_, Kernel reached)
                 && reached == kernel;
     }
@@ -143,19 +143,25 @@ public final class GrowingFold {
      * needed are kept, now standing over the joined walk. They are evaluated where they were, so the
      * only thing that could go wrong is one of their names meaning something else inside the outer
      * step — which is checked for rather than reasoned about.
+     *
+     * <p>What the joined walk answers stands as what the binding answered, which the outer walk
+     * may have been widened to where the expansion that wrote it declared a wider result.
      */
     private static Core joinedThroughBinding(Core.LetIn binding) {
-        if (!(binding.body() instanceof Core.Call outer) || outer.fn() != BUILD
-                || !(outer.args().get(1) instanceof Core.Read walked)
+        if (!(Core.withoutStanding(binding.body()) instanceof Core.Call outer)
+                || outer.fn() != BUILD
+                || !(Core.withoutStanding(outer.args().get(1)) instanceof Core.Read walked)
                 || !walked.binding().equals(binding.binder().binding())
                 || uses(binding.body(), binding.binder().binding()) != 1) {
             return null;
         }
         List<Core.LetIn> kept = new ArrayList<>();
-        Core value = binding.value();
+        // The list in between is not built, so the type it was bound at is nobody's: what each
+        // element stands as is what the outer step takes it as, which the join says.
+        Core value = Core.withoutStanding(binding.value());
         while (value instanceof Core.LetIn nested) {
             kept.add(nested);
-            value = nested.body();
+            value = Core.withoutStanding(nested.body());
         }
         if (!(value instanceof Core.Call inner) || inner.fn() != BUILD) {
             return null;
@@ -177,7 +183,7 @@ public final class GrowingFold {
             joined = new Core.LetIn(k.binder(), k.bindType(), k.value(), joined, joined.type(),
                     k.pos());
         }
-        return joined;
+        return Core.standingAs(joined, binding.type());
     }
 
     /** {@code call} as a build, or null when it is not a fold that only grows a list or a map. */
@@ -189,7 +195,8 @@ public final class GrowingFold {
         Core.CallTarget build;
         Core step;
         if (call.type() instanceof Type.ListOf
-                && seed instanceof Core.ListLit lit && lit.elements().isEmpty()) {
+                && Core.withoutStanding(seed) instanceof Core.ListLit lit
+                && lit.elements().isEmpty()) {
             build = BUILD;
             step = grownStep(call.args().get(0));
         } else if (call.type() instanceof Type.MapOf
@@ -255,7 +262,8 @@ public final class GrowingFold {
         do {
             before = names.size();
             count(body, e -> {
-                if (e instanceof Core.LetIn li && li.value() instanceof Core.Read v
+                if (e instanceof Core.LetIn li
+                        && Core.withoutStanding(li.value()) instanceof Core.Read v
                         && names.contains(v.binding())) {
                     names.add(li.binder().binding());
                 }
@@ -283,7 +291,8 @@ public final class GrowingFold {
                 && call.fn() instanceof Core.Reached.OfKernel(_, Kernel reached)
                 && READS.contains(reached)
                 && !call.args().isEmpty()
-                && call.args().getLast() instanceof Core.Read v && acc.contains(v.binding()), n);
+                && Core.withoutStanding(call.args().getLast()) instanceof Core.Read v
+                && acc.contains(v.binding()), n);
         return n[0];
     }
 
@@ -291,7 +300,8 @@ public final class GrowingFold {
      *  mentions {@link #aliases} followed. */
     private static int aliased(Core e, Set<BindingId> acc) {
         int[] n = {0};
-        count(e, c -> c instanceof Core.LetIn li && li.value() instanceof Core.Read v
+        count(e, c -> c instanceof Core.LetIn li
+                && Core.withoutStanding(li.value()) instanceof Core.Read v
                 && acc.contains(v.binding()), n);
         return n[0];
     }
@@ -312,14 +322,19 @@ public final class GrowingFold {
      * here to take a list apart with.
      */
     private static Core joined(Core.Call build) {
-        if (!(build.args().get(2) instanceof Core.Int from) || from.value() != 0) {
+        if (!(Core.withoutStanding(build.args().get(2)) instanceof Core.Int from)
+                || from.value() != 0) {
             return null;
         }
-        if (!(build.args().get(1) instanceof Core.Call inner) || inner.fn() != BUILD) {
+        // The list in between is not built, so the type it was handed over at is nobody's: what
+        // each element stands as is what the outer step takes it as, which the join says.
+        if (!(Core.withoutStanding(build.args().get(1)) instanceof Core.Call inner)
+                || inner.fn() != BUILD) {
             return null;
         }
-        if (!(build.args().get(0) instanceof Core.Block outer) || outer.params().size() != 2
-                || !(inner.args().get(0) instanceof Core.Block innerStep)) {
+        if (!(Core.withoutStanding(build.args().get(0)) instanceof Core.Block outer)
+                || outer.params().size() != 2
+                || !(Core.withoutStanding(inner.args().get(0)) instanceof Core.Block innerStep)) {
             return null;
         }
         if (adds(innerStep.body()) != 1) {
@@ -356,17 +371,21 @@ public final class GrowingFold {
             return e;
         }
         if (e instanceof Core.Call c && c.fn() == GROW) {
-            if (!(c.args().get(1) instanceof Core.ListLit lit) || lit.elements().size() != 1) {
+            if (!(Core.withoutStanding(c.args().get(1)) instanceof Core.ListLit lit)
+                    || lit.elements().size() != 1) {
                 refused[0] = true;   // the add hands over a list, and the outer step takes an element
                 return e;
             }
-            // each binding is in force at the type the outer step takes that parameter at
+            // Each binding is in force at the type the outer step takes that parameter at, and what
+            // it is given stands as that type: the element was added to a list of what the outer
+            // step takes, and the builder is the one the outer step grows.
             List<Type> takes = ((Type.FnOf) outer.type()).params();
             Core body = outer.body();
-            Core element = new Core.LetIn(outer.params().get(1), takes.get(1), lit.elements().get(0),
-                    body, body.type(), c.pos());
-            return new Core.LetIn(outer.params().get(0), takes.get(0), c.args().get(0), element,
-                    body.type(), c.pos());
+            Core element = new Core.LetIn(outer.params().get(1), takes.get(1),
+                    Core.standingAs(lit.elements().get(0), takes.get(1)), body, body.type(),
+                    c.pos());
+            return new Core.LetIn(outer.params().get(0), takes.get(0),
+                    Core.standingAs(c.args().get(0), takes.get(0)), element, body.type(), c.pos());
         }
         return Core.mapChildren(e, child -> piped(child, outer, refused), s -> s,
                 nd -> Core.mapChildren(nd, child -> piped(child, outer, refused)));
@@ -389,17 +408,19 @@ public final class GrowingFold {
      * own. A walk an author wrote by hand reaches here as readily as one a {@code map} became, and
      * for it the lookup finds nothing — which is the true answer.
      */
-    public static souther.compiler.types.BindingId elementBindingOf(Core e) {
+    public static souther.compiler.types.BindingId elementBindingOf(Core standing) {
         // Through a `let`, which is what a value is: what an expression comes to is what its body
         // comes to, and the bindings on the way are read where they are read. That is the ordinary
-        // meaning of a binding and not a shape this pass left — the walk is what it wraps.
+        // meaning of a binding and not a shape this pass left — the walk is what it wraps. The type
+        // the value stands as says nothing about which walk made it.
+        Core e = Core.withoutStanding(standing);
         if (e instanceof Core.LetIn let) {
             return elementBindingOf(let.body());
         }
         if (!(e instanceof Core.Call call)
                 || (call.fn() != BUILD && call.fn() != MAP_BUILD)
                 || call.args().isEmpty()
-                || !(call.args().get(0) instanceof Core.Block step)
+                || !(Core.withoutStanding(call.args().get(0)) instanceof Core.Block step)
                 || step.params().size() != 2) {
             return null;
         }
@@ -439,7 +460,8 @@ public final class GrowingFold {
     /** {@code acc ++ rhs} as an add to the builder. */
     private static Core appended(Core e, Set<BindingId> acc) {
         if (!(e instanceof Core.Binary b) || b.op() != BinOp.CONCAT
-                || !(b.left() instanceof Core.Read v) || !acc.contains(v.binding())) {
+                || !(Core.withoutStanding(b.left()) instanceof Core.Read v)
+                || !acc.contains(v.binding())) {
             return null;
         }
         return new Core.Call(GROW, List.of(b.left(), b.right()),
@@ -450,7 +472,8 @@ public final class GrowingFold {
     /** {@code Map.insert(key, value, acc)} as a write into the builder. */
     private static Core inserted(Core e, Set<BindingId> acc) {
         if (!applies(e, Kernel.MAP_INSERT) || !(e instanceof Core.Call c) || c.args().size() != 3
-                || !(c.args().get(2) instanceof Core.Read v) || !acc.contains(v.binding())) {
+                || !(Core.withoutStanding(c.args().get(2)) instanceof Core.Read v)
+                || !acc.contains(v.binding())) {
             return null;
         }
         return new Core.Call(PUT, List.of(c.args().get(2), c.args().get(0), c.args().get(1)),
@@ -482,8 +505,15 @@ public final class GrowingFold {
                 yield els == null ? null
                         : new Core.If(iff.cond(), then, els, iff.place(), iff.type(), iff.pos());
             }
+            // What it holds is the answering position, and what that is rewritten to stands as what
+            // it stood as.
+            case Core.Widen w -> {
+                Core value = answers(w.value(), acc, found, growth);
+                yield value == null ? null : Core.standingAs(value, w.type());
+            }
             case Core.LetIn li -> {
-                if (acc.contains(li.binder().binding()) && !(li.value() instanceof Core.Read v
+                if (acc.contains(li.binder().binding())
+                        && !(Core.withoutStanding(li.value()) instanceof Core.Read v
                         && acc.contains(v.binding()))) {
                     // one of the accumulator's names now stands for something else
                     yield null;

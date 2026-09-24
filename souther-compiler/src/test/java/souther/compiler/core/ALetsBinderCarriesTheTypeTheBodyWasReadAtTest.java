@@ -12,16 +12,17 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * A {@code let} says in Core what type its name is in force at.
  *
  * <p>The checker enters a binder into the environment at a type of its own deciding, and that type
- * is not always the value's. A written annotation may be a sum the value is one case of, and the
+ * is not always the value's own. A written annotation may be a sum the value is one case of, and the
  * bindings an expansion wraps its body in hold each argument at the declared sum parameter. What the
- * body was read with is then wider than what the value is, and a reader of the tree that took the
- * value's type for the binding's would be reading the body at a type the checker never read it at.
+ * body was read with is then wider than what the value was worked out as, and the value stands as
+ * that wider type where it is bound: a reader of the tree reads both, and neither from the other.
  *
  * <p>Every model here hands a {@code Closed} to a binding the checker holds at {@code Deal}. One of
  * them never reads the binding, so the answer cannot be the type of some read of it: there is none.
@@ -86,13 +87,17 @@ class ALetsBinderCarriesTheTypeTheBodyWasReadAtTest {
         List<Core.LetIn> bindings = new ArrayList<>();
         collect(body, Core.LetIn.class, bindings);
         List<Core.LetIn> handed = bindings.stream()
-                .filter(li -> Type.show(li.value().type()).equals("Closed"))
+                .filter(li -> Type.show(Core.withoutStanding(li.value()).type()).equals("Closed"))
                 .toList();
         assertEquals(1, handed.size(), "`" + behavior + "` binds the `Closed` it is given once");
         Core.LetIn let = handed.getFirst();
 
         assertEquals("Deal", Type.show(let.bindType()),
                 "the binding is in force at `Deal` while its value is a `Closed`");
+        assertInstanceOf(Core.Widen.class, let.value(),
+                "and the value says it stands there as what the binding is in force at");
+        assertEquals(let.bindType(), let.value().type(),
+                "which is the type the binding is in force at");
         List<Core.Read> reads = readsOf(let.body(), let.binder().binding());
         assertEquals(read, !reads.isEmpty(),
                 read ? "the body reads the binding" : "nothing reads the binding");

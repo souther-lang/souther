@@ -137,7 +137,7 @@ final class AdmissibleReading {
     PlannedValues<FactSubject> leaf(ClauseExpr.Part part, Denotations at) {
         Core e = part.of();
         boolean positive = part.positive();
-        if (e instanceof Core.Binary b
+        if (Core.withoutStanding(e) instanceof Core.Binary b
                 && Comparison.of(b).map(Comparison::claim).orElse(null)
                         instanceof ComparisonClaim.Singled singled) {
             // Which of the two it states, once the denials above have been counted: what the
@@ -379,7 +379,7 @@ final class AdmissibleReading {
      * substitution puts in the tree when it gives a field an expression of its own.
      */
     private static ConstructOccurrence wroteIt(Core e) {
-        return switch (e) {
+        return switch (Core.withoutStanding(e)) {
             case Core.Binary it -> it.occurrence();
             case Core.Call it -> it.occurrence();
             case Core.PreservedCall it -> it.occurrence();
@@ -558,7 +558,7 @@ final class AdmissibleReading {
      * folded to anything; what it is is which declaration it is.
      */
     private Value valueOf(Core e, Denotations at) {
-        if (e instanceof Core.UnitValue unit) {
+        if (Core.withoutStanding(e) instanceof Core.UnitValue unit) {
             return Value.of(unit.data());
         }
         Object folded = Terms.folded(e, symbols, at);

@@ -1147,6 +1147,10 @@ public final class CoverageSites {
                 case Core.OptionSome s ->
                         walk(structural.take(new CoreStructure.Edge.SomeValue(), s.value()),
                                 inside);
+                // Standing as a wider type decides nothing; what it holds is what runs.
+                case Core.Widen w ->
+                        walk(structural.take(new CoreStructure.Edge.WidenedValue(), w.value()),
+                                inside);
                 case Core.Tuple t -> {
                     for (int i = 0; i < t.elements().size(); i++) {
                         walk(structural.take(new CoreStructure.Edge.TupleElement(i),

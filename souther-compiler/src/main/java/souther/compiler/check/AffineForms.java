@@ -378,8 +378,9 @@ public final class AffineForms {
      * they would have to change. Where every member was read and they came to different forms,
      * nothing stopped and this answers nothing, and the stop is reported at the name.
      */
-    private static <A, E> Outcome<A, E> read(Core e, E at, Reading<A, E> reading,
+    private static <A, E> Outcome<A, E> read(Core written, E at, Reading<A, E> reading,
                                              Walk<A, E> following) {
+        Core e = Core.withoutStanding(written);
         if (!(e instanceof Core.Read r)) {
             return null;
         }
@@ -532,7 +533,9 @@ public final class AffineForms {
      * one value.
      */
     private static <A, E> java.util.List<Standing<A, E>> standing(
-            Core e, E at, Reading<A, E> reading, Walk<A, E> following) {
+            Core asPlaced, E at, Reading<A, E> reading, Walk<A, E> following) {
+        // What a value is does not turn on the type it stands as at its position.
+        Core e = Core.withoutStanding(asPlaced);
         return switch (e) {
             case Core.Read r -> {
                 ReadThrough<E> through = reading.readThrough(r, at);
@@ -600,11 +603,11 @@ public final class AffineForms {
      */
     private static <A, E> java.util.List<Standing<A, E>> eliminated(
             Core e, E at, Reading<A, E> reading, Walk<A, E> following) {
-        return switch (e) {
+        return switch (Core.withoutStanding(e)) {
             case Core.FieldAccess fa -> {
                 java.util.List<Standing<A, E>> out = new java.util.ArrayList<>();
                 for (Standing<A, E> target : standing(fa.target(), at, reading, following)) {
-                    if (!(target.value() instanceof Core.Construct nd)) {
+                    if (!(Core.withoutStanding(target.value()) instanceof Core.Construct nd)) {
                         yield null;
                     }
                     Core written = ConstructionProjection.given(nd, fa.field());
@@ -620,7 +623,8 @@ public final class AffineForms {
             case Core.TupleGet get -> {
                 java.util.List<Standing<A, E>> out = new java.util.ArrayList<>();
                 for (Standing<A, E> tuple : standing(get.tuple(), at, reading, following)) {
-                    if (!(tuple.value() instanceof Core.Tuple written) || get.index() < 0
+                    if (!(Core.withoutStanding(tuple.value()) instanceof Core.Tuple written)
+                            || get.index() < 0
                             || get.index() >= written.elements().size()) {
                         yield null;
                     }
@@ -667,9 +671,10 @@ public final class AffineForms {
 
     /** {@code e} read as arithmetic over what its parts answer, or null where this has no rule for
      *  it or the rule it has does not compose. */
-    private static <A, E> LinearForm<A> composed(Core e, E at, Reading<A, E> reading,
+    private static <A, E> LinearForm<A> composed(Core asPlaced, E at, Reading<A, E> reading,
                                                  Walk<A, E> following,
                                                  Stop<A, E> stopped) {
+        Core e = Core.withoutStanding(asPlaced);
         LinearForm<A> written = literal(e, reading);
         if (written != null) {
             return written;

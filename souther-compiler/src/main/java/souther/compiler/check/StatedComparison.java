@@ -52,7 +52,8 @@ public record StatedComparison(ComparisonClaim claim, Core left, Core right) {
      * to apply.
      */
     static StatedComparison of(ClauseExpr.Part part) {
-        return part.of() instanceof Core.Binary bin ? of(bin, part.positive()) : null;
+        return Core.withoutStanding(part.of()) instanceof Core.Binary bin
+                ? of(bin, part.positive()) : null;
     }
 
     /** The same of a comparison held under {@code positive} by a reader whose polarity did not come

@@ -77,7 +77,9 @@ public record ElementBindings(Map<BindingId, List<Core>> containers,
      * <p>Asked where a name is bound, so that everything that reads the name reads the meaning and
      * not the edge that asked for it.
      */
-    public Core dereferenced(Core value) {
+    public Core dereferenced(Core standing) {
+        // The type a name is in force at says nothing about which value it holds.
+        Core value = Core.withoutStanding(standing);
         return value instanceof Core.MaterialisedValue build ? templates.bodyOf(build) : value;
     }
 
@@ -216,7 +218,8 @@ public record ElementBindings(Map<BindingId, List<Core>> containers,
         Map<BindingId, ElementProjection> out = new LinkedHashMap<>();
         answered.forEach((parameter, body) -> {
             // The element the closure was applied to, which is what the parameter was bound to.
-            if (!(held.get(parameter) instanceof Core.Read read) || read.binding() == null) {
+            if (!(Core.withoutStanding(held.get(parameter)) instanceof Core.Read read)
+                    || read.binding() == null) {
                 return;
             }
             // Of the one container the walk is over. A binding taking elements of more than one
@@ -260,15 +263,16 @@ public record ElementBindings(Map<BindingId, List<Core>> containers,
             return false;
         }
         Set<BindingId> met = new HashSet<>();
-        Core at = e;
+        Core at = Core.withoutStanding(e);
         while (at != null) {
             if (at instanceof Core.LetIn let) {
-                at = let.body();
+                at = Core.withoutStanding(let.body());
             } else if (at instanceof Core.Read read) {
                 if (binding.equals(read.binding())) {
                     return true;
                 }
-                at = met.add(read.binding()) ? held.get(read.binding()) : null;
+                at = met.add(read.binding())
+                        ? Core.withoutStanding(held.get(read.binding())) : null;
             } else {
                 return false;
             }
@@ -284,8 +288,9 @@ public record ElementBindings(Map<BindingId, List<Core>> containers,
                 && let.binder().binding() != null) {
             // A name given a build of a value holds what the value is: what it was bound to is the
             // template, and the build is only where it was asked for.
-            held.putIfAbsent(let.binder().binding(), let.value() instanceof Core.MaterialisedValue build
-                    ? values.bodyOf(build) : let.value());
+            Core value = Core.withoutStanding(let.value());
+            held.putIfAbsent(let.binder().binding(), value instanceof Core.MaterialisedValue build
+                    ? values.bodyOf(build) : value);
             // The body of a binding is read only where a fact proved before the tree was rewritten
             // says this binding is a closure parameter of a walk answering one per element. The
             // shape connects the two ends; it establishes nothing, and a binding nothing licenses
@@ -387,7 +392,7 @@ public record ElementBindings(Map<BindingId, List<Core>> containers,
      * nowhere and say nothing about having done so.
      */
     private static Core.Block blockOf(Core closure, Map<BindingId, Core> held) {
-        Core at = closure;
+        Core at = Core.withoutStanding(closure);
         Set<BindingId> met = new HashSet<>();
         while (at instanceof Core.Read read) {
             if (!met.add(read.binding())) {
@@ -395,7 +400,7 @@ public record ElementBindings(Map<BindingId, List<Core>> containers,
                         "a name bound to itself through the names it is bound to: "
                                 + read.binding());
             }
-            at = held.get(read.binding());
+            at = Core.withoutStanding(held.get(read.binding()));
         }
         return at instanceof Core.Block block ? block : null;
     }

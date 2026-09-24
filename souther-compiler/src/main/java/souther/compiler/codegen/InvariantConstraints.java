@@ -184,7 +184,7 @@ public final class InvariantConstraints {
         if (isValue(e)) {
             return Measured.VALUE;
         }
-        if (!(e instanceof Core.PreservedCall call) || call.args().size() != 1
+        if (!(Core.withoutStanding(e) instanceof Core.PreservedCall call) || call.args().size() != 1
                 || !isValue(call.args().get(0))) {
             return null;
         }
@@ -353,7 +353,7 @@ public final class InvariantConstraints {
     }
 
     private static boolean isValue(Core e) {
-        return e instanceof Core.Read read && read.name().equals(VALUE);
+        return Core.withoutStanding(e) instanceof Core.Read read && read.name().equals(VALUE);
     }
 
     /**
@@ -386,17 +386,18 @@ public final class InvariantConstraints {
      * the parameter when it reads that binding; a name spelled like it, bound elsewhere, is another
      * value. */
     private static boolean isIdentity(Core e) {
-        return e instanceof Core.Block block && block.params().size() == 1
-                && block.body() instanceof Core.Read read
+        return Core.withoutStanding(e) instanceof Core.Block block && block.params().size() == 1
+                && Core.withoutStanding(block.body()) instanceof Core.Read read
                 && read.binding().equals(block.params().get(0).binding());
     }
 
     /** An Int literal, negation included ({@code -1}), or null when the operand is not one. */
-    private static Long intLiteral(Core e) {
+    private static Long intLiteral(Core standing) {
+        Core e = Core.withoutStanding(standing);
         if (e instanceof Core.Int lit) {
             return lit.value();
         }
-        if (e instanceof Core.Neg neg && neg.operand() instanceof Core.Int lit
+        if (e instanceof Core.Neg neg && Core.withoutStanding(neg.operand()) instanceof Core.Int lit
                 && lit.value() != Long.MIN_VALUE) {
             return -lit.value();
         }
@@ -404,11 +405,13 @@ public final class InvariantConstraints {
     }
 
     /** A Decimal literal; an Int literal counts, since a bare literal takes the other side's type. */
-    private static BigDecimal decimalLiteral(Core e) {
+    private static BigDecimal decimalLiteral(Core standing) {
+        Core e = Core.withoutStanding(standing);
         if (e instanceof Core.Decimal lit) {
             return lit.value();
         }
-        if (e instanceof Core.Neg neg && neg.operand() instanceof Core.Decimal lit) {
+        if (e instanceof Core.Neg neg
+                && Core.withoutStanding(neg.operand()) instanceof Core.Decimal lit) {
             return lit.value().negate();
         }
         Long asInt = intLiteral(e);

@@ -85,7 +85,9 @@ public final class NumericMeasures {
      * A measure of several values is not one of these, and what it would be counted at is not a
      * place.
      */
-    public static Measured takenIn(Core e, Symbols symbols) {
+    public static Measured takenIn(Core standing, Symbols symbols) {
+        // What a value measures does not turn on the type it stands as.
+        Core e = Core.withoutStanding(standing);
         ValueName operation = Terms.operationOf(e);
         List<Core> args = Terms.argsOf(e);
         if (operation == null && e instanceof Core.Binary written) {

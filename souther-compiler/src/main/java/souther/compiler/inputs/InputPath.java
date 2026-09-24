@@ -174,6 +174,8 @@ final class InputPath {
             // and is not a question about this shape: it is asked where the name is read, of what
             // the name is.
             case Core.LetIn let -> named(let.body(), names.inside(let.binder(), let.value()));
+            // A value standing as a wider type is at the place it is at.
+            case Core.Widen w -> named(w.value(), names);
             // A call kept standing names no location. Where the walk is over a tree that keeps them
             // that is the answer, and where it is not, its presence says this walk was handed a
             // representation it does not read — said rather than answered with "no path", which
@@ -253,7 +255,7 @@ final class InputPath {
      * stays inside one expression, which is the kind of step nothing has to bound.
      */
     private <T> T introducing(Core e, BindingEnvironment names, OfAConstruction<T> found) {
-        return switch (e) {
+        return switch (Core.withoutStanding(e)) {
             case Core.Construct construct -> found.of(construct, names);
             case Core.Read r when names.roleOf(r.binding()) instanceof BindingRole.Alias(var held) ->
                     trail.through(r.binding(), () -> introducing(held, names, found));
@@ -345,7 +347,9 @@ final class InputPath {
 
     /** The ways an operation's answer holds the elements of what it was given, and no position
      *  where the expression is not one of them. */
-    private PathResolution elementsOf(Core e, BindingEnvironment names) {
+    private PathResolution elementsOf(Core standing, BindingEnvironment names) {
+        // Which elements a value holds does not turn on the type it stands as.
+        Core e = Core.withoutStanding(standing);
         if (e instanceof Core.Read r) {
             return switch (names.stepFrom(r.binding(), asked)) {
                 // Through a binding an expansion wrote, where the operation it removed answered the

@@ -303,6 +303,7 @@ public final class CoverageRead {
             case Core.FieldAccess access -> walkAll(some(access.target()), naming, reach, observed);
             case Core.TupleGet get -> walkAll(some(get.tuple()), naming, reach, observed);
             case Core.OptionSome option -> walkAll(some(option.value()), naming, reach, observed);
+            case Core.Widen widen -> walkAll(some(widen.value()), naming, reach, observed);
             case Core.Binary binary ->
                     walkAll(some(binary.left(), binary.right()), naming, reach, observed);
             case Core.Call call -> walkAll(call.args(), naming, reach, observed);

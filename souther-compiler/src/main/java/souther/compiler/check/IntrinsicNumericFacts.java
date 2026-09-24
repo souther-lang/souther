@@ -87,7 +87,7 @@ final class IntrinsicNumericFacts {
         for (Core added : DischargeRules.noSmallerThan(container)) {
             standing(size, atom, added, Rel.GE, at, terms, out);
         }
-        if (container instanceof Core.PreservedCall call) {
+        if (Core.withoutStanding(container) instanceof Core.PreservedCall call) {
             DischargeRules.Source built = DischargeRules.builtFrom(call);
             Rel rel = built == null ? null : relationOf(built.size());
             if (rel != null) {
@@ -180,7 +180,8 @@ final class IntrinsicNumericFacts {
         if (!DischargeRules.isAMeasure(call.operation()) || call.args().size() != 2) {
             return;
         }
-        if (!(terms.originating(call.args().get(1), at, new java.util.HashSet<>())
+        if (!(Core.withoutStanding(
+                terms.originating(call.args().get(1), at, new java.util.HashSet<>()))
                 instanceof Core.PreservedCall moved)) {
             return;
         }

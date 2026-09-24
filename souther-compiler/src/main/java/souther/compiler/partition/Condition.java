@@ -156,8 +156,10 @@ sealed interface Condition {
      * <p>Asked after the way in has been looked through, so that what is filed is the condition
      * rather than the route to it: a truth reached through a binding is the truth.
      */
-    static Condition of(Core e, InputReads reads, Symbols symbols, DeclarationNewtypes newtypes,
-                        ConditionNumbering numbering) {
+    static Condition of(Core standing, InputReads reads, Symbols symbols,
+                        DeclarationNewtypes newtypes, ConditionNumbering numbering) {
+        // A condition is the truth it is whatever type it stands as.
+        Core e = Core.withoutStanding(standing);
         if (e instanceof Core.LetIn let) {
             return of(let.body(), reads.and(let.binder(), let.value()), symbols, newtypes,
                     numbering);

@@ -591,7 +591,9 @@ public sealed interface Carrier extends ValueOrder {
      * is not a newtype wraps its value rather than being it, so its construction is a value of its
      * own and is left alone.
      */
-    private static Core bare(Core e, Symbols symbols) {
+    private static Core bare(Core written, Symbols symbols) {
+        // A value written down is the value it is whatever type it stands as.
+        Core e = Core.withoutStanding(written);
         return e instanceof Core.Construct nd && !nd.values().isEmpty()
                 && TypeOps.isSingleValueNewtype(Type.ref(nd.typeName()), symbols)
                 ? bare(nd.values().get(0).value(), symbols) : e;

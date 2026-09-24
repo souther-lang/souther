@@ -1385,7 +1385,8 @@ sealed interface StatedByClauses {
      * sent to an operator that is not in front of them.
      */
     private static ConstructOccurrence wroteIt(Core e) {
-        return e instanceof Core.Binary it ? it.occurrence() : ConstructOccurrence.unwritten();
+        return Core.withoutStanding(e) instanceof Core.Binary it ? it.occurrence()
+                : ConstructOccurrence.unwritten();
     }
 
     /**

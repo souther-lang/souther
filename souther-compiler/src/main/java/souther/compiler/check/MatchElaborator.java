@@ -250,7 +250,7 @@ public final class MatchElaborator {
         if (branchType == null) {
             throw CompileException.of(Diagnostic.at(m.pos(), 5).say(new MatchMessage.ThisMatchHasNoCases()).build());
         }
-        return new Core.Match(scrutineeCore, arms,
+        return new Core.Match(scrutineeCore, standingAs(arms, branchType),
                 new Core.ForkPlace(ctx.occurrenceOf(m.origin()), ctx.within()), branchType,
                 m.pos());
     }
@@ -301,7 +301,7 @@ public final class MatchElaborator {
         if (!missing.isEmpty()) {
             throw nonExhaustive(m.pos(), "Option", missing);
         }
-        return new Core.Match(scrutineeCore, arms,
+        return new Core.Match(scrutineeCore, standingAs(arms, branchType),
                 new Core.ForkPlace(ctx.occurrenceOf(m.origin()), ctx.within()), branchType,
                 m.pos());
     }
@@ -399,6 +399,18 @@ public final class MatchElaborator {
      * returns it as is. */
     static Scope bound(Scope env, Hir.Binder binding, Type type) {
         return binding == null || type == null ? env : env.with(binding, type);
+    }
+
+    /**
+     * Every arm answering as {@code joined}, what all of them joined at. Asked only once the last arm
+     * has been read: the join of the arms read so far is not what an earlier arm stands as.
+     */
+    private static List<Core.Case> standingAs(List<Core.Case> arms, Type joined) {
+        List<Core.Case> out = new ArrayList<>();
+        for (Core.Case arm : arms) {
+            out.add(arm.answering(Core.standingAs(arm.body(), joined)));
+        }
+        return out;
     }
 
     static Type mergeBranch(Hir.Match m, Type branchType, Type bt, Hir.Case c, Type expected) {

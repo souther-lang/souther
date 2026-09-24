@@ -617,11 +617,11 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
     /**
      * And the program says what the kernel that call reaches was declared to take.
      *
-     * <p>What the checker settled for each node is what arrived there. That answers the callee's
-     * shape only while no value can arrive narrower than the parameter it goes into, and a
-     * sum-typed parameter ends it: the argument here is a {@code HALF_UP} and the parameter is the
-     * sum it is a case of. An output building a boundary form off the arguments would build one
-     * naming the case, and find nothing declared that way.
+     * <p>A value may arrive narrower than the parameter it goes into: the argument here is a
+     * {@code HALF_UP} and the parameter is the sum it is a case of. What the call is handed stands as
+     * the parameter, and what it holds is the case, so an output building a boundary form off the
+     * arguments builds it at the type declared there and finds the case under it — and never has to
+     * work out for itself that the one may stand as the other.
      */
     @Test
     void andTheProgramSaysWhatThatKernelWasDeclaredToTake() {
@@ -645,15 +645,20 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
                 "what the language declared the kernel to take");
         assertEquals("Decimal", Type.show(declared.result()),
                 "and what it declared it answers");
-        assertEquals("HALF_UP", Type.show(rounds.args().get(1).type()),
-                "while what arrived at the sum-typed parameter is the case it is");
+        Core.Widen arrived = assertInstanceOf(Core.Widen.class, rounds.args().get(1),
+                "what arrived at the sum-typed parameter stands as that parameter");
+        assertEquals("RoundingMode", Type.show(arrived.type()),
+                "at the type the kernel was declared to take there");
+        assertEquals("HALF_UP", Type.show(arrived.value().type()),
+                "and what it holds is the case it is");
     }
 
     /**
      * And the other two operations the language tells a way of rounding expose the same boundary.
      *
      * <p>The same invariant checked above for {@code Decimal.round} — the declaration says which
-     * parameter is {@code RoundingMode}, the checked call carries the case that arrived there —
+     * parameter is {@code RoundingMode}, the checked call is handed a value standing as that
+     * parameter and holding the case that arrived there —
      * holds at {@code toInt}'s and {@code divide}'s own declared positions too. An output that reads
      * the declaration does not need to be told separately that {@code toInt} takes its mode first
      * and {@code divide} takes its last.
@@ -696,9 +701,12 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
         assertEquals(1, modePositions.size(),
                 () -> kernel + " declares exactly one RoundingMode parameter");
 
-        Core.Call node = reached;
-        assertEquals("HALF_UP", Type.show(node.args().get(modePositions.get(0)).type()),
-                () -> "what arrived at " + kernel + "'s RoundingMode parameter is the case it is");
+        Core arrived = reached.args().get(modePositions.get(0));
+        assertEquals(parameters.get(modePositions.get(0)), arrived.type(),
+                () -> "what arrived at " + kernel + "'s RoundingMode parameter stands as it");
+        assertEquals("HALF_UP", Type.show(Core.withoutStanding(arrived).type()),
+                () -> "and what it holds at " + kernel + "'s RoundingMode parameter is the case"
+                        + " it is");
     }
 
     /**

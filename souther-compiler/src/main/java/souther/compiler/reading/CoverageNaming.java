@@ -103,7 +103,7 @@ final class CoverageNaming implements Naming<Outcome> {
      */
     @Override
     public Outcome side(Core value, boolean held) {
-        if (!(value instanceof Core.Binary comparison)) {
+        if (!(Core.withoutStanding(value) instanceof Core.Binary comparison)) {
             // A position holding a truth comes out both ways and the plan places no comparison at
             // it, so there is nothing here to say. The fork on it is named where the way in is.
             return null;

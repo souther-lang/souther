@@ -76,7 +76,8 @@ final class NumberWays implements ComparisonWays {
     @Override
     public boolean comesOut(Core e, boolean want, Function<Core.Read, Core> settledBy) {
         ComparedNumber said =
-                e instanceof Core.Binary binary ? numbers.of(binary, reads) : null;
+                Core.withoutStanding(e) instanceof Core.Binary binary
+                        ? numbers.of(binary, reads) : null;
         ComparedNumber.DrawnLine drawn = said == null ? null : said.line();
         return drawn == null
                 ? ComparisonWays.OF_THE_TREE.comesOut(e, want, settledBy)

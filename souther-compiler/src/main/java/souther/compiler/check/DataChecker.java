@@ -947,15 +947,16 @@ public final class DataChecker {
             CheckContext making = ctx.makingAnOptional(ft instanceof Type.OptionOf);
             Core value = Elaborator.liftIntoOption(
                     Elaborator.elaborate(init.value(), env, making, ft), ft, ctx.published());
-            written.put(init.name(), new Core.FieldValue(init.name(), value, init.pos()));
             Type vt = value.type();
             // a case value widens to its sum-typed field (spec §sum-data)
             if (!TypeOps.assignable(vt, ft, ctx.published())) {
                 throw CompileException.of(Diagnostic
                                 .at(init.written().reportedAt())
-                                
+
                                 .diff(Type.show(vt, ft), Type.show(ft, vt)).say(new DataMessage.AFieldExpectsAnotherType(init.name(), Type.show(ft), Type.show(vt))).build());
             }
+            written.put(init.name(), new Core.FieldValue(init.name(),
+                    Core.standingAs(value, ft), init.pos()));
         }
         // the sums spread here, which a field the construction still wants was not in the shared part
         // of — all of them, because naming one of several would pick by position and send the author
@@ -1026,9 +1027,11 @@ public final class DataChecker {
                         .diff(Type.show(pv, type), Type.show(type, pv)).build());
             }
             // The value is read at the type the source declares the field, which is the type the
-            // backend loads it at; that it fits the field being given it was decided just above.
+            // backend loads it at, and stands as the type of the field it is given to, which was
+            // decided just above.
             values.add(new Core.FieldValue(name,
-                    new Core.FieldAccess(from.read(), name, pv, from.read().pos()),
+                    Core.standingAs(new Core.FieldAccess(from.read(), name, pv, from.read().pos()),
+                            type),
                     from.read().pos()));
         }
         return values;

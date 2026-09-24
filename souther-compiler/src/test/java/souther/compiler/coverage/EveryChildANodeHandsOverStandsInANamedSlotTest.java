@@ -107,7 +107,8 @@ class EveryChildANodeHandsOverStandsInANamedSlotTest {
         assertEquals(List.of("BinaryLeft", "BinaryRight", "BlockBody", "CallArgument",
                         "ConstructedAttempt", "ConstructedElse", "ConstructedThen", "FieldTarget",
                         "FieldValue", "IfCondition", "IfElse", "IfThen", "LetBody", "LetValue",
-                        "ListElement", "MatchCase", "MatchScrutinee", "NegOperand", "SomeValue"),
+                        "ListElement", "MatchCase", "MatchScrutinee", "NegOperand", "SomeValue",
+                        "WidenedValue"),
                 List.copyOf(met),
                 "which slots the models put something in, and so which slots the checks above are"
                         + " about");

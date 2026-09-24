@@ -65,9 +65,11 @@ final class WhatAForkTests {
         return out;
     }
 
-    private static void turnsOn(Core e, AnswerAspect aspect,
+    private static void turnsOn(Core standing, AnswerAspect aspect,
                                 java.util.function.UnaryOperator<Core> denotes,
                                 Set<Asked> met, List<Core> out) {
+        // What an answer turns on does not turn on the type it stands as.
+        Core e = Core.withoutStanding(standing);
         // By what has been asked, which is what makes it stop. The tree is finite and so are the
         // library's edges, and a name a walk followed may lead back to where it started — so a
         // question already asked is one already answered rather than one to ask again. Not a depth:
@@ -141,7 +143,7 @@ final class WhatAForkTests {
      * was read would come back unread on account of a constant.
      */
     private static boolean writtenOut(Core e) {
-        return switch (e) {
+        return switch (Core.withoutStanding(e)) {
             case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
                  Core.UnitValue _, Core.ListLit _, Core.Tuple _, Core.OptionSome _,
                  Core.OptionNone _, Core.Construct _ -> true;
@@ -181,7 +183,7 @@ final class WhatAForkTests {
     /** Which library operation {@code e} applies, in either shape a representation gives one, or
      *  null where it applies none. */
     private static ValueName operationOf(Core e) {
-        return switch (e) {
+        return switch (Core.withoutStanding(e)) {
             case Core.PreservedCall kept -> kept.declared().operation();
             case Core.Call call when call.fn() instanceof Core.Reached reached -> reached.denotes();
             default -> null;
@@ -189,7 +191,7 @@ final class WhatAForkTests {
     }
 
     private static List<Core> argumentsOf(Core e) {
-        return switch (e) {
+        return switch (Core.withoutStanding(e)) {
             case Core.PreservedCall kept -> kept.args();
             case Core.Call call -> call.args();
             default -> List.of();
@@ -220,7 +222,7 @@ final class WhatAForkTests {
      */
     private static Core answerOf(Core e, java.util.function.UnaryOperator<Core> denotes) {
         Core stands = denotes.apply(e);
-        return stands instanceof Core.Block block ? block.body() : stands;
+        return Core.withoutStanding(stands) instanceof Core.Block block ? block.body() : stands;
     }
 
     /** One question this walk has been asked: an expression, and which side of what it answers.
