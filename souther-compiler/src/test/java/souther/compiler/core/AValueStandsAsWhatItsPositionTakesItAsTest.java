@@ -89,6 +89,11 @@ class AValueStandsAsWhatItsPositionTakesItAsTest {
             behavior deepest : (n: Int) -> Shape
             let deepest (n) = deep(n)
 
+            let stepping (k: Int) : (Shape, Shape) -> Circle = (acc, s) -> Circle { r = k }
+
+            behavior stepped : (cs: List<Circle>) -> Shape
+            let stepped (cs) = List.fold(stepping(1), Square { side = 0 }, cs)
+
             behavior tallied : (cs: List<Circle>, k: Int) -> Int
             let tallied (cs, k) = {
                 let f: (Int, Shape) -> Int =
@@ -224,6 +229,39 @@ class AValueStandsAsWhatItsPositionTakesItAsTest {
                 "while what it holds is the case it is");
     }
 
+    /**
+     * And a function that takes more than the call hands it and answers less than the call takes
+     * stands as what the call takes, while the function itself stays of the type its body was
+     * checked at: what it takes is said around it, and what it answers is said at its body.
+     */
+    @Test
+    void aFunctionTakingMoreAndAnsweringLessKeepsBothWhereTheyWereDecided() {
+        Core.Call fold = null;
+        for (Core.Call each : every(body("stepped"), Core.Call.class)) {
+            if (each.args().size() > 1) {
+                fold = each;
+            }
+        }
+        assertNotNull(fold, "the fold is a call");
+        Core step = fold.args().get(0);
+        Core.Widen standing = assertInstanceOf(Core.Widen.class, step,
+                "a function taking the sum stands as one taking the case the call hands it");
+        Type.FnOf takes = (Type.FnOf) standing.type();
+        assertEquals(List.of("Shape", "Circle"), takes.params().stream().map(Type::show).toList());
+        assertEquals("Shape", Type.show(takes.result()), "answering what the accumulator is");
+        Type.FnOf own = (Type.FnOf) standing.value().type();
+        assertEquals(List.of("Shape", "Shape"), own.params().stream().map(Type::show).toList(),
+                "while the function takes what its body was checked taking");
+        List<Core.Block> blocks = every(standing.value(), Core.Block.class);
+        assertEquals(1, blocks.size(), "one block");
+        Core.Block block = blocks.getFirst();
+        assertEquals(own.params(), ((Type.FnOf) block.type()).params(),
+                "the block is of the parameters its body was read with");
+        Core.Widen answers = assertInstanceOf(Core.Widen.class, block.body(),
+                "and its body answers the case as the sum");
+        assertEquals("Shape", Type.show(answers.type()));
+    }
+
     @Test
     void whereTheTypesAreOneNothingIsSaid() {
         assertTrue(every(body("same"), Core.Widen.class).isEmpty(),
@@ -241,8 +279,8 @@ class AValueStandsAsWhatItsPositionTakesItAsTest {
                 "a value stands at a position once");
         assertSame(standing.value(), Core.standingAs(standing.value(), standing.value().type()),
                 "standing as its own type is the value itself");
-        assertEquals(standing, Core.standingAs(standing, standing.type()),
-                "and standing again as what it stands as is the one standing");
+        assertSame(standing, Core.standingAs(standing, standing.type()),
+                "and standing again as what it stands as is the one standing, the same node");
     }
 
     @Test

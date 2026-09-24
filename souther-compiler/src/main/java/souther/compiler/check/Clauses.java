@@ -384,6 +384,8 @@ final class Clauses {
         return Core.mapAll(e, child -> substituted(child, given),
                 // A name slot holds a binding and nothing else, so a value put there would be
                 // something the reader of that slot cannot load. Only another name may stand there.
+                // It identifies a binding and is no typed value position: a type the substituted
+                // value stands as belongs to the value, and not to this slot.
                 name -> Core.withoutStanding(substituted(name, given)) instanceof Core.Read r
                         ? r : name);
     }

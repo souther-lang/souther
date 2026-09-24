@@ -656,9 +656,14 @@ public final class Elaborator {
      * operation's signature settled its function argument to answer.
      *
      * <p>A block written there answers it from its body, so the body is what stands as the wider
-     * type and the block is of the type the call takes; and a block under the bindings it captures
-     * is that block, under those bindings. Any other function value stands as a function answering
-     * {@code result}, taking what it took.
+     * type and the block is of the parameters its body was read with; and a block under the
+     * bindings it captures is that block, under those bindings. Any other function value stands as
+     * a function answering {@code result}, taking what it took.
+     *
+     * <p>A function already standing as one taking less is answered for as the function it is, and
+     * stands as before around what that comes to. Its own type is what its body was read with and
+     * the type around it is what the call takes; rebuilt at the second, a block would say its body
+     * was read with parameters it never was.
      */
     static Core answering(Core function, Type result) {
         Type.FnOf own = (Type.FnOf) function.type();
@@ -666,7 +671,9 @@ public final class Elaborator {
             return function;
         }
         Type answers = Type.fn(own.params(), result);
-        return switch (Core.withoutStanding(function)) {
+        return switch (function) {
+            case Core.Widen standing ->
+                    Core.standingAs(answering(standing.value(), result), answers);
             case Core.Block block -> new Core.Block(block.params(),
                     Core.standingAs(block.body(), result), answers, block.pos());
             case Core.LetIn captures -> new Core.LetIn(captures.binder(), captures.bindType(),

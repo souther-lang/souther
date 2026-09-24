@@ -1300,10 +1300,14 @@ public sealed interface Core {
      * {@code value} standing as {@code type}: {@code value} itself where it already is of that type,
      * and a {@link Widen} of it where it is not.
      *
-     * <p>A {@code value} that is itself a {@link Widen} is set aside first, so that a value restated at
-     * a new position stands there as what that position takes it as, once.
+     * <p>A {@code value} already standing as {@code type} is that value, the same node. One that is a
+     * {@link Widen} of something else is set aside first, so that a value restated at a new position
+     * stands there as what that position takes it as, once.
      */
     static Core standingAs(Core value, Type type) {
+        if (value.type().equals(type)) {
+            return value;
+        }
         Core bare = withoutStanding(value);
         return bare.type().equals(type) ? bare : new Widen(bare, type);
     }
