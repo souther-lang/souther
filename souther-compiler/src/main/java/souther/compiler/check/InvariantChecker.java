@@ -3815,7 +3815,7 @@ public final class InvariantChecker {
             // What the split asks is evaluated before any arm is, so it is walked here and what it
             // leaves is what the arms are read under.
             within = walk(split.asked(), within, there, copies);
-            Set<Core> alike = sameSplit(e, value, there);
+            Set<Core> alike = sameSplit(e, at, value, there);
             // The readings start from where the split stood, not from outside it. The tree each is
             // given still holds those binders and walks into them again, which is why entering one
             // already entered is nothing: a second transition would forget what the arm settled.
@@ -5046,21 +5046,30 @@ public final class InvariantChecker {
      * included. Asked once for all the readings, since which nodes those are does not depend on which
      * arm is being read.
      *
-     * <p>{@code at} is where {@code value} stands, which is what keying it needs. A candidate
-     * elsewhere in {@code e} is keyed there too rather than in its own scope, so two splits that
-     * compute the same value under different bindings are read as two — which is the thing this
-     * exists to prevent, still unanswered for that shape.
+     * <p>Two environments, because a key means something only beside the environment it was read
+     * in. {@code there} is where {@code value} stands and is what its key is read in; {@code at} is
+     * where {@code e} stands, and each candidate is keyed where it stands inside {@code e}. A helper
+     * called twice is two bindings of one argument, and read in the first one's environment the
+     * second one's name denotes nothing.
      */
-    private Set<Core> sameSplit(Core e, Core value, Denotations at) {
+    private Set<Core> sameSplit(Core e, Denotations at, Core value, Denotations there) {
         Set<Core> alike = Collections.newSetFromMap(new IdentityHashMap<>());
         alike.add(value);
-        Term key = terms.bodyKey(value, at);
+        Term key = terms.bodyKey(value, there);
         if (key != null) {
             collectAlike(e, key, at, alike);
         }
         return alike;
     }
 
+    /**
+     * The splits under {@code e} keyed as {@code key} is, {@code e} standing at {@code at}.
+     *
+     * <p>Every child is visited, and what a binder over one means is {@link Terms}' answer: a
+     * {@code let}'s body is read {@link Terms#inside} it, and an arm of a {@code match} or of an
+     * attempt under what {@link Terms#choosing} that arm binds. The forms that open a scope are the
+     * ones named here.
+     */
     private void collectAlike(Core e, Term key, Denotations at, Set<Core> alike) {
         if (e instanceof Core.Block) {
             return;
@@ -5069,7 +5078,36 @@ public final class InvariantChecker {
             alike.add(e);
             return;
         }
+        if (e instanceof Core.LetIn li) {
+            collectAlike(li.value(), key, at, alike);
+            collectAlike(li.body(), key, terms.inside(li, at), alike);
+            return;
+        }
+        if (e instanceof Core.Match m) {
+            collectAlike(m.scrutinee(), key, at, alike);
+            collectArms(Choice.of(m), key, at, alike);
+            return;
+        }
+        if (e instanceof Core.IfConstructed ic) {
+            collectAlike(ic.construct(), key, at, alike);
+            collectArms(Choice.of(ic), key, at, alike);
+            return;
+        }
         Core.forEachChild(e, child -> collectAlike(child, key, at, alike));
+    }
+
+    /**
+     * The splits under the arms of {@code choice}, each read under what choosing that arm binds.
+     *
+     * <p>Only for a choice whose arms are the bodies of the node it was read off, which a
+     * {@code match} and an attempt are. The forms that bind are named by {@link #collectAlike} and
+     * not found by asking {@link Choice}: which value a node is one of is that type's question, and
+     * where a binder's scope begins is not.
+     */
+    private void collectArms(Choice choice, Term key, Denotations at, Set<Core> alike) {
+        for (Choice.Arm arm : choice.arms()) {
+            collectAlike(arm.answers(), key, terms.choosing(arm.decidedBy(), at), alike);
+        }
     }
 
     /**
