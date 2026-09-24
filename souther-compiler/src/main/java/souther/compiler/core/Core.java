@@ -1360,8 +1360,9 @@ public sealed interface Core {
 
     /**
      * {@code e} with each of its slots replaced by what the operator for that slot answers, the
-     * node's own kind, type and position kept — or {@code e} itself where every slot answered what it
-     * was given, so a walk that only reads allocates nothing.
+     * node's own kind, position and the types it holds kept — or {@code e} itself where every slot
+     * answered what it was given, so a walk that only reads allocates nothing. A {@link Block} holds
+     * no type for what it answers, so what it answers follows its rewritten body.
      *
      * <p>The children of a node occupy three kinds of slot, which differ in what may stand there.
      *
@@ -1525,8 +1526,8 @@ public sealed interface Core {
 
     /**
      * {@code e} with each of its slots replaced by what the operator for that slot answers, the
-     * node's own kind, type and position kept. A Core-to-Core pass recurses through this rather than
-     * hand-copying every node kind.
+     * node's own kind, position and the types it holds kept, as {@link #atSlots} says. A Core-to-Core
+     * pass recurses through this rather than hand-copying every node kind.
      *
      * <p>An operator per slot kind, so a rewrite cannot put an expression where the backend can only
      * load a binding, or something other than a construction where an attempt tests one.
