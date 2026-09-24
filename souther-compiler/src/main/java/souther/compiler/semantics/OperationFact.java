@@ -15,6 +15,14 @@ import java.util.Objects;
  * <p>Sealed, so the procedures that hold these to the library's declarations answer for a kind
  * added rather than passing over it.
  *
+ * <p><b>A kind is here because a reader in the compiler takes it as a proposition.</b> Whether the
+ * statement is that something holds or that it does not is beside the point; what earns a kind its
+ * place is that something below the binding reads its value as a statement about the operation and
+ * acts on it. That a question about an operation was considered and closed without a rule is not
+ * such a statement. Its reason may well be about the operation, but no reader here interprets the
+ * closing, so it belongs to the completeness check that asks the question and is not declared,
+ * bound or filed here.
+ *
  * <p><b>The authoring vocabulary, and nothing below the binding reads it.</b> An argument is named
  * here as {@link ArgumentRef}, a word; another operation as a {@link souther.compiler.types.ValueName},
  * a name. Neither says the library has such an operation or such an argument. What holds these to

@@ -73,7 +73,7 @@ class AnAccumulationIsWrittenForWhatItMeansAndNotForWhatCanReadItTest {
                 "join carries whether anything came before the element it is at, which an identity"
                         + " and a combine over two values of one type have nowhere to keep");
         assertEquals(true, Question.ACCUMULATION.deliberatelyUnanswered().contains(op("String", "join")),
-                "so it answers by being named as one there is nothing of this to say of");
+                "so it is named as deliberately unanswered");
     }
 
     /**

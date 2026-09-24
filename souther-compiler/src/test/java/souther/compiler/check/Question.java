@@ -14,16 +14,16 @@ import java.util.Set;
  * <p>A table with no row for an operation says two things at once: that nothing is true of it, and
  * that nobody looked. That is how {@code List.distinctBy} came to be credited by neither the
  * totality check nor the discharge one — a valid recursive helper rejected, a guard that stopped
- * discharging, and nothing said about a missing row. What settles which of the two a silence is, is
+ * discharging, and nothing said about a missing row. What settles which of the two an absence is, is
  * the range: what an operation is declared to be puts it in range of a question, and an operation in
- * range answers — with a rule, or by being named among the ones there is nothing to say of, with the
- * reason. So the library gaining an operation is the library asking these questions, and each is
- * unanswered until someone answers it.
+ * range is settled — with a rule, or by being named as deliberately unanswered, with the reason. So
+ * the library gaining an operation is the library asking these questions, and each is open until
+ * someone settles it.
  *
- * <p>One of the two and not either. A silence says that nothing is true under the question, so it is
- * the denial of a rule rather than a spare row beside one, and an operation carrying both is one
- * where one of the two is wrong. Read as "a rule or a silence", a silence is only ever a filler, and
- * one that has become false covers the range as well as anything and stays where it is.
+ * <p>One of the two and not either. Each operation in range is one thing to settle, and these are the
+ * two ways it can be: a rule was written, or the question was considered and closed without one. A
+ * name among the closed ones beside a rule is a record the rule has overtaken. Read as "a rule or a
+ * closing", a stale closing covers the range as well as anything and stays where it is.
  *
  * <p>A range is read off the declaration and nothing else, so it holds an operation nobody thought
  * of. Where the answer too is read off the declaration the rule is derived rather than written
@@ -75,8 +75,8 @@ enum Question {
      * carries, is declared the same way.
      *
      * <p>The container is part of the range and not only of the answer. This asks whether an
-     * operation walks <em>a container</em>, so one given none is outside it rather than in it with
-     * nothing to say — an operation declared {@code ((A) -> A, A) -> A} repeats a step over no
+     * operation walks <em>a container</em>, so one given none is outside it rather than in it and
+     * deliberately unanswered — an operation declared {@code ((A) -> A, A) -> A} repeats a step over no
      * elements and is a different question, which nobody has had to ask yet.
      *
      * <p>Beside {@link #COMBINATOR} and not folded into it. What an operation hands its closure is
@@ -569,9 +569,8 @@ enum Question {
             // arithmetic over `a` and `b` and is a form of neither, since what multiplies each is
             // the other. A sum and a difference are not here at all — what they answer is a form
             // of what they were given, and they say so by being the arithmetic they are — the
-            // operator a call to them is read as, which `ComputesANumber` records. Naming them
-            // here would deny that, which is why the two cannot both be written: a name here says
-            // nothing is true of it under this question.
+            // operator a call to them is read as, which `ComputesANumber` records. So this question
+            // is answered for them and is not closed.
             //
             // A number of their own: `compare` answers a sign, `floorMod` a remainder, `abs` a
             // distance with the sign dropped, `toInt` a whole number, `round` and
