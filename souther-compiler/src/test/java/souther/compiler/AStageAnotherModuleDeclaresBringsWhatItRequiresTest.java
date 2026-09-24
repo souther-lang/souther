@@ -138,45 +138,65 @@ class AStageAnotherModuleDeclaresBringsWhatItRequiresTest {
         assertEquals(62L, Codecs.apply(again, 3L), "rate, then double, then tax, then inc");
     }
 
+    /** A version of `lib.c` whose `step` takes and answers what the earlier one did, and which no
+     *  longer declares the `rate` the earlier one's `step` required. */
+    private static final String C_WITHOUT_RATE = """
+            module lib.c exposing ( double, step : Int )
+            behavior double : (n: Int) -> Int
+            let double (n) = n + n
+            behavior step = double >-> double
+            """;
+
+    private static final String BUILDS_ON_B = """
+            module app.s
+            import lib.b ( priced, inc )
+            behavior again = priced >-> inc
+            """;
+
+    /** `lib.b`, built against the `lib.c` that declared `rate`: its `priced` requires it. */
+    private static final Map<String, ClassFileImage> B_BUILT_WITH_RATE =
+            Compiler.compileModules(List.of("""
+                    module lib.b exposing ( inc, priced : Int )
+                    import lib.c ( step )
+                    behavior inc : (n: Int) -> Int
+                    let inc (n) = n + 1
+                    behavior priced = step >-> inc
+                    """), ModulePath.of(Compiler.compile("""
+                    module lib.c exposing ( rate, double, step : Int )
+                    behavior rate : (n: Int) -> Int
+                    behavior charged : (n: Int) -> Int depends on rate
+                    let charged (n, rate) = rate(n)
+                    behavior double : (n: Int) -> Int
+                    let double (n) = n + n
+                    behavior step = charged >-> double
+                    """)));
+
     /**
-     * A module on the path built against another version of one it depends on, where the version on
-     * the path no longer declares a behavior it was built requiring. Its import still resolves —
-     * `step` is there, taking and answering the same — and what it requires is not in its text, so
-     * nothing but the requirement names what went missing. A compile building on it is refused with
-     * that, and not answered with no classes.
+     * A module on the path built against another version of one it depends on, where the version
+     * this compilation reads no longer declares a behavior it was built requiring. Its import still
+     * resolves — `step` is there, taking and answering the same — and what it requires is not in
+     * its text, so nothing but the requirement names what went missing. A compile building on it is
+     * refused with that, and not answered with no classes.
      */
     @Test
     void aRequirementBuiltAgainstAnotherVersionOfItsModuleIsSaid() {
-        Map<String, ClassFileImage> before = Compiler.compile("""
-                module lib.c exposing ( rate, double, step : Int )
-                behavior rate : (n: Int) -> Int
-                behavior charged : (n: Int) -> Int depends on rate
-                let charged (n, rate) = rate(n)
-                behavior double : (n: Int) -> Int
-                let double (n) = n + n
-                behavior step = charged >-> double
-                """);
-        Map<String, ClassFileImage> path = new HashMap<>(Compiler.compileModules(List.of("""
-                module lib.b exposing ( inc, priced : Int )
-                import lib.c ( step )
-                behavior inc : (n: Int) -> Int
-                let inc (n) = n + 1
-                behavior priced = step >-> inc
-                """), ModulePath.of(before)));
-        path.putAll(Compiler.compile("""
-                module lib.c exposing ( double, step : Int )
-                behavior double : (n: Int) -> Int
-                let double (n) = n + n
-                behavior step = double >-> double
-                """));
+        Map<String, ClassFileImage> path = new HashMap<>(B_BUILT_WITH_RATE);
+        path.putAll(Compiler.compile(C_WITHOUT_RATE));
 
-        CompileException refused = assertThrows(CompileException.class,
-                () -> Compiler.compileModules(List.of("""
-                        module app.s
-                        import lib.b ( priced, inc )
-                        behavior again = priced >-> inc
-                        """), ModulePath.of(path)));
+        assertRefusedForRate(assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of(BUILDS_ON_B), ModulePath.of(path))));
+    }
 
+    /** The same, with the version that no longer declares it compiled here rather than read off the
+     *  path. Which of the two it is does not change what the module on the path was built against. */
+    @Test
+    void aRequirementOfAModuleCompiledHereIsHeldToItToo() {
+        assertRefusedForRate(assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of(C_WITHOUT_RATE, BUILDS_ON_B),
+                        ModulePath.of(B_BUILT_WITH_RATE))));
+    }
+
+    private static void assertRefusedForRate(CompileException refused) {
         ModuleMessage.ItWasBuiltRequiringWhatTheModuleDoesNotDeclare said = assertInstanceOf(
                 ModuleMessage.ItWasBuiltRequiringWhatTheModuleDoesNotDeclare.class,
                 refused.diagnostic().said());

@@ -1170,7 +1170,7 @@ public final class Bodies {
                     undeclared.add(Report.raised(Diagnostic
                             .say(new ModuleMessage.ItWasBuiltRequiringWhatTheModuleDoesNotDeclare(
                                     name, dependency.name(), dependency.module()))
-                            .hint(new ModuleMessage.RebuildItAgainstTheModuleOnThePath(
+                            .hint(new ModuleMessage.RebuildItAgainstTheModuleThisCompilationReads(
                                     name, dependency.module()))
                             .atCodeWrittenOutOfSight(ModuleReadback.provenanceOf(name))
                             .build()));

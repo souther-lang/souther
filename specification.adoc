@@ -6004,7 +6004,7 @@ A module read from compiled output still has to have been built by a Souther tha
 
 Reported where a name written on an `+import+` list or after a module qualifier is not one that module declares (<<a-reached-name-is-declared-by-its-module>>). The nearest name it does declare is suggested. Separate from <<e1507>>: this is a mistake about what is there, not about what is published.
 
-Reported as well where a module on the path was built requiring a behavior that the module on the path it names does not declare. The module was built against another version of that one; it is said about the module that carries the requirement, since that is the artifact to rebuild.
+Reported as well where a module on the path was built requiring a behavior that the module it names, as this compilation reads it — compiled here or on the path — does not declare. The module was built against another version of that one; it is said about the module that carries the requirement, since that is the artifact to rebuild.
 
 [#e1507]
 === A name reached across a boundary is not exposed
