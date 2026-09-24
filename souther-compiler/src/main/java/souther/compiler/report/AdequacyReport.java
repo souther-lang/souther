@@ -3798,9 +3798,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 out.append(String.format("      %s not accounted for: %s — %s %s: %s%s%n",
                         mark(f), cited(asked.cited(), rendering, declaredIn, places),
                         asked(asked.asked()), subjectOf(asked),
-                        whyStanding(asked, parts).written().stream()
+                        publishedStops(asked, parts).stream()
                                 .map(stop -> whyUnread(stop.reason())
-                                        + sentTo(stop.sentTo(), parts, rendering, declaredIn))
+                                        + sentTo(stop.sentTo(), rendering, declaredIn))
                                 .collect(Collectors.joining("; ")),
                         whatItsPositionWasShortOf(asked).map(AdequacyReport::whyUnread)
                                 .map(each -> ", and the answer at its position: " + each)
@@ -3880,6 +3880,37 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         List<ReportedReason.Stop> sorted = steady(these);
         sorted.sort(Comparator.comparing(at::get, SourcePos.IN_WRITTEN_ORDER));
         return ReportedReason.asTheAuthorWroteThem(AuthoredOrder.asWritten(sorted));
+    }
+
+    /**
+     * One entry of a question's {@code stopped} array, as a document writes it: the word and where
+     * a reader goes about it, and nothing a reader is not told.
+     *
+     * <p>What two entries are told apart by is what the schema says tells them apart, so this is
+     * the value that is compared for a repeat. {@link ReportedReason.Stop} holds what an entry is
+     * made from and where its author put it; two of those that differ only in what the document
+     * does not write are one entry here.
+     *
+     * @param sentTo empty for the rule itself and for a part this compilation cannot point at
+     */
+    private record PublishedStop(UndividedPosition.Reason reason, Optional<PublishedAt> sentTo) {
+    }
+
+    /**
+     * What a question stands on as the document lists it: in the order {@link #whyStanding} settles,
+     * each entry once, the first of them keeping its place.
+     *
+     * <p>Told apart after the places are resolved and not before. Two stops about different parts
+     * of a rule can send a reader to the same place, or to none, and the order is asked of the
+     * parts before that difference is thrown away.
+     */
+    private static List<PublishedStop> publishedStops(PartitionEvidence.Unanswered asked,
+                                                      WhereAPartIs parts) {
+        Set<PublishedStop> out = new LinkedHashSet<>();
+        for (ReportedReason.Stop each : whyStanding(asked, parts).written()) {
+            out.add(new PublishedStop(each.reason(), placeInTheRule(each.sentTo(), parts)));
+        }
+        return List.copyOf(out);
     }
 
     /**
@@ -4874,9 +4905,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private static String sentTo(RuleSite sentTo, WhereAPartIs parts, SourceRendering rendering,
                                  SourceId declaredIn) {
-        return placeInTheRule(sentTo, parts)
-                .map(at -> ", at " + PlaceProse.said(at, rendering, declaredIn))
-                .orElse("");
+        return sentTo(placeInTheRule(sentTo, parts), rendering, declaredIn);
+    }
+
+    private static String sentTo(Optional<PublishedAt> sentTo, SourceRendering rendering,
+                                 SourceId declaredIn) {
+        return sentTo.map(at -> ", at " + PlaceProse.said(at, rendering, declaredIn)).orElse("");
     }
 
     /**
@@ -5103,10 +5137,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // whose ends two choices left open leaves two, and a list of words says one.
                 if (!whyStanding(each).isEmpty()) {
                     ArrayNode stopped = one.putArray("stopped");
-                    whyStanding(each, parts).written().forEach(stop -> {
+                    publishedStops(each, parts).forEach(stop -> {
                         ObjectNode standsOn = stopped.addObject();
                         standsOn.put("reason", word(stop.reason()));
-                        sentTo(standsOn, stop.sentTo(), parts, sources);
+                        stop.sentTo().ifPresent(at -> place(standsOn.putObject("sentTo"), at, sources));
                     });
                 }
                 whatItsPositionWasShortOf(each)

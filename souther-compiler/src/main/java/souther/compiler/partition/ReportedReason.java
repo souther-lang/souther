@@ -32,6 +32,11 @@ public final class ReportedReason {
      * and two things to lift can come out under one of them. A clause whose ends two choices left
      * open leaves two, and a list of words says the reader has one thing to do.
      *
+     * <p>A candidate for an entry of a document, not an entry. {@code about} is what an author's
+     * order is asked of and is never written, and {@code sentTo} is a site that a document may or
+     * may not be able to point at, so two of these that differ are not thereby two entries. What
+     * is compared for a repeat is what the document writes.
+     *
      * @param reason what kind of thing stopped the derivation, at the coarseness promised
      * @param sentTo where inside the rule a reader goes about it — the rule itself for a reason
      *               about the whole of it
