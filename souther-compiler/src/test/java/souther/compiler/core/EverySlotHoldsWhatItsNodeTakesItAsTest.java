@@ -161,7 +161,14 @@ class EverySlotHoldsWhatItsNodeTakesItAsTest {
 
     private static List<Core> trees;
 
-    /** Every tree the checker builds for every corpus: each body, and what an analysis reads. */
+    /**
+     * Every tree the checker builds for every corpus, as checking built it: what an analysis of
+     * each body reads, and the template of each value it builds.
+     *
+     * <p>Not the body a check hands on to be emitted. That one has been through the rewrite that
+     * turns a fold growing a collection into a build ({@link GrowingFold}), which is a pass after
+     * checking and not held here.
+     */
     private static List<Core> trees() {
         if (trees != null) {
             return trees;
@@ -182,9 +189,6 @@ class EverySlotHoldsWhatItsNodeTakesItAsTest {
                 for (String behavior : new TreeSet<>(names)) {
                     Bodies.CheckedBody checked =
                             c.db().ask(new Bodies.CheckedBehavior(module, behavior)).value();
-                    if (checked != null && checked.body() != null) {
-                        out.add(checked.body());
-                    }
                     if (checked != null && checked.analysis() != null) {
                         out.add(checked.analysis().core());
                         out.addAll(checked.analysis().templatesAfterTheirBuilders());

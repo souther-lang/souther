@@ -249,16 +249,19 @@ class AValueStandsAsWhatItsPositionTakesItAsTest {
         Type.FnOf takes = (Type.FnOf) standing.type();
         assertEquals(List.of("Shape", "Circle"), takes.params().stream().map(Type::show).toList());
         assertEquals("Shape", Type.show(takes.result()), "answering what the accumulator is");
-        Type.FnOf own = (Type.FnOf) standing.value().type();
+        Core.LetIn captures = assertInstanceOf(Core.LetIn.class, standing.value(),
+                "the function is the block under the binding of what it captures");
+        Core.Block block = assertInstanceOf(Core.Block.class, captures.body(),
+                "and the function under the binding is the block");
+        assertEquals(captures.type(), block.type(),
+                "the binding and the function under it answer one function type");
+        Type.FnOf own = (Type.FnOf) captures.type();
         assertEquals(List.of("Shape", "Shape"), own.params().stream().map(Type::show).toList(),
-                "while the function takes what its body was checked taking");
-        List<Core.Block> blocks = every(standing.value(), Core.Block.class);
-        assertEquals(1, blocks.size(), "one block");
-        Core.Block block = blocks.getFirst();
-        assertEquals(own.params(), ((Type.FnOf) block.type()).params(),
-                "the block is of the parameters its body was read with");
+                "the function takes what its body was checked taking");
+        assertEquals("Shape", Type.show(own.result()),
+                "and was answered as the sum before it stands at the call");
         Core.Widen answers = assertInstanceOf(Core.Widen.class, block.body(),
-                "and its body answers the case as the sum");
+                "its body answers the case as the sum");
         assertEquals("Shape", Type.show(answers.type()));
     }
 
