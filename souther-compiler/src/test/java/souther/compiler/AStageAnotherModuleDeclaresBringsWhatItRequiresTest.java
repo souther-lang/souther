@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
 
@@ -14,6 +15,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
@@ -134,6 +136,54 @@ class AStageAnotherModuleDeclaresBringsWhatItRequiresTest {
         Object again = bound(classes, "app.w.Again", "lib.r.Rate", "lib.p.Tax");
 
         assertEquals(62L, Codecs.apply(again, 3L), "rate, then double, then tax, then inc");
+    }
+
+    /**
+     * A module on the path built against another version of one it depends on, where the version on
+     * the path no longer declares a behavior it was built requiring. Its import still resolves —
+     * `step` is there, taking and answering the same — and what it requires is not in its text, so
+     * nothing but the requirement names what went missing. A compile building on it is refused with
+     * that, and not answered with no classes.
+     */
+    @Test
+    void aRequirementBuiltAgainstAnotherVersionOfItsModuleIsSaid() {
+        Map<String, ClassFileImage> before = Compiler.compile("""
+                module lib.c exposing ( rate, double, step : Int )
+                behavior rate : (n: Int) -> Int
+                behavior charged : (n: Int) -> Int depends on rate
+                let charged (n, rate) = rate(n)
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                behavior step = charged >-> double
+                """);
+        Map<String, ClassFileImage> path = new HashMap<>(Compiler.compileModules(List.of("""
+                module lib.b exposing ( inc, priced : Int )
+                import lib.c ( step )
+                behavior inc : (n: Int) -> Int
+                let inc (n) = n + 1
+                behavior priced = step >-> inc
+                """), ModulePath.of(before)));
+        path.putAll(Compiler.compile("""
+                module lib.c exposing ( double, step : Int )
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                behavior step = double >-> double
+                """));
+
+        CompileException refused = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of("""
+                        module app.s
+                        import lib.b ( priced, inc )
+                        behavior again = priced >-> inc
+                        """), ModulePath.of(path)));
+
+        ModuleMessage.ItWasBuiltRequiringWhatTheModuleDoesNotDeclare said = assertInstanceOf(
+                ModuleMessage.ItWasBuiltRequiringWhatTheModuleDoesNotDeclare.class,
+                refused.diagnostic().said());
+        assertEquals("E1506", refused.diagnostic().code());
+        assertEquals("lib.b", said.module());
+        assertEquals("rate", said.name());
+        assertEquals("lib.c", said.declaredIn());
     }
 
     /** A dependency the module never names that takes two inputs: held as its own class and not

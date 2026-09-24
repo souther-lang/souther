@@ -415,7 +415,7 @@ include::syntax/grammar.ebnf[tag=qualified-reference]
 
 A type is also reachable through the module that declares it, written as the module name and the type name.
 
-[[a-reached-name-is-declared-by-its-module]]A name reached across a module boundary MUST be one that module declares, and [[a-reached-name-is-exposed-by-its-module]]it MUST be one that module exposes. The two are separate: a name the module never declared is a mistake about what is there, and a name it declared and kept is a mistake about what it publishes, which is the module's own decision to make (<<exposed-surface>>). Both hold whether the name arrives by `+import+` or is written qualified.
+[[a-reached-name-is-declared-by-its-module]]A name reached across a module boundary MUST be one that module declares, and [[a-reached-name-is-exposed-by-its-module]]it MUST be one that module exposes. The two are separate: a name the module never declared is a mistake about what is there, and a name it declared and kept is a mistake about what it publishes, which is the module's own decision to make (<<exposed-surface>>). Both hold whether the name arrives by `+import+` or is written qualified. The first holds as well for a behavior a module read off the path was built requiring: a composition's stages are not published, so what they require travels beside its declarations (<<composition-with-requirements>>), and a behavior named there is one the module reaches. It need not be exposed — an injected behavior is supplied whether or not its module publishes it.
 
 [[an-imported-name-denotes-one-thing]]A name an `+import+` brings in MUST denote one thing here. Two modules exposing it, an alias already in use, or this module's own declaration of that spelling each leave the reader with a name and no single answer; reaching one of them qualified is what says which. Like the standard library's `+List.map+`, this needs no `+import+`: the `+import+` line only lets the name be written bare.
 
@@ -6003,6 +6003,8 @@ A module read from compiled output still has to have been built by a Souther tha
 ----
 
 Reported where a name written on an `+import+` list or after a module qualifier is not one that module declares (<<a-reached-name-is-declared-by-its-module>>). The nearest name it does declare is suggested. Separate from <<e1507>>: this is a mistake about what is there, not about what is published.
+
+Reported as well where a module on the path was built requiring a behavior that the module on the path it names does not declare. The module was built against another version of that one; it is said about the module that carries the requirement, since that is the artifact to rebuild.
 
 [#e1507]
 === A name reached across a boundary is not exposed

@@ -51,6 +51,16 @@ public sealed interface ModuleMessage extends Message {
     @Code(DiagnosticCode.E1506)
     record TheModuleDeclaresNoSuchName(String name, String module) implements ModuleMessage, Reported {}
 
+    /** A module off the path was built requiring {@code name} of {@code declaredIn} injected, and
+     * the {@code declaredIn} on the path does not declare it. A name the module reaches as much as
+     * one its text writes, carried beside the text because the stages that reach it are not. */
+    @Code(DiagnosticCode.E1506)
+    record ItWasBuiltRequiringWhatTheModuleDoesNotDeclare(String module, String name, String declaredIn)
+            implements ModuleMessage, Reported {}
+
+    record RebuildItAgainstTheModuleOnThePath(String module, String dependency)
+            implements ModuleMessage, Supporting {}
+
     @Code(DiagnosticCode.E1507)
     record TheModuleDoesNotExposeIt(String name, String module) implements ModuleMessage, Reported {}
 
