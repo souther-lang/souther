@@ -2,13 +2,11 @@ package souther.compiler;
 
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -36,6 +34,10 @@ class ACompositionFromAJarIsStillACompositionTest {
 
             behavior priced = rate >-> double
             """;
+
+    /** The jar, built once for every case: what a reader is compiled against is its classes, and
+     *  nothing a reader does changes them. */
+    private static final ModulePath JAR = ModulePath.of(Compiler.compile(PUBLISHED));
 
     @Test
     void aBodyCannotCallOneByName() {
@@ -65,9 +67,8 @@ class ACompositionFromAJarIsStillACompositionTest {
     private static void assertSameRefusal(String reader, String code) {
         Diagnostic together = assertThrows(CompileException.class,
                 () -> Compiler.compileModules(List.of(PUBLISHED, reader))).diagnostic();
-        Map<String, ClassFileImage> jar = Compiler.compile(PUBLISHED);
         Diagnostic offThePath = assertThrows(CompileException.class,
-                () -> Compiler.compileModules(List.of(reader), ModulePath.of(jar))).diagnostic();
+                () -> Compiler.compileModules(List.of(reader), JAR)).diagnostic();
 
         assertEquals(code, together.code());
         assertEquals(together.code(), offThePath.code());

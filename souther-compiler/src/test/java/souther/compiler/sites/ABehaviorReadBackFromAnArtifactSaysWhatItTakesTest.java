@@ -56,18 +56,25 @@ class ABehaviorReadBackFromAnArtifactSaysWhatItTakesTest {
             behavior again = tallied >-> tally
             """;
 
-    @Test
-    void aBorrowedBehaviorNamesItsParametersAndTheirTypes() {
+    /** The consumer compiled once against the published library, with every question answered, and
+     *  read by each case. The readings below ask what is already answered and change nothing. */
+    private static final Compilation COMPILATION = compiled();
+
+    private static Compilation compiled() {
         ModulePath published = ModulePath.of(Compiler.compile(LIBRARY));
         Compilation compilation = Compilation.ofDocuments(
                 Map.of("a.sou", CONSUMER), Set.of(), published);
         compilation.answerEverything();
+        return compilation;
+    }
 
-        assertEquals(List.of(), compilation.db().allReports().stream()
+    @Test
+    void aBorrowedBehaviorNamesItsParametersAndTheirTypes() {
+        assertEquals(List.of(), COMPILATION.db().allReports().stream()
                 .map(each -> each.report().diagnostic().said().getClass().getSimpleName()).toList(),
                 "the model under test compiles");
-        CalledBehavior called = SemanticSnapshot.of(compilation.db(), "app.order").orElseThrow()
-                .calledAt(over(compilation, "behavior twice =", "tally")).orElseThrow();
+        CalledBehavior called = SemanticSnapshot.of(COMPILATION.db(), "app.order").orElseThrow()
+                .calledAt(over(COMPILATION, "behavior twice =", "tally")).orElseThrow();
 
         assertEquals("tally", called.name());
         assertEquals(List.of("amount"), namesOf(called));
@@ -79,13 +86,8 @@ class ABehaviorReadBackFromAnArtifactSaysWhatItTakesTest {
      *  there to carry it are nobody's. */
     @Test
     void aBorrowedCompositionNamesNoParameters() {
-        ModulePath published = ModulePath.of(Compiler.compile(LIBRARY));
-        Compilation compilation = Compilation.ofDocuments(
-                Map.of("a.sou", CONSUMER), Set.of(), published);
-        compilation.answerEverything();
-
-        assertEquals(Optional.empty(), SemanticSnapshot.of(compilation.db(), "app.order")
-                .orElseThrow().calledAt(over(compilation, "behavior again =", "tallied")));
+        assertEquals(Optional.empty(), SemanticSnapshot.of(COMPILATION.db(), "app.order")
+                .orElseThrow().calledAt(over(COMPILATION, "behavior again =", "tallied")));
     }
 
     /**

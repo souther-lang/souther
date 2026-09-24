@@ -2,7 +2,6 @@ package souther.program.api;
 
 import souther.compiler.Compiler;
 import souther.compiler.core.Core;
-import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.program.BehaviorTarget;
 import souther.compiler.program.CheckedImplementation;
@@ -13,7 +12,6 @@ import souther.compiler.types.ValueName;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -71,10 +69,16 @@ class ASignatureSaysTheNamesItsParametersAreDeclaredUnderTest {
             let spun (base) = spin(base)
             """;
 
+    /** Each program compiled once and read by every case. A snapshot is a value and does not
+     *  change once taken, so nothing one case reads can be moved by another. */
+    private static final CheckedProgram BILLED = CheckedProgram.of(List.of(BILLING));
+
+    private static final CheckedProgram OFF_THE_PATH =
+            CheckedProgram.of(List.of(USES), ModulePath.of(Compiler.compile(PUBLISHED)));
+
     @Test
     void theNamesAreTheSignaturesAndNotTheBindersOfTheLetImplementingIt() {
-        BehaviorTarget settle = CheckedProgram.of(List.of(BILLING))
-                .behavior(new ValueName.Behavior("billing", "settle"));
+        BehaviorTarget settle = BILLED.behavior(new ValueName.Behavior("billing", "settle"));
 
         assertEquals(Optional.of(List.of("line", "paid")), namesOf(settle.signature()));
         assertEquals(List.of("l", "amount"),
@@ -84,8 +88,7 @@ class ASignatureSaysTheNamesItsParametersAreDeclaredUnderTest {
 
     @Test
     void aBehaviorWithNoBodyStillSaysTheNamesItDeclares() {
-        BehaviorTarget rateFor = CheckedProgram.of(List.of(BILLING))
-                .behavior(new ValueName.Behavior("billing", "rateFor"));
+        BehaviorTarget rateFor = BILLED.behavior(new ValueName.Behavior("billing", "rateFor"));
 
         assertInstanceOf(CheckedImplementation.Injected.class, rateFor.implementation());
         assertEquals(Optional.of(List.of("of")), namesOf(rateFor.signature()));
@@ -93,16 +96,16 @@ class ASignatureSaysTheNamesItsParametersAreDeclaredUnderTest {
 
     @Test
     void aSignatureThatDeclaresNoParametersNamesNone() {
-        CheckedSignature now = CheckedProgram.of(List.of(BILLING))
-                .behavior(new ValueName.Behavior("billing", "now")).signature();
+        CheckedSignature now =
+                BILLED.behavior(new ValueName.Behavior("billing", "now")).signature();
 
         assertEquals(Optional.of(List.of()), namesOf(now));
     }
 
     @Test
     void aCompositionTakesInputsItDeclaresNoParametersFor() {
-        CheckedSignature composed = CheckedProgram.of(List.of(BILLING))
-                .behavior(new ValueName.Behavior("billing", "settledTwice")).signature();
+        CheckedSignature composed =
+                BILLED.behavior(new ValueName.Behavior("billing", "settledTwice")).signature();
 
         assertEquals(2, composed.inputs().size(), () -> "it takes what `settle` takes: " + composed);
         assertEquals(Optional.empty(), composed.declaredParameters());
@@ -110,8 +113,8 @@ class ASignatureSaysTheNamesItsParametersAreDeclaredUnderTest {
 
     @Test
     void eachParameterIsTheInputItStandsFor() {
-        CheckedSignature settle = CheckedProgram.of(List.of(BILLING))
-                .behavior(new ValueName.Behavior("billing", "settle")).signature();
+        CheckedSignature settle =
+                BILLED.behavior(new ValueName.Behavior("billing", "settle")).signature();
 
         assertEquals(settle.inputs(), settle.declaredParameters().orElseThrow().stream()
                 .map(CheckedSignature.Parameter::input).toList());
@@ -119,21 +122,17 @@ class ASignatureSaysTheNamesItsParametersAreDeclaredUnderTest {
 
     @Test
     void aBehaviorReadOffThePathSaysTheNamesItsModuleDeclares() {
-        Map<String, ClassFileImage> published = Compiler.compile(PUBLISHED);
-        CheckedProgram program = CheckedProgram.of(List.of(USES), ModulePath.of(published));
-
         assertEquals(Optional.of(List.of("of")), namesOf(
-                program.behavior(new ValueName.Behavior("lib.rates", "spin")).signature()));
+                OFF_THE_PATH.behavior(new ValueName.Behavior("lib.rates", "spin")).signature()));
         assertEquals(Optional.of(List.of("item", "qty")), namesOf(
-                program.behavior(new ValueName.Behavior("lib.rates", "quote")).signature()));
+                OFF_THE_PATH.behavior(new ValueName.Behavior("lib.rates", "quote")).signature()));
     }
 
     /** What another project published for a composition is the signature its stages computed, and
      *  not a declaration: its inputs arrive with no names, as they do where it was written. */
     @Test
     void aCompositionReadOffThePathDeclaresNoParameters() {
-        Map<String, ClassFileImage> published = Compiler.compile(PUBLISHED);
-        CheckedSignature composed = CheckedProgram.of(List.of(USES), ModulePath.of(published))
+        CheckedSignature composed = OFF_THE_PATH
                 .behavior(new ValueName.Behavior("lib.rates", "spunTwice")).signature();
 
         assertEquals(1, composed.inputs().size(), () -> "it takes what `spin` takes: " + composed);
