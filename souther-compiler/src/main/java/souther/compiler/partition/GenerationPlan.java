@@ -85,11 +85,11 @@ public final class GenerationPlan {
                                 + subject.behavior() + ": " + target);
             }
         }
-        Map<ArmProbe, GenerationObligation.Arm> arms = new HashMap<>();
+        Map<ArmProbe, GenerationObligation.Arm> armAtPlace = new HashMap<>();
         for (GenerationObligation each : obligations) {
             if (each instanceof GenerationObligation.Arm arm) {
                 for (ArmProbe place : arm.target().occurrences()) {
-                    GenerationObligation.Arm already = arms.putIfAbsent(place, arm);
+                    GenerationObligation.Arm already = armAtPlace.putIfAbsent(place, arm);
                     if (already != null) {
                         throw new IllegalArgumentException("one place is recorded against two arms"
                                 + " of one plan: " + place + " is held by " + already + " and "
@@ -100,7 +100,7 @@ public final class GenerationPlan {
         }
         this.subject = subject;
         this.obligations = obligations;
-        this.arms = Map.copyOf(arms);
+        this.arms = Map.copyOf(armAtPlace);
     }
 
     /** The behavior a row would be written for. */
