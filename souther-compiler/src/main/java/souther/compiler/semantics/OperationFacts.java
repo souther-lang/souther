@@ -61,7 +61,7 @@ public final class OperationFacts {
     private static final List<Declared> DECLARED = declared();
 
     private static List<Declared> declared() {
-        List<Declared> out = new ArrayList<>(List.of(
+        return List.of(
             // What each answers, counted, in what its arguments are counted as. A date's count is
             // its carrier's, so a difference of two of them is a number of days while neither is a
             // number — which is the whole of why these can be said at all.
@@ -359,175 +359,7 @@ public final class OperationFacts {
             about("Decimal", "clamp", answers(at(1), stands(at(2), Rel.GE, at(0)),
                     stands(at(2), Rel.GT, at(1)))),
             about("Decimal", "clamp", answers(at(2), stands(at(2), Rel.GE, at(0)),
-                    stands(at(2), Rel.LE, at(1))))));
-
-        // What a count is, said as a bound. An operation counting what it was given answers how many
-        // of something there are, and there is no negative number of them — so this is the meaning
-        // of that kind of fact and not something true of `List.length` in particular. Written beside
-        // each of them it would be four copies of one proposition, and the fifth such operation
-        // would arrive counting and unbounded.
-        //
-        // Generated into the declarations rather than answered beside them. The declarations are the
-        // list and everything else here is read off it, so a bound that existed only in a lookup
-        // would be the one bound nothing holds to the library and the one row no test can count.
-        //
-        // One way round, and it is not a closure over the facts. A count is bounded at nought; a
-        // result bounded at nought is not a count — `Int.abs` answers one and counts nothing.
-
-        // What a construction keeps of what it read, where the answer is nothing. Each group is
-        // a reason about what a shape can say, not about the operation being uninteresting.
-            //
-        // They answer something other than what they read. A map's keys and its entry pairs are
-        // not its values, `fromList` takes the values out of pairs, `groupBy` answers lists of
-        // the elements rather than the elements, `concat` reads the lists inside its argument,
-        // `zipShortest` pairs two lists, and `flatMap` makes any number of elements from each.
-            //
-        // They put in what the container they read did not hold. Nothing that held of every
-        // element still does. How many there are is said instead by the bound on the result.
-            //
-        // They answer the same elements in a container of another kind. That is true and
-        // unsayable: every statement names the kind it is about, so nothing said of a list is a
-        // statement about a set, and a rule between them would carry nothing.
-        out.addAll(saysNothing(OperationSubject.BUILT, op("Map", "keys"), op("Map", "toList"), op("Map", "fromList"),
-                op("List", "groupBy"), op("List", "concat"), op("List", "zipShortest"), op("List", "flatMap"),
-                op("Map", "insert"), op("Set", "insert"), op("Map", "union"), op("Set", "union"), op("List", "append"),
-                op("Map", "updateOrInsert"), op("Map", "values"), op("Set", "toList"), op("Set", "fromList"),
-                op("List", "indexBy")));
-
-        // A predicate over a string states something of the characters it holds in the order it
-        // holds them, and what would carry such a statement is a construction of a container
-        // from a container, which a string is not one of. An emptiness check is carried by what
-        // its size does and not as a property of elements.
-        out.addAll(saysNothing(OperationSubject.PREDICATE_CARRY, op("String", "contains"), op("String", "startsWith"),
-                op("String", "endsWith"), op("String", "matches"), op("List", "isEmpty"), op("Set", "isEmpty"),
-                op("Map", "isEmpty"), op("String", "isEmpty")));
-
-        // `List.any` states its predicate of some element and not of every one.
-        out.addAll(saysNothing(OperationSubject.QUANTIFICATION, op("List", "any")));
-
-        // Nothing bounds their result, for two reasons.
-        //
-        // The arithmetic and its function forms answer a number that may be anywhere, and a choice
-        // answers one of two values, which is what its cases bound.
-        //
-        // And the two whose number another fact already has whole. `Decimal.fromInt` answers the
-        // number it was given and `Date.daysBetween` the two day counts subtracted, and each says so
-        // as the form it answers (`AnswersAFormOfItsArguments`), which puts the result wherever what
-        // it is a form of stands. A bound written here beside such a form would be a second, weaker
-        // answer to a question that has one, and which of them was read would be whichever reader
-        // arrived.
-        out.addAll(saysNothing(OperationSubject.BOUNDS, op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
-                op("Decimal", "add"), op("Decimal", "subtract"), op("Decimal", "multiply"),
-                op("Int", "min"), op("Int", "max"), op("Int", "clamp"), op("Decimal", "min"),
-                op("Decimal", "max"), op("Decimal", "clamp"), op("Decimal", "fromInt"),
-                op("Decimal", "round"), op("Date", "daysBetween")));
-
-        // Months and years hold different numbers of days, so neither states a count of the one
-        // measure a pair of dates has.
-        out.addAll(saysNothing(OperationSubject.MEASURE, op("Date", "addMonths"), op("Date", "addYears")));
-
-        // They compute a new number rather than answering one they were given: what `a + b`
-        // answers is neither `a` nor `b`, `compare` answers a sign, `floorMod` a remainder,
-        // `abs` a distance, `toInt` a whole number, `round` a value at another scale.
-        // `Decimal.fromInt` answers the number it was given unconditionally, which is a
-        // statement of its own rather than a case.
-        out.addAll(saysNothing(OperationSubject.CHOICE, op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
-                op("Decimal", "add"), op("Decimal", "subtract"), op("Decimal", "multiply"), op("Int", "compare"),
-                op("Decimal", "compare"), op("Int", "floorMod"), op("Int", "abs"), op("Decimal", "abs"), op("Decimal", "toInt"),
-                op("Decimal", "round"), op("Decimal", "fromInt")));
-
-        // They answer one of the values they were given, which is which case they are in and
-        // not arithmetic of their own.
-        out.addAll(saysNothing(OperationSubject.NUMERIC_RESULT, op("Int", "min"), op("Int", "max"), op("Int", "clamp"),
-                op("Int", "floorMod"), op("Int", "compare"), op("Decimal", "min"), op("Decimal", "max"), op("Decimal", "clamp")));
-
-        // Arithmetic and a choice between two values are not orders at all: what
-        // `Int.subtract` answers has the sign of one and says how far apart they are as well,
-        // and `min` answers one of the two rather than anything about the pair.
-        // `DateTime.minutesBetween` counts whole minutes, so a zero says the two are less than
-        // a minute apart rather than that they are equal, and a non-negative count does not say
-        // the second is not the earlier.
-        out.addAll(saysNothing(OperationSubject.ORDER, op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
-                op("Int", "min"), op("Int", "max"), op("Int", "floorMod"), op("DateTime", "minutesBetween")));
-
-        // What they answer is no form of what they were given, for three reasons.
-        //
-        // A product is one only where an operand is written down: `Int.multiply(a, b)` is
-        // arithmetic over `a` and `b` and is a form of neither, since what multiplies each is the
-        // other. A sum and a difference are not here at all — what they answer is a form of what
-        // they were given, and they say so by being the arithmetic they are — the operator a call
-        // to them is read as, which `ComputesANumber` records. A silence here would deny
-        // that, which is why the two cannot both be written: a name under a subject says nothing is
-        // true of it there.
-        //
-        // A number of their own: `compare` answers a sign, `floorMod` a remainder, `abs` a distance
-        // with the sign dropped, `toInt` a whole number, `round` a value at another scale. What such
-        // a result is bounded by is a different statement from its being a value that was already
-        // there; and `min`, `max` and `clamp` answer one of their arguments, which one depending on
-        // the arguments, and that is what their cases say.
-        //
-        // And, among the temporal ones, a count that is not arithmetic over the counts it was
-        // given. Months and years hold different numbers of days, so neither shift moves a date by
-        // any number of them. `DateTime.minutesBetween` counts whole minutes over a carrier
-        // counting seconds and drops the remainder toward zero, so it is not the difference of the
-        // two counts — which is why it is the operation an author of the next such fact would reach
-        // for, and why the refusal is written down beside the ones that are accepted. A component of
-        // a value is no arithmetic over its count either, and is said as the representation that
-        // reads it rather than as a form: the parts of a day divide and take a remainder, and the
-        // parts of a date are the calendar's, which no step over a day count answers.
-        out.addAll(saysNothing(OperationSubject.FORM, op("Int", "multiply"),
-                op("Decimal", "multiply"), op("Int", "compare"),
-                op("Decimal", "compare"), op("Int", "floorMod"), op("Int", "abs"), op("Decimal", "abs"), op("Decimal", "toInt"),
-                op("Decimal", "round"), op("Int", "min"), op("Int", "max"), op("Int", "clamp"), op("Decimal", "min"), op("Decimal", "max"),
-                op("Decimal", "clamp"), op("Date", "addMonths"), op("Date", "addYears"),
-                op("DateTime", "minutesBetween"), op("Date", "year"), op("Date", "month"),
-                op("Date", "day"), op("Time", "hour"), op("Time", "minute"), op("Time", "second"),
-                op("DateTime", "toDate"), op("DateTime", "toTime")));
-
-        // The number each answers arrives at one case of what it answers, and the other case says
-        // the text named no number at all. So the number exists and no representation reads the
-        // call: what a reading is applied to is one location, and the value standing there is the
-        // union. Which case it is in is settled where the union is taken apart, and what stands at
-        // the arm is a value with a name of its own rather than something this operation answered.
-        //
-        // Not "no conversion is ever read". `Decimal.fromInt` is a conversion and answers a form of
-        // its argument, because what it answers is a number at every call. The difference is the
-        // union and nothing else.
-        out.addAll(saysNothing(OperationSubject.READING, op("String", "toInt"),
-                op("String", "toDecimal"), op("Rational", "toWholeNumber"),
-                op("Rational", "toFiniteDecimal")));
-
-        // And the narrowings of an exact value, for a reason of the value's own. What they are given
-        // is a Rational, which is on no carrier and has no counts for anything to be read in
-        // (ADR-0116) — so there is no representation relating what they answer to what they were
-        // handed, whether the answer arrives as a value or at one case of a union. A bound relating
-        // the two is the same statement and is silent for the same reason: `Decimal.toInt` states
-        // one because both sides of it are counted, and these have only one side that is.
-        out.addAll(saysNothing(OperationSubject.BOUNDS, op("Rational", "toInt"),
-                op("Rational", "toDecimal")));
-
-        // What `Rational.toDecimal` answers is a value at the scale it was asked for, which is none
-        // of its arguments and no arithmetic over them — the same two silences `Decimal.round` keeps,
-        // and for the same reason.
-        out.addAll(saysNothing(OperationSubject.CHOICE, op("Rational", "toDecimal")));
-        out.addAll(saysNothing(OperationSubject.FORM, op("Rational", "toDecimal")));
-
-        // And the walk that multiplies what its container holds. It answers a number at every call
-        // its elements are numbers at, and what reads a number is one account at a time: the
-        // account for a walk that adds is read off that walk, and a walk that multiplies would need
-        // its own — how a total is read off a row and what containers come to a given one are not
-        // the sum's answers with the step changed.
-        //
-        // The joins are not here, and are not in range either. What `String.concat` answers is
-        // declared to be a string, so there is no number for a representation to read and nothing
-        // to be silent about; `List.concat` answers a list and is read by the body the language
-        // writes out, which is about that list.
-        //
-        // Said rather than left out. This is in range by the shape of its declaration, so an
-        // absence here is an operation nobody has answered for, which is what the range exists to
-        // find.
-        out.addAll(saysNothing(OperationSubject.READING, op("List", "product")));
-        return List.copyOf(out);
+                    stands(at(2), Rel.LE, at(1)))));
     }
 
     /** How many whole minutes the first date-time and the last stand apart, which is as far apart as
@@ -539,15 +371,6 @@ public final class OperationFacts {
                 .subtract(souther.compiler.numeric.DateTimes.MIN.at())
                 .divideToIntegralValue(java.math.BigDecimal.valueOf(60))
                 .longValueExact();
-    }
-
-    /** That there is nothing to say of each of {@code operations} under {@code subject}. */
-    private static List<Declared> saysNothing(OperationSubject subject, ValueName... operations) {
-        List<Declared> out = new ArrayList<>(operations.length);
-        for (ValueName operation : operations) {
-            out.add(new Declared(operation, new OperationFact.SaysNothingOf(subject)));
-        }
-        return out;
     }
 
     /** The operation {@code name} of the library module published as {@code alias}. Written as the

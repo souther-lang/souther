@@ -20,24 +20,11 @@ import java.util.Set;
  * {@link Combinators}. A reduction is handed the step it repeats and this is not: {@code List.sum}
  * takes a container and nothing else, so what it starts from and what it repeats are not arguments
  * anything can read off the call — they are what the operation means.
- * {@link Question#ACCUMULATION} states the range and the declarations answer it.
  */
 final class Accumulations {
 
     /** What a call accumulates, and the container it accumulates over. */
     record Accumulating(Accumulation what, Core container) {}
-
-    /**
-     * The operations in range that accumulate from no identity through no single step.
-     *
-     * <p>{@code String.join} is one, and not because it answers a string. A separator stands between
-     * elements and not before the first, so what the walk does at each element depends on whether
-     * anything came before it — and an identity with a combine over two values of one type has
-     * nowhere to keep that. Written as {@code join(sep, xs)} it is a walk carrying more than the
-     * answer so far, which is a different question from this one and is not asked of it here.
-     */
-    static final Set<ValueName> NO_SIMPLE_ACCUMULATION =
-            Set.of(ValueName.Stdlib.operation("String", "join"));
 
     /** What {@code operation} accumulates, or null where it accumulates nothing. */
     static Accumulation of(ValueName operation) {
@@ -59,8 +46,7 @@ final class Accumulations {
                 : new Accumulating(walk.how(), CallArguments.of(walk.container(), call));
     }
 
-    /** The operations there is a rule about, for the check that a rule answers a question its
-     * operation is asked. */
+    /** The operations there is a rule about. */
     static Set<ValueName> answered() {
         return DefaultBoundOperationFacts.get().accumulates();
     }

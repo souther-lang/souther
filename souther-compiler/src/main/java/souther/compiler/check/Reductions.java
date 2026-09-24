@@ -19,7 +19,7 @@ import java.util.Set;
  * <p>Two halves, in the order ADR-0097 puts them. That an operation is a walk from a seed is not
  * something a type says: {@code ((A, B) -> A, A, List<B>) -> A} is equally the declaration of an
  * operation that applies its closure once, or that ignores the seed and answers something it built
- * itself. So {@link Question#REDUCTION} states the range and {@link #REDUCES} answers it. Where the
+ * itself. So which operations are walks is written down ({@link #REDUCES}). Where the
  * seed and the accumulator are, once an operation is known to be one, the declaration does say — the
  * seed is the argument of the type the operation answers, and the accumulator is the closure
  * parameter of that type — so those are read off the signature and are not written down.
@@ -50,17 +50,6 @@ final class Reductions {
             op("List", "foldRight"),
             op("Set", "fold"),
             op("Map", "fold"));
-
-    /**
-     * The operations that take a container, a seed of the type they answer, and a closure answering
-     * that type, and are not a walk from the seed through the closure. The library has none.
-     *
-     * <p>Empty is a decision and not an oversight: every operation the range holds today is a fold
-     * under some name. An operation that took this shape and applied its closure once, or answered
-     * without consulting the seed, would be named here with what it does instead — and until one is
-     * written the emptiness is what says the range was looked at.
-     */
-    static final Set<ValueName> REDUCES_NOTHING = Set.of();
 
     /** A reduction's seed and the closure parameter it arrives on, as positions of the call —
      * meaningful only beside the call they are positions in, which is why they are read through
@@ -105,8 +94,7 @@ final class Reductions {
                 handed.container());
     }
 
-    /** The operations there is a rule about, for the check that a rule answers a question its
-     * operation is asked. */
+    /** The operations there is a rule about. */
     static Set<ValueName.Stdlib.Operation> answered() {
         return Derived.RULES.keySet();
     }

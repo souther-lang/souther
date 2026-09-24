@@ -9,7 +9,6 @@ import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.semantics.ElementShape;
 import souther.compiler.semantics.NumericResult;
-import souther.compiler.semantics.OperationSubject;
 import souther.compiler.semantics.ResultBound;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
@@ -236,11 +235,5 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
     /** One case of the definition the operation is written in. The cases of one operation are
      *  exhaustive between them, in the order they are declared. */
     record IsDefinedByCases(DeclaredOperation operation, DefinitionCase<DeclaredArgument> one)
-            implements SeveralAboutAnOperation {}
-
-    /** There is nothing to say of the operation under {@code subject}. As many as there are
-     *  subjects it is silent under, and one per subject — a second under one subject is refused
-     *  where the silences are gathered ({@link BoundOperationFacts}). */
-    record SaysNothingOf(DeclaredOperation operation, OperationSubject subject)
             implements SeveralAboutAnOperation {}
 }

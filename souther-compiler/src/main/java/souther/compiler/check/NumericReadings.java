@@ -22,18 +22,15 @@ import java.util.List;
  *   <li>{@link Resolution.Multiple} is an invalid library definition, not a choice to resolve. What
  *       it means is that two representations would each read one call and which of them a report
  *       showed would be whichever reader arrived. Nothing recovers from it.
- *   <li>{@link Resolution.None} is valid globally; a question may make it invalid within its range.
- *       Most of the library answers numbers nothing reads, and that is ordinary. Where a check
- *       needs a reading, it is that check's range that says so and its silence
- *       ({@code BoundOperationFact.SaysNothingOf}) that is the other answer.
+ *   <li>{@link Resolution.None} is valid. Most of the library answers numbers nothing reads, and
+ *       that is ordinary.
  * </ul>
  *
  * <p>The third is the one worth keeping. Made to answer {@code One} wherever a number is answered,
- * this would start carrying the deliberate silences — {@code String.toInt} answers a number at one
- * case of a union and no representation reads it there — and finding out what is declared would be
- * deciding what ought to be. Made to refuse {@code Multiple} only where some question asks, the
- * exclusivity would hold as far as that question's range and no further, and would move when the
- * range moved.
+ * this would have to be told which numbers nothing reads on purpose — {@code String.toInt} answers
+ * a number at one case of a union and no representation reads it there — and finding out what is
+ * declared would be deciding what ought to be. Made to refuse {@code Multiple} only where a reading
+ * is wanted, the exclusivity would hold as far as that want and no further.
  *
  * <p><b>Counted, and not asked one representation at a time.</b> Written as a condition per
  * representation inside whatever holds a declaration, a representation added is one every existing
@@ -43,9 +40,8 @@ import java.util.List;
  *
  * <p><b>Over the bound facts.</b> What is counted is what the binding made, so the readings an
  * operation has are read off the same values every other reader holds. The binder asks this of the
- * facts it has just bound, before it publishes them ({@code OperationFactBinder}), and a question
- * about the range asks it of the published ones ({@link Question}); both are the one procedure over
- * one vocabulary.
+ * facts it has just bound, before it publishes them ({@code OperationFactBinder}), and a reader
+ * after it asks it of the published ones; both are the one procedure over one vocabulary.
  */
 final class NumericReadings {
 
@@ -105,9 +101,8 @@ final class NumericReadings {
      * every such operation would carry a reading of a number that is not there, and a proposition
      * with no subject is one nothing can be false of.
      *
-     * <p>Answered at one case of a union counts, for the reason {@code Question.NUMERIC_RESULT}
-     * counts it: what the shape of a result says is which inputs an operation declines, not what
-     * it answers where it answers anything.
+     * <p>Answered at one case of a union counts: what the shape of a result says is which inputs an
+     * operation declines, not what it answers where it answers anything.
      *
      * <p>In the order the arms are written and not in the order the facts were declared, so a
      * message naming two readings names them the same way whichever of them was written first.
@@ -147,8 +142,7 @@ final class NumericReadings {
                 // answered, and it is read as the account it already is rather than as a second
                 // one declared beside it. A walk of another kind carries an identity and a step
                 // and answers no number this reads — a join of strings, a product — so what it
-                // contributes here is nothing, and that it answers this question at all is said
-                // where the silences are.
+                // contributes here is nothing.
                 case BoundOperationFact.AccumulatesItsContainer walk -> {
                     TakenAs how = walk.takenAs();
                     if (how != null) {
@@ -174,8 +168,7 @@ final class NumericReadings {
                      BoundOperationFact.StatesItsPredicateOfEveryElement _,
                      BoundOperationFact.TurnsOnWhetherAnArgumentHolds _,
                      BoundOperationFact.MeansTheSameAsASizeOfNought _,
-                     BoundOperationFact.EveryAnswerItCanGiveHasASourceValue _,
-                     BoundOperationFact.SaysNothingOf _ -> { }
+                     BoundOperationFact.EveryAnswerItCanGiveHasASourceValue _ -> { }
             }
         }
         List<NumericReading> found = new ArrayList<>(terms);

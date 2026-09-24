@@ -64,7 +64,7 @@ class AnOperationTheLibraryGainsIsAnsweredForTest {
             ValueName operation = e.getKey();
             for (Question question : Question.askedOf(DefaultStdlib.get(), e.getValue().signature())) {
                 boolean answered = question.answeredFor(DefaultStdlib.get(), operation);
-                boolean silent = question.nothingSaidOf().contains(operation);
+                boolean silent = question.deliberatelyUnanswered().contains(operation);
                 if (answered != silent) {
                     continue;
                 }
@@ -95,7 +95,7 @@ class AnOperationTheLibraryGainsIsAnsweredForTest {
                     unasked.add(operation + " — " + question + " (a rule)");
                 }
             }
-            for (ValueName operation : question.nothingSaidOf()) {
+            for (ValueName operation : question.deliberatelyUnanswered()) {
                 if (!question.asksOfOperation(DefaultStdlib.get(), operation)) {
                     unasked.add(operation + " — " + question + " (nothing to say)");
                 }
