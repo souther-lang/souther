@@ -47,8 +47,8 @@ class APlaceSeveralWaysLeadToIsStillOnePlaceTest {
         Core fork = new Core.If(new Core.Bool(true, Type.BOOL, AT),
                 new Core.Int(1, Type.INT, AT), new Core.Int(2, Type.INT, AT),
                 Core.ForkPlace.asWritten(ConstructOccurrence.asWritten(FORK)), Type.INT, AT);
-        return new Core.Binary(BinOp.ADD, fork, fork, ConstructOccurrence.unwritten(), Type.INT,
-                AT);
+        return new Core.Binary(BinOp.ADD, fork, fork, Core.BinaryReading.AS_THEY_STAND,
+                ConstructOccurrence.unwritten(), Type.INT, AT);
     }
 
     /** One {@code let} standing in both sides, which is two ways to one binder. */
@@ -57,7 +57,8 @@ class APlaceSeveralWaysLeadToIsStillOnePlaceTest {
         Core let = new Core.LetIn(new Core.Binder("x", bound), Type.INT,
                 new Core.Int(1, Type.INT, AT),
                 new Core.Read("x", bound, Type.INT, AT), Type.INT, AT);
-        return new Core.Binary(BinOp.ADD, let, let, ConstructOccurrence.unwritten(), Type.INT, AT);
+        return new Core.Binary(BinOp.ADD, let, let, Core.BinaryReading.AS_THEY_STAND,
+                ConstructOccurrence.unwritten(), Type.INT, AT);
     }
 
     @Test

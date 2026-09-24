@@ -39,7 +39,8 @@ class ADivWhoseAnswerIsNotRationalIsRefusedTest {
                 new WrittenOwner.Body("demo", "go"), 0, SourceConstruct.IF);
         Core.Binary malformed = new Core.Binary(BinOp.DIV,
                 new Core.Int(4, Type.INT, POS), new Core.Int(2, Type.INT, POS),
-                ConstructOccurrence.asWritten(origin), Type.INT, POS);
+                Core.BinaryReading.AS_THEY_STAND, ConstructOccurrence.asWritten(origin), Type.INT,
+                POS);
 
         IllegalStateException thrown = assertThrows(IllegalStateException.class,
                 () -> AbortSites.of(List.of(malformed), KERNELS, Set.of()));

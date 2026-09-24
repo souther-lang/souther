@@ -167,8 +167,8 @@ class BlockReachesTest {
     }
 
     private static Core binary(Core left, Core right) {
-        return new Core.Binary(BinOp.ADD, left, right, ConstructOccurrence.unwritten(), Type.INT,
-                POS);
+        return new Core.Binary(BinOp.ADD, left, right, Core.BinaryReading.AS_THEY_STAND,
+                ConstructOccurrence.unwritten(), Type.INT, POS);
     }
 
     private static Core callOf(ValueName.Behavior behavior) {

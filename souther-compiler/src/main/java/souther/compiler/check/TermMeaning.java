@@ -263,6 +263,7 @@ public final class TermMeaning {
             case Core.Binary x -> {
                 out.add(Core.Binary.class);
                 out.add(x.op());
+                out.add(x.reading());
                 out.add(x.type());
                 project(x.left(), out);
                 project(x.right(), out);

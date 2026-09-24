@@ -117,8 +117,8 @@ class AnOccurrenceOfAClauseIsTheSameHoweverTheClauseStandsTest {
     }
 
     private static Core both(Core left, Core right) {
-        return new Core.Binary(BinOp.AND, left, right, ConstructOccurrence.unwritten(), Type.BOOL,
-                POS);
+        return new Core.Binary(BinOp.AND, left, right, Core.BinaryReading.AS_THEY_STAND,
+                ConstructOccurrence.unwritten(), Type.BOOL, POS);
     }
 
     /** {@code c} denied, written as the {@code if} the analysis reads as a denial. */
@@ -130,6 +130,6 @@ class AnOccurrenceOfAClauseIsTheSameHoweverTheClauseStandsTest {
 
     private static Core rule(Core subject, int least) {
         return new Core.Binary(BinOp.GE, subject, new Core.Int(least, Type.INT, POS),
-                ConstructOccurrence.unwritten(), Type.BOOL, POS);
+                Core.BinaryReading.AS_THEY_STAND, ConstructOccurrence.unwritten(), Type.BOOL, POS);
     }
 }

@@ -1829,12 +1829,26 @@ final class BodyGen {
          *  and it was written as one where the tree was built (spec §newtype-arithmetic), so
          *  nothing is opened or re-wrapped at the operator. */
         private void arithmetic(Core.Binary bin, String onDecimal, String onInt) {
-            // Exact arithmetic is what the operator answers with rather than what either operand was
-            // written as: a quotient of two whole numbers leaves them, and an operation beside a
-            // Rational reads the other side at its exact value (ADR-0116). Both are the one question
-            // "is this exact", asked of the operator's own type, and each operand is pushed as the
-            // Rational the operation sees — which is what leaves one kind of value on the stack for
-            // the kernel and for every reader of the result.
+            // An operation beside a Rational reads the other side at its exact value (ADR-0116),
+            // which the checker settled and the tree says; each operand is pushed as the Rational
+            // the operation reads it as.
+            switch (bin.reading()) {
+                case Core.BinaryReading.ExactNumbers _ -> {
+                    pushExact(bin.left());
+                    pushExact(bin.right());
+                    code.invokestatic(CD_RationalMath, exactly(bin.op()), MTD_ratArith);
+                    return;
+                }
+                // Newtype arithmetic is the operation over what the newtypes wrap, which the tree
+                // already holds as such, so nothing reaches here read in a newtype.
+                case Core.BinaryReading.In in -> throw new IllegalStateException(
+                        "arithmetic reads numbers, not values in " + Type.show(in.type()));
+                case Core.BinaryReading.AsTheyStand _ -> { }
+            }
+            // Read as they stand, the operator may still answer an exact value: a quotient of two
+            // whole numbers or two decimals leaves them (ADR-0116), and two Rationals are exact
+            // already. Each is computed as Rationals, which leaves one kind of value on the stack
+            // for the kernel and for every reader of the result.
             if (bin.type() == Type.RATIONAL) {
                 if (bin.left().type() == Type.INT && bin.right().type() == Type.INT) {
                     genExpr(bin.left());
@@ -1893,12 +1907,6 @@ final class BodyGen {
             }
         }
 
-        /** Whether a comparison of these two is a comparison of exact values, which is what one
-         *  operand already being a Rational makes it (ADR-0116). */
-        private static boolean exactPair(Core left, Core right) {
-            return left.type() == Type.RATIONAL || right.type() == Type.RATIONAL;
-        }
-
         /**
          * The comparison, emitted from what it placed.
          *
@@ -1928,9 +1936,7 @@ final class BodyGen {
         private void ordered(Comparison comparison, ComparisonClaim.Cut cut) {
             // Whether the two may be compared at all was settled by BinaryElaborator against the
             // types as written; this reads what they open to.
-            Ordering how = Ordering.ofComparison(
-                    comparison.left().type(), comparison.right().type(), ctx.inners, symbols,
-                    ctx.kinds,
+            Ordering how = Ordering.ofComparison(comparison, ctx.inners, symbols, ctx.kinds,
                     ctx.published);
             if (how == null) {
                 throw new IllegalStateException("a comparison the checker admitted has no order: "
@@ -1949,7 +1955,7 @@ final class BodyGen {
                     // sign against 0. BigDecimal.compareTo ignores scale, which matches Decimal
                     // equality (spec §equality); a Rational compares by exact value; the others
                     // order lexicographically / in time.
-                    if (exactPair(comparison.left(), comparison.right())) {
+                    if (comparison.reading() instanceof Core.BinaryReading.ExactNumbers) {
                         pushExact(comparison.left());
                         pushExact(comparison.right());
                     } else {
@@ -1985,7 +1991,7 @@ final class BodyGen {
          * inverted.
          */
         private void same(Comparison comparison, ComparisonClaim.Singled singled) {
-            if (exactPair(comparison.left(), comparison.right())) {
+            if (comparison.reading() instanceof Core.BinaryReading.ExactNumbers) {
                 // Equal by exact mathematical value, which is what the runtime value's own equality
                 // is: one representation per value, so `Values.equal` asking it is asking this.
                 pushExact(comparison.left());

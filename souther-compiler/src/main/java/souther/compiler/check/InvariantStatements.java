@@ -122,7 +122,7 @@ public final class InvariantStatements {
             return new InvariantStatement.Compares(reached.statement(),
                     new StatedComparison(compares.claim(),
                             Clauses.substituted(compares.left(), given),
-                            Clauses.substituted(compares.right(), given)));
+                            Clauses.substituted(compares.right(), given), compares.reading()));
         }
         // What the part states with the denials above it taken off, which is the operation itself
         // where one was kept standing. Stated only: what holds where an operation does not is not

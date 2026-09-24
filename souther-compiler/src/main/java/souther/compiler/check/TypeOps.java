@@ -1703,12 +1703,10 @@ public final class TypeOps {
      * null when they are not both values of one. Either side may name it: {@code stage < Won}
      * carries the order on the left, and a case listed by two sums takes the one it is compared with.
      *
-     * <p>Which types this is asked of decides what it means, so it is not visible outside this
-     * package. Asked of the operands as written it is the nominal admissibility rule, and that is
+     * <p>Asked of the operands as written, which makes it the nominal admissibility rule, and that is
      * {@code BinaryElaborator}'s alone: two different newtypes over one enumeration must not meet
-     * here. Asked of what they open to it is how the comparison emits, and that is
-     * {@link Ordering#ofComparison}. The backend reaching past both and asking this itself is how
-     * the same type came to be ordered to one reader and not to another (issue #856).
+     * here. What it answers reaches the backend as the type the comparison reads its operands in,
+     * so no reader after the checker asks it again.
      */
     static TypeSymbol comparisonEnumeration(Type lt, Type rt, Symbols symbols,
                                             DeclarationKinds kinds,

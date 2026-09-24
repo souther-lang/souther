@@ -204,9 +204,9 @@ public final class AbortSites {
 
     /**
      * What {@code binary} — one of {@code + - * /} — can end a run without a value for, read off
-     * {@link Core.Binary#type} rather than off an operand's: {@code type()} is the checked fact
-     * {@code BodyGen} itself dispatches on ({@code bin.type() == Type.RATIONAL} selects
-     * {@code RationalMath} ahead of the Int/Decimal arm), and an operand can name a different
+     * {@link Core.Binary#type} rather than off an operand's: an answer of {@code Rational} is one
+     * {@code BodyGen} computes through {@code RationalMath}, whether the operator read its operands
+     * at their exact values or they were Rationals already, and an operand can name a different
      * runtime operation than the answer does — {@code Int / Int} runs {@code
      * RationalMath.divideWholeNumbers}, where both operands are {@code Int} and the answer, and the
      * operation, are {@code Rational}.
