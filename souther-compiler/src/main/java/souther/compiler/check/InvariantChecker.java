@@ -5066,9 +5066,9 @@ public final class InvariantChecker {
      * The splits under {@code e} keyed as {@code key} is, {@code e} standing at {@code at}.
      *
      * <p>Every child is visited, and what a binder over one means is {@link Terms}' answer: a
-     * {@code let}'s body is read {@link Terms#inside} it, and an arm of a choice under what
-     * {@link Terms#choosing} that arm binds. Which children are arms is read off {@link Choice}, the
-     * owner of that question, and not off the node.
+     * {@code let}'s body is read {@link Terms#inside} it, and an arm of a {@code match} or of an
+     * attempt under what {@link Terms#choosing} that arm binds. The forms that open a scope are the
+     * ones named here.
      */
     private void collectAlike(Core e, Term key, Denotations at, Set<Core> alike) {
         if (e instanceof Core.Block) {
@@ -5083,19 +5083,31 @@ public final class InvariantChecker {
             collectAlike(li.body(), key, terms.inside(li, at), alike);
             return;
         }
-        // An operation defined by cases has arms that are not among its children and bind nothing,
-        // so a call is read without asking what its arms are.
-        Choice choice = e instanceof Core.PreservedCall ? null : Choice.of(e);
-        if (choice == null) {
-            Core.forEachChild(e, child -> collectAlike(child, key, at, alike));
+        if (e instanceof Core.Match m) {
+            collectAlike(m.scrutinee(), key, at, alike);
+            collectArms(Choice.of(m), key, at, alike);
             return;
         }
-        Map<Core, Choice.Decides> arms = new IdentityHashMap<>();
-        choice.arms().forEach(arm -> arms.put(arm.answers(), arm.decidedBy()));
-        Core.forEachChild(e, child -> {
-            Choice.Decides decides = arms.get(child);
-            collectAlike(child, key, decides == null ? at : terms.choosing(decides, at), alike);
-        });
+        if (e instanceof Core.IfConstructed ic) {
+            collectAlike(ic.construct(), key, at, alike);
+            collectArms(Choice.of(ic), key, at, alike);
+            return;
+        }
+        Core.forEachChild(e, child -> collectAlike(child, key, at, alike));
+    }
+
+    /**
+     * The splits under the arms of {@code choice}, each read under what choosing that arm binds.
+     *
+     * <p>Only for a choice whose arms are the bodies of the node it was read off, which a
+     * {@code match} and an attempt are. The forms that bind are named by {@link #collectAlike} and
+     * not found by asking {@link Choice}: which value a node is one of is that type's question, and
+     * where a binder's scope begins is not.
+     */
+    private void collectArms(Choice choice, Term key, Denotations at, Set<Core> alike) {
+        for (Choice.Arm arm : choice.arms()) {
+            collectAlike(arm.answers(), key, terms.choosing(arm.decidedBy(), at), alike);
+        }
     }
 
     /**
