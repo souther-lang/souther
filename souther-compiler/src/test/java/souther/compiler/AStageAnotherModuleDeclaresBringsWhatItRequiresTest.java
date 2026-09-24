@@ -55,20 +55,28 @@ class AStageAnotherModuleDeclaresBringsWhatItRequiresTest {
             }
             """;
 
+    /** Both modules compiled together, with a Java `rate`, once for every case that runs them: the
+     *  classes are read and nothing a case does changes them. */
+    private static final Map<String, ClassFileImage> TOGETHER = together();
+
+    private static Map<String, ClassFileImage> together() {
+        try {
+            return Map.copyOf(withRate(Compiler.compileModules(List.of(LIB, APP))));
+        } catch (Exception e) {
+            throw new ExceptionInInitializerError(e);
+        }
+    }
+
     @Test
     void aCompositionOfAnotherModuleIsBuiltWithWhatItsStagesRequire() throws Exception {
-        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(LIB, APP));
-
-        Object again = bound(withRate(classes), "app.v.Again", "lib.q.Rate");
+        Object again = bound(TOGETHER, "app.v.Again", "lib.q.Rate");
 
         assertEquals(120L, Codecs.apply(again, 3L), "rate(3) is 30, doubled by priced and again");
     }
 
     @Test
     void aBehaviorOfAnotherModuleThatDependsOnSomethingIsBuiltWithIt() throws Exception {
-        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of(LIB, APP));
-
-        Object billed = bound(withRate(classes), "app.v.Billed", "lib.q.Rate");
+        Object billed = bound(TOGETHER, "app.v.Billed", "lib.q.Rate");
 
         assertEquals(60L, Codecs.apply(billed, 3L));
     }

@@ -842,14 +842,15 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                 behavior priced = rate >-> double
                 """;
         String taxed = rated.replace("priced = rate >-> double", "priced = tax >-> double");
+        PublishedClasses evaluated = declarationsOf(rated);
 
         assertInstanceOf(Agreement.Agree.class,
                 DeclarationAgreement.of("example.requiring", "priced",
-                        declarationsOf(rated), declarationsOf(rated), DefaultStdlib.get()),
+                        declarationsOf(rated), evaluated, DefaultStdlib.get()),
                 "two builds of one composition agree");
         assertInstanceOf(Agreement.Disagree.class,
                 DeclarationAgreement.of("example.requiring", "priced",
-                        declarationsOf(taxed), declarationsOf(rated), DefaultStdlib.get()),
+                        declarationsOf(taxed), evaluated, DefaultStdlib.get()),
                 "one is handed `tax` and the other `rate`");
     }
 
