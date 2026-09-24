@@ -1,9 +1,11 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.AnalysisBody;
+import souther.compiler.check.Choice;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.PredicateStatement;
 import souther.compiler.check.RuleRef;
+import souther.compiler.check.ScopeStep;
 import souther.compiler.check.StatedContract;
 import souther.compiler.check.StringPredicates;
 import souther.compiler.check.Symbols;
@@ -304,13 +306,17 @@ record PredicateReadings(List<Reading> predicates, Set<Core> statedAt,
                         builds);
                 for (Core.Case arm : match.cases()) {
                     walk(arm.body(), behavior, read,
-                            reads.insideArm(match, arm, read.symbols(), read.newtypes()),
+                            reads.choosing(new Choice.Decides.ACase(arm, match.scrutinee()),
+                                    read.symbols(), read.newtypes()),
                             flow, live, out, reaches, statedAt, builds);
                 }
             }
-            default -> Core.forEachChild(e, child ->
-                    walk(child, behavior, read, reads, flow, live, out, reaches, statedAt,
-                            builds));
+            // Every other child under what the step into it binds, which for an attempt's `then`
+            // is its name standing for what was built.
+            default -> ScopeStep.forEachChild(e, (child, step) ->
+                    walk(child, behavior, read,
+                            reads.entering(step, read.symbols(), read.newtypes()), flow, live,
+                            out, reaches, statedAt, builds));
         }
     }
 

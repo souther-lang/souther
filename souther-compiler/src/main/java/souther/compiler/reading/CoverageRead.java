@@ -1,8 +1,10 @@
 package souther.compiler.reading;
 
 import souther.compiler.coverage.ArmProbe;
+import souther.compiler.check.Choice;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
@@ -195,7 +197,7 @@ public final class CoverageRead {
             // still that position. Both environments widen here and neither answers the other's
             // question. Nothing about getting here changes: a binding is not a fork.
             walk(let.value(), naming, reach, arrives);
-            walk(let.body(), naming.under(let.binder(), let.value()), reach, arrives);
+            walk(let.body(), naming.entering(new ScopeStep.Let(let)), reach, arrives);
             return;
         }
         if (arrives && !reach.ways().isEmpty()) {
@@ -230,7 +232,10 @@ public final class CoverageRead {
                     // they arrive by different paths.
                     Reach into = waysInTo(iff, part, naming, reach);
                     arms.at(iff, part, into);
-                    walk(parts[part], naming, into, observed);
+                    walk(parts[part],
+                            naming.entering(new ScopeStep.Chosen(
+                                    new Choice.Decides.ACondition(iff.cond(), part == 0))),
+                            into, observed);
                 }
             }
             case Core.Match match -> {
@@ -245,7 +250,10 @@ public final class CoverageRead {
                             : under(reach, new Reach.Ways(List.of(new WayIn(went.holds()))));
                     arms.at(match, part, into);
                     Core.Case arm = match.cases().get(part);
-                    walk(arm.body(), naming.insideArm(match, arm), into, observed);
+                    walk(arm.body(),
+                            naming.entering(new ScopeStep.Chosen(
+                                    new Choice.Decides.ACase(arm, match.scrutinee()))),
+                            into, observed);
                 }
             }
             case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled() -> {
@@ -256,7 +264,8 @@ public final class CoverageRead {
                 // The values are made, and which arm is taken is whether making the thing out of
                 // them held its rules. No class of an input names that, so a row cannot be steered
                 // to either arm — and the arms are still arms, so what is in them is read under a
-                // way in nothing states rather than not read at all.
+                // way in nothing states rather than not read at all. Inside `then` the attempt's
+                // name stands for what was built, as it does to every reading of the input.
                 for (Core.FieldValue given : constructed.construct().values()) {
                     walk(given.value(), naming, reach, observed);
                 }
@@ -264,10 +273,16 @@ public final class CoverageRead {
                         PathAccess.Unsupported.Why.THE_CONSTRUCTION_DECIDES_IT);
                 int part = 0;
                 arms.at(constructed, part++, into);
-                walk(constructed.then(), naming, into, observed);
+                walk(constructed.then(),
+                        naming.entering(new ScopeStep.Chosen(
+                                new Choice.Decides.ItWasBuilt(constructed))),
+                        into, observed);
                 for (Core.ElseArm departure : constructed.els()) {
                     arms.at(constructed, part++, into);
-                    walk(departure.body(), naming, into, observed);
+                    walk(departure.body(),
+                            naming.entering(new ScopeStep.Chosen(
+                                    new Choice.Decides.ItDeparted(constructed, departure))),
+                            into, observed);
                 }
             }
             case Core.Block block -> {
@@ -275,14 +290,14 @@ public final class CoverageRead {
                 // whatever it is called with. That is not a condition on the inputs of this
                 // behavior, so nothing in there has a way in this can name — and the arms in there
                 // are numbered like any others, so they are read and told that.
-                walk(block.body(), naming,
+                walk(block.body(), naming.entering(new ScopeStep.Block(block)),
                         new Reach.Unnameable(
                                 PathAccess.Unsupported.Why.RUNS_WHERE_SOMETHING_CALLS_IT),
                         observed);
             }
             case Core.LetIn let -> {
                 walk(let.value(), naming, reach, observed);
-                walk(let.body(), naming.under(let.binder(), let.value()), reach, observed);
+                walk(let.body(), naming.entering(new ScopeStep.Let(let)), reach, observed);
             }
             case Core.Int _ -> { }
             case Core.Decimal _ -> { }

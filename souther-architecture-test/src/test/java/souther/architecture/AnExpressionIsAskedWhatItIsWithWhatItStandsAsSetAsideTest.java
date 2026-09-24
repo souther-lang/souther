@@ -590,7 +590,7 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
         row(out, c + "claims/UnreachableClaims", "claimedUnder",
                 "(" + core + "L" + c + "inputs/InputReads;L" + c + "check/Symbols;L" + c
                         + "check/DeclarationNewtypes;L" + c + "coverage/CoverageSites$Plan;L" + c
-                        + "coverage/NormalReturn;ZLjava/util/List;)V", 3, GOES_ON_INTO_IT);
+                        + "coverage/NormalReturn;ZLjava/util/List;)V", 1, GOES_ON_INTO_IT);
         row(out, c + "claims/UnreachableReasons", "collect",
                 "(" + core + "L" + c + "coverage/NormalReturn;Ljava/util/List;)V", 1,
                 "follows what a node evaluates first to where a run stops, and what a Widen"
@@ -645,12 +645,6 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                 "which names a node binds, asked of every node the descent meets: a Widen binds"
                         + " none");
         row(out, c + "coverage/NormalReturn", "mayEnter", "(" + core + "I)Z", 1, OF_A_FORK);
-        row(out, c + "flow/ValueArrivals", "fill",
-                "(" + core + "L" + c + "flow/Naming;L" + c + "flow/ComparisonWays;"
-                        + "Ljava/util/Map;)V", 1, GOES_ON_INTO_IT);
-        row(out, c + "inputs/InputDemand", "walk",
-                "(" + core + "L" + c + "inputs/InputReads;L" + c + "check/Symbols;L" + c
-                        + "check/DeclarationNewtypes;Ljava/util/Set;)V", 1, GOES_ON_INTO_IT);
         row(out, c + "partition/ComparisonAssessment", "readsAnswer",
                 "(" + core + "L" + c + "types/BindingId;)Z", 1, COUNTS_THROUGH_IT);
         row(out, c + "partition/ComparisonReadings", "comparisonAt",

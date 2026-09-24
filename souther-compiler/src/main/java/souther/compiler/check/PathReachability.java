@@ -481,12 +481,21 @@ public final class PathReachability {
                 // the construction having held, so its binding carries what the type guarantees —
                 // which is the whole of what a guard inside that branch has to read against. Each
                 // departure stands where nothing was built, so none is entered with any of it.
+                //
+                // One decision entered in both environments: what the binder denotes and which
+                // position of the input it is are two readings of the same name, and a `then` that
+                // entered it in one of them only would be read with the name meaning two things.
                 ic.construct().values().forEach(given ->
                         walk(given.value(), k, at, reads, decided, nothingAbove));
-                PathEngine.Entered built = engine.enteringBuilt(ic, k, at);
-                walk(ic.then(), built.known(), built.at(), reads, decided, false);
+                Choice.Decides.ItWasBuilt held = new Choice.Decides.ItWasBuilt(ic);
+                PathEngine.Entered built = engine.enteringBuilt(held, k, at);
+                walk(ic.then(), built.known(), built.at(),
+                        reads.choosing(held, symbols, newtypes), decided, false);
                 for (Core.ElseArm arm : ic.els()) {
-                    walk(arm.body(), k, at, reads, decided, false);
+                    walk(arm.body(), k, at,
+                            reads.choosing(new Choice.Decides.ItDeparted(ic, arm), symbols,
+                                    newtypes),
+                            decided, false);
                 }
             }
             case Core.LetIn li -> {
@@ -495,7 +504,8 @@ public final class PathReachability {
                 // Inside what the `let` binds, so an arm of an expanded helper is read against the
                 // position the call handed it. A binding is not a fork, so what stands above the
                 // body is what stood above the binding.
-                walk(li.body(), in.known(), in.at(), reads.and(li.binder(), li.value()), decided,
+                walk(li.body(), in.known(), in.at(),
+                        reads.entering(new ScopeStep.Let(li), symbols, newtypes), decided,
                         nothingAbove);
             }
             case Core.Match match -> {
@@ -520,12 +530,14 @@ public final class PathReachability {
                     // the case it selects, which is where a comparison written inside the arm draws
                     // its line.
                     walk(arm.body(), in.known(), in.at(),
-                            reads.insideArm(match, arm, symbols, newtypes), decided, false);
+                            reads.choosing(new Choice.Decides.ACase(arm, match.scrutinee()),
+                                    symbols, newtypes),
+                            decided, false);
                 }
             }
-            default -> {
-                Core.forEachChild(e, child -> walk(child, k, at, reads, decided, nothingAbove));
-            }
+            default -> ScopeStep.forEachChild(e, (child, step) ->
+                    walk(child, k, engine.scoped(step, at), reads.entering(step, symbols, newtypes),
+                            decided, nothingAbove));
         }
     }
 
@@ -541,14 +553,20 @@ public final class PathReachability {
      * what it is for. Read as one thing, the walk answered for whatever it happened to reach:
      * {@code A && (B || C)} with {@code A} ruled out stops at the operator, which is numbered
      * nowhere, and left {@code B} and {@code C} unanswered — the shape of a claim nothing made.
+     *
+     * <p>Nothing is narrowed, and the names still are entered. What a comparison below says is read
+     * under the names in force where it is written, and which of its conditions a proof may name
+     * depends on that reading even where the state it is taken into is already empty.
      */
     private void unreached(Core e, Known k, Denotations at, InputReads reads,
                            List<PathDecision> decided) {
-        Core.forEachChild(e, child -> {
+        ScopeStep.forEachChild(e, (child, step) -> {
+            Denotations there = engine.scoped(step, at);
+            InputReads named = reads.entering(step, symbols, newtypes);
             if (child instanceof Core.Binary comparison) {
-                outcomesAt(comparison, k, at, reads, decided);
+                outcomesAt(comparison, k, there, named, decided);
             }
-            unreached(child, k, at, reads, decided);
+            unreached(child, k, there, named, decided);
         });
     }
 
@@ -761,7 +779,9 @@ public final class PathReachability {
                             why(iff.cond(), holds, under, reads))
                     : new Reachability.Unsettled(whyNot(taken, iff.cond())));
         }
-        walk(arm, inside, at, reads, under, false);
+        walk(arm, inside, at,
+                reads.choosing(new Choice.Decides.ACondition(iff.cond(), holds), symbols, newtypes),
+                under, false);
     }
 
     /**

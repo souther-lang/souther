@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import souther.compiler.check.Choice;
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
@@ -152,7 +153,7 @@ public final class InputReads {
     }
 
     /**
-     * The same, inside one arm of a {@code match}.
+     * The same, inside one arm of a {@code match} over {@code scrutinee}.
      *
      * <p>A name an arm binds stands for the value that was matched, read as the case the arm
      * selects — which is the position the scrutinee is at, narrowed. Written here and nowhere else:
@@ -180,23 +181,12 @@ public final class InputReads {
      * many that is. A container written with two members of the admitted case leaves two, and an
      * arm is no evidence that the name is one of them: what would make it one is there being one
      * left, which is what the set says and the arm does not.
-     */
-    public InputReads insideArm(Core.Match match, Core.Case arm, Symbols symbols,
-                                DeclarationNewtypes newtypes) {
-        return insideArmOn(match.scrutinee(), arm, symbols, newtypes);
-    }
-
-    /**
-     * The same, where the value the arm matched is what the caller holds rather than the node that
-     * matched it.
      *
-     * <p>Named apart from the one above and not written as its wider signature. What an arm narrows
-     * is the scrutinee, and a walk that has the {@code match} in hand would be passing the node it
-     * is standing on into a slot that takes any expression — which every caller compiles and one of
-     * them gets wrong.
+     * <p>Reached through {@link #choosing} and from nowhere else, so that a walk going into an arm
+     * says which way of deciding took it there rather than which node it is standing on.
      */
-    public InputReads insideArmOn(Core scrutinee, Core.Case arm, Symbols symbols,
-                                  DeclarationNewtypes newtypes) {
+    private InputReads insideArmOn(Core scrutinee, Core.Case arm, Symbols symbols,
+                                   DeclarationNewtypes newtypes) {
         if (arm.binder() == null || arm.binder().binding() == null) {
             return this;
         }
@@ -346,6 +336,24 @@ public final class InputReads {
             // An operation defined by cases answers a value the call was already given. It
             // introduces no name.
             case Choice.Decides.ByArgumentRelations _ -> this;
+        };
+    }
+
+    /**
+     * The reading a child is read in, {@code step} being the way from its parent into it
+     * ({@link ScopeStep#forEachChild}).
+     *
+     * <p>A block's body is read in the reading the block stands in. Its parameters are given where
+     * something calls it, which is no position of this behavior's input, and a name nothing entered
+     * stands for no position already.
+     */
+    public InputReads entering(ScopeStep step, Symbols symbols, DeclarationNewtypes newtypes) {
+        return switch (step) {
+            case ScopeStep.Same _ -> this;
+            case ScopeStep.Let(Core.LetIn binding) -> and(binding.binder(), binding.value());
+            case ScopeStep.Chosen(Choice.Decides decidedBy) ->
+                    choosing(decidedBy, symbols, newtypes);
+            case ScopeStep.Block _ -> this;
         };
     }
 

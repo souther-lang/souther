@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.ScopeStep;
 import souther.compiler.core.Core;
 import souther.compiler.flow.Naming;
 import souther.compiler.inputs.InputReads;
@@ -71,15 +72,9 @@ final class DecisionNaming implements Naming<DecisionPath> {
     }
 
     @Override
-    public Naming<DecisionPath> under(Core.Binder binder, Core value) {
-        return new DecisionNaming(meanings, reads.and(binder, value), numbering, mostArrivals);
-    }
-
-    @Override
-    public Naming<DecisionPath> insideArm(Core.Match match, Core.Case arm) {
+    public Naming<DecisionPath> entering(ScopeStep step) {
         return new DecisionNaming(meanings,
-                reads.insideArm(match, arm, meanings.states().symbols(),
-                        meanings.states().newtypes()),
+                reads.entering(step, meanings.states().symbols(), meanings.states().newtypes()),
                 numbering, mostArrivals);
     }
 
