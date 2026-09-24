@@ -28,11 +28,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>A fork answers what its branches join at, and each branch is of that type; a list holds its
  * elements at the type it is a list of; a binding holds its value at the type it is in force at and
- * answers what its body answers; a block answers what its body answers; an optional holds what it
- * holds at the type it is an optional of; {@code ++} over lists takes both sides at the list it
- * answers. Where a value is narrower than the slot, what stands there is the {@link Core.Widen}
- * saying it may stand as that type, so none of these is a question a reader of the tree has to
- * answer again.
+ * answers what its body answers; an optional holds what it holds at the type it is an optional of;
+ * {@code ++} over lists takes both sides at the list it answers. Where a value is narrower than the
+ * slot, what stands there is the {@link Core.Widen} saying it may stand as that type, so none of
+ * these is a question a reader of the tree has to answer again.
+ *
+ * <p>A block is not among them. What it answers is its body's type, read off the body, so there is
+ * no second type for the body to disagree with.
  *
  * <p>Of the trees checking hands out, and not of every {@code Core} anything builds. A pass after
  * checking rewrites the tree it is handed, and an analysis may build a node of its own to read, and
@@ -129,8 +131,6 @@ class EverySlotHoldsWhatItsNodeTakesItAsTest {
                 expect(out, let, "value", let.bindType(), let.value());
                 expect(out, let, "body", let.type(), let.body());
             }
-            case Core.Block block when block.type() instanceof Type.FnOf fn ->
-                    expect(out, block, "body", fn.result(), block.body());
             case Core.OptionSome some when some.type() instanceof Type.OptionOf of ->
                     expect(out, some, "value", of.element(), some.value());
             case Core.Binary joined when joined.op() == BinOp.CONCAT

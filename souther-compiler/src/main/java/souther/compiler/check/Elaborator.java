@@ -674,8 +674,8 @@ public final class Elaborator {
         return switch (function) {
             case Core.Widen standing ->
                     Core.standingAs(answering(standing.value(), result), answers);
-            case Core.Block block -> new Core.Block(block.params(),
-                    Core.standingAs(block.body(), result), answers, block.pos());
+            case Core.Block block -> new Core.Block(block.params(), block.paramTypes(),
+                    Core.standingAs(block.body(), result), block.pos());
             case Core.LetIn captures -> new Core.LetIn(captures.binder(), captures.bindType(),
                     captures.value(), answering(captures.body(), result), answers, captures.pos());
             default -> Core.standingAs(function, answers);
@@ -733,8 +733,7 @@ public final class Elaborator {
             inner = inner.with(block.params().get(i), paramTypes.get(i));
         }
         Core body = elaborate(block.body(), inner, ctx);
-        return new Core.Block(CoreBinders.all(block.params()), body, Type.fn(paramTypes, body.type()),
-                block.pos());
+        return new Core.Block(CoreBinders.all(block.params()), paramTypes, body, block.pos());
     }
 
     /** Whether an expression bound to a {@code let} is a function value: a lambda, or an {@code if}
@@ -1433,7 +1432,7 @@ public final class Elaborator {
                     inner = inner.with(b.params().get(i), paramTypes.get(i));
                 }
                 Core body = elaborate(b.body(), inner, ctx);
-                yield new Core.Block(CoreBinders.all(b.params()), body, Type.fn(paramTypes, body.type()), b.pos());
+                yield new Core.Block(CoreBinders.all(b.params()), paramTypes, body, b.pos());
             }
             case Hir.If iff -> {
                 Core cond = requireTyped(iff.cond(), Type.BOOL, env, ctx, "if condition");

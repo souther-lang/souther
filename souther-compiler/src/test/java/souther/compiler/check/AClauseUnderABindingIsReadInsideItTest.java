@@ -226,7 +226,7 @@ class AClauseUnderABindingIsReadInsideItTest {
     }
 
     private static Core block(Core.Binder param, Core body) {
-        return new Core.Block(List.of(param), body, Type.INT, POS);
+        return new Core.Block(List.of(param), List.of(Type.INT), body, POS);
     }
 
     @Test

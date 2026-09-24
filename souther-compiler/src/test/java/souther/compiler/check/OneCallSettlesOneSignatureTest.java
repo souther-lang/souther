@@ -80,7 +80,7 @@ class OneCallSettlesOneSignatureTest {
 
         Core.PreservedCall kept = assertInstanceOf(Core.PreservedCall.class, typed);
         Core.Block predicate = assertInstanceOf(Core.Block.class, kept.args().get(0));
-        assertEquals(List.of(Type.INT), ((Type.FnOf) predicate.type()).params(),
+        assertEquals(List.of(Type.INT), predicate.paramTypes(),
                 "a predicate over `Nothing` is one the author's own body cannot use");
     }
 

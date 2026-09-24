@@ -316,7 +316,7 @@ public final class TermMeaning {
             case Core.Block x -> {
                 out.add(Core.Block.class);
                 out.add(x.params());
-                out.add(x.type());
+                out.add(x.paramTypes());
                 project(x.body(), out);
             }
             case Core.ListLit x -> {

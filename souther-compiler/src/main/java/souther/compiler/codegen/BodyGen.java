@@ -1457,9 +1457,8 @@ final class BodyGen {
             if (step == null) {
                 return false;
             }
-            Type.FnOf fn = (Type.FnOf) step.type();
-            Type accType = fn.params().get(0);
-            Type elementType = fn.params().get(1);
+            Type accType = step.paramTypes().get(0);
+            Type elementType = step.paramTypes().get(1);
 
             int iterator = slot(Type.STRING);   // a reference slot; the type is not read back
             genExpr(walked);
