@@ -3,9 +3,9 @@
 Status: Accepted. Supersedes the rounding-mode entry under "what is still refused" in ADR-0086,
 and the "this argument is a rounding mode" side condition it kept in the compiler.
 
-Amended by #994 and #1010. The decision stands; two of the reasons given for it named machinery
-that no longer exists, and are corrected in place below (marked **Amended**). What changed is where
-each fact is answered, not what it is.
+Amended by #994, #1010 and #1931. The decision stands; two of the reasons given for it named
+machinery that no longer exists, and are corrected in place below (marked **Amended**). What
+changed is where each fact is answered, not what it is.
 
 ## Context
 
@@ -103,6 +103,13 @@ the observed argument types only ever agreed with the declaration while every pa
 invariant; a sum-typed parameter ends that — an argument's type may be the case it happens to be
 while the declaration names the sum — so the descriptor comes from the callee.
 
+**Amended (#1931).** The argument's type is no longer the case it happens to be. A call to a
+kernel says what it takes each argument as (`Core.CallSettlement.AtKernel.takes`), the checker
+places each argument at exactly that type, and a case handed to a sum-typed parameter stands as
+the sum under a `Widen`. The descriptor still comes from the callee, for a reason that does not
+depend on where a value arrives: a runtime method has one descriptor, and a signature's type
+variables are settled differently by each call to it.
+
 The other 61 kernels that build a descriptor from the call were audited against that invariant and
 none breaks it, but the reason is worth recording because it is not a rule anyone stated: every
 other declared parameter is a primitive or a container, whose boundary form the type settles on
@@ -120,6 +127,16 @@ and for a polymorphic kernel those are two different sources (the declaration sa
 caller needs the element it actually holds). Ten kernels also permute their arguments and nine
 erase a slot and box it, neither of which the declaration states. Until those are separated, a
 mechanical migration would move type variables into places that expect settled types.
+
+**Amended (#1931).** The two sources are separated. A kernel's signature is the open declaration
+shared by every application (`KernelSignature`, read through `CheckedProgram.kernel`); what one
+application takes is on the call (`AtKernel.takes`) and what it answers is the call's type, both
+settled by the checker from one substitution. An emitter reading the declaration for the
+descriptor and the call for the Souther types no longer has to substitute the signature again to
+get them. The JVM backend derives every backed kernel's descriptor from the declaration through
+one rule, and `KernelDescriptorsComeFromDeclarationsTest` is gone with the split it held. The
+permutation of arguments and the boxing of a slot the runtime takes as a reference remain what a
+row and the emitter state, which the declaration does not.
 
 `constructs` does not govern a rounding-mode case, stated as the general rule rather than a
 namespace check: the discipline governs what the compilation declares
