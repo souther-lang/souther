@@ -22,6 +22,7 @@ import souther.compiler.derive.CodecShape;
 import souther.compiler.derive.Deriver;
 import souther.compiler.abort.AbortSites;
 import souther.compiler.core.Composition;
+import souther.compiler.core.Contract;
 import souther.compiler.core.Core;
 import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.core.KernelContracts;
@@ -113,7 +114,7 @@ final class CheckedProgramAssembler {
             modules.add(moduleOf(module, types, targets));
         }
         KernelContracts kernels = KernelContracts.of(libraryOf(db).kernelSignatures());
-        AbortSites aborts = AbortSites.of(everyCoreRootOf(modules), kernels,
+        AbortSites aborts = AbortSites.of(everyCoreRootOf(modules, everyDeclaration), kernels,
                 constructedWithInvariants(everyDeclaration));
         return new CheckedProgram(modules, language, onThePath, targets, kernels, aborts);
     }
@@ -139,22 +140,41 @@ final class CheckedProgramAssembler {
 
     /**
      * Every {@code Core} a program's outputs are asked to emit: each behavior's body, where it has
-     * one this compile wrote, each helper's, and each value's.
+     * one this compile wrote, each helper's, each value's and each value entry's, the condition of
+     * every clause a declared data holds its values to, and the condition of every rule a behavior
+     * declares of its answer.
      *
-     * <p>Not a behavior composed of stages, and not one this program only calls — an
-     * {@link CheckedImplementation.Composed} has no {@code Core} of its own to classify, and
-     * {@link CheckedImplementation.ImplementedElsewhere} and {@link CheckedImplementation.Injected}
-     * likewise emit nothing here for {@link AbortSites} to be asked about: what either can end
-     * without a value for is a fact about a build this is not, read the same way a call to either
-     * already answers {@link AbortSet#NONE} at the site that reaches it
-     * ({@link souther.compiler.abort.AbortSites}).
+     * <p>The one list of them, and a list of every place a checked program hands a {@code Core}
+     * out: each of those is code some output runs, so each is a site {@link AbortSites} has to
+     * answer for. A place added to the program's surface is added here too, and
+     * {@code EveryCoreAProgramHandsOutIsASiteAbortsAtAnswersForTest} fails until it is.
+     *
+     * <p>A clause is emitted wherever a value of its data is built, and a rule wherever its
+     * behavior's answer is held to it, which for a behavior another build answers is every
+     * crossing into this program. Every declaration is asked, one on the path among them, since a
+     * construction of that data runs its clauses in whatever output builds it. A clause a spread
+     * takes in is the one {@code Core} in every data that includes it, and it is classified once:
+     * what it can end without a value for does not depend on which data is being built.
+     *
+     * <p>A body only where this compile wrote one. {@link CheckedImplementation.Composed} has no
+     * {@code Core} of its own, and what {@link CheckedImplementation.ImplementedElsewhere} and
+     * {@link CheckedImplementation.Injected} can end without a value for is a fact about a build
+     * this is not, read the same way a call to either answers {@link AbortSet#NONE} at the site
+     * that reaches it.
      */
-    private static List<Core> everyCoreRootOf(List<CheckedModule> modules) {
+    private static List<Core> everyCoreRootOf(List<CheckedModule> modules,
+                                              List<CheckedData> everyDeclaration) {
         List<Core> roots = new ArrayList<>();
         for (CheckedModule module : modules) {
             for (CheckedBehavior behavior : module.behaviors()) {
                 if (behavior.implementation() instanceof CheckedImplementation.Body body) {
                     roots.add(body.body());
+                }
+                Contract declares = behavior.ensures().contract();
+                if (declares != null) {
+                    for (Contract.Rule rule : declares.rules()) {
+                        roots.add(rule.condition());
+                    }
                 }
             }
             for (CheckedHelper helper : module.helpers()) {
@@ -165,6 +185,13 @@ final class CheckedProgramAssembler {
             }
             for (CheckedValueEntry entry : module.valueEntries()) {
                 roots.add(entry.body());
+            }
+        }
+        for (CheckedData declared : everyDeclaration) {
+            if (declared instanceof CheckedData.WithFields fields) {
+                for (ValueShape.Invariant clause : fields.invariants()) {
+                    roots.add(clause.condition());
+                }
             }
         }
         return roots;

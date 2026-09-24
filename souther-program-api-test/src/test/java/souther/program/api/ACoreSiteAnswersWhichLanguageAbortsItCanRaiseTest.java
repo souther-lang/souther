@@ -1,8 +1,11 @@
 package souther.program.api;
 
 import souther.compiler.abort.AbortKind;
+import souther.compiler.core.Contract;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.program.CheckedBehavior;
+import souther.compiler.program.CheckedData;
 import souther.compiler.program.CheckedImplementation;
 import souther.compiler.program.CheckedModule;
 import souther.compiler.program.CheckedProgram;
@@ -16,6 +19,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -32,10 +36,21 @@ class ACoreSiteAnswersWhichLanguageAbortsItCanRaiseTest {
                 , dividesIntByInt, dividesDecimalByDecimal, dividesWithARationalOperand
                 , unreached
                 , negatesInt, negatesDecimal, negatesRational
+                , Span, LabeledSpan, bounded
                 )
 
             data Positive = Int
                 invariant positive = value > 0
+
+            data Span = { lo: Int, hi: Int }
+                invariant ordered = lo + 1 <= hi
+
+            data LabeledSpan = { ...Span, label: String }
+
+            behavior bounded : (n: Int) -> Int
+                ensures above = value + 1 > n
+
+            let bounded (n) = n
 
             behavior unguarded : (n: Int) -> Positive
 
@@ -276,6 +291,83 @@ class ACoreSiteAnswersWhichLanguageAbortsItCanRaiseTest {
                 assertTrue(program.abortsAt(read).isEmpty(), () -> read + " never aborts on its own");
             }
         }
+    }
+
+    /**
+     * A clause's condition is emitted wherever a value of its data is built, so its sites answer
+     * the same question a body's do: {@code lo + 1} leaves the range an {@code Int} holds, and the
+     * comparison over it does not.
+     */
+    @Test
+    void anIntSumInAClauseAbortsWhereTheAnswerHasNoPlace() {
+        CheckedProgram program = program();
+        Core condition = onlyClauseOf(program, "Span");
+
+        Core.Binary sum = null;
+        for (Core node : everyNodeOf(condition)) {
+            if (node instanceof Core.Binary binary && binary.op() == BinOp.ADD) {
+                sum = binary;
+            }
+            assertTrue(!(node instanceof Core.Read read) || program.abortsAt(read).isEmpty(),
+                    () -> node + " never aborts on its own");
+        }
+
+        assertEquals(Set.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE), program.abortsAt(sum).kinds());
+        assertTrue(program.abortsAt(condition).isEmpty(), "the comparison itself never aborts");
+    }
+
+    /** A clause a spread takes in is answered for in the data that includes it as well. */
+    @Test
+    void aClauseASpreadTakesInIsAnsweredForWhereItIsTakenIn() {
+        CheckedProgram program = program();
+        Core condition = onlyClauseOf(program, "LabeledSpan");
+
+        Core.Binary sum = null;
+        for (Core node : everyNodeOf(condition)) {
+            if (node instanceof Core.Binary binary && binary.op() == BinOp.ADD) {
+                sum = binary;
+            }
+        }
+
+        assertEquals(Set.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE), program.abortsAt(sum).kinds());
+    }
+
+    /**
+     * A rule a behavior declares of its answer is code an output runs where the answer is held to
+     * it, so its sites answer the same question: {@code value + 1} leaves the range.
+     */
+    @Test
+    void anIntSumInAnEnsuresRuleAbortsWhereTheAnswerHasNoPlace() {
+        CheckedProgram program = program();
+        CheckedBehavior bounded = null;
+        for (CheckedBehavior behavior : program.module("demo").behaviors()) {
+            if (behavior.name().name().equals("bounded")) {
+                bounded = behavior;
+            }
+        }
+        assertNotNull(bounded, "no behavior `bounded` in the fixture");
+        List<Contract.Rule> rules = bounded.ensures().contract().rules();
+        assertEquals(1, rules.size(), () -> "one rule, and " + rules);
+
+        Core.Binary sum = null;
+        for (Core node : everyNodeOf(rules.getFirst().condition())) {
+            if (node instanceof Core.Binary binary && binary.op() == BinOp.ADD) {
+                sum = binary;
+            }
+        }
+
+        assertEquals(Set.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE), program.abortsAt(sum).kinds());
+    }
+
+    private static Core onlyClauseOf(CheckedProgram program, String data) {
+        for (CheckedData declared : program.module("demo").data()) {
+            if (declared.name().name().equals(data)
+                    && declared instanceof CheckedData.WithFields fields) {
+                assertEquals(1, fields.invariants().size(), () -> data + " holds one clause");
+                return fields.invariants().getFirst().condition();
+            }
+        }
+        throw new AssertionError("no data `" + data + "` with fields in the fixture");
     }
 
     /** A node this program never handed over is refused rather than answered as total. */
