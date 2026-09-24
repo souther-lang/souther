@@ -13,11 +13,13 @@ import java.util.Set;
  * What a kernel was declared to take and to answer.
  *
  * <p>The declaration is Souther, written in a core module, and this is that declaration's types as
- * the checker resolved them. It belongs to the callee: an output emitting a call builds its own
- * boundary form out of this, and the types at the call supply values rather than the shape of the
- * thing being called. The two agree only where a declared parameter is a type no value can arrive
- * narrower than, and a sum-typed parameter ends that — the argument's type is the case it happens
- * to be, while the declaration names the sum.
+ * the checker resolved them, with its type variables still open. It belongs to the callee and is
+ * the same for every call to the kernel: an output emitting a call builds its own boundary form out
+ * of this. It is not what one call takes. Each application settles the variables, and what that
+ * application takes each argument as is on the call ({@link Core.CallSettlement.AtKernel#takes}),
+ * where every argument stands at exactly that type — under a {@link Core.Widen} where the value is
+ * narrower, so an argument for a sum-typed parameter stands as the sum and not as the case it is.
+ * An output reads what a call takes off the call and does not substitute this signature again.
  *
  * <p>{@code result} is the return type as it was declared, whole. A kernel that can depart declares
  * the departure beside what it answers with ({@code Decimal | DivisionByZero}), and the union is

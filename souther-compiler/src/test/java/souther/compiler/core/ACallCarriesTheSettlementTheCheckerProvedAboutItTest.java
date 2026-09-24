@@ -39,6 +39,10 @@ class ACallCarriesTheSettlementTheCheckerProvedAboutItTest {
             new ReachName.OfLibrary(ValueName.Stdlib.operation("String", "trim")),
             Kernel.STRING_TRIM);
 
+    private static final Core.Reached.OfKernel EMPTY_MAP = new Core.Reached.OfKernel(
+            new ReachName.OfLibrary(ValueName.Stdlib.operation("Map", "empty")),
+            Kernel.MAP_EMPTY);
+
     private static final Core.Reached.OfDeclaration HELPER = new Core.Reached.OfDeclaration(
             new ReachName.Own(new ValueName.Helper("demo", "half")));
 
@@ -100,10 +104,20 @@ class ACallCarriesTheSettlementTheCheckerProvedAboutItTest {
      *  other. */
     @Test
     void aKernelTakingNothingSettlesThatItTakesNothing() {
-        Core.Call call = new Core.Call(TRIM, List.of(), UNWRITTEN,
-                at(List.of(), Core.KernelFact.None.INSTANCE), Type.STRING, POS);
+        Core.Call call = new Core.Call(EMPTY_MAP, List.of(), UNWRITTEN,
+                at(List.of(), Core.KernelFact.None.INSTANCE), new Type.MapOf(Type.STRING, Type.INT),
+                POS);
 
         assertEquals(List.of(), ((Core.CallSettlement.AtKernel) call.settlement()).takes());
+    }
+
+    /** And a kernel taking nothing is refused no settlement, as any kernel call is. */
+    @Test
+    void aKernelTakingNothingIsRefusedNoSettlement() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new Core.Call(EMPTY_MAP, List.of(), UNWRITTEN,
+                        Core.CallSettlement.None.INSTANCE, new Type.MapOf(Type.STRING, Type.INT),
+                        POS));
     }
 
     /** A call to a declaration takes its arguments as the declaration says, so it is refused a

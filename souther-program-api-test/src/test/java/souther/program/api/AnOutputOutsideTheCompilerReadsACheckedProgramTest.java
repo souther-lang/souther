@@ -140,8 +140,8 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
      * A call whose argument arrives narrower than the parameter it goes into.
      *
      * <p>{@code round} declares its second parameter {@code RoundingMode}, a sum the language
-     * itself gives; {@code HALF_UP} is one of its cases, so the type at the call is the case and
-     * the type in the declaration is the sum.
+     * itself gives; {@code HALF_UP} is one of its cases, so the value is the case and the parameter
+     * is the sum. The call stands the value as the sum, which is what it says it takes there.
      */
     private static final String ROUNDS = """
             module demo
@@ -651,6 +651,27 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
                 "at the type the kernel was declared to take there");
         assertEquals("HALF_UP", Type.show(arrived.value().type()),
                 "and what it holds is the case it is");
+        assertEquals(declared.parameters(),
+                ((Core.CallSettlement.AtKernel) rounds.settlement()).takes(),
+                "and the call says it takes the parameters the declaration names, which it can only"
+                        + " say by settling them and not by reading them off its arguments");
+    }
+
+    /**
+     * And a kernel read as a value, with no argument, is an application that takes nothing: the
+     * settlement says so and is not absent.
+     */
+    @Test
+    void aKernelTakingNoArgumentSaysItTakesNone() {
+        CheckedProgram program = checked(CALLS_THE_LIBRARY);
+        Core body = ((CheckedImplementation.Body)
+                named(program.module("demo"), "counts").implementation()).body();
+
+        Core.Call empty = callTo(Kernel.MAP_EMPTY, body);
+
+        assertEquals(List.of(), empty.args(), "the empty map is applied to nothing");
+        assertEquals(new Core.CallSettlement.AtKernel(List.of(), Core.KernelFact.None.INSTANCE),
+                empty.settlement(), "and says it takes nothing, with nothing more settled");
     }
 
     /**
