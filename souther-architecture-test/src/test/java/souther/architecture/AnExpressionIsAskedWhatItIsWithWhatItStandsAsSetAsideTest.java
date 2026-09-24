@@ -615,8 +615,6 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
         row(out, c + "core/GrowingFold", "inserted", "(" + core + "Ljava/util/Set;)" + core, 1,
                 "asked of an answering position answers() hands on, which has gone past a Widen"
                         + " to what it holds");
-        row(out, c + "core/GrowingFold", "piped",
-                "(" + core + "L" + CORE + "$Block;[Z)" + core, 2, REWRITES_UNDER_IT);
         row(out, c + "core/GrowingFold", "puttingStep", "(" + core + ")" + core, 2,
                 "asked of the step a fold is handed: a block, or the bindings a block captures, is"
                         + " handed as itself (Elaborator.answering widens what its body answers),"
@@ -628,6 +626,9 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                 REWRITES_UNDER_IT);
         row(out, c + "core/GrowingFold", "uses", "(" + core + "L" + c + "types/BindingId;)I", 1,
                 COUNTS_THROUGH_IT);
+        row(out, c + "core/GrowingFold$Piped", "at", "(" + core + "Ljava/util/Set;)" + core, 1,
+                "asked of an answering position answers() hands on, which has gone past a Widen"
+                        + " to what it holds");
         row(out, c + "coverage/ComparisonCatalog", "occurrenceAt",
                 "(" + core + ")Ljava/util/Optional;", 1,
                 "whether the node a walk stands at is a comparison: a Widen is not, and the"
