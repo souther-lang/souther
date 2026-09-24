@@ -3,6 +3,7 @@ package souther.compiler.program;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
+import souther.compiler.check.BehaviorBodies;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Boundary;
@@ -241,15 +242,14 @@ final class CheckedProgramAssembler {
                     yield composed == null ? null : composedSignatureOf(composed, module.name(), db);
                 }
             };
-            BehaviorImplementation state = module.implementations().get(declared.name());
-            if (signature == null || state == null) {
+            if (signature == null) {
                 // The module was taken as checked and one of the behaviors it declares has no
-                // signature, or no reading of where its body comes from. A caller reaches it, so
-                // letting it through hands an output a call it cannot emit and says nothing about
-                // why.
+                // signature. A caller reaches it, so letting it through hands an output a call it
+                // cannot emit and says nothing about why.
                 throw new IllegalStateException("`" + named + "` was taken as checked and this"
                         + " compile has no reading of it");
             }
+            BehaviorImplementation state = module.implementations().of(named);
             BehaviorTarget target = new BehaviorTarget(signature,
                     implementedAs(state, named, declared, implementations, module.checked(),
                             module.compositions()));
@@ -282,8 +282,7 @@ final class CheckedProgramAssembler {
             Map<String, Sig> signatures = db.ask(new Bodies.Signatures(module)).value();
             Map<String, DeclaredSig> declaredSignatures =
                     db.ask(new Bodies.DeclaredSignatures(module)).value();
-            Map<String, BehaviorImplementation> implementations =
-                    db.ask(new Bodies.Implementation(module)).value();
+            BehaviorBodies implementations = db.ask(new Bodies.Implementation(module)).value();
             if (declares == null || signatures == null || declaredSignatures == null
                     || implementations == null) {
                 throw new IllegalStateException("`" + module + "` was read off the path and this"
@@ -301,12 +300,12 @@ final class CheckedProgramAssembler {
                         yield composed == null ? null : composedSignatureOf(composed, module, db);
                     }
                 };
-                BehaviorImplementation state = implementations.get(declared.name());
-                if (signature == null || state == null) {
+                if (signature == null) {
                     throw new IllegalStateException("`" + named + "` is declared by a module this"
                             + " compile read off the path and this compile has no reading of it");
                 }
-                file(targets, named, new BehaviorTarget(signature, publishedAs(state)));
+                file(targets, named, new BehaviorTarget(signature,
+                        publishedAs(implementations.of(named))));
             }
         }
     }
@@ -445,7 +444,7 @@ final class CheckedProgramAssembler {
     private record ModuleReading(String name, Hir.Module bodies, Bodies.Elaborated checked,
                                  Map<String, Sig> signatures,
                                  Map<String, DeclaredSig> declaredSignatures,
-                                 Map<String, BehaviorImplementation> implementations,
+                                 BehaviorBodies implementations,
                                  Map<ValueName.Behavior, Composition> compositions,
                                  Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                  List<CheckedData> data,
@@ -485,8 +484,7 @@ final class CheckedProgramAssembler {
         // called, so the names are asked of the answer that changes when one is renamed.
         Map<String, DeclaredSig> declaredSignatures =
                 db.ask(new Bodies.DeclaredSignatures(module)).value();
-        Map<String, BehaviorImplementation> implementations =
-                db.ask(new Bodies.Implementation(module)).value();
+        BehaviorBodies implementations = db.ask(new Bodies.Implementation(module)).value();
         Map<ValueName.Behavior, Composition> compositions =
                 db.ask(new Compositions.Of(module)).value();
         // What a value of each declared data is made of and must satisfy, and where each behavior's

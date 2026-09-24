@@ -2064,8 +2064,9 @@ public final class Analyzer {
      * What the behaviors of {@code module} are still owed, as declarations to write.
      *
      * <p>Two sets, not one. An implementation is owed by a behavior written as a signature with
-     * nothing implementing it, which is {@link Requirements#injectedNames} — the same question the
-     * emitter asks about what it has to be given. A row may be written for any behavior at all: a
+     * nothing implementing it, which is what {@link Prepared#implementationOf} says has no body
+     * here — the module's classification, which the emitter reads too. A row may be written for any
+     * behavior at all: a
      * composition has no implementation to offer, since it is its own, and has rows like anything
      * else.
      */
@@ -2111,7 +2112,8 @@ public final class Analyzer {
     private static Optional<CompletionItem> implementationToWrite(
             Prepared prepared, Hir.BehaviorDef declared, String module) {
         if (!(declared instanceof Hir.SpecBehavior behavior)
-                || prepared.implementationOf(behavior).hasBody()) {
+                || prepared.implementationOf(new ValueName.Behavior(module, behavior.name()))
+                        .hasBody()) {
             return Optional.empty();
         }
         List<SpecImplementation.Parameter> parameters = SpecImplementation.parameters(behavior);
@@ -2150,7 +2152,8 @@ public final class Analyzer {
         List<BehaviorRequirement> required = List.of();
         // A behavior that takes dependencies as arguments is offered a row that supplies them,
         // whether or not its `let` has been written yet. An injection target takes none.
-        if (!prepared.implementationOf(declared).isInjectionTarget()) {
+        if (!prepared.implementationOf(new ValueName.Behavior(module, declared.name()))
+                .isInjectionTarget()) {
             required = requirements.get(declared.name());
             if (required == null) {
                 return Optional.empty();

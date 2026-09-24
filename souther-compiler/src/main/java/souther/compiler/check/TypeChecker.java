@@ -91,7 +91,9 @@ public final class TypeChecker {
      * asked for on its own ({@link #checkBehavior}), so what one of them says is not in here.
      *
      * <p>{@code reqSigs} and {@code recursiveHelperFns} are handed over rather than worked out here,
-     * because the body check reads the same two and they must be the same two.
+     * because the body check reads the same two and they must be the same two. {@code bodies} is
+     * where each behavior of the module gets its body, handed over for the same reason: the module's
+     * tree does not say, and for a module read off the path it has no {@code let} to count.
      */
     public static Reported checkModule(Hir.Module module, DerivedSymbols symbols,
                                        DeclarationAccess declarations,
@@ -99,7 +101,7 @@ public final class TypeChecker {
                                        DeclarationLocations declaredAt,
                                        ReadingPolicy policy,
                                        Map<String, Sig> sigs,
-                                       Set<ValueName.Behavior> importedInjected,
+                                       BehaviorBodies bodies,
                                        Set<ValueName.Behavior> importedUnwritten,
                                        Hir.Module lowered, Map<BindingId, ValueName.Helper> carried,
                                        Map<String, LoweringRole> roles,
@@ -123,7 +125,7 @@ public final class TypeChecker {
                     withNoValue,
                     declaredAt,
                     policy, sigs,
-                    importedInjected,
+                    bodies,
                     importedUnwritten,
                     lowered, calleeSigs, errors,
                     elaborated, abandoned, reqSigs, recursiveHelperFns, imported, settled, shapes);
@@ -246,7 +248,7 @@ public final class TypeChecker {
                                         DeclarationLocations declaredAt,
                                        ReadingPolicy policy,
                                         Map<String, Sig> sigs,
-                                       Set<ValueName.Behavior> importedInjected,
+                                       BehaviorBodies bodies,
                                        Set<ValueName.Behavior> importedUnwritten,
                                         Hir.Module lowered, Map<ValueName.Behavior, ReqSig> calleeSigs,
                                         List<CompileException> errors,
@@ -479,7 +481,7 @@ public final class TypeChecker {
             }
             exposed.add(e);
         }
-        // Injection targets (spec §injected-behavior): a SpecBehavior with no matching fn. Its name and
+        // Injection targets (spec §injected-behavior): the behaviors `bodies` says Java supplies. Its name and
         // success type let a fn call it inline (spec §unmarked-output); it is the "required" behavior of the
         // old form. An imported injection target is one here too (spec §composition-with-requirements): the
         // module that names it injects and binds it, whether it named it as a `>->` stage or as a `depends
@@ -509,7 +511,8 @@ public final class TypeChecker {
             // Java supplies is the behavior that writes no clause and no `let` (§injected-behavior),
             // and only that one gets a base for an implementation to extend.
             if (b instanceof Hir.SpecBehavior spec
-                    && Requirements.implementationOf(b, fns.keySet()).isInjectionTarget()) {
+                    && bodies.of(new ValueName.Behavior(module.name(), b.name()))
+                            .isInjectionTarget()) {
                 SpecChecker.checkInjectionConstructs(spec, symbols, exposeAll, exposed);
                 injectionTargets.add(spec.name());
             }
@@ -533,7 +536,8 @@ public final class TypeChecker {
         // untypeable, and the body check would report it as a call to an unknown name (E1023).
         SpecChecker.checkRequiresAreInjectionTargets(module, reqSigs, calleeSigs);
         // Nothing that is built here may hold a behavior nobody has written (spec §unwritten-behavior).
-        SpecChecker.checkNothingBuiltHereRestsOnAnUnwrittenBehavior(module, importedUnwritten);
+        SpecChecker.checkNothingBuiltHereRestsOnAnUnwrittenBehavior(module, bodies,
+                importedUnwritten);
         // Fail-fast too: a behavior reaching itself has no first element to build, and the code that
         // works out requirement sets and emits classes would walk the loop.
         SpecChecker.checkBehaviorsDoNotRecurse(module);

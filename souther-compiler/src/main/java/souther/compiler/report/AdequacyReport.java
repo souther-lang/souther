@@ -19,6 +19,7 @@ import souther.compiler.types.MaterialisationSite;
 import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.RegionSlot;
 import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.ValueName;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleCitations;
 import souther.compiler.check.RuleRef;
@@ -833,7 +834,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     decisions == null ? null : decisions.get(behavior.name()),
                     meetings == null ? null : meetings.get(behavior.name()));
             behaviors.add(new BehaviorReport(behavior.name(),
-                    module.implementationOf(behavior),
+                    module.implementationOf(new ValueName.Behavior(module.name(), behavior.name())),
                     evidence,
                     // Asked of the answer. The account answers for every behavior the module
                     // declares, so a missing key is that query and this walking different lists

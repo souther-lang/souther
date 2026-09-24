@@ -56,13 +56,18 @@ public final class CheckSurface implements Assembly {
      */
     private final List<Desugared.Fn> desugaredFrom;
     private final Map<Hir.Expr, String> operandMethods;
+    /** Where each behavior gets its body, as the module was classified. Not in the tree: a tree
+     *  read off the path has no {@code let} to say, so two surfaces whose trees are the same can
+     *  still disagree about this. */
+    private final BehaviorBodies bodies;
     /** Worked out once, as the rungs beside this work theirs out. */
     private volatile Hir.Module projected;
 
     private CheckSurface(InvariantSettled settling, List<Normalized.Def> declarations,
                          List<Desugared.Fn> fns, List<Desugared.Fn> desugaredFrom,
                          List<Hir.Example> examples, FakeTables fakes,
-                         List<Hir.FnDef> mintedDefs, Map<Hir.Expr, String> operandMethods) {
+                         List<Hir.FnDef> mintedDefs, Map<Hir.Expr, String> operandMethods,
+                         BehaviorBodies bodies) {
         this.settling = settling;
         this.declarations = List.copyOf(declarations);
         this.fns = List.copyOf(fns);
@@ -71,6 +76,7 @@ public final class CheckSurface implements Assembly {
         this.fakes = fakes;
         this.mintedDefs = List.copyOf(mintedDefs);
         this.operandMethods = operandMethods;
+        this.bodies = bodies;
     }
 
     /**
@@ -84,7 +90,8 @@ public final class CheckSurface implements Assembly {
      *
      * <p>{@code newtypes} is which names were declared wrapping one value, which is what deciding
      * whether an application is a construction comes to; {@code signatures} is what each behavior
-     * takes and answers with, which says where a row's values stand.
+     * takes and answers with, which says where a row's values stand. {@code bodies} is where each
+     * behavior gets its body, which is carried beside the tree rather than read off it.
      *
      * <p>Which answer stands in for which part is checked and not taken from the key it arrived
      * under. Both tables are keyed by the name written here, and a name is a name in some module —
@@ -106,8 +113,15 @@ public final class CheckSurface implements Assembly {
                                         Map<String, Desugared.Fn> desugared,
                                         DeclarationNewtypes newtypes,
                                         Map<ValueName.Behavior, Sig> signatures,
-                                        FakeTables declared) {
+                                        FakeTables declared,
+                                        BehaviorBodies bodies) {
         Hir.Module settled = settling.module();
+        // The same check for the table: a module's classification under the name of another would
+        // answer about behaviors this surface does not declare.
+        if (!bodies.module().equals(settled.name())) {
+            throw new IllegalArgumentException("where the behaviors of `" + bodies.module()
+                    + "` get their bodies is not an answer about `" + settled.name() + "`");
+        }
         List<Normalized.Def> declarations = new ArrayList<>();
         for (InvariantSettled.Def def : settling.defs()) {
             Normalized.Def came = normalized.get(def.name());
@@ -160,7 +174,7 @@ public final class CheckSurface implements Assembly {
         // read, and writing a name out does not touch either.
         FakeTables fakes = FakeTables.namesWrittenOut(declared, self);
         CheckSurface written = new CheckSurface(settling, declarations, fns, desugaredFrom, examples, fakes,
-                List.of(), Map.of());
+                List.of(), Map.of(), bodies);
         // What each row operand computes, emitted beside the module's own so a row runs its operand
         // in the program the behavior it is about is applied in. Which method is whose is kept with
         // the assembly: it is decided here and read wherever a row is run, never counted out again.
@@ -174,7 +188,7 @@ public final class CheckSurface implements Assembly {
         List<Hir.FnDef> minted = new ArrayList<>(rows.defs().values());
         minted.addAll(entries.values());
         return new CheckSurface(settling, declarations, fns, desugaredFrom, examples, fakes,
-                minted, rows.methods());
+                minted, rows.methods(), bodies);
     }
 
     /** What the module is called. */
@@ -186,6 +200,11 @@ public final class CheckSurface implements Assembly {
      *  compares this against is what a settling answered rather than half of it. */
     InvariantSettled settling() {
         return settling;
+    }
+
+    /** Where each behavior gets its body, as the module was classified and handed in. */
+    BehaviorBodies bodies() {
+        return bodies;
     }
 
     /** The declarations joined here, as the one producer of that form answered for them. */
@@ -216,11 +235,12 @@ public final class CheckSurface implements Assembly {
     }
 
     /** Where {@code behavior}'s body comes from. How the behavior is written, which is a question
-     *  about the source and not about what a compile made of it. */
-    public BehaviorImplementation implementationOf(Hir.BehaviorDef behavior) {
-        return Requirements.implementationOf(module(), behavior);
+     *  about the source and not about what a compile made of it.
+     *
+     *  @throws IllegalArgumentException where {@code behavior} is not one this module declares */
+    public BehaviorImplementation implementationOf(ValueName.Behavior behavior) {
+        return bodies.of(behavior);
     }
-
 
     /** Its definitions, as they came out. */
     public List<Desugared.Fn> fns() {
@@ -291,11 +311,14 @@ public final class CheckSurface implements Assembly {
 
     /** What it answers with. The tree covers the parts that were written back into it; what it was
      *  joined from is answered beside the tree and is compared beside it, since two surfaces made
-     *  from different answers are two surfaces however alike the trees came out. */
+     *  from different answers are two surfaces however alike the trees came out. Where each
+     *  behavior gets its body is one of those: a module on the path republished with one behavior
+     *  now left to Java reads back as the same tree. */
     @Override
     public boolean equals(Object o) {
         return o instanceof CheckSurface other && module().equals(other.module())
-                && mintedDefs.equals(other.mintedDefs) && desugaredFrom.equals(other.desugaredFrom);
+                && mintedDefs.equals(other.mintedDefs) && desugaredFrom.equals(other.desugaredFrom)
+                && bodies.equals(other.bodies);
     }
 
     @Override

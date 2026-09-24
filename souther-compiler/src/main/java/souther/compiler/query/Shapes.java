@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.BehaviorBodies;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.ClauseDischarge;
 import souther.compiler.check.ClauseLocations;
@@ -772,8 +773,10 @@ public final class Shapes {
                     signatures = db.ask(new Bodies.Reachable(name));
             Answer<souther.compiler.check.FakeTables> declared =
                     db.ask(new Names.FakeTables(name));
+            Answer<BehaviorBodies> bodies = db.ask(new Bodies.Implementation(name));
             if (!settling.present() || !normalized.present() || !resolved.present()
-                    || !scope.present() || !fns.present() || !declared.present()) {
+                    || !scope.present() || !fns.present() || !declared.present()
+                    || !bodies.present()) {
                 return Answer.absent();
             }
             try {
@@ -782,7 +785,7 @@ public final class Shapes {
                                 settling.value(), normalized.value(), fns.value(),
                                 declarationNewtypes(db),
                                 signatures.present() ? signatures.value() : Map.of(),
-                                declared.value());
+                                declared.value(), bodies.value());
                 // A definition that did not desugar is missing from what was handed in, and a
                 // surface without it would be this module read as one that does not write it.
                 return assembled == null ? Answer.absent() : Answer.of(assembled);

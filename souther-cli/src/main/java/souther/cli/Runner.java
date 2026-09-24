@@ -17,6 +17,7 @@ import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.query.Bodies;
+import souther.compiler.types.ValueName;
 import net.unit8.raoh.Issues;
 import net.unit8.raoh.ResourceBundleMessageResolver;
 
@@ -316,7 +317,9 @@ public final class Runner {
             // is the module's classification; whether anything has to be handed to it is what the
             // declaration says it depends on.
             if (b instanceof Hir.SpecBehavior spec
-                    && module.implementationOf(spec).hasBody() && spec.dependsOn().isEmpty()) {
+                    && module.implementationOf(new ValueName.Behavior(module.name(), spec.name()))
+                            .hasBody()
+                    && spec.dependsOn().isEmpty()) {
                 drivable.put(spec.name(), spec);
             } else if (b instanceof Hir.PipeBehavior pipe
                     && pipelineBlocker(pipe, requirements) == null) {
@@ -442,7 +445,8 @@ public final class Runner {
                 // Two ways to have no body, and they send an author to different places: one is
                 // supplied from Java and the other is a `let` this model has not written yet. Which
                 // of them this is, is the module's answer and not a table read again here.
-                switch (module.implementationOf(spec)) {
+                switch (module.implementationOf(
+                        new ValueName.Behavior(module.name(), spec.name()))) {
                     case IMPLEMENTED -> { }
                     case INJECTION_TARGET -> {
                         return fail("run.behavior.noimpl",

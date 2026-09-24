@@ -25,6 +25,7 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.examples.FixtureReader;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AnalysisBody;
+import souther.compiler.check.BehaviorBodies;
 import souther.compiler.check.FakeTables;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.BoundaryOutput;
@@ -1146,12 +1147,9 @@ public final class Adequacy {
     }
 
     /** Whether the model gives this behavior a body of its own, read off the declarations. */
-    private static boolean givenABody(
-            Map<String, souther.compiler.check.BehaviorImplementation> implementations,
-            String behavior) {
-        souther.compiler.check.BehaviorImplementation state =
-                implementations == null ? null : implementations.get(behavior);
-        return state != null && state.hasBody();
+    private static boolean givenABody(BehaviorBodies implementations, String behavior) {
+        return implementations != null && implementations.of(
+                new ValueName.Behavior(implementations.module(), behavior)).hasBody();
     }
 
     /**
@@ -1192,8 +1190,7 @@ public final class Adequacy {
             // Where each behavior gets its body, which is the model's answer and the one reader of
             // the declarations. Whether this elaboration holds that body is the other question,
             // asked of the elaboration below.
-            Map<String, souther.compiler.check.BehaviorImplementation> implementations =
-                    db.ask(new Bodies.Implementation(name)).value();
+            BehaviorBodies implementations = db.ask(new Bodies.Implementation(name)).value();
             Map<String, InteractionEvidence> out = new LinkedHashMap<>();
             met.value().forEach((behavior, read) -> {
                 souther.compiler.partition.MeasuredInput subject = subjectOf(db, name, behavior);

@@ -21,6 +21,7 @@ import souther.compiler.check.InvariantStatements;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.ExpandedClauses;
 import souther.compiler.types.TypeKey;
+import souther.compiler.check.BehaviorBodies;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Requirements;
 import souther.compiler.check.DataChecker;
@@ -109,7 +110,7 @@ public final class Output {
                         shipped(in), in.scope(), in.published(), in.kinds(),
                         in.scope().library().kernelSignatures(),
                         in.typePackages(), in.sigs(), in.requirementSigs(),
-                        in.injected(),
+                        in.injected(), in.bodies(),
                         in.callees(), in.requirements(), in.foreignStages(), in.checked(),
                         in.compositions(),
                         in.dischargeClauses(), in.invariantStatements(), in.shapes(), in.checks(),
@@ -171,6 +172,7 @@ public final class Output {
                       Map<ValueName.Behavior, Sig> sigs,
                       Map<ValueName.Behavior, Sig> requirementSigs,
                       Set<ValueName.Behavior> injected,
+                      BehaviorBodies bodies,
                       Map<ValueName.Behavior, ReqSig> callees,
                       Map<String, List<BehaviorRequirement>> requirements,
                       Map<ValueName.Behavior, List<ValueName.Behavior>> foreignStages,
@@ -237,8 +239,11 @@ public final class Output {
                     db.ask(new Bodies.RequirementSignatures(name));
             Answer<Map<ValueName.Behavior, List<ValueName.Behavior>>> foreignStages =
                     db.ask(new Bodies.ForeignStageRequirements(name));
+            // What Java supplies, and where every behavior of this module gets its body: the
+            // module's classification, which the emitter reads rather than counting `let`s.
             Answer<Set<ValueName.Behavior>> injected =
-                    db.ask(new Bodies.ImportedInjected(name));
+                    db.ask(new Bodies.InjectionTargets(name));
+            Answer<BehaviorBodies> bodies = db.ask(new Bodies.Implementation(name));
             Answer<Map<ValueName.Behavior, ReqSig>> callees = db.ask(new Bodies.CalleeSigs(name));
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Map<String, List<BehaviorRequirement>>> requirements =
@@ -276,7 +281,8 @@ public final class Output {
             if (!checked.present() || !compositions.present()
                     || !lowering.present() || !scope.present() || !requirementSigs.present()
                     || !foreignStages.present()
-                    || !signatures.present() || !injected.present() || !callees.present()
+                    || !signatures.present() || !injected.present() || !bodies.present()
+                    || !callees.present()
                     || !prepared.present() || !requirements.present() || !expandable.present()
                     || !checks.present() || !standing.present() || !shapes.present()
                     || !reading.present()) {
@@ -285,7 +291,7 @@ public final class Output {
             return new Inputs(lowering.value().lowered(), scope.value(),
                     Shapes.publishedDeclarations(db), Shapes.declarationKinds(db),
                     prepared.value().importedFrom(), signatures.value(), requirementSigs.value(),
-                    injected.value(),
+                    injected.value(), bodies.value(),
                     callees.value(), requirements.value(), foreignStages.value(), checked.value(),
                     compositions.value(),
                     Shapes.expandedClauses(db), InvariantStatements.of(reading.value()),
@@ -321,8 +327,7 @@ public final class Output {
             }
             CstFrontend.Parsed written = db.ask(new Front.Parsed(id)).value();
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
-            Map<String, souther.compiler.check.BehaviorImplementation> implementations =
-                    db.ask(new Bodies.Implementation(name)).value();
+            BehaviorBodies implementations = db.ask(new Bodies.Implementation(name)).value();
             // The resolved module beside the written one. What a declaration reaches is read off
             // the names it resolved to, a clause being written among bindings that may be spelled
             // like a helper; and it is read before the invariants are settled, since settling
@@ -349,7 +354,7 @@ public final class Output {
             requirements.value().forEach((behavior, each) ->
                     required.put(behavior, Requirements.names(each)));
             ModuleMetadata.stamp(classes, written.module(), resolved.value(),
-                    written.slices(), sigs.value(), implementations, required,
+                    written.slices(), sigs.value(), implementations.states(), required,
                     scope.value().scope()::reach, checked.value().settledValues());
         }
 
@@ -490,7 +495,7 @@ public final class Output {
                         in.lowered(), in.scope(), in.published(), in.kinds(),
                         in.scope().library().kernelSignatures(),
                         in.typePackages(), in.sigs(), in.requirementSigs(),
-                        in.injected(),
+                        in.injected(), in.bodies(),
                         in.callees(), in.requirements(), in.foreignStages(), in.checked(),
                         in.compositions(),
                         in.dischargeClauses(), in.invariantStatements(), in.shapes(), in.checks(),

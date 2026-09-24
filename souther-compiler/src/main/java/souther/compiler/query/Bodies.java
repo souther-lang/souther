@@ -52,6 +52,7 @@ import souther.compiler.check.ModuleUniverse.InSight.Read.PublishedHelper;
 import souther.compiler.check.ReqSig;
 import souther.compiler.check.Resolve;
 import souther.compiler.check.Scoping;
+import souther.compiler.check.BehaviorBodies;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.Sig;
 import souther.compiler.check.SpecChecker;
@@ -102,7 +103,6 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.SequencedSet;
 import java.util.List;
@@ -124,40 +124,30 @@ public final class Bodies {
      * Where each behavior of a module gets its body: written here, Souther's to write and not
      * written, or Java's to supply (spec §injected-behavior, §unwritten-behavior).
      *
-     * <p>One question asked once. Every reader that used to ask whether a behavior has a {@code let}
-     * asks this instead, so that the two things an absent {@code let} can mean are two answers
-     * rather than one (issue #936).
+     * <p>The one place a behavior is classified. Every reader asks this, so that the two things an
+     * absent {@code let} can mean are two answers rather than one — and so that a module read off
+     * the path, whose tree carries no {@code let} at all, is answered with what it published rather
+     * than classified again from a tree that cannot say.
      */
-    public record Implementation(String name) implements Key<Map<String, BehaviorImplementation>> {
+    public record Implementation(String name) implements Key<BehaviorBodies> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<String, BehaviorImplementation>> compute(Db db) {
+        public Answer<BehaviorBodies> compute(Db db) {
             Front.FromPath.OnThePath onThePath = Front.onThePath(db, name);
             if (onThePath != null) {
                 // A module off the path published where each of its behaviors gets its body,
                 // because the fn that decides is not published with it.
-                return Answer.of(onThePath.behaviorImplementations());
+                return Answer.of(new BehaviorBodies(name, onThePath.behaviorImplementations()));
             }
             Ast.Module m = db.ask(new Front.Available(name)).value();
             if (m == null) {
-                return Answer.of(Map.of());
+                return Answer.of(new BehaviorBodies(name, Map.of()));
             }
-            Set<String> fns = new LinkedHashSet<>();
-            for (Ast.FnDef f : m.fns()) {
-                fns.add(f.name());
-            }
-            Map<String, BehaviorImplementation> states = new LinkedHashMap<>();
-            for (Ast.BehaviorDef b : m.behaviors()) {
-                states.put(b.name(), b instanceof Ast.SpecBehavior spec
-                        ? BehaviorImplementation.of(fns.contains(spec.name()),
-                                !spec.dependsOn().isEmpty())
-                        : BehaviorImplementation.IMPLEMENTED);
-            }
-            return Answer.of(Collections.unmodifiableMap(states));
+            return Answer.of(BehaviorBodies.fromSource(m));
         }
     }
 
@@ -189,8 +179,7 @@ public final class Bodies {
 
     private static Answer<Set<String>> where(Db db, String module,
                                              Predicate<BehaviorImplementation> is) {
-        Answer<Map<String, BehaviorImplementation>> states =
-                db.ask(new Implementation(module));
+        Answer<BehaviorBodies> states = db.ask(new Implementation(module));
         // Absent rather than empty. A module whose classification could not be asked has not been
         // shown to have no unwritten behaviors, and a caller told there are none rests on it: the
         // rule that nothing built here may hold one would then pass for want of an answer.
@@ -198,7 +187,7 @@ public final class Bodies {
             return Answer.absent();
         }
         Set<String> named = new LinkedHashSet<>();
-        states.value().forEach((name, state) -> {
+        states.value().states().forEach((name, state) -> {
             if (is.test(state)) {
                 named.add(name);
             }
@@ -1097,6 +1086,38 @@ public final class Bodies {
     }
 
     /**
+     * The injection targets a module builds against: the imported ones it names, whose base lives
+     * in the module that declares them, and its own (spec §injected-behavior,
+     * §composition-with-requirements).
+     *
+     * <p>Whether a name is something to inject or something to construct. The requirement walk, the
+     * placement of each {@code ensures} check and the emitter all decide it by this set, so they
+     * cannot disagree about one behavior — and none of them decides it from a tree, which for a
+     * module read off the path carries no {@code let} to tell an implemented behavior from one Java
+     * supplies.
+     */
+    public record InjectionTargets(String name) implements Key<Set<ValueName.Behavior>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Set<ValueName.Behavior>> compute(Db db) {
+            Answer<Set<ValueName.Behavior>> imported = db.ask(new ImportedInjected(name));
+            Answer<Set<String>> own = db.ask(new Injected(name));
+            if (!imported.present() || !own.present()) {
+                return Answer.absent();
+            }
+            Set<ValueName.Behavior> injected = new LinkedHashSet<>(imported.value());
+            for (String behavior : own.value()) {
+                injected.add(new ValueName.Behavior(name, behavior));
+            }
+            return Answer.of(Ordered.set(injected));
+        }
+    }
+
+    /**
      * What each behavior of a module requires injected to be constructed, and which definitions ask
      * for it ({@link Requirements}).
      *
@@ -1129,7 +1150,7 @@ public final class Bodies {
                         ? published(onThePath) : Answer.absent();
             }
             Answer<Lower.Lowered> lowering = db.ask(new Lowering(name));
-            Answer<Set<ValueName.Behavior>> injected = db.ask(new ImportedInjected(name));
+            Answer<Set<ValueName.Behavior>> injected = db.ask(new InjectionTargets(name));
             Answer<Map<ValueName.Behavior, List<ValueName.Behavior>>> foreign =
                     db.ask(new ForeignStageRequirements(name));
             if (!lowering.present() || !injected.present() || !foreign.present()) {
@@ -1198,8 +1219,7 @@ public final class Bodies {
                 }
                 return Answer.of(Ordered.map(declared));
             }
-            Answer<Map<String, BehaviorImplementation>> implementations =
-                    db.ask(new Implementation(name));
+            Answer<BehaviorBodies> implementations = db.ask(new Implementation(name));
             Answer<Map<String, List<BehaviorRequirement>>> requirements =
                     db.ask(new Requirements(name));
             Answer<Map<ValueName.Behavior, Sig>> takes = db.ask(new RequirementSignatures(name));
@@ -1207,7 +1227,7 @@ public final class Bodies {
                 return Answer.absent();
             }
             Map<String, ConstructionLink> out = new LinkedHashMap<>();
-            implementations.value().forEach((behavior, implementation) -> {
+            implementations.value().states().forEach((behavior, implementation) -> {
                 if (implementation != BehaviorImplementation.IMPLEMENTED) {
                     return;
                 }
@@ -3503,7 +3523,9 @@ public final class Bodies {
             // being handed nothing — it goes as far as it can without one and abandons the module
             // there, and what went wrong was reported where signatures are made.
             Answer<Map<String, Sig>> signatures = db.ask(new Signatures(name));
-            Answer<Set<ValueName.Behavior>> injected = db.ask(new ImportedInjected(name));
+            // Where each behavior gets its body, as the module was classified. The tree the check
+            // walks cannot say, since one read off the path carries no `let`.
+            Answer<BehaviorBodies> bodies = db.ask(new Implementation(name));
             Answer<Set<ValueName.Behavior>> unwritten = db.ask(new ImportedUnwritten(name));
             Answer<Map<ValueName.Behavior, ReqSig>> reqSigs = db.ask(new ReqSigs(name));
             Answer<Map<String, Type>> sigs = db.ask(new RecursiveCallSigs(name, InliningPolicy.FULL));
@@ -3517,7 +3539,7 @@ public final class Bodies {
             Answer<UninhabitableTypes.WithNoValue> withNoValue =
                     db.ask(new Shapes.TypesWithNoValue(name));
             if (!lowering.present() || !scope.present()
-                    || !injected.present() || !unwritten.present()
+                    || !bodies.present() || !unwritten.present()
                     || !reqSigs.present() || !sigs.present() || !withNoValue.present()
                     || !calleeSigs.present() || !published.present() || !elsewhere.present()) {
                 return Answer.absent();
@@ -3545,7 +3567,7 @@ public final class Bodies {
                         withNoValue.value(), Shapes.declarationLocations(db),
                         db.ask(new Front.Reading()).value(),
                         signatures.present() ? signatures.value() : null,
-                        injected.value(), unwritten.value(), lowering.value().lowered(),
+                        bodies.value(), unwritten.value(), lowering.value().lowered(),
                         lowering.value().carried(), lowering.value().roles(), reqSigs.value(),
                         calleeSigs.value(), sigs.value(), published.value(),
                         settled, shapes.present() ? shapes.value() : Map.of(),
@@ -4230,13 +4252,12 @@ public final class Bodies {
      * implement, and that is the whole difference between the two absences a row can meet.
      */
     private static Set<String> implementationsOwnedBy(Db db, String module) {
-        Map<String, BehaviorImplementation> states =
-                db.ask(new Implementation(module)).value();
+        BehaviorBodies states = db.ask(new Implementation(module)).value();
         Set<String> owned = new LinkedHashSet<>();
         if (states == null) {
             return owned;
         }
-        states.forEach((behavior, state) -> {
+        states.states().forEach((behavior, state) -> {
             if (state.hasBody()) {
                 owned.add(behavior);
             }
@@ -4394,8 +4415,8 @@ public final class Bodies {
      * to but reaches as a dependency joins the injected ones, and a reader arriving afterwards
      * finds a bodied behavior among them.
      *
-     * <p>{@link souther.compiler.check.Requirements#injectedNames} is the set as the requirements pass answered it, which
-     * is the reading the decision is owed.
+     * <p>{@link InjectionTargets} is the set as the requirements pass answered it, which is the
+     * reading the decision is owed.
      *
      * <p>Every behavior this module declares is in here, which is what makes a miss an answer
      * ({@link EnsuresEnforcement#in}) rather than a table that was not filled.
@@ -4410,15 +4431,13 @@ public final class Bodies {
         @Override
         public Answer<Map<ValueName.Behavior, EnsuresEnforcement>> compute(Db db) {
             Answer<Lower.Lowered> lowering = db.ask(new Lowering(name));
-            Answer<Set<ValueName.Behavior>> importedInjected = db.ask(new ImportedInjected(name));
+            Answer<Set<ValueName.Behavior>> injectionTargets = db.ask(new InjectionTargets(name));
             Answer<Map<String, CheckedEnsures>> contracts = db.ask(new Contracts(name));
-            if (!lowering.present() || !importedInjected.present() || !contracts.present()) {
+            if (!lowering.present() || !injectionTargets.present() || !contracts.present()) {
                 return Answer.absent();
             }
             Hir.Module lowered = lowering.value().lowered();
-            Set<ValueName.Behavior> injected =
-                    souther.compiler.check.Requirements.injectedNames(
-                            lowered, importedInjected.value());
+            Set<ValueName.Behavior> injected = injectionTargets.value();
             // What runs, which is what a check is made from. Where each rule was written stays with
             // the declaration; a reader given that as well would hold a value an unrelated edit
             // moves.
