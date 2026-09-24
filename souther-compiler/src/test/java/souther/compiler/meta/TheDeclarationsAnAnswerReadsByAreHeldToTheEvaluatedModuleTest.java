@@ -855,6 +855,38 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
     }
 
     /**
+     * A composition requiring the same dependency in both builds, where that dependency is declared
+     * differently.
+     *
+     * <p>The dependency is held to both builds as a behavior a declaration names is. Nothing the
+     * composition publishes names it — its stages are not published — so it is reached through what
+     * the composition requires or not at all, and a dependency taking two inputs is handed in as
+     * another class than one taking one.
+     */
+    @Test
+    void whatACompositionRequiresIsHeldToBothBuildsAsWell() {
+        String unary = """
+                module example.requiring
+
+                behavior rate : (n: Int) -> Int
+                behavior charged : (n: Int) -> Int depends on rate
+                let charged (n, rate) = rate(n)
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                behavior priced = charged >-> double
+                """;
+        String binary = unary
+                .replace("behavior rate : (n: Int) -> Int", "behavior rate : (n: Int, m: Int) -> Int")
+                .replace("let charged (n, rate) = rate(n)", "let charged (n, rate) = rate(n, n)");
+
+        Agreement.Disagree said = assertInstanceOf(Agreement.Disagree.class,
+                DeclarationAgreement.of("example.requiring", "priced",
+                        declarationsOf(binary), declarationsOf(unary), DefaultStdlib.get()),
+                "the two take the same `rate` and do not agree about what it is");
+        assertEquals("rate", said.declaration());
+    }
+
+    /**
      * A module only an unread helper reaches is not held to.
      *
      * <p>It has to be read — a name in that helper is answered against it, and resolution answers

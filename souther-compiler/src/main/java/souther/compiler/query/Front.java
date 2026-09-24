@@ -601,18 +601,7 @@ public final class Front {
                 }
                 ReadableModule module = ((Readback.Ready<ReadableModule>) readback).value();
                 read.put(name, module);
-                // What its behaviors are built with is reached as much as what its declarations
-                // name. A composition's stages are not published, so a dependency one of them brings
-                // in may be declared in a module nothing in its text mentions — and a reader
-                // building the composition is handed that dependency and types it from there.
-                SequencedSet<String> reaches = new LinkedHashSet<>(reaches(module.module()).keySet());
-                for (List<ValueName.Behavior> required : module.behaviorRequirements().values()) {
-                    for (ValueName.Behavior dependency : required) {
-                        if (!dependency.module().equals(name)) {
-                            reaches.add(dependency.module());
-                        }
-                    }
-                }
+                SequencedSet<String> reaches = reaches(module);
                 edges.put(name, List.copyOf(reaches));
                 pending.addAll(reaches);
             }
@@ -1354,6 +1343,30 @@ public final class Front {
             }
         }
         names.remove(m.name());
+        return names;
+    }
+
+    /**
+     * Every module a module read off the path reaches: what its declarations name
+     * ({@link #reaches(Ast.Module)}), and every module a dependency one of its behaviors is
+     * constructed with is declared in.
+     *
+     * <p>The second is not in the text. A composition's stages are not published, so a dependency a
+     * stage brings in may be declared in a module nothing the module carries mentions, and it is
+     * carried beside the module instead. A reader building the composition is handed that dependency
+     * and types it from its module; a reader comparing two builds of it follows it there. One answer
+     * for both sets of published classes, for the reason the one above is one.
+     */
+    public static SequencedSet<String> reaches(ReadableModule read) {
+        String own = read.module().name();
+        SequencedSet<String> names = new LinkedHashSet<>(reaches(read.module()).keySet());
+        for (List<ValueName.Behavior> required : read.behaviorRequirements().values()) {
+            for (ValueName.Behavior dependency : required) {
+                if (!dependency.module().equals(own)) {
+                    names.add(dependency.module());
+                }
+            }
+        }
         return names;
     }
 

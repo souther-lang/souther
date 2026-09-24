@@ -121,7 +121,7 @@ public final class PublishedUniverse {
         return resolutions.get(module);
     }
 
-    /** Reads {@code module} and everything its declarations name, as far as these classes go. */
+    /** Reads {@code module} and everything it reaches, as far as these classes go. */
     private void readReaching(String module) {
         Deque<String> toRead = new ArrayDeque<>(Set.of(module));
         Set<String> tried = new LinkedHashSet<>(Set.of(module));
@@ -138,10 +138,10 @@ public final class PublishedUniverse {
             if (!(readback instanceof Readback.Ready<ReadableModule>(ReadableModule readable))) {
                 continue;
             }
-            // Which modules a module's declarations name, answered where the compiler answers it:
-            // an import line names one, and so does a type or a behavior written with a qualifier,
-            // which needs no import at all.
-            for (String reaches : Front.reaches(readable.module()).keySet()) {
+            // Which modules a module reaches, answered where the compiler answers it: an import line
+            // names one, and so does a type or a behavior written with a qualifier, which needs no
+            // import at all, and so does a dependency one of its behaviors is constructed with.
+            for (String reaches : Front.reaches(readable)) {
                 if (tried.add(reaches)) {
                     toRead.addLast(reaches);
                 }
