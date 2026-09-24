@@ -6995,7 +6995,9 @@ Told apart from <<e1918>>, which is an arm no row goes through. A row does go th
 No row takes a decision rule of `judgeHours`.
 ----
 
-A warning (<<what-a-build-refuses-over-is-the-account>>). A body of guards and matches states a decision; its rules are the ways through it, each carrying the distinctions that way consulted and what each came out as, with a condition the way never reached left out rather than written as a don't-care.
+A warning (<<what-a-build-refuses-over-is-the-account>>). The forks of a body state a decision, whatever each fork is decided by; its rules are the ways through it, each carrying the distinctions that way consulted and what each came out as, with a condition the way never reached left out rather than written as a don't-care. An attempted construction is one of them: whether its invariant held and which departure it took are distinctions a way consults, and a run is placed at the rule whose arm it went through even though this compiler does not read which values of the input each arm is reached by.
+
+A rule this compiler read fewer distinctions of than its way consults is not one any run is placed at. Every distinction it does carry being seen is no evidence that a run took it, and a rule left with none would be matched by every run.
 
 Said only of the rules something was seen standing in. Whether a rule is owed a row at all is settled before this and the other two answers are not warned about: a rule the readings that already exist show no row takes is owed nothing, and a rule this compiler looked for and did not find is neither covered nor a gap — reporting the second would tell an author that a shortfall of this compiler is work of theirs.
 

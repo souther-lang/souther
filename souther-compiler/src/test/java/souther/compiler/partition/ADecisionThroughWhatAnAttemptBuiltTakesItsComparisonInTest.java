@@ -14,6 +14,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * scope the body is. Named from outside the attempt, {@code q.value} is no position and the
  * comparison on the way to both rules under {@code then} is one the reading declines — so a row
  * composed for either is composed against less than the way asks.
+ *
+ * <p>The attempt's own arm is declined on every way, the departure's included. Which arm an attempt
+ * takes is decided by its invariant, which this reading does not read as anything about the input,
+ * and a way that left the arm off would say its region is all there is to it.
  */
 class ADecisionThroughWhatAnAttemptBuiltTakesItsComparisonInTest {
 
@@ -29,17 +33,28 @@ class ADecisionThroughWhatAnAttemptBuiltTakesItsComparisonInTest {
             let size (x) = if Q(x) as q then (if q.value > 10 then Big else Small) else Nope
             """;
 
-    /** Each way under {@code then} takes the comparison in, and no way declines a condition. */
+    /** Each way under {@code then} takes the comparison in, and what any way declines is the
+     *  attempt's arm and nothing else. */
     @Test
     void theComparisonUnderThenIsTakenInOnBothWays() {
         DecisionReading read = DecisionReadings.of(MODEL, "size");
 
         List<String> onTheWay = read.found().stream()
                 .map(ruled -> ruled.states().onTheWay().stream()
-                        .map(each -> each.getClass().getSimpleName()).toList().toString())
+                        .map(ADecisionThroughWhatAnAttemptBuiltTakesItsComparisonInTest::said)
+                        .toList().toString())
                 .sorted()
                 .toList();
 
-        assertEquals(List.of("[TakenIn]", "[TakenIn]", "[]"), onTheWay);
+        assertEquals(List.of(
+                "[Declined ForkArmNotReadAsANarrowing, TakenIn]",
+                "[Declined ForkArmNotReadAsANarrowing, TakenIn]",
+                "[Declined ForkArmNotReadAsANarrowing]"), onTheWay);
+    }
+
+    private static String said(OnTheWay each) {
+        return each instanceof OnTheWay.Declined declined
+                ? "Declined " + declined.why().getClass().getSimpleName()
+                : each.getClass().getSimpleName();
     }
 }

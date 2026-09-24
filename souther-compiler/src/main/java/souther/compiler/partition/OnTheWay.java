@@ -187,8 +187,9 @@ public sealed interface OnTheWay {
          *
          * <p>A fork on something no position holds — an expression the walk cannot follow back to
          * one, an arm answering for several cases at once, a case the reading of the declarations
-         * has no position for. Each of those leaves the same thing unsaid, which is which values of
-         * the input reach this arm, so they arrive here as one word.
+         * has no position for, an attempt whose arm is decided by an invariant the walk does not
+         * read. Each of those leaves the same thing unsaid, which is which values of the input
+         * reach this arm, so they arrive here as one word.
          */
         record ForkArmNotReadAsANarrowing() implements Why {}
 

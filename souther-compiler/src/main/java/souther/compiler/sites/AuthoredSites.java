@@ -434,8 +434,21 @@ public final class AuthoredSites {
                     take(e);
                     wrote(attempt.origin(), attempt.pos());
                     expr(attempt.construct());
+                    // An arm of an attempt is a condition as an arm of a match is: that the
+                    // invariant held, or that it failed the way the departure answers. The
+                    // success is written as its body and each departure where the departure is.
+                    boolean written = attempt.origin() != null && attempt.origin().isWritten();
+                    if (written && attempt.then() != null) {
+                        wroteCondition(new WrittenCondition.ForkArm(attempt.origin(), 0),
+                                attempt.then().pos());
+                    }
                     expr(attempt.then());
-                    for (Hir.ElseArm arm : attempt.els()) {
+                    for (int i = 0; i < attempt.els().size(); i++) {
+                        Hir.ElseArm arm = attempt.els().get(i);
+                        if (written) {
+                            wroteCondition(new WrittenCondition.ForkArm(attempt.origin(), i + 1),
+                                    arm.pos());
+                        }
                         expr(arm.body());
                     }
                 }

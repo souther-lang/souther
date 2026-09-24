@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.carrier.Lookup;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.core.Core;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
@@ -182,6 +183,26 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison)
                     new OnTheWay.Why.ForkArmNotReadAsANarrowing());
         }
         return new OnTheWay.Narrowed(at, scrutinee.refine(narrowing));
+    }
+
+    /**
+     * What reaching arm {@code part} of {@code attempt} establishes about this input, which this
+     * reading cannot say.
+     *
+     * <p>The arm is decided by whether the construction's invariant held of the values it was
+     * given, and what that says of the input is the invariant read over those values. That is a
+     * reading of the invariant and not of anything this walk met, so the arm is declined rather than
+     * given a narrowing the walk did not establish. Declined and not left out: a rule through the
+     * arm still turns on it, and it is named so that the success and each departure are distinctions
+     * apart.
+     *
+     * @param at where the arm is written, which is its body since an attempt writes no arm of its own
+     */
+    static OnTheWay attempting(Core.IfConstructed attempt, int part, SourcePos at,
+                               ConditionNumbering numbering) {
+        ConditionOccurrence met = numbering.metEntering(attempt, part);
+        return new OnTheWay.Declined(met, numbering.anchorOfArm(attempt.origin(), part, at, met),
+                new OnTheWay.Why.ForkArmNotReadAsANarrowing());
     }
 
     /**

@@ -1,5 +1,6 @@
 package souther.compiler.reading;
 
+import souther.compiler.check.Choice;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
@@ -163,25 +164,37 @@ final class CoverageNaming implements Naming<Outcome> {
      *
      * <p>An arm places at no class of any input, so a group offered under one of these goes. That it
      * is here at all is what says the reading found a way in it could not name.
+     *
+     * <p>An attempt's arms are always this: whether the invariant held is decided by nothing
+     * written in the body, so there is no position to say it of and the arm is what names it.
      */
     @Override
-    public Outcome forkArm(Core fork, int part) {
+    public Outcome forkArm(Core fork, int part, Choice.Decides decidedBy) {
         ControlPlace.Arm place = armPoint(fork, part);
         ControlClaim claim = claimAt(place);
         if (claim == null) {
             return null;
         }
-        if (fork instanceof Core.If iff) {
-            TermPath read = switch (reads.pathOf(iff.cond(), newtypes)) {
-                case PathResolution.At(var stands) -> stands;
-                case PathResolution.NotAPosition _ -> null;
-                case PathResolution.MayStandAt _ -> null;
-            };
-            Condition what = read == null ? new Condition.Arm(place.arm())
-                    : new Condition.Case(read, part == 0 ? "true" : "false");
-            return one(new Decision(what, claim));
-        }
-        return one(new Decision(new Condition.Arm(place.arm()), claim));
+        Condition what = switch (decidedBy) {
+            case Choice.Decides.ACondition(Core cond, boolean holding) -> {
+                TermPath read = switch (reads.pathOf(cond, newtypes)) {
+                    case PathResolution.At(var stands) -> stands;
+                    case PathResolution.NotAPosition _ -> null;
+                    case PathResolution.MayStandAt _ -> null;
+                };
+                yield read == null ? new Condition.Arm(place.arm())
+                        : new Condition.Case(read, holding ? "true" : "false");
+            }
+            case Choice.Decides.ItWasBuilt _ -> new Condition.Arm(place.arm());
+            case Choice.Decides.ItDeparted _ -> new Condition.Arm(place.arm());
+            // Named by matchCase, which is asked of the match and not of a fork in general.
+            case Choice.Decides.ACase _ -> throw new IllegalStateException(
+                    "a case of a match at " + fork.pos() + " was asked of as an arm of a fork");
+            case Choice.Decides.ByArgumentRelations _ -> throw new IllegalStateException(
+                    "an operation the library defines by cases at " + fork.pos()
+                            + " was asked of as an arm of a fork, and no walk enters one");
+        };
+        return one(new Decision(what, claim));
     }
 
     @Override

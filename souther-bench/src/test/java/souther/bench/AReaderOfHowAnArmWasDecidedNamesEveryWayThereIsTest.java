@@ -73,7 +73,14 @@ class AReaderOfHowAnArmWasDecidedNamesEveryWayThereIsTest {
             "souther.compiler.flow.ValueArrivals#inside", "which name a step into a child binds,"
                     + " for the reading of how a value arrives. It binds the name to a way of"
                     + " arriving and to no value, so it says nothing of what the name denotes,"
-                    + " which is Terms#chose's answer"));
+                    + " which is Terms#chose's answer",
+            "souther.compiler.partition.DecisionNaming#forkArm", "which distinction of the decision"
+                    + " a way into the arm consulted, and where a run through it is seen. What the"
+                    + " arm settles is not read: a condition is asked of the one reading of a"
+                    + " condition, and an attempt's arm is a column that says it cannot be read",
+            "souther.compiler.reading.CoverageNaming#forkArm", "how a way into the arm is written"
+                    + " for the reading a row is composed against: the position a condition is on"
+                    + " where it is on one, and the arm itself where it is not"));
 
     @Test
     void everyReaderOfHowAnArmWasDecidedNamesEveryWayThereIs() throws IOException {
