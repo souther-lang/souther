@@ -107,6 +107,49 @@ class ModuleReadbackTest {
                 read.module().imports().stream().map(Ast.Import::module).toList());
     }
 
+    /**
+     * The parameter names a composition's signature is written with to reach the parser are no word
+     * of any declaration, so an import that only such a name spells is not needed — and the same word
+     * written in a declaration still is.
+     *
+     * <p>Both ways, because the two are one word. A reading that passed over every occurrence of it
+     * would drop the second import, and one that read the made-up names as words would keep the
+     * first.
+     */
+    @Test
+    void aNameWrittenOnlyToCarryACompositionNeedsNoImport() {
+        String dependency = """
+                module private.dep exposing ( in0 )
+                let in0 = 1
+                """;
+        String bodyOnly = """
+                module lib.pub exposing ( double, twice : Int )
+                import private.dep ( in0 )
+                behavior double : (n: Int) -> Int
+                let double (n) = n + in0
+                behavior twice = double >-> double
+                """;
+        String declared = """
+                module lib.pub exposing ( Floor, double, twice : Int )
+                import private.dep ( in0 )
+                data Floor = Int
+                    invariant value >= in0
+                behavior double : (n: Int) -> Int
+                let double (n) = n
+                behavior twice = double >-> double
+                """;
+
+        assertEquals(List.of(), importsReadBack(dependency, bodyOnly),
+                "only a `let` names it, and the composition's signature names nothing");
+        assertEquals(List.of("private.dep"), importsReadBack(dependency, declared),
+                "an invariant names it");
+    }
+
+    private static List<String> importsReadBack(String dependency, String published) {
+        return readBack("lib.pub", Compiler.compileModules(List.of(dependency, published)))
+                .module().imports().stream().map(Ast.Import::module).toList();
+    }
+
     /** No `let` comes back for any behavior, so where each one's body comes from cannot be read off
      * the module; it is carried beside it. Three states and not two: a behavior Souther is to
      * implement and nobody has would arrive as one Java supplies if a reader worked it out again,

@@ -73,6 +73,7 @@ class ACompositionFromAJarIsStillACompositionTest {
         assertEquals(code, together.code());
         assertEquals(together.code(), offThePath.code());
         assertEquals(together.said().getClass(), offThePath.said().getClass(),
-                () -> "compiled beside it: " + together + "\nread off the path: " + offThePath);
+                () -> "compiled beside it: " + together.said()
+                        + "\nread off the path: " + offThePath.said());
     }
 }

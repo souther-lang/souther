@@ -9,6 +9,7 @@ import souther.compiler.check.Scoping;
 import souther.compiler.check.Registry;
 import souther.compiler.codegen.Backend;
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Region;
 import souther.compiler.cst.SourceLayout;
 import souther.compiler.diag.SourceProvenance;
 import souther.compiler.frontend.CstFrontend;
@@ -187,9 +188,11 @@ public final class ModuleReadback {
             declarations.append('\n').append(helper).append('\n');
         }
         StringBuilder source = new StringBuilder(m.header()).append('\n');
+        int importsFrom = source.length();
         for (String line : m.imports()) {
             source.append(line).append('\n');
         }
+        Span importLines = new Span(importsFrom, source.length());
         source.append(declarations);
         CstFrontend.ReadBack readBack;
         try {
@@ -204,13 +207,14 @@ public final class ModuleReadback {
             // else's raise arrive as a statement about this artifact.
             return unreadable(moduleName, new Readback.Failure.InvalidPublishedSyntax());
         }
-        Ast.Module parsed = asPublished(readBack.module(), signaturesFrom);
-        if (parsed == null) {
+        Published published = asPublished(readBack.module(), signaturesFrom);
+        if (published == null) {
             // A composition's signature carrying what only a declaration writes, or a signature
             // the metadata says was declared written as stages: the two members disagree about
             // what this behavior is.
             return unreadable(moduleName, new Readback.Failure.UnreadableMetadata());
         }
+        Ast.Module parsed = published.module();
         if (!parsed.name().equals(moduleName)) {
             // A reading answers about the module it was asked for. The class was found by that name
             // and the module is named by the header on it; where the two differ there is no reading
@@ -228,11 +232,16 @@ public final class ModuleReadback {
             return unreadable(moduleName, new Readback.Failure.InvalidDeclarations(
                     refused.get(0), refused.subList(1, refused.size())));
         }
-        // Which imports are needed is asked of the header and the declarations — everything that was
-        // published except the import lines themselves.
+        // Which imports are needed is asked of the text that was parsed, passing over the import
+        // lines themselves and what was written only to carry a composition through the parser.
+        List<Span> passedOver = new ArrayList<>();
+        passedOver.add(importLines);
+        for (Region binder : published.writtenForTheParser()) {
+            passedOver.add(new Span(readBack.laidOut().offsetOf(binder.start()),
+                    readBack.laidOut().offsetOf(binder.end())));
+        }
         Exposing.Checked checked =
-                Exposing.check(withNeededImports(parsed, m.header() + "\n" + declarations),
-                        library);
+                Exposing.check(withNeededImports(parsed, source.toString(), passedOver), library);
         if (!checked.refused().isEmpty()) {
             List<Readback.Exposure> crossed = checked.refused().stream()
                     .map(ModuleReadback::asAnArtifactsFailure).toList();
@@ -284,13 +293,18 @@ public final class ModuleReadback {
      * as a declaration, every reader that asks what kind of behavior this is would answer for one
      * that declared parameters.
      *
+     * <p>The parameter names it drops are still written in the text, and where they are written is
+     * answered beside the module: the text is what was parsed and stays as it is, and a reading of
+     * its words passes over them.
+     *
      * <p>Null where the text and the metadata disagree: a composition's signature written with a
      * clause only a declaration carries, or a behavior the metadata says was declared written as
      * stages. The writer produces neither.
      */
-    private static Ast.Module asPublished(Ast.Module parsed,
-                                          Map<String, PublishedSignature> signaturesFrom) {
+    private static Published asPublished(Ast.Module parsed,
+                                         Map<String, PublishedSignature> signaturesFrom) {
         List<Ast.BehaviorDef> behaviors = new ArrayList<>(parsed.behaviors().size());
+        List<Region> writtenForTheParser = new ArrayList<>();
         for (Ast.BehaviorDef behavior : parsed.behaviors()) {
             PublishedSignature from = signaturesFrom.get(behavior.name());
             if (from == null) {
@@ -300,7 +314,12 @@ public final class ModuleReadback {
                 case Ast.PipeBehavior _ -> null;
                 case Ast.SpecBehavior spec -> switch (from) {
                     case DECLARED -> spec;
-                    case COMPOSED -> compositionOf(spec);
+                    case COMPOSED -> {
+                        for (Ast.Param param : spec.params()) {
+                            writtenForTheParser.add(param.written().region());
+                        }
+                        yield compositionOf(spec);
+                    }
                 };
             };
             if (read == null) {
@@ -308,10 +327,21 @@ public final class ModuleReadback {
             }
             behaviors.add(read);
         }
-        return new Ast.Module(parsed.name(), parsed.exposing(), parsed.exposedOutputs(),
-                parsed.imports(), parsed.defs(), behaviors, parsed.fns(), parsed.takenOn(),
-                parsed.examples(), parsed.fakes(), parsed.exampleFileTarget(), parsed.pos());
+        return new Published(new Ast.Module(parsed.name(), parsed.exposing(),
+                parsed.exposedOutputs(), parsed.imports(), parsed.defs(), behaviors, parsed.fns(),
+                parsed.takenOn(), parsed.examples(), parsed.fakes(), parsed.exampleFileTarget(),
+                parsed.pos()), List.copyOf(writtenForTheParser));
     }
+
+    /**
+     * A module as it was published, and where its text holds syntax that is no part of any
+     * declaration: the parameter names written to carry a composition's signature through the
+     * parser.
+     */
+    private record Published(Ast.Module module, List<Region> writtenForTheParser) {}
+
+    /** A stretch of the published text, from {@code from} up to {@code to}, in UTF-16 code units. */
+    private record Span(int from, int to) {}
 
     /** The composition {@code written} is the published signature of, or null where it carries a
      *  clause a composition does not write. */
@@ -381,16 +411,22 @@ public final class ModuleReadback {
      * declarations that never mention it (issue #138).
      *
      * <p>Needed is decided on the words of the published text rather than on the parsed
-     * declarations. The text is exactly what an importing project reads, and a word is a word
-     * wherever it is written — in a field's type, a spread, an invariant, a helper an invariant
-     * calls, an exposed composition's output. A walk over the parsed forms would have to name every
-     * place a type can appear and would drop an import the day one is added; a word that is written
-     * nowhere cannot be referred to by anything.
+     * declarations, and a word is a word wherever it is written — in a field's type, a spread, an
+     * invariant, a helper an invariant calls, an exposed composition's output. A walk over the
+     * parsed forms would have to name every place a type can appear and would drop an import the day
+     * one is added; a word that is written nowhere cannot be referred to by anything.
+     *
+     * <p>The words of every declaration, and nothing else: {@code passedOver} is where the text holds
+     * something else — the import lines being decided about, and syntax written only to carry a
+     * declaration through the parser, which for a published composition is the parameter names its
+     * signature is written with. Those are found by where the parse put them, and the text itself is
+     * read as it is.
      */
-    private static Ast.Module withNeededImports(Ast.Module module, String declared) {
+    private static Ast.Module withNeededImports(Ast.Module module, String text,
+                                                List<Span> passedOver) {
         Set<String> written = new LinkedHashSet<>();
         Set<String> qualifiers = new LinkedHashSet<>();
-        for (String word : words(declared)) {
+        for (String word : words(text, passedOver)) {
             written.add(word);
             int dot = word.lastIndexOf('.');
             if (dot > 0) {
@@ -421,12 +457,22 @@ public final class ModuleReadback {
      *
      * <p>A run inside a string literal is a word here too: it costs an import that is kept, which is
      * what was published anyway.
+     *
+     * <p>What lies in {@code passedOver} is read as no part of any word, so a run ends where one
+     * begins and starts again after it, and nothing on either side of it is joined into a word the
+     * text does not write.
      */
-    private static List<String> words(String text) {
+    private static List<String> words(String text, List<Span> passedOver) {
+        boolean[] skipped = new boolean[text.length()];
+        for (Span span : passedOver) {
+            for (int i = span.from(); i < span.to(); i++) {
+                skipped[i] = true;
+            }
+        }
         List<String> words = new ArrayList<>();
         int start = -1;
         for (int i = 0; i <= text.length(); i++) {
-            boolean part = i < text.length()
+            boolean part = i < text.length() && !skipped[i]
                     && (Character.isLetterOrDigit(text.charAt(i)) || text.charAt(i) == '_'
                             || text.charAt(i) == '.');
             if (part && start < 0) {
