@@ -249,6 +249,11 @@ public final class TermMeaning {
                 out.add(x.type());
                 project(x.operand(), out);
             }
+            case Core.Widen x -> {
+                out.add(Core.Widen.class);
+                out.add(x.type());
+                project(x.value(), out);
+            }
             case Core.FieldAccess x -> {
                 out.add(Core.FieldAccess.class);
                 out.add(x.field());

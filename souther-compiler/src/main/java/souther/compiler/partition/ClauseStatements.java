@@ -116,8 +116,10 @@ final class ClauseStatements {
         return out;
     }
 
-    private static void walk(Core e, InputReads reads, Symbols symbols,
+    private static void walk(Core standing, InputReads reads, Symbols symbols,
                              DeclarationNewtypes newtypes, List<Statement> out) {
+        // What a rule states is the truth it is whatever type it stands as.
+        Core e = Core.withoutStanding(standing);
         // Through what a `let` binds: what the expression comes to is its body, so the body states
         // whatever the rule states. This is the shape a helper called from a clause arrives in —
         // the call expanded and its argument bound to the helper's own parameter — and a walk that
@@ -145,8 +147,9 @@ final class ClauseStatements {
     }
 
     /** Which kind of rule one statement is. */
-    private static Statement whatItStates(Core e, InputReads reads, Symbols symbols,
+    private static Statement whatItStates(Core standing, InputReads reads, Symbols symbols,
                                           DeclarationNewtypes newtypes) {
+        Core e = Core.withoutStanding(standing);
         if (e instanceof Core.Binary binary) {
             Comparison comparison = Comparison.of(binary).orElse(null);
             return comparison == null ? new Statement.NotRead(e, reads)

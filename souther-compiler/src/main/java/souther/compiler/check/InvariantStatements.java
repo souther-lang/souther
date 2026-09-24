@@ -128,7 +128,7 @@ public final class InvariantStatements {
         // where one was kept standing. Stated only: what holds where an operation does not is not
         // that operation, and there is nothing here to name it by.
         if (reached.said().positive()
-                && Clauses.substituted(reached.said().of(), given)
+                && Core.withoutStanding(Clauses.substituted(reached.said().of(), given))
                         instanceof Core.PreservedCall call) {
             return new InvariantStatement.Applies(reached.statement(), call);
         }

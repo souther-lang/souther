@@ -2539,7 +2539,7 @@ public final class InvariantChecker {
     private StatedLines.Statement lineStatedIn(Core leaf, boolean positive, Denotations at,
                                                Map<FactSubject, Coordinate> byName,
                                                Arrivals answering) {
-        if (!(leaf instanceof Core.Binary bin)) {
+        if (!(Core.withoutStanding(leaf) instanceof Core.Binary bin)) {
             return NO_LINE;
         }
         StatedComparison read = StatedComparison.of(bin, positive);
@@ -3721,7 +3721,7 @@ public final class InvariantChecker {
      * are owed once, under nothing that was assumed on the way to any build of it.
      */
     private Known walkedValue(Core value, Known k, Denotations at, ContextMultiplicity copies) {
-        return switch (value) {
+        return switch (Core.withoutStanding(value)) {
             case Core.Block _ -> k;
             case Core.MaterialisedValue build -> {
                 Core template = templates.bodyOf(build);
@@ -3766,6 +3766,11 @@ public final class InvariantChecker {
     private Known walk(Core e, Known k, Denotations at, ContextMultiplicity copies) {
         if (k.reachesNothing()) {
             return k;
+        }
+        // Standing as a wider type evaluates nothing, constructs nothing and settles nothing: what
+        // is walked is what it holds, and what that leaves is what this leaves.
+        if (e instanceof Core.Widen w) {
+            return walk(w.value(), k, at, copies);
         }
         Core.LetIn standing = bindingInValueIn(e);
         if (standing != null) {

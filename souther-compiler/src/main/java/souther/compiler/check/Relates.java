@@ -33,7 +33,7 @@ final class Relates {
         // whatever else it is, since what a call or a pattern says about the positions in it is
         // what a reading could not work out — counting the positions instead reads
         // `validPair(left, right)` as a relation, which it may not be.
-        if (!(e instanceof Core.Binary b) || !b.op().compares()) {
+        if (!(Core.withoutStanding(e) instanceof Core.Binary b) || !b.op().compares()) {
             return false;
         }
         Object left = positionIn.apply(b.left());

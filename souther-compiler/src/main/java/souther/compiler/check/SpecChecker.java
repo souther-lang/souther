@@ -348,17 +348,19 @@ public final class SpecChecker {
 
         // push the declared output type into the body so a body that is directly an empty collection
         // (or a construction whose field is one) takes the declared type rather than a bottom
-        Core elaboratedBody = Elaborator.elaborate(body, tenv,
+        Core answered = Elaborator.elaborate(body, tenv,
                 new CheckContext(symbols, declarations, null, reqSigs)
                         .withCallees(calleeSigs)
                         .withDependencies(dependsOn)
                         .preserving(Preserved.valuesAlreadySettled(settledValues)), output);
-        Type rt = elaboratedBody.type();
+        Type rt = answered.type();
         if (!TypeOps.assignable(rt, output, published)) {
             throw CompileException.of(Diagnostic
                             .at(body.pos())
                             .diff(Type.show(rt, output), Type.show(output, rt)).say(new BehaviorMessage.TheBodyIsNotWhatTheBehaviorReturns(spec.name(), Type.show(output), Type.show(rt))).build());
         }
+        // What the body answers stands as what the behavior is declared to answer.
+        Core elaboratedBody = Core.standingAs(answered, output);
 
         // One expression (spec §guard): this single walk sees every construction, including under a
         // desugared `guard`.

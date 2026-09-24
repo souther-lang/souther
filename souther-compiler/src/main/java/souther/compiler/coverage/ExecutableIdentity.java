@@ -42,7 +42,7 @@ public record ExecutableIdentity(Kind kind, List<Settled> settled,
     public enum Kind {
         INT, DECIMAL, STR, BOOL, TEMPORAL, READ, UNIT_VALUE, OPTION_NONE, UNREACHABLE, NEG,
         FIELD_ACCESS, BINARY, CALL, APPLY, IF, IF_CONSTRUCTED, LET_IN, BLOCK, LIST_LIT,
-        OPTION_SOME, TUPLE, TUPLE_GET, CONSTRUCT, MATCH
+        OPTION_SOME, TUPLE, TUPLE_GET, CONSTRUCT, MATCH, WIDEN
     }
 
     public ExecutableIdentity {
@@ -172,6 +172,8 @@ public record ExecutableIdentity(Kind kind, List<Settled> settled,
             }
             case Core.ListLit _ -> Kind.LIST_LIT;
             case Core.OptionSome _ -> Kind.OPTION_SOME;
+            // The type it stands as is the node's type, which is settled beside every kind.
+            case Core.Widen _ -> Kind.WIDEN;
             case Core.Tuple _ -> Kind.TUPLE;
             case Core.TupleGet it -> {
                 settled.add(new Settled.Count(it.index()));

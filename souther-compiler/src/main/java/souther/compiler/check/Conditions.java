@@ -221,7 +221,7 @@ final class Conditions {
      * that each of them had to recognise again before it could read what this already knew.
      */
     static ComparisonReadings comparisonsStatedBy(Terms terms, Core cond, Denotations at) {
-        if (!(cond instanceof Core.Binary b)) {
+        if (!(Core.withoutStanding(cond) instanceof Core.Binary b)) {
             return ComparisonReadings.none();
         }
         ComparisonClaim placed = Comparison.of(b).map(Comparison::claim).orElse(null);
@@ -269,10 +269,11 @@ final class Conditions {
      */
     private static StatedComparison orderStatedBy(Terms terms, StatedComparison stated,
                                                   Denotations at) {
-        boolean callFirst = stated.left() instanceof Core.PreservedCall;
+        boolean callFirst = Core.withoutStanding(stated.left()) instanceof Core.PreservedCall;
         Core side = callFirst ? stated.left() : stated.right();
         Core against = callFirst ? stated.right() : stated.left();
-        if (!(side instanceof Core.PreservedCall call) || call.args().size() != 2) {
+        if (!(Core.withoutStanding(side) instanceof Core.PreservedCall call)
+                || call.args().size() != 2) {
             return null;
         }
         BoundOperationFact.StatesTheOrderOfItsArguments positive =
@@ -360,7 +361,7 @@ final class Conditions {
      * counted them would be asking a third time.
      */
     static Core asSizeComparison(Core e) {
-        if (e instanceof Core.PreservedCall call
+        if (Core.withoutStanding(e) instanceof Core.PreservedCall call
                 && DischargeRules.sizeMeantBy(call.operation())
                         instanceof BoundOperationFact.MeansTheSameAsASizeOfNought means) {
             // No source wrote this call. It is the size the written one means, composed so that the

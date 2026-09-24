@@ -292,6 +292,13 @@ public final class CallElaborator {
                 }
             }
         }
+        // What each function argument answers stands as what the signature settled it to answer,
+        // which is known once every argument has been read.
+        for (int i = 0; i < params.size(); i++) {
+            if (params.get(i) instanceof Type.FnOf declared) {
+                ca.answering(i, TypeOps.substitute(declared.result(), bind));
+            }
+        }
         // The operation as the signature that just typed this call says it: what was applied and
         // what it takes are one answer, and asking anything a second time for the name would be
         // reaching for a declaration this already has in hand.
@@ -350,23 +357,23 @@ public final class CallElaborator {
             return cores[i].type();
         }
 
-        /** Argument {@code i} checked against {@code expected}, as {@link Elaborator#requireType} does. */
+        /** Argument {@code i} checked against {@code expected}, as {@link Elaborator#requireType}
+         *  does, and handed to the call standing as {@code expected}. */
         void require(int i, Type expected, String what) {
-            Core c = Elaborator.elaborate(args.get(i), env, ctx);
-            cores[i] = c;
-            Elaborator.requireType(args.get(i), c.type(), expected, ctx.published(), what);
+            cores[i] = Elaborator.standing(args.get(i), Elaborator.elaborate(args.get(i), env, ctx),
+                    expected, ctx.published(), what);
         }
 
         /** Argument {@code i}, elaborated once by {@link #type}, required to fit {@code required}
-         *  now that the signature's variables are settled. Reads the stored core — the
-         *  expression's own type did not change, only what is asked of it — so nothing is
-         *  elaborated twice. */
+         *  now that the signature's variables are settled, and handed to the call standing as
+         *  {@code required}. Reads the stored core — the expression's own type did not change, only
+         *  what is asked of it — so nothing is elaborated twice. */
         void requireTyped(int i, Type required, String what) {
             if (cores[i] == null) {
                 throw new IllegalStateException(
                         "argument " + (i + 1) + " required before it was typed");
             }
-            Elaborator.requireType(args.get(i), cores[i].type(), required, ctx.published(), what);
+            cores[i] = Elaborator.standing(args.get(i), cores[i], required, ctx.published(), what);
         }
 
         /** Argument {@code i} as a block (or a function value standing in for one), returning the
@@ -379,6 +386,12 @@ public final class CallElaborator {
 
         void put(int i, Core c) {
             cores[i] = c;
+        }
+
+        /** Argument {@code i}, a function value already read, answering {@code result} as
+         *  {@link Elaborator#answering} says. */
+        void answering(int i, Type result) {
+            cores[i] = Elaborator.answering(cores[i], result);
         }
 
         /** The elaborated arguments. Every argument must have been reached: a rule that yields a type

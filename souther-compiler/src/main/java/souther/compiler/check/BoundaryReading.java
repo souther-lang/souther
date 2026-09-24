@@ -115,7 +115,7 @@ final class BoundaryReading {
             return NOTHING_STATED;
         }
         FactSubject subject = subjectOf(said.number());
-        if (subject == null || !(e instanceof Core.Binary bin)) {
+        if (subject == null || !(Core.withoutStanding(e) instanceof Core.Binary bin)) {
             return NOTHING_STATED;
         }
         OrderedLeaf.Read<DerivedNumber> read = OrderedLeaf.of(bin, positive, at, terms,

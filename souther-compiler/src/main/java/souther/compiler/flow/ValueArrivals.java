@@ -396,6 +396,9 @@ public final class ValueArrivals<P> {
             // A function value, not a body being run here. What happens when a call applies it is
             // that call's business, and a call is not read through either.
             case Core.Block _ -> oneWay();
+            // Arrives as the value it holds: standing as a wider type evaluates nothing and settles
+            // nothing.
+            case Core.Widen widen -> settle(widen.value(), naming, comparisons, bound);
             // The value is evaluated before the body it binds is.
             case Core.LetIn let -> {
                 Paths<P> value = settle(let.value(), naming, comparisons, bound);
@@ -801,6 +804,7 @@ public final class ValueArrivals<P> {
             case Core.FieldAccess access -> present(access.target());
             case Core.TupleGet get -> present(get.tuple());
             case Core.OptionSome option -> present(option.value());
+            case Core.Widen widen -> present(widen.value());
             case Core.Binary binary -> present(binary.left(), binary.right());
             // The callee's own body is not read; its arguments are evaluated before it is reached.
             case Core.Call call -> call.args();

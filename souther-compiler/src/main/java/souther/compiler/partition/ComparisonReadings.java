@@ -399,7 +399,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 // is read once, where the template is. What is recorded is how this build was
                 // reached, which is what the template is read under.
                 Core given = let.value();
-                if (let.value() instanceof Core.MaterialisedValue build) {
+                if (Core.withoutStanding(let.value()) instanceof Core.MaterialisedValue build) {
                     given = in.templates().bodyOf(build);
                     in.templates().entered(given, assumed, live && flow.reads(let));
                 } else {

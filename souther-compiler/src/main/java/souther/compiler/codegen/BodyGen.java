@@ -403,7 +403,8 @@ final class BodyGen {
             emitLine(e);
             switch (e) {
                 case Core.LetIn li -> {
-                    if (li.value() instanceof Core.Call call && behaviorOf(call) != null
+                    if (Core.withoutStanding(li.value()) instanceof Core.Call call
+                            && behaviorOf(call) != null
                             && requiredNames.contains(behaviorOf(call))) {
                         // call an injected required behavior; requiredCall handles both the unary
                         // Behavior contract and a multi-input base (issue #57), leaving the success
@@ -450,6 +451,9 @@ final class BodyGen {
                             null);
                 }
                 case Core.Match m -> emitTailMatch(m, cdB, requiredNames, requiredSuccess, expected);
+                // What it holds is in tail position: the value returned is the value it holds.
+                case Core.Widen w ->
+                        emitTail(w.value(), cdB, requiredNames, requiredSuccess, expected);
                 case Core.Call call when tcoName != null && call.name().equals(tcoName)
                         && call.args().size() == tcoParams.size() -> emitSelfTailCall(call);
                 case Core.Construct nd when DataChecker.isInvariantBearing(nd.typeName(), symbols) -> {
@@ -794,6 +798,15 @@ final class BodyGen {
                 }
                 case Core.OptionNone _ ->
                         code.invokestatic(CD_Option, "none", MethodTypeDesc.of(CD_Option), true);
+                // Every type a value may stand as is laid out here the way the value already is: a
+                // case is an instance of its sum's interface, and a collection, an optional and a
+                // tuple hold references whatever they are of. So the value is emitted as it is.
+                //
+                // What the position asks for is handed on and nothing more. Standing as a type is
+                // not a position stating one: an `unreachable` a comparison or an operator is
+                // handed still has nothing that says what it leaves, whatever the checker let it
+                // stand as.
+                case Core.Widen w -> genExpr(w.value(), expected);
                 case Core.Unreachable u -> unreachable(u, expected);
                 // A build in the tree an analysis reads. What is emitted calls the value's method.
                 case Core.MaterialisedValue m -> throw new IllegalStateException(
@@ -1367,7 +1380,8 @@ final class BodyGen {
         private void growList(Core.Call call) {
             genExpr(call.args().get(0));
             Core added = call.args().get(1);
-            if (added instanceof Core.ListLit lit && lit.elements().size() == 1) {
+            if (Core.withoutStanding(added) instanceof Core.ListLit lit
+                    && lit.elements().size() == 1) {
                 box(code, genExpr(lit.elements().get(0)));
                 code.invokestatic(CD_Lists, "grow", MTD_Lists_grow);
             } else {
@@ -1774,7 +1788,8 @@ final class BodyGen {
                         genExpr(bin.right());
                         code.invokestatic(CD_Strings, "append",
                                 MethodTypeDesc.of(CD_String, CD_String, CD_String));
-                    } else if (bin.right() instanceof Core.ListLit lit && lit.elements().size() == 1) {
+                    } else if (Core.withoutStanding(bin.right()) instanceof Core.ListLit lit
+                            && lit.elements().size() == 1) {
                         // `acc ++ [x]` is how every fold-derived combinator grows its list
                         // (souther.list's map/filter), so it runs once per element. Push the element
                         // itself: building a one-element list for `concat` to immediately take apart
@@ -2103,6 +2118,10 @@ final class BodyGen {
                     storeLet(li, genExpr(li.value()));
                     emitFunctionValue(li.body(), paramTypes);
                 }
+                // A function standing as one that answers more, or takes less, is the function it
+                // is, emitted at the parameter types it was checked at.
+                case Core.Widen w -> emitFunctionValue(w.value(),
+                        ((Type.FnOf) w.value().type()).params());
                 default -> genExpr(value);
             }
         }

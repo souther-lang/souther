@@ -363,13 +363,13 @@ public final class GuardThresholds {
             }
 
             private TermPath pathOf(Core here, InputReads at) {
-                if (here instanceof Core.Read read) {
+                if (Core.withoutStanding(here) instanceof Core.Read read) {
                     return at.meaningOf(read, symbols, newtypes)
                             instanceof ReadMeaning.Position position ? position.path() : null;
                 }
                 // A call the language defines the meaning of stands for what it answers and not for
                 // a location, however the reading spells the two apart.
-                if (here instanceof Core.PreservedCall) {
+                if (Core.withoutStanding(here) instanceof Core.PreservedCall) {
                     return null;
                 }
                 // Which position the expression is, and none where it is none: the walk this

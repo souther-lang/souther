@@ -234,31 +234,17 @@ public final class HelperTyping {
                         .hint(new NameMessage.WriteItWhereTheTypeIsStated())
                         .say(new NameMessage.NothingSaysWhatThisPositionHolds()).build());
             }
-            elaborated.definitionTypes.put(h.name(), bodyType);
-            if (settled != null) {
-                // Both halves of what a reference to it is held to, said where both are in hand:
-                // the empty parameter list is why this is a value at all, and the result is what
-                // checking its body just answered. A reader given the type alone would have to
-                // decide for itself that a value takes no arguments.
-                settledSignatures.settled(CompleteSignature.ofSettledValue(settled, bodyType));
-                // What it is a constant of, read off the body it was checked as. A reference to it
-                // is written out as that constant, so every position that asks whether an
-                // expression is known at compile time goes on reading a literal.
-                ConstEval.against(symbols).eval(body)
-                        .ifPresent(c -> settledConstants.put(settled, c));
-            }
-            if (emitted != null) {
-                // The one place this narrows to what the module emits: a role that reached here
-                // without narrowing all the way is a value or a helper by construction, and the
-                // narrowing states that rather than assumes it.
-                elaborated.helpers.put(h.name(), new EmittedDefinition(elaboratedBody, takes,
-                        LoweringRole.emitted(role, h.name(), inliner.moduleName())));
-            }
-            // a declared return type — required on a recursive helper, allowed on any helper — must
-            // match the body; a lying annotation is not silently ignored. What a row's operand
-            // answers with is the position's contribution and not a claim of its own where the
-            // position requires nothing: a row may state what the behavior does not answer with,
-            // and reporting that disagreement is what the row is for.
+            // What the definition answers, decided once and read by everything below: its body, what
+            // it is recorded to answer, and the signature a reference to it is held to.
+            //
+            // A declared return type — required on a recursive helper, allowed on any helper — must
+            // match the body; a lying annotation is not silently ignored, and a body it admits
+            // answers as what was declared. What a row's operand answers with is the position's
+            // contribution and not a claim of its own where the position requires nothing: a row
+            // may state what the behavior does not answer with, and reporting that disagreement is
+            // what the row is for. So there the body answers as itself.
+            Type answers = bodyType;
+            Core definition = elaboratedBody;
             if (declaredReturn != null && (standsAt == null || standsAt.required() != null)) {
                 Type declared = declaredReturn;
                 if (!TypeOps.assignable(bodyType, declared, published)) {
@@ -274,6 +260,28 @@ public final class HelperTyping {
                                             Type.show(declared), Type.show(bodyType)))
                             .build());
                 }
+                answers = declared;
+                definition = Core.standingAs(elaboratedBody, declared);
+            }
+            elaborated.definitionTypes.put(h.name(), answers);
+            if (settled != null) {
+                // Both halves of what a reference to it is held to, said where both are in hand:
+                // the empty parameter list is why this is a value at all, and the result is what
+                // checking its body just answered. A reader given the type alone would have to
+                // decide for itself that a value takes no arguments.
+                settledSignatures.settled(CompleteSignature.ofSettledValue(settled, answers));
+                // What it is a constant of, read off the body it was checked as. A reference to it
+                // is written out as that constant, so every position that asks whether an
+                // expression is known at compile time goes on reading a literal.
+                ConstEval.against(symbols).eval(body)
+                        .ifPresent(c -> settledConstants.put(settled, c));
+            }
+            if (emitted != null) {
+                // The one place this narrows to what the module emits: a role that reached here
+                // without narrowing all the way is a value or a helper by construction, and the
+                // narrowing states that rather than assumes it.
+                elaborated.helpers.put(h.name(), new EmittedDefinition(definition, takes,
+                        LoweringRole.emitted(role, h.name(), inliner.moduleName())));
             }
         }
     }

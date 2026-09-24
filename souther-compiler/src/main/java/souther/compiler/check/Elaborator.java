@@ -200,8 +200,8 @@ public final class Elaborator {
                 // where it was written rather than under the binding it makes.
                 Scope inner = env.binding(li.binder(), bindType, li.value());
                 Core body = elaborate(li.body(), inner, ctx, expected);
-                yield new Core.LetIn(CoreBinders.of(li.binder()), bindType, value, body, body.type(),
-                        li.pos());
+                yield new Core.LetIn(CoreBinders.of(li.binder()), bindType,
+                        Core.standingAs(value, bindType), body, body.type(), li.pos());
             }
             case Hir.Expansion ex -> expansion(ex, env, ctx, expected);
             // A build of a value elaborates as the value does, in the copy the build is: the walk
@@ -312,7 +312,8 @@ public final class Elaborator {
                     joined = TypeOps.joinAt(expected, tt, et);
                 }
                 if (joined != null) {
-                    yield new Core.If(cond, then, els,
+                    yield new Core.If(cond, Core.standingAs(then, joined),
+                            Core.standingAs(els, joined),
                             new Core.ForkPlace(ctx.occurrenceOf(iff.origin()), ctx.within()),
                             joined, iff.pos());
                 }
@@ -370,7 +371,14 @@ public final class Elaborator {
                     }
                     joined = next;
                 }
-                yield new Core.IfConstructed(construct, CoreBinders.of(ic.binder()), then, arms,
+                // Each arm stands as what all of them joined at, which is known only once the last
+                // has been read.
+                List<Core.ElseArm> standing = new ArrayList<>();
+                for (Core.ElseArm arm : arms) {
+                    standing.add(new Core.ElseArm(arm.clause(), Core.standingAs(arm.body(), joined)));
+                }
+                yield new Core.IfConstructed(construct, CoreBinders.of(ic.binder()),
+                        Core.standingAs(then, joined), standing,
                         new Core.ForkPlace(ctx.occurrenceOf(ic.origin()), ctx.within()), joined,
                         ic.pos());
             }
@@ -407,7 +415,13 @@ public final class Elaborator {
                     }
                     elem = joined;
                 }
-                yield new Core.ListLit(elements, Type.list(elem), lit.pos());
+                // Each element stands as what all of them joined at, which is known only once the
+                // last has been read.
+                List<Core> standing = new ArrayList<>();
+                for (Core element : elements) {
+                    standing.add(Core.standingAs(element, elem));
+                }
+                yield new Core.ListLit(standing, Type.list(elem), lit.pos());
             }
             // A row's brackets, which say which collection they are only through the position they
             // stand at (spec §example-evaluable). Resolved into the form a body writes for that
@@ -503,12 +517,24 @@ public final class Elaborator {
                 row.pos(), row.region());
     }
 
-    /** Elaborates {@code e} and checks it against {@code expected}, returning its Core. The check is
-     * bottom-up, as {@link #requireType} is: the expected type is not pushed into the expression. */
+    /** Elaborates {@code e} and checks it against {@code expected}, returning its Core standing as
+     * {@code expected}. The check is bottom-up, as {@link #requireType} is: the expected type is not
+     * pushed into the expression. */
     static Core requireTyped(Hir.Expr e, Type expected, Scope env, CheckContext ctx, String what) {
-        Core c = elaborate(e, env, ctx);
-        requireType(e, c.type(), expected, ctx.published(), what);
-        return c;
+        return standing(e, elaborate(e, env, ctx), expected, ctx.published(), what);
+    }
+
+    /**
+     * {@code value}, which {@code e} elaborated to, placed where {@code expected} is taken: refused
+     * where it may not stand there, and standing as {@code expected} where it may.
+     *
+     * <p>The check and what it decided in one step, so that a position that asks whether a value may
+     * stand there holds the answer in the tree it builds rather than having asked and kept nothing.
+     */
+    static Core standing(Hir.Expr e, Core value, Type expected, PublishedDeclarations published,
+                         String what) {
+        requireType(e, value.type(), expected, published, what);
+        return Core.standingAs(value, expected);
     }
 
 
@@ -591,8 +617,11 @@ public final class Elaborator {
         if (narrowGot != null) {
             BottomInfer.refineBottom(declaredStep.result(), narrowGot, bind);
             Type want = TypeOps.substitute(declaredStep.result(), bind);
-            if (want instanceof Type.Var || TypeOps.assignable(narrowGot, want, ctx.published())) {
-                return narrowCore;   // the narrow accumulator is a fixpoint
+            if (want instanceof Type.Var) {
+                return narrowCore;
+            }
+            if (TypeOps.assignable(narrowGot, want, ctx.published())) {
+                return answering(narrowCore, want);   // the narrow accumulator is a fixpoint
             }
         }
         // The step matches on, or grows the accumulator into, the sum the seed's case belongs to.
@@ -606,7 +635,8 @@ public final class Elaborator {
                 Type got = ((Type.FnOf) widenedCore.type()).result();
                 if (TypeOps.assignable(got, sum, ctx.published())) {
                     bind.put(accVar.name(), sum);
-                    return widenedCore;   // the step is emitted at the widened accumulator
+                    // the step is emitted at the widened accumulator
+                    return answering(widenedCore, sum);
                 }
             }
         }
@@ -618,6 +648,38 @@ public final class Elaborator {
                         Type.show(narrowGot),
                         Type.show(TypeOps.substitute(declaredStep.result(), bind))))
                 .build());
+    }
+
+    /**
+     * {@code function}, a function value handed to a call, answering {@code result} where the call
+     * takes what it answers as {@code result}: the accumulator a fold's step grows, or what a kept
+     * operation's signature settled its function argument to answer.
+     *
+     * <p>A block written there answers it from its body, so the body is what stands as the wider
+     * type and the block is of the parameters its body was read with; and a block under the
+     * bindings it captures is that block, under those bindings. Any other function value stands as
+     * a function answering {@code result}, taking what it took.
+     *
+     * <p>A function already standing as one taking less is answered for as the function it is, and
+     * stands as before around what that comes to. Its own type is what its body was read with and
+     * the type around it is what the call takes; rebuilt at the second, a block would say its body
+     * was read with parameters it never was.
+     */
+    static Core answering(Core function, Type result) {
+        Type.FnOf own = (Type.FnOf) function.type();
+        if (own.result().equals(result)) {
+            return function;
+        }
+        Type answers = Type.fn(own.params(), result);
+        return switch (function) {
+            case Core.Widen standing ->
+                    Core.standingAs(answering(standing.value(), result), answers);
+            case Core.Block block -> new Core.Block(block.params(),
+                    Core.standingAs(block.body(), result), answers, block.pos());
+            case Core.LetIn captures -> new Core.LetIn(captures.binder(), captures.bindType(),
+                    captures.value(), answering(captures.body(), result), answers, captures.pos());
+            default -> Core.standingAs(function, answers);
+        };
     }
 
     /**
@@ -653,7 +715,9 @@ public final class Elaborator {
                                 .build());
                     }
                 }
-                return value;
+                // A function taking what the call hands its block, or more, stands as one taking
+                // what the call hands it.
+                return Core.standingAs(value, Type.fn(paramTypes, fn.result()));
             }
             throw CompileException.of(Diagnostic.say(new HelperMessage.ThisExpectsABlock(fnName)).at(arg.pos()).build());
         }
@@ -836,7 +900,7 @@ public final class Elaborator {
             throw new IllegalStateException(
                     "an expansion answered with a type it had not decided: " + Type.show(type));
         }
-        return applied.wrap(body, type, ex.pos());
+        return applied.wrap(Core.standingAs(body, type), type, ex.pos());
     }
 
     /** What reading this application's arguments decided, and the scope its body is read in. */
@@ -890,7 +954,8 @@ public final class Elaborator {
                     bindType = carriedType(required, value.type(), ctx.kinds(), ctx.published());
                 }
             }
-            arguments.add(new AppliedArgument(CoreBinders.of(b.binder()), bindType, value));
+            arguments.add(new AppliedArgument(CoreBinders.of(b.binder()), bindType,
+                    Core.standingAs(value, bindType)));
             // What the argument was, under what it was written against. It is elaborated in the
             // caller's scope above, so that is where a reader below reads it: read under the
             // bindings this expansion makes instead, a name in it would be answered by whatever
@@ -1554,7 +1619,7 @@ public final class Elaborator {
                 || !TypeOps.assignable(value.type(), opt.element(), published)) {
             return value;
         }
-        return new Core.OptionSome(value, expected, value.pos());
+        return new Core.OptionSome(Core.standingAs(value, opt.element()), expected, value.pos());
     }
 
     /**

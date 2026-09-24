@@ -78,6 +78,8 @@ public final class Evaluated {
             case Core.FieldAccess access -> always(access.target());
             case Core.TupleGet get -> always(get.tuple());
             case Core.OptionSome option -> always(option.value());
+            // What it holds runs; standing as a wider type runs nothing of its own.
+            case Core.Widen widen -> always(widen.value());
             // The left, and then the right on the runs the left did not answer for. A false left
             // is the answer of a `&&` and a true left is the answer of an `||`, so what has to hold
             // for the right to run is the left coming out the other way.

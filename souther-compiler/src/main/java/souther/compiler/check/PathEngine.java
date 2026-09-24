@@ -331,7 +331,8 @@ final class PathEngine {
 
     /** The call {@code value} came from, through however many names it was given, or null where it
      * came from something else. {@code seen} stops a binding given itself. */
-    private Core.Call originatingCall(Core value, Denotations at, Set<BindingId> seen) {
+    private Core.Call originatingCall(Core standing, Denotations at, Set<BindingId> seen) {
+        Core value = Core.withoutStanding(standing);
         if (value instanceof Core.Call call) {
             return call;
         }

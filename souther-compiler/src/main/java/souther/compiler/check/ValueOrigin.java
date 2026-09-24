@@ -545,7 +545,8 @@ public sealed interface ValueOrigin<K> {
      * value goes; left out, each was a node this could say nothing about — which reads the same as
      * a value it could not reach, and they are not the same thing.
      */
-    private static boolean writtenOut(Core e) {
+    private static boolean writtenOut(Core standing) {
+        Core e = Core.withoutStanding(standing);
         return e instanceof Core.Int || e instanceof Core.Decimal || e instanceof Core.Str
                 || e instanceof Core.Bool || e instanceof Core.Temporal
                 || e instanceof Core.UnitValue;

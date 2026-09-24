@@ -89,7 +89,8 @@ final class CoreConstantEval {
     }
 
     private Optional<Object> eval(Core e, Env env) {
-        return switch (e) {
+        // A constant is the value it is whatever type it stands as.
+        return switch (Core.withoutStanding(e)) {
             case Core.Int i -> Optional.of(i.value());
             case Core.Decimal d -> Optional.of(d.value());
             case Core.Str s -> Optional.of(s.value());

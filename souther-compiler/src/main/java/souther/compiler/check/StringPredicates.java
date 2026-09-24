@@ -344,7 +344,7 @@ public enum StringPredicates {
      * about itself under that word.
      */
     public static Stated statedBy(Core clause, Symbols symbols, WrittenText text) {
-        if (!(clause instanceof Core.PreservedCall call)
+        if (!(Core.withoutStanding(clause) instanceof Core.PreservedCall call)
                 || !(call.operation() instanceof ValueName.Stdlib.Operation operation)) {
             return null;
         }

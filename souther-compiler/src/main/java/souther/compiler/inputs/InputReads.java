@@ -308,14 +308,14 @@ public final class InputReads {
                                           DeclarationNewtypes newtypes) {
         Denotation standing = standing(new Denotation(e, this), symbols, newtypes,
                 new HashSet<>());
-        return standing.value() instanceof Core.Read name
+        return Core.withoutStanding(standing.value()) instanceof Core.Read name
                 && standing.at().meaningOf(name, symbols, newtypes) instanceof ReadMeaning.OneOf one
                 ? one : null;
     }
 
     /** Which case {@code e} is written as, or null where it is not written as one. */
     private static souther.compiler.types.TypeSymbol caseWritten(Core e) {
-        return switch (e) {
+        return switch (Core.withoutStanding(e)) {
             case Core.Construct nd -> nd.typeName();
             case Core.UnitValue unit -> unit.data();
             default -> null;
@@ -424,7 +424,8 @@ public final class InputReads {
      * name rather than a walk that does not end.
      */
     public Denotation denotes(Core e, Symbols symbols, DeclarationNewtypes newtypes) {
-        Core at = e;
+        // Which expression a name stands for does not turn on the type it stands as there.
+        Core at = Core.withoutStanding(e);
         InputReads reads = this;
         Set<BindingId> met = new HashSet<>();
         while (at instanceof Core.Read read) {
@@ -433,7 +434,7 @@ public final class InputReads {
                             instanceof ReadMeaning.Through through)) {
                 return new Denotation(at, reads);
             }
-            at = through.denotes().value();
+            at = Core.withoutStanding(through.denotes().value());
             reads = through.denotes().at();
         }
         return new Denotation(at, reads);
@@ -521,11 +522,14 @@ public final class InputReads {
                                                                 DeclarationNewtypes newtypes,
                                                                 Set<BindingId> met) {
         Denotation standing = standing(container, symbols, newtypes, met);
-        if (!(standing.value() instanceof Core.ListLit written) || written.elements().isEmpty()) {
+        if (!(Core.withoutStanding(standing.value()) instanceof Core.ListLit written)
+                || written.elements().isEmpty()) {
             return null;
         }
         java.util.List<Denotation> out = new java.util.ArrayList<>();
-        written.elements().forEach(each -> out.add(new Denotation(each, standing.at())));
+        // Which value each member is does not turn on the type it stands as in the list.
+        written.elements().forEach(each ->
+                out.add(new Denotation(Core.withoutStanding(each), standing.at())));
         return out;
     }
 
@@ -562,6 +566,8 @@ public final class InputReads {
                 }
                 case Core.LetIn let ->
                         at = new Denotation(let.body(), at.at().and(let.binder(), let.value()));
+                // What a value is does not turn on the type it stands as.
+                case Core.Widen w -> at = new Denotation(w.value(), at.at());
                 default -> {
                     return at;
                 }
@@ -586,8 +592,8 @@ public final class InputReads {
      * arithmetic over the values is not a question a naming answers.
      */
     public String writtenStringOf(Core e, Symbols symbols, DeclarationNewtypes newtypes) {
-        return standing(new Denotation(e, this), symbols, newtypes, new HashSet<>())
-                .value() instanceof Core.Str written ? written.value() : null;
+        return Core.withoutStanding(standing(new Denotation(e, this), symbols, newtypes,
+                new HashSet<>()).value()) instanceof Core.Str written ? written.value() : null;
     }
 
     /** Where an element handed to {@code binding} stands ({@link InputPath#elementAt}). */
