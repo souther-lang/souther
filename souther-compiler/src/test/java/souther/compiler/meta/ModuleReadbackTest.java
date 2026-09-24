@@ -267,7 +267,7 @@ class ModuleReadbackTest {
             PublishedClasses.SoutherModuleView m, int compat, List<String> constructions) {
         return new PublishedClasses.SoutherModuleView(compat, m.compiler(), m.header(),
                 m.imports(), m.types(), m.behaviors(), m.invariantHelpers(), m.valueAnswers(),
-                constructions);
+                constructions, m.constructors());
     }
 
     /** {@code classes} with every behavior's requirement list replaced by {@code requirements}. */

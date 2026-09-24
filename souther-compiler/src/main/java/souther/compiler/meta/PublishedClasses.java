@@ -84,15 +84,17 @@ public interface PublishedClasses {
     record SoutherModuleView(int compat, String compiler, String header,
                              List<String> imports, List<String> types,
                              List<String> behaviors, List<String> invariantHelpers,
-                             List<String> valueAnswers, List<String> constructions) {
+                             List<String> valueAnswers, List<String> constructions,
+                             List<String> constructors) {
 
-        /** A module that records no answers for its values and whose classes build nothing of
-         *  another module, which is what a writer that has neither to record wrote. */
+        /** A module that records no answers for its values, whose classes build nothing of another
+         *  module and which implements no behavior, which is what a writer that has none of these
+         *  to record wrote. */
         public SoutherModuleView(int compat, String compiler, String header, List<String> imports,
                                  List<String> types, List<String> behaviors,
                                  List<String> invariantHelpers) {
             this(compat, compiler, header, imports, types, behaviors, invariantHelpers, List.of(),
-                    List.of());
+                    List.of(), List.of());
         }
     }
 }

@@ -511,6 +511,11 @@ public final class Front {
                 return read.constructionLinks();
             }
 
+            /** The constructor each of its behavior implementations declares. */
+            public List<ConstructionLink> constructors() {
+                return read.constructors();
+            }
+
             public List<Scoping.Claim> libraryClaims() {
                 return read.libraryClaims();
             }

@@ -601,7 +601,7 @@ public final class Backend {
                     + " site(s) that nothing emitted: " + missed
                     + "; a body was walked without counting what it holds");
         }
-        out.constructs(b.ctx.constructionLinks());
+        out.constructs(b.ctx.constructionLinks(), b.ctx.constructors());
         return out;
     }
 
@@ -781,8 +781,14 @@ public final class Backend {
     /** Emits injected required-behavior fields plus the matching constructor (or a no-arg ctor) on a
      * behavior's {@code $Impl}. The {@code of()}/{@code bind()} factories live on the public interface
      * ({@link #emitBehaviorFactory}), not here. */
-    private void emitInjection(ClassBuilder cb, ClassDesc cdX, InjectionSlots held) {
+    private void emitInjection(ClassBuilder cb, ClassDesc cdX, ValueName.Behavior own,
+                               InjectionSlots held) {
+        List<ValueName.Behavior> takes = new ArrayList<>();
+        for (InjectionSlots.Slot slot : held.all()) {
+            takes.add(slot.dependency());
+        }
         if (held.isEmpty()) {
+            ctx.providesConstructor(own, takes, MTD_void);
             emitPublicCtor(cb);
             return;
         }
@@ -796,6 +802,7 @@ public final class Backend {
             params[i] = held.all().get(i).type();
         }
         MethodTypeDesc ctorDesc = MethodTypeDesc.of(ConstantDescs.CD_void, params);
+        ctx.providesConstructor(own, takes, ctorDesc);
         cb.withMethodBody("<init>", ctorDesc, ClassFile.ACC_PUBLIC, code -> {
             code.aload(0);
             code.invokespecial(CD_Object, "<init>", MTD_void);
@@ -1455,7 +1462,7 @@ public final class Backend {
             cb.withFlags(pub(spec.name()) | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             // implements its public interface (which itself extends Behavior for a single-input one)
             cb.withInterfaceSymbols(cdBehavior(spec.name()));
-            emitInjection(cb, cdB, injected);
+            emitInjection(cb, cdB, new ValueName.Behavior(ctx.pkg, spec.name()), injected);
             if (where instanceof EnsuresEnforcement.AtTheCallee(Contract _)) {
                 emitCheckingApply(cb, cdB, spec, mtdApply, n);
             }
@@ -1673,7 +1680,7 @@ public final class Backend {
             cb.withFlags(pub(pipe.name()) | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             // implements its public interface (which itself extends Behavior for a single-input one)
             cb.withInterfaceSymbols(cdBehavior(pipe.name()));
-            emitInjection(cb, cdP, reqStages);
+            emitInjection(cb, cdP, own(pipe.name()), reqStages);
 
             cb.withMethodBody("apply", mtdApply, ClassFile.ACC_PUBLIC, code -> {
                 // slot 1 always holds the running value (an output case, as an Object).

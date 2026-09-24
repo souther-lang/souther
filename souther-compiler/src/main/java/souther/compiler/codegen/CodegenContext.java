@@ -432,6 +432,26 @@ final class CodegenContext {
         return List.copyOf(constructedElsewhere.values());
     }
 
+    /** The constructors this module's behaviors' implementations declare, by the behavior. */
+    private final Map<ValueName.Behavior, ConstructionLink> declared = new LinkedHashMap<>();
+
+    /** Records that the class being emitted is {@code own}'s implementation and declares
+     *  {@code constructor}, taking {@code dependencies} in that order. Said once per behavior. */
+    void providesConstructor(ValueName.Behavior own, List<ValueName.Behavior> dependencies,
+                             MethodTypeDesc constructor) {
+        ConstructionLink provided =
+                new ConstructionLink(own, dependencies, constructor.descriptorString());
+        if (declared.putIfAbsent(own, provided) != null) {
+            throw new IllegalStateException("`" + own.module() + "." + own.name()
+                    + "`'s implementation declares a constructor twice");
+        }
+    }
+
+    /** What {@link #providesConstructor} recorded, in the order the classes were emitted. */
+    List<ConstructionLink> constructors() {
+        return List.copyOf(declared.values());
+    }
+
     /** The typed {@code apply(A,B,…)} descriptor of a standalone required behavior's base — the same
      * descriptor {@link Backend#generateRequiredBase} declared, so an {@code invokevirtual} on it links. */
     MethodTypeDesc requiredApplyDesc(ValueName.Behavior name) {

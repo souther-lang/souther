@@ -134,7 +134,8 @@ public final class ModuleMetadata {
                 Backend.moduleClass(module.name(), moduleAnnotation(module, resolved, slices, types,
                         behaviors, ValueAnswers.written(module.name(),
                                 ValueEntries.publishedValues(resolved), settledValues),
-                        PublishedConstructions.written(out.constructionLinks()))));
+                        PublishedConstructions.written(out.constructionLinks()),
+                        PublishedConstructions.written(out.constructors()))));
     }
 
     /**
@@ -217,7 +218,8 @@ public final class ModuleMetadata {
             CstFrontend.Slices slices,
                                                List<String> types, List<String> behaviors,
                                                List<String> valueAnswers,
-                                               List<String> constructions) {
+                                               List<String> constructions,
+                                               List<String> constructors) {
         return Annotation.of(MODULE_ANN,
                 AnnotationElement.ofInt("compat", Backend.BOUNDARY_VERSION),
                 AnnotationElement.ofString("compiler", compilerVersion()),
@@ -228,7 +230,8 @@ public final class ModuleMetadata {
                 strings("behaviors", behaviors),
                 strings("invariantHelpers", invariantHelpers(module, resolved, slices)),
                 strings("valueAnswers", valueAnswers),
-                strings("constructions", constructions));
+                strings("constructions", constructions),
+                strings("constructors", constructors));
     }
 
     private static AnnotationElement strings(String name, List<String> values) {

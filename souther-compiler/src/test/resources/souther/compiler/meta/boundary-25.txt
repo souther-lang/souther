@@ -10,6 +10,7 @@ Lsouther/runtime/meta/SoutherModule;
   compat: int
   compiler: string
   constructions: array of string
+  constructors: array of string
   header: string
   imports: array of string
   invariantHelpers: array of string

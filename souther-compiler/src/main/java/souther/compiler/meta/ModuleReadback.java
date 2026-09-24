@@ -132,7 +132,10 @@ public final class ModuleReadback {
         // where they build nothing, so a module at this number without it is not one this wrote.
         List<ConstructionLink> constructions = m.constructions() == null
                 ? null : PublishedConstructions.read(m.constructions());
-        if (constructions == null) {
+        // And the constructors its own implementations declare, for the same reason.
+        List<ConstructionLink> constructors = m.constructors() == null
+                ? null : PublishedConstructions.read(m.constructors());
+        if (constructions == null || constructors == null) {
             return unreadable(moduleName, new Readback.Failure.UnreadableMetadata());
         }
         StringBuilder declarations = new StringBuilder();
@@ -276,7 +279,8 @@ public final class ModuleReadback {
         }
         return new Readback.Ready<>(
                 new AsRead(checked.module(), declared.declarations(), declared.asDeclared(),
-                        implementations, requirements, constructions, checked.claims(),
+                        implementations, requirements, constructions, constructors,
+                        checked.claims(),
                         readBack.laidOut(), answers));
     }
 
@@ -292,6 +296,7 @@ public final class ModuleReadback {
                   Map<String, BehaviorImplementation> behaviorImplementations,
                   Map<String, List<ValueName.Behavior>> behaviorRequirements,
                   List<ConstructionLink> constructionLinks,
+                  List<ConstructionLink> constructors,
                   java.util.List<Scoping.Claim> libraryClaims,
                   SourceLayout laidOutText,
                   Preserved.SettledValues valueAnswers) implements ReadableModule {
@@ -306,6 +311,7 @@ public final class ModuleReadback {
             behaviorRequirements =
                     Collections.unmodifiableMap(new LinkedHashMap<>(behaviorRequirements));
             constructionLinks = List.copyOf(constructionLinks);
+            constructors = List.copyOf(constructors);
             libraryClaims = List.copyOf(libraryClaims);
         }
     }

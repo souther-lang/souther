@@ -4,10 +4,13 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.query.Compilation;
+import souther.compiler.query.Db;
 
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -17,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A composition requires what its stages require (spec §composition-with-requirements), and a stage
@@ -294,7 +298,9 @@ class AStageAnotherModuleDeclaresBringsWhatItRequiresTest {
     }
 
     /** The same dependency, by the same name, taking two inputs where it took one. It is held as
-     *  its own class rather than the unary Behavior, so the constructor taking it is another one. */
+     *  its own class rather than the unary Behavior, so the constructor taking it is another one —
+     *  the one `step` declares, and the one `lib.b`'s own `priced` declares, which is handed the
+     *  same dependency. Both are said. */
     @Test
     void aDependencyTakingOtherInputsChangesTheConstructorAndIsSaid() {
         Map<String, ClassFileImage> path = builtAgainst("""
@@ -315,8 +321,16 @@ class AStageAnotherModuleDeclaresBringsWhatItRequiresTest {
                 behavior step = charged >-> double
                 """);
 
-        assertInstanceOf(ModuleMessage.ItBuildsItWithOtherDependencies.class,
-                refusal(path, USES_ONLY_INC));
+        List<Object> said = saidCompiling(USES_ONLY_INC, path);
+
+        assertTrue(said.stream().anyMatch(each ->
+                        each instanceof ModuleMessage.ItBuildsItWithOtherDependencies b
+                                && b.name().equals("step")),
+                "lib.b builds step through a constructor it no longer has: " + said);
+        assertTrue(said.stream().anyMatch(each ->
+                        each instanceof ModuleMessage.ItsImplementationTakesItsDependenciesAnotherWay b
+                                && b.module().equals("lib.b") && b.name().equals("priced")),
+                "lib.b's own priced takes rate as it no longer is: " + said);
     }
 
     /** A stage `lib.b` builds is one Java supplies now, so there is no implementation of it to build. */
@@ -414,6 +428,106 @@ class AStageAnotherModuleDeclaresBringsWhatItRequiresTest {
 
         assertDoesNotThrow(() -> Compiler.compileModules(List.of(USES_ONLY_INC),
                 ModulePath.of(path)));
+    }
+
+    /** Every report a compile of {@code app} against {@code path} says, as what each says. */
+    private static List<Object> saidCompiling(String app, Map<String, ClassFileImage> path) {
+        Compilation compilation = Compilation.ofSources(List.of(app), ModulePath.of(path));
+        compilation.answerEverything();
+        List<Object> said = new ArrayList<>();
+        for (Db.Found found : compilation.db().allReports()) {
+            said.add(found.report().diagnostic().said());
+        }
+        return said;
+    }
+
+    private static final String D_TAKING_ONE = """
+            module lib.d exposing ( rate )
+            behavior rate : (n: Int) -> Int
+            """;
+
+    private static final String D_TAKING_TWO = """
+            module lib.d exposing ( rate )
+            behavior rate : (n: Int, m: Int) -> Int
+            """;
+
+    private static final String C_ON_ONE = """
+            module lib.c exposing ( double, step : Int )
+            import lib.d ( rate )
+            behavior charged : (n: Int) -> Int depends on rate
+            let charged (n, rate) = rate(n)
+            behavior double : (n: Int) -> Int
+            let double (n) = n + n
+            behavior step = charged >-> double
+            """;
+
+    private static final String C_ON_TWO = """
+            module lib.c exposing ( double, step : Int )
+            import lib.d ( rate )
+            behavior charged : (n: Int) -> Int depends on rate
+            let charged (n, rate) = rate(n, n)
+            behavior double : (n: Int) -> Int
+            let double (n) = n + n
+            behavior step = charged >-> double
+            """;
+
+    /**
+     * `lib.b` built against a `lib.c` and a `lib.d` that agree with each other, and read beside an
+     * older `lib.c` that was built against an older `lib.d`. `lib.b` builds `step` handing it
+     * `lib.d.rate` as the class `lib.d.Rate`, which is what `step` takes against this `lib.d`; the
+     * `lib.c` on the path declares it taking the unary Behavior, which is what it took against the
+     * `lib.d` it was built with. What `lib.b` links against is held to what that `lib.c` declares,
+     * and what that `lib.c` declares is held to this `lib.d` — both are said.
+     */
+    @Test
+    void aModuleOnThePathIsHeldToWhatItsClassesDeclareAndNotToWhatItWouldDeclareNow() {
+        Map<String, ClassFileImage> newer = Compiler.compileModules(List.of(D_TAKING_TWO, C_ON_TWO));
+        Map<String, ClassFileImage> path = new HashMap<>(Compiler.compileModules(
+                List.of(B_ON_STEP), ModulePath.of(newer)));
+        path.putAll(Compiler.compileModules(List.of(D_TAKING_ONE, C_ON_ONE)));
+        path.putAll(Compiler.compile(D_TAKING_TWO));
+
+        List<Object> said = saidCompiling(USES_ONLY_INC, path);
+
+        assertTrue(said.stream().anyMatch(each ->
+                        each instanceof ModuleMessage.ItsImplementationTakesItsDependenciesAnotherWay c
+                                && c.module().equals("lib.c") && c.name().equals("step")),
+                "the lib.c on the path declares step against another lib.d: " + said);
+        assertTrue(said.stream().anyMatch(each ->
+                        each instanceof ModuleMessage.ItBuildsItWithOtherDependencies b
+                                && b.module().equals("lib.b") && b.name().equals("step")),
+                "lib.b links against a constructor the lib.c on the path does not declare: "
+                        + said);
+    }
+
+    /**
+     * Old `lib.b` and `lib.c` beside a `lib.d` that no longer declares the `rate` both were built
+     * requiring. Holding `lib.b` asks how `lib.c` builds `step`, and that is read off `lib.c`'s
+     * classes rather than worked out through what `lib.c` requires — so the missing `rate` is said
+     * about `lib.c`, and nothing on the way stops the compiler.
+     */
+    @Test
+    void aDependencyGoneFromUnderAModuleOnThePathIsSaidAndStopsNothing() {
+        Map<String, ClassFileImage> older = Compiler.compileModules(List.of(D_TAKING_ONE, """
+                module lib.c exposing ( double, step : Int )
+                import lib.d ( rate )
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                behavior step = rate >-> double
+                """));
+        Map<String, ClassFileImage> path = new HashMap<>(older);
+        path.putAll(Compiler.compileModules(List.of(B_ON_STEP), ModulePath.of(older)));
+        path.putAll(Compiler.compile("""
+                module lib.d exposing ( bonus )
+                behavior bonus : (n: Int) -> Int
+                """));
+
+        List<Object> said = saidCompiling(USES_ONLY_INC, path);
+
+        assertTrue(said.stream().anyMatch(each ->
+                        each instanceof ModuleMessage.ItWasBuiltRequiringWhatTheModuleDoesNotDeclare c
+                                && c.module().equals("lib.c") && c.name().equals("rate")),
+                "lib.c requires a rate this lib.d does not declare: " + said);
     }
 
     private static void assertRefusedForRate(CompileException refused) {

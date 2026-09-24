@@ -90,6 +90,16 @@ public sealed interface ReadableModule permits ModuleReadback.AsRead {
      */
     List<ConstructionLink> constructionLinks();
 
+    /**
+     * The constructor each of its behavior implementations declares, as the class was emitted.
+     *
+     * <p>What a class built against this module links against when it builds one of its behaviors,
+     * and what this module's own dependencies were when it was built. Not worked out again from
+     * its requirements: the signatures a reader has for those dependencies may not be the ones it
+     * was compiled against, and the constructor is the one it was compiled with.
+     */
+    List<ConstructionLink> constructors();
+
     /** What its library import lines brought in, which the module itself no longer says. */
     List<Scoping.Claim> libraryClaims();
 

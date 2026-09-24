@@ -81,7 +81,7 @@ class WhatIsSealedIsNoLongerWrittenTest {
         ways.put("leftOut", out -> out.leftOut("quote"));
         // What the classes build of other modules is published with them, so it is said before they
         // are handed over or not at all.
-        ways.put("constructs", out -> out.constructs(List.of()));
+        ways.put("constructs", out -> out.constructs(List.of(), List.of()));
         return ways;
     }
 
@@ -94,7 +94,7 @@ class WhatIsSealedIsNoLongerWrittenTest {
      * sealing to refuse, and no order of calls under which two readers are told different things.
      */
     private static final Set<String> WHICH_DO_NOT_WRITE =
-            Set.of("implemented", "probes", "constructionLinks", "seal");
+            Set.of("implemented", "probes", "constructionLinks", "constructors", "seal");
 
     @TestFactory
     Stream<DynamicTest> everyWayOfWritingIsRefusedAfterwards() {

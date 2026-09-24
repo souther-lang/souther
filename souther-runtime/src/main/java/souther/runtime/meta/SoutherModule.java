@@ -64,4 +64,11 @@ public @interface SoutherModule {
      * assumed about a module they were built against, which a reader holds that module to. No
      * default: a writer that says nothing about it has not said its classes build nothing. */
     String[] constructions();
+
+    /** The constructor each of this module's behavior implementations declares, written as
+     * {@link #constructions} writes one: what a class built against this module links against when
+     * it builds that behavior. Recorded where the class was emitted, since the dependencies it was
+     * emitted against may not be the ones a reader has. No default, for the reason
+     * {@link #constructions} has none. */
+    String[] constructors();
 }

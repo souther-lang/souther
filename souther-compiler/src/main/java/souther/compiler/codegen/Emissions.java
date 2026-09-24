@@ -60,6 +60,9 @@ public final class Emissions {
     /** The constructors of other modules' behaviors these classes link against, once the generation
      *  has said so. */
     private List<ConstructionLink> constructionLinks;
+    /** The constructors these classes declare, one per behavior implementation, once the generation
+     *  has said so. */
+    private List<ConstructionLink> constructors;
     /** What was handed out, once there is such a thing. */
     private Map<String, ClassFileImage> sealed;
 
@@ -211,14 +214,30 @@ public final class Emissions {
 
     /**
      * That these classes build {@code links} — every constructor of another module's behavior an
-     * instruction of theirs links against. Said once, by the generation, when every class is written.
+     * instruction of theirs links against — and declare {@code declared}, the constructor of each
+     * behavior implementation among them. Said once, by the generation, when every class is written.
+     *
+     * <p>The two halves of one contract, each as the bytecode has it: what a class of this module
+     * calls, and what a class of this module can be called by. A module read off the path is held to
+     * both, and neither is worked out again from what the module declares.
      */
-    void constructs(List<ConstructionLink> links) {
+    void constructs(List<ConstructionLink> links, List<ConstructionLink> declared) {
         stillOpen("recording what the classes link against");
         if (constructionLinks != null) {
             throw new IllegalStateException("what the classes of " + module + " build is said once");
         }
         constructionLinks = List.copyOf(links);
+        constructors = List.copyOf(declared);
+    }
+
+    /** The constructor each behavior implementation of these classes declares, as the class that
+     *  declares it was emitted with. */
+    public List<ConstructionLink> constructors() {
+        if (constructors == null) {
+            throw new IllegalStateException("the generation of " + module
+                    + " has not said what its classes declare");
+        }
+        return constructors;
     }
 
     /**
