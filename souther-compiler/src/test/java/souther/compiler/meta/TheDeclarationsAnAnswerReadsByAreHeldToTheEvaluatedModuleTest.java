@@ -677,16 +677,15 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
     }
 
     /**
-     * A composition is compared as what it publishes, which is a signature.
+     * A composition is compared as what it publishes: that it is a composition, and what it takes
+     * and answers.
      *
-     * <p>A module publishes what a composition's stages compute rather than the stages, so what comes
-     * back is a signature like any other behavior's. This is what says so: the comparison refuses a
-     * composition outright, and a build whose behavior is one goes through here without meeting that
-     * refusal. A day when a composition does arrive is a day this fails rather than a day the stages
-     * are quietly compared by a rule nobody could read the truth of.
+     * <p>A module publishes what a composition's stages compute rather than the stages, so the
+     * stages are nothing two builds are held to — and a stage whose answer moved is a disagreement
+     * about that stage.
      */
     @Test
-    void aCompositionIsComparedAsTheSignatureItPublishes() {
+    void aCompositionIsComparedAsWhatItPublishes() {
         String moved = COMPOSING_MODEL.replace("data Priced = { of: Amount }",
                 "data Priced = { of: Amount, twice: Amount }")
                 .replace("let price (a) = Priced { of = a }",
@@ -700,6 +699,27 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                 DeclarationAgreement.of("example.composing", "price",
                         declarationsOf(moved), declarationsOf(COMPOSING_MODEL), DefaultStdlib.get()),
                 "and what a stage answers with having moved is a disagreement for that stage");
+    }
+
+    /**
+     * A behavior rewritten from a composition into one that declares its parameters, taking and
+     * answering the same types.
+     *
+     * <p>The two are not the same declaration: one is called by name and may be rested on in
+     * {@code depends on}, and the other is composed with. What crosses into them is the same values,
+     * but what a build may do with the behavior is not, so the builds disagree about it.
+     */
+    @Test
+    void aCompositionRewrittenAsADeclaredBehaviorIsADisagreement() {
+        String declared = COMPOSING_MODEL.replace("behavior priceAndSettle = price >-> settle",
+                "behavior priceAndSettle : (a: Amount) -> Amount")
+                .replace("let settle (p) = p.of",
+                        "let settle (p) = p.of\n\nlet priceAndSettle (a) = a");
+
+        assertInstanceOf(Agreement.Disagree.class,
+                DeclarationAgreement.of("example.composing", "priceAndSettle",
+                        declarationsOf(declared), declarationsOf(COMPOSING_MODEL),
+                        DefaultStdlib.get()));
     }
 
     /**

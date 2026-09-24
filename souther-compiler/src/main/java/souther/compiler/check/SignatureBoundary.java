@@ -34,10 +34,10 @@ import java.util.List;
  * outside in. A precedence between rules would be a second thing to state and to keep true; the
  * traversal is one thing, and it is the one the author reads their own declaration in.
  *
- * <p>Reached from {@link SignatureDeclarations} for a written declaration and from
- * {@link PipelineSigs} for what a composition answers: this is how a signature is made, not a
- * question about a type that anything may ask again. Those are the two origins there are, and each
- * is admitted once.
+ * <p>Reached from {@link SignatureDeclarations} for a written declaration, and from
+ * {@link PipelineSigs} for what a composition answers and for what a composition another project
+ * compiled published: this is how a signature is made, not a question about a type that anything
+ * may ask again. Those are the origins there are, and each is admitted once.
  */
 final class SignatureBoundary {
 
@@ -61,6 +61,25 @@ final class SignatureBoundary {
         Type out = TypeOps.successType(spec.ret());
         return new DeclaredSig(ins,
                 output(out, out, Where.output(spec.name(), spec.pos()), symbols, kinds, published));
+    }
+
+    /**
+     * The signature of a composition another project compiled: the inputs and the answer its module
+     * published, admitted as they arrive. It declares no parameters, so what comes out is a
+     * {@link Sig} and not a {@link DeclaredSig}.
+     */
+    static Sig publishedComposition(Hir.PipeBehavior pipe, Hir.Composition.Elsewhere elsewhere,
+                                    Symbols symbols, DeclarationKinds kinds,
+                                    PublishedDeclarations published) {
+        List<BoundaryInput> ins = new ArrayList<>(elsewhere.takes().size());
+        for (Hir.RetType takes : elsewhere.takes()) {
+            Type t = TypeOps.successType(takes);
+            ins.add(input(t, t, Where.publishedInput(pipe.name(), pipe.pos()), symbols, kinds,
+                    published));
+        }
+        Type out = TypeOps.successType(elsewhere.answers());
+        return new Sig(ins,
+                output(out, out, Where.output(pipe.name(), pipe.pos()), symbols, kinds, published));
     }
 
     /**
@@ -287,18 +306,26 @@ final class SignatureBoundary {
      * Where a refusal is reported and how it names what it refuses. A parameter is underlined where
      * it was written; an answer is reported on the behavior, which is what names it.
      */
-    private record Where(boolean parameter, String name, Region region, SourcePos pos) {
+    private record Where(boolean parameter, String name, Region region, SourcePos pos,
+                         boolean published) {
 
         static Where param(Hir.Param p, SourcePos behavior) {
-            return new Where(true, p.name(), p.written().region(), behavior);
+            return new Where(true, p.name(), p.written().region(), behavior, false);
         }
 
         static Where output(String behavior, SourcePos pos) {
-            return new Where(false, behavior, null, pos);
+            return new Where(false, behavior, null, pos, false);
+        }
+
+        /** An input of a composition another project compiled. It has no name to report, and a
+         *  compiler that agrees with this one about the boundary already admitted it. */
+        static Where publishedInput(String behavior, SourcePos pos) {
+            return new Where(true, behavior, null, pos, true);
         }
 
         <M extends souther.compiler.diag.msg.Message & souther.compiler.diag.msg.Reported>
                 CompileException refusal(M said) {
+            refuseOnlyWhatWasWritten();
             Diagnostic.Builder builder = Diagnostic.say(said);
             return CompileException.of(
                     (region == null ? builder.at(pos) : builder.at(region)).build());
@@ -307,9 +334,18 @@ final class SignatureBoundary {
         <M extends souther.compiler.diag.msg.Message & souther.compiler.diag.msg.Reported,
                 H extends souther.compiler.diag.msg.Message & souther.compiler.diag.msg.Supporting>
                 CompileException hinted(M said, H hint) {
+            refuseOnlyWhatWasWritten();
             Diagnostic.Builder builder = Diagnostic.say(said).hint(hint);
             return CompileException.of(
                     (region == null ? builder.at(pos) : builder.at(region)).build());
+        }
+
+        private void refuseOnlyWhatWasWritten() {
+            if (published) {
+                throw new IllegalStateException("`" + name + "` was published taking an input"
+                        + " this compiler does not admit, by a compiler that agrees with it about"
+                        + " the boundary");
+            }
         }
 
     }

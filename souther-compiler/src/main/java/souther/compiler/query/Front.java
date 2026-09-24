@@ -1318,7 +1318,10 @@ public final class Front {
         }
         for (Ast.BehaviorDef b : m.behaviors()) {
             List<Ast.Var> named = switch (b) {
-                case Ast.PipeBehavior pipe -> pipe.stages();
+                case Ast.PipeBehavior pipe -> switch (pipe.composition()) {
+                    case Ast.Composition.Stages stages -> stages.stages();
+                    case Ast.Composition.Elsewhere _ -> List.of();
+                };
                 case Ast.SpecBehavior spec -> spec.dependsOn();
             };
             for (Ast.Var ref : named) {

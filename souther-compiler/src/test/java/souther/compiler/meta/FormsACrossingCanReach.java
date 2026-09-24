@@ -44,7 +44,7 @@ final class FormsACrossingCanReach {
     private static final List<List<CrossingProjection.Taken>> PROJECTION = List.of(
             CrossingProjection.OF_A_PRODUCT, CrossingProjection.OF_A_SUM,
             CrossingProjection.OF_A_UNIT, CrossingProjection.OF_A_DECLARED_BEHAVIOR,
-            CrossingProjection.OF_A_HELPER);
+            CrossingProjection.OF_A_PUBLISHED_COMPOSITION, CrossingProjection.OF_A_HELPER);
 
     /**
      * What a part declared as a primitive arrives as.

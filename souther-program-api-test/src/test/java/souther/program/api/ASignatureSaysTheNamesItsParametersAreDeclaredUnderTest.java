@@ -53,17 +53,19 @@ class ASignatureSaysTheNamesItsParametersAreDeclaredUnderTest {
     /** Published by another project: one behavior it implements under binders of its own, and one
      *  nothing there implements. */
     private static final String PUBLISHED = """
-            module lib.rates exposing ( spin, quote )
+            module lib.rates exposing ( spin, quote, spunTwice : Int )
 
             behavior spin : (of: Int) -> Int
             let spin (x) = x
 
             behavior quote : (item: Int, qty: Int) -> Int
+
+            behavior spunTwice = spin >-> spin
             """;
 
     private static final String USES = """
             module app.uses
-            import lib.rates ( spin, quote )
+            import lib.rates ( spin, quote, spunTwice )
 
             behavior spun : (base: Int) -> Int
             let spun (base) = spin(base)
@@ -124,6 +126,18 @@ class ASignatureSaysTheNamesItsParametersAreDeclaredUnderTest {
                 program.behavior(new ValueName.Behavior("lib.rates", "spin")).signature()));
         assertEquals(Optional.of(List.of("item", "qty")), namesOf(
                 program.behavior(new ValueName.Behavior("lib.rates", "quote")).signature()));
+    }
+
+    /** What another project published for a composition is the signature its stages computed, and
+     *  not a declaration: its inputs arrive with no names, as they do where it was written. */
+    @Test
+    void aCompositionReadOffThePathDeclaresNoParameters() {
+        Map<String, ClassFileImage> published = Compiler.compile(PUBLISHED);
+        CheckedSignature composed = CheckedProgram.of(List.of(USES), ModulePath.of(published))
+                .behavior(new ValueName.Behavior("lib.rates", "spunTwice")).signature();
+
+        assertEquals(1, composed.inputs().size(), () -> "it takes what `spin` takes: " + composed);
+        assertEquals(Optional.empty(), composed.declaredParameters());
     }
 
     private static Optional<List<String>> namesOf(CheckedSignature signature) {

@@ -127,6 +127,7 @@ public final class ModuleReadback {
         }
         StringBuilder declarations = new StringBuilder();
         Map<String, BehaviorImplementation> implementations = new LinkedHashMap<>();
+        Map<String, PublishedSignature> signaturesFrom = new LinkedHashMap<>();
         for (String type : m.types()) {
             PublishedClasses.Declarations carried;
             switch (classes.of(moduleName + "." + type)) {
@@ -165,6 +166,12 @@ public final class ModuleReadback {
                 return unreadable(moduleName, new Readback.Failure.DeclarationMissing(behavior));
             }
             declarations.append('\n').append(carried.behaviorSignature()).append('\n');
+            PublishedSignature from =
+                    PublishedSignature.readingWritten(carried.behaviorSignatureFrom());
+            if (from == null) {
+                return unreadable(moduleName, new Readback.Failure.UnreadableMetadata());
+            }
+            signaturesFrom.put(behavior, from);
             BehaviorImplementation implementation;
             try {
                 implementation =
@@ -197,7 +204,13 @@ public final class ModuleReadback {
             // else's raise arrive as a statement about this artifact.
             return unreadable(moduleName, new Readback.Failure.InvalidPublishedSyntax());
         }
-        Ast.Module parsed = readBack.module();
+        Ast.Module parsed = asPublished(readBack.module(), signaturesFrom);
+        if (parsed == null) {
+            // A composition's signature carrying what only a declaration writes, or a signature
+            // the metadata says was declared written as stages: the two members disagree about
+            // what this behavior is.
+            return unreadable(moduleName, new Readback.Failure.UnreadableMetadata());
+        }
         if (!parsed.name().equals(moduleName)) {
             // A reading answers about the module it was asked for. The class was found by that name
             // and the module is named by the header on it; where the two differ there is no reading
@@ -260,6 +273,59 @@ public final class ModuleReadback {
                     Collections.unmodifiableMap(new LinkedHashMap<>(behaviorImplementations));
             libraryClaims = List.copyOf(libraryClaims);
         }
+    }
+
+    /**
+     * {@code parsed} with each composition put back as one.
+     *
+     * <p>What was parsed for a composition is a declaration with the parameter names the writer made
+     * up for the parser ({@link PublishedSignature#COMPOSED}). It is a composition whose stages stayed
+     * behind, and is read back as that: the types it takes and what it answers, with no names. Left
+     * as a declaration, every reader that asks what kind of behavior this is would answer for one
+     * that declared parameters.
+     *
+     * <p>Null where the text and the metadata disagree: a composition's signature written with a
+     * clause only a declaration carries, or a behavior the metadata says was declared written as
+     * stages. The writer produces neither.
+     */
+    private static Ast.Module asPublished(Ast.Module parsed,
+                                          Map<String, PublishedSignature> signaturesFrom) {
+        List<Ast.BehaviorDef> behaviors = new ArrayList<>(parsed.behaviors().size());
+        for (Ast.BehaviorDef behavior : parsed.behaviors()) {
+            PublishedSignature from = signaturesFrom.get(behavior.name());
+            if (from == null) {
+                return null;
+            }
+            Ast.BehaviorDef read = switch (behavior) {
+                case Ast.PipeBehavior _ -> null;
+                case Ast.SpecBehavior spec -> switch (from) {
+                    case DECLARED -> spec;
+                    case COMPOSED -> compositionOf(spec);
+                };
+            };
+            if (read == null) {
+                return null;
+            }
+            behaviors.add(read);
+        }
+        return new Ast.Module(parsed.name(), parsed.exposing(), parsed.exposedOutputs(),
+                parsed.imports(), parsed.defs(), behaviors, parsed.fns(), parsed.takenOn(),
+                parsed.examples(), parsed.fakes(), parsed.exampleFileTarget(), parsed.pos());
+    }
+
+    /** The composition {@code written} is the published signature of, or null where it carries a
+     *  clause a composition does not write. */
+    private static Ast.PipeBehavior compositionOf(Ast.SpecBehavior written) {
+        if (!written.constructs().isEmpty() || !written.dependsOn().isEmpty()
+                || !written.ensures().isEmpty()) {
+            return null;
+        }
+        List<Ast.RetType> takes = new ArrayList<>(written.params().size());
+        for (Ast.Param param : written.params()) {
+            takes.add(param.type());
+        }
+        return new Ast.PipeBehavior(written.written(),
+                new Ast.Composition.Elsewhere(takes, written.ret()), written.pos());
     }
 
     private static Readback<ReadableModule> unreadable(String module, Readback.Failure why) {

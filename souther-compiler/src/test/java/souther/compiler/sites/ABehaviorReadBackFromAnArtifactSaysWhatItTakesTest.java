@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -37,18 +38,22 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class ABehaviorReadBackFromAnArtifactSaysWhatItTakesTest {
 
     private static final String LIBRARY = """
-            module shared.money exposing ( Amount, tally )
+            module shared.money exposing ( Amount, tally, tallied : Amount )
 
             data Amount = Int
 
             behavior tally : (amount: Amount) -> Amount
+
+            behavior tallied = tally >-> tally
             """;
 
     private static final String CONSUMER = """
             module app.order
-            import shared.money ( tally )
+            import shared.money ( tally, tallied )
 
             behavior twice = tally >-> tally
+
+            behavior again = tallied >-> tally
             """;
 
     @Test
@@ -67,6 +72,20 @@ class ABehaviorReadBackFromAnArtifactSaysWhatItTakesTest {
         assertEquals("tally", called.name());
         assertEquals(List.of("amount"), namesOf(called));
         assertEquals(List.of("Amount"), typesOf(called));
+    }
+
+    /** A composition read back from an artifact names no parameters, as one written here does not:
+     *  what the artifact carries of its signature is what its stages compute, and the names written
+     *  there to carry it are nobody's. */
+    @Test
+    void aBorrowedCompositionNamesNoParameters() {
+        ModulePath published = ModulePath.of(Compiler.compile(LIBRARY));
+        Compilation compilation = Compilation.ofDocuments(
+                Map.of("a.sou", CONSUMER), Set.of(), published);
+        compilation.answerEverything();
+
+        assertEquals(Optional.empty(), SemanticSnapshot.of(compilation.db(), "app.order")
+                .orElseThrow().calledAt(over(compilation, "behavior again =", "tallied")));
     }
 
     /**

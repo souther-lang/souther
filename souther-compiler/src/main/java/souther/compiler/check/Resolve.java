@@ -568,7 +568,7 @@ public final class Resolve {
                         r.retType(spec.ret()), r.names(spec.constructs()),
                         r.required(spec.dependsOn(), spec.name()), r.ensures(spec), spec.pos());
                 case Ast.PipeBehavior pipe -> new Hir.PipeBehavior(pipe.written(),
-                        r.stages(pipe.stages()), r.retType(pipe.declaredOut()), pipe.pos());
+                        r.composition(pipe.composition()), pipe.pos());
             });
         }
         List<Hir.FnDef> fns = new ArrayList<>();
@@ -670,7 +670,22 @@ public final class Resolve {
         return out;
     }
 
-    /** The stages of a {@code >->} composition, each answered against the behavior namespace. */
+    /** A {@code >->} composition: its stages, each answered against the behavior namespace, or for
+     *  one read off the path the types it takes and answers. */
+    private Hir.Composition composition(Ast.Composition composition) {
+        return switch (composition) {
+            case Ast.Composition.Stages written -> new Hir.Composition.Stages(
+                    stages(written.stages()), retType(written.declaredOut()));
+            case Ast.Composition.Elsewhere elsewhere -> {
+                List<Hir.RetType> takes = new ArrayList<>();
+                for (Ast.RetType each : elsewhere.takes()) {
+                    takes.add(retType(each));
+                }
+                yield new Hir.Composition.Elsewhere(takes, retType(elsewhere.answers()));
+            }
+        };
+    }
+
     private List<Hir.Var> stages(List<Ast.Var> stages) {
         List<Hir.Var> out = new ArrayList<>();
         for (Ast.Var stage : stages) {

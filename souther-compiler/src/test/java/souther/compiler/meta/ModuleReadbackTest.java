@@ -130,13 +130,14 @@ class ModuleReadbackTest {
                 read.behaviorImplementations());
     }
 
-    /** A composition declares stages; what comes back is the signature it computes to, written in
-     * the names the module that published it has. It is read back as that module's own source, under
-     * the import lines that travelled with it, so {@code Cart} here means what it meant there —
-     * which is why it is not written out with its module
+    /** A composition declares stages; what comes back is a composition taking and answering what
+     * its stages compute, with no stages and no parameter names. The types are written in the names
+     * the module that published it has. It is read back as that module's own source, under the
+     * import lines that travelled with it, so {@code Cart} here means what it meant there — which
+     * is why it is not written out with its module
      * (spec {@code [#a-published-signature-is-written-in-names-its-module-has]}). */
     @Test
-    void aCompositionComesBackAsASignature() {
+    void aCompositionComesBackAsACompositionOfWhatItsStagesCompute() {
         Map<String, ClassFileImage> classes = Compiler.compileModules(List.of("""
                 module shop.pricing exposing ( Cart, Priced, quote )
                 data Cart = { n: Int }
@@ -154,11 +155,15 @@ class ModuleReadbackTest {
 
         ReadableModule read = readBack("shop.checkout", classes);
 
-        Ast.SpecBehavior checkout = (Ast.SpecBehavior) read.module().behaviors().stream()
-                .filter(b -> b.name().equals("checkout")).findFirst().orElseThrow();
-        assertEquals("Cart", refName(checkout.params().get(0).type()),
+        Ast.PipeBehavior checkout = assertInstanceOf(Ast.PipeBehavior.class,
+                read.module().behaviors().stream()
+                        .filter(b -> b.name().equals("checkout")).findFirst().orElseThrow());
+        Ast.Composition.Elsewhere published =
+                assertInstanceOf(Ast.Composition.Elsewhere.class, checkout.composition());
+        assertEquals(1, published.takes().size());
+        assertEquals("Cart", refName(published.takes().get(0)),
                 "imported bare there, so bare here");
-        assertEquals("Done", refName(checkout.ret()), "the module's own declaration");
+        assertEquals("Done", refName(published.answers()), "the module's own declaration");
     }
 
     /** The name of a written type's single reference case. */
@@ -347,7 +352,7 @@ class ModuleReadbackTest {
                         new PublishedClasses.SoutherModuleView(Backend.BOUNDARY_VERSION,
                                 "another build", "module lib.two exposing ( Held )", List.of(),
                                 List.of("Held", "Twice", "Some"), List.of(), List.of()),
-                        null, null, null),
+                        null, null, null, null),
                 "lib.two.Held", declaring("data Held = String"),
                 "lib.two.Twice", declaring("data Held = Int"),
                 "lib.two.Some", declaring("data Some = String"));
@@ -364,7 +369,7 @@ class ModuleReadbackTest {
 
     /** The class one declaration was stamped on. */
     private static PublishedClasses.Declarations declaring(String declaration) {
-        return new PublishedClasses.Declarations(null, declaration, null, null);
+        return new PublishedClasses.Declarations(null, declaration, null, null, null);
     }
 
     /**
@@ -409,7 +414,7 @@ class ModuleReadbackTest {
                     m == null ? null : new PublishedClasses.SoutherModuleView(
                             boundary, "0.0.1-before", m.header(), m.imports(), m.types(),
                             m.behaviors(), m.invariantHelpers()),
-                    d.data(), d.behaviorSignature(),
+                    d.data(), d.behaviorSignature(), d.behaviorSignatureFrom(),
                     // What the older compiler wrote in its place is a flag, and no word of ours
                     // reads as one.
                     d.behaviorSignature() == null ? null : "true"));
@@ -429,7 +434,7 @@ class ModuleReadbackTest {
             }
             return new PublishedClasses.Carried.Declared(new PublishedClasses.Declarations(
                     as.apply(d.module()), d.data(), d.behaviorSignature(),
-                    d.behaviorImplementation()));
+                    d.behaviorSignatureFrom(), d.behaviorImplementation()));
         };
     }
 

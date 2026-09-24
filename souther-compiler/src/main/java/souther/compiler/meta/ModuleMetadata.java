@@ -108,9 +108,14 @@ public final class ModuleMetadata {
                 continue;
             }
             behaviors.add(b.name());
+            PublishedSignature from = switch (b) {
+                case Ast.SpecBehavior _ -> PublishedSignature.DECLARED;
+                case Ast.PipeBehavior _ -> PublishedSignature.COMPOSED;
+            };
             add(out, new GeneratedClass.BehaviorInterface(module.name(), b.name()),
                     Annotation.of(BEHAVIOR_ANN,
                             AnnotationElement.ofString("signature", signature),
+                            AnnotationElement.ofString("signatureFrom", from.written()),
                             AnnotationElement.ofString("implementation",
                                     implementations.get(b.name()).written())));
         }
@@ -123,7 +128,9 @@ public final class ModuleMetadata {
     /**
      * What the importing module reads as this behavior's signature. A declared one is the
      * declaration as written. A composition declares its stages, not a signature, so the computed
-     * one is written out — the stages are the module's own business and are not carried.
+     * one is written out — the stages are the module's own business and are not carried. The
+     * parser asks for a name on every parameter, so the computed one is given names; they are
+     * {@link PublishedSignature#COMPOSED}'s to drop, and a reader never sees them.
      *
      * <p>Null where the behavior has no signature to publish, and only there. A composition whose
      * stage names nothing computes none, and nothing is carried for it.

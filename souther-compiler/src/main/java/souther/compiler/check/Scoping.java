@@ -769,7 +769,10 @@ public final class Scoping {
         List<Ast.Var> out = new ArrayList<>();
         for (Ast.BehaviorDef b : m.behaviors()) {
             List<Ast.Var> refs = switch (b) {
-                case Ast.PipeBehavior pipe -> pipe.stages();
+                case Ast.PipeBehavior pipe -> switch (pipe.composition()) {
+                    case Ast.Composition.Stages written -> written.stages();
+                    case Ast.Composition.Elsewhere _ -> List.of();
+                };
                 case Ast.SpecBehavior spec -> spec.dependsOn();
             };
             for (Ast.Var ref : refs) {

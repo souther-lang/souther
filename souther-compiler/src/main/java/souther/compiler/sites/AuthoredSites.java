@@ -315,8 +315,14 @@ public final class AuthoredSites {
                 }
                 // The stages of a composition are names, and each is an occurrence like any other.
                 case Hir.PipeBehavior pipe -> {
-                    for (Hir.Var stage : pipe.stages()) {
-                        expr(stage);
+                    switch (pipe.composition()) {
+                        case Hir.Composition.Stages written -> {
+                            for (Hir.Var stage : written.stages()) {
+                                expr(stage);
+                            }
+                        }
+                        // What another project published writes nothing in this text.
+                        case Hir.Composition.Elsewhere _ -> { }
                     }
                 }
             }

@@ -8,7 +8,11 @@ import java.lang.annotation.Target;
 /**
  * A behavior, carried on the interface it generated.
  *
- * <p>{@link #implementation} is the one thing here that is not Souther source. Where a behavior's
+ * <p>{@link #signatureFrom} and {@link #implementation} are not Souther source. A composition
+ * declares stages rather than a signature, and the stages are not published, so what its signature
+ * is written out as reads like a declaration; the first says whether it is one.
+ *
+ * <p>Where a behavior's
  * body comes from is decided from the {@code let} the module writes and the {@code depends on} the
  * declaration carries, and the fn is not published — so a signature on its own cannot say which of
  * the three states this is, and the state travels beside it. A word rather than a flag: a reader
@@ -23,6 +27,11 @@ public @interface SoutherBehavior {
      * computed one for a {@code >->} composition, which declares stages instead. Either way the
      * importing module reads a signature and never the stages behind it. */
     String signature();
+
+    /** Where {@link #signature} comes from: {@code declared} for a behavior that wrote it, and
+     * {@code composed} for a {@code >->} composition, whose signature is what its stages compute and
+     * whose parameter names were made up to write it out as source. */
+    String signatureFrom();
 
     /** Where the body comes from: {@code implemented}, {@code unimplemented} or {@code injected}.
      * A module that names an injected one as a stage inherits it as a requirement of its own. */

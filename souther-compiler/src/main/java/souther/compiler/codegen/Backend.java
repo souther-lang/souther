@@ -1389,8 +1389,14 @@ public final class Backend {
      * walking into its fields, trusting that guarantee instead. A jar written before this version
      * has a constructor that does not give it, so a reader that trusted one could observe a field
      * value the carrier invariant says cannot exist.
+     *
+     * <p>Version 24 changes what a module's metadata carries: the behavior annotation says whether
+     * its signature is one the behavior declared or the one a composition's stages compute, and the
+     * reading asks for it. A jar written before it carries a composition as a declaration with
+     * parameter names nobody wrote, which a reader would take for the module's own and call the
+     * composition by name where it is composed with.
      */
-    public static final int BOUNDARY_VERSION = 23;
+    public static final int BOUNDARY_VERSION = 24;
 
     /** Emits the class a module's own declarations are published on, carrying {@code declarations}.
      * What it says is the caller's; that it is built like every other generated class — the same Java
