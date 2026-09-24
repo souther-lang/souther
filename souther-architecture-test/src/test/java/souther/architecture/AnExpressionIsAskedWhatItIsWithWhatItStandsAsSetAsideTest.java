@@ -549,7 +549,7 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                 "(" + core + ")L" + CORE + "$LetIn;", 1, PAST_IT_ALREADY);
         row(out, c + "check/InvariantChecker", "collectAlike",
                 "(" + core + "L" + c + "check/Term;L" + c + "check/Denotations;Ljava/util/Set;)V",
-                1, GOES_ON_INTO_IT);
+                2, GOES_ON_INTO_IT);
         row(out, c + "check/InvariantChecker", "splitIn",
                 "(" + core + ")L" + c + "check/InvariantChecker$SplitSite;", 4, GOES_ON_INTO_IT);
         row(out, c + "check/InvariantChecker", "splitValueIn",
