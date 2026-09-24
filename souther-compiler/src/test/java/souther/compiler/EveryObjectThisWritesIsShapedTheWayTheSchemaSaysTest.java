@@ -143,6 +143,46 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
         keys.removeAll(schema().get("$defs").get("partition").get("properties").get("notRead")
                 .get("items").get("properties").propertyNames());
         assertEquals(Set.of(), keys, "and every key of one of these is one the schema declares");
+
+        assertEquals(List.of(), DocumentShape.of(written).wrong(),
+                "and the whole document is shaped the way the schema says, not only these keys");
+    }
+
+    /**
+     * Two stops the document writes alike are one entry of {@code stopped}.
+     *
+     * <p>The schema tells two entries apart by the word and where a reader is sent, so two stops
+     * about different parts of a rule that send a reader nowhere in particular are one entry.
+     */
+    @Test
+    void aStoppedEntryTheDocumentWritesAlikeIsWrittenOnce() {
+        JsonNode written = reportOf(Compilation.ofSource("""
+                module m
+
+                data Yes
+                data N = { n: Int }
+                    invariant r = n >= 2 || Int.abs(n) >= 5
+
+                behavior f : (v: N) -> Yes
+                    constructs Yes
+                let f (v) = Yes
+                """, "Main"));
+        JsonNode unanswered = written.get("modules").get(0).get("behaviors").get(0)
+                .get("partition").get("unanswered");
+        assertNotNull(unanswered, "the model leaves a question nothing answered");
+        int listed = 0;
+        for (JsonNode each : unanswered) {
+            JsonNode stopped = each.get("stopped");
+            if (stopped == null) {
+                continue;
+            }
+            Set<JsonNode> entries = new LinkedHashSet<>();
+            for (JsonNode entry : stopped) {
+                listed++;
+                assertTrue(entries.add(entry), () -> "an entry written twice: " + stopped);
+            }
+        }
+        assertTrue(listed > 0, "the fixture is one that has entries to repeat");
     }
 
     /**

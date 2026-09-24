@@ -32,6 +32,11 @@ public final class ReportedReason {
      * and two things to lift can come out under one of them. A clause whose ends two choices left
      * open leaves two, and a list of words says the reader has one thing to do.
      *
+     * <p>A candidate for an entry of a document, not an entry. {@code about} is what an author's
+     * order is asked of and is never written, and {@code sentTo} is a site that a document may or
+     * may not be able to point at, so two of these that differ are not thereby two entries. What
+     * is compared for a repeat is what the document writes.
+     *
      * @param reason what kind of thing stopped the derivation, at the coarseness promised
      * @param sentTo where inside the rule a reader goes about it — the rule itself for a reason
      *               about the whole of it
@@ -99,9 +104,11 @@ public final class ReportedReason {
     /**
      * Each of them once, keeping where it first stood, which is what a coarsening leaves.
      *
-     * <p>Told apart by the word and by where it sends a reader. Two producers a document offers one
-     * word for are one thing to lift where they are about the same part of the rule, and two where
-     * they are not — folded on the word alone, a clause with two choices in it came out as one.
+     * <p>Told apart by the word, what it is about and where it sends a reader. Two producers a
+     * document offers one word for are one thing to lift where they are about the same part of the
+     * rule, and two where they are not — folded on the word alone, a clause with two choices in it
+     * came out as one. Whether two of these are one entry of a document is a later question, asked
+     * of what the document writes.
      *
      * <p>Kept in a set, because how many of these there are is how many parts of the rule a reader
      * is sent to and not how many words the vocabulary has. A scan of what is already held was
