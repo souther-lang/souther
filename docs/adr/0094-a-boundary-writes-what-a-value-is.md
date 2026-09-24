@@ -4,9 +4,9 @@ Status: Accepted. Revised 2026-09-24 — see *Revision*.
 
 ## Revision (2026-09-24)
 
-The law is about the external representation, and bytes are a separate step. Equal values at one
-position write one representation; one implementation turns one representation into one byte
-sequence. The Decision below put both halves into "the same JSON, byte for byte", and a second
+The law is about the external representation, and bytes are a separate step. Under a derived
+Encoder, equal values at one position write one representation; at that position, one
+implementation turns one representation into one byte sequence. The Decision below put both halves into "the same JSON, byte for byte", and a second
 implementation showed that they come apart: the JVM writes a product case's discriminator after the
 case's fields, souther-native-compiler writes it first, and nothing in the language said whether
 that was a disagreement (issue #1900).
@@ -23,8 +23,10 @@ What stays:
 - A `Decimal` is written as its amount. That settles the representation, not the bytes.
 - A `Set`'s array is written in ascending order of its members' representations. An array's order
   is part of the representation, so the language has to decide it.
-- What one implementation writes at a position follows from the representation alone and never
-  from how the value was built (`[#bytes-follow-from-the-representation]`). This is the
+- At a position whose Encoder is derived, what one implementation writes is decided by the
+  position and the representation and never by how the value was built
+  (`[#bytes-follow-from-the-representation]`). A custom Encoder is bound by none of this, as it
+  was not by the Decision. This is the
   construction-history problem the Decision set out to remove, placed where it belongs, and golden
   tests, ETags and cache keys rest on it within one implementation.
 
