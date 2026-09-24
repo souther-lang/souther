@@ -203,5 +203,14 @@ public enum WeakeningWord {
      * <p>Apart from the word above, and a consumer acts on them differently: that one leaves a rule
      * undecided, and this one leaves the account without the rules to be undecided about.
      */
-    DECISION_NOT_FULLY_READ
+    DECISION_NOT_FULLY_READ,
+
+    /**
+     * The rules of a body's decision are in hand and some rule was read with fewer of the
+     * distinctions its way consults than the body draws.
+     *
+     * <p>Apart from the word above, which is the rules not being in hand. What this takes away is
+     * whether a rule read short is taken by a row or owed one, and it bears on that rule alone.
+     */
+    DECISION_RULE_READ_SHORT
 }

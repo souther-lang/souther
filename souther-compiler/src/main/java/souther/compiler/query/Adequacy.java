@@ -5679,16 +5679,18 @@ public final class Adequacy {
         }
 
         /**
-         * The same, where what found it is the reading of a body's decision.
+         * The same, where what found it is the reading of one rule of a body's decision.
          *
          * <p>A fourth and not one of the three, because what a decision reading went without is
          * neither a measure's status nor a fold of the readings of a line: a row it could not place
          * among the rules and a row nothing watched each leave a rule nothing was seen taking as
-         * one a row may already take. Taken whole for the reason the others are — a rule of a body
-         * rests on one reading of one set of runs, and a caller handing over a set assembled beside
-         * it could give one rule's finding what another behavior's reading went without.
+         * one a row may already take. Of one rule and not of the reading, because a rule read short
+         * bears on that rule and on no other ({@link DecisionEvidence#at}). Taken whole for the
+         * reason the others are — a caller handing over a set assembled beside it could give one
+         * rule's finding what another rule's reading went without.
          */
-        public static Finding by(FindingSubject subject, DecisionEvidence found, About about) {
+        public static Finding by(FindingSubject subject, DecisionEvidence.OfOneRule found,
+                                 About about) {
             return new Finding(subject, found.weakening(), about);
         }
 
@@ -6520,8 +6522,8 @@ public final class Adequacy {
                     : decision.read().found()) {
                 RuleSettlement came = settled.get(ruled.rule());
                 if (came != null && came.requirement() instanceof RuleRequirement.Required) {
-                    out.add(Finding.by(new FindingSubject.OfABehavior(behavior), decision,
-                            new About.ARuleNoRowTakes(behavior, ruled)));
+                    out.add(Finding.by(new FindingSubject.OfABehavior(behavior),
+                            decision.at(ruled), new About.ARuleNoRowTakes(behavior, ruled)));
                 }
             }
         }

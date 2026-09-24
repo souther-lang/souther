@@ -2,6 +2,7 @@ package souther.compiler.flow;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.Choice;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.core.Core;
@@ -294,7 +295,9 @@ class ANamingDecidesHowAWayIsWrittenAndNotWhetherThereIsOneTest {
 
         @Override
         public Marks forkArm(Core fork, int part) {
-            return mark(fork, fork instanceof Core.If iff ? iff.cond() : fork, "arm", part);
+            return mark(fork, Choice.decidingArm(fork, part)
+                    instanceof Choice.Decides.ACondition(Core cond, boolean _) ? cond : fork,
+                    "arm", part);
         }
 
         private Marks mark(Core at, Core about, String what, int part) {

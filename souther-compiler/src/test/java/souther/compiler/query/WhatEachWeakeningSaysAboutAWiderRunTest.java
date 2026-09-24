@@ -99,6 +99,8 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         table.put("DecisionRunNotWatched", "answers/UNAFFECTED");
         // A reading held to a larger figure gets further, so this one a wider run can answer.
         table.put("DecisionReadingIncomplete", "answers/MAY_CHANGE");
+        // A rule read short is short of words, which no figure gives it.
+        table.put("DecisionRuleReadShort", "answers/UNAFFECTED");
         return table;
     }
 
@@ -220,7 +222,8 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                  Weakening.ProofContradicted _, Weakening.ArmsUnsettled _,
                  Weakening.DecisionOfRowUnreadable _, Weakening.DecisionRunNotWatched _,
                  Weakening.MeetingsNotWalked _,
-                 Weakening.DecisionReadingIncomplete _ -> "answers";
+                 Weakening.DecisionReadingIncomplete _,
+                 Weakening.DecisionRuleReadShort _ -> "answers";
         };
     }
 
@@ -263,6 +266,7 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                 new souther.compiler.partition.DecisionReading.Enumeration.StoppedAtAFigure(
                         souther.compiler.partition.CompositionBudget
                                 .PATHS_OF_A_DECISION_READ)));
+        out.add(new Weakening.DecisionRuleReadShort("b"));
         return out;
     }
 

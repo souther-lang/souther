@@ -307,6 +307,8 @@ public sealed interface ObligationDisposition {
                      // And a decision whose ways could not all be written down, which is about
                      // what obligations there are and not about a point of a line.
                      Weakening.DecisionReadingIncomplete _,
+                     // And a rule of a decision read short, which is about what that rule is.
+                     Weakening.DecisionRuleReadShort _,
                      // And the readings nobody made, which is read beside these rather than among
                      // them ({@link #readingsTriedIn}): the reasons here are what a reading met,
                      // and there was no reading of those to meet anything.

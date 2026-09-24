@@ -601,7 +601,11 @@ public final class ValueArrivals<P> {
         return List.of(armWay(iff, part, naming));
     }
 
-    /** The arm itself as the one way in, for a condition whose ways cannot all be written down. */
+    /**
+     * The arm itself as the one way in, for a fork whose ways in cannot be written down as the ways
+     * a condition comes out: a condition whose ways cannot all be written down, and an attempt,
+     * whose arms are decided by whether an invariant held and by no condition written in the body.
+     */
     private Provenance<P> armWay(Core fork, int part, Naming<P> naming) {
         P named = naming.forkArm(fork, part);
         return named == null

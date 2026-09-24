@@ -189,6 +189,27 @@ public record Choice(Kind kind, List<Arm> arms) {
         };
     }
 
+    /**
+     * What decides arm {@code part} of {@code fork}.
+     *
+     * <p>For a reader that holds a fork and which of its arms, and needs the node deciding it. Asked
+     * here rather than handed in beside the pair, because a way of deciding passed beside a fork and
+     * an arm is a third value that has to agree with the other two, and nothing would say which of
+     * them to believe where it did not: a rule named after one departure and seen at another arm.
+     *
+     * @throws IllegalArgumentException where {@code fork} is not a choice or has no such arm
+     */
+    public static Decides decidingArm(Core fork, int part) {
+        Choice choice = of(fork);
+        if (choice == null || part < 0 || part >= choice.arms().size()) {
+            throw new IllegalArgumentException("arm " + part + " of a "
+                    + (fork == null ? "missing node" : fork.getClass().getSimpleName() + " at "
+                            + fork.pos())
+                    + " is no arm of a choice");
+        }
+        return choice.arms().get(part).decidedBy();
+    }
+
     /** What an attempt answers: the value built where its invariant held, and what is taken where it
      * did not — one departure per clause the attempt names, and each of them a value of its own. */
     private static List<Arm> attempted(Core.IfConstructed ic) {

@@ -656,8 +656,6 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                         + "inputs/InputReads;L" + c + "partition/LiveFlow;Ljava/util/List;Z"
                         + "Ljava/util/List;Ljava/util/List;L" + c
                         + "partition/ConditionNumbering;)V", 1, GOES_ON_INTO_IT);
-        row(out, c + "partition/DecisionNaming", "forkArm",
-                "(" + core + "I)L" + c + "partition/DecisionPath;", 1, OF_A_FORK);
         row(out, c + "partition/LiveFlow", "walk", "(" + core + "Ljava/util/Set;)V", 1,
                 COUNTS_THROUGH_IT);
         row(out, c + "partition/PredicateReadings", "found",
@@ -671,8 +669,6 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                         + "inputs/InputReads;L" + c + "partition/LiveFlow;ZLjava/util/List;L" + c
                         + "partition/RuleReachNumbering;Ljava/util/Set;L" + c
                         + "partition/PredicateReadings$Builds;)V", 1, GOES_ON_INTO_IT);
-        row(out, c + "reading/CoverageNaming", "forkArm",
-                "(" + core + "I)L" + c + "reading/Outcome;", 1, OF_A_FORK);
         row(out, c + "reading/CoverageRead", "walk",
                 "(" + core + "L" + c + "reading/CoverageNaming;L" + c + "reading/Reach;Z)V", 1,
                 GOES_ON_INTO_IT);

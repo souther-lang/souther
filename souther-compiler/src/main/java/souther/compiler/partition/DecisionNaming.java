@@ -1,9 +1,11 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.Choice;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.core.Core;
 import souther.compiler.flow.Naming;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 
 /**
@@ -108,30 +110,58 @@ final class DecisionNaming implements Naming<DecisionPath> {
 
     @Override
     public DecisionPath matchCase(Core.Match match, int part) {
-        DecisionMeanings.Read read = meanings.entering(match, part, reads, numbering);
-        ModelOccurrence fork =
-                ModelOccurrence.statedAt(match.place().occurrence()).orElse(null);
-        return DecisionPath.NOWHERE.and(read.answer(), fork == null
-                ? new ShownBy.NothingIsRecorded(read.answer().condition())
-                : new ShownBy.AtAnArm(fork, part), read.onTheWay());
+        return atAnArm(meanings.entering(match, part, reads, numbering), match.occurrence(), part);
     }
 
     /**
-     * The fork's own condition, coming out the way this arm is under.
+     * The distinction the arm is an answer of.
      *
-     * <p>Asked where the ways the condition comes out could not all be written down, which is what a
+     * <p>For an {@code if}, the fork's own condition coming out the way this arm is under. Asked
+     * where the ways the condition comes out could not all be written down, which is what a
      * condition whose value this reading cannot work out leaves — a call to one of the language's
      * own operations among them. The fork is still one distinction with two answers, and the arms
      * are those answers: run together they would report a distinction the body draws as one it does
-     * not, and both arms would carry the same empty path.
+     * not, and both arms would carry the same empty path. The same condition the reading would have
+     * named had it been able to value it, which is why it is asked for the same way: a column
+     * minted here instead would be a second name for one condition, and the two accounts of it would
+     * agree about nothing.
      *
-     * <p>The same condition the reading would have named had it been able to value it, which is why
-     * it is asked for the same way. A column minted here instead would be a second name for one
-     * condition, and the two accounts of it would agree about nothing.
+     * <p>For an attempt, the arm itself. Whether the invariant held is a condition no expression of
+     * the body states, so there is no condition to ask for; the arm is a column this reading names
+     * and says it cannot read, and a run through it is seen at the arm the way a run through a case
+     * of a {@code match} is.
      */
     @Override
     public DecisionPath forkArm(Core fork, int part) {
-        return fork instanceof Core.If iff ? side(iff.cond(), part == 0) : null;
+        return switch (Choice.decidingArm(fork, part)) {
+            case Choice.Decides.ACondition(Core cond, boolean holding) -> side(cond, holding);
+            case Choice.Decides.ItWasBuilt(Core.IfConstructed attempt) -> atAnArm(
+                    meanings.attempting(attempt, part, attempt.then().pos(), numbering),
+                    attempt.occurrence(), part);
+            case Choice.Decides.ItDeparted(Core.IfConstructed attempt, Core.ElseArm on) -> atAnArm(
+                    meanings.attempting(attempt, part, on.body().pos(), numbering),
+                    attempt.occurrence(), part);
+            // Named by matchCase, which is asked of the match and not of a fork in general.
+            case Choice.Decides.ACase _ -> throw new IllegalStateException(
+                    "a case of a match at " + fork.pos() + " was asked of as an arm of a fork");
+            case Choice.Decides.ByArgumentRelations _ -> throw new IllegalStateException(
+                    "an operation the library defines by cases at " + fork.pos()
+                            + " was asked of as an arm of a fork, and no walk enters one");
+        };
+    }
+
+    /**
+     * A path through one arm of a fork, carrying {@code read} and seen at that arm of the model.
+     *
+     * <p>A fork no construct of the model states — one inside the language's own operations — has
+     * no arm a run is recorded at, and says so rather than being left off the path.
+     */
+    private static DecisionPath atAnArm(DecisionMeanings.Read read, ConstructOccurrence fork,
+                                        int part) {
+        ModelOccurrence stated = ModelOccurrence.statedAt(fork).orElse(null);
+        return DecisionPath.NOWHERE.and(read.answer(), stated == null
+                ? new ShownBy.NothingIsRecorded(read.answer().condition())
+                : new ShownBy.AtAnArm(stated, part), read.onTheWay());
     }
 
     @Override

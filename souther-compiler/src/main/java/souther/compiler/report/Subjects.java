@@ -85,6 +85,9 @@ final class Subjects {
             // is what happened and travels as the reason; one body has one decision, so it tells
             // no two of these apart.
             case Weakening.DecisionReadingIncomplete it -> new Subject.OfABehavior(it.behavior());
+            // The behavior one of whose rules was read short. Which rule is each rule's own
+            // answer, and one fact of the reading is one subject however many rules it bears on.
+            case Weakening.DecisionRuleReadShort it -> new Subject.OfABehavior(it.behavior());
         };
     }
 

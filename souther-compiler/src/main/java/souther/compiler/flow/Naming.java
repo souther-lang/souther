@@ -1,5 +1,6 @@
 package souther.compiler.flow;
 
+import souther.compiler.check.Choice;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.core.Core;
 
@@ -63,7 +64,16 @@ public interface Naming<P> {
     /** That a run took case {@code part} of {@code match}, or null where this has no words for it. */
     P matchCase(Core.Match match, int part);
 
-    /** That a run took arm {@code part} of {@code fork}, said of the fork itself, or null. */
+    /**
+     * That a run took arm {@code part} of {@code fork}, said of the fork itself, or null.
+     *
+     * <p>What decides the arm is {@link Choice#decidingArm}'s answer, and a naming switches over it
+     * rather than asking the node what kind of fork it is. Asked of the node, a naming answers for
+     * the kinds it knows and passes every other straight through, and the arms of a fork it did not
+     * know are ways carrying nothing about which arm was taken. Switched over, a way of deciding an
+     * arm added to {@link Choice.Decides} is one every naming has to say something about before it
+     * compiles.
+     */
     P forkArm(Core fork, int part);
 
     /** How many arrivals one node is read as before the reading gives up on enumerating them. */
