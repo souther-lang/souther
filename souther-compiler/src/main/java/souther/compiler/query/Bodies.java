@@ -1100,6 +1100,11 @@ public final class Bodies {
      *
      * <p>Read off the lowered module — the same tree the backend emits from — so the two cannot be
      * looking at different behaviors.
+     *
+     * <p>A module read off the path is answered from what it published. It carries what each of its
+     * behaviors requires and not which of its definitions asked, so each dependency is asked for by
+     * the behavior it is published for. A module that imports it reads the dependencies and not the
+     * requesters, and reads the same ones whichever way the module arrived.
      */
     public record Requirements(String name) implements Key<Map<String, List<BehaviorRequirement>>> {
         @Override
@@ -1109,19 +1114,124 @@ public final class Bodies {
 
         @Override
         public Answer<Map<String, List<BehaviorRequirement>>> compute(Db db) {
+            Front.FromPath.OnThePath onThePath = Front.onThePath(db, name);
+            if (onThePath != null) {
+                Map<String, List<BehaviorRequirement>> published = new LinkedHashMap<>();
+                onThePath.behaviorRequirements().forEach((behavior, dependencies) -> {
+                    List<BehaviorRequirement> each = new ArrayList<>();
+                    for (ValueName.Behavior dependency : dependencies) {
+                        each.add(new BehaviorRequirement(dependency, List.of(behavior)));
+                    }
+                    published.put(behavior, List.copyOf(each));
+                });
+                return Answer.of(Ordered.map(published));
+            }
             Answer<Lower.Lowered> lowering = db.ask(new Lowering(name));
             Answer<Set<ValueName.Behavior>> injected = db.ask(new ImportedInjected(name));
-            if (!lowering.present() || !injected.present()) {
+            Answer<Map<ValueName.Behavior, List<ValueName.Behavior>>> foreign =
+                    db.ask(new ForeignStageRequirements(name));
+            if (!lowering.present() || !injected.present() || !foreign.present()) {
                 return Answer.absent();
             }
             try {
                 return Answer.of(Ordered.map(souther.compiler.check.Requirements.of(
-                        lowering.value().lowered(), injected.value())));
+                        lowering.value().lowered(), injected.value(), foreign.value())));
             } catch (CompileException e) {
                 // A composition that reaches itself has no requirement set to work out. The cycle is
                 // reported where it is written; nothing is emitted for the module either way.
                 return Answer.absent(e);
             }
+        }
+    }
+
+    /**
+     * What each stage of this module's compositions that another module declares requires, as that
+     * module answered it ({@link Requirements}), in the order it takes them.
+     *
+     * <p>Two readers, one answer. The composition here requires what its stages do, and the
+     * composition builds each stage — so the list that goes into this module's requirement sets is
+     * the same list the stage's constructor is handed. Only the dependencies cross; which of the
+     * declaring module's definitions asked for one does not.
+     */
+    public record ForeignStageRequirements(String name)
+            implements Key<Map<ValueName.Behavior, List<ValueName.Behavior>>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<ValueName.Behavior, List<ValueName.Behavior>>> compute(Db db) {
+            if (Names.cyclic(db, name)) {
+                return Answer.absent();
+            }
+            Answer<Lower.Lowered> lowering = db.ask(new Lowering(name));
+            Answer<Set<ValueName.Behavior>> injected = db.ask(new ImportedInjected(name));
+            if (!lowering.present() || !injected.present()) {
+                return Answer.absent();
+            }
+            Map<ValueName.Behavior, List<ValueName.Behavior>> out = new LinkedHashMap<>();
+            for (ValueName.Behavior stage : souther.compiler.check.Requirements.foreignStages(
+                    lowering.value().lowered(), injected.value())) {
+                Answer<Map<String, List<BehaviorRequirement>>> there =
+                        db.ask(new Requirements(stage.module()));
+                if (!there.present()) {
+                    return Answer.absent();
+                }
+                List<BehaviorRequirement> requirements = there.value().get(stage.name());
+                if (requirements == null) {
+                    throw new IllegalStateException("`" + stage.module() + "` answered no"
+                            + " requirement set for `" + stage.name() + "`, which it declares and"
+                            + " does not leave to Java");
+                }
+                out.put(stage, souther.compiler.check.Requirements.names(requirements));
+            }
+            return Answer.of(Ordered.map(out));
+        }
+    }
+
+    /**
+     * The signature of every behavior this module's classes take injected, by the declaration it
+     * is.
+     *
+     * <p>What a field, a constructor parameter and a call on one are typed from. Read off the
+     * requirement sets and not off the import lines: a dependency a stage of another module brings
+     * in is taken by this module's constructor whether or not anything here names it.
+     */
+    public record RequirementSignatures(String name)
+            implements Key<Map<ValueName.Behavior, Sig>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<ValueName.Behavior, Sig>> compute(Db db) {
+            Answer<Map<String, List<BehaviorRequirement>>> requirements =
+                    db.ask(new Requirements(name));
+            if (!requirements.present()) {
+                return Answer.absent();
+            }
+            Map<ValueName.Behavior, Sig> out = new LinkedHashMap<>();
+            for (List<BehaviorRequirement> each : requirements.value().values()) {
+                for (BehaviorRequirement requirement : each) {
+                    ValueName.Behavior dependency = requirement.dependency();
+                    if (out.containsKey(dependency)) {
+                        continue;
+                    }
+                    Answer<Map<String, Sig>> declared =
+                            db.ask(new Signatures(dependency.module()));
+                    if (!declared.present()) {
+                        return Answer.absent();
+                    }
+                    Sig sig = declared.value().get(dependency.name());
+                    if (sig == null) {
+                        return Answer.absent();
+                    }
+                    out.put(dependency, sig);
+                }
+            }
+            return Answer.of(Ordered.map(out));
         }
     }
 

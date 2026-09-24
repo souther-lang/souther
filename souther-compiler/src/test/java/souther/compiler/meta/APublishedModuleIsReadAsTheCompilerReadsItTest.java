@@ -227,12 +227,12 @@ class APublishedModuleIsReadAsTheCompilerReadsItTest {
         return new PublishedClasses.Declarations(new PublishedClasses.SoutherModuleView(
                 souther.compiler.codegen.Backend.BOUNDARY_VERSION, "another build",
                 "module " + module + " exposing ( Same, Note )", imports, types,
-                List.of(), List.of()), null, null, null, null);
+                List.of(), List.of()), null, null, null, null, null);
     }
 
     /** The class one declaration was stamped on. */
     private static PublishedClasses.Declarations dataClass(String declaration) {
-        return new PublishedClasses.Declarations(null, declaration, null, null, null);
+        return new PublishedClasses.Declarations(null, declaration, null, null, null, null);
     }
 
     /** What the invariant of {@code type} calls, as the front end answered it. */

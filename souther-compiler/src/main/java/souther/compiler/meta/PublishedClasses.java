@@ -63,9 +63,13 @@ public interface PublishedClasses {
     }
 
     /** What one class was annotated with. A class carries at most one of each, which the reading
-     *  holds it to rather than taking whichever it met last. */
+     *  holds it to rather than taking whichever it met last.
+     *
+     *  <p>{@code behaviorRequirements} is null where the class carries no behavior, and a list —
+     *  empty where the behavior requires nothing — where it carries one. */
     record Declarations(SoutherModuleView module, String data, String behaviorSignature,
-                        String behaviorSignatureFrom, String behaviorImplementation) {}
+                        String behaviorSignatureFrom, String behaviorImplementation,
+                        List<String> behaviorRequirements) {}
 
     /**
      * The {@code $Module} annotation's members, as a reader here uses them.

@@ -136,11 +136,16 @@ final class CodegenContext {
      * descriptor cannot drift apart. */
     private Map<ValueName.Behavior, List<Type>> reqParams = Map.of();
     private Map<ValueName.Behavior, Type> reqSuccess = Map.of();
+    /** The behaviors Java supplies. A required one of them is held as its abstract base class, and
+     *  any other required behavior as its interface, which is what a call on it is linked against. */
+    private Set<ValueName.Behavior> injectionTargets = Set.of();
 
     void setRequiredSignatures(Map<ValueName.Behavior, List<Type>> params,
-                               Map<ValueName.Behavior, Type> success) {
+                               Map<ValueName.Behavior, Type> success,
+                               Set<ValueName.Behavior> injectionTargets) {
         this.reqParams = params;
         this.reqSuccess = success;
+        this.injectionTargets = Set.copyOf(injectionTargets);
     }
 
     /**
@@ -370,13 +375,20 @@ final class CodegenContext {
         return callees.get(name);
     }
 
-    /** A required (injected) behavior takes other than one input, so it is a standalone base rather
-     * than the unary {@code Behavior} (issue #57, spec §java-base-class). Two inputs are too many to
+    /** A required behavior takes other than one input, so it is held as its own class — the base
+     * Java extends, or the interface of one with an implementation — rather than the unary
+     * {@code Behavior} (spec §java-base-class). Two inputs are too many to
      * hand along an arrow and none is too few, so both are called on their own class with a typed
      * {@code apply}; only a single input is the transformation {@code Behavior} describes. */
     boolean isStandaloneRequired(ValueName.Behavior name) {
         List<Type> params = reqParams.get(name);
         return params != null && params.size() != 1;   // absent: not a required behavior at all
+    }
+
+    /** Whether Java supplies {@code name}: its class is then the abstract base a typed {@code apply}
+     *  is called on virtually, where a behavior with an implementation is an interface. */
+    boolean isInjectionTarget(ValueName.Behavior name) {
+        return injectionTargets.contains(name);
     }
 
     /** The JVM type a required behavior is stored/injected as: its own base class unless it takes

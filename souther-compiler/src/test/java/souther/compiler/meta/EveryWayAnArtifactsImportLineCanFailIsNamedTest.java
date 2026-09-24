@@ -254,9 +254,9 @@ class EveryWayAnArtifactsImportLineCanFailIsNamedTest {
                             "module " + name + " exposing ( " + module.exposed() + " )",
                             module.imports(), List.copyOf(module.declarations().keySet()),
                             List.of(), module.helpers()),
-                    null, null, null, null));
+                    null, null, null, null, null));
             module.declarations().forEach((declared, text) -> classes.put(name + "." + declared,
-                    new PublishedClasses.Declarations(null, text, null, null, null)));
+                    new PublishedClasses.Declarations(null, text, null, null, null, null)));
         });
         return name -> PublishedClasses.carrying(classes.get(name));
     }

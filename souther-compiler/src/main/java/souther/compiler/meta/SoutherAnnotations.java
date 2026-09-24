@@ -62,7 +62,8 @@ final class SoutherAnnotations {
                 data == null ? null : required(data, "value"),
                 behavior == null ? null : required(behavior, "signature"),
                 behavior == null ? null : required(behavior, "signatureFrom"),
-                behavior == null ? null : required(behavior, "implementation"));
+                behavior == null ? null : required(behavior, "implementation"),
+                behavior == null ? null : requiredStrings(behavior, "requirements"));
     }
 
     /**
@@ -177,9 +178,21 @@ final class SoutherAnnotations {
      *  array of strings is not this schema's. */
     private static List<String> strings(Annotation a, String name) {
         AnnotationValue value = member(a, name);
+        return value == null ? List.of() : stringsOf(value, name);
+    }
+
+    /** An array member the schema declares with no default: absent is unreadable and not empty. The
+     *  writer writes an empty array where there is nothing to list, so a class without the member
+     *  was not written by it. */
+    private static List<String> requiredStrings(Annotation a, String name) {
+        AnnotationValue value = member(a, name);
         if (value == null) {
-            return List.of();
+            throw notOurs(name);
         }
+        return stringsOf(value, name);
+    }
+
+    private static List<String> stringsOf(AnnotationValue value, String name) {
         if (!(value instanceof AnnotationValue.OfArray array)) {
             throw notOurs(name);
         }

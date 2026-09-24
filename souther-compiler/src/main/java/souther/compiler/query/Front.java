@@ -9,6 +9,7 @@ import souther.compiler.ast.WrittenName;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.ValueName;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -498,6 +499,12 @@ public final class Front {
                 return read.behaviorImplementations();
             }
 
+            /** What constructing each of its behaviors requires injected, as the module that
+             *  declared it worked out. */
+            public Map<String, List<ValueName.Behavior>> behaviorRequirements() {
+                return read.behaviorRequirements();
+            }
+
             public List<Scoping.Claim> libraryClaims() {
                 return read.libraryClaims();
             }
@@ -594,8 +601,19 @@ public final class Front {
                 }
                 ReadableModule module = ((Readback.Ready<ReadableModule>) readback).value();
                 read.put(name, module);
-                List<String> reaches = List.copyOf(reaches(module.module()).keySet());
-                edges.put(name, reaches);
+                // What its behaviors are built with is reached as much as what its declarations
+                // name. A composition's stages are not published, so a dependency one of them brings
+                // in may be declared in a module nothing in its text mentions — and a reader
+                // building the composition is handed that dependency and types it from there.
+                SequencedSet<String> reaches = new LinkedHashSet<>(reaches(module.module()).keySet());
+                for (List<ValueName.Behavior> required : module.behaviorRequirements().values()) {
+                    for (ValueName.Behavior dependency : required) {
+                        if (!dependency.module().equals(name)) {
+                            reaches.add(dependency.module());
+                        }
+                    }
+                }
+                edges.put(name, List.copyOf(reaches));
                 pending.addAll(reaches);
             }
             Map<String, List<SourcePos>> reachedFrom = reachedFrom(named, edges);

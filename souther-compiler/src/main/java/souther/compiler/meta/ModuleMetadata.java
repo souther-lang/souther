@@ -88,11 +88,14 @@ public final class ModuleMetadata {
      * or inlined, so the invariants read as they were written. {@code sigs} supplies the signature
      * of a {@code >->} composition, which declares stages instead of one; {@code implementations}
      * says where each behavior's body comes from (spec §injected-behavior, §unwritten-behavior),
-     * which is the compiler's rule to state and not a fact about any one class.
+     * which is the compiler's rule to state and not a fact about any one class. {@code requirements}
+     * is what each behavior constructed here requires injected, which a composition works out from
+     * stages that are not carried.
      */
     public static void stamp(Emissions out, Ast.Module module, Hir.Module resolved,
                              CstFrontend.Slices slices, Map<String, Sig> sigs,
                              Map<String, BehaviorImplementation> implementations,
+                             Map<String, List<ValueName.Behavior>> requirements,
                              TypeReachName.Naming naming, Preserved.SettledValues settledValues) {
         List<String> types = new ArrayList<>();
         for (Ast.Def def : module.defs()) {
@@ -112,12 +115,20 @@ public final class ModuleMetadata {
                 case Ast.SpecBehavior _ -> PublishedSignature.DECLARED;
                 case Ast.PipeBehavior _ -> PublishedSignature.COMPOSED;
             };
+            BehaviorImplementation implementation = implementations.get(b.name());
+            List<ValueName.Behavior> required = requirements.get(b.name());
+            if (implementation.isInjectionTarget()) {
+                required = List.of();
+            } else if (required == null) {
+                throw new IllegalStateException("`" + module.name() + "." + b.name()
+                        + "` is constructed here and reached publication with no requirement set");
+            }
             add(out, new GeneratedClass.BehaviorInterface(module.name(), b.name()),
                     Annotation.of(BEHAVIOR_ANN,
                             AnnotationElement.ofString("signature", signature),
                             AnnotationElement.ofString("signatureFrom", from.written()),
-                            AnnotationElement.ofString("implementation",
-                                    implementations.get(b.name()).written())));
+                            AnnotationElement.ofString("implementation", implementation.written()),
+                            strings("requirements", PublishedRequirements.written(required))));
         }
         out.put(new GeneratedClass.ModuleDeclarations(module.name()),
                 Backend.moduleClass(module.name(), moduleAnnotation(module, resolved, slices, types,

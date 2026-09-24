@@ -823,6 +823,37 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
     }
 
     /**
+     * A composition taking and answering the same in both builds, whose stages require different
+     * things.
+     *
+     * <p>What it requires is what an implementation of it is handed, in that order, and it comes
+     * from stages neither build publishes. Two builds that disagree about it hand a row's stand-ins
+     * to different dependencies, with nothing in the signature to show it.
+     */
+    @Test
+    void aCompositionRequiringSomethingElseIsADisagreement() {
+        String rated = """
+                module example.requiring
+
+                behavior rate : (n: Int) -> Int
+                behavior tax : (n: Int) -> Int
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                behavior priced = rate >-> double
+                """;
+        String taxed = rated.replace("priced = rate >-> double", "priced = tax >-> double");
+
+        assertInstanceOf(Agreement.Agree.class,
+                DeclarationAgreement.of("example.requiring", "priced",
+                        declarationsOf(rated), declarationsOf(rated), DefaultStdlib.get()),
+                "two builds of one composition agree");
+        assertInstanceOf(Agreement.Disagree.class,
+                DeclarationAgreement.of("example.requiring", "priced",
+                        declarationsOf(taxed), declarationsOf(rated), DefaultStdlib.get()),
+                "one is handed `tax` and the other `rate`");
+    }
+
+    /**
      * A module only an unread helper reaches is not held to.
      *
      * <p>It has to be read — a name in that helper is answered against it, and resolution answers

@@ -1635,7 +1635,13 @@ final class BodyGen {
                     box(code, at);   // a primitive boxes to its apply-param type; a reference already matches
                     keepForTheCheck(saved);
                 }
-                code.invokevirtual(ctx.cdBehavior(callee), "apply", desc);
+                // Java's is its abstract base; one with an implementation of its own is held as
+                // its interface, which declares the same typed apply.
+                if (ctx.isInjectionTarget(callee)) {
+                    code.invokevirtual(ctx.cdBehavior(callee), "apply", desc);
+                } else {
+                    code.invokeinterface(ctx.cdBehavior(callee), "apply", desc);
+                }
                 project(callee, success);
                 CanonicalizeAtCrossing.emit(code, success);
                 checkAtCrossing(callee, saved);

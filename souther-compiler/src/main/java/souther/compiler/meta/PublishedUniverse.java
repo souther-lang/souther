@@ -10,11 +10,13 @@ import souther.compiler.check.Registry;
 import souther.compiler.check.Resolve;
 import souther.compiler.check.Scoping;
 import souther.compiler.query.Front;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -154,10 +156,12 @@ public final class PublishedUniverse {
      * source, so it travels beside the module ({@link ReadableModule}). It decides whether an
      * implementation may be supplied for a behavior at all, which is as much a fact about a crossing
      * as the behavior's signature is — so it travels this far too, rather than being dropped where a
-     * reading turns into declarations.
+     * reading turns into declarations. What constructing a behavior requires travels for the same
+     * reason: it is what an implementation of the behavior is handed, in that order.
      */
     public record Read(Hir.Module module,
-                       Map<String, BehaviorImplementation> behaviorImplementations) {
+                       Map<String, BehaviorImplementation> behaviorImplementations,
+                       Map<String, List<ValueName.Behavior>> behaviorRequirements) {
     }
 
     /**
@@ -267,6 +271,6 @@ public final class PublishedUniverse {
                     new Readback.Failure.UnresolvedPublishedNames());
         }
         return new Readback.Ready<>(new Read(resolution.module(),
-                readable.behaviorImplementations()));
+                readable.behaviorImplementations(), readable.behaviorRequirements()));
     }
 }

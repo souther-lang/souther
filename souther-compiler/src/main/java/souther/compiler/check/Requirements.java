@@ -125,9 +125,15 @@ public final class Requirements {
      *
      * <p>{@code importedInjected} are the injection targets this module borrows; its own are read off
      * the module ({@link #injectedNames}).
+     *
+     * <p>{@code foreignStages} is what each stage declared in another module requires, as the module
+     * that declares it answered: one entry for every behavior {@link #foreignStages} names. The stage
+     * is the requester of what it brings in. What asked for a dependency inside it is that module's
+     * business, and one read off the path does not carry it at all.
      */
-    public static Map<String, List<BehaviorRequirement>> of(Hir.Module module,
-                                                            Set<ValueName.Behavior> importedInjected) {
+    public static Map<String, List<BehaviorRequirement>> of(
+            Hir.Module module, Set<ValueName.Behavior> importedInjected,
+            Map<ValueName.Behavior, List<ValueName.Behavior>> foreignStages) {
         Set<ValueName.Behavior> injected = injectedNames(module, importedInjected);
         Map<ValueName.Behavior, Hir.BehaviorDef> byName = new HashMap<>();
         for (Hir.BehaviorDef bd : module.behaviors()) {
@@ -135,8 +141,8 @@ public final class Requirements {
         }
         Map<ValueName.Behavior, Map<ValueName.Behavior, List<String>>> memo = new LinkedHashMap<>();
         for (Hir.BehaviorDef bd : module.behaviors()) {
-            resolve(new ValueName.Behavior(module.name(), bd.name()), byName, injected, memo,
-                    new LinkedHashSet<>());
+            resolve(new ValueName.Behavior(module.name(), bd.name()), byName, foreignStages,
+                    injected, memo, new LinkedHashSet<>());
         }
         Map<String, List<BehaviorRequirement>> out = new LinkedHashMap<>();
         for (Map.Entry<ValueName.Behavior, Map<ValueName.Behavior, List<String>>> e
@@ -148,6 +154,29 @@ public final class Requirements {
             out.put(e.getKey().name(), List.copyOf(reqs));
         }
         return out;
+    }
+
+    /**
+     * The stages of {@code module}'s compositions that another module declares and does not leave to
+     * Java: the behaviors whose requirement set {@link #of} has to be handed, because it is the
+     * declaring module's to work out. An injected one is not here — it is the dependency itself.
+     */
+    public static Set<ValueName.Behavior> foreignStages(Hir.Module module,
+                                                        Set<ValueName.Behavior> importedInjected) {
+        Set<ValueName.Behavior> foreign = new LinkedHashSet<>();
+        for (Hir.BehaviorDef bd : module.behaviors()) {
+            if (bd instanceof Hir.PipeBehavior pipe
+                    && pipe.composition() instanceof Hir.Composition.Stages written) {
+                for (Hir.Var stage : written.stages()) {
+                    ValueName.Behavior s = reaches(stage);
+                    if (s != null && !s.module().equals(module.name())
+                            && !importedInjected.contains(s)) {
+                        foreign.add(s);
+                    }
+                }
+            }
+        }
+        return foreign;
     }
 
     /**
@@ -186,6 +215,7 @@ public final class Requirements {
      */
     private static Map<ValueName.Behavior, List<String>> resolve(
             ValueName.Behavior name, Map<ValueName.Behavior, Hir.BehaviorDef> byName,
+            Map<ValueName.Behavior, List<ValueName.Behavior>> foreignStages,
             Set<ValueName.Behavior> injected,
             Map<ValueName.Behavior, Map<ValueName.Behavior, List<String>>> memo,
             SequencedSet<ValueName.Behavior> inProgress) {
@@ -198,7 +228,19 @@ public final class Requirements {
         }
         Hir.BehaviorDef bd = byName.get(name);
         if (bd == null) {
-            return Map.of();
+            // Declared elsewhere, so what it requires is what its module answered. Not having that
+            // answer is not the same as it requiring nothing: a stage built without what it needs
+            // is a class that does not link.
+            List<ValueName.Behavior> declared = foreignStages.get(name);
+            if (declared == null) {
+                throw new IllegalStateException("`" + name.module() + "." + name.name()
+                        + "` is a stage declared elsewhere, and what it requires was not handed in");
+            }
+            Map<ValueName.Behavior, List<String>> brought = new LinkedHashMap<>();
+            for (ValueName.Behavior dependency : declared) {
+                add(brought, dependency, name.name());
+            }
+            return brought;
         }
         if (!inProgress.add(name)) {
             StringBuilder written = new StringBuilder();
@@ -225,10 +267,11 @@ public final class Requirements {
             case Hir.PipeBehavior pipe -> {
                 List<Hir.Var> stages = switch (pipe.composition()) {
                     case Hir.Composition.Stages written -> written.stages();
-                    // A composition read off the path has no stages here to walk, and what its
-                    // stages require is not carried with it. So nothing is added for it, and a
-                    // composition built on one here is constructed without what those stages need.
-                    case Hir.Composition.Elsewhere _ -> List.of();
+                    // A module read off the path is answered from what it published, and its
+                    // compositions are never walked for it.
+                    case Hir.Composition.Elsewhere _ -> throw new IllegalStateException("`"
+                            + name.module() + "." + name.name() + "` was read off the path and has"
+                            + " no stages to walk");
                 };
                 for (Hir.Var stage : stages) {
                     ValueName.Behavior s = reaches(stage);
@@ -242,7 +285,8 @@ public final class Requirements {
                         continue;
                     }
                     for (Map.Entry<ValueName.Behavior, List<String>> e
-                            : resolve(s, byName, injected, memo, inProgress).entrySet()) {
+                            : resolve(s, byName, foreignStages, injected, memo, inProgress)
+                                    .entrySet()) {
                         for (String requester : e.getValue()) {
                             add(acc, e.getKey(), requester);
                         }

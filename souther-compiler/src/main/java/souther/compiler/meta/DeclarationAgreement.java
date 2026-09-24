@@ -190,6 +190,14 @@ public final class DeclarationAgreement {
                             there.behaviorImplementations().get(what.name()))) {
                 return new Agreement.Disagree(what.module(), what.name());
             }
+            // What constructing it requires is what an implementation of it is handed, in that
+            // order, and a composition's comes from stages neither side's declaration shows.
+            if (what instanceof Reached.ABehavior
+                    && !java.util.Objects.equals(
+                            here.behaviorRequirements().get(what.name()),
+                            there.behaviorRequirements().get(what.name()))) {
+                return new Agreement.Disagree(what.module(), what.name());
+            }
             follow(ours);
             follow(theirs);
             return new Agreement.Agree();

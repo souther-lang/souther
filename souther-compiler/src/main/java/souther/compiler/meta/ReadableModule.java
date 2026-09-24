@@ -5,6 +5,7 @@ import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.Preserved;
 import souther.compiler.check.Scoping;
 import souther.compiler.cst.SourceLayout;
+import souther.compiler.types.ValueName;
 import java.util.List;
 
 import java.util.Map;
@@ -67,6 +68,16 @@ public sealed interface ReadableModule permits ModuleReadback.AsRead {
      * the behavior Souther is to implement and nobody has, which would arrive as Java's to supply
      * (issue #936). */
     Map<String, BehaviorImplementation> behaviorImplementations();
+
+    /**
+     * What constructing each behavior requires injected, in the order its constructor takes them,
+     * as the module that declared it worked out. Every behavior but an injection target, which is not
+     * constructed and is not here.
+     *
+     * <p>Carried rather than derived, for the reason {@link #behaviorImplementations} is: a
+     * composition's comes from its stages, and its stages are not published.
+     */
+    Map<String, List<ValueName.Behavior>> behaviorRequirements();
 
     /** What its library import lines brought in, which the module itself no longer says. */
     List<Scoping.Claim> libraryClaims();

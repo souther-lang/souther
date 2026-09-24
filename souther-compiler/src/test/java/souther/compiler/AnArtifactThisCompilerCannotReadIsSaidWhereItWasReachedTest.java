@@ -67,7 +67,7 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
         return new PublishedClasses.Declarations(new PublishedClasses.SoutherModuleView(
                 compat, "0.0.1-other",
                 "module " + module + " exposing ( " + String.join(", ", types) + " )",
-                imports, types, List.of(), helpers), null, null, null, null);
+                imports, types, List.of(), helpers), null, null, null, null, null);
     }
 
     /** Bytes that begin like a class file and end before one does: the parse itself refuses them. */
@@ -130,7 +130,7 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
     }
 
     private static PublishedClasses.Declarations dataClass(String declaration) {
-        return new PublishedClasses.Declarations(null, declaration, null, null, null);
+        return new PublishedClasses.Declarations(null, declaration, null, null, null, null);
     }
 
     /** The importing project. Its second mistake is its own, and is how we see whether the rest of
@@ -272,7 +272,7 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
                         new PublishedClasses.SoutherModuleView(Backend.BOUNDARY_VERSION,
                                 "0.0.1-other", "module lib.pub exposing ( Held )",
                                 List.of(), List.of("Held", "Twice"), List.of(), List.of()),
-                        null, null, null, null),
+                        null, null, null, null, null),
                 "lib.pub.Held", dataClass("data Held = String"),
                 "lib.pub.Twice", dataClass("data Held = Int")));
 
@@ -297,7 +297,7 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
                         new PublishedClasses.SoutherModuleView(Backend.BOUNDARY_VERSION,
                                 "0.0.1-other", "module lib.pub exposing ( Held )",
                                 List.of(), List.of("Held", "Some"), List.of(), List.of()),
-                        null, null, null, null),
+                        null, null, null, null, null),
                 "lib.pub.Held", dataClass("data Held = String"),
                 "lib.pub.Some", dataClass("data Some = String"))));
     }
@@ -398,7 +398,7 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
                         new PublishedClasses.SoutherModuleView(Backend.BOUNDARY_VERSION,
                                 "0.0.1-other", "module lib.other exposing ( Held )",
                                 List.of(), List.of("Held"), List.of(), List.of()),
-                        null, null, null, null),
+                        null, null, null, null, null),
                 "lib.pub.Held", dataClass("data Held = String"))));
     }
 
