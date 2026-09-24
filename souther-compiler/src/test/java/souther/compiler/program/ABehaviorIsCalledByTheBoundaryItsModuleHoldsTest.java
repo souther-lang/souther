@@ -102,7 +102,9 @@ class ABehaviorIsCalledByTheBoundaryItsModuleHoldsTest {
      *  they are two, and not what either of them says. */
     private static BehaviorTarget target() {
         return new BehaviorTarget(
-                new CheckedSignature(List.of(new CheckedBoundaryInput.Scalar(LeafScalar.INT)),
+                CheckedSignature.declared(
+                        List.of(new CheckedSignature.Parameter("n",
+                                new CheckedBoundaryInput.Scalar(LeafScalar.INT))),
                         new CheckedBoundaryOutput.Scalar(LeafScalar.INT)),
                 new CheckedImplementation.Injected());
     }

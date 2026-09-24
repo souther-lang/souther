@@ -59,7 +59,13 @@ public final class PipelineSigs {
             if (b instanceof Hir.PipeBehavior pipe) {
                 try {
                     sigs.put(new ValueName.Behavior(module, pipe.name()),
-                            pipeSig(pipe, sigs, symbols, published, kinds, pipeStages));
+                            switch (pipe.composition()) {
+                                case Hir.Composition.Stages written -> pipeSig(pipe, written, sigs,
+                                        symbols, published, kinds, pipeStages);
+                                case Hir.Composition.Elsewhere elsewhere ->
+                                        SignatureBoundary.publishedComposition(pipe, elsewhere,
+                                                symbols, kinds, published);
+                            });
                 } catch (Unanswerable _) {
                     // A stage that names nothing was reported where it was written, and this
                     // composition has no signature to work out. It is one behavior: the others keep
@@ -82,8 +88,11 @@ public final class PipelineSigs {
             String module, List<Hir.BehaviorDef> behaviors) {
         Map<ValueName.Behavior, List<Hir.Var>> stages = new HashMap<>();
         for (Hir.BehaviorDef b : behaviors) {
-            if (b instanceof Hir.PipeBehavior pipe) {
-                stages.put(new ValueName.Behavior(module, pipe.name()), pipe.stages());
+            // A composition read off the path has no stages to splice in, so a stage naming one is
+            // a stage like any other.
+            if (b instanceof Hir.PipeBehavior pipe
+                    && pipe.composition() instanceof Hir.Composition.Stages written) {
+                stages.put(new ValueName.Behavior(module, pipe.name()), written.stages());
             }
         }
         return stages;
@@ -174,11 +183,12 @@ public final class PipelineSigs {
      * <p>Asked of a declaration and the signatures around it, so it can be asked before the module
      * has checked (a signature needs it) and after (a backend needs it), and answer the same.
      */
-    public static Composition composition(Hir.PipeBehavior pipe, Map<ValueName.Behavior, Sig> sigs,
+    public static Composition composition(Hir.PipeBehavior pipe, Hir.Composition.Stages written,
+                                          Map<ValueName.Behavior, Sig> sigs,
                                           PublishedDeclarations published,
                                           Map<ValueName.Behavior, List<Hir.Var>> pipeStages) {
         // flatten nested pipeline stages so `>->` is associative (spec §type-routing)
-        List<Hir.Var> stages = flattenStages(pipe.stages(), pipeStages, pipe.pos());
+        List<Hir.Var> stages = flattenStages(written.stages(), pipeStages, pipe.pos());
         Sig first = stageSig(stages.get(0), sigs);
         List<Composition.Stage> walked = new ArrayList<>();
         // the first stage takes the composition's own arguments, so nothing is routed into it
@@ -210,22 +220,23 @@ public final class PipelineSigs {
         return new Composition(walked, withRetired(mainline, retired));
     }
 
-    private static Sig pipeSig(Hir.PipeBehavior pipe, Map<ValueName.Behavior, Sig> sigs,
+    private static Sig pipeSig(Hir.PipeBehavior pipe, Hir.Composition.Stages written,
+                               Map<ValueName.Behavior, Sig> sigs,
                                Symbols symbols, PublishedDeclarations published,
                                DeclarationKinds kinds,
                                Map<ValueName.Behavior, List<Hir.Var>> pipeStages) {
-        Composition composed = composition(pipe, sigs, published, pipeStages);
+        Composition composed = composition(pipe, written, sigs, published, pipeStages);
         Type out = composed.answers();
         // an optional declared output must match the inferred one exactly (spec
         // §declared-composition-output): neither a missing case (too narrow) nor an extra one (too wide) is
         // accepted.
-        if (pipe.declaredOut() != null) {
+        if (written.declaredOut() != null) {
             // What was written is read first, and whether it can be compared with what is produced
             // is asked of the reading. A member no arm can name is a mistake in the declaration
             // itself, and it is the author's whether or not something beside it went unresolved.
-            Type declaredOut = TypeOps.successType(pipe.declaredOut());
-            if (TypeOps.restsOnAnUnresolvedName(pipe.declaredOut())) {
-                throw new Unanswerable(pipe.declaredOut().pos());
+            Type declaredOut = TypeOps.successType(written.declaredOut());
+            if (TypeOps.restsOnAnUnresolvedName(written.declaredOut())) {
+                throw new Unanswerable(written.declaredOut().pos());
             }
             Set<TypeSymbol> inferred = new LinkedHashSet<>(AtomSpace.subjectAtoms(out, published));
             Set<TypeSymbol> declared =

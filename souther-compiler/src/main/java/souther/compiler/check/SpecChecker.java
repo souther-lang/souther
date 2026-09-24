@@ -82,7 +82,13 @@ public final class SpecChecker {
                     }
                 }
                 case Hir.PipeBehavior pipe -> {
-                    for (Hir.Var stage : pipe.stages()) {
+                    // A composition read off the path has no stages here, and the module that
+                    // wrote it was held to this where it was compiled.
+                    List<Hir.Var> stages = switch (pipe.composition()) {
+                        case Hir.Composition.Stages written -> written.stages();
+                        case Hir.Composition.Elsewhere _ -> List.of();
+                    };
+                    for (Hir.Var stage : stages) {
                         ValueName.Behavior named = behaviorReached(stage);
                         if (named != null && names.contains(named) && !out.contains(named)) {
                             out.add(named);
@@ -863,8 +869,16 @@ public final class SpecChecker {
             switch (b) {
                 case Hir.SpecBehavior spec when fns.contains(spec.name()) ->
                         refuseFirstUnwritten(spec.name(), spec.dependsOn(), unwritten);
-                case Hir.PipeBehavior pipe -> refuseFirstUnwritten(pipe.name(),
-                        PipelineSigs.flattenStages(pipe.stages(), pipeStages, pipe.pos()), unwritten);
+                case Hir.PipeBehavior pipe -> {
+                    switch (pipe.composition()) {
+                        case Hir.Composition.Stages written -> refuseFirstUnwritten(pipe.name(),
+                                PipelineSigs.flattenStages(written.stages(), pipeStages,
+                                        pipe.pos()), unwritten);
+                        // Its stages stayed with the module that wrote them, which was held to
+                        // this where it was compiled.
+                        case Hir.Composition.Elsewhere _ -> { }
+                    }
+                }
                 default -> { }
             }
         }
@@ -906,12 +920,14 @@ public final class SpecChecker {
         }
         Map<ValueName.Behavior, List<Hir.Var>> pipeStages = PipelineSigs.pipelineStages(module);
         for (Hir.BehaviorDef b : module.behaviors()) {
-            if (!(b instanceof Hir.PipeBehavior pipe)) {
+            if (!(b instanceof Hir.PipeBehavior pipe)
+                    || !(pipe.composition() instanceof Hir.Composition.Stages written)) {
+                // A composition read off the path has no stages here to hold to this.
                 continue;
             }
             // check the flattened stages: a named intermediate splices in its own first stage, which
             // then sits after `>->` and so must be single-input too (spec §sequential-composition, §type-routing)
-            List<Hir.Var> stages = PipelineSigs.flattenStages(pipe.stages(), pipeStages,
+            List<Hir.Var> stages = PipelineSigs.flattenStages(written.stages(), pipeStages,
                     pipe.pos());
             for (int i = 1; i < stages.size(); i++) {
                 ValueName.Behavior stage = behaviorReached(stages.get(i));

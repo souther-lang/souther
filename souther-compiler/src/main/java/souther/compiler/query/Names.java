@@ -1066,7 +1066,10 @@ public final class Names {
             }
             for (Hir.BehaviorDef b : m.behaviors()) {
                 List<Hir.Var> named = switch (b) {
-                    case Hir.PipeBehavior pipe -> pipe.stages();
+                    case Hir.PipeBehavior pipe -> switch (pipe.composition()) {
+                        case Hir.Composition.Stages written -> written.stages();
+                        case Hir.Composition.Elsewhere _ -> List.of();
+                    };
                     case Hir.SpecBehavior spec -> spec.dependsOn();
                 };
                 for (Hir.Var ref : named) {
@@ -1881,7 +1884,16 @@ public final class Names {
                 }
                 collectRetType(spec.ret(), refs);
             } else if (b instanceof Ast.PipeBehavior pipe) {
-                collectRetType(pipe.declaredOut(), refs);
+                switch (pipe.composition()) {
+                    case Ast.Composition.Stages written ->
+                            collectRetType(written.declaredOut(), refs);
+                    case Ast.Composition.Elsewhere elsewhere -> {
+                        for (Ast.RetType takes : elsewhere.takes()) {
+                            collectRetType(takes, refs);
+                        }
+                        collectRetType(elsewhere.answers(), refs);
+                    }
+                }
             }
         }
         for (Ast.FnDef fn : m.fns()) {

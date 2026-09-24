@@ -441,13 +441,41 @@ public interface Ast {
     }
 
     /**
-     * {@code behavior name = f >-> g >-> ... [-> A | B]} — a composition (spec §sequential-composition).
-     * {@code declaredOut} is the optional trailing output declaration (§declared-composition-output): null
-     * when absent (output is inferred), else the declared cases, which must match the inferred output exactly
-     * (E1604).
+     * {@code behavior name = f >-> g >-> ... [-> A | B]} — a composition (spec §sequential-composition),
+     * as far as this compile can see it ({@link Composition}).
      */
-    record PipeBehavior(WrittenName written, List<Var> stages, RetType declaredOut, SourcePos pos)
+    record PipeBehavior(WrittenName written, Composition composition, SourcePos pos)
             implements BehaviorDef {
+    }
+
+    /**
+     * What this compile holds of a composition.
+     *
+     * <p>A composition declares stages rather than a parameter list. A module compiled elsewhere
+     * publishes the signature those stages computed and leaves the stages behind (ADR-0063), so what
+     * a reader of it holds is a composition all the same — one that takes what it takes without a
+     * declaration naming its inputs — and not a behavior that declared parameters.
+     */
+    sealed interface Composition {
+
+        /**
+         * The stages as the composition writes them, and its optional trailing output declaration
+         * (§declared-composition-output): null when absent (output is inferred), else the declared
+         * cases, which must match the inferred output exactly (E1604).
+         */
+        record Stages(List<Var> stages, RetType declaredOut) implements Composition {
+            public Stages {
+                stages = List.copyOf(stages);
+            }
+        }
+
+        /** A composition another project compiled: what it takes and answers, as the module that
+         *  wrote it published them. Its stages are not here, and nothing names its inputs. */
+        record Elsewhere(List<RetType> takes, RetType answers) implements Composition {
+            public Elsewhere {
+                takes = List.copyOf(takes);
+            }
+        }
     }
 
     /**

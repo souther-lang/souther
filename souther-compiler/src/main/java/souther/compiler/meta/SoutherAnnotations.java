@@ -61,6 +61,7 @@ final class SoutherAnnotations {
                 module == null ? null : moduleView(module),
                 data == null ? null : required(data, "value"),
                 behavior == null ? null : required(behavior, "signature"),
+                behavior == null ? null : required(behavior, "signatureFrom"),
                 behavior == null ? null : required(behavior, "implementation"));
     }
 

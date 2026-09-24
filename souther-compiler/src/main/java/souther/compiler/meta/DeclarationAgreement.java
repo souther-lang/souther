@@ -23,6 +23,7 @@ import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.IdentityHashMap;
@@ -444,20 +445,36 @@ public final class DeclarationAgreement {
         };
     }
 
-    /** What a value crossing into a behavior depends on: what it takes and what it answers with. */
+    /**
+     * What a value crossing into a behavior depends on: which kind of behavior it is, what it takes
+     * and what it answers with.
+     *
+     * <p>The kind is a part of its own and comes first. A behavior that declared its parameters is
+     * called by name and may be rested on in {@code depends on}; a composition is composed with. Two
+     * builds that take and answer the same types through the two agree about neither, and that is
+     * said here rather than left to how many parts each kind happens to have.
+     */
     private static List<Object> crossingParts(Hir.BehaviorDef behavior) {
-        return switch (behavior) {
-            case Hir.SpecBehavior b ->
-                    CrossingProjection.read(CrossingProjection.OF_A_DECLARED_BEHAVIOR, b);
-            // A composition does not arrive here. What a module publishes for one is the signature
-            // its stages compute (`ModuleMetadata.signatureOf`), so what comes back from a jar is a
-            // declared behavior like any other, and its stages are the module's own business. Said
-            // as a refusal rather than as a comparison of the stages, because a comparison written
-            // for a form that never arrives is a rule nobody can read the truth of.
-            case Hir.PipeBehavior p -> throw new IllegalStateException(
-                    "`" + p.name() + "` is published as the signature its stages compute, so a"
-                            + " composition is not a form a published declaration is read back as");
-        };
+        List<Object> parts = new ArrayList<>();
+        switch (behavior) {
+            case Hir.SpecBehavior b -> {
+                parts.add(PublishedSignature.DECLARED.written());
+                parts.addAll(CrossingProjection.read(CrossingProjection.OF_A_DECLARED_BEHAVIOR, b));
+            }
+            case Hir.PipeBehavior p -> {
+                parts.add(PublishedSignature.COMPOSED.written());
+                parts.addAll(switch (p.composition()) {
+                    case Hir.Composition.Elsewhere published -> CrossingProjection.read(
+                            CrossingProjection.OF_A_PUBLISHED_COMPOSITION, published);
+                    // What a module publishes of a composition is what it takes and answers, so
+                    // a reading of one never holds its stages, and there are none to compare.
+                    case Hir.Composition.Stages _ -> throw new IllegalStateException("`"
+                            + p.name() + "` was read back with its stages, which a module does"
+                            + " not publish");
+                });
+            }
+        }
+        return parts;
     }
 
     /** What a value crossing into a published helper depends on. */

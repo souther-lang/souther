@@ -785,7 +785,7 @@ public final class AstBuilder {
             stages.add(Ast.Var.written(qualifiedNameOf(st), reference()));
         }
         Ast.RetType declaredOut = pipe.child(SyntaxKind.RET_TYPE).map(AstBuilder.this::retType).orElse(null);
-        return new Ast.PipeBehavior(declared, stages, declaredOut, pos);
+        return new Ast.PipeBehavior(declared, new Ast.Composition.Stages(stages, declaredOut), pos);
     }
 
     private Ast.EnsuresClause ensuresClause(SyntaxNode clause) {

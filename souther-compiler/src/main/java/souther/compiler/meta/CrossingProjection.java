@@ -112,6 +112,16 @@ final class CrossingProjection {
             whole(Hir.SpecBehavior.class, "ensures"));
 
     /**
+     * What a composition another project compiled takes and what it answers with.
+     *
+     * <p>That is all a module publishes of one ({@link Hir.Composition.Elsewhere}): its stages stay
+     * behind, so which stages it has is nothing two builds can be held to.
+     */
+    static final List<Taken> OF_A_PUBLISHED_COMPOSITION = List.of(
+            whole(Hir.Composition.Elsewhere.class, "takes"),
+            whole(Hir.Composition.Elsewhere.class, "answers"));
+
+    /**
      * A published helper, whole.
      *
      * <p>These are carried because a declaration cannot be read without them — an invariant calls

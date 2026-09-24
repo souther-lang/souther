@@ -223,7 +223,14 @@ public final class Requirements {
                 }
             }
             case Hir.PipeBehavior pipe -> {
-                for (Hir.Var stage : pipe.stages()) {
+                List<Hir.Var> stages = switch (pipe.composition()) {
+                    case Hir.Composition.Stages written -> written.stages();
+                    // A composition read off the path has no stages here to walk, and what its
+                    // stages require is not carried with it. So nothing is added for it, and a
+                    // composition built on one here is constructed without what those stages need.
+                    case Hir.Composition.Elsewhere _ -> List.of();
+                };
+                for (Hir.Var stage : stages) {
                     ValueName.Behavior s = reaches(stage);
                     if (s == null) {
                         continue;   // it names no behavior, so it carries no requirement in

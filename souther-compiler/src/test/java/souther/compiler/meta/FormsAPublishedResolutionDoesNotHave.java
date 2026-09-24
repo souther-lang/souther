@@ -26,8 +26,7 @@ import java.util.LinkedHashMap;
  *
  * <p><b>What this is not.</b> It says nothing about how a crossing compares one of these, because a
  * form a crossing never meets has nothing to be compared by. Giving one a comparison rule would be
- * writing a rule nobody can read the truth of, which is what the refusal of a composition in
- * {@link DeclarationAgreement} says in the one place a declaration form can be refused outright.
+ * writing a rule nobody can read the truth of.
  *
  * <p>What keeps it honest is beside it and not in it:
  * {@code WhoMayBuildAFormNoPublishedResolutionHasTest} holds the classes that build one of these to

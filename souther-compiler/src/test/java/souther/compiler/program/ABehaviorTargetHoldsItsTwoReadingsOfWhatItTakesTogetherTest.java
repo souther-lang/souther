@@ -38,7 +38,7 @@ class ABehaviorTargetHoldsItsTwoReadingsOfWhatItTakesTogetherTest {
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> target(List.of(INT, INT), body(binder("only"))));
 
-        assertEquals("a behavior declared [INT, INT] -> INT has a body binding [only]",
+        assertEquals("a behavior declared [p0: INT, p1: INT] -> INT has a body binding [only]",
                 refused.getMessage());
     }
 
@@ -77,12 +77,14 @@ class ABehaviorTargetHoldsItsTwoReadingsOfWhatItTakesTogetherTest {
     }
 
     private static BehaviorTarget target(List<Type> takes, CheckedImplementation implementation) {
-        List<CheckedBoundaryInput> inputs = new ArrayList<>(takes.size());
+        List<CheckedSignature.Parameter> parameters = new ArrayList<>(takes.size());
         for (Type type : takes) {
-            inputs.add(new CheckedBoundaryInput.Scalar(LeafScalar.of((Type.Prim) type)));
+            parameters.add(new CheckedSignature.Parameter("p" + parameters.size(),
+                    new CheckedBoundaryInput.Scalar(LeafScalar.of((Type.Prim) type))));
         }
         return new BehaviorTarget(
-                new CheckedSignature(inputs, new CheckedBoundaryOutput.Scalar(LeafScalar.INT)),
+                CheckedSignature.declared(parameters,
+                        new CheckedBoundaryOutput.Scalar(LeafScalar.INT)),
                 implementation);
     }
 

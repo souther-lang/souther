@@ -453,8 +453,24 @@ public final class TypeOps {
                         return true;
                     }
                 }
-            } else if (b instanceof Hir.PipeBehavior pipe && erroneous(pipe.declaredOut())) {
-                return true;
+            } else if (b instanceof Hir.PipeBehavior pipe) {
+                switch (pipe.composition()) {
+                    case Hir.Composition.Stages written -> {
+                        if (erroneous(written.declaredOut())) {
+                            return true;
+                        }
+                    }
+                    case Hir.Composition.Elsewhere elsewhere -> {
+                        for (Hir.RetType takes : elsewhere.takes()) {
+                            if (erroneous(takes)) {
+                                return true;
+                            }
+                        }
+                        if (erroneous(elsewhere.answers())) {
+                            return true;
+                        }
+                    }
+                }
             }
         }
         for (Hir.FnDef fn : module.fns()) {

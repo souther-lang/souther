@@ -9,6 +9,7 @@ import souther.compiler.check.Boundary;
 import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.BoundaryOutput;
 import souther.compiler.check.CoreBinders;
+import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.Derived;
 import souther.compiler.check.EmittedDefinition;
 import souther.compiler.check.Lower;
@@ -230,7 +231,16 @@ final class CheckedProgramAssembler {
                 SpecImplementation.implementationsOf(module.bodies());
         for (Hir.BehaviorDef declared : module.bodies().behaviors()) {
             ValueName.Behavior named = new ValueName.Behavior(module.name(), declared.name());
-            Sig signature = module.signatures().get(declared.name());
+            CheckedSignature signature = switch (declared) {
+                case Hir.SpecBehavior _ -> {
+                    DeclaredSig written = module.declaredSignatures().get(declared.name());
+                    yield written == null ? null : declaredSignatureOf(written, module.name(), db);
+                }
+                case Hir.PipeBehavior _ -> {
+                    Sig composed = module.signatures().get(declared.name());
+                    yield composed == null ? null : composedSignatureOf(composed, module.name(), db);
+                }
+            };
             BehaviorImplementation state = module.implementations().get(declared.name());
             if (signature == null || state == null) {
                 // The module was taken as checked and one of the behaviors it declares has no
@@ -240,7 +250,7 @@ final class CheckedProgramAssembler {
                 throw new IllegalStateException("`" + named + "` was taken as checked and this"
                         + " compile has no reading of it");
             }
-            BehaviorTarget target = new BehaviorTarget(signatureOf(signature, module.name(), db),
+            BehaviorTarget target = new BehaviorTarget(signature,
                     implementedAs(state, named, declared, implementations, module.checked(),
                             module.compositions()));
             file(targets, named, target);
@@ -270,22 +280,33 @@ final class CheckedProgramAssembler {
         for (String module : readOffThePath(db)) {
             Ast.Module declares = db.ask(new Front.Available(module)).value();
             Map<String, Sig> signatures = db.ask(new Bodies.Signatures(module)).value();
+            Map<String, DeclaredSig> declaredSignatures =
+                    db.ask(new Bodies.DeclaredSignatures(module)).value();
             Map<String, BehaviorImplementation> implementations =
                     db.ask(new Bodies.Implementation(module)).value();
-            if (declares == null || signatures == null || implementations == null) {
+            if (declares == null || signatures == null || declaredSignatures == null
+                    || implementations == null) {
                 throw new IllegalStateException("`" + module + "` was read off the path and this"
                         + " compile has nothing to say about the behaviors it declares");
             }
             for (Ast.BehaviorDef declared : declares.behaviors()) {
                 ValueName.Behavior named = new ValueName.Behavior(module, declared.name());
-                Sig signature = signatures.get(declared.name());
+                CheckedSignature signature = switch (declared) {
+                    case Ast.SpecBehavior _ -> {
+                        DeclaredSig written = declaredSignatures.get(declared.name());
+                        yield written == null ? null : declaredSignatureOf(written, module, db);
+                    }
+                    case Ast.PipeBehavior _ -> {
+                        Sig composed = signatures.get(declared.name());
+                        yield composed == null ? null : composedSignatureOf(composed, module, db);
+                    }
+                };
                 BehaviorImplementation state = implementations.get(declared.name());
                 if (signature == null || state == null) {
                     throw new IllegalStateException("`" + named + "` is declared by a module this"
                             + " compile read off the path and this compile has no reading of it");
                 }
-                file(targets, named,
-                        new BehaviorTarget(signatureOf(signature, module, db), publishedAs(state)));
+                file(targets, named, new BehaviorTarget(signature, publishedAs(state)));
             }
         }
     }
@@ -423,6 +444,7 @@ final class CheckedProgramAssembler {
      */
     private record ModuleReading(String name, Hir.Module bodies, Bodies.Elaborated checked,
                                  Map<String, Sig> signatures,
+                                 Map<String, DeclaredSig> declaredSignatures,
                                  Map<String, BehaviorImplementation> implementations,
                                  Map<ValueName.Behavior, Composition> compositions,
                                  Map<ValueName.Behavior, EnsuresEnforcement> checks,
@@ -458,6 +480,11 @@ final class CheckedProgramAssembler {
         Bodies.Elaborated checked = db.ask(new Bodies.Checked(module)).value();
         Lower.Lowered lowering = db.ask(new Bodies.Lowering(module)).value();
         Map<String, Sig> signatures = db.ask(new Bodies.Signatures(module)).value();
+        // The declarations the signatures above were made from, for the names each parameter is
+        // written under: what crosses the boundary is the same answer whatever a parameter is
+        // called, so the names are asked of the answer that changes when one is renamed.
+        Map<String, DeclaredSig> declaredSignatures =
+                db.ask(new Bodies.DeclaredSignatures(module)).value();
         Map<String, BehaviorImplementation> implementations =
                 db.ask(new Bodies.Implementation(module)).value();
         Map<ValueName.Behavior, Composition> compositions =
@@ -483,7 +510,7 @@ final class CheckedProgramAssembler {
         // made.
         Symbols symbols = Names.derivedSymbols(db, module).value();
         if (checked == null || lowering == null || signatures == null
-                || implementations == null
+                || declaredSignatures == null || implementations == null
                 || compositions == null || symbols == null || shapes == null || checks == null
                 || requirements == null || codecDefs == null) {
             // Not a report: the failure above is what a caller is told, and reaching here past it
@@ -509,7 +536,8 @@ final class CheckedProgramAssembler {
             throw new IllegalStateException("`" + module + "` was taken as checked and what it"
                     + " publishes was not read");
         }
-        return new ModuleReading(module, bodies, checked, signatures, implementations,
+        return new ModuleReading(module, bodies, checked, signatures, declaredSignatures,
+                implementations,
                 compositions, checks,
                 dataOf(declarations, db, shapes, codecDefs),
                 rowsOf(db, module), requirementsOf(requirements), published);
@@ -800,13 +828,30 @@ final class CheckedProgramAssembler {
      * that offers the module as it was parsed, so handing one over whole would put the syntax tree
      * two hops from a behavior's declared output. What is kept is the answer the witness proves,
      * never the witness.
+     *
+     * <p>Each parameter is carried with the name it was declared under, off the one
+     * {@link DeclaredSig.Input} that holds both: the pairing is what the declaration was admitted
+     * as, and nothing here lines a name up with a shape by position.
      */
-    private static CheckedSignature signatureOf(Sig signature, String moduleName, Db db) {
+    private static CheckedSignature declaredSignatureOf(DeclaredSig declared, String moduleName,
+                                                        Db db) {
+        List<CheckedSignature.Parameter> parameters = new ArrayList<>(declared.inputs().size());
+        for (DeclaredSig.Input input : declared.inputs()) {
+            parameters.add(
+                    new CheckedSignature.Parameter(input.name(), projectInput(input.boundary())));
+        }
+        return CheckedSignature.declared(parameters,
+                projectOutput(declared.boundary().out(), moduleName, db));
+    }
+
+    /** What a composition takes and answers, projected the same way. It wrote no parameters, so
+     *  its inputs have no names to carry. */
+    private static CheckedSignature composedSignatureOf(Sig signature, String moduleName, Db db) {
         List<CheckedBoundaryInput> inputs = new ArrayList<>(signature.ins().size());
         for (BoundaryInput in : signature.ins()) {
             inputs.add(projectInput(in));
         }
-        return new CheckedSignature(inputs, projectOutput(signature.out(), moduleName, db));
+        return CheckedSignature.composed(inputs, projectOutput(signature.out(), moduleName, db));
     }
 
     /** {@code checked}, carried over without the admission witness it was made from. */

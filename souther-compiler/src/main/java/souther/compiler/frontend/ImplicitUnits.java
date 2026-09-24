@@ -74,8 +74,10 @@ public final class ImplicitUnits {
             switch (behavior) {
                 case Ast.SpecBehavior spec ->
                         introduceAll(spec.ret(), module.name(), declared, added);
-                case Ast.PipeBehavior pipe ->
-                        introduceAll(pipe.declaredOut(), module.name(), declared, added);
+                case Ast.PipeBehavior pipe -> introduceAll(switch (pipe.composition()) {
+                    case Ast.Composition.Stages written -> written.declaredOut();
+                    case Ast.Composition.Elsewhere elsewhere -> elsewhere.answers();
+                }, module.name(), declared, added);
             }
         }
         for (Ast.RetType output : module.exposedOutputs().values()) {
