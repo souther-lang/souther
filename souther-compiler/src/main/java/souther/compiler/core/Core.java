@@ -746,8 +746,8 @@ public sealed interface Core {
      * at all, or a step that would never be applied because an element of it has no type to be.
      */
     static Block runsWhereItStands(Core step) {
-        return withoutStanding(step) instanceof Block block && block.type() instanceof Type.FnOf fn
-                && !neverRuns(fn) ? block : null;
+        return withoutStanding(step) instanceof Block block && !neverRuns(block.type())
+                ? block : null;
     }
 
     /**
@@ -983,10 +983,29 @@ public sealed interface Core {
 
     /** A second-class block: a step passed to a recursive combinator, or an escaping lambda a {@code
      * let} binds (a closure). It has no value of its own: the call it is passed to emits its body
-     * inline, and only a block that escapes into a first-class position becomes a class. Its {@code
-     * type} is the {@link Type.FnOf} the checker gave it — the parameter types the context fixed, and
-     * the body's result type. */
-    record Block(List<Binder> params, Core body, Type type, SourcePos pos) implements Core {
+     * inline, and only a block that escapes into a first-class position becomes a class.
+     *
+     * <p>{@code paramTypes} are the types its body reads its parameters at, and are held because the
+     * body cannot say them. What it answers is its body's type and is not held: a rewrite of the body
+     * changes what the block answers with it. A type the function stands as at a position is not the
+     * block's — that is a {@link Widen} around it.
+     */
+    record Block(List<Binder> params, List<Type> paramTypes, Core body, SourcePos pos)
+            implements Core {
+
+        public Block {
+            params = List.copyOf(params);
+            paramTypes = List.copyOf(paramTypes);
+            if (params.size() != paramTypes.size()) {
+                throw new IllegalArgumentException("a block of " + params.size()
+                        + " parameters reads its body at " + paramTypes.size() + " types");
+            }
+        }
+
+        @Override
+        public Type.FnOf type() {
+            return new Type.FnOf(paramTypes, body.type());
+        }
 
         /** How the parameters were written, in order. */
         public List<String> paramNames() {
@@ -1440,7 +1459,7 @@ public sealed interface Core {
             }
             case Block b -> {
                 Core body = atExpr.apply(b.body());
-                yield body == b.body() ? b : new Block(b.params(), body, b.type(), b.pos());
+                yield body == b.body() ? b : new Block(b.params(), b.paramTypes(), body, b.pos());
             }
             case ListLit lit -> {
                 List<Core> elements = each(lit.elements(), atExpr);

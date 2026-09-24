@@ -12,6 +12,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.Type;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -1526,11 +1527,12 @@ final class Predicates {
         if (traced == null) {
             return null;
         }
-        Core on = Terms.read(element, Terms.elementType(step.type()), step.pos());
+        Type elementType = step.paramTypes().getFirst();
+        Core on = Terms.read(element, elementType, step.pos());
         for (String field : traced) {
             on = new Core.FieldAccess(on, field, terms.fieldType(on.type(), field), step.pos());
         }
-        return new Core.Block(List.of(element), on, step.type(), step.pos());
+        return new Core.Block(List.of(element), List.of(elementType), on, step.pos());
     }
 
     /**

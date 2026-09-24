@@ -109,9 +109,7 @@ final class EmittedClassReferences {
             // A step the emitter runs where it stands is not this: it is read by
             // visitStepRunWhereItStands, from the same answer the emitter asks.
             case Core.Block block -> {
-                if (block.type() instanceof Type.FnOf fn) {
-                    fn.params().forEach(this::add);
-                }
+                block.paramTypes().forEach(this::add);
                 BlockReaches.of(block, Set.of()).bindings().forEach(read -> add(read.type()));
             }
             // The abort leaves a value of the shape its position asks for, cast to it.
@@ -182,7 +180,7 @@ final class EmittedClassReferences {
      * cast to its type, and its body is emitted where it stands.
      */
     private void visitStepRunWhereItStands(Core.Block step) {
-        add(((Type.FnOf) step.type()).params().get(1));
+        add(step.paramTypes().get(1));
         visit(step.body(), null);
     }
 

@@ -242,7 +242,7 @@ public final class GrowingFold {
                         != mentions(block.body(), acc)) {
             return null;
         }
-        return new Core.Block(block.params(), putting, block.type(), block.pos());
+        return new Core.Block(block.params(), block.paramTypes(), putting, block.pos());
     }
 
     /**
@@ -345,7 +345,11 @@ public final class GrowingFold {
         if (refused[0]) {
             return null;
         }
-        Core step = new Core.Block(innerStep.params(), body, innerStep.type(), innerStep.pos());
+        // The inner step's parameters, read at what it read them at, around a body that now answers
+        // what the outer step answers. The positions the two steps stood at are gone with the calls
+        // they were arguments of, so what either stood as there is nobody's.
+        Core step = new Core.Block(innerStep.params(), innerStep.paramTypes(), body,
+                innerStep.pos());
         return new Core.Call(BUILD, List.of(step, inner.args().get(1), inner.args().get(2)),
                 ConstructOccurrence.unwritten(), Core.CallSettlement.None.INSTANCE,
                 build.type(), build.pos());
@@ -379,7 +383,7 @@ public final class GrowingFold {
             // Each binding is in force at the type the outer step takes that parameter at, and what
             // it is given stands as that type: the element was added to a list of what the outer
             // step takes, and the builder is the one the outer step grows.
-            List<Type> takes = ((Type.FnOf) outer.type()).params();
+            List<Type> takes = outer.paramTypes();
             Core body = outer.body();
             Core element = new Core.LetIn(outer.params().get(1), takes.get(1),
                     Core.standingAs(lit.elements().get(0), takes.get(1)), body, body.type(),
@@ -448,7 +452,7 @@ public final class GrowingFold {
             // and a builder is not that list yet.
             return null;
         }
-        return new Core.Block(block.params(), grown, block.type(), block.pos());
+        return new Core.Block(block.params(), block.paramTypes(), grown, block.pos());
     }
 
     /** What an answering position of a growing step may hold besides the accumulator itself: the one

@@ -207,7 +207,7 @@ class AValueStandsAsWhatItsPositionTakesItAsTest {
         Core.Widen answered = assertInstanceOf(Core.Widen.class, step.body(),
                 "a step answering a case of the accumulator's sum answers it as the sum");
         assertEquals("Shape", Type.show(answered.type()));
-        assertEquals("Shape", Type.show(((Type.FnOf) step.type()).result()),
+        assertEquals("Shape", Type.show(step.type().result()),
                 "and the step is of the type the call takes it at");
     }
 

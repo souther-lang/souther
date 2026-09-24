@@ -204,7 +204,7 @@ class WhatABodyDoesDoesNotMoveWithTheNumbersMintedForItsNamesTest {
                     it.body(), it.type(), it.pos());
             case Core.Block it -> new Core.Block(
                     it.params().stream().map(each -> moved(each, subst)).toList(),
-                    it.body(), it.type(), it.pos());
+                    it.paramTypes(), it.body(), it.pos());
             case Core.IfConstructed it -> new Core.IfConstructed(it.construct(),
                     moved(it.binder(), subst), it.then(), it.els(), it.place(), it.type(),
                     it.pos());

@@ -93,8 +93,8 @@ class BlockReachesTest {
         BindingId outerParam = binding(0);
         BindingId outside = binding(1);
         Core.Block inner = block(binary(read(outerParam), read(outside)));
-        Core.Block outer = new Core.Block(List.of(new Core.Binder("x", outerParam)), inner,
-                Type.INT, POS);
+        Core.Block outer = new Core.Block(List.of(new Core.Binder("x", outerParam)),
+                List.of(Type.INT), inner, POS);
 
         BlockReaches outerReaches = BlockReaches.of(outer, Set.of());
         BlockReaches innerReaches = BlockReaches.of(inner, Set.of());
@@ -163,7 +163,7 @@ class BlockReachesTest {
     }
 
     private static Core.Block block(Core body) {
-        return new Core.Block(List.of(), body, Type.INT, POS);
+        return new Core.Block(List.of(), List.of(), body, POS);
     }
 
     private static Core binary(Core left, Core right) {
