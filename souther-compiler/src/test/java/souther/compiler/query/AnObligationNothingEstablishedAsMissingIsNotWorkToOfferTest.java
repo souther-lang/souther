@@ -127,7 +127,7 @@ class AnObligationNothingEstablishedAsMissingIsNotWorkToOfferTest {
                     ObligationIdentity.OfAFallbackPairCell it) -> plan.pairsOwed().contains(it);
             case About.AnArmNoRowGoesThrough(var arm) -> arm.place().probe().isPresent()
                     && plan.armsOwed().stream()
-                            .anyMatch(owed -> owed.recordedAt(arm.place().probe().get()));
+                            .anyMatch(owed -> owed.occurrences().contains(arm.place().probe().get()));
             default -> false;
         };
     }

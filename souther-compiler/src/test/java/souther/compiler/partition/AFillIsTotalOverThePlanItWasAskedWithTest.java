@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
@@ -138,6 +139,49 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
 
         assertThrows(IllegalArgumentException.class,
                 () -> new Discharge(planOver(List.of(), List.of(AN_ARM)), nothing));
+    }
+
+    /**
+     * A reader holding one place an arm is recorded at is answered with what became of that arm.
+     *
+     * <p>Every place of a spliced arm answers the same, a place of another arm answers for that
+     * one, and a place the plan names under no arm answers nothing.
+     */
+    @Test
+    void aPlaceIsAnsweredForByTheArmThePlanHoldsThere() {
+        ArmProbe elsewhere = PLACES.get(0);
+        Generator.ArmOwed spliced = new Generator.ArmOwed(List.of(elsewhere, ARM));
+        ArmDisposition throughTheSplice = new ArmDisposition.Built(new RowId(0), ARM);
+        ArmDisposition throughTheOther = new ArmDisposition.Built(new RowId(1), ANOTHER);
+        Discharge discharge = Discharge.of(planOver(List.of(), List.of(spliced)), List.of(
+                new GenerationAnswer.Arm(new GenerationObligation.Arm(spliced), throughTheSplice)));
+        Discharge both = Discharge.of(planOver(List.of(), List.of(spliced, ANOTHER_ARM)), List.of(
+                new GenerationAnswer.Arm(new GenerationObligation.Arm(spliced), throughTheSplice),
+                new GenerationAnswer.Arm(new GenerationObligation.Arm(ANOTHER_ARM),
+                        throughTheOther)));
+
+        assertEquals(throughTheSplice, discharge.at(elsewhere), "at one splice");
+        assertEquals(throughTheSplice, discharge.at(ARM), "and at the other");
+        assertNull(discharge.at(ANOTHER), "a place this plan holds no arm at");
+        assertEquals(throughTheOther, both.at(ANOTHER), "a place of another arm answers for it");
+    }
+
+    /** Two arms of one plan recorded at one place would answer a reader at that place twice. */
+    @Test
+    void aPlaceTwoArmsOfOnePlanClaimIsRefused() {
+        Generator.ArmOwed spliced = new Generator.ArmOwed(List.of(ARM, ANOTHER));
+
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                () -> planOver(List.of(), List.of(spliced, ANOTHER_ARM)));
+
+        assertEquals(true, refused.getMessage().contains(ANOTHER.toString()),
+                refused.getMessage());
+    }
+
+    @Test
+    void anArmNamingOnePlaceTwiceIsRefused() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new Generator.ArmOwed(List.of(ARM, ARM)));
     }
 
     /** And the rows the answers point at, for the same reason: an id under nothing is not a row. */

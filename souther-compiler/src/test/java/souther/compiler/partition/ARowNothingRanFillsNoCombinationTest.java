@@ -193,7 +193,7 @@ class ARowNothingRanFillsNoCombinationTest {
                 .toList();
         assertEquals(3, built.size(),
                 "the arm nothing builds is the refused one; the three beside it are answered: "
-                        + filled.discharge().arms().values());
+                        + GenerationFixtures.arms(filled.discharge()).values());
     }
 
     /**
