@@ -5,8 +5,10 @@ import souther.compiler.Compiler;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.ast.Ast;
 import souther.compiler.codegen.Backend;
+import souther.compiler.codegen.ConstructionLink;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.jvm.ClassFileImage;
+import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
@@ -171,6 +173,118 @@ class ModuleReadbackTest {
                         "double", BehaviorImplementation.IMPLEMENTED,
                         "audited", BehaviorImplementation.UNIMPLEMENTED),
                 read.behaviorImplementations());
+    }
+
+    /** What constructing each behavior requires comes back beside it, for every behavior but one
+     *  Java supplies. A composition's is carried because the stages it comes from are not. */
+    @Test
+    void whatEachBehaviorRequiresIsCarried() {
+        ReadableModule read = readBack("shared.q", Compiler.compile("""
+                module shared.q exposing ( rate, double, priced : Int, charged )
+                behavior rate : (n: Int) -> Int
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                behavior priced = rate >-> double
+                behavior charged : (n: Int) -> Int depends on rate
+                let charged (n, rate) = rate(n)
+                """));
+
+        ValueName.Behavior rate = new ValueName.Behavior("shared.q", "rate");
+        assertEquals(Map.of("double", List.of(), "priced", List.of(rate), "charged", List.of(rate)),
+                read.behaviorRequirements());
+    }
+
+    /** A behavior annotation at this boundary that says nothing of what the behavior requires was
+     *  not written by this compiler, and is not read as requiring nothing. */
+    @Test
+    void aBehaviorThatSaysNothingOfWhatItRequiresIsNotReadAsRequiringNothing() {
+        PublishedClasses silent = requirementsWritten(Compiler.compile("""
+                module shared.q exposing ( double )
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                """), null);
+
+        assertInstanceOf(Readback.Failure.UnreadableMetadata.class,
+                refusalOf("shared.q", silent));
+    }
+
+    /** An entry that is not a module and a name, each counted, is not one this compiler wrote. */
+    @Test
+    void aRequirementThatDoesNotCountOutIsNotRead() {
+        PublishedClasses garbled = requirementsWritten(Compiler.compile("""
+                module shared.q exposing ( double )
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                """), List.of("8:shared.q4:rat"));
+
+        assertInstanceOf(Readback.Failure.UnreadableMetadata.class,
+                refusalOf("shared.q", garbled));
+    }
+
+    /** What a module's classes build of another module comes back with it: the behavior, what it is
+     *  handed in order, and the constructor linked against. */
+    @Test
+    void whatItsClassesBuildOfAnotherModuleIsCarried() {
+        ReadableModule read = readBack("shared.b", Compiler.compileModules(List.of("""
+                module shared.c exposing ( rate, step : Int )
+                behavior rate : (n: Int) -> Int
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                behavior step = rate >-> double
+                """, """
+                module shared.b exposing ( priced : Int )
+                import shared.c ( step )
+                behavior inc : (n: Int) -> Int
+                let inc (n) = n + 1
+                behavior priced = step >-> inc
+                """)));
+
+        assertEquals(List.of(new ConstructionLink(new ValueName.Behavior("shared.c", "step"),
+                        List.of(new ValueName.Behavior("shared.c", "rate")),
+                        "(Lsouther/runtime/Behavior;)V")),
+                read.constructionLinks());
+    }
+
+    /** A module at this boundary that says nothing of what its classes build was not written by
+     *  this compiler, and is not read as building nothing. */
+    @Test
+    void aModuleThatSaysNothingOfWhatItBuildsIsNotReadAsBuildingNothing() {
+        Map<String, ClassFileImage> classes = Compiler.compile("""
+                module shared.q exposing ( double )
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                """);
+
+        assertInstanceOf(Readback.Failure.UnreadableMetadata.class,
+                refusalOf("shared.q", viewing(classes, m -> withConstructions(m, m.compat(), null))));
+        assertInstanceOf(Readback.Failure.Incompatible.class,
+                refusalOf("shared.q", viewing(classes,
+                        m -> withConstructions(m, Backend.BOUNDARY_VERSION - 1, null))),
+                "an older writer left it out, which is the boundary the two do not share");
+    }
+
+    private static PublishedClasses.SoutherModuleView withConstructions(
+            PublishedClasses.SoutherModuleView m, int compat, List<String> constructions) {
+        return new PublishedClasses.SoutherModuleView(compat, m.compiler(), m.header(),
+                m.imports(), m.types(), m.behaviors(), m.invariantHelpers(), m.valueAnswers(),
+                constructions, m.constructors());
+    }
+
+    /** {@code classes} with every behavior's requirement list replaced by {@code requirements}. */
+    private static PublishedClasses requirementsWritten(Map<String, ClassFileImage> classes,
+                                                        List<String> requirements) {
+        PublishedClasses read = ModulePath.of(classes).declarations();
+        return binaryName -> {
+            if (!(read.of(binaryName)
+                    instanceof PublishedClasses.Carried.Declared(
+                            PublishedClasses.Declarations d))
+                    || d.behaviorSignature() == null) {
+                return read.of(binaryName);
+            }
+            return new PublishedClasses.Carried.Declared(new PublishedClasses.Declarations(
+                    d.module(), d.data(), d.behaviorSignature(), d.behaviorSignatureFrom(),
+                    d.behaviorImplementation(), requirements));
+        };
     }
 
     /** A composition declares stages; what comes back is a composition taking and answering what
@@ -395,7 +509,7 @@ class ModuleReadbackTest {
                         new PublishedClasses.SoutherModuleView(Backend.BOUNDARY_VERSION,
                                 "another build", "module lib.two exposing ( Held )", List.of(),
                                 List.of("Held", "Twice", "Some"), List.of(), List.of()),
-                        null, null, null, null),
+                        null, null, null, null, null),
                 "lib.two.Held", declaring("data Held = String"),
                 "lib.two.Twice", declaring("data Held = Int"),
                 "lib.two.Some", declaring("data Some = String"));
@@ -412,7 +526,7 @@ class ModuleReadbackTest {
 
     /** The class one declaration was stamped on. */
     private static PublishedClasses.Declarations declaring(String declaration) {
-        return new PublishedClasses.Declarations(null, declaration, null, null, null);
+        return new PublishedClasses.Declarations(null, declaration, null, null, null, null);
     }
 
     /**
@@ -460,7 +574,7 @@ class ModuleReadbackTest {
                     d.data(), d.behaviorSignature(), d.behaviorSignatureFrom(),
                     // What the older compiler wrote in its place is a flag, and no word of ours
                     // reads as one.
-                    d.behaviorSignature() == null ? null : "true"));
+                    d.behaviorSignature() == null ? null : "true", d.behaviorRequirements()));
         };
     }
 
@@ -477,7 +591,8 @@ class ModuleReadbackTest {
             }
             return new PublishedClasses.Carried.Declared(new PublishedClasses.Declarations(
                     as.apply(d.module()), d.data(), d.behaviorSignature(),
-                    d.behaviorSignatureFrom(), d.behaviorImplementation()));
+                    d.behaviorSignatureFrom(), d.behaviorImplementation(),
+                    d.behaviorRequirements()));
         };
     }
 

@@ -591,6 +591,17 @@ public final class Compilation {
                 found.add(new Db.Found(module, null, report));
             }
         }
+        // Every module the path carries is held to what it was built against, whatever of it this
+        // compilation goes on to use: a module built against another version of a dependency is one
+        // whose classes stop when they reach it, and which of them a row reaches is not the question.
+        Front.FromPath.Of path = db.ask(new Front.FromPath()).value();
+        if (path != null) {
+            for (String module : path.modules().keySet()) {
+                for (Report report : db.ask(new Bodies.BuiltAgainst(module)).reports()) {
+                    found.add(new Db.Found(module, null, report));
+                }
+            }
+        }
         return found;
     }
 

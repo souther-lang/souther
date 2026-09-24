@@ -373,6 +373,8 @@ A declaration is not a binding in force and does not shadow an import. Importing
 
 [[a-published-module-can-be-read-back]]A module used from compiled output MUST be readable back into the published surface this compiler understands. This is the boundary condition an importing project depends on, and the rules above are among the ways an artifact fails to meet it — a class carrying metadata this compiler cannot read, a boundary revision that does not agree, declarations of a module other than the one they were published under, a declaration whose class is absent, published text this compiler does not parse, an `+import+` line the published surface needs and this compiler cannot read. An artifact that fails any of them is reported as one that cannot be read (<<e1509>>), with the reason said under that report; the rules themselves belong to the project that published it, and are not obligations of the project reading it.
 
+[[a-published-module-agrees-with-what-it-was-built-against]]A module used from compiled output MUST agree with the modules this compilation has about how it builds their behaviors. Its classes build behaviors of the modules it was compiled against — a stage of another module's, a behavior of another module's called by name — and each is built by the constructor that behavior's implementation had then, which takes what the behavior required injected, in that order, each as its own number of inputs has it held. The module the behavior is declared in, as this compilation has it, compiled here or on the path, has to build it the same way: have an implementation of it to build, and build it by that constructor. For a module on the path that is the constructor its classes declare, as they were compiled, and not one worked out from the modules it depends on now. Those classes are held to the modules they depend on as well: each of its implementations has to take its dependencies the way those dependencies, as this compilation has them, are held — or a class compiled now against them builds it by a constructor it does not have. A module that does not was built against another version of that one, and its classes stop when they reach it; it is reported with the behavior it builds or declares (<<e1510>>), and is held to this for everything it builds and declares, not for what some importer happens to use. What the module's classes build and declare is carried beside its declarations for this, since a composition's stages are not published.
+
 Which import lines those are is settled by what the published surface needs, and not by what the artifact carries. A compiled module carries every `+import+` line it was written under. Reading one back takes only the lines the declarations it publishes name: a module's implementation does not cross, so an import only its bodies used names nothing an importing project reads, and taking it would make that project put a module on its path to read declarations that never mention it. A line left out for that reason is a line this compiler never reads, and so is never one it cannot read.
 
 A module MAY be imported from the compiled output of another project, with no `+.sou+` of it in this
@@ -415,7 +417,7 @@ include::syntax/grammar.ebnf[tag=qualified-reference]
 
 A type is also reachable through the module that declares it, written as the module name and the type name.
 
-[[a-reached-name-is-declared-by-its-module]]A name reached across a module boundary MUST be one that module declares, and [[a-reached-name-is-exposed-by-its-module]]it MUST be one that module exposes. The two are separate: a name the module never declared is a mistake about what is there, and a name it declared and kept is a mistake about what it publishes, which is the module's own decision to make (<<exposed-surface>>). Both hold whether the name arrives by `+import+` or is written qualified.
+[[a-reached-name-is-declared-by-its-module]]A name reached across a module boundary MUST be one that module declares, and [[a-reached-name-is-exposed-by-its-module]]it MUST be one that module exposes. The two are separate: a name the module never declared is a mistake about what is there, and a name it declared and kept is a mistake about what it publishes, which is the module's own decision to make (<<exposed-surface>>). Both hold whether the name arrives by `+import+` or is written qualified. The first holds as well for a behavior a module read off the path was built requiring: a composition's stages are not published, so what they require travels beside its declarations (<<composition-with-requirements>>), and a behavior named there is one the module reaches. It need not be exposed — an injected behavior is supplied whether or not its module publishes it.
 
 [[an-imported-name-denotes-one-thing]]A name an `+import+` brings in MUST denote one thing here. Two modules exposing it, an alias already in use, or this module's own declaration of that spelling each leave the reader with a name and no single answer; reaching one of them qualified is what says which. Like the standard library's `+List.map+`, this needs no `+import+`: the `+import+` line only lets the name be written bare.
 
@@ -6004,6 +6006,8 @@ A module read from compiled output still has to have been built by a Souther tha
 
 Reported where a name written on an `+import+` list or after a module qualifier is not one that module declares (<<a-reached-name-is-declared-by-its-module>>). The nearest name it does declare is suggested. Separate from <<e1507>>: this is a mistake about what is there, not about what is published.
 
+Reported as well where a module on the path was built requiring a behavior that the module it names, as this compilation reads it — compiled here or on the path — does not declare. The module was built against another version of that one; it is said about the module that carries the requirement, since that is the artifact to rebuild.
+
 [#e1507]
 === A name reached across a boundary is not exposed
 
@@ -6040,6 +6044,21 @@ Reported where a module the class path carries cannot be read back into the surf
 Said where the module was reached from — the `+import+` line in this project that arrives at it, and every other line that does, since a dependency two files import is reached by both. The artifact's own lines are not this compile's to quote, and a report carrying one sends an author to a place in a file they do not have.
 
 One report and one code, whichever failure it was, because the author reading it has one thing to do about any of them. The rules broken are the publishing project's; naming one of them as the rule this author is in breach of hands them somebody else's obligation. A module refused here is still a module this compile has heard of, so an importer is not also told there is no such thing.
+
+[#e1510]
+=== A module on the path builds a behavior another way than its module does
+
+[,text]
+----
+Module `lib.b` was built building `lib.c.step` another way than the `lib.c` in this compilation
+  builds it: it builds it with `(lib.c.rate) through (Lsouther/runtime/Behavior;)V`, and it is built
+  with `(lib.c.bonus) through (Lsouther/runtime/Behavior;)V` here.
+  Rebuild `lib.b` against this `lib.c`, or compile against the `lib.c` it was built with.
+----
+
+Reported where a module the path carries builds a behavior of another module handing it other dependencies, or the same ones in another order, or through another constructor than that module, as this compilation has it, builds the behavior with — or builds a behavior that module has no implementation of, because Java supplies it or nobody has written it — and where one of its own implementations takes its dependencies otherwise than they are held against the modules this compilation has (<<a-published-module-agrees-with-what-it-was-built-against>>). The artifact was built against another version of that module. What it requires injected and whom it names is <<e1506>>; this is how its own classes build what they build.
+
+Said about the module on the path, which is the artifact to rebuild, for every module the path carries and whatever of it this compilation uses.
 
 [#e1601-removed]
 === (retired)

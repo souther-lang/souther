@@ -9,6 +9,7 @@ import souther.compiler.ast.WrittenName;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.ValueName;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -20,6 +21,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.check.Exposing;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.Scoping;
+import souther.compiler.codegen.ConstructionLink;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.RowIdentity;
@@ -498,6 +500,22 @@ public final class Front {
                 return read.behaviorImplementations();
             }
 
+            /** What constructing each of its behaviors requires injected, as the module that
+             *  declared it worked out. */
+            public Map<String, List<ValueName.Behavior>> behaviorRequirements() {
+                return read.behaviorRequirements();
+            }
+
+            /** The constructors of other modules' behaviors its classes link against. */
+            public List<ConstructionLink> constructionLinks() {
+                return read.constructionLinks();
+            }
+
+            /** The constructor each of its behavior implementations declares. */
+            public List<ConstructionLink> constructors() {
+                return read.constructors();
+            }
+
             public List<Scoping.Claim> libraryClaims() {
                 return read.libraryClaims();
             }
@@ -594,8 +612,8 @@ public final class Front {
                 }
                 ReadableModule module = ((Readback.Ready<ReadableModule>) readback).value();
                 read.put(name, module);
-                List<String> reaches = List.copyOf(reaches(module.module()).keySet());
-                edges.put(name, reaches);
+                SequencedSet<String> reaches = reaches(module);
+                edges.put(name, List.copyOf(reaches));
                 pending.addAll(reaches);
             }
             Map<String, List<SourcePos>> reachedFrom = reachedFrom(named, edges);
@@ -1336,6 +1354,39 @@ public final class Front {
             }
         }
         names.remove(m.name());
+        return names;
+    }
+
+    /**
+     * Every module a module read off the path reaches: what its declarations name
+     * ({@link #reaches(Ast.Module)}), every module a dependency one of its behaviors is constructed
+     * with is declared in, and every module a behavior its classes build is declared in.
+     *
+     * <p>The last two are not in the text, and are carried beside it. A composition's stages are not
+     * published, so a dependency a stage brings in may be declared in a module nothing the module
+     * carries mentions — and so may the stage itself, or a behavior a body calls by name, since the
+     * bodies are not published either and the import that named it goes with them. A reader building
+     * the composition is handed that dependency and types it from its module; a reader holding the
+     * module to what its classes build asks that module how it builds it; a reader comparing two
+     * builds follows it there. One answer for both sets of published classes, for the reason the one
+     * above is one.
+     */
+    public static SequencedSet<String> reaches(ReadableModule read) {
+        String own = read.module().name();
+        SequencedSet<String> names = new LinkedHashSet<>(reaches(read.module()).keySet());
+        List<ValueName.Behavior> named = new ArrayList<>();
+        for (List<ValueName.Behavior> required : read.behaviorRequirements().values()) {
+            named.addAll(required);
+        }
+        for (ConstructionLink link : read.constructionLinks()) {
+            named.add(link.target());
+            named.addAll(link.dependencies());
+        }
+        for (ValueName.Behavior each : named) {
+            if (!each.module().equals(own)) {
+                names.add(each.module());
+            }
+        }
         return names;
     }
 

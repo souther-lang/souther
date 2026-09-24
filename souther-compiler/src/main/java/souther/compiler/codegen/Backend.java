@@ -58,6 +58,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.SequencedMap;
+import java.util.LinkedHashSet;
 import java.util.Set;
 import static souther.compiler.codegen.Descriptors.*;
 import static souther.compiler.codegen.JvmTypes.*;
@@ -148,12 +149,14 @@ public final class Backend {
 
     /** Generates a module's classes. {@code symbols} covers own plus imported definitions;
      * {@code typePackage} maps an imported type or behavior name to its declaring module (spec §modules);
-     * {@code importedSigs} carries imported behaviors' signatures so a composition can name one as a stage
-     * (spec §composition); {@code importedInjected} are imported injection-target behaviors, which a
+     * {@code requirementSigs} carries the signature of every behavior a class here holds injected,
+     * which is what its field, its constructor parameter and a call on it are typed from;
+     * {@code importedInjected} are imported injection-target behaviors, which a
      * composition here inherits as requirements to inject and bind (spec §injected-behavior,
      * §composition-with-requirements); {@code requirements} says what each behavior takes injected and in
      * what order — the answer the example verifier reads too, so a fake reaches the parameter this
-     * constructor binds it to; {@code checked} carries the type checker's elaborated bodies, which is what
+     * constructor binds it to; {@code foreignStages} says the same of each stage another module
+     * declares, which a composition here builds; {@code checked} carries the type checker's elaborated bodies, which is what
      * the emitter reads instead of inferring types again (issue #81); {@code dischargeInvariants} carries
      * this module's invariant clauses in the representation the language's own operations survive in, which
      * is what a derived decoder's constraint mapping reads (spec §decoder-error); {@code shapes} says
@@ -166,10 +169,12 @@ public final class Backend {
                                                KernelSignatures kernels,
                                                Map<String, String> typePackage,
                                                Map<ValueName.Behavior, Sig> sigs,
-                                               Map<ValueName.Behavior, Sig> importedSigs,
+                                               Map<ValueName.Behavior, Sig> requirementSigs,
                                                Set<ValueName.Behavior> importedInjected,
                                                Map<ValueName.Behavior, ReqSig> calleeSigs,
                                                Map<String, List<BehaviorRequirement>> requirements,
+                                               Map<ValueName.Behavior, List<ValueName.Behavior>>
+                                                       foreignStages,
                                                Bodies.Elaborated checked,
                                                Map<ValueName.Behavior, Composition> compositions,
                                                ExpandedClauseLookup dischargeInvariants,
@@ -178,9 +183,9 @@ public final class Backend {
                                                Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                Map<String, Type> standingCalls,
                                                SourceLayouts layouts) {
-        return generate(module, symbols, published, kinds, kernels, typePackage, sigs, importedSigs,
-                importedInjected,
-                calleeSigs, requirements, checked, compositions, dischargeInvariants,
+        return generate(module, symbols, published, kinds, kernels, typePackage, sigs,
+                requirementSigs, importedInjected,
+                calleeSigs, requirements, foreignStages, checked, compositions, dischargeInvariants,
                 invariantStatements, shapes, checks, standingCalls, layouts, Instrumentation.NONE);
     }
 
@@ -203,10 +208,12 @@ public final class Backend {
                                                KernelSignatures kernels,
                                                Map<String, String> typePackage,
                                                Map<ValueName.Behavior, Sig> sigs,
-                                               Map<ValueName.Behavior, Sig> importedSigs,
+                                               Map<ValueName.Behavior, Sig> requirementSigs,
                                                Set<ValueName.Behavior> importedInjected,
                                                Map<ValueName.Behavior, ReqSig> calleeSigs,
                                                Map<String, List<BehaviorRequirement>> requirements,
+                                               Map<ValueName.Behavior, List<ValueName.Behavior>>
+                                                       foreignStages,
                                                Bodies.Elaborated checked,
                                                Map<ValueName.Behavior, Composition> compositions,
                                                ExpandedClauseLookup dischargeInvariants,
@@ -218,8 +225,8 @@ public final class Backend {
                                                Instrumentation instrumentation) {
         try {
             return generating(module, symbols, published, kinds, kernels, typePackage, sigs,
-                    importedSigs,
-                    importedInjected, calleeSigs, requirements, checked, compositions,
+                    requirementSigs,
+                    importedInjected, calleeSigs, requirements, foreignStages, checked, compositions,
                     dischargeInvariants, invariantStatements, shapes, checks, standingCalls,
                     layouts, instrumentation);
         } catch (IllegalArgumentException e) {
@@ -236,10 +243,12 @@ public final class Backend {
                                         KernelSignatures kernels,
                                                   Map<String, String> typePackage,
                                                   Map<ValueName.Behavior, Sig> sigs,
-                                                  Map<ValueName.Behavior, Sig> importedSigs,
+                                                  Map<ValueName.Behavior, Sig> requirementSigs,
                                                   Set<ValueName.Behavior> importedInjected,
                                                   Map<ValueName.Behavior, ReqSig> calleeSigs,
                                                   Map<String, List<BehaviorRequirement>> requirements,
+                                                  Map<ValueName.Behavior, List<ValueName.Behavior>>
+                                                          foreignStages,
                                                   Bodies.Elaborated checked,
                                                   Map<ValueName.Behavior, Composition> compositions,
                                                   ExpandedClauseLookup dischargeInvariants,
@@ -380,23 +389,23 @@ public final class Backend {
         // abstract base class a Java implementation extends (§java-base-class). Imported injection targets
         // (their base lives in the declaring module) are requirements too, so a composition here
         // injects and binds them (spec §composition-with-requirements) — but no base is generated for them here.
-        Set<ValueName.Behavior> requiredNames = Requirements.injectedNames(module, importedInjected);
+        //
+        // Whether a behavior is one of these is the whole of what decides whether a class holding it
+        // reads it from a field or builds it. Being held as a field by something else does not make
+        // a behavior injected: one may be a dependency of one behavior and a stage another builds.
+        Set<ValueName.Behavior> injectionTargets =
+                Requirements.injectedNames(module, importedInjected);
         // Beside them, and not among them: a behavior Souther is to implement and nobody has is
         // nothing to inject — no base is emitted for it, so there is nothing a caller could be
-        // handed. `requiredNames` grows below with every behavior held as a field, which is why
-        // what is unwritten is asked of the declarations rather than read off what is left over.
+        // handed.
         Set<ValueName.Behavior> unwrittenNames = Requirements.unwrittenNames(module);
-        Map<ValueName.Behavior, Type> requiredSuccess = new HashMap<>();
-        Map<ValueName.Behavior, List<Type>> requiredParam = new HashMap<>();
         for (Hir.BehaviorDef bd : module.behaviors()) {
             ValueName.Behavior declared = new ValueName.Behavior(module.name(), bd.name());
-            if (bd instanceof Hir.SpecBehavior spec && requiredNames.contains(declared)) {
-                requiredSuccess.put(declared, b.successType(spec.ret()));
+            if (bd instanceof Hir.SpecBehavior spec && injectionTargets.contains(declared)) {
                 List<Type> reqParams = new ArrayList<>();
                 for (Hir.Param p : spec.params()) {
                     reqParams.add(b.successType(p.type()));
                 }
-                requiredParam.put(declared, reqParams);
                 // Unit output cases get a no-arg factory (a unit has nothing to validate, so it is
                 // built directly). A field-bearing constructed type gets a typed factory, but only
                 // when the behavior declares it in `constructs` — that declaration is the authority
@@ -427,57 +436,19 @@ public final class Backend {
                                         reqParams, b.successType(spec.ret()))));
             }
         }
-        // An imported injected behavior (its base lives in the declaring module, so no base is built
-        // here) is a requirement too; take its arity from the imported signature so the unary-vs-multi
-        // dispatch treats a cross-module multi-input dependency the same as a local one (issue #57).
-        // A behavior with an implementation of its own may be a requirement too, when it declares
-        // `depends on` (spec [#depends-on]). Nothing is generated for it here — it has its own $Impl —
-        // but the module that named it holds it as a field, so its arity and output belong in the
-        // same maps the unary-vs-multi dispatch reads.
-        Map<ValueName.Behavior, Hir.SpecBehavior> ownSpecs = new HashMap<>();
-        for (Hir.BehaviorDef bd : module.behaviors()) {
-            if (bd instanceof Hir.SpecBehavior spec) {
-                ownSpecs.put(new ValueName.Behavior(module.name(), spec.name()), spec);
-            }
-        }
-        for (Hir.BehaviorDef bd : module.behaviors()) {
-            if (!(bd instanceof Hir.SpecBehavior spec)) {
-                continue;
-            }
-            for (Hir.Var req : spec.dependsOn()) {
-                ValueName.Behavior name = reachedBy(req);
-                if (name == null || requiredNames.contains(name)) {
-                    continue;
-                }
-                Hir.SpecBehavior own = ownSpecs.get(name);
-                if (own != null) {
-                    List<Type> ins = new ArrayList<>();
-                    for (Hir.Param p : own.params()) {
-                        ins.add(b.successType(p.type()));
-                    }
-                    requiredNames.add(name);
-                    requiredParam.put(name, ins);
-                    requiredSuccess.put(name, b.successType(own.ret()));
-                    continue;
-                }
-                Sig imported = importedSigs.get(name);
-                if (imported != null) {
-                    requiredNames.add(name);
-                    requiredParam.put(name, imported.inputTypes());
-                    requiredSuccess.put(name, imported.outputType());
-                }
-            }
-        }
-        for (ValueName.Behavior name : importedInjected) {
-            Sig sig = importedSigs.get(name);
-            if (sig != null) {
-                requiredParam.put(name, sig.inputTypes());
-                requiredSuccess.put(name, sig.outputType());
-            }
-        }
+        // Every behavior a class here holds as a field — an injection target, or a behavior with an
+        // implementation of its own that declares `depends on` — whichever module declares it and
+        // whether or not this one names it: a stage of another module brings its dependencies in
+        // with it. Its arity decides whether it is held as the unary Behavior or as its own class.
+        Map<ValueName.Behavior, Type> requiredSuccess = new HashMap<>();
+        Map<ValueName.Behavior, List<Type>> requiredParam = new HashMap<>();
+        requirementSigs.forEach((dependency, sig) -> {
+            requiredParam.put(dependency, sig.inputTypes());
+            requiredSuccess.put(dependency, sig.outputType());
+        });
         // The unary-vs-multi dispatch for required behaviors reads these; set once, so the base class,
         // the $Impl field/ctor, the bind factory, and every call site agree (issue #57).
-        b.ctx.setRequiredSignatures(requiredParam, requiredSuccess);
+        b.ctx.setRequiredSignatures(requiredParam, requiredSuccess, injectionTargets);
         // A behavior that depends on nothing is called by being built where it is called, so it is not
         // in the injection maps above; what a call site needs is the signature it was typed against.
         b.ctx.setCalleeSignatures(calleeSigs);
@@ -488,6 +459,9 @@ public final class Backend {
             behaviorDeps.put(new ValueName.Behavior(module.name(), e.getKey()),
                     Requirements.names(e.getValue()));
         }
+        // A stage another module declares is built here too, handed what its module said it takes —
+        // the same list this module's own requirement sets took it from.
+        behaviorDeps.putAll(foreignStages);
         // Which definition implements each behavior, and which of that definition's parameters are
         // the declared inputs, asked once for the module rather than worked out here: the snapshot's
         // assembler reads its binders from the same answer, so which local an input arrives in
@@ -536,7 +510,7 @@ public final class Backend {
                                 // interface (behaviorClass) is what Java code declares (spec
                                 // §jvm-anonymous-union).
                                 out.put(new GeneratedClass.BehaviorImpl(module.name(), spec.name()),
-                                        b.generateSpecFn(spec, implemented, requiredNames,
+                                        b.generateSpecFn(spec, implemented,
                                                 requiredSuccess, requiredParam));
                             } else {
                                 // Written down where it is decided. What is missing from the classes
@@ -576,7 +550,7 @@ public final class Backend {
                         if (checked.emits().contains(pipe.name())) {
                             out.put(new GeneratedClass.BehaviorImpl(module.name(), pipe.name()),
                                     b.generatePipe(pipe, composedOf(compositions, named),
-                                            requiredNames, sigs, behaviorDeps));
+                                            injectionTargets, sigs, behaviorDeps));
                         } else {
                             out.leftOut(pipe.name());
                         }
@@ -627,6 +601,7 @@ public final class Backend {
                     + " site(s) that nothing emitted: " + missed
                     + "; a body was walked without counting what it holds");
         }
+        out.constructs(b.ctx.constructionLinks(), b.ctx.constructors());
         return out;
     }
 
@@ -806,8 +781,14 @@ public final class Backend {
     /** Emits injected required-behavior fields plus the matching constructor (or a no-arg ctor) on a
      * behavior's {@code $Impl}. The {@code of()}/{@code bind()} factories live on the public interface
      * ({@link #emitBehaviorFactory}), not here. */
-    private void emitInjection(ClassBuilder cb, ClassDesc cdX, InjectionSlots held) {
+    private void emitInjection(ClassBuilder cb, ClassDesc cdX, ValueName.Behavior own,
+                               InjectionSlots held) {
+        List<ValueName.Behavior> takes = new ArrayList<>();
+        for (InjectionSlots.Slot slot : held.all()) {
+            takes.add(slot.dependency());
+        }
         if (held.isEmpty()) {
+            ctx.providesConstructor(own, takes, MTD_void);
             emitPublicCtor(cb);
             return;
         }
@@ -821,6 +802,7 @@ public final class Backend {
             params[i] = held.all().get(i).type();
         }
         MethodTypeDesc ctorDesc = MethodTypeDesc.of(ConstantDescs.CD_void, params);
+        ctx.providesConstructor(own, takes, ctorDesc);
         cb.withMethodBody("<init>", ctorDesc, ClassFile.ACC_PUBLIC, code -> {
             code.aload(0);
             code.invokespecial(CD_Object, "<init>", MTD_void);
@@ -1395,8 +1377,13 @@ public final class Backend {
      * reading asks for it. A jar written before it carries a composition as a declaration with
      * parameter names nobody wrote, which a reader would take for the module's own and call the
      * composition by name where it is composed with.
+     *
+     * <p>Version 25 has the behavior annotation say what constructing the behavior requires
+     * injected, and the reading asks for it. A composition's requirements come from stages the jar
+     * does not carry. A reader of a jar written before this version has no list for one, and a
+     * composition it builds on one would be constructed without what those stages need.
      */
-    public static final int BOUNDARY_VERSION = 24;
+    public static final int BOUNDARY_VERSION = 25;
 
     /** Emits the class a module's own declarations are published on, carrying {@code declarations}.
      * What it says is the caller's; that it is built like every other generated class — the same Java
@@ -1447,7 +1434,6 @@ public final class Backend {
      * name the injected behaviors and are resolved as inline calls, not bound as locals.
      */
     private byte[] generateSpecFn(Hir.SpecBehavior spec, SpecImplementation.Implemented implemented,
-                                  Set<ValueName.Behavior> requiredNames,
                                   Map<ValueName.Behavior, Type> requiredSuccess,
                                   Map<ValueName.Behavior, List<Type>> requiredParam) {
         ClassDesc cdB = cdBehaviorImpl(spec.name());   // the $Impl behind the public interface
@@ -1455,6 +1441,10 @@ public final class Backend {
         // declared dependencies, validated to equal what the fn calls (E1602/E1603); the same order is
         // used by pipeline callers (requirementSets), so the injected fields line up.
         InjectionSlots injected = InjectionSlots.of(requiredBy(spec), ctx);
+        // What this body calls through a field is what this behavior holds, and nothing another
+        // behavior of the module happens to depend on: a behavior this one names without depending
+        // on it is built where it is called.
+        Set<ValueName.Behavior> held = new LinkedHashSet<>(requiredBy(spec));
         ClassDesc[] applyParams = new ClassDesc[n];
         for (int i = 0; i < n; i++) {
             applyParams[i] = CD_Object;
@@ -1472,7 +1462,7 @@ public final class Backend {
             cb.withFlags(pub(spec.name()) | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             // implements its public interface (which itself extends Behavior for a single-input one)
             cb.withInterfaceSymbols(cdBehavior(spec.name()));
-            emitInjection(cb, cdB, injected);
+            emitInjection(cb, cdB, new ValueName.Behavior(ctx.pkg, spec.name()), injected);
             if (where instanceof EnsuresEnforcement.AtTheCallee(Contract _)) {
                 emitCheckingApply(cb, cdB, spec, mtdApply, n);
             }
@@ -1481,7 +1471,7 @@ public final class Backend {
                 // The one body a coverage plan is made from, so the one body whose arms are counted.
                 gen.armsAreCounted();
                 gen.injectsInto(successType(spec.ret()));
-                gen.requireds(requiredNames, requiredSuccess, requiredParam, injected);
+                gen.requireds(held, requiredSuccess, requiredParam, injected);
                 for (SpecImplementation.ParameterBinding.AnInput input
                         : implemented.declaredInputs()) {
                     // the definition's input names the binding; its type comes from the behavior,
@@ -1500,7 +1490,7 @@ public final class Backend {
                 // thread the behavior's declared output so a tail-position fold over an empty seed
                 // materialises its step at the output type, not a bottom (issue #70)
                 gen.emitTail(elaborated(checked.behaviorBodies(), implemented.definition().name()),
-                        cdB, requiredNames, requiredSuccess, successType(spec.ret()));
+                        cdB, held, requiredSuccess, successType(spec.ret()));
             });
             if (n != 1) {
                 List<Type> pts = new ArrayList<>();
@@ -1670,7 +1660,7 @@ public final class Backend {
      * derivations of one rule, one of them in a backend.
      */
     private byte[] generatePipe(Hir.PipeBehavior pipe, Composition composed,
-                                Set<ValueName.Behavior> requiredNames,
+                                Set<ValueName.Behavior> injectionTargets,
                                 Map<ValueName.Behavior, Sig> sigs,
                                 Map<ValueName.Behavior, List<ValueName.Behavior>> behaviorDeps) {
         ClassDesc cdP = cdBehaviorImpl(pipe.name());   // the $Impl behind the public interface
@@ -1690,7 +1680,7 @@ public final class Backend {
             cb.withFlags(pub(pipe.name()) | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             // implements its public interface (which itself extends Behavior for a single-input one)
             cb.withInterfaceSymbols(cdBehavior(pipe.name()));
-            emitInjection(cb, cdP, reqStages);
+            emitInjection(cb, cdP, own(pipe.name()), reqStages);
 
             cb.withMethodBody("apply", mtdApply, ClassFile.ACC_PUBLIC, code -> {
                 // slot 1 always holds the running value (an output case, as an Object).
@@ -1704,7 +1694,7 @@ public final class Backend {
                     code.astore(i + 1);
                 }
                 // stage 0 consumes the pipeline's arguments unconditionally
-                applyFirstStage(code, cdP, stages.get(0).behavior(), arity, requiredNames,
+                applyFirstStage(code, cdP, stages.get(0).behavior(), arity, injectionTargets,
                         reqStages, behaviorDeps, stages.get(0).answers(), arity + 1);
                 Label end = code.newLabel();
                 for (int i = 1; i < stages.size(); i++) {
@@ -1727,7 +1717,7 @@ public final class Backend {
                         }
                         case Composition.Routing.Always _ -> { }
                     }
-                    applyStage(code, cdP, stage.behavior(), requiredNames, reqStages, behaviorDeps,
+                    applyStage(code, cdP, stage.behavior(), injectionTargets, reqStages, behaviorDeps,
                             stage.answers(), arity + 1);
                 }
                 code.labelBinding(end);
@@ -1755,16 +1745,16 @@ public final class Backend {
      * zero-input stage takes that same path with nothing to cast.
      */
     private void applyFirstStage(CodeBuilder code, ClassDesc cdP, ValueName.Behavior stage,
-                                 int arity, Set<ValueName.Behavior> requiredNames,
+                                 int arity, Set<ValueName.Behavior> injectionTargets,
                                  InjectionSlots held,
                                  Map<ValueName.Behavior, List<ValueName.Behavior>> behaviorDeps,
                                  Type stageOut, int slot) {
         if (arity == 1) {
-            applyStage(code, cdP, stage, requiredNames, held, behaviorDeps, stageOut, slot);
+            applyStage(code, cdP, stage, injectionTargets, held, behaviorDeps, stageOut, slot);
             return;
         }
-        pushStage(code, cdP, stage, requiredNames, held, behaviorDeps);
-        if (ctx.isStandaloneRequired(stage)) {
+        pushStage(code, cdP, stage, injectionTargets, held, behaviorDeps);
+        if (injectionTargets.contains(stage)) {
             MethodTypeDesc desc = ctx.requiredApplyDesc(stage);
             for (int i = 0; i < arity; i++) {
                 code.aload(i + 1);
@@ -1797,12 +1787,12 @@ public final class Backend {
     /** Applies one pipeline stage to the running value in slot 1, storing the result back. A stage
      * is a behavior, or a {@code Type.decoder}/{@code Type.encoder} boundary codec (spec §sequential-composition). */
     private void applyStage(CodeBuilder code, ClassDesc cdP, ValueName.Behavior stage,
-                            Set<ValueName.Behavior> requiredNames, InjectionSlots held,
+                            Set<ValueName.Behavior> injectionTargets, InjectionSlots held,
                             Map<ValueName.Behavior, List<ValueName.Behavior>> behaviorDeps,
                             Type stageOut, int slot) {
         // decode/encode are boundary edges, not pipeline stages (spec §sequential-composition): `>->` composes
         // behaviors only.
-        pushStage(code, cdP, stage, requiredNames, held, behaviorDeps);
+        pushStage(code, cdP, stage, injectionTargets, held, behaviorDeps);
         code.aload(1);
         code.invokeinterface(CD_Behavior, "apply", MTD_apply);
         projectStage(code, stage, stageOut, slot);
@@ -1847,11 +1837,15 @@ public final class Backend {
 
     /** Pushes the behavior object for a pipeline stage: an injected required field, or a fresh
      * body-behavior instance constructed with the required dependencies it declares (spec
-     * §composition-with-requirements). */
+     * §composition-with-requirements).
+     *
+     * <p>Which of the two is decided by whether Java supplies the stage and by nothing else. A
+     * behavior with an implementation is built here even where another behavior of the module holds
+     * it as a dependency: the composition was handed what that behavior requires, not the behavior. */
     private void pushStage(CodeBuilder code, ClassDesc cdP, ValueName.Behavior stage,
-                           Set<ValueName.Behavior> requiredNames, InjectionSlots held,
+                           Set<ValueName.Behavior> injectionTargets, InjectionSlots held,
                            Map<ValueName.Behavior, List<ValueName.Behavior>> behaviorDeps) {
-        if (requiredNames.contains(stage)) {
+        if (injectionTargets.contains(stage)) {
             InjectionSlots.Slot slot = held.of(stage);
             code.aload(0);
             code.getfield(cdP, slot.fieldName(), slot.type());
@@ -1860,7 +1854,11 @@ public final class Backend {
         ClassDesc cdStage = ctx.cdBehaviorImpl(stage);   // the $Impl, not the interface
         code.new_(cdStage);
         code.dup();
-        List<ValueName.Behavior> deps = behaviorDeps.getOrDefault(stage, List.of());
+        List<ValueName.Behavior> deps = behaviorDeps.get(stage);
+        if (deps == null) {
+            throw new IllegalStateException("`" + stage.module() + "." + stage.name()
+                    + "` is built as a stage here with no word on what it takes");
+        }
         ClassDesc[] ctorParams = new ClassDesc[deps.size()];
         for (int i = 0; i < deps.size(); i++) {
             // Reuse the composition's own field: it holds the dependency and hands it to the stage
@@ -1876,7 +1874,9 @@ public final class Backend {
             code.getfield(cdP, slot.fieldName(), slot.type());
             ctorParams[i] = slot.type();
         }
-        code.invokespecial(cdStage, "<init>", MethodTypeDesc.of(ConstantDescs.CD_void, ctorParams));
+        MethodTypeDesc constructor = MethodTypeDesc.of(ConstantDescs.CD_void, ctorParams);
+        ctx.linksConstructor(stage, deps, constructor);
+        code.invokespecial(cdStage, "<init>", constructor);
     }
 
     // --- value class members ---

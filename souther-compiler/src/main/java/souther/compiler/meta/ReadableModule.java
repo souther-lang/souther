@@ -2,9 +2,11 @@ package souther.compiler.meta;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.BehaviorImplementation;
+import souther.compiler.codegen.ConstructionLink;
 import souther.compiler.check.Preserved;
 import souther.compiler.check.Scoping;
 import souther.compiler.cst.SourceLayout;
+import souther.compiler.types.ValueName;
 import java.util.List;
 
 import java.util.Map;
@@ -67,6 +69,36 @@ public sealed interface ReadableModule permits ModuleReadback.AsRead {
      * the behavior Souther is to implement and nobody has, which would arrive as Java's to supply
      * (issue #936). */
     Map<String, BehaviorImplementation> behaviorImplementations();
+
+    /**
+     * What constructing each behavior requires injected, in the order its constructor takes them,
+     * as the module that declared it worked out. Every behavior but an injection target, which is not
+     * constructed and is not here.
+     *
+     * <p>Carried rather than derived, for the reason {@link #behaviorImplementations} is: a
+     * composition's comes from its stages, and its stages are not published.
+     */
+    Map<String, List<ValueName.Behavior>> behaviorRequirements();
+
+    /**
+     * The constructors of other modules' behaviors its classes link against, as the instructions
+     * that link them recorded them where the module was built.
+     *
+     * <p>Not a declaration of this module's: what its classes assumed about the modules it was built
+     * against. A compilation reading it holds those modules, as it has them, to the same
+     * constructors.
+     */
+    List<ConstructionLink> constructionLinks();
+
+    /**
+     * The constructor each of its behavior implementations declares, as the class was emitted.
+     *
+     * <p>What a class built against this module links against when it builds one of its behaviors,
+     * and what this module's own dependencies were when it was built. Not worked out again from
+     * its requirements: the signatures a reader has for those dependencies may not be the ones it
+     * was compiled against, and the constructor is the one it was compiled with.
+     */
+    List<ConstructionLink> constructors();
 
     /** What its library import lines brought in, which the module itself no longer says. */
     List<Scoping.Claim> libraryClaims();

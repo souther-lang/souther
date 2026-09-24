@@ -49,7 +49,12 @@ class MetadataOfThisCompilersNameIsHeldToItsShapeTest {
     /** {@code binaryName}'s class with its annotations rewritten. */
     private static PublishedClasses withMetadata(String binaryName,
                                                  UnaryOperator<List<Annotation>> as) {
-        Map<String, ClassFileImage> classes = new java.util.LinkedHashMap<>(Compiler.compile(SOURCE));
+        return withMetadata(SOURCE, binaryName, as);
+    }
+
+    private static PublishedClasses withMetadata(String source, String binaryName,
+                                                 UnaryOperator<List<Annotation>> as) {
+        Map<String, ClassFileImage> classes = new java.util.LinkedHashMap<>(Compiler.compile(source));
         ClassFile cf = ClassFile.of();
         ClassModel model = cf.parse(classes.get(binaryName).bytes());
         List<Annotation> had = new ArrayList<>();
@@ -71,6 +76,32 @@ class MetadataOfThisCompilersNameIsHeldToItsShapeTest {
         assertInstanceOf(PublishedClasses.Carried.UnreadableMetadata.class,
                 classes.of("shared.money.Amount"),
                 "a declaration with no text is not a declaration whose text is empty");
+    }
+
+    /** An array member the schema declares with no default. Left out, it is not an empty list: the
+     *  writer writes one of those where a behavior requires nothing. */
+    @Test
+    void aRequiredArrayMemberThatIsNotThereAtAll() {
+        PublishedClasses classes = withMetadata("""
+                module shared.money exposing ( double )
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                """, "shared.money.Double", had -> {
+            List<Annotation> out = new ArrayList<>();
+            for (Annotation a : had) {
+                List<AnnotationElement> members = new ArrayList<>();
+                for (AnnotationElement e : a.elements()) {
+                    if (!e.name().stringValue().equals("requirements")) {
+                        members.add(e);
+                    }
+                }
+                out.add(Annotation.of(a.classSymbol(), members));
+            }
+            return out;
+        });
+
+        assertInstanceOf(PublishedClasses.Carried.UnreadableMetadata.class,
+                classes.of("shared.money.Double"));
     }
 
     /** The same member, written as something else. */

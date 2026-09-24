@@ -8,6 +8,7 @@ import souther.compiler.check.Preserved;
 import souther.compiler.check.Scoping;
 import souther.compiler.check.Registry;
 import souther.compiler.codegen.Backend;
+import souther.compiler.codegen.ConstructionLink;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Region;
 import souther.compiler.cst.SourceLayout;
@@ -16,6 +17,7 @@ import souther.compiler.frontend.CstFrontend;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -126,8 +128,19 @@ public final class ModuleReadback {
         if (m.compat() != Backend.BOUNDARY_VERSION || m.header().isBlank()) {
             return unreadable(moduleName, new Readback.Failure.Incompatible(m.compiler()));
         }
+        // What its classes build of other modules. Written by every writer at this boundary, empty
+        // where they build nothing, so a module at this number without it is not one this wrote.
+        List<ConstructionLink> constructions = m.constructions() == null
+                ? null : PublishedConstructions.read(m.constructions());
+        // And the constructors its own implementations declare, for the same reason.
+        List<ConstructionLink> constructors = m.constructors() == null
+                ? null : PublishedConstructions.read(m.constructors());
+        if (constructions == null || constructors == null) {
+            return unreadable(moduleName, new Readback.Failure.UnreadableMetadata());
+        }
         StringBuilder declarations = new StringBuilder();
         Map<String, BehaviorImplementation> implementations = new LinkedHashMap<>();
+        Map<String, List<ValueName.Behavior>> requirements = new LinkedHashMap<>();
         Map<String, PublishedSignature> signaturesFrom = new LinkedHashMap<>();
         for (String type : m.types()) {
             PublishedClasses.Declarations carried;
@@ -183,6 +196,16 @@ public final class ModuleReadback {
                 return unreadable(moduleName, new Readback.Failure.UnreadableMetadata());
             }
             implementations.put(behavior, implementation);
+            List<ValueName.Behavior> required = carried.behaviorRequirements() == null
+                    ? null : PublishedRequirements.read(carried.behaviorRequirements());
+            if (required == null) {
+                return unreadable(moduleName, new Readback.Failure.UnreadableMetadata());
+            }
+            // An injection target is not constructed by Souther, so it is not among what a
+            // construction is answered for; it is the dependency.
+            if (!implementation.isInjectionTarget()) {
+                requirements.put(behavior, required);
+            }
         }
         for (String helper : m.invariantHelpers()) {
             declarations.append('\n').append(helper).append('\n');
@@ -256,7 +279,9 @@ public final class ModuleReadback {
         }
         return new Readback.Ready<>(
                 new AsRead(checked.module(), declared.declarations(), declared.asDeclared(),
-                        implementations, checked.claims(), readBack.laidOut(), answers));
+                        implementations, requirements, constructions, constructors,
+                        checked.claims(),
+                        readBack.laidOut(), answers));
     }
 
     /**
@@ -269,6 +294,9 @@ public final class ModuleReadback {
     record AsRead(Ast.Module module, Map<String, Ast.Def> declarations,
                   java.util.List<String> asDeclared,
                   Map<String, BehaviorImplementation> behaviorImplementations,
+                  Map<String, List<ValueName.Behavior>> behaviorRequirements,
+                  List<ConstructionLink> constructionLinks,
+                  List<ConstructionLink> constructors,
                   java.util.List<Scoping.Claim> libraryClaims,
                   SourceLayout laidOutText,
                   Preserved.SettledValues valueAnswers) implements ReadableModule {
@@ -280,6 +308,10 @@ public final class ModuleReadback {
             asDeclared = java.util.List.copyOf(asDeclared);
             behaviorImplementations =
                     Collections.unmodifiableMap(new LinkedHashMap<>(behaviorImplementations));
+            behaviorRequirements =
+                    Collections.unmodifiableMap(new LinkedHashMap<>(behaviorRequirements));
+            constructionLinks = List.copyOf(constructionLinks);
+            constructors = List.copyOf(constructors);
             libraryClaims = List.copyOf(libraryClaims);
         }
     }

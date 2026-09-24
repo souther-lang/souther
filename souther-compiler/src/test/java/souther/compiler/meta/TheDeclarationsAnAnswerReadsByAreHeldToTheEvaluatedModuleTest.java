@@ -823,6 +823,70 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
     }
 
     /**
+     * A composition taking and answering the same in both builds, whose stages require different
+     * things.
+     *
+     * <p>What it requires is what an implementation of it is handed, in that order, and it comes
+     * from stages neither build publishes. Two builds that disagree about it hand a row's stand-ins
+     * to different dependencies, with nothing in the signature to show it.
+     */
+    @Test
+    void aCompositionRequiringSomethingElseIsADisagreement() {
+        String rated = """
+                module example.requiring
+
+                behavior rate : (n: Int) -> Int
+                behavior tax : (n: Int) -> Int
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                behavior priced = rate >-> double
+                """;
+        String taxed = rated.replace("priced = rate >-> double", "priced = tax >-> double");
+        PublishedClasses evaluated = declarationsOf(rated);
+
+        assertInstanceOf(Agreement.Agree.class,
+                DeclarationAgreement.of("example.requiring", "priced",
+                        declarationsOf(rated), evaluated, DefaultStdlib.get()),
+                "two builds of one composition agree");
+        assertInstanceOf(Agreement.Disagree.class,
+                DeclarationAgreement.of("example.requiring", "priced",
+                        declarationsOf(taxed), evaluated, DefaultStdlib.get()),
+                "one is handed `tax` and the other `rate`");
+    }
+
+    /**
+     * A composition requiring the same dependency in both builds, where that dependency is declared
+     * differently.
+     *
+     * <p>The dependency is held to both builds as a behavior a declaration names is. Nothing the
+     * composition publishes names it — its stages are not published — so it is reached through what
+     * the composition requires or not at all, and a dependency taking two inputs is handed in as
+     * another class than one taking one.
+     */
+    @Test
+    void whatACompositionRequiresIsHeldToBothBuildsAsWell() {
+        String unary = """
+                module example.requiring
+
+                behavior rate : (n: Int) -> Int
+                behavior charged : (n: Int) -> Int depends on rate
+                let charged (n, rate) = rate(n)
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                behavior priced = charged >-> double
+                """;
+        String binary = unary
+                .replace("behavior rate : (n: Int) -> Int", "behavior rate : (n: Int, m: Int) -> Int")
+                .replace("let charged (n, rate) = rate(n)", "let charged (n, rate) = rate(n, n)");
+
+        Agreement.Disagree said = assertInstanceOf(Agreement.Disagree.class,
+                DeclarationAgreement.of("example.requiring", "priced",
+                        declarationsOf(binary), declarationsOf(unary), DefaultStdlib.get()),
+                "the two take the same `rate` and do not agree about what it is");
+        assertEquals("rate", said.declaration());
+    }
+
+    /**
      * A module only an unread helper reaches is not held to.
      *
      * <p>It has to be read — a name in that helper is answered against it, and resolution answers

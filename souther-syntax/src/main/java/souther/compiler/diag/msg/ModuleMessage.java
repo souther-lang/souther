@@ -51,6 +51,39 @@ public sealed interface ModuleMessage extends Message {
     @Code(DiagnosticCode.E1506)
     record TheModuleDeclaresNoSuchName(String name, String module) implements ModuleMessage, Reported {}
 
+    /** A module off the path was built requiring {@code name} of {@code declaredIn} injected, and
+     * the {@code declaredIn} this compilation reads — compiled here or on the path — does not
+     * declare it. A name the module reaches as much as one its text writes, carried beside the text
+     * because the stages that reach it are not. */
+    @Code(DiagnosticCode.E1506)
+    record ItWasBuiltRequiringWhatTheModuleDoesNotDeclare(String module, String name, String declaredIn)
+            implements ModuleMessage, Reported {}
+
+    record RebuildItAgainstTheModuleThisCompilationReads(String module, String dependency)
+            implements ModuleMessage, Supporting {}
+
+    /** A module off the path builds {@code name} of {@code declaredIn}, and the {@code declaredIn}
+     * this compilation reads has no implementation of it to build: Java supplies it, or nobody has
+     * written it. */
+    @Code(DiagnosticCode.E1510)
+    record ItBuildsWhatTheModuleDoesNotBuild(String module, String name, String declaredIn)
+            implements ModuleMessage, Reported {}
+
+    /** A module off the path declares {@code name}'s implementation taking {@code built}, and
+     * against the modules this compilation reads it would take {@code now}: its dependencies moved
+     * under it since it was built. */
+    @Code(DiagnosticCode.E1510)
+    record ItsImplementationTakesItsDependenciesAnotherWay(String module, String name, String built,
+                                                           String now)
+            implements ModuleMessage, Reported {}
+
+    /** A module off the path builds {@code name} of {@code declaredIn} by the constructor
+     * {@code built}, and the {@code declaredIn} this compilation reads builds it by {@code now}. */
+    @Code(DiagnosticCode.E1510)
+    record ItBuildsItWithOtherDependencies(String module, String name, String declaredIn,
+                                           String built, String now)
+            implements ModuleMessage, Reported {}
+
     @Code(DiagnosticCode.E1507)
     record TheModuleDoesNotExposeIt(String name, String module) implements ModuleMessage, Reported {}
 

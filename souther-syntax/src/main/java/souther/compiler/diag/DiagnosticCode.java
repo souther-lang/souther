@@ -108,6 +108,7 @@ public enum DiagnosticCode {
     E1507("a-reached-name-is-exposed-by-its-module", "check.module.title"),
     E1508("an-imported-name-denotes-one-thing", "check.module.title"),
     E1509("a-published-module-can-be-read-back", "check.module.title"),
+    E1510("a-published-module-agrees-with-what-it-was-built-against", "check.module.title"),
     E1602("depends-on-names-every-requirement", "e1602.title"),
     E1603("depends-on-names-no-more", "e1603.title"),
     E1604("composition-output-agrees-with-inference", "e1604.title"),

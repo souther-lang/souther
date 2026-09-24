@@ -22,6 +22,7 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.ExpandedClauses;
 import souther.compiler.types.TypeKey;
 import souther.compiler.check.BehaviorRequirement;
+import souther.compiler.check.Requirements;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.Lower;
 import souther.compiler.check.ReqSig;
@@ -107,9 +108,10 @@ public final class Output {
                 Emissions emitted = Backend.generate(
                         shipped(in), in.scope(), in.published(), in.kinds(),
                         in.scope().library().kernelSignatures(),
-                        in.typePackages(), in.sigs(), in.imported(),
+                        in.typePackages(), in.sigs(), in.requirementSigs(),
                         in.injected(),
-                        in.callees(), in.requirements(), in.checked(), in.compositions(),
+                        in.callees(), in.requirements(), in.foreignStages(), in.checked(),
+                        in.compositions(),
                         in.dischargeClauses(), in.invariantStatements(), in.shapes(), in.checks(),
                         in.standingCalls(), new TheTextsThisCompileHolds(db));
                 publishDeclarations(db, emitted);
@@ -166,10 +168,12 @@ public final class Output {
                       souther.compiler.check.PublishedDeclarations published,
                       souther.compiler.check.DeclarationKinds kinds,
                       Map<String, String> typePackages,
-                      Map<ValueName.Behavior, Sig> sigs, Map<ValueName.Behavior, Sig> imported,
+                      Map<ValueName.Behavior, Sig> sigs,
+                      Map<ValueName.Behavior, Sig> requirementSigs,
                       Set<ValueName.Behavior> injected,
                       Map<ValueName.Behavior, ReqSig> callees,
                       Map<String, List<BehaviorRequirement>> requirements,
+                      Map<ValueName.Behavior, List<ValueName.Behavior>> foreignStages,
                       Bodies.Elaborated checked,
                       Map<ValueName.Behavior, souther.compiler.core.Composition> compositions,
                       ExpandedClauseLookup dischargeClauses,
@@ -229,7 +233,10 @@ public final class Output {
             // The behaviors this module can name, each under the declaration it belongs to: what
             // the check typed the compositions against, so the emitter routes over the same ones.
             Answer<Map<ValueName.Behavior, Sig>> signatures = db.ask(new Bodies.Reachable(name));
-            Answer<Map<ValueName.Behavior, Sig>> imported = db.ask(new Bodies.Imported(name));
+            Answer<Map<ValueName.Behavior, Sig>> requirementSigs =
+                    db.ask(new Bodies.RequirementSignatures(name));
+            Answer<Map<ValueName.Behavior, List<ValueName.Behavior>>> foreignStages =
+                    db.ask(new Bodies.ForeignStageRequirements(name));
             Answer<Set<ValueName.Behavior>> injected =
                     db.ask(new Bodies.ImportedInjected(name));
             Answer<Map<ValueName.Behavior, ReqSig>> callees = db.ask(new Bodies.CalleeSigs(name));
@@ -267,7 +274,8 @@ public final class Output {
             // written out and declines the same rule named through a helper.
             Answer<RuleReadingSource> reading = Shapes.ruleReading(db, name);
             if (!checked.present() || !compositions.present()
-                    || !lowering.present() || !scope.present() || !imported.present()
+                    || !lowering.present() || !scope.present() || !requirementSigs.present()
+                    || !foreignStages.present()
                     || !signatures.present() || !injected.present() || !callees.present()
                     || !prepared.present() || !requirements.present() || !expandable.present()
                     || !checks.present() || !standing.present() || !shapes.present()
@@ -276,9 +284,10 @@ public final class Output {
             }
             return new Inputs(lowering.value().lowered(), scope.value(),
                     Shapes.publishedDeclarations(db), Shapes.declarationKinds(db),
-                    prepared.value().importedFrom(), signatures.value(), imported.value(),
+                    prepared.value().importedFrom(), signatures.value(), requirementSigs.value(),
                     injected.value(),
-                    callees.value(), requirements.value(), checked.value(), compositions.value(),
+                    callees.value(), requirements.value(), foreignStages.value(), checked.value(),
+                    compositions.value(),
                     Shapes.expandedClauses(db), InvariantStatements.of(reading.value()),
                     shapes.value(), checks.value(),
                     Set.copyOf(prepared.value().operandMethods().values()), standing.value());
@@ -327,12 +336,20 @@ public final class Output {
             // reader of the value is given, so it is the same one the readers in this compilation
             // are given.
             Answer<Bodies.ModuleCheck.Of> checked = db.ask(new Bodies.ModuleCheck(name));
+            // What each behavior requires injected: the same answer this module's constructors were
+            // emitted from, published so a reader constructs one of its compositions the same way.
+            Answer<Map<String, List<BehaviorRequirement>>> requirements =
+                    db.ask(new Bodies.Requirements(name));
             if (written == null || !sigs.present() || implementations == null
-                    || !resolved.present() || !scope.present() || !checked.present()) {
+                    || !resolved.present() || !scope.present() || !checked.present()
+                    || !requirements.present()) {
                 return;
             }
+            Map<String, List<ValueName.Behavior>> required = new LinkedHashMap<>();
+            requirements.value().forEach((behavior, each) ->
+                    required.put(behavior, Requirements.names(each)));
             ModuleMetadata.stamp(classes, written.module(), resolved.value(),
-                    written.slices(), sigs.value(), implementations,
+                    written.slices(), sigs.value(), implementations, required,
                     scope.value().scope()::reach, checked.value().settledValues());
         }
 
@@ -472,9 +489,10 @@ public final class Output {
                 Emissions emitted = Backend.generate(
                         in.lowered(), in.scope(), in.published(), in.kinds(),
                         in.scope().library().kernelSignatures(),
-                        in.typePackages(), in.sigs(), in.imported(),
+                        in.typePackages(), in.sigs(), in.requirementSigs(),
                         in.injected(),
-                        in.callees(), in.requirements(), in.checked(), in.compositions(),
+                        in.callees(), in.requirements(), in.foreignStages(), in.checked(),
+                        in.compositions(),
                         in.dischargeClauses(), in.invariantStatements(), in.shapes(), in.checks(),
                         in.standingCalls(), new TheTextsThisCompileHolds(db), instrumentation);
                 // The classes, what they implement and whose numbers a run through them leaves,

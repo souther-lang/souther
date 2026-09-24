@@ -13,7 +13,6 @@ import java.lang.classfile.AnnotationValue;
 import java.lang.classfile.Attributes;
 import java.lang.classfile.ClassFile;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -41,6 +40,14 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  */
 class WhatABoundaryCarriesIsRecordedUnderItsNumberTest {
 
+    /** A module whose behavior {@link #MODULE} builds, so what a module's classes build of another
+     *  one is written with something in it. */
+    private static final String RATES = """
+            module shared.rates exposing ( half )
+            behavior half : (n: Int) -> Int
+            let half (n) = n - 1
+            """;
+
     /**
      * Enough of a module to write all three of the annotations this compiler puts on a class, and to
      * put something in every member of each.
@@ -51,8 +58,9 @@ class WhatABoundaryCarriesIsRecordedUnderItsNumberTest {
      * {@link #everyMemberOfTheRecordWasMeasured}, which refuses a record that could not read one.
      */
     private static final String MODULE = """
-            module shared.money exposing ( Amount, Receipt, ceiling, charge, quote )
+            module shared.money exposing ( Amount, Receipt, ceiling, charge, quote, settle, halve )
             import String ( length )
+            import shared.rates ( half )
 
             data Amount = Int
                 invariant value >= 0 && withinCap(value)
@@ -68,11 +76,22 @@ class WhatABoundaryCarriesIsRecordedUnderItsNumberTest {
             let charge (a) = Receipt { paid = a }
 
             behavior quote : (a: Amount) -> Receipt
+
+            behavior settle : (a: Amount) -> Receipt depends on quote
+            let settle (a, quote) = quote(a)
+
+            behavior halve : (n: Int) -> Int
+            let halve (n) = half(n)
             """;
+
+    /** Both modules, compiled together. */
+    private static Map<String, ClassFileImage> compiled() {
+        return Compiler.compileModules(List.of(RATES, MODULE));
+    }
 
     @Test
     void theShapeIsTheOneRecordedForThisBoundary() {
-        String carried = carried(Compiler.compile(MODULE));
+        String carried = carried(compiled());
         String recorded = recorded(Backend.BOUNDARY_VERSION);
 
         assertNotNull(recorded, () ->
@@ -87,31 +106,37 @@ class WhatABoundaryCarriesIsRecordedUnderItsNumberTest {
                         + " this shape, so a shape that moved needs a number that moved with it.");
     }
 
-    /** The members of each annotation this compiler writes, and what kind of value each holds. */
+    /**
+     * The members of each annotation this compiler writes, and what kind of value each holds.
+     *
+     * <p>Read off every class that carries one, not off whichever came last. Two behaviors carry the
+     * same members, and an array one of them leaves empty is measured on the other: which class a
+     * member was read from is the order the classes came out in, and a record resting on that says
+     * nothing when it changes.
+     */
     private static String carried(Map<String, ClassFileImage> classes) {
-        Map<String, String> byAnnotation = new TreeMap<>();
+        Map<String, Map<String, String>> byAnnotation = new TreeMap<>();
         for (ClassFileImage image : classes.values()) {
             for (Annotation annotation : annotations(image.bytes())) {
                 String type = annotation.className().stringValue();
                 if (!type.startsWith("Lsouther/runtime/meta/")) {
                     continue;
                 }
-                byAnnotation.put(type, members(annotation));
+                Map<String, String> members = byAnnotation.computeIfAbsent(type, _ -> new TreeMap<>());
+                for (AnnotationElement element : annotation.elements()) {
+                    String kind = kindOf(element.value());
+                    members.merge(element.name().stringValue(), kind,
+                            (was, now) -> was.endsWith(UNREAD) ? now : was);
+                }
             }
         }
         StringBuilder out = new StringBuilder();
-        byAnnotation.forEach((type, members) ->
-                out.append(type).append('\n').append(members));
+        byAnnotation.forEach((type, members) -> {
+            out.append(type).append('\n');
+            members.forEach((name, kind) ->
+                    out.append("  ").append(name).append(": ").append(kind).append('\n'));
+        });
         return out.toString();
-    }
-
-    private static String members(Annotation annotation) {
-        List<String> written = new ArrayList<>();
-        for (AnnotationElement element : annotation.elements()) {
-            written.add("  " + element.name().stringValue() + ": " + kindOf(element.value()));
-        }
-        java.util.Collections.sort(written);
-        return String.join("\n", written) + "\n";
     }
 
     /** An array the fixture left empty, which says its own name and nothing about what it holds. */
@@ -167,7 +192,7 @@ class WhatABoundaryCarriesIsRecordedUnderItsNumberTest {
      */
     @Test
     void everyMemberOfTheRecordWasMeasured() {
-        String carried = carried(Compiler.compile(MODULE));
+        String carried = carried(compiled());
 
         assertFalse(carried.contains(UNREAD),
                 () -> "a member of the boundary is written by a fixture that leaves it empty, so"

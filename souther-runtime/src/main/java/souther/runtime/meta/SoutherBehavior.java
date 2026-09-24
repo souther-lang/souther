@@ -36,4 +36,11 @@ public @interface SoutherBehavior {
     /** Where the body comes from: {@code implemented}, {@code unimplemented} or {@code injected}.
      * A module that names an injected one as a stage inherits it as a requirement of its own. */
     String implementation();
+
+    /** What constructing the behavior requires injected, in the order its constructor takes them,
+     * each written as the declaring module and the name, counted. Worked out by the module that
+     * declares the behavior: a composition's comes from stages that are not published, so a reader
+     * could not work it out again. An injection target is not constructed here and writes none.
+     * No default: a writer that says nothing about it has not said the list is empty. */
+    String[] requirements();
 }

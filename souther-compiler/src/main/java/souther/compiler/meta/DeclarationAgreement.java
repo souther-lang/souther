@@ -3,6 +3,7 @@ package souther.compiler.meta;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.Reserved;
 import souther.compiler.ast.DefinitionRole;
+import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.RowPosition;
 import souther.compiler.diag.QuotedFrom;
@@ -168,26 +169,12 @@ public final class DeclarationAgreement {
             }
             PublishedUniverse.Read here = ourSide.get(what.module());
             PublishedUniverse.Read there = theirSide.get(what.module());
-            List<Object> ours = what.partsIn(here.module());
-            List<Object> theirs = what.partsIn(there.module());
+            List<Object> ours = what.partsIn(here);
+            List<Object> theirs = what.partsIn(there);
             // A name only one side has is a difference in itself: a type that was removed, a helper
             // one build's declaration is read through and the other's is not.
             if (ours == null || theirs == null
                     || !sameShape(ours, theirs, new Walk(new Bound(), watching))) {
-                return new Agreement.Disagree(what.module(), what.name());
-            }
-            // Where a behavior's body comes from is not in a declaration and does not survive as
-            // source, so it travels beside the module. It decides whether an implementation may be
-            // supplied for a behavior at all, which is as much a fact about the crossing as the
-            // signature is: two builds that disagree about it disagree about whether anything may
-            // be handed in there. The whole state and not one of its readings — two builds calling
-            // a behavior unwritten and injected respectively agree about neither. Asked of the
-            // behaviors this crossing reaches, like everything else — the module's other behaviors
-            // are nothing a row of this one meets.
-            if (what instanceof Reached.ABehavior
-                    && !java.util.Objects.equals(
-                            here.behaviorImplementations().get(what.name()),
-                            there.behaviorImplementations().get(what.name()))) {
                 return new Agreement.Disagree(what.module(), what.name());
             }
             follow(ours);
@@ -337,9 +324,10 @@ public final class DeclarationAgreement {
          *  the namespace rule restated a fourth time. */
         boolean isDeclaredByLanguage();
 
-        /** What of {@code m} this is, as what a crossing depends on — null where m has no such
-         *  thing. */
-        List<Object> partsIn(Hir.Module m);
+        /** What of {@code read} this is, as what a crossing depends on — null where it has no such
+         *  thing. Asked of the reading and not of its module alone: what a module carries beside its
+         *  declarations is as much a part of what it declares as what they say. */
+        List<Object> partsIn(PublishedUniverse.Read read);
 
         record ADeclaration(TypeSymbol type) implements Reached {
 
@@ -362,8 +350,8 @@ public final class DeclarationAgreement {
             }
 
             @Override
-            public List<Object> partsIn(Hir.Module m) {
-                for (Hir.Def def : m.defs()) {
+            public List<Object> partsIn(PublishedUniverse.Read read) {
+                for (Hir.Def def : read.module().defs()) {
                     if (def.name().equals(name())) {
                         return crossingParts(def);
                     }
@@ -389,11 +377,29 @@ public final class DeclarationAgreement {
                 return behavior.isDeclaredByLanguage();
             }
 
+            /**
+             * The behavior's declaration, and what the module carries beside it: where its body
+             * comes from, and what constructing it requires.
+             *
+             * <p>Neither is in a declaration and neither survives as source, and both are what a
+             * crossing into the behavior depends on. Where its body comes from decides whether
+             * anything may be handed in there at all — the whole state and not one of its
+             * readings, since two builds calling a behavior unwritten and injected agree about
+             * neither. What it requires is what an implementation of it is handed, in that order,
+             * and a composition's comes from stages neither build publishes. Held as parts, both
+             * are compared where the declaration is and followed where it is: a dependency is
+             * reached and held to both builds like a behavior a declaration names.
+             */
             @Override
-            public List<Object> partsIn(Hir.Module m) {
-                for (Hir.BehaviorDef b : m.behaviors()) {
+            public List<Object> partsIn(PublishedUniverse.Read read) {
+                for (Hir.BehaviorDef b : read.module().behaviors()) {
                     if (b.name().equals(name())) {
-                        return crossingParts(b);
+                        List<Object> parts = new ArrayList<>(crossingParts(b));
+                        BehaviorImplementation implementation =
+                                read.behaviorImplementations().get(name());
+                        parts.add(implementation == null ? null : implementation.written());
+                        parts.add(Optional.ofNullable(read.behaviorRequirements().get(name())));
+                        return parts;
                     }
                 }
                 return null;
@@ -418,8 +424,8 @@ public final class DeclarationAgreement {
             }
 
             @Override
-            public List<Object> partsIn(Hir.Module m) {
-                for (Hir.FnDef fn : m.fns()) {
+            public List<Object> partsIn(PublishedUniverse.Read read) {
+                for (Hir.FnDef fn : read.module().fns()) {
                     if (fn.name().equals(name())) {
                         return crossingParts(fn);
                     }
