@@ -1,7 +1,6 @@
 package souther.compiler.core;
 
-import souther.compiler.conformance.ConformanceCorpus;
-import souther.compiler.meta.ModulePath;
+import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.BindingId;
@@ -14,7 +13,6 @@ import java.lang.reflect.RecordComponent;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -266,21 +264,15 @@ class EveryTreeTheBackendIsHandedIsTypedTest {
      * <p>These are the answers of the queries that rewrite a checked body for the backend, which
      * {@code WhoMayRewriteACheckedBodyForTheBackendTest} in {@code souther-architecture-test} holds
      * to be the only ones. Every model and not only the conformance ones, which are written against
-     * what the language declares and have no reason to write two walks in a row.
+     * what the language declares and have no reason to write two walks in a row: the compilations
+     * the JVM already holds, so the population is asked and not compiled again.
      */
     private static List<Core> trees() {
         if (trees != null) {
             return trees;
         }
         List<Core> out = new ArrayList<>();
-        for (String name : ConformanceCorpus.manifest().keySet()) {
-            ConformanceCorpus corpus = ConformanceCorpus.load(name);
-            Map<String, String> byId = new LinkedHashMap<>();
-            for (int i = 0; i < corpus.sources().size(); i++) {
-                byId.put(corpus.files().get(i), corpus.sources().get(i));
-            }
-            Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-            c.answerEverything();
+        for (Compilation c : RepositoryModels.all()) {
             for (String module : c.modules()) {
                 Bodies.ModuleCheck.Of checkedModule =
                         c.db().ask(new Bodies.ModuleCheck(module)).value();
