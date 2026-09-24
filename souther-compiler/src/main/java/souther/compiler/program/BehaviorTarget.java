@@ -28,6 +28,12 @@ package souther.compiler.program;
  * beside a behavior of a checked module, so that a target is a call boundary that cannot say two
  * things wherever one is made.
  *
+ * <p>Where the form of the signature is held to the implementation. A declaration names every
+ * parameter and a composition names none, and only a composition is {@link
+ * CheckedImplementation.Composed}; a body, an injected behavior and an unwritten one are each a
+ * declaration. An implementation another compile emitted is either, and the signature says which
+ * ({@link CheckedSignature#declaredParameters()}).
+ *
  * <p>A class and not a record. What a call boundary is known to be will grow — what a caller may
  * assume of the answer is a decision this compilation does not make for a behavior another module
  * declared ({@link souther.compiler.core.EnsuresEnforcement.NotDecidedHere}) — and each of those
@@ -45,6 +51,7 @@ public final class BehaviorTarget {
                     "a call boundary is what it takes and answers and where its implementation"
                             + " comes from");
         }
+        holdTheFormOfTheSignature(signature, implementation);
         if (implementation instanceof CheckedImplementation.Body body
                 && body.parameters().size() != signature.takes().size()) {
             // Said with both readings written out. The identity a caller asks with is not here —
@@ -55,6 +62,31 @@ public final class BehaviorTarget {
         }
         this.signature = signature;
         this.implementation = implementation;
+    }
+
+    // No wildcard arm: an implementation added later does not compile until it is decided here
+    // which form of signature it goes with.
+    private static void holdTheFormOfTheSignature(CheckedSignature signature,
+                                                  CheckedImplementation implementation) {
+        boolean declared = signature.declaredParameters().isPresent();
+        switch (implementation) {
+            case CheckedImplementation.Body _,
+                 CheckedImplementation.Injected _,
+                 CheckedImplementation.Unwritten _ -> {
+                if (!declared) {
+                    throw new IllegalArgumentException("a composition's signature " + signature
+                            + " names no parameters, and " + implementation
+                            + " is written against a declaration");
+                }
+            }
+            case CheckedImplementation.Composed _ -> {
+                if (declared) {
+                    throw new IllegalArgumentException("a declared signature " + signature
+                            + " is not the signature of " + implementation);
+                }
+            }
+            case CheckedImplementation.ImplementedElsewhere _ -> { }
+        }
     }
 
     /** What it takes and what it answers, as the check settled them. */

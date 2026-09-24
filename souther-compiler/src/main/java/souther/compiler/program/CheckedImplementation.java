@@ -83,6 +83,10 @@ public sealed interface CheckedImplementation {
      * {@link Composition} it is written as — that belongs to the compile that checked it, and a
      * second one emitted under the same name would be two definitions of one behavior.
      *
+     * <p>Does not say whether the published behavior was declared or a composition. That is the
+     * signature's answer ({@link CheckedSignature#declaredParameters()}), and holding it here as
+     * well would be a second copy that could disagree with it.
+     *
      * <p>Says nothing about how a call to it is reached on some machine. Whether an output links
      * the implementation in, calls across a module boundary, or imports it is that output's answer,
      * for the reason a class name and a Wasm block are not decided here.
