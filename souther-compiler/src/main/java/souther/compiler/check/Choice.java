@@ -126,6 +126,34 @@ public record Choice(Kind kind, List<Arm> arms) {
                 relations = List.copyOf(relations);
             }
         }
+
+        // One place makes each of these, and it is here. An arm is decided by the node it is
+        // written under, and the node is what says which way of deciding it is: a walk that
+        // spelled the record out for itself would be a second account of which arm of which node
+        // decides what, agreeing with this one until a node gained a way of being entered.
+
+        /** What decides the arm of {@code iff} taken where its condition comes out
+         *  {@code holding}. */
+        static ACondition ofCondition(Core.If iff, boolean holding) {
+            return new ACondition(iff.cond(), holding);
+        }
+
+        /** What decides {@code arm} of {@code match}. Asked of the {@code match} and not of its
+         *  scrutinee, so that an arm is never paired with a node other than the one it stands
+         *  in. */
+        static ACase ofCase(Core.Match match, Core.Case arm) {
+            return new ACase(arm, match.scrutinee());
+        }
+
+        /** What decides the success arm of {@code attempt}. */
+        static ItWasBuilt ofBuilt(Core.IfConstructed attempt) {
+            return new ItWasBuilt(attempt);
+        }
+
+        /** What decides {@code departure} of {@code attempt}. */
+        static ItDeparted ofDeparture(Core.IfConstructed attempt, Core.ElseArm departure) {
+            return new ItDeparted(attempt, departure);
+        }
     }
 
     public Choice {
@@ -150,10 +178,10 @@ public record Choice(Kind kind, List<Arm> arms) {
     public static Choice of(Core e) {
         return switch (e) {
             case Core.If iff -> new Choice(Kind.A_CONDITION, List.of(
-                    new Arm(iff.then(), new Decides.ACondition(iff.cond(), true)),
-                    new Arm(iff.els(), new Decides.ACondition(iff.cond(), false))));
+                    new Arm(iff.then(), Decides.ofCondition(iff, true)),
+                    new Arm(iff.els(), Decides.ofCondition(iff, false))));
             case Core.Match m -> new Choice(Kind.A_CASE, m.cases().stream()
-                    .map(c -> new Arm(c.body(), new Decides.ACase(c, m.scrutinee())))
+                    .map(c -> new Arm(c.body(), Decides.ofCase(m, c)))
                     .toList());
             case Core.IfConstructed ic -> new Choice(Kind.AN_ATTEMPT, attempted(ic));
             case Core.PreservedCall call -> defined(call);
@@ -165,8 +193,8 @@ public record Choice(Kind kind, List<Arm> arms) {
      * did not — one departure per clause the attempt names, and each of them a value of its own. */
     private static List<Arm> attempted(Core.IfConstructed ic) {
         List<Arm> out = new ArrayList<>();
-        out.add(new Arm(ic.then(), new Decides.ItWasBuilt(ic)));
-        ic.els().forEach(arm -> out.add(new Arm(arm.body(), new Decides.ItDeparted(ic, arm))));
+        out.add(new Arm(ic.then(), Decides.ofBuilt(ic)));
+        ic.els().forEach(arm -> out.add(new Arm(arm.body(), Decides.ofDeparture(ic, arm))));
         return out;
     }
 

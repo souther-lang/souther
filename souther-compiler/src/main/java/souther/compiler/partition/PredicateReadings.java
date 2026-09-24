@@ -4,6 +4,7 @@ import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.PredicateStatement;
 import souther.compiler.check.RuleRef;
+import souther.compiler.check.ScopeStep;
 import souther.compiler.check.StatedContract;
 import souther.compiler.check.StringPredicates;
 import souther.compiler.check.Symbols;
@@ -295,22 +296,14 @@ record PredicateReadings(List<Reading> predicates, Set<Core> statedAt,
                 walk(let.body(), behavior, read, reads.and(let.binder(), given), flow, live,
                         out, reaches, statedAt, builds);
             }
-            // And each arm under what the arm says the value it matched turned out to be. A name
-            // the arm binds is the scrutinee's position narrowed to that case, so a predicate
-            // written inside an arm is about a position the reading of the input has — read
-            // without it, every rule an author writes inside a `match` was about nothing.
-            case Core.Match match -> {
-                walk(match.scrutinee(), behavior, read, reads, flow, live, out, reaches, statedAt,
-                        builds);
-                for (Core.Case arm : match.cases()) {
-                    walk(arm.body(), behavior, read,
-                            reads.insideArm(match, arm, read.symbols(), read.newtypes()),
-                            flow, live, out, reaches, statedAt, builds);
-                }
-            }
-            default -> Core.forEachChild(e, child ->
-                    walk(child, behavior, read, reads, flow, live, out, reaches, statedAt,
-                            builds));
+            // Every other child under what the step into it binds: an arm's name is the
+            // scrutinee's position narrowed to that case, so a predicate written inside an arm is
+            // about a position the reading of the input has, and an attempt's `then` is where its
+            // name stands for what was built.
+            default -> ScopeStep.forEachChild(e, (child, step) ->
+                    walk(child, behavior, read,
+                            reads.entering(step, read.symbols(), read.newtypes()), flow, live,
+                            out, reaches, statedAt, builds));
         }
     }
 

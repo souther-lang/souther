@@ -69,7 +69,11 @@ class AReaderOfHowAnArmWasDecidedNamesEveryWayThereIsTest {
             "souther.compiler.inputs.InputReads#choosing", "the same question Terms#chose answers,"
                     + " in the vocabulary a reading of the inputs speaks. Two readings of one body"
                     + " name a position in two ways and each owns what a name means to it, as they"
-                    + " do for a let's binding"));
+                    + " do for a let's binding",
+            "souther.compiler.flow.ValueArrivals#inside", "which name a step into a child binds,"
+                    + " for the reading of how a value arrives. It binds the name to a way of"
+                    + " arriving and to no value, so it says nothing of what the name denotes,"
+                    + " which is Terms#chose's answer"));
 
     @Test
     void everyReaderOfHowAnArmWasDecidedNamesEveryWayThereIs() throws IOException {

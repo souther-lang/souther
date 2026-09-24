@@ -481,12 +481,20 @@ public final class PathReachability {
                 // the construction having held, so its binding carries what the type guarantees —
                 // which is the whole of what a guard inside that branch has to read against. Each
                 // departure stands where nothing was built, so none is entered with any of it.
+                //
+                // One decision entered in both environments: what the binder denotes and which
+                // position of the input it is are two readings of the same name, and a `then` that
+                // entered it in one of them only would be read with the name meaning two things.
                 ic.construct().values().forEach(given ->
                         walk(given.value(), k, at, reads, decided, nothingAbove));
-                PathEngine.Entered built = engine.enteringBuilt(ic, k, at);
-                walk(ic.then(), built.known(), built.at(), reads, decided, false);
+                Choice.Decides.ItWasBuilt held = Choice.Decides.ofBuilt(ic);
+                PathEngine.Entered built = engine.enteringBuilt(held, k, at);
+                walk(ic.then(), built.known(), built.at(),
+                        reads.choosing(held, symbols, newtypes), decided, false);
                 for (Core.ElseArm arm : ic.els()) {
-                    walk(arm.body(), k, at, reads, decided, false);
+                    walk(arm.body(), k, at,
+                            reads.choosing(Choice.Decides.ofDeparture(ic, arm), symbols, newtypes),
+                            decided, false);
                 }
             }
             case Core.LetIn li -> {
@@ -495,7 +503,8 @@ public final class PathReachability {
                 // Inside what the `let` binds, so an arm of an expanded helper is read against the
                 // position the call handed it. A binding is not a fork, so what stands above the
                 // body is what stood above the binding.
-                walk(li.body(), in.known(), in.at(), reads.and(li.binder(), li.value()), decided,
+                walk(li.body(), in.known(), in.at(),
+                        reads.entering(new ScopeStep.Let(li), symbols, newtypes), decided,
                         nothingAbove);
             }
             case Core.Match match -> {
@@ -520,12 +529,13 @@ public final class PathReachability {
                     // the case it selects, which is where a comparison written inside the arm draws
                     // its line.
                     walk(arm.body(), in.known(), in.at(),
-                            reads.insideArm(match, arm, symbols, newtypes), decided, false);
+                            reads.choosing(Choice.Decides.ofCase(match, arm), symbols, newtypes),
+                            decided, false);
                 }
             }
-            default -> {
-                Core.forEachChild(e, child -> walk(child, k, at, reads, decided, nothingAbove));
-            }
+            default -> ScopeStep.forEachChild(e, (child, step) ->
+                    walk(child, k, at, reads.entering(step, symbols, newtypes), decided,
+                            nothingAbove));
         }
     }
 
@@ -761,7 +771,9 @@ public final class PathReachability {
                             why(iff.cond(), holds, under, reads))
                     : new Reachability.Unsettled(whyNot(taken, iff.cond())));
         }
-        walk(arm, inside, at, reads, under, false);
+        walk(arm, inside, at,
+                reads.choosing(Choice.Decides.ofCondition(iff, holds), symbols, newtypes),
+                under, false);
     }
 
     /**

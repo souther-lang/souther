@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 
@@ -66,9 +67,10 @@ public record InputDemand(List<TermPath> paths) {
     /**
      * Every location {@code body} names, read under the bindings on the way to each of them.
      *
-     * <p>The environment is the one every reader of a body carries, moved along by the two things
-     * that change what a name means: a binding, and an arm that says which case the value it matched
-     * turned out to be. Everything else is walked with the environment it stands in.
+     * <p>The environment is the one every reader of a body carries, moved along at each step into a
+     * child that changes what a name means ({@link ScopeStep}): a binding, an arm that says which
+     * case the value it matched turned out to be, and an attempt that held and so built what its
+     * name stands for.
      *
      * <p>The reading of the input is not reachable from here, and is not reachable from what walks
      * a body at all: {@link InputReads} knows what a name stands for and nothing about the model.
@@ -98,24 +100,8 @@ public record InputDemand(List<TermPath> paths) {
             // else of them.
             case PathResolution.MayStandAt(var among) -> found.addAll(among);
         }
-        switch (e) {
-            // The body of a `let` is where the name stands for what was bound to it.
-            case Core.LetIn let -> {
-                walk(let.value(), names, symbols, newtypes, found);
-                walk(let.body(), names.and(let.binder(), let.value()), symbols, newtypes, found);
-            }
-            // And each arm under what the arm says the value it matched turned out to be, which is
-            // the one step of a path no expression writes down.
-            case Core.Match match -> {
-                walk(match.scrutinee(), names, symbols, newtypes, found);
-                for (Core.Case arm : match.cases()) {
-                    walk(arm.body(), names.insideArm(match, arm, symbols, newtypes), symbols,
-                            newtypes, found);
-                }
-            }
-            default ->
-                    Core.forEachChild(e, child -> walk(child, names, symbols, newtypes, found));
-        }
+        ScopeStep.forEachChild(e, (child, step) ->
+                walk(child, names.entering(step, symbols, newtypes), symbols, newtypes, found));
     }
 
     /** The same demand with {@code more} named as well, for a caller that has paths of its own. */

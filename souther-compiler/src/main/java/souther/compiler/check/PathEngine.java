@@ -468,10 +468,14 @@ final class PathEngine {
      * <p>Its departures stand where the invariant did not hold and nothing was built, so none of
      * them is entered with anything the attempt would have guaranteed. That is the caller's to
      * honour by not asking.
+     *
+     * <p>Handed the decision rather than the attempt, so that a walk carrying another environment
+     * beside this one enters it with the same value this entered.
      */
-    Entered enteringBuilt(Core.IfConstructed ic, Known k, Denotations at) {
+    Entered enteringBuilt(Choice.Decides.ItWasBuilt built, Known k, Denotations at) {
+        Core.IfConstructed ic = built.attempt();
         Core.Read root = Terms.read(ic.binder(), ic.construct().type(), ic.pos());
-        Denotations next = terms.choosing(new Choice.Decides.ItWasBuilt(ic), at);
+        Denotations next = terms.choosing(built, at);
         return new Entered(seedAt(root, k, next), next);
     }
 

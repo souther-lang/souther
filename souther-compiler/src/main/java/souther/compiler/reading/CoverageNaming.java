@@ -1,6 +1,7 @@
 package souther.compiler.reading;
 
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ControlClaim;
@@ -30,7 +31,7 @@ import java.util.List;
  * comparison with no value, and everything standing under it went with it.
  *
  * <p>A value per position and not one object walked along: what a name reads widens inside a
- * {@code let}, so {@link #under} answers a new one and the reading holds each where it belongs.
+ * {@code let}, so {@link #entering} answers a new one and the reading holds each where it belongs.
  */
 final class CoverageNaming implements Naming<Outcome> {
 
@@ -82,14 +83,9 @@ final class CoverageNaming implements Naming<Outcome> {
     // The environment moves and the reading of the comparisons does not: what a name reads here is
     // this naming's own, and what each comparison came to is one answer for the whole body.
     @Override
-    public CoverageNaming under(Core.Binder binder, Core value) {
-        return new CoverageNaming(plan, symbols, newtypes, reads.and(binder, value), numbers);
-    }
-
-    @Override
-    public CoverageNaming insideArm(Core.Match match, Core.Case arm) {
-        return new CoverageNaming(plan, symbols, newtypes,
-                reads.insideArm(match, arm, symbols, newtypes), numbers);
+    public CoverageNaming entering(ScopeStep step) {
+        InputReads inside = reads.entering(step, symbols, newtypes);
+        return inside == reads ? this : new CoverageNaming(plan, symbols, newtypes, inside, numbers);
     }
 
     /**

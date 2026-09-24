@@ -1,5 +1,6 @@
 package souther.compiler.flow;
 
+import souther.compiler.check.ScopeStep;
 import souther.compiler.core.Core;
 
 /**
@@ -35,19 +36,15 @@ public interface Naming<P> {
     P join(P held, P more);
 
     /**
-     * The naming inside a {@code let}, which may have words for the name it binds.
+     * The naming a child is read in, {@code step} being the way from its parent into it, which may
+     * have words for a name the step binds.
      *
-     * <p>One of the two places what a name means changes, with {@link #insideArm}. The two are the
-     * ones a tree's names are read under ({@code InputReads}), and a naming has both or is not
-     * scoped like it —
-     * a naming with one of them answers under a binding and stays outside an arm, which is a name
+     * <p>Every step and not a chosen few. What a name means changes where a tree's names are read
+     * under a new scope ({@link ScopeStep}), and a naming that entered some of those steps and not
+     * others would answer under a binding and stay outside an attempt's {@code then} — a name
      * meaning one thing to the reading that found the positions and another to this.
      */
-    Naming<P> under(Core.Binder binder, Core value);
-
-    /** The naming inside {@code arm} of {@code match}, which may have words for the name the arm
-     *  binds to the case it selects. */
-    Naming<P> insideArm(Core.Match match, Core.Case arm);
+    Naming<P> entering(ScopeStep step);
 
     /**
      * That {@code value} came out {@code held}, or null where this naming has no words for it.

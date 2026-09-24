@@ -235,9 +235,10 @@ class NothingThatWalksATreeNamesTheReadingOfTheInputTest {
     /**
      * Whether {@code of} moves an environment along as it goes, which is what makes it walk state.
      *
-     * <p>It keeps one and it asks one for the environment inside a binding or inside an arm, which
-     * are the two things that change what a name stands for. A value that keeps one and asks it
-     * neither is standing where it was made and is an answer about that place.
+     * <p>It keeps one and it asks one for the environment one step further in: inside a binding,
+     * inside an arm a decision chose, or at any step into a child — the ways the environment has of
+     * answering where a name stands for something else. A value that keeps one and asks it none of
+     * them is standing where it was made and is an answer about that place.
      */
     private static boolean movesAnEnvironmentAlong(ClassModel of) {
         if (!keepsAnEnvironment(of)) {
@@ -246,13 +247,15 @@ class NothingThatWalksATreeNamesTheReadingOfTheInputTest {
         for (PoolEntry entry : of.constantPool()) {
             if (entry instanceof MemberRefEntry member
                     && member.owner().asInternalName().equals(ENVIRONMENT)
-                    && (member.name().stringValue().equals("and")
-                            || member.name().stringValue().equals("insideArm"))) {
+                    && STEPS_IN.contains(member.name().stringValue())) {
                 return true;
             }
         }
         return false;
     }
+
+    /** What the environment answers a step further in with. */
+    private static final Set<String> STEPS_IN = Set.of("and", "choosing", "entering");
 
     /**
      * Every spelling of a type in {@code of}, each read as the role it is written in.

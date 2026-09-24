@@ -1,10 +1,12 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.AnalysisBody;
+import souther.compiler.check.Choice;
 import souther.compiler.check.Comparison;
 import souther.compiler.diag.Citation;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.ValueTemplates;
 import souther.compiler.core.Core;
@@ -384,11 +386,15 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     forks.add(new ForkMet(iff.occurrence(), iff.cond(), Citation.of(iff.pos()),
                             reads, atoms, owned));
                 }
-                walk(iff.then(), in, reads, flow,
-                        taking(condition, true, in.read(), assumed),
+                walk(iff.then(), in,
+                        reads.choosing(Choice.Decides.ofCondition(iff, true), symbols,
+                                in.newtypes()),
+                        flow, taking(condition, true, in.read(), assumed),
                         live, out, forks, numbering);
-                walk(iff.els(), in, reads, flow,
-                        taking(condition, false, in.read(), assumed),
+                walk(iff.els(), in,
+                        reads.choosing(Choice.Decides.ofCondition(iff, false), symbols,
+                                in.newtypes()),
+                        flow, taking(condition, false, in.read(), assumed),
                         live, out, forks, numbering);
             }
             // What a `let` computes is read on the way to the answer only where the name is read;
@@ -422,14 +428,23 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 walk(match.scrutinee(), in, reads, flow, assumed, live, out, forks, numbering);
                 for (int part = 0; part < match.cases().size(); part++) {
                     Core.Case arm = match.cases().get(part);
-                    walk(arm.body(), in, reads.insideArm(match, arm, symbols, in.newtypes()), flow,
+                    walk(arm.body(), in,
+                            reads.choosing(Choice.Decides.ofCase(match, arm), symbols,
+                                    in.newtypes()),
+                            flow,
                             entering(match, arm, part, in.read().domain(), reads, assumed,
                                     ruleSource, numbering),
                             live, out, forks, numbering);
                 }
             }
-            default -> Core.forEachChild(e, child ->
-                    walk(child, in, reads, flow, assumed, live, out, forks, numbering));
+            // Every other child under what the step into it binds. An attempt's `then` is where its
+            // name stands for what was built, so a comparison written over that name is one over
+            // the positions the construction was given. That the attempt held puts no line on the
+            // account: which way it went is decided by the type's rules, and a row is not steered
+            // by it.
+            default -> ScopeStep.forEachChild(e, (child, step) ->
+                    walk(child, in, reads.entering(step, symbols, in.newtypes()), flow, assumed,
+                            live, out, forks, numbering));
         }
     }
 

@@ -3886,7 +3886,7 @@ public final class InvariantChecker {
                 // of the attempt, and an attempt is written where it could not say enough: an
                 // expression it cannot name denotes nothing, and inheriting that would drop the one
                 // thing reaching this branch established.
-                Entered in = engine.enteringBuilt(ic, out, at);
+                Entered in = engine.enteringBuilt(Choice.Decides.ofBuilt(ic), out, at);
                 List<Entered> ways = new ArrayList<>();
                 ways.add(new Entered(entering(ic.then(), in.known(), in.at(), copies), in.at()));
                 // Each departure stands where the invariant did not hold, and nothing was built
@@ -4730,7 +4730,8 @@ public final class InvariantChecker {
         /** An attempted construction's success branch, read with the binding carrying the invariant
          * the attempt established. */
         static Binder of(Core.IfConstructed ic) {
-            return (engine, k, at) -> engine.enteringBuilt(ic, k, at);
+            return (engine, k, at) ->
+                    engine.enteringBuilt(Choice.Decides.ofBuilt(ic), k, at);
         }
     }
 

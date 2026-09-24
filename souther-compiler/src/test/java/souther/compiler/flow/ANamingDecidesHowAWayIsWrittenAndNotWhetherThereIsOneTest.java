@@ -2,6 +2,7 @@ package souther.compiler.flow;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.ScopeStep;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
@@ -276,12 +277,7 @@ class ANamingDecidesHowAWayIsWrittenAndNotWhetherThereIsOneTest {
         }
 
         @Override
-        public Naming<Marks> under(Core.Binder binder, Core value) {
-            return this;
-        }
-
-        @Override
-        public Naming<Marks> insideArm(Core.Match match, Core.Case arm) {
+        public Naming<Marks> entering(ScopeStep step) {
             return this;
         }
 
