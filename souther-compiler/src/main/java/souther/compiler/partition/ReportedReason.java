@@ -104,9 +104,11 @@ public final class ReportedReason {
     /**
      * Each of them once, keeping where it first stood, which is what a coarsening leaves.
      *
-     * <p>Told apart by the word and by where it sends a reader. Two producers a document offers one
-     * word for are one thing to lift where they are about the same part of the rule, and two where
-     * they are not — folded on the word alone, a clause with two choices in it came out as one.
+     * <p>Told apart by the word, what it is about and where it sends a reader. Two producers a
+     * document offers one word for are one thing to lift where they are about the same part of the
+     * rule, and two where they are not — folded on the word alone, a clause with two choices in it
+     * came out as one. Whether two of these are one entry of a document is a later question, asked
+     * of what the document writes.
      *
      * <p>Kept in a set, because how many of these there are is how many parts of the rule a reader
      * is sent to and not how many words the vocabulary has. A scan of what is already held was

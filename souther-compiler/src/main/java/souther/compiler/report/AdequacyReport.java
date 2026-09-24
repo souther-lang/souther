@@ -5140,7 +5140,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     publishedStops(each, parts).forEach(stop -> {
                         ObjectNode standsOn = stopped.addObject();
                         standsOn.put("reason", word(stop.reason()));
-                        stop.sentTo().ifPresent(at -> place(standsOn.putObject("sentTo"), at, sources));
+                        stop.sentTo().ifPresent(
+                                at -> place(standsOn.putObject("sentTo"), at, sources));
                     });
                 }
                 whatItsPositionWasShortOf(each)
