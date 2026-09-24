@@ -1,8 +1,10 @@
 package souther.program.api;
 
 import souther.compiler.abort.AbortKind;
+import souther.compiler.core.Contract;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.program.CheckedBehavior;
 import souther.compiler.program.CheckedData;
 import souther.compiler.program.CheckedImplementation;
 import souther.compiler.program.CheckedModule;
@@ -17,6 +19,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -33,7 +36,7 @@ class ACoreSiteAnswersWhichLanguageAbortsItCanRaiseTest {
                 , dividesIntByInt, dividesDecimalByDecimal, dividesWithARationalOperand
                 , unreached
                 , negatesInt, negatesDecimal, negatesRational
-                , Span, LabeledSpan
+                , Span, LabeledSpan, bounded
                 )
 
             data Positive = Int
@@ -43,6 +46,11 @@ class ACoreSiteAnswersWhichLanguageAbortsItCanRaiseTest {
                 invariant ordered = lo + 1 <= hi
 
             data LabeledSpan = { ...Span, label: String }
+
+            behavior bounded : (n: Int) -> Int
+                ensures above = value + 1 > n
+
+            let bounded (n) = n
 
             behavior unguarded : (n: Int) -> Positive
 
@@ -316,6 +324,33 @@ class ACoreSiteAnswersWhichLanguageAbortsItCanRaiseTest {
 
         Core.Binary sum = null;
         for (Core node : everyNodeOf(condition)) {
+            if (node instanceof Core.Binary binary && binary.op() == BinOp.ADD) {
+                sum = binary;
+            }
+        }
+
+        assertEquals(Set.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE), program.abortsAt(sum).kinds());
+    }
+
+    /**
+     * A rule a behavior declares of its answer is code an output runs where the answer is held to
+     * it, so its sites answer the same question: {@code value + 1} leaves the range.
+     */
+    @Test
+    void anIntSumInAnEnsuresRuleAbortsWhereTheAnswerHasNoPlace() {
+        CheckedProgram program = program();
+        CheckedBehavior bounded = null;
+        for (CheckedBehavior behavior : program.module("demo").behaviors()) {
+            if (behavior.name().name().equals("bounded")) {
+                bounded = behavior;
+            }
+        }
+        assertNotNull(bounded, "no behavior `bounded` in the fixture");
+        List<Contract.Rule> rules = bounded.ensures().contract().rules();
+        assertEquals(1, rules.size(), () -> "one rule, and " + rules);
+
+        Core.Binary sum = null;
+        for (Core node : everyNodeOf(rules.getFirst().condition())) {
             if (node instanceof Core.Binary binary && binary.op() == BinOp.ADD) {
                 sum = binary;
             }

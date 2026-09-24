@@ -16,11 +16,12 @@ import java.util.Set;
  *
  * <p>Read by identity and not by structural equality: {@code Core} is a record, and two occurrences
  * that happen to be built the same way — {@code x + 1} written twice — are equal without being the
- * one site this classified. What this answers is a fact about the occurrence a checked body holds,
+ * one site this classified. What this answers is a fact about the occurrence a checked program holds,
  * so a lookup that collapsed equal-but-distinct occurrences together would answer one of them for
  * both, and get it right only where the two happened to agree.
  *
- * <p>Built once, over every body a program holds, by whoever assembles the {@code CheckedProgram} —
+ * <p>Built once, over every {@code Core} a program hands out, by whoever assembles the
+ * {@code CheckedProgram}; that is where the roots are listed —
  * never by a backend re-walking {@code Core} to ask the same question a second time, which is the
  * shape this whole issue exists to end. A site not among {@link #at} is refused rather than answered
  * with {@link AbortSet#NONE}: those are not the same fact, and confusing "nobody classified this" for
@@ -59,8 +60,9 @@ public final class AbortSites {
     }
 
     /**
-     * Classifies every site under every {@code Core} in {@code roots} — a program's behavior bodies
-     * and helper bodies, in whatever order a caller holds them in; order carries no meaning here.
+     * Classifies every site under every {@code Core} in {@code roots}, in whatever order a caller
+     * holds them in; order carries no meaning here. Which {@code Core} a program's roots are is
+     * the caller's to say, and nothing here assumes they are bodies.
      *
      * @param constructedWithInvariants every declared type at least one {@code invariant} clause
      *     names, read off the program's own declarations rather than re-derived here — the same
