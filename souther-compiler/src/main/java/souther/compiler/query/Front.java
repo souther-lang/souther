@@ -606,6 +606,29 @@ public final class Front {
                 pending.addAll(reaches);
             }
             Map<String, List<SourcePos>> reachedFrom = reachedFrom(named, edges);
+            // What a module published it requires names behaviors of the modules it reaches, and
+            // is held to them here with every module in sight, the way the module names in it are:
+            // for everything the module published, and not for what some importer happens to use.
+            // A module one of whose requirements names nothing there was built against another
+            // version of that module, and is not taken into this compilation.
+            Map<String, List<ValueName.Behavior>> builtAgainstAnother = new LinkedHashMap<>();
+            read.forEach((name, module) -> {
+                for (List<ValueName.Behavior> required : module.behaviorRequirements().values()) {
+                    for (ValueName.Behavior dependency : required) {
+                        Ast.Module there = inSight(db, layout, read, dependency.module());
+                        if (there != null && !declaresBehavior(there, dependency.name())) {
+                            builtAgainstAnother.computeIfAbsent(name, _ -> new ArrayList<>())
+                                    .add(dependency);
+                        }
+                    }
+                }
+            });
+            builtAgainstAnother.forEach((name, undeclared) -> {
+                read.remove(name);
+                for (ValueName.Behavior dependency : undeclared) {
+                    reports.add(saidAbout(name, builtRequiring(name, dependency), reachedFrom));
+                }
+            });
             Map<String, OnThePath> found = new LinkedHashMap<>();
             read.forEach((name, module) -> found.put(name,
                     new OnThePath(module, reachedFrom.getOrDefault(name, List.of()))));
@@ -627,6 +650,7 @@ public final class Front {
                     // this compiler will not read, is on the path and has been told so.
                     if (read.containsKey(needed) || refused.containsKey(needed)
                             || unreadable.containsKey(needed)
+                            || builtAgainstAnother.containsKey(needed)
                             || layout.idOfModule().containsKey(needed)
                             || Reserved.isQualifier(needed)) {
                         continue;
@@ -637,6 +661,7 @@ public final class Front {
             }
             SequencedSet<String> notRead = new LinkedHashSet<>(refused.keySet());
             notRead.addAll(unreadable.keySet());
+            notRead.addAll(builtAgainstAnother.keySet());
             return Answer.of(new FromPath.Of(Ordered.map(found), Ordered.set(notRead)), reports);
         }
     }
@@ -859,6 +884,45 @@ public final class Front {
                 .hint(new ModuleMessage.AddItToThisProjectsDependencies(needed))
                 .atCodeWrittenOutOfSight(ModuleReadback.provenanceOf(module))
                 .build();
+    }
+
+    /**
+     * That {@code module}, off the path, was built requiring {@code dependency}, and the module it
+     * names as this compilation has it does not declare it — said about {@code module}, which is the
+     * artifact built against another version of that one.
+     */
+    static Diagnostic builtRequiring(String module, ValueName.Behavior dependency) {
+        return Diagnostic.say(new ModuleMessage.ItWasBuiltRequiringWhatTheModuleDoesNotDeclare(
+                        module, dependency.name(), dependency.module()))
+                .hint(new ModuleMessage.RebuildItAgainstTheModuleThisCompilationReads(
+                        module, dependency.module()))
+                .atCodeWrittenOutOfSight(ModuleReadback.provenanceOf(module))
+                .build();
+    }
+
+    /**
+     * {@code name} as this compilation has it: as its source was written, or as it was read back off
+     * the path — or null where there is no such module to ask, one nothing has or one it has and will
+     * not read, each of which is said on its own.
+     */
+    private static Ast.Module inSight(Db db, Layout.Of layout, Map<String, ReadableModule> read,
+                                      String name) {
+        if (layout.idOfModule().containsKey(name)) {
+            return db.ask(new Exposed(name)).value();
+        }
+        ReadableModule off = read.get(name);
+        return off == null ? null : off.module();
+    }
+
+    /** Whether {@code module} declares a behavior of that name. Whether there is one, and nothing
+     *  about what it is. */
+    private static boolean declaresBehavior(Ast.Module module, String name) {
+        for (Ast.BehaviorDef behavior : module.behaviors()) {
+            if (behavior.name().equals(name)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** What the path carries for {@code name}, or null when no module of that name came off it. */

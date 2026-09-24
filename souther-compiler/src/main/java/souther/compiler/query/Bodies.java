@@ -67,7 +67,6 @@ import souther.compiler.core.ValueShape;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.ModuleMessage;
-import souther.compiler.meta.ModuleReadback;
 import souther.compiler.claims.ClaimDiagnostics;
 import souther.compiler.claims.Claims;
 import souther.compiler.claims.UnreachableClaims;
@@ -1117,7 +1116,7 @@ public final class Bodies {
         public Answer<Map<String, List<BehaviorRequirement>>> compute(Db db) {
             Front.FromPath.OnThePath onThePath = Front.onThePath(db, name);
             if (onThePath != null) {
-                return published(db, name, onThePath);
+                return published(onThePath);
             }
             Answer<Lower.Lowered> lowering = db.ask(new Lowering(name));
             Answer<Set<ValueName.Behavior>> injected = db.ask(new ImportedInjected(name));
@@ -1138,52 +1137,23 @@ public final class Bodies {
     }
 
     /**
-     * What a module read off the path published each of its behaviors as requiring, held to the
-     * modules this compilation reads.
+     * What a module read off the path published each of its behaviors as requiring.
      *
-     * <p>Where a published requirement enters this compilation, and so where it is held to the rule
-     * a name the module's text writes is held to: the behavior is declared by the module it names
-     * (spec {@code [#a-reached-name-is-declared-by-its-module]}). The module was built against
-     * another version of that module when it is not, and every reader downstream looks the behavior
-     * up — so a requirement naming nothing is said here, once, rather than found missing there and
-     * answered with silence.
-     *
-     * <p>A module that is not in this compilation at all is not said again: the path reading
-     * reports it as a module this one needs.
+     * <p>Taken as published. Every behavior named here was held to the module it names when the
+     * module was taken off the path ({@link Front.FromPath}), whatever of it anybody goes on to
+     * use; a module one of whose requirements names nothing there is not in this compilation.
      */
     private static Answer<Map<String, List<BehaviorRequirement>>> published(
-            Db db, String name, Front.FromPath.OnThePath onThePath) {
+            Front.FromPath.OnThePath onThePath) {
         Map<String, List<BehaviorRequirement>> published = new LinkedHashMap<>();
-        List<Report> undeclared = new ArrayList<>();
-        boolean unread = false;
-        for (Map.Entry<String, List<ValueName.Behavior>> entry
-                : onThePath.behaviorRequirements().entrySet()) {
+        onThePath.behaviorRequirements().forEach((behavior, dependencies) -> {
             List<BehaviorRequirement> each = new ArrayList<>();
-            for (ValueName.Behavior dependency : entry.getValue()) {
-                if (db.ask(new Front.Available(dependency.module())).value() == null) {
-                    unread = true;
-                    continue;
-                }
-                Map<String, BehaviorImplementation> declared =
-                        db.ask(new Implementation(dependency.module())).value();
-                if (declared == null || !declared.containsKey(dependency.name())) {
-                    undeclared.add(Report.raised(Diagnostic
-                            .say(new ModuleMessage.ItWasBuiltRequiringWhatTheModuleDoesNotDeclare(
-                                    name, dependency.name(), dependency.module()))
-                            .hint(new ModuleMessage.RebuildItAgainstTheModuleThisCompilationReads(
-                                    name, dependency.module()))
-                            .atCodeWrittenOutOfSight(ModuleReadback.provenanceOf(name))
-                            .build()));
-                    continue;
-                }
-                each.add(new BehaviorRequirement(dependency, List.of(entry.getKey())));
+            for (ValueName.Behavior dependency : dependencies) {
+                each.add(new BehaviorRequirement(dependency, List.of(behavior)));
             }
-            published.put(entry.getKey(), List.copyOf(each));
-        }
-        if (!undeclared.isEmpty()) {
-            return Answer.absent(undeclared);
-        }
-        return unread ? Answer.absent() : Answer.of(Ordered.map(published));
+            published.put(behavior, List.copyOf(each));
+        });
+        return Answer.of(Ordered.map(published));
     }
 
     /**
@@ -1270,7 +1240,8 @@ public final class Bodies {
                     if (sig == null) {
                         // A requirement names a behavior its module declares: one this module's
                         // source reaches was resolved, and one another module published was held to
-                        // it where it came in (`published`). So a behavior with no signature here is
+                        // it when that module was taken off the path. So a behavior with no signature
+                        // here is
                         // one whose signature did not build, which is reported where it is written.
                         Map<String, BehaviorImplementation> there =
                                 db.ask(new Implementation(dependency.module())).value();

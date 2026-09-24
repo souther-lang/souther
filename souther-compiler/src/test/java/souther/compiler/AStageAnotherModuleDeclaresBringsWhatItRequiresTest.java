@@ -153,7 +153,8 @@ class AStageAnotherModuleDeclaresBringsWhatItRequiresTest {
             behavior again = priced >-> inc
             """;
 
-    /** `lib.b`, built against the `lib.c` that declared `rate`: its `priced` requires it. */
+    /** `lib.b`, built against the `lib.c` that declared `rate`: its `priced` requires it, and its
+     *  `inc` requires nothing. */
     private static final Map<String, ClassFileImage> B_BUILT_WITH_RATE =
             Compiler.compileModules(List.of("""
                     module lib.b exposing ( inc, priced : Int )
@@ -194,6 +195,22 @@ class AStageAnotherModuleDeclaresBringsWhatItRequiresTest {
         assertRefusedForRate(assertThrows(CompileException.class,
                 () -> Compiler.compileModules(List.of(C_WITHOUT_RATE, BUILDS_ON_B),
                         ModulePath.of(B_BUILT_WITH_RATE))));
+    }
+
+    /** A compile that uses only what of `lib.b` requires nothing. What the module was built against
+     *  is a fact about the module, and is held for all of it: the module is refused whichever of its
+     *  behaviors anything goes on to use. */
+    @Test
+    void aModuleBuiltAgainstAnotherVersionIsRefusedWhateverOfItIsUsed() {
+        Map<String, ClassFileImage> path = new HashMap<>(B_BUILT_WITH_RATE);
+        path.putAll(Compiler.compile(C_WITHOUT_RATE));
+
+        assertRefusedForRate(assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of("""
+                        module app.t
+                        import lib.b ( inc )
+                        behavior twice = inc >-> inc
+                        """), ModulePath.of(path))));
     }
 
     private static void assertRefusedForRate(CompileException refused) {
