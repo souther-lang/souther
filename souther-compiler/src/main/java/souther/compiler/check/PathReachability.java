@@ -536,8 +536,8 @@ public final class PathReachability {
                 }
             }
             default -> ScopeStep.forEachChild(e, (child, step) ->
-                    walk(child, k, engine.scoped(step, at), reads.entering(step, symbols, newtypes),
-                            decided, nothingAbove));
+                    walk(child, k, at, reads.entering(step, symbols, newtypes), decided,
+                            nothingAbove));
         }
     }
 
@@ -553,20 +553,14 @@ public final class PathReachability {
      * what it is for. Read as one thing, the walk answered for whatever it happened to reach:
      * {@code A && (B || C)} with {@code A} ruled out stops at the operator, which is numbered
      * nowhere, and left {@code B} and {@code C} unanswered — the shape of a claim nothing made.
-     *
-     * <p>Nothing is narrowed, and the names still are entered. What a comparison below says is read
-     * under the names in force where it is written, and which of its conditions a proof may name
-     * depends on that reading even where the state it is taken into is already empty.
      */
     private void unreached(Core e, Known k, Denotations at, InputReads reads,
                            List<PathDecision> decided) {
-        ScopeStep.forEachChild(e, (child, step) -> {
-            Denotations there = engine.scoped(step, at);
-            InputReads named = reads.entering(step, symbols, newtypes);
+        Core.forEachChild(e, child -> {
             if (child instanceof Core.Binary comparison) {
-                outcomesAt(comparison, k, there, named, decided);
+                outcomesAt(comparison, k, at, reads, decided);
             }
-            unreached(child, k, there, named, decided);
+            unreached(child, k, at, reads, decided);
         });
     }
 

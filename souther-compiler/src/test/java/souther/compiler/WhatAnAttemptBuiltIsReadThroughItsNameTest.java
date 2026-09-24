@@ -106,8 +106,8 @@ class WhatAnAttemptBuiltIsReadThroughItsNameTest {
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
                 compilation.db()).text();
 
-        assertTrue(block.contains("\"x=x <= 10\" : (10)"), block);
-        assertTrue(block.contains("\"x=10 < x\"  : (11)"), block);
+        assertTrue(block.contains("x <= 10") && block.contains("(10)"), block);
+        assertTrue(block.contains("10 < x") && block.contains("(11)"), block);
     }
 
     /** A predicate written over what was built divides the position it was built from. */

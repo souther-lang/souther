@@ -479,26 +479,6 @@ final class PathEngine {
         return new Entered(seedAt(root, k, next), next);
     }
 
-    /**
-     * Where a child is read, {@code step} being the way from its parent into it, with nothing
-     * established by getting there.
-     *
-     * <p>For a walk that has to read what is written below a place nothing arrives at. What stands
-     * there is already nothing and stays nothing, so there is no knowledge to seed or narrow; what
-     * a comparison written there is about still depends on the names in force where it is written.
-     *
-     * <p>A block's body is read where the block stands. Its parameters are given where something
-     * calls it, and this reading enters none of them.
-     */
-    Denotations scoped(ScopeStep step, Denotations at) {
-        return switch (step) {
-            case ScopeStep.Same _ -> at;
-            case ScopeStep.Let(Core.LetIn binding) -> terms.inside(binding, at);
-            case ScopeStep.Chosen(Choice.Decides decidedBy) -> terms.choosing(decidedBy, at);
-            case ScopeStep.Block _ -> at;
-        };
-    }
-
     // --- seeding -------------------------------------------------------------------------------
 
     /**
