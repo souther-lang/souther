@@ -134,8 +134,14 @@ public final class CallElaborator {
         BottomInfer.pinResultTypeVars(declared, expected, bindings, ctx.published());
         // A name written where a value goes, and no call written anywhere: reading a value's name
         // is running its body, so the call is this compiler's and there is none to send anybody to.
-        return new Core.Call(reached(new ReachName.OfLibrary(lib), ctx),
-                List.of(), ConstructOccurrence.unwritten(), Core.CallSettlement.None.INSTANCE,
+        //
+        // A kernel read this way is an application of it taking nothing, which is a settlement and
+        // not the absence of one.
+        Core.Reached reached = reached(new ReachName.OfLibrary(lib), ctx);
+        Core.CallSettlement settlement = reached instanceof Core.Reached.OfKernel
+                ? new Core.CallSettlement.AtKernel(List.of(), Core.KernelFact.None.INSTANCE)
+                : Core.CallSettlement.None.INSTANCE;
+        return new Core.Call(reached, List.of(), ConstructOccurrence.unwritten(), settlement,
                 TypeOps.toBottom(TypeOps.substitute(declared, bindings)), v.pos());
     }
 
@@ -477,13 +483,38 @@ public final class CallElaborator {
                 + " and reached call elaboration unexpanded, at " + call.pos());
     }
 
-    /** What one application of a declared signature settled: the declared result with the
-     *  signature's variables substituted, and that substitution itself — for the checks a kernel
-     *  runs on the outcome. Settled at construction: the map is copied, not shared with the
-     *  unifier. */
-    private record Applied(Type result, Map<String, Type> substitution) {
+    /**
+     * What one application of a declared signature settled: the substitution of the signature's
+     * variables, from which what it takes and what it answers are both read. Held as the one
+     * substitution so the two cannot come to answer from different settlements — a kernel that
+     * settles a variable further ({@link #settlingTheElement}) settles both at once. Copied at
+     * construction, not shared with the unifier.
+     */
+    private record Applied(Type.FnOf signature, Map<String, Type> substitution) {
+
         private Applied {
             substitution = Map.copyOf(substitution);
+        }
+
+        /** What the application takes each argument as. */
+        List<Type> takes() {
+            List<Type> out = new ArrayList<>();
+            for (Type param : signature.params()) {
+                out.add(TypeOps.substitute(param, substitution));
+            }
+            return out;
+        }
+
+        /** What the application answers. */
+        Type result() {
+            return TypeOps.substitute(signature.result(), substitution);
+        }
+
+        /** This application with {@code variable} settled as {@code as}. */
+        Applied settling(Type.Var variable, Type as) {
+            Map<String, Type> settled = new HashMap<>(substitution);
+            settled.put(variable.name(), as);
+            return new Applied(signature, settled);
         }
     }
 
@@ -553,7 +584,7 @@ public final class CallElaborator {
             }
             throw CompileException.of(b.say(new NameMessage.TheElementTypeCannotBeInferredHere()).build());
         }
-        return new Applied(TypeOps.substitute(signature.result(), bind), bind);
+        return new Applied(signature, bind);
     }
 
     /** Each value argument held to the parameter it was given to, at its own position — the
@@ -571,10 +602,24 @@ public final class CallElaborator {
     }
 
     /**
-     * What typing a call answers: the result type, together with whatever call-specific fact the
-     * checker settled along the way ({@link Core.CallSettlement}) — {@code None} for every kernel
-     * but {@code String.matches}, where settling the pattern is part of typing the call and not a
-     * separate walk.
+     * Each value argument placed at what the application settled it takes that argument as, once the
+     * settlement is final. A value argument was required against the substitution as it stood when
+     * the value arguments were read, and what a function argument settled afterwards, or a kernel's
+     * own rule, may have settled a variable its parameter reads further.
+     */
+    private static void placedAt(Hir.Apply call, List<Type> declared, List<Type> takes,
+                                 CallArgs ca) {
+        for (int i = 0; i < declared.size(); i++) {
+            if (!(declared.get(i) instanceof Type.FnOf)) {
+                ca.requireTyped(i, takes.get(i), "argument " + (i + 1) + " of " + call.written());
+            }
+        }
+    }
+
+    /**
+     * What typing a call answers: the result type, together with what the checker settled about
+     * this application along the way ({@link Core.CallSettlement}) — for a kernel, what it takes
+     * each argument as and any fact of its own; {@code None} for any other call.
      */
     record TypedCall(Type type, Core.CallSettlement settlement) {
 
@@ -649,19 +694,20 @@ public final class CallElaborator {
                 orderingSubject = orderedElement;
             }
             if (kernel == Kernel.LIST_SUM || kernel == Kernel.LIST_PRODUCT) {
-                return new TypedCall(numericFold(call, applied.result(), expected));
+                applied = settlingTheElement(call, applied, expected);
             }
+            Core.KernelFact fact;
             if (kernel == Kernel.STRING_MATCHES) {
-                String pattern = validatedRegexPattern(
-                        new BoundExpr(args.get(0), env.values()), ctx.symbols());
-                return new TypedCall(applied.result(),
-                        new Core.CallSettlement.StringMatches(pattern));
+                fact = new Core.KernelFact.StringMatches(validatedRegexPattern(
+                        new BoundExpr(args.get(0), env.values()), ctx.symbols()));
+            } else if (orderingSubject != null) {
+                fact = new Core.KernelFact.OrderingSubject(orderingSubject);
+            } else {
+                fact = Core.KernelFact.None.INSTANCE;
             }
-            if (orderingSubject != null) {
-                return new TypedCall(applied.result(),
-                        new Core.CallSettlement.OrderingSubject(orderingSubject));
-            }
-            return new TypedCall(applied.result());
+            List<Type> takes = applied.takes();
+            placedAt(call, intrinsic.parameters(), takes, ca);
+            return new TypedCall(applied.result(), new Core.CallSettlement.AtKernel(takes, fact));
         }
         // a function-typed value in scope (a helper's function parameter) applied to
         // arguments — f(x) (spec §fn-declaration). A newtype construction 金額(500) never
@@ -789,16 +835,18 @@ public final class CallElaborator {
     }
 
     /**
-     * The element {@code List.sum} / {@code List.product} answers with. It is {@code Int},
-     * {@code Decimal} or {@code Rational} — the types {@code +} and {@code *} are defined for
-     * (ADR-0116) — and nothing else: a newtype over one of them declares neither an addition nor a
-     * zero, so it is rejected here rather than folded as the value it wraps.
+     * {@code applied} with the element {@code List.sum} / {@code List.product} folds settled. It is
+     * {@code Int}, {@code Decimal} or {@code Rational} — the types {@code +} and {@code *} are
+     * defined for (ADR-0116) — and nothing else: a newtype over one of them declares neither an
+     * addition nor a zero, so it is rejected here rather than folded as the value it wraps.
      *
      * <p>Over the empty-list literal there is no element to read, and the seed the fold answers with
      * is the nought or the one of whichever of them this is. That comes from the position the call
      * is written in — the field, the annotated binding, the declared output it feeds. A {@code ?}
      * field asks for the value it wraps rather than for an optional (ADR-0011), so the optional is
-     * peeled before the position is read, exactly as a written literal has it peeled.
+     * peeled before the position is read, exactly as a written literal has it peeled. What the
+     * position says settles the signature's element variable, so the list the call takes is a list
+     * of it as well as the answer being one.
      *
      * <p>Three things the position can be, and they are three different reports. It states one of
      * the numbers arithmetic is defined for: that is the answer. It states nothing: the answer is asked for rather than defaulted,
@@ -807,14 +855,20 @@ public final class CallElaborator {
      * that a sum does not go here — asking for an annotation would send the reader after something
      * the position already carries.
      */
-    private static Type numericFold(Hir.Apply call, Type element, Type expected) {
+    private static Applied settlingTheElement(Hir.Apply call, Applied applied, Type expected) {
+        Type element = applied.result();
         if (foldsANumber(element)) {
-            return element;
+            return applied;
         }
         if (BottomInfer.isBottom(element)) {
             Type position = expected instanceof Type.OptionOf o ? o.element() : expected;
             if (foldsANumber(position)) {
-                return position;
+                if (!(applied.signature().result() instanceof Type.Var variable)) {
+                    throw new IllegalStateException("`" + call.written() + "` answers "
+                            + Type.show(applied.signature().result())
+                            + ", which is no element for its position to settle");
+                }
+                return applied.settling(variable, position);
             }
             if (position == null || BottomInfer.isBottom(position)) {
                 throw CompileException.of(Diagnostic

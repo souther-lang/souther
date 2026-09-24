@@ -29,9 +29,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>A fork answers what its branches join at, and each branch is of that type; a list holds its
  * elements at the type it is a list of; a binding holds its value at the type it is in force at and
  * answers what its body answers; an optional holds what it holds at the type it is an optional of;
- * {@code ++} over lists takes both sides at the list it answers. Where a value is narrower than the
- * slot, what stands there is the {@link Core.Widen} saying it may stand as that type, so none of
- * these is a question a reader of the tree has to answer again.
+ * {@code ++} over lists takes both sides at the list it answers; a kernel's application takes each
+ * argument at what it settled it takes it as. Where a value is narrower than the slot, what stands
+ * there is the {@link Core.Widen} saying it may stand as that type, so none of these is a question a
+ * reader of the tree has to answer again.
  *
  * <p>A block is not among them. What it answers is its body's type, read off the body, so there is
  * no second type for the body to disagree with.
@@ -40,9 +41,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * checking rewrites the tree it is handed, and an analysis may build a node of its own to read, and
  * neither is held here.
  *
- * <p>What a call takes, and what a construction's fields take, are said by the declarations and not
- * by the node, so they are held where the declaration is read ({@link
- * AValueStandsAsWhatItsPositionTakesItAsTest}) rather than here.
+ * <p>What a call to a declaration takes, and what a construction's fields take, are said by the
+ * declarations and not by the node, so they are held where the declaration is read ({@link
+ * AValueStandsAsWhatItsPositionTakesItAsTest}) rather than here. A kernel's signature is declared
+ * with type variables each application settles, so what one application takes is said by the call.
+ * The trees read here keep the language's operations standing as themselves, so a kernel applied to
+ * arguments is met in the body handed on to be emitted, which {@link
+ * EveryTreeTheBackendIsHandedIsTypedTest} asks this of.
  */
 @ClosedWorldContract
 class EverySlotHoldsWhatItsNodeTakesItAsTest {
@@ -137,6 +142,18 @@ class EverySlotHoldsWhatItsNodeTakesItAsTest {
                     && joined.type() instanceof Type.ListOf -> {
                 expect(out, joined, "left", joined.type(), joined.left());
                 expect(out, joined, "right", joined.type(), joined.right());
+            }
+            case Core.Call call when call.settlement()
+                    instanceof Core.CallSettlement.AtKernel(List<Type> takes, _) -> {
+                if (takes.size() != call.args().size()) {
+                    out.add("Call at " + call.pos() + ": `" + call.name() + "` takes "
+                            + takes.size() + " argument(s) and holds " + call.args().size());
+                } else {
+                    for (int i = 0; i < takes.size(); i++) {
+                        expect(out, call, "argument " + (i + 1) + " of `" + call.name() + "`",
+                                takes.get(i), call.args().get(i));
+                    }
+                }
             }
             default -> { }
         }

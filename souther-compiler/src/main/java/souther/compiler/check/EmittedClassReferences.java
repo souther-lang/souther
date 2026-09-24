@@ -200,7 +200,8 @@ final class EmittedClassReferences {
      * the ordering was checked against, which is the emitter's own reading of the call.
      */
     private void sortedBy(Core.Call call) {
-        if (call.settlement() instanceof Core.CallSettlement.OrderingSubject ordered) {
+        if (call.settlement() instanceof Core.CallSettlement.AtKernel(
+                _, Core.KernelFact.OrderingSubject ordered)) {
             add(Ordering.enumerationOfHeld(ordered.type(), inners, symbols, kinds, published));
         }
     }

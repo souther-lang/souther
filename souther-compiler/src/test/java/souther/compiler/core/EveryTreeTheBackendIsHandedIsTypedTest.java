@@ -50,6 +50,32 @@ class EveryTreeTheBackendIsHandedIsTypedTest {
                         + " one its node takes it at");
     }
 
+    /**
+     * And that the bodies read apply kernels to arguments, some of them narrower than what the
+     * application takes, so the slot rule is asked of what a kernel's application takes and of a
+     * Widen among its arguments.
+     */
+    @Test
+    void theModelsHandOnKernelsAppliedToArgumentsTheyWiden() {
+        int[] applied = {0};
+        int[] widened = {0};
+        for (Core tree : trees()) {
+            each(tree, node -> {
+                if (node instanceof Core.Call call
+                        && call.settlement() instanceof Core.CallSettlement.AtKernel
+                        && !call.args().isEmpty()) {
+                    applied[0]++;
+                    if (call.args().stream().anyMatch(Core.Widen.class::isInstance)) {
+                        widened[0]++;
+                    }
+                }
+            });
+        }
+        assertFalse(applied[0] == 0, "no body the models hand on applies a kernel to an argument");
+        assertFalse(widened[0] == 0,
+                "no body the models hand on hands a kernel an argument narrower than it takes");
+    }
+
     @Test
     void everyReadIsOfTheTypeItsBindingIsInForceAt() {
         List<String> found = new ArrayList<>();

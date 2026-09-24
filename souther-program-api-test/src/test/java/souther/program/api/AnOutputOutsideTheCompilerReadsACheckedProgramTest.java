@@ -140,8 +140,8 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
      * A call whose argument arrives narrower than the parameter it goes into.
      *
      * <p>{@code round} declares its second parameter {@code RoundingMode}, a sum the language
-     * itself gives; {@code HALF_UP} is one of its cases, so the type at the call is the case and
-     * the type in the declaration is the sum.
+     * itself gives; {@code HALF_UP} is one of its cases, so the value is the case and the parameter
+     * is the sum. The call stands the value as the sum, which is what it says it takes there.
      */
     private static final String ROUNDS = """
             module demo
@@ -651,6 +651,27 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
                 "at the type the kernel was declared to take there");
         assertEquals("HALF_UP", Type.show(arrived.value().type()),
                 "and what it holds is the case it is");
+        assertEquals(declared.parameters(),
+                ((Core.CallSettlement.AtKernel) rounds.settlement()).takes(),
+                "and the call says it takes the parameters the declaration names, which it can only"
+                        + " say by settling them and not by reading them off its arguments");
+    }
+
+    /**
+     * And a kernel read as a value, with no argument, is an application that takes nothing: the
+     * settlement says so and is not absent.
+     */
+    @Test
+    void aKernelTakingNoArgumentSaysItTakesNone() {
+        CheckedProgram program = checked(CALLS_THE_LIBRARY);
+        Core body = ((CheckedImplementation.Body)
+                named(program.module("demo"), "counts").implementation()).body();
+
+        Core.Call empty = callTo(Kernel.MAP_EMPTY, body);
+
+        assertEquals(List.of(), empty.args(), "the empty map is applied to nothing");
+        assertEquals(new Core.CallSettlement.AtKernel(List.of(), Core.KernelFact.None.INSTANCE),
+                empty.settlement(), "and says it takes nothing, with nothing more settled");
     }
 
     /**
@@ -822,30 +843,46 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
         }
         assertNotNull(matches, "the body reaches String.matches");
 
-        assertInstanceOf(Core.CallSettlement.StringMatches.class, matches.settlement(),
+        Core.KernelFact.StringMatches pattern = assertInstanceOf(
+                Core.KernelFact.StringMatches.class, factOf(matches),
                 "the checker settled this call's pattern, and the call carries it");
-        assertEquals("AB-[0-9]{4}", ((Core.CallSettlement.StringMatches) matches.settlement())
-                        .pattern(),
+        assertEquals("AB-[0-9]{4}", pattern.pattern(),
                 "settled under the binding the body holds in force, not read back from the argument");
     }
 
     /**
-     * And every other call carries {@code None}: a settlement is {@code String.matches}'s own fact,
-     * not something every kernel call is handed.
+     * Every kernel call says what it takes each of its arguments as, and each argument is of that
+     * type: an output holding a slot to the type its position takes reads it off the call, without
+     * substituting the kernel's signature under a rule of its own. And no other kernel carries a
+     * fact: a pattern is {@code String.matches}'s own.
      */
     @Test
-    void aCallToAnyOtherKernelCarriesNoSettlement() {
+    void aKernelCallSaysWhatItTakesEachArgumentAs() {
         CheckedProgram program = checked(CALLS_THE_LIBRARY);
         Core body = ((CheckedImplementation.Body)
                 named(program.module("demo"), "tidy").implementation()).body();
 
+        int kernelCalls = 0;
         for (Core node : everyNodeOf(body)) {
             if (node instanceof Core.Call call
                     && call.fn() instanceof Core.Reached.OfKernel kernel) {
-                assertEquals(Core.CallSettlement.None.INSTANCE, call.settlement(),
-                        kernel.rendered() + " settles nothing beyond its type");
+                kernelCalls++;
+                Core.CallSettlement.AtKernel settled = assertInstanceOf(
+                        Core.CallSettlement.AtKernel.class, call.settlement(),
+                        kernel.rendered() + " says what it takes");
+                assertEquals(call.args().stream().map(Core::type).toList(), settled.takes(),
+                        kernel.rendered() + " holds each argument at what it takes it as");
+                assertEquals(Core.KernelFact.None.INSTANCE, settled.fact(),
+                        kernel.rendered() + " settles nothing beyond what it takes and answers");
             }
         }
+        assertTrue(kernelCalls > 0, "the body reaches a kernel");
+    }
+
+    /** What the checker settled about one kernel's application beside what it takes. */
+    private static Core.KernelFact factOf(Core.Call call) {
+        return assertInstanceOf(Core.CallSettlement.AtKernel.class, call.settlement(),
+                call.name() + " is a kernel's application").fact();
     }
 
     // --- an ordering-sensitive kernel's checked subject travels with the call, the way
@@ -904,10 +941,10 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
                 named(program.module("demo"), "run").implementation()).body();
 
         for (Kernel kernel : List.of(Kernel.LIST_SORT, Kernel.LIST_MAX, Kernel.LIST_MIN)) {
-            Core.CallSettlement settlement = callTo(kernel, body).settlement();
-            assertInstanceOf(Core.CallSettlement.OrderingSubject.class, settlement,
+            Core.KernelFact.OrderingSubject subject = assertInstanceOf(
+                    Core.KernelFact.OrderingSubject.class, factOf(callTo(kernel, body)),
                     kernel.name() + " carries what the ordering requirement was checked against");
-            assertEquals(Type.INT, ((Core.CallSettlement.OrderingSubject) settlement).type(),
+            assertEquals(Type.INT, subject.type(),
                     kernel.name() + "'s subject is the element, not the call's own result");
         }
     }
@@ -922,10 +959,10 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
         Core body = ((CheckedImplementation.Body)
                 named(program.module("demo"), "sortByRun").implementation()).body();
 
-        Core.CallSettlement settlement = callTo(Kernel.LIST_SORT_BY, body).settlement();
-        assertInstanceOf(Core.CallSettlement.OrderingSubject.class, settlement,
+        Core.KernelFact.OrderingSubject subject = assertInstanceOf(
+                Core.KernelFact.OrderingSubject.class, factOf(callTo(Kernel.LIST_SORT_BY, body)),
                 "sortBy carries what the ordering requirement was checked against");
-        assertEquals(Type.INT, ((Core.CallSettlement.OrderingSubject) settlement).type(),
+        assertEquals(Type.INT, subject.type(),
                 "the subject is the key's result (Int), not the row it was read off");
     }
 
@@ -940,11 +977,10 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
         Core body = ((CheckedImplementation.Body)
                 named(program.module("demo"), "emptyRun").implementation()).body();
 
-        Core.CallSettlement settlement = callTo(Kernel.LIST_SORT, body).settlement();
-        assertInstanceOf(Core.CallSettlement.OrderingSubject.class, settlement,
+        Core.KernelFact.OrderingSubject subject = assertInstanceOf(
+                Core.KernelFact.OrderingSubject.class, factOf(callTo(Kernel.LIST_SORT, body)),
                 "the checker still settles a subject for an empty-list literal");
-        assertInstanceOf(Type.Nothing.class,
-                ((Core.CallSettlement.OrderingSubject) settlement).type(),
+        assertInstanceOf(Type.Nothing.class, subject.type(),
                 "the subject is Nothing, not an element this call never had");
     }
 

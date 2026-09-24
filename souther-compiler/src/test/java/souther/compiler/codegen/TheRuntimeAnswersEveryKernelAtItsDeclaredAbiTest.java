@@ -127,7 +127,7 @@ class TheRuntimeAnswersEveryKernelAtItsDeclaredAbiTest {
      * And these are the kernels whose runtime method has a comparator overload at all.
      *
      * <p>Whether a given call reaches it is settled per call by {@code CallElaborator} and read off
-     * {@code Core.CallSettlement.OrderingSubject} in {@code BodyGen} — this set is the narrower,
+     * {@code Core.KernelFact.OrderingSubject} in {@code BodyGen} — this set is the narrower,
      * ABI-level fact underneath that: which runtime methods have such an overload to be reached. The
      * witness for each of these is a case in {@code CompileEnumerationOrderTest} that sorts, takes
      * the extremes of, or keys a list of cases and reads the result. A kernel added to the set and
@@ -144,7 +144,7 @@ class TheRuntimeAnswersEveryKernelAtItsDeclaredAbiTest {
 
     /**
      * And the comparator path itself asks this set, rather than trusting whatever set the caller
-     * happened to gate on — {@code BodyGen} reads {@code Core.CallSettlement.OrderingSubject}, a
+     * happened to gate on — {@code BodyGen} reads {@code Core.KernelFact.OrderingSubject}, a
      * semantic fact with no idea whether this runtime has a comparator overload for the kernel it
      * names. A kernel could gain the settlement without gaining the overload (or without this set
      * being updated to say so), and this is what catches that at the call it would otherwise wrongly

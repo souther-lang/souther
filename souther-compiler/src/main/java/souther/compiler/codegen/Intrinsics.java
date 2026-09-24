@@ -32,9 +32,10 @@ import static souther.compiler.codegen.Descriptors.*;
  *   KernelSignature -> slotsOf -> descriptorOf
  * }</pre>
  *
- * <p>The declaration belongs to the callee, and a descriptor built from the types observed at a call
- * agrees with it only while no value can arrive narrower than the parameter it goes into. A
- * sum-typed parameter ends that, so nothing here reads the call for the shape of what it is calling.
+ * <p>The declaration belongs to the callee. A runtime method has one descriptor, and one built from
+ * what a call takes ({@link Core.CallSettlement.AtKernel#takes}) would differ between calls to it
+ * wherever a parameter is a type variable the call settles, so nothing here reads the call for the
+ * shape of what it is calling.
  *
  * <p>What a row carries is what the declaration cannot say: which runtime class and method answer
  * the kernel, and the order that method takes the arguments in — Souther puts the subject last for
@@ -85,10 +86,9 @@ final class Intrinsics {
      * gives: each parameter is the boundary form of the declared parameter type, the return the
      * boundary form of the declared result.
      *
-     * <p>A descriptor belongs to the callee. Built from the types observed at the call it agrees
-     * with the declaration only while no value can arrive narrower than the parameter it goes into,
-     * and a sum-typed parameter ends that — the argument's type is the case it happens to be, while
-     * the declaration names the sum.
+     * <p>A descriptor belongs to the callee. The runtime method has one, and one built from what a
+     * call takes would differ between calls to it wherever a parameter is a type variable that call
+     * settles.
      *
      * <p>Everything a row carries is something the declaration does not settle. Which class and
      * method answer the kernel is one; the order is another — Souther puts the subject last for pipe
@@ -371,7 +371,7 @@ final class Intrinsics {
     /** The kernels whose runtime method has a second overload taking a comparator ahead of what the
      *  declaration names — the runtime ABI fact {@link #descriptorWithComparator} and {@link
      *  #emitWithComparator} answer for. Which call actually reaches it is a checker fact ({@link
-     *  Core.CallSettlement.OrderingSubject}), settled once in {@code CallElaborator} and read off the
+     *  Core.KernelFact.OrderingSubject}), settled once in {@code CallElaborator} and read off the
      *  call in {@code BodyGen}; this set says only which runtime methods exist to be reached that
      *  way, and does not decide that any particular call does. */
     static final Set<Kernel> COMPARATOR_OVERLOADS = Set.of(

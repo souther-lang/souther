@@ -113,10 +113,11 @@ public final class CheckedProgram {
      * can end without a value instead.
      *
      * <p>Held once for the program and not on the calls that reach one. Which operation a call
-     * reaches is a fact about that call; what the operation accepts and how it can end without a
-     * value are facts about the language this program was checked with, and the same for every call
-     * in every module — written onto each call site it would be one statement copied as many times
-     * as the program happens to reach the library.
+     * reaches is a fact about that call, and so is what the call takes each argument as once the
+     * signature's variables are settled for it; what the operation was declared to take and how it
+     * can end without a value are facts about the language this program was checked with, and the
+     * same for every call in every module — written onto each call site it would be one statement
+     * copied as many times as the program happens to reach the library.
      */
     private final KernelContracts kernels;
     /**
@@ -321,13 +322,17 @@ public final class CheckedProgram {
      * without a value instead.
      *
      * <p>The declaration behind a call this program's bodies reach. A call says which operation it
-     * reaches ({@link souther.compiler.core.Core.Reached.OfKernel}) and every node carries the type
-     * the checker settled for it, and those answer what arrived rather than what the callee accepts:
-     * the two part company wherever a declared parameter is a type a value can arrive narrower than,
-     * which a sum-typed parameter is. An output building a boundary form for a call reads it here —
-     * and reads {@link KernelContract#aborts} here too, rather than deriving what a kernel can end
-     * without a value for from its own reading of {@code souther-runtime} or of the specification
-     * prose the two would otherwise have been read from separately.
+     * reaches ({@link souther.compiler.core.Core.Reached.OfKernel}), and this answers what the
+     * language declared of that operation for every call to it: the types as declared, with the
+     * signature's type variables still open. It is not what one call takes. Each application settles
+     * those variables, and the call says what it takes each argument as ({@link
+     * souther.compiler.core.Core.CallSettlement.AtKernel#takes}), each argument standing at exactly
+     * that type. An output reads that off the call and never substitutes this signature again.
+     *
+     * <p>An output building a boundary form for a call reads the declaration here — and reads {@link
+     * KernelContract#aborts} here too, rather than deriving what a kernel can end without a value
+     * for from its own reading of {@code souther-runtime} or of the specification prose the two
+     * would otherwise have been read from separately.
      *
      * <p>Total over the kernels, and never a null. The language names a fixed set of them and a
      * snapshot holding fewer cannot be made, so there is no kernel a program can reach that this

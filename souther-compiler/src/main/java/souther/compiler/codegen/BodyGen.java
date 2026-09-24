@@ -1213,7 +1213,8 @@ final class BodyGen {
          * Intrinsics#emit} says.
          */
         private void kernel(Kernel kernel, Core.Call call) {
-            if (call.settlement() instanceof Core.CallSettlement.OrderingSubject ordered) {
+            if (call.settlement() instanceof Core.CallSettlement.AtKernel(
+                    _, Core.KernelFact.OrderingSubject ordered)) {
                 TypeSymbol ordering = sumOrdering(ordered.type());
                 // No sum to take an ordering off: an element the JVM already compares. That goes to
                 // the table row, which is the same runtime method without the comparator.
