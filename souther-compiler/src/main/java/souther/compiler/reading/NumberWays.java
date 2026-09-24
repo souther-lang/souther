@@ -65,8 +65,9 @@ final class NumberWays implements ComparisonWays {
 
     @Override
     public ComparisonWays entering(ScopeStep step) {
-        return new NumberWays(numbers, quantities, reads.entering(step, symbols, newtypes),
-                symbols, newtypes);
+        InputReads inside = reads.entering(step, symbols, newtypes);
+        return inside == reads ? this
+                : new NumberWays(numbers, quantities, inside, symbols, newtypes);
     }
 
     @Override

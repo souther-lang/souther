@@ -84,8 +84,8 @@ final class CoverageNaming implements Naming<Outcome> {
     // this naming's own, and what each comparison came to is one answer for the whole body.
     @Override
     public CoverageNaming entering(ScopeStep step) {
-        return new CoverageNaming(plan, symbols, newtypes,
-                reads.entering(step, symbols, newtypes), numbers);
+        InputReads inside = reads.entering(step, symbols, newtypes);
+        return inside == reads ? this : new CoverageNaming(plan, symbols, newtypes, inside, numbers);
     }
 
     /**

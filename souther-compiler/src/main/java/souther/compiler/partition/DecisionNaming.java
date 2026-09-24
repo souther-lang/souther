@@ -73,9 +73,10 @@ final class DecisionNaming implements Naming<DecisionPath> {
 
     @Override
     public Naming<DecisionPath> entering(ScopeStep step) {
-        return new DecisionNaming(meanings,
-                reads.entering(step, meanings.states().symbols(), meanings.states().newtypes()),
-                numbering, mostArrivals);
+        InputReads inside =
+                reads.entering(step, meanings.states().symbols(), meanings.states().newtypes());
+        return inside == reads ? this
+                : new DecisionNaming(meanings, inside, numbering, mostArrivals);
     }
 
     /**
