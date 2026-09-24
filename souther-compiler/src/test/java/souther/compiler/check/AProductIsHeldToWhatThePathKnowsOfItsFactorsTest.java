@@ -51,7 +51,8 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
     }
 
     private static Core.Binary arithmetic(BinOp op, Core left, Core right) {
-        return new Core.Binary(op, left, right, ConstructOccurrence.unwritten(), Type.INT, POS);
+        return new Core.Binary(op, left, right, Core.BinaryReading.AS_THEY_STAND,
+                ConstructOccurrence.unwritten(), Type.INT, POS);
     }
 
     /** A domain in which each of {@code atoms} is at or above zero. */

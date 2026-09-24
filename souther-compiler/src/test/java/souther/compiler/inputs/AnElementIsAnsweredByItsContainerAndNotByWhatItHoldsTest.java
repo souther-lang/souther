@@ -76,7 +76,7 @@ class AnElementIsAnsweredByItsContainerAndNotByWhatItHoldsTest {
     @Test
     void arithmeticOverAPositionStandsAtNone() {
         Core sum = new Core.Binary(BinOp.ADD, parameter(), new Core.Int(1, Type.INT, POS),
-                ConstructOccurrence.unwritten(), Type.INT, POS);
+                Core.BinaryReading.AS_THEY_STAND, ConstructOccurrence.unwritten(), Type.INT, POS);
 
         assertEquals(new PathResolution.NotAPosition(), readingOf(sum));
     }

@@ -195,7 +195,7 @@ class EveryTermIsReadForWhatItSaysTest {
 
     private static Core compared(BinOp op, ConstructOccurrence occurrence) {
         return new Core.Binary(op, new Core.Int(1, Type.INT, POS), new Core.Int(2, Type.INT, POS),
-                occurrence, Type.BOOL, POS);
+                Core.BinaryReading.AS_THEY_STAND, occurrence, Type.BOOL, POS);
     }
 
     private static Core forked(List<BindingOwner> expansion) {

@@ -9,7 +9,9 @@ import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Typing a binary operator, including the rules that let a single-value newtype compare with and
@@ -59,7 +61,8 @@ public final class BinaryElaborator {
         Core right = operand(bin.right(), bin, env, ctx);
         return switch (bin.op()) {
             // both operands were asked for a Bool where they were read
-            case AND, OR -> new Core.Binary(bin.op(), left, right, ctx.occurrenceOf(bin.origin()), Type.BOOL, bin.pos());
+            case AND, OR -> new Core.Binary(bin.op(), left, right, Core.BinaryReading.AS_THEY_STAND,
+                    ctx.occurrenceOf(bin.origin()), Type.BOOL, bin.pos());
             case LT, LE, GT, GE -> {
                 // The ordered primitives: Int numerically, String lexicographically, Decimal by
                 // value, Date/DateTime in time. Unlike Elm (which orders only Int/Float/Char/String
@@ -69,12 +72,14 @@ public final class BinaryElaborator {
                 // except that a bare literal takes the other side's newtype from context.
                 Type lt = left.type();
                 Type rt = right.type();
-                if (!orderedComparable(lt, rt, bin.left(), bin.right(), ctx.inners(), ctx.symbols(),
-                        ctx.kinds(), ctx.published())) {
+                Core.BinaryReading reading = orderedReading(lt, rt, bin.left(), bin.right(),
+                        ctx.inners(), ctx.symbols(), ctx.kinds(), ctx.published());
+                if (reading == null) {
                     throw CompileException.of(Diagnostic
                                     .at(bin.pos()).say(new TypeMessage.ComparisonNeedsOrderedValuesOfOneType(Type.show(lt), Type.show(rt))).build());
                 }
-                yield new Core.Binary(bin.op(), left, right, ctx.occurrenceOf(bin.origin()), Type.BOOL, bin.pos());
+                yield new Core.Binary(bin.op(), left, right, reading,
+                        ctx.occurrenceOf(bin.origin()), Type.BOOL, bin.pos());
             }
             case ADD, SUB, MUL, DIV -> {
                 // `+ - * /` work on two numbers of one type — Int, Decimal or Rational — and an
@@ -93,13 +98,16 @@ public final class BinaryElaborator {
                         isLiteralExpr(bin.left()), isLiteralExpr(bin.right()), ctx.symbols());
                 yield switch (answer) {
                     case ArithmeticCheck.Allowed allowed -> arithmetic(bin, left, right,
-                            allowed.resultType(), ctx);
+                            allowed, ctx);
                     case ArithmeticCheck.DeferToPlainTypeCheck _ -> {
                         // One type against another: the found-versus-expected block says it better
-                        // than a sentence would, and requireType raises or absorbs it.
+                        // than a sentence would, and requireType raises or absorbs it. Absorbed,
+                        // the right side stands as the left's type, and the pair is read as it
+                        // stands.
                         yield new Core.Binary(bin.op(), left,
                                 Elaborator.standing(bin.right(), right, lt, ctx.published(),
                                         "operand of arithmetic"),
+                                Core.BinaryReading.AS_THEY_STAND,
                                 ctx.occurrenceOf(bin.origin()), lt, bin.pos());
                     }
                     case ArithmeticCheck.Refused no -> throw refused(bin, no.refusal(), lt, rt);
@@ -112,7 +120,8 @@ public final class BinaryElaborator {
                 Type lraw = left.type();
                 Type rraw = right.type();
                 if (lraw == Type.STRING && rraw == Type.STRING) {
-                    yield new Core.Binary(bin.op(), left, right, ctx.occurrenceOf(bin.origin()), Type.STRING, bin.pos());
+                    yield new Core.Binary(bin.op(), left, right, Core.BinaryReading.AS_THEY_STAND,
+                            ctx.occurrenceOf(bin.origin()), Type.STRING, bin.pos());
                 }
                 // A bottom operand ({@code Nothing}) is a list read from an accumulator an empty
                 // collection seed grows — the value at a key of a `Map.empty`-seeded fold, whose element
@@ -143,26 +152,12 @@ public final class BinaryElaborator {
                 // Each side stands as the list both of them join at.
                 Type joined = Type.list(element);
                 yield new Core.Binary(bin.op(), Core.standingAs(left, joined),
-                        Core.standingAs(right, joined), ctx.occurrenceOf(bin.origin()), joined,
-                        bin.pos());
+                        Core.standingAs(right, joined), Core.BinaryReading.AS_THEY_STAND,
+                        ctx.occurrenceOf(bin.origin()), joined, bin.pos());
             }
             case EQ, NE -> {
                 Type lt = left.type();
                 Type rt = right.type();
-                // two values of the same data compare by their fields (spec §equality); across different
-                // types there is nothing to compare. An operand may be the scalar empty-collection
-                // bottom (`Nothing`) when it reads an accumulator a `[]` seed grows — the `e` in
-                // `if any(e -> e == x, acc) …` over a `fold(…, [], xs)` is bound to the not-yet-fixed
-                // element type (ADR-0028). At run time it holds the other operand's type, so absorb the
-                // bottom rather than reject the comparison. (A whole empty list `[]` stays a type error
-                // against a non-list, so this does not loosen `[] == 5`.)
-                // A sum may also be compared with one of its cases (`役職 == 一般社員`): a case value
-                // is a value of its sum (case->sum is transparent everywhere else, spec §sum-data), so
-                // this is a sum-vs-sum comparison by case (spec §equality). Check the relation on the
-                // top-level case sets directly, not through `assignable` — `assignable` recurses into
-                // collections (covariance), which would wrongly let `List<一般社員> == List<役職>` compare;
-                // the exemption is only the direct sum<->case scalar relationship. Unrelated types
-                // (`金額 == 数量`) have disjoint case sets and still fail.
                 // `==` is value equality, and a function value has none: comparing two would fall
                 // back to whether they are the same object, which is not a question the language asks
                 if (!TypeOps.supportsEquality(lt)
@@ -171,21 +166,17 @@ public final class BinaryElaborator {
                     throw CompileException.of(Diagnostic
                                     .at(bin.pos(), 2).say(new TypeMessage.AFunctionHasNoValueToCompare(Type.show(carrier))).build());
                 }
-                List<TypeSymbol> lCases = AtomSpace.subjectAtoms(lt, ctx.published());
-                List<TypeSymbol> rCases = AtomSpace.subjectAtoms(rt, ctx.published());
-                boolean caseOfSum = !lCases.isEmpty() && !rCases.isEmpty()
-                        && (lCases.containsAll(rCases) || rCases.containsAll(lCases));
-                if (!lt.equals(rt) && !eqCoercible(lt, rt, bin.left(), bin.right(), ctx.inners(), ctx.symbols())
-                        && !exactlyComparable(lt, rt)
-                        && !caseOfSum && !BottomInfer.isBottom(lt) && !BottomInfer.isBottom(rt)) {
+                Core.BinaryReading reading = equalityReading(lt, rt, bin.left(), bin.right(), ctx);
+                if (reading == null) {
                     throw CompileException.of(Diagnostic
                                     .at(bin.pos(), 2)
                                     .secondary(bin.left().reportedAt(), new DeclarationMessage.ThisOperandIs(Type.show(lt, rt)))
                                     .secondary(bin.right().reportedAt(), new DeclarationMessage.ThisOperandIs(Type.show(rt, lt)))
-                                    
+
                                     .say(new TypeMessage.TheseTwoCannotBeCompared(Type.show(lt, rt), Type.show(rt, lt))).build());
                 }
-                yield new Core.Binary(bin.op(), left, right, ctx.occurrenceOf(bin.origin()), Type.BOOL, bin.pos());
+                yield new Core.Binary(bin.op(), left, right, reading,
+                        ctx.occurrenceOf(bin.origin()), Type.BOOL, bin.pos());
             }
         };
     }
@@ -200,38 +191,95 @@ public final class BinaryElaborator {
     }
 
     /**
-     * Whether {@code <}/{@code <=}/{@code >}/{@code >=} may compare the operands.
+     * What {@code <}/{@code <=}/{@code >}/{@code >=} reads the operands as, or null where it may not
+     * compare them.
      *
-     * <p>Three ways, and every one of them is asked of the operands <em>as written</em>. That is the
-     * rule and not an implementation detail: the nominal boundary is the type, so {@code data
-     * StageA = Stage} and {@code data StageB = Stage} open to one order and are still not comparable
-     * (ADR-0047). A reading that reduced both sides first and then asked what orders them would
-     * admit that pair, which is why {@link Ordering#ofComparison} — the reading that does reduce
-     * first — is the backend's and says so.
+     * <p>Every way is asked of the operands <em>as written</em>. That is the rule and not an
+     * implementation detail: the nominal boundary is the type, so {@code data StageA = Stage} and
+     * {@code data StageB = Stage} open to one order and are still not comparable (ADR-0047). A
+     * reading that reduced both sides first and then asked what orders them would admit that pair.
+     * How the type read here is ordered once it is opened is {@link Ordering#ofComparison}, which
+     * is the backend's and decides nothing about admission.
      */
-    static boolean orderedComparable(Type lt, Type rt, Hir.Expr le, Hir.Expr re,
+    static Core.BinaryReading orderedReading(Type lt, Type rt, Hir.Expr le, Hir.Expr re,
                                              NewtypeInners inners,
                                              Symbols symbols, DeclarationKinds kinds,
                                              PublishedDeclarations published) {
         // Two of the same type, where that type has an order: 金額 <= 金額, Stage <= Stage, and
         // StageN <= StageN, whose order is the enumeration it wraps (ADR-0047 over ADR-0069).
         if (lt.equals(rt)) {
-            return TypeOps.supportsOrdering(lt, inners, symbols, kinds, published);
+            return TypeOps.supportsOrdering(lt, inners, symbols, kinds, published)
+                    ? Core.BinaryReading.AS_THEY_STAND : null;
         }
         // Two values of one enumeration that are not one type: a case value is a value of its sum
         // (spec §sum-data), so `stage < Won` compares in the sum both sides belong to (issue #161).
-        if (TypeOps.comparisonEnumeration(lt, rt, symbols, kinds, published) != null) {
-            return true;
+        TypeSymbol enumeration = TypeOps.comparisonEnumeration(lt, rt, symbols, kinds, published);
+        if (enumeration != null) {
+            return new Core.BinaryReading.In(Type.ref(enumeration));
         }
         if (exactlyComparable(lt, rt)) {
-            return true;
+            return Core.BinaryReading.EXACT_NUMBERS;
         }
         // A newtype and a source literal of what it wraps: 金額 <= 100, but not 金額 <= n for an
         // Int variable, and not 金額 <= 数量. Ordering asks in addition that the wrapped value be
         // ordered, which the equality rule this shares does not.
         return TypeOps.supportsOrdering(lt, inners, symbols, kinds, published)
                 && TypeOps.base(lt, inners).equals(TypeOps.base(rt, inners))
-                && literalPairsNewtype(lt, rt, le, re, symbols);
+                && literalPairsNewtype(lt, rt, le, re, symbols)
+                ? new Core.BinaryReading.In(newtypeOfThePair(lt, rt, symbols)) : null;
+    }
+
+    /**
+     * What {@code ==}/{@code /=} reads the operands as, or null where there is nothing to compare.
+     *
+     * <p>Two values of the same data compare by their fields (spec §equality); across different
+     * types there is nothing to compare, save for the pairs below. An operand may be the scalar
+     * empty-collection bottom ({@code Nothing}) when it reads an accumulator a {@code []} seed grows
+     * — the {@code e} in {@code if any(e -> e == x, acc) …} over a {@code fold(…, [], xs)} is bound
+     * to the not-yet-fixed element type (ADR-0028). At run time it holds the other operand's type,
+     * so the pair is read in that type rather than refused. (A whole empty list {@code []} stays a
+     * type error against a non-list, so this does not loosen {@code [] == 5}.)
+     *
+     * <p>A sum may also be compared with one of its cases ({@code 役職 == 一般社員}): a case value is
+     * a value of its sum (spec §sum-data), so this is a sum-vs-sum comparison by case (spec
+     * §equality). The relation is asked of the top-level case sets directly, not through
+     * {@code assignable} — that recurses into collections (covariance), which would wrongly let
+     * {@code List<一般社員> == List<役職>} compare. Unrelated types ({@code 金額 == 数量}) have
+     * disjoint case sets and still fail.
+     */
+    private static Core.BinaryReading equalityReading(Type lt, Type rt, Hir.Expr le, Hir.Expr re,
+                                                      CheckContext ctx) {
+        if (lt.equals(rt)) {
+            return Core.BinaryReading.AS_THEY_STAND;
+        }
+        if (exactlyComparable(lt, rt)) {
+            return Core.BinaryReading.EXACT_NUMBERS;
+        }
+        if (eqCoercible(lt, rt, le, re, ctx.inners(), ctx.symbols())) {
+            return new Core.BinaryReading.In(newtypeOfThePair(lt, rt, ctx.symbols()));
+        }
+        List<TypeSymbol> lCases = AtomSpace.subjectAtoms(lt, ctx.published());
+        List<TypeSymbol> rCases = AtomSpace.subjectAtoms(rt, ctx.published());
+        if (!lCases.isEmpty() && !rCases.isEmpty()
+                && (lCases.containsAll(rCases) || rCases.containsAll(lCases))) {
+            // Read in the cases both sides range over, and not in either side's name: two sums
+            // listing one set of cases are both that set, and a sum and the union of its cases are
+            // one set spelled twice. Taken from a side, the reading would turn on which side was
+            // written first and on how the set was spelled.
+            Set<TypeSymbol> cases = new LinkedHashSet<>(lCases);
+            cases.addAll(rCases);
+            return new Core.BinaryReading.In(Type.union(cases));
+        }
+        if (BottomInfer.isBottom(lt)) {
+            return new Core.BinaryReading.In(rt);
+        }
+        return BottomInfer.isBottom(rt) ? new Core.BinaryReading.In(lt) : null;
+    }
+
+    /** The side of a newtype-and-literal pair that wears the newtype, which is what the literal is
+     *  read as. */
+    private static Type newtypeOfThePair(Type lt, Type rt, Symbols symbols) {
+        return TypeOps.isSingleValueNewtype(lt, symbols) ? lt : rt;
     }
 
     /**
@@ -327,8 +375,10 @@ public final class BinaryElaborator {
      * so the invariant is owed where every other invariant is owed, and no reader has to recognise an
      * expression as a construction to find it.
      */
-    private static Core arithmetic(Hir.Binary bin, Core left, Core right, Type result,
-                                   CheckContext ctx) {
+    private static Core arithmetic(Hir.Binary bin, Core left, Core right,
+                                   ArithmeticCheck.Allowed allowed, CheckContext ctx) {
+        Type result = allowed.resultType();
+        Core.BinaryReading reading = allowed.reading();
         Type base = TypeOps.directNumericNewtypeBase(result, ctx.symbols());
         // Where the operator answers an exact value, the newtype's name is what cancelled: one
         // quantity over another of the same kind is a number and not a quantity (ADR-0116), so the
@@ -336,15 +386,16 @@ public final class BinaryElaborator {
         // other newtype arithmetic is: what the tree carries is the arithmetic over the numbers, and
         // no reader below has to recognise a wrapper to find them.
         if (result == Type.RATIONAL) {
-            return new Core.Binary(bin.op(), opened(left, ctx), opened(right, ctx),
+            return new Core.Binary(bin.op(), opened(left, ctx), opened(right, ctx), reading,
                     ctx.occurrenceOf(bin.origin()), result, bin.pos());
         }
         // A newtype is a declaration a module wrote, which is what having a base says of it; the
         // pattern is what used to be an unchecked cast below.
         if (base == null || !(result instanceof Type.Ref(TypeSymbol.AtModule wrapper))) {
-            return new Core.Binary(bin.op(), left, right, ctx.occurrenceOf(bin.origin()), result, bin.pos());
+            return new Core.Binary(bin.op(), left, right, reading, ctx.occurrenceOf(bin.origin()),
+                    result, bin.pos());
         }
-        Core computed = new Core.Binary(bin.op(), opened(left, ctx), opened(right, ctx),
+        Core computed = new Core.Binary(bin.op(), opened(left, ctx), opened(right, ctx), reading,
                 ctx.occurrenceOf(bin.origin()),
                 base, bin.pos());
         return new Core.Construct(wrapper,

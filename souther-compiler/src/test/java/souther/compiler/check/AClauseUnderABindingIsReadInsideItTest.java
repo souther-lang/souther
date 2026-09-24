@@ -85,7 +85,8 @@ class AClauseUnderABindingIsReadInsideItTest {
     }
 
     private static Core.Binary binary(BinOp op, Core left, Core right) {
-        return new Core.Binary(op, left, right, ConstructOccurrence.unwritten(), Type.BOOL, POS);
+        return new Core.Binary(op, left, right, Core.BinaryReading.AS_THEY_STAND,
+                ConstructOccurrence.unwritten(), Type.BOOL, POS);
     }
 
     /** `n >= 1`, the rule every clause below states one way or another. */

@@ -108,7 +108,7 @@ class ANameTheFoldReadsTwiceIsFollowedOnceTest {
     /** {@code x[i-1] + x[i-1]}: one name, read twice. */
     private static Core doubled(Core.Binder before) {
         return new Core.Binary(BinOp.ADD, read(before), read(before),
-                ConstructOccurrence.unwritten(), Type.INT, POS);
+                Core.BinaryReading.AS_THEY_STAND, ConstructOccurrence.unwritten(), Type.INT, POS);
     }
 
     private static Denotations bound(PathEngine engine, Core.Binder binder, Core value,

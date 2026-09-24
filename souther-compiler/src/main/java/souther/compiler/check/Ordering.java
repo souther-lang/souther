@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.core.Core;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
@@ -122,39 +123,24 @@ public sealed interface Ordering {
     }
 
     /**
-     * How a comparison of two operands is emitted, once each has been opened to the value it wraps.
+     * How a comparison is emitted, once each operand has been opened to the value it wraps.
      *
-     * <p><b>This does not decide whether the operands may be compared.</b> That is {@code
-     * BinaryElaborator.orderedComparable}, and it is asked of the types as written, because the
-     * nominal boundary is the type and not its base: two different newtypes over one enumeration
-     * open to the same order and are still not comparable (ADR-0047). Asked here of the opened
-     * types, this answers for a pair that rule has already admitted.
+     * <p>Read off what the checker settled the comparison reads its operands as, and not off the
+     * pair of their types. Which enumeration orders a case beside its sum, and whether one exact
+     * side makes the pair exact, are the checker's answers and are in the reading; what is left
+     * here is how a value of that one type is ordered once its names are off. That the operands
+     * may be compared at all is not asked here either — the reading exists only where the checker
+     * admitted them.
      */
-    static Ordering ofComparison(Type lt, Type rt, NewtypeInners inners, Symbols symbols,
-                                 DeclarationKinds kinds,
-                                 PublishedDeclarations published) {
-        Type lb = TypeOps.base(lt, inners);
-        Type rb = TypeOps.base(rt, inners);
-        // A case value, a union of cases and the sum itself are all comparable on the sum's order
-        // without ranging over it, and either side may be the one that names the sum — so the
-        // enumeration is read off the pair rather than off one operand.
-        TypeSymbol enumeration = TypeOps.comparisonEnumeration(lb, rb, symbols, kinds, published);
-        if (enumeration != null) {
-            return new Places(enumeration);
-        }
-        // A pair one side of which is exact opens to two types and is ordered all the same: the
-        // operands are read at their exact mathematical values, which is one order over one kind of
-        // value (ADR-0116). Read off the pair for the same reason the enumeration above is — neither
-        // operand alone says the operation is exact.
-        if (BinaryElaborator.exactlyComparable(lb, rb)) {
-            return ofTerminal(Type.RATIONAL, symbols, kinds, published);
-        }
-        // Otherwise both operands open to one type, which the admissibility rule established and
-        // this states rather than assumes: every route that admits a pair short of the enumeration
-        // one leaves them with equal bases. Answering off the left alone would give an order for a
-        // pair that has none — and the backend's "a comparison the checker admitted has no order"
-        // is only an assertion about the checker while nothing here can fail.
-        return lb.equals(rb) ? ofTerminal(lb, symbols, kinds, published) : null;
+    static Ordering ofComparison(Comparison comparison, NewtypeInners inners, Symbols symbols,
+                                 DeclarationKinds kinds, PublishedDeclarations published) {
+        Type read = switch (comparison.reading()) {
+            case Core.BinaryReading.AsTheyStand _ -> comparison.left().type();
+            case Core.BinaryReading.In in -> in.type();
+            case Core.BinaryReading.ExactNumbers _ -> Type.RATIONAL;
+        };
+        Ordering how = of(read, inners, symbols, kinds, published);
+        return how == null ? null : how.opened();
     }
 
     /** How a value still held as the type it was asked of is ordered: a newtype by the {@code

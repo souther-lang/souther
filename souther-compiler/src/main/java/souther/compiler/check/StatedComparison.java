@@ -25,8 +25,13 @@ import java.util.function.Function;
  * putting the node back together, and putting the node back together is what a statement exists
  * instead of. Whoever reports about a clause holds the expression the source wrote and reports about
  * that.
+ *
+ * <p>What the two sides are read as is carried, because it is part of what is compared: a
+ * canonical comparison written back as a node is filed by the term it is, and {@code 金額 <= 100}
+ * read in 金額 is not the same term as a comparison that reads its sides as they stand.
  */
-public record StatedComparison(ComparisonClaim claim, Core left, Core right) {
+public record StatedComparison(ComparisonClaim claim, Core left, Core right,
+                               Core.BinaryReading reading) {
 
     /**
      * The relation this states, asserted with polarity {@code positive}.
@@ -62,7 +67,7 @@ public record StatedComparison(ComparisonClaim claim, Core left, Core right) {
         Comparison read = Comparison.of(bin).orElse(null);
         return read == null ? null
                 : new StatedComparison(positive ? read.claim() : read.claim().denied(),
-                        read.left(), read.right());
+                        read.left(), read.right(), read.reading());
     }
 
     /**

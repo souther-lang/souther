@@ -56,7 +56,8 @@ class HowFarTheReadingOfWhatAClauseOwesDescendsTest {
     }
 
     private static Core.Binary comparing(BinOp op, Core left, Core right, Type answers) {
-        return new Core.Binary(op, left, right, ConstructOccurrence.unwritten(), answers, POS);
+        return new Core.Binary(op, left, right, Core.BinaryReading.AS_THEY_STAND,
+                ConstructOccurrence.unwritten(), answers, POS);
     }
 
     /** `value >= 1`, one of the two rules every clause below is written out of. */

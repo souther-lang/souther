@@ -224,12 +224,12 @@ final class Conditions {
         if (!(Core.withoutStanding(cond) instanceof Core.Binary b)) {
             return ComparisonReadings.none();
         }
-        ComparisonClaim placed = Comparison.of(b).map(Comparison::claim).orElse(null);
+        Comparison placed = Comparison.of(b).orElse(null);
         if (placed == null) {
             return ComparisonReadings.none();
         }
         List<StatedComparison> readings = new ArrayList<>();
-        readings.add(new StatedComparison(placed, b.left(), b.right()));
+        readings.add(placed.stated());
         for (StatedComparison composed = orderStatedBy(terms, readings.getLast(), at);
                 composed != null;
                 composed = orderStatedBy(terms, readings.getLast(), at)) {
@@ -290,7 +290,10 @@ final class Conditions {
         return stands == null ? null
                 : new StatedComparison(ComparisonClaim.stating(stands),
                         CallArguments.of(positive.greater(), call),
-                        CallArguments.of(positive.lesser(), call));
+                        CallArguments.of(positive.lesser(), call),
+                        // Two arguments of the operation that orders them, each standing as what
+                        // it was passed as, and the order is the one over that type.
+                        Core.BinaryReading.AS_THEY_STAND);
     }
 
     /**
@@ -377,7 +380,8 @@ final class Conditions {
                             application, call.place().lineage()),
                     Type.INT, call.pos());
             return new Core.Binary(BinOp.EQ, size, new Core.Int(0, Type.INT, call.pos()),
-                    ConstructOccurrence.unwritten(), Type.BOOL, call.pos());
+                    Core.BinaryReading.AS_THEY_STAND, ConstructOccurrence.unwritten(), Type.BOOL,
+                    call.pos());
         }
         return e;
     }
@@ -401,25 +405,23 @@ final class Conditions {
      * leave a clause written the other unsettled.
      */
     static Polar polar(StatedComparison stated, boolean positive) {
-        Polar written =
-                stated.claim().canonical(stated.left(), stated.right()).expressedAs(AS_POLAR);
-        return positive ? written : AS_POLAR.denied(written);
+        AsPolar as = new AsPolar(stated.reading());
+        Polar written = stated.claim().canonical(stated.left(), stated.right()).expressedAs(as);
+        return positive ? written : as.denied(written);
     }
-
-    /** One of them, because it holds nothing: what a canonical comparison is written as is the same
-     *  answer wherever it is asked. */
-    private static final AsPolar AS_POLAR = new AsPolar();
 
     /**
      * A canonical comparison, written as a node with what is asserted of it held beside it.
      *
      * <p>The node is this reader's own spelling and stands nowhere. What a comparison is filed under
-     * is what it places and the terms of its two sides ({@link Terms}), so where it came from, what
-     * it answers and where it stands decide nothing here — which is why they are written inert
-     * rather than taken from a comparison the source wrote. A statement is a claim and two sides,
-     * and there is no occurrence in it to inherit.
+     * is what it places, what it reads its sides as, and the terms of its two sides ({@link Terms}),
+     * so where it came from, what it answers and where it stands decide nothing here — which is why
+     * they are written inert rather than taken from a comparison the source wrote. A statement is a
+     * claim, a reading and two sides, and there is no occurrence in it to inherit. The reading reads
+     * both sides alike, so turning the comparison round to its canonical order keeps it.
      */
-    private record AsPolar() implements CanonicalComparison.Expression<Core, Polar> {
+    private record AsPolar(Core.BinaryReading reading)
+            implements CanonicalComparison.Expression<Core, Polar> {
 
         @Override
         public Polar theSameValue(Core left, Core right) {
@@ -435,9 +437,9 @@ final class Conditions {
          *  and sides decide nothing any reader of this asks, so they are filled with what says so:
          *  unwritten, so no coverage site is named by it, the type a comparison answers, and a
          *  position taken from a side because the constructor takes one. */
-        private static Core.Binary canonical(BinOp op, Core left, Core right) {
-            return new Core.Binary(op, left, right, ConstructOccurrence.unwritten(), Type.BOOL,
-                    left.pos());
+        private Core.Binary canonical(BinOp op, Core left, Core right) {
+            return new Core.Binary(op, left, right, reading, ConstructOccurrence.unwritten(),
+                    Type.BOOL, left.pos());
         }
 
         /** Carried beside the node, which is what a polarity is for: a denial written as a node

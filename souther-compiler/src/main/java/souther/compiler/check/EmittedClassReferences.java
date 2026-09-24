@@ -186,10 +186,9 @@ final class EmittedClassReferences {
 
     /** The enumeration a comparison that places a value on an order takes it from. */
     private void comparedBy(Core.Binary bin) {
-        if (Comparison.of(bin).map(Comparison::claim).orElse(null)
-                instanceof ComparisonClaim.Cut) {
-            Ordering how = Ordering.ofComparison(bin.left().type(), bin.right().type(), inners,
-                    symbols, kinds, published);
+        Comparison comparison = Comparison.of(bin).orElse(null);
+        if (comparison != null && comparison.claim() instanceof ComparisonClaim.Cut) {
+            Ordering how = Ordering.ofComparison(comparison, inners, symbols, kinds, published);
             if (how != null && how.opened() instanceof Ordering.Places places) {
                 add(places.enumeration());
             }

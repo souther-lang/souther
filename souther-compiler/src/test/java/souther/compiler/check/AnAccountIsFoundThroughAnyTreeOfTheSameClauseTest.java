@@ -53,7 +53,7 @@ class AnAccountIsFoundThroughAnyTreeOfTheSameClauseTest {
 
     /** {@code a == a && b == b}, built afresh each time this is called. */
     private static Core clause() {
-        return new Core.Binary(BinOp.AND, leaf("a"), leaf("b"),
+        return new Core.Binary(BinOp.AND, leaf("a"), leaf("b"), Core.BinaryReading.AS_THEY_STAND,
                 ConstructOccurrence.unwritten(), Type.BOOL, POS);
     }
 
@@ -144,7 +144,7 @@ class AnAccountIsFoundThroughAnyTreeOfTheSameClauseTest {
     /** A clause of no connective, named by which of them it is. */
     private static Core leaf(String named) {
         return new Core.Binary(BinOp.EQ, new Core.Str(named, Type.STRING, POS),
-                new Core.Str(named, Type.STRING, POS), ConstructOccurrence.unwritten(),
-                Type.BOOL, POS);
+                new Core.Str(named, Type.STRING, POS), Core.BinaryReading.AS_THEY_STAND,
+                ConstructOccurrence.unwritten(), Type.BOOL, POS);
     }
 }

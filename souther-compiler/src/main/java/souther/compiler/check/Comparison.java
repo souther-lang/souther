@@ -34,11 +34,13 @@ public final class Comparison {
     private final ComparisonClaim claim;
     private final Core left;
     private final Core right;
+    private final Core.BinaryReading reading;
 
-    private Comparison(ComparisonClaim claim, Core left, Core right) {
+    private Comparison(ComparisonClaim claim, Core left, Core right, Core.BinaryReading reading) {
         this.claim = claim;
         this.left = left;
         this.right = right;
+        this.reading = reading;
     }
 
     /** {@code at} as a comparison, or nothing where its operator compares no values. */
@@ -46,8 +48,13 @@ public final class Comparison {
         return switch (ComparisonPlacement.of(at.op())) {
             case ComparisonPlacement.Nothing _ -> Optional.empty();
             case ComparisonClaim claim ->
-                    Optional.of(new Comparison(claim, at.left(), at.right()));
+                    Optional.of(new Comparison(claim, at.left(), at.right(), at.reading()));
         };
+    }
+
+    /** What the two sides are compared as, which the checker settled. */
+    public Core.BinaryReading reading() {
+        return reading;
     }
 
     /** What its operator placed on the values. */
@@ -77,7 +84,7 @@ public final class Comparison {
      * holds, and a report holds it already.
      */
     public StatedComparison stated() {
-        return new StatedComparison(claim, left, right);
+        return new StatedComparison(claim, left, right, reading);
     }
 
     /** Everything this holds, which is what an identity is of. The claim is read off the operator
@@ -87,12 +94,13 @@ public final class Comparison {
     @Override
     public boolean equals(Object other) {
         return other instanceof Comparison that && claim.equals(that.claim)
-                && left.equals(that.left) && right.equals(that.right);
+                && left.equals(that.left) && right.equals(that.right)
+                && reading.equals(that.reading);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(claim, left, right);
+        return Objects.hash(claim, left, right, reading);
     }
 
     @Override

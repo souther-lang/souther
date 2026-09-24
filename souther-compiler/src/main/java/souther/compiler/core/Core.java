@@ -227,9 +227,13 @@ public sealed interface Core {
      * (see {@link souther.compiler.ast.Hir.Binary}) and the copy of the body it stands in. Both,
      * because a helper spliced into two calls holds one written comparison twice, and a reader
      * holding only the first would be reading one of them about the other.
+     *
+     * <p>{@code reading} is what the operator reads its operands as, which the checker settled and
+     * the three types here do not say. {@code type} is what the operator answers, and the two differ:
+     * {@code i / j} over two {@code Int}s reads them as they stand and answers a {@code Rational}.
      */
-    record Binary(BinOp op, Core left, Core right, ConstructOccurrence occurrence, Type type,
-                  SourcePos pos) implements Core {
+    record Binary(BinOp op, Core left, Core right, BinaryReading reading,
+                  ConstructOccurrence occurrence, Type type, SourcePos pos) implements Core {
 
         public Binary {
             // A comparison is some comparison of the model, in some copy of the body that wrote it.
@@ -239,12 +243,69 @@ public sealed interface Core {
                 throw new IllegalArgumentException(
                         "a comparison is some comparison of the model: " + op);
             }
+            if (reading == null) {
+                throw new IllegalArgumentException("an operator reads its operands as something: "
+                        + op);
+            }
+            if (reading instanceof BinaryReading.AsTheyStand
+                    && !left.type().equals(right.type())) {
+                throw new IllegalArgumentException("operands read as they stand stand as one type: "
+                        + left.type() + " " + op + " " + right.type());
+            }
         }
 
         /** What the source wrote, for a reader whose question is about the construct alone. */
         public SourceConstructOrigin origin() {
             return occurrence.origin();
         }
+    }
+
+    /**
+     * What an operator reads its two operands as, as the checker settled it.
+     *
+     * <p>Not a type of either operand and not a place either stands: an {@code Int} beside a
+     * {@code Rational} is still refused where a Rational is asked for, and a literal beside a
+     * newtype is read as the newtype by this operator and by nothing else. That is why this is not a
+     * {@link Widen}. And not which rule of the checker allowed it: a reading says what the operands
+     * were taken as, which is what a backend lowers, and two rules that settle on one reading are
+     * one reading here.
+     *
+     * <p>Newtype arithmetic has none of its own. The tree already says it — each operand opened to
+     * what it wraps, the operation over those, the result built again — and the operation inside
+     * reads its numbers as they stand.
+     *
+     * <p>Every one of these reads the two sides alike, so a comparison turned round keeps it.
+     */
+    sealed interface BinaryReading {
+
+        /** Each operand as the type it has, which is one type for both. */
+        record AsTheyStand() implements BinaryReading {}
+
+        /**
+         * The pair as values of {@code type}, for this operator only: a literal beside the newtype it
+         * is compared with, a case beside the enumeration that orders it, two values tested for
+         * sameness across one set of cases, a value beside one that states nothing about its own
+         * type.
+         *
+         * <p>Never which side came first: what an operator reads its operands as is the same
+         * written either way round, so the type is one both sides settle and not one of theirs
+         * picked. Where two sides name one set of cases, it is that set as a union.
+         */
+        record In(Type type) implements BinaryReading {
+            public In {
+                if (type == null) {
+                    throw new IllegalArgumentException("a pair is read in some type");
+                }
+            }
+        }
+
+        /** Each operand at its exact mathematical value, which one of them already being a
+         *  {@code Rational} makes of the pair (ADR-0116). No type of the language stands for it. */
+        record ExactNumbers() implements BinaryReading {}
+
+        AsTheyStand AS_THEY_STAND = new AsTheyStand();
+
+        ExactNumbers EXACT_NUMBERS = new ExactNumbers();
     }
 
     /**
@@ -1413,7 +1474,8 @@ public sealed interface Core {
                 Core left = atExpr.apply(b.left());
                 Core right = atExpr.apply(b.right());
                 yield left == b.left() && right == b.right() ? b
-                        : new Binary(b.op(), left, right, b.occurrence(), b.type(), b.pos());
+                        : new Binary(b.op(), left, right, b.reading(), b.occurrence(), b.type(),
+                                b.pos());
             }
             case Call c -> {
                 List<Core> args = each(c.args(), atExpr);

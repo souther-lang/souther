@@ -115,7 +115,8 @@ class ANameReadTwiceIsFollowedOnceTest {
         for (int i = 1; i <= links; i++) {
             Core.Read before = read(new BindingId(OWNER, i - 1));
             given.put(new BindingId(OWNER, i), new Core.Binary(BinOp.ADD, before, before,
-                    ConstructOccurrence.unwritten(), Type.INT, POS));
+                    Core.BinaryReading.AS_THEY_STAND, ConstructOccurrence.unwritten(), Type.INT,
+                    POS));
         }
         return read(new BindingId(OWNER, links));
     }

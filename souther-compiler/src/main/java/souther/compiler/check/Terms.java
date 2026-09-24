@@ -452,9 +452,11 @@ final class Terms {
             return e;
         }
         BinOp op = DischargeRules.operator(operation);
-        // Not a comparison any source wrote: a call read as the operator it stands for.
+        // Not a comparison any source wrote: a call read as the operator it stands for, over its
+        // arguments as they were passed.
         return op == null ? e : new Core.Binary(op, args.get(0), args.get(1),
-                ConstructOccurrence.unwritten(), e.type(), e.pos());
+                Core.BinaryReading.AS_THEY_STAND, ConstructOccurrence.unwritten(), e.type(),
+                e.pos());
     }
 
     /**

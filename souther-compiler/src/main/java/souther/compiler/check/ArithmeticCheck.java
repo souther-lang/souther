@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.core.Core;
 import souther.compiler.types.BinOp;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.ArithmeticMessage;
@@ -30,8 +31,15 @@ import souther.compiler.types.Type;
  */
 sealed interface ArithmeticCheck {
 
-    /** The operands combine, and the operator answers with {@code resultType}. */
-    record Allowed(Type resultType) implements ArithmeticCheck {}
+    /**
+     * The operands combine, the operator answers with {@code resultType}, and it reads the numbers
+     * it works on as {@code reading}.
+     *
+     * <p>The numbers and not the operands: over a newtype the operation is on what the newtype
+     * wraps, which the elaborator writes out as the construction it is, so a newtype's arithmetic
+     * reads its numbers as they stand.
+     */
+    record Allowed(Type resultType, Core.BinaryReading reading) implements ArithmeticCheck {}
 
     /**
      * Arithmetic has nothing of its own left to say, and what remains is one type against another:
@@ -224,10 +232,10 @@ sealed interface ArithmeticCheck {
                 // sentence. Asked of the names and not of their bases, as the product above is: two
                 // newtypes over one base are still two kinds.
                 case DIV -> lt.equals(rt)
-                        ? new Allowed(Type.RATIONAL)
+                        ? new Allowed(Type.RATIONAL, Core.BinaryReading.AS_THEY_STAND)
                         : new Refused(new QuotientChangesDimension(lt, rt));
                 default -> lt.equals(rt)
-                        ? new Allowed(lt)
+                        ? new Allowed(lt, Core.BinaryReading.AS_THEY_STAND)
                         : new Refused(new DifferentNewtypes(lt, rt));
             };
         }
@@ -242,7 +250,7 @@ sealed interface ArithmeticCheck {
                 // the pair, so an `Int` beside a `Decimal` still has nothing between them and falls
                 // to the plain type check below.
                 if (lt == Type.RATIONAL || rt == Type.RATIONAL) {
-                    return new Allowed(Type.RATIONAL);
+                    return new Allowed(Type.RATIONAL, Core.BinaryReading.EXACT_NUMBERS);
                 }
                 return new DeferToPlainTypeCheck(lt, rt);
             }
@@ -257,7 +265,8 @@ sealed interface ArithmeticCheck {
             // closed under division, and the operator answers the same type for both rather than
             // one that depends on which of them it was handed. A Rational divided by a Rational is
             // already one.
-            return new Allowed(op == BinOp.DIV ? Type.RATIONAL : lt);
+            return new Allowed(op == BinOp.DIV ? Type.RATIONAL : lt,
+                    Core.BinaryReading.AS_THEY_STAND);
         }
         // Exactly one operand wears a newtype; the other is a value of the base it wraps.
         boolean newtypeOnTheLeft = ln != null;
@@ -267,7 +276,7 @@ sealed interface ArithmeticCheck {
         if (op == BinOp.ADD || op == BinOp.SUB) {
             boolean valueIsLiteral = newtypeOnTheLeft ? rightIsLiteral : leftIsLiteral;
             return valueIsLiteral
-                    ? new Allowed(newtype)
+                    ? new Allowed(newtype, Core.BinaryReading.AS_THEY_STAND)
                     : new Refused(new BareValueIsNotALiteral(newtype, value, valueSide));
         }
         if (op == BinOp.DIV) {
@@ -279,7 +288,7 @@ sealed interface ArithmeticCheck {
                     ? new QuotientLeavesTheWrappedType(newtype, value, valueSide)
                     : new ReciprocalChangesDimension(value, newtype));
         }
-        return new Allowed(newtype);
+        return new Allowed(newtype, Core.BinaryReading.AS_THEY_STAND);
     }
 
     /** Why arithmetic cannot read this operand at all, or {@code null} where it can. A question

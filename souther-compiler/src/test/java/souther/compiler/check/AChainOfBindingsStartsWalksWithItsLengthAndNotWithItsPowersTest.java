@@ -54,8 +54,8 @@ class AChainOfBindingsStartsWalksWithItsLengthAndNotWithItsPowersTest {
                                 new Core.Int(0, Type.INT, POS),
                                 Core.ForkPlace.asWritten(ConstructOccurrence.unwritten()),
                                 Type.INT, POS),
-                        new Core.Int(1, Type.INT, POS), ConstructOccurrence.unwritten(),
-                        Type.INT, POS);
+                        new Core.Int(1, Type.INT, POS), Core.BinaryReading.AS_THEY_STAND,
+                        ConstructOccurrence.unwritten(), Type.INT, POS);
         Core read = new Core.Read(binder.name(), binder.binding(), Type.INT, POS);
         return new Level(binder, new Core.LetIn(binder, Type.INT, value, read, Type.INT, POS));
     }
