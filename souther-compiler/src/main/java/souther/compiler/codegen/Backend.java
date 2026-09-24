@@ -17,6 +17,8 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.DefinitionRole;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
+import souther.compiler.check.BehaviorBodies;
+import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.ReqSig;
 import souther.compiler.check.Requirements;
@@ -151,9 +153,11 @@ public final class Backend {
      * {@code typePackage} maps an imported type or behavior name to its declaring module (spec §modules);
      * {@code requirementSigs} carries the signature of every behavior a class here holds injected,
      * which is what its field, its constructor parameter and a call on it are typed from;
-     * {@code importedInjected} are imported injection-target behaviors, which a
-     * composition here inherits as requirements to inject and bind (spec §injected-behavior,
-     * §composition-with-requirements); {@code requirements} says what each behavior takes injected and in
+     * {@code injectionTargets} are the injection targets the module builds against — its own, and the
+     * imported ones a composition here inherits as requirements to inject and bind (spec
+     * §injected-behavior, §composition-with-requirements); {@code bodies} is where each behavior of
+     * the module gets its body, which is also what tells one nobody has written from one Java
+     * supplies; {@code requirements} says what each behavior takes injected and in
      * what order — the answer the example verifier reads too, so a fake reaches the parameter this
      * constructor binds it to; {@code foreignStages} says the same of each stage another module
      * declares, which a composition here builds; {@code checked} carries the type checker's elaborated bodies, which is what
@@ -170,7 +174,8 @@ public final class Backend {
                                                Map<String, String> typePackage,
                                                Map<ValueName.Behavior, Sig> sigs,
                                                Map<ValueName.Behavior, Sig> requirementSigs,
-                                               Set<ValueName.Behavior> importedInjected,
+                                               Set<ValueName.Behavior> injectionTargets,
+                                               BehaviorBodies bodies,
                                                Map<ValueName.Behavior, ReqSig> calleeSigs,
                                                Map<String, List<BehaviorRequirement>> requirements,
                                                Map<ValueName.Behavior, List<ValueName.Behavior>>
@@ -184,7 +189,7 @@ public final class Backend {
                                                Map<String, Type> standingCalls,
                                                SourceLayouts layouts) {
         return generate(module, symbols, published, kinds, kernels, typePackage, sigs,
-                requirementSigs, importedInjected,
+                requirementSigs, injectionTargets, bodies,
                 calleeSigs, requirements, foreignStages, checked, compositions, dischargeInvariants,
                 invariantStatements, shapes, checks, standingCalls, layouts, Instrumentation.NONE);
     }
@@ -209,7 +214,8 @@ public final class Backend {
                                                Map<String, String> typePackage,
                                                Map<ValueName.Behavior, Sig> sigs,
                                                Map<ValueName.Behavior, Sig> requirementSigs,
-                                               Set<ValueName.Behavior> importedInjected,
+                                               Set<ValueName.Behavior> injectionTargets,
+                                               BehaviorBodies bodies,
                                                Map<ValueName.Behavior, ReqSig> calleeSigs,
                                                Map<String, List<BehaviorRequirement>> requirements,
                                                Map<ValueName.Behavior, List<ValueName.Behavior>>
@@ -226,7 +232,7 @@ public final class Backend {
         try {
             return generating(module, symbols, published, kinds, kernels, typePackage, sigs,
                     requirementSigs,
-                    importedInjected, calleeSigs, requirements, foreignStages, checked, compositions,
+                    injectionTargets, bodies, calleeSigs, requirements, foreignStages, checked, compositions,
                     dischargeInvariants, invariantStatements, shapes, checks, standingCalls,
                     layouts, instrumentation);
         } catch (IllegalArgumentException e) {
@@ -244,7 +250,8 @@ public final class Backend {
                                                   Map<String, String> typePackage,
                                                   Map<ValueName.Behavior, Sig> sigs,
                                                   Map<ValueName.Behavior, Sig> requirementSigs,
-                                                  Set<ValueName.Behavior> importedInjected,
+                                                  Set<ValueName.Behavior> injectionTargets,
+                                                  BehaviorBodies bodies,
                                                   Map<ValueName.Behavior, ReqSig> calleeSigs,
                                                   Map<String, List<BehaviorRequirement>> requirements,
                                                   Map<ValueName.Behavior, List<ValueName.Behavior>>
@@ -385,20 +392,18 @@ public final class Backend {
                 }
             });
         }
-        // Injection targets (spec §injected-behavior): a SpecBehavior with no matching fn. Each becomes an
-        // abstract base class a Java implementation extends (§java-base-class). Imported injection targets
-        // (their base lives in the declaring module) are requirements too, so a composition here
-        // injects and binds them (spec §composition-with-requirements) — but no base is generated for them here.
+        // Injection targets (spec §injected-behavior): the module's own become an abstract base class a
+        // Java implementation extends (§java-base-class). Imported injection targets (their base lives
+        // in the declaring module) are requirements too, so a composition here injects and binds them
+        // (spec §composition-with-requirements) — but no base is generated for them here.
         //
         // Whether a behavior is one of these is the whole of what decides whether a class holding it
         // reads it from a field or builds it. Being held as a field by something else does not make
         // a behavior injected: one may be a dependency of one behavior and a stage another builds.
-        Set<ValueName.Behavior> injectionTargets =
-                Requirements.injectedNames(module, importedInjected);
-        // Beside them, and not among them: a behavior Souther is to implement and nobody has is
-        // nothing to inject — no base is emitted for it, so there is nothing a caller could be
-        // handed.
-        Set<ValueName.Behavior> unwrittenNames = Requirements.unwrittenNames(module);
+        //
+        // Beside them, and not among them: a behavior Souther is to implement and nobody has
+        // (`bodies` says which) is nothing to inject — no base is emitted for it, so there is nothing
+        // a caller could be handed.
         for (Hir.BehaviorDef bd : module.behaviors()) {
             ValueName.Behavior declared = new ValueName.Behavior(module.name(), bd.name());
             if (bd instanceof Hir.SpecBehavior spec && injectionTargets.contains(declared)) {
@@ -527,8 +532,8 @@ public final class Backend {
                             out.put(new GeneratedClass.BehaviorInterface(module.name(), spec.name()),
                                     b.generateBehaviorInterface(spec.name(), pts, b.successType(spec.ret()),
                                             requiredBy(spec)));
-                        } else if (unwrittenNames.contains(
-                                new ValueName.Behavior(module.name(), spec.name()))) {
+                        } else if (bodies.of(new ValueName.Behavior(module.name(), spec.name()))
+                                == BehaviorImplementation.UNIMPLEMENTED) {
                             // Souther's to implement and not written (spec §unwritten-behavior).
                             // The declaration is emitted so its name exists; nothing that would need
                             // the body it has not got is.

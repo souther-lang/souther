@@ -850,15 +850,12 @@ public final class SpecChecker {
      * write the clause on.
      */
     static void checkNothingBuiltHereRestsOnAnUnwrittenBehavior(
-            Hir.Module module, Set<ValueName.Behavior> importedUnwritten) {
-        Set<String> fns = new HashSet<>();
-        for (Hir.FnDef fn : module.fns()) {
-            fns.add(fn.name());
-        }
+            Hir.Module module, BehaviorBodies bodies, Set<ValueName.Behavior> importedUnwritten) {
         Set<ValueName.Behavior> unwritten = new HashSet<>(importedUnwritten);
         for (Hir.BehaviorDef b : module.behaviors()) {
-            if (Requirements.implementationOf(b, fns) == BehaviorImplementation.UNIMPLEMENTED) {
-                unwritten.add(new ValueName.Behavior(module.name(), b.name()));
+            ValueName.Behavior declared = new ValueName.Behavior(module.name(), b.name());
+            if (bodies.of(declared) == BehaviorImplementation.UNIMPLEMENTED) {
+                unwritten.add(declared);
             }
         }
         if (unwritten.isEmpty()) {
@@ -867,7 +864,8 @@ public final class SpecChecker {
         Map<ValueName.Behavior, List<Hir.Var>> pipeStages = PipelineSigs.pipelineStages(module);
         for (Hir.BehaviorDef b : module.behaviors()) {
             switch (b) {
-                case Hir.SpecBehavior spec when fns.contains(spec.name()) ->
+                case Hir.SpecBehavior spec when bodies.of(
+                        new ValueName.Behavior(module.name(), spec.name())).hasBody() ->
                         refuseFirstUnwritten(spec.name(), spec.dependsOn(), unwritten);
                 case Hir.PipeBehavior pipe -> {
                     switch (pipe.composition()) {

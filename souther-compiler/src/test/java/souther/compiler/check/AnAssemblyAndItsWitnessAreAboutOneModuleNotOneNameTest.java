@@ -81,7 +81,8 @@ class AnAssemblyAndItsWitnessAreAboutOneModuleNotOneNameTest {
     @Test
     void oneSettlingReadAgainstTwoSetsOfNamesDoesNotPair() {
         Desugared.Module declarations = declarationsOf(WITH_A_CONSTRUCTION);
-        InvariantSettled settling = assemblyOf(WITH_A_CONSTRUCTION).settling();
+        CheckSurface itsOwnAssembly = assemblyOf(WITH_A_CONSTRUCTION);
+        InvariantSettled settling = itsOwnAssembly.settling();
 
         Map<String, Normalized.Def> elsewhere = new LinkedHashMap<>();
         for (InvariantSettled.Def def : settling.defs()) {
@@ -99,7 +100,7 @@ class AnAssemblyAndItsWitnessAreAboutOneModuleNotOneNameTest {
         }
         CheckSurface read = CheckSurface.assemble(settling, elsewhere, itsOwn,
                 DeclarationNewtypes.NONE,
-                Map.of(), FakeTables.classify(settling.module()));
+                Map.of(), FakeTables.classify(settling.module()), itsOwnAssembly.bodies());
         assertNotNull(read, "the assembly is made, so the refusal below is about the pairing");
 
         assertThrows(IllegalArgumentException.class, () -> Prepared.prepare(declarations, read),
@@ -137,7 +138,7 @@ class AnAssemblyAndItsWitnessAreAboutOneModuleNotOneNameTest {
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> CheckSurface.assemble(settling, normalized, underTheWrongName,
                         DeclarationNewtypes.NONE,
-                        Map.of(), FakeTables.classify(settling.module())),
+                        Map.of(), FakeTables.classify(settling.module()), itsOwn.bodies()),
                 "an answer for one definition stood in for another, and the name they were looked"
                         + " up by is the same shape");
         assertTrue(refused.getMessage().contains("first"), refused.getMessage());
@@ -177,7 +178,7 @@ class AnAssemblyAndItsWitnessAreAboutOneModuleNotOneNameTest {
 
         CheckSurface assembled = CheckSurface.assemble(settling, normalized, read,
                 DeclarationNewtypes.NONE,
-                Map.of(), FakeTables.classify(settling.module()));
+                Map.of(), FakeTables.classify(settling.module()), itsOwn.bodies());
         assertNotNull(assembled, "the assembly is made, so the refusal below is about the pairing");
         assertNotEquals(declarations.fns(), assembled.desugaredFrom(),
                 "the two readings are two sets of definitions, or this says nothing");

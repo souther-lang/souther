@@ -33,89 +33,16 @@ public final class Requirements {
     private Requirements() {}
 
     /**
-     * Where {@code behavior}'s body comes from (spec §injected-behavior, §unwritten-behavior).
-     *
-     * <p>How the behavior is written, and nothing else. It answers no question about what a compile
-     * emitted for it or about what a run can apply: those are settled where they happen, and a reader
-     * asking one of them from here would be reading a declaration for a fact about a run.
-     *
-     * <p>Asked of the declaration and not of a name. What is being asked about is the behavior the
-     * module wrote, so a caller hands it over rather than a spelling to look one up by — and there is
-     * then no answer to give for a name that names no behavior.
-     */
-    public static BehaviorImplementation implementationOf(Hir.Module module,
-                                                          Hir.BehaviorDef behavior) {
-        return implementationOf(behavior, definedNames(module));
-    }
-
-    /**
-     * The injection targets a module builds against: its own behaviors written with no body, and the imported
-     * ones it names, whose base lives in the module that declares them (spec §injected-behavior,
-     * §composition-with-requirements).
-     *
-     * <p>This is the rule that decides whether a name is something to inject or something to
-     * construct, and both the emitter and the requirement walk below read it here so they cannot
-     * disagree about one behavior.
-     */
-    public static Set<ValueName.Behavior> injectedNames(Hir.Module module,
-                                                       Set<ValueName.Behavior> importedInjected) {
-        Set<String> fns = definedNames(module);
-        Set<ValueName.Behavior> injected = new LinkedHashSet<>(importedInjected);
-        for (Hir.BehaviorDef bd : module.behaviors()) {
-            if (implementationOf(bd, fns).isInjectionTarget()) {
-                injected.add(new ValueName.Behavior(module.name(), bd.name()));
-            }
-        }
-        return injected;
-    }
-
-    /** The behaviors of {@code module} Souther is to implement and nobody has, which is the state a
-     *  model written example-first passes through (spec §unwritten-behavior). */
-    public static Set<ValueName.Behavior> unwrittenNames(Hir.Module module) {
-        Set<String> fns = definedNames(module);
-        Set<ValueName.Behavior> unwritten = new LinkedHashSet<>();
-        for (Hir.BehaviorDef bd : module.behaviors()) {
-            if (implementationOf(bd, fns) == BehaviorImplementation.UNIMPLEMENTED) {
-                unwritten.add(new ValueName.Behavior(module.name(), bd.name()));
-            }
-        }
-        return unwritten;
-    }
-
-    /** How this representation asks {@link BehaviorImplementation#of}: a {@code >->} composition is
-     *  its own implementation, and a behavior stating only its specification has a body here when a
-     *  {@code let} of its name does.
-     *
-     *  <p>Public so that a checker walking the same module with the definition names already in hand
-     *  reads this rather than counting the {@code let}s again. */
-    public static BehaviorImplementation implementationOf(Hir.BehaviorDef bd, Set<String> fns) {
-        if (!(bd instanceof Hir.SpecBehavior spec)) {
-            return BehaviorImplementation.IMPLEMENTED;
-        }
-        return BehaviorImplementation.of(fns.contains(spec.name()), !spec.dependsOn().isEmpty());
-    }
-
-    /**
      * Whether this behavior is a {@code >->} composition, which is its own implementation.
      *
-     * <p>The branch {@link #implementationOf} takes first, named. A composition has no positions,
-     * no lines and no arms of its own — its stages have them and are measured there — so it is the
-     * one thing a measure of a behavior may answer inapplicable about without reading any further.
-     * That makes it a claim about what is written, and a claim about what is written is read from
-     * the declarations: a measure that took a behavior's absence from an answer for it would be
-     * making the claim out of a derivation that did not come back (issue #996).
+     * <p>A composition has no positions, no lines and no arms of its own — its stages have them and
+     * are measured there — so it is the one thing a measure of a behavior may answer inapplicable
+     * about without reading any further. That makes it a claim about what is written, and a claim
+     * about what is written is read from the declarations: a measure that took a behavior's absence
+     * from an answer for it would be making the claim out of a derivation that did not come back.
      */
     public static boolean isComposition(Hir.BehaviorDef bd) {
         return !(bd instanceof Hir.SpecBehavior);
-    }
-
-    /** The names the module's definitions are written under. */
-    private static Set<String> definedNames(Hir.Module module) {
-        Set<String> fns = new LinkedHashSet<>();
-        for (Hir.FnDef fn : module.fns()) {
-            fns.add(fn.name());
-        }
-        return fns;
     }
 
     /**
@@ -123,8 +50,9 @@ public final class Requirements {
      * name. An injected behavior is not constructed — the Java side supplies it — so it is not a key
      * (it appears as a dependency of the definitions that name it).
      *
-     * <p>{@code importedInjected} are the injection targets this module borrows; its own are read off
-     * the module ({@link #injectedNames}).
+     * <p>{@code injected} is every injection target this module builds against, its own and the ones
+     * it borrows. Handed in and not read off {@code module}: which behaviors Java supplies is decided
+     * where the module is classified, and this walk only follows what that says.
      *
      * <p>{@code foreignStages} is what each stage declared in another module requires, as the module
      * that declares it answered: one entry for every behavior {@link #foreignStages} names. The stage
@@ -132,9 +60,8 @@ public final class Requirements {
      * business, and one read off the path does not carry it at all.
      */
     public static Map<String, List<BehaviorRequirement>> of(
-            Hir.Module module, Set<ValueName.Behavior> importedInjected,
+            Hir.Module module, Set<ValueName.Behavior> injected,
             Map<ValueName.Behavior, List<ValueName.Behavior>> foreignStages) {
-        Set<ValueName.Behavior> injected = injectedNames(module, importedInjected);
         Map<ValueName.Behavior, Hir.BehaviorDef> byName = new HashMap<>();
         for (Hir.BehaviorDef bd : module.behaviors()) {
             byName.put(new ValueName.Behavior(module.name(), bd.name()), bd);

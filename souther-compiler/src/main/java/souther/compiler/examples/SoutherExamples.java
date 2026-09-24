@@ -16,6 +16,7 @@ import souther.compiler.execute.jvm.JvmExampleRuns;
 import souther.compiler.query.ExampleExecutions;
 import souther.compiler.query.Output;
 import souther.compiler.query.Shapes;
+import souther.compiler.types.ValueName;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -226,7 +227,7 @@ public final class SoutherExamples {
             if (!declared.name().equals(behavior)) {
                 continue;
             }
-            switch (prepared.implementationOf(declared)) {
+            switch (prepared.implementationOf(new ValueName.Behavior(module, declared.name()))) {
                 case INJECTION_TARGET -> { }
                 case IMPLEMENTED -> throw new IllegalArgumentException(
                         "`" + module + "." + behavior + "` has an implementation of its own, so its"

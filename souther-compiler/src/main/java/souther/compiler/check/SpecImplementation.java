@@ -350,8 +350,9 @@ public final class SpecImplementation {
      * <p>Among what the module declared, and not among what it took on to emit. What a module emits
      * without declaring is a recursion another module wrote and a method minted for a row's operand
      * ({@code Hir.Module#takenOn}); a behavior's implementation is a {@code let} of its name and is
-     * always a declaration. {@link Requirements#implementationOf} decides whether a behavior has one
-     * by looking in the same place, so a name found here is a name that reading called implemented.
+     * always a declaration. A module compiled here is classified into its {@link BehaviorBodies} by
+     * looking in the same place, so a name found here is a name that classification called
+     * implemented.
      *
      * <p>A behavior with no definition is absent rather than present with nothing: an injected
      * behavior and an unwritten one both reach this and neither has parameters to divide.

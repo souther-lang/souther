@@ -1179,7 +1179,7 @@ public final class ExampleVerifier {
     private Hir.SpecBehavior injectedSpec(String name) {
         for (Hir.BehaviorDef b : module.behaviors()) {
             if (b instanceof Hir.SpecBehavior spec && spec.name().equals(name)
-                    && module.implementationOf(spec).isInjectionTarget()) {
+                    && module.implementationOf(module.targeted(spec.name())).isInjectionTarget()) {
                 return spec;
             }
         }

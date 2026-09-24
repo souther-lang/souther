@@ -33,10 +33,13 @@ public enum BehaviorImplementation {
     INJECTION_TARGET;
 
     /**
-     * The one rule.
+     * The one rule, for classifying a module from its source.
      *
      * <p>Two questions about the declaration and nothing else — no name to look up and no module to
-     * consult — so that the two representations a behavior is read in cannot answer differently.
+     * consult. It is asked where a module compiled here is classified into its
+     * {@link BehaviorBodies}, and nowhere else: a module read off the path was classified where it
+     * was compiled and carries the answer, and its tree has no {@code let} for the first question.
+     * A reader holding a tree asks the module's {@link BehaviorBodies} instead.
      *
      * @param hasBody whether an implementation of this behavior is written here: a {@code let} of
      *                its name, or the {@code >->} the behavior is declared as
