@@ -58,4 +58,10 @@ public @interface SoutherModule {
 
     /** What each value the module declares was settled as, one {@code name=type} entry each. */
     String[] valueAnswers() default {};
+
+    /** The constructors of other modules' behaviors this module's classes link against: the
+     * declaring module, the behavior and the constructor's descriptor, each counted. What the classes
+     * assumed about a module they were built against, which a reader holds that module to. No
+     * default: a writer that says nothing about it has not said its classes build nothing. */
+    String[] constructions();
 }

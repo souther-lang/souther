@@ -394,7 +394,42 @@ final class CodegenContext {
     /** The JVM type a required behavior is stored/injected as: its own base class unless it takes
      * exactly one input, which is the unary {@code Behavior} composition contract. */
     ClassDesc requiredFieldType(ValueName.Behavior name) {
-        return isStandaloneRequired(name) ? cdBehavior(name) : CD_Behavior;
+        List<Type> params = reqParams.get(name);
+        if (params == null) {
+            throw new IllegalStateException("`" + name.module() + "." + name.name()
+                    + "` is held as a field here with no signature to hold it by");
+        }
+        return ConstructionAbi.heldAs(name, params);
+    }
+
+    /**
+     * The constructors of other modules' behaviors this module's classes link against, by the
+     * behavior built. One per behavior: two classes of one module building a behavior are built from
+     * one answer about what it takes, so two descriptors for it would be this compiler emitting two
+     * programs.
+     */
+    private final Map<ValueName.Behavior, ConstructionLink> constructedElsewhere =
+            new LinkedHashMap<>();
+
+    /** Records that the instruction being emitted hands {@code dependencies} to {@code target}'s
+     *  implementation through {@code constructor}, where {@code target} is another module's. */
+    void linksConstructor(ValueName.Behavior target, List<ValueName.Behavior> dependencies,
+                          MethodTypeDesc constructor) {
+        if (target.module().equals(pkg)) {
+            return;
+        }
+        ConstructionLink link =
+                new ConstructionLink(target, dependencies, constructor.descriptorString());
+        ConstructionLink before = constructedElsewhere.putIfAbsent(target, link);
+        if (before != null && !before.equals(link)) {
+            throw new IllegalStateException("`" + target.module() + "." + target.name()
+                    + "` is built here as " + before + " and as " + link);
+        }
+    }
+
+    /** What {@link #linksConstructor} recorded, in the order it was first recorded. */
+    List<ConstructionLink> constructionLinks() {
+        return List.copyOf(constructedElsewhere.values());
     }
 
     /** The typed {@code apply(A,B,…)} descriptor of a standalone required behavior's base — the same

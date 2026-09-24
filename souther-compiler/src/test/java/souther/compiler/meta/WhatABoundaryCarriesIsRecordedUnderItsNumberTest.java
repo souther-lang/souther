@@ -40,6 +40,14 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  */
 class WhatABoundaryCarriesIsRecordedUnderItsNumberTest {
 
+    /** A module whose behavior {@link #MODULE} builds, so what a module's classes build of another
+     *  one is written with something in it. */
+    private static final String RATES = """
+            module shared.rates exposing ( half )
+            behavior half : (n: Int) -> Int
+            let half (n) = n - 1
+            """;
+
     /**
      * Enough of a module to write all three of the annotations this compiler puts on a class, and to
      * put something in every member of each.
@@ -50,8 +58,9 @@ class WhatABoundaryCarriesIsRecordedUnderItsNumberTest {
      * {@link #everyMemberOfTheRecordWasMeasured}, which refuses a record that could not read one.
      */
     private static final String MODULE = """
-            module shared.money exposing ( Amount, Receipt, ceiling, charge, quote, settle )
+            module shared.money exposing ( Amount, Receipt, ceiling, charge, quote, settle, halve )
             import String ( length )
+            import shared.rates ( half )
 
             data Amount = Int
                 invariant value >= 0 && withinCap(value)
@@ -70,11 +79,19 @@ class WhatABoundaryCarriesIsRecordedUnderItsNumberTest {
 
             behavior settle : (a: Amount) -> Receipt depends on quote
             let settle (a, quote) = quote(a)
+
+            behavior halve : (n: Int) -> Int
+            let halve (n) = half(n)
             """;
+
+    /** Both modules, compiled together. */
+    private static Map<String, ClassFileImage> compiled() {
+        return Compiler.compileModules(List.of(RATES, MODULE));
+    }
 
     @Test
     void theShapeIsTheOneRecordedForThisBoundary() {
-        String carried = carried(Compiler.compile(MODULE));
+        String carried = carried(compiled());
         String recorded = recorded(Backend.BOUNDARY_VERSION);
 
         assertNotNull(recorded, () ->
@@ -175,7 +192,7 @@ class WhatABoundaryCarriesIsRecordedUnderItsNumberTest {
      */
     @Test
     void everyMemberOfTheRecordWasMeasured() {
-        String carried = carried(Compiler.compile(MODULE));
+        String carried = carried(compiled());
 
         assertFalse(carried.contains(UNREAD),
                 () -> "a member of the boundary is written by a fixture that leaves it empty, so"

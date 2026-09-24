@@ -2,6 +2,7 @@ package souther.compiler.meta;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.BehaviorImplementation;
+import souther.compiler.codegen.ConstructionLink;
 import souther.compiler.check.Preserved;
 import souther.compiler.check.Scoping;
 import souther.compiler.cst.SourceLayout;
@@ -78,6 +79,16 @@ public sealed interface ReadableModule permits ModuleReadback.AsRead {
      * composition's comes from its stages, and its stages are not published.
      */
     Map<String, List<ValueName.Behavior>> behaviorRequirements();
+
+    /**
+     * The constructors of other modules' behaviors its classes link against, as the instructions
+     * that link them recorded them where the module was built.
+     *
+     * <p>Not a declaration of this module's: what its classes assumed about the modules it was built
+     * against. A compilation reading it holds those modules, as it has them, to the same
+     * constructors.
+     */
+    List<ConstructionLink> constructionLinks();
 
     /** What its library import lines brought in, which the module itself no longer says. */
     List<Scoping.Claim> libraryClaims();

@@ -11,6 +11,7 @@ import java.lang.classfile.ClassFile;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -56,6 +57,9 @@ public final class Emissions {
     private final String module;
     /** Whose numbers these classes record a run in, where they record one at all. */
     private final ProbeImage probes;
+    /** The constructors of other modules' behaviors these classes link against, once the generation
+     *  has said so. */
+    private List<ConstructionLink> constructionLinks;
     /** What was handed out, once there is such a thing. */
     private Map<String, ClassFileImage> sealed;
 
@@ -203,6 +207,34 @@ public final class Emissions {
     void leftOut(String behavior) {
         stillOpen("recording an implementation this emission did not make");
         leftOut.add(behavior);
+    }
+
+    /**
+     * That these classes build {@code links} — every constructor of another module's behavior an
+     * instruction of theirs links against. Said once, by the generation, when every class is written.
+     */
+    void constructs(List<ConstructionLink> links) {
+        stillOpen("recording what the classes link against");
+        if (constructionLinks != null) {
+            throw new IllegalStateException("what the classes of " + module + " build is said once");
+        }
+        constructionLinks = List.copyOf(links);
+    }
+
+    /**
+     * The constructors of other modules' behaviors these classes link against, as the instructions
+     * that link them recorded them.
+     *
+     * <p>What a module published about itself is its declarations; this is what its classes assumed
+     * about somebody else's, which a reader of the module off the path holds the module it builds
+     * from to.
+     */
+    public List<ConstructionLink> constructionLinks() {
+        if (constructionLinks == null) {
+            throw new IllegalStateException("the generation of " + module
+                    + " has not said what its classes build");
+        }
+        return constructionLinks;
     }
 
     /**

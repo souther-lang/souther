@@ -1587,6 +1587,7 @@ final class BodyGen {
             ClassDesc impl = ctx.cdBehaviorImpl(callee);
             code.new_(impl);
             code.dup();
+            ctx.linksConstructor(callee, List.of(), MTD_void);
             code.invokespecial(impl, "<init>", MTD_void);
             if (sig.params().size() == 1) {
                 Type at = genExpr(call.args().get(0));

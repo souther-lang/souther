@@ -40,13 +40,13 @@ final class PublishedRequirements {
         return List.copyOf(out);
     }
 
-    private static String counted(String text) {
+    static String counted(String text) {
         return text.length() + ":" + text;
     }
 
     /** The counted text starting at {@code at[0]}, moving {@code at[0]} past it; null where there is
      *  none there. */
-    private static String counted(String entry, int[] at) {
+    static String counted(String entry, int[] at) {
         int from = at[0];
         int colon = from;
         while (colon < entry.length() && Character.isDigit(entry.charAt(colon))

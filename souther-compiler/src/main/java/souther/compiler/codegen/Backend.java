@@ -601,6 +601,7 @@ public final class Backend {
                     + " site(s) that nothing emitted: " + missed
                     + "; a body was walked without counting what it holds");
         }
+        out.constructs(b.ctx.constructionLinks());
         return out;
     }
 
@@ -1866,7 +1867,9 @@ public final class Backend {
             code.getfield(cdP, slot.fieldName(), slot.type());
             ctorParams[i] = slot.type();
         }
-        code.invokespecial(cdStage, "<init>", MethodTypeDesc.of(ConstantDescs.CD_void, ctorParams));
+        MethodTypeDesc constructor = MethodTypeDesc.of(ConstantDescs.CD_void, ctorParams);
+        ctx.linksConstructor(stage, deps, constructor);
+        code.invokespecial(cdStage, "<init>", constructor);
     }
 
     // --- value class members ---

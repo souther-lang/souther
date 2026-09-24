@@ -5,6 +5,7 @@ import souther.compiler.Compiler;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.ast.Ast;
 import souther.compiler.codegen.Backend;
+import souther.compiler.codegen.ConstructionLink;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.types.ValueName;
@@ -218,6 +219,55 @@ class ModuleReadbackTest {
 
         assertInstanceOf(Readback.Failure.UnreadableMetadata.class,
                 refusalOf("shared.q", garbled));
+    }
+
+    /** What a module's classes build of another module comes back with it: the behavior, what it is
+     *  handed in order, and the constructor linked against. */
+    @Test
+    void whatItsClassesBuildOfAnotherModuleIsCarried() {
+        ReadableModule read = readBack("shared.b", Compiler.compileModules(List.of("""
+                module shared.c exposing ( rate, step : Int )
+                behavior rate : (n: Int) -> Int
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                behavior step = rate >-> double
+                """, """
+                module shared.b exposing ( priced : Int )
+                import shared.c ( step )
+                behavior inc : (n: Int) -> Int
+                let inc (n) = n + 1
+                behavior priced = step >-> inc
+                """)));
+
+        assertEquals(List.of(new ConstructionLink(new ValueName.Behavior("shared.c", "step"),
+                        List.of(new ValueName.Behavior("shared.c", "rate")),
+                        "(Lsouther/runtime/Behavior;)V")),
+                read.constructionLinks());
+    }
+
+    /** A module at this boundary that says nothing of what its classes build was not written by
+     *  this compiler, and is not read as building nothing. */
+    @Test
+    void aModuleThatSaysNothingOfWhatItBuildsIsNotReadAsBuildingNothing() {
+        Map<String, ClassFileImage> classes = Compiler.compile("""
+                module shared.q exposing ( double )
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                """);
+
+        assertInstanceOf(Readback.Failure.UnreadableMetadata.class,
+                refusalOf("shared.q", viewing(classes, m -> withConstructions(m, m.compat(), null))));
+        assertInstanceOf(Readback.Failure.Incompatible.class,
+                refusalOf("shared.q", viewing(classes,
+                        m -> withConstructions(m, Backend.BOUNDARY_VERSION - 1, null))),
+                "an older writer left it out, which is the boundary the two do not share");
+    }
+
+    private static PublishedClasses.SoutherModuleView withConstructions(
+            PublishedClasses.SoutherModuleView m, int compat, List<String> constructions) {
+        return new PublishedClasses.SoutherModuleView(compat, m.compiler(), m.header(),
+                m.imports(), m.types(), m.behaviors(), m.invariantHelpers(), m.valueAnswers(),
+                constructions);
     }
 
     /** {@code classes} with every behavior's requirement list replaced by {@code requirements}. */

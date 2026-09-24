@@ -279,13 +279,26 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
      * <p>The rule inside the published module is read at two calls, because that is what a reader
      * out here has to be able to be sent to: one rule, out of sight, met twice, and where a report
      * points for each is what the reading that met it says rather than what the rule does.
+     *
+     * <p>The published module's classes build a behavior of another published module, because a
+     * module read off the path is held to how the modules it was built against build what it
+     * builds, whatever the reader goes on to use of it.
      */
     private static Compilation readingWhatIsPublished() {
-        Map<String, ClassFileImage> published = Compiler.compile("""
-                module lib exposing ( wide )
+        Map<String, ClassFileImage> published = Compiler.compileModules(List.of("""
+                module base exposing ( twice )
+
+                behavior twice : (n: Int) -> Int
+                let twice (n) = n + n
+                """, """
+                module lib exposing ( wide, doubled )
+                import base ( twice )
 
                 let wide (n: Int): Bool = n > 10
-                """, "lib.sou");
+
+                behavior doubled : (n: Int) -> Int
+                let doubled (n) = twice(n)
+                """));
         Compilation compilation = Compilation.ofSources(List.of("""
                 module reader
 

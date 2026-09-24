@@ -8,6 +8,7 @@ import souther.compiler.check.Preserved;
 import souther.compiler.check.Scoping;
 import souther.compiler.check.Registry;
 import souther.compiler.codegen.Backend;
+import souther.compiler.codegen.ConstructionLink;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Region;
 import souther.compiler.cst.SourceLayout;
@@ -126,6 +127,13 @@ public final class ModuleReadback {
         // whatever its number says.
         if (m.compat() != Backend.BOUNDARY_VERSION || m.header().isBlank()) {
             return unreadable(moduleName, new Readback.Failure.Incompatible(m.compiler()));
+        }
+        // What its classes build of other modules. Written by every writer at this boundary, empty
+        // where they build nothing, so a module at this number without it is not one this wrote.
+        List<ConstructionLink> constructions = m.constructions() == null
+                ? null : PublishedConstructions.read(m.constructions());
+        if (constructions == null) {
+            return unreadable(moduleName, new Readback.Failure.UnreadableMetadata());
         }
         StringBuilder declarations = new StringBuilder();
         Map<String, BehaviorImplementation> implementations = new LinkedHashMap<>();
@@ -268,8 +276,8 @@ public final class ModuleReadback {
         }
         return new Readback.Ready<>(
                 new AsRead(checked.module(), declared.declarations(), declared.asDeclared(),
-                        implementations, requirements, checked.claims(), readBack.laidOut(),
-                        answers));
+                        implementations, requirements, constructions, checked.claims(),
+                        readBack.laidOut(), answers));
     }
 
     /**
@@ -283,6 +291,7 @@ public final class ModuleReadback {
                   java.util.List<String> asDeclared,
                   Map<String, BehaviorImplementation> behaviorImplementations,
                   Map<String, List<ValueName.Behavior>> behaviorRequirements,
+                  List<ConstructionLink> constructionLinks,
                   java.util.List<Scoping.Claim> libraryClaims,
                   SourceLayout laidOutText,
                   Preserved.SettledValues valueAnswers) implements ReadableModule {
@@ -296,6 +305,7 @@ public final class ModuleReadback {
                     Collections.unmodifiableMap(new LinkedHashMap<>(behaviorImplementations));
             behaviorRequirements =
                     Collections.unmodifiableMap(new LinkedHashMap<>(behaviorRequirements));
+            constructionLinks = List.copyOf(constructionLinks);
             libraryClaims = List.copyOf(libraryClaims);
         }
     }

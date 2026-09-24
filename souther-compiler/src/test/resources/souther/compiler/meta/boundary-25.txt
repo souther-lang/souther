@@ -9,6 +9,7 @@ Lsouther/runtime/meta/SoutherModule;
   behaviors: array of string
   compat: int
   compiler: string
+  constructions: array of string
   header: string
   imports: array of string
   invariantHelpers: array of string

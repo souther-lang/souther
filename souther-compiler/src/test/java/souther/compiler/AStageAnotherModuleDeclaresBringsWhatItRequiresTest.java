@@ -206,11 +206,214 @@ class AStageAnotherModuleDeclaresBringsWhatItRequiresTest {
         path.putAll(Compiler.compile(C_WITHOUT_RATE));
 
         assertRefusedForRate(assertThrows(CompileException.class,
-                () -> Compiler.compileModules(List.of("""
-                        module app.t
-                        import lib.b ( inc )
-                        behavior twice = inc >-> inc
-                        """), ModulePath.of(path))));
+                () -> Compiler.compileModules(List.of(USES_ONLY_INC), ModulePath.of(path))));
+    }
+
+    /**
+     * `lib.b` built against {@code before}, read off the path beside {@code after}, and a compile of
+     * {@code app} against the two.
+     */
+    private static Map<String, ClassFileImage> builtAgainst(String before, String b, String after) {
+        Map<String, ClassFileImage> path = new HashMap<>(Compiler.compileModules(List.of(b),
+                ModulePath.of(Compiler.compile(before))));
+        path.putAll(Compiler.compile(after));
+        return path;
+    }
+
+    private static final String B_ON_STEP = """
+            module lib.b exposing ( inc, priced : Int )
+            import lib.c ( step )
+            behavior inc : (n: Int) -> Int
+            let inc (n) = n + 1
+            behavior priced = step >-> inc
+            """;
+
+    /** Calls `inc`, which requires nothing, by name — and so asks nothing of what `lib.b` requires
+     *  or builds. That the module is held all the same is what holding it for all of it means. */
+    private static final String USES_ONLY_INC = """
+            module app.u
+            import lib.b ( inc )
+            behavior twice : (n: Int) -> Int
+            let twice (n) = inc(inc(n))
+            """;
+
+    /** What {@code app} is refused with, against {@code path}. */
+    private static ModuleMessage refusal(Map<String, ClassFileImage> path, String app) {
+        CompileException refused = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of(app), ModulePath.of(path)));
+        assertEquals("E1510", refused.diagnostic().code(), refused.getMessage());
+        return assertInstanceOf(ModuleMessage.class, refused.diagnostic().said());
+    }
+
+    /**
+     * The stage `lib.b` builds still exists, takes and answers the same, and the behavior it was
+     * built requiring is still declared — and the stage now requires something else. `lib.b` links
+     * against a constructor the stage no longer has.
+     */
+    @Test
+    void aStageRequiringSomethingElseNowIsSaid() {
+        Map<String, ClassFileImage> path = builtAgainst("""
+                module lib.c exposing ( rate, double, step : Int )
+                behavior rate : (n: Int) -> Int
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                behavior step = rate >-> double
+                """, B_ON_STEP, """
+                module lib.c exposing ( rate, bonus, double, step : Int )
+                behavior rate : (n: Int) -> Int
+                behavior bonus : (n: Int) -> Int
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                behavior step = bonus >-> double
+                """);
+
+        ModuleMessage.ItBuildsItWithOtherDependencies said = assertInstanceOf(
+                ModuleMessage.ItBuildsItWithOtherDependencies.class, refusal(path, USES_ONLY_INC));
+        assertEquals("lib.b", said.module());
+        assertEquals("step", said.name());
+        assertEquals("lib.c", said.declaredIn());
+    }
+
+    /** The same two dependencies, taken in the other order. */
+    @Test
+    void aStageTakingItsDependenciesInAnotherOrderIsSaid() {
+        Map<String, ClassFileImage> path = builtAgainst("""
+                module lib.c exposing ( rate, tax, step : Int )
+                behavior rate : (n: Int) -> Int
+                behavior tax : (n: Int) -> Int
+                behavior step = rate >-> tax
+                """, B_ON_STEP, """
+                module lib.c exposing ( rate, tax, step : Int )
+                behavior rate : (n: Int) -> Int
+                behavior tax : (n: Int) -> Int
+                behavior step = tax >-> rate
+                """);
+
+        assertInstanceOf(ModuleMessage.ItBuildsItWithOtherDependencies.class,
+                refusal(path, USES_ONLY_INC));
+    }
+
+    /** The same dependency, by the same name, taking two inputs where it took one. It is held as
+     *  its own class rather than the unary Behavior, so the constructor taking it is another one. */
+    @Test
+    void aDependencyTakingOtherInputsChangesTheConstructorAndIsSaid() {
+        Map<String, ClassFileImage> path = builtAgainst("""
+                module lib.c exposing ( rate, double, step : Int )
+                behavior rate : (n: Int) -> Int
+                behavior charged : (n: Int) -> Int depends on rate
+                let charged (n, rate) = rate(n)
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                behavior step = charged >-> double
+                """, B_ON_STEP, """
+                module lib.c exposing ( rate, double, step : Int )
+                behavior rate : (n: Int, m: Int) -> Int
+                behavior charged : (n: Int) -> Int depends on rate
+                let charged (n, rate) = rate(n, n)
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                behavior step = charged >-> double
+                """);
+
+        assertInstanceOf(ModuleMessage.ItBuildsItWithOtherDependencies.class,
+                refusal(path, USES_ONLY_INC));
+    }
+
+    /** A stage `lib.b` builds is one Java supplies now, so there is no implementation of it to build. */
+    @Test
+    void aStageJavaSuppliesNowIsSaid() {
+        Map<String, ClassFileImage> path = builtAgainst("""
+                module lib.c exposing ( double, step : Int )
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                behavior step = double >-> double
+                """, B_ON_STEP, """
+                module lib.c exposing ( step )
+                behavior step : (n: Int) -> Int
+                """);
+
+        ModuleMessage.ItBuildsWhatTheModuleDoesNotBuild said = assertInstanceOf(
+                ModuleMessage.ItBuildsWhatTheModuleDoesNotBuild.class, refusal(path, USES_ONLY_INC));
+        assertEquals("step", said.name());
+    }
+
+    /** A behavior of another module `lib.b` calls by name, built where it is called with nothing to
+     *  hand it, which requires something now. */
+    @Test
+    void aBehaviorCalledByNameThatRequiresSomethingNowIsSaid() {
+        Map<String, ClassFileImage> path = builtAgainst("""
+                module lib.c exposing ( twice )
+                behavior twice : (n: Int) -> Int
+                let twice (n) = n + n
+                """, """
+                module lib.b exposing ( inc, use )
+                import lib.c ( twice )
+                behavior inc : (n: Int) -> Int
+                let inc (n) = n + 1
+                behavior use : (n: Int) -> Int
+                let use (n) = twice(n)
+                """, """
+                module lib.c exposing ( rate, twice )
+                behavior rate : (n: Int) -> Int
+                behavior twice : (n: Int) -> Int depends on rate
+                let twice (n, rate) = rate(n)
+                """);
+
+        ModuleMessage.ItBuildsItWithOtherDependencies said = assertInstanceOf(
+                ModuleMessage.ItBuildsItWithOtherDependencies.class, refusal(path, USES_ONLY_INC));
+        assertEquals("twice", said.name());
+        assertEquals("() through ()V", said.built());
+        assertEquals("(lib.c.rate) through (Lsouther/runtime/Behavior;)V", said.now());
+    }
+
+    /** `lib.b` without the module whose behavior it builds. Nothing `lib.b` publishes names `lib.c` —
+     *  the body that calls `twice` is not published, and the import goes with it — so only what its
+     *  classes build says `lib.c` is needed, and that it is not there is said. */
+    @Test
+    void aModuleOnlyItsClassesBuildFromIsNeededAllTheSame() {
+        Map<String, ClassFileImage> path = Compiler.compileModules(List.of("""
+                module lib.b exposing ( inc, use )
+                import lib.c ( twice )
+                behavior inc : (n: Int) -> Int
+                let inc (n) = n + 1
+                behavior use : (n: Int) -> Int
+                let use (n) = twice(n)
+                """), ModulePath.of(Compiler.compile("""
+                module lib.c exposing ( twice )
+                behavior twice : (n: Int) -> Int
+                let twice (n) = n + n
+                """)));
+
+        CompileException refused = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of(USES_ONLY_INC), ModulePath.of(path)));
+
+        ModuleMessage.AModuleItNeedsIsNotOnThePath said = assertInstanceOf(
+                ModuleMessage.AModuleItNeedsIsNotOnThePath.class, refused.diagnostic().said());
+        assertEquals("lib.c", said.needed());
+        assertEquals("lib.b", said.module());
+    }
+
+    /** A version of `lib.c` that builds everything `lib.b` builds the way it did, with something
+     *  added beside it. Nothing `lib.b` links against moved, and it is taken. */
+    @Test
+    void aVersionBuildingWhatItBuildsTheSameWayIsTaken() {
+        Map<String, ClassFileImage> path = builtAgainst("""
+                module lib.c exposing ( rate, double, step : Int )
+                behavior rate : (n: Int) -> Int
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                behavior step = rate >-> double
+                """, B_ON_STEP, """
+                module lib.c exposing ( rate, bonus, double, step : Int )
+                behavior rate : (n: Int) -> Int
+                behavior bonus : (n: Int) -> Int
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n + 0
+                behavior step = rate >-> double
+                """);
+
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of(USES_ONLY_INC),
+                ModulePath.of(path)));
     }
 
     private static void assertRefusedForRate(CompileException refused) {

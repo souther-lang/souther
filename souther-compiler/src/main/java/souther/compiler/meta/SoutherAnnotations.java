@@ -109,7 +109,21 @@ final class SoutherAnnotations {
                 moduleInt(a, "compat", -1), moduleString(a, "compiler", ""),
                 moduleString(a, "header", ""),
                 strings(a, "imports"), strings(a, "types"), strings(a, "behaviors"),
-                strings(a, "invariantHelpers"), strings(a, "valueAnswers"));
+                strings(a, "invariantHelpers"), strings(a, "valueAnswers"),
+                stringsOrNull(a, "constructions"));
+    }
+
+    /**
+     * An array member the schema declares with no default, or null where the writer wrote none.
+     *
+     * <p>On the {@code $Module} annotation and not refused here, for the reason {@code compat} is
+     * not: a writer older than this reader leaves it out, and what that says is a boundary the two
+     * do not share, which the reading reports once it has read the number. The reading refuses a
+     * module at this boundary that left it out.
+     */
+    private static List<String> stringsOrNull(Annotation a, String name) {
+        AnnotationValue value = member(a, name);
+        return value == null ? null : stringsOf(value, name);
     }
 
     /**

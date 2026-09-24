@@ -21,6 +21,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.check.Exposing;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.Scoping;
+import souther.compiler.codegen.ConstructionLink;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.RowIdentity;
@@ -505,6 +506,11 @@ public final class Front {
                 return read.behaviorRequirements();
             }
 
+            /** The constructors of other modules' behaviors its classes link against. */
+            public List<ConstructionLink> constructionLinks() {
+                return read.constructionLinks();
+            }
+
             public List<Scoping.Claim> libraryClaims() {
                 return read.libraryClaims();
             }
@@ -606,29 +612,6 @@ public final class Front {
                 pending.addAll(reaches);
             }
             Map<String, List<SourcePos>> reachedFrom = reachedFrom(named, edges);
-            // What a module published it requires names behaviors of the modules it reaches, and
-            // is held to them here with every module in sight, the way the module names in it are:
-            // for everything the module published, and not for what some importer happens to use.
-            // A module one of whose requirements names nothing there was built against another
-            // version of that module, and is not taken into this compilation.
-            Map<String, List<ValueName.Behavior>> builtAgainstAnother = new LinkedHashMap<>();
-            read.forEach((name, module) -> {
-                for (List<ValueName.Behavior> required : module.behaviorRequirements().values()) {
-                    for (ValueName.Behavior dependency : required) {
-                        Ast.Module there = inSight(db, layout, read, dependency.module());
-                        if (there != null && !declaresBehavior(there, dependency.name())) {
-                            builtAgainstAnother.computeIfAbsent(name, _ -> new ArrayList<>())
-                                    .add(dependency);
-                        }
-                    }
-                }
-            });
-            builtAgainstAnother.forEach((name, undeclared) -> {
-                read.remove(name);
-                for (ValueName.Behavior dependency : undeclared) {
-                    reports.add(saidAbout(name, builtRequiring(name, dependency), reachedFrom));
-                }
-            });
             Map<String, OnThePath> found = new LinkedHashMap<>();
             read.forEach((name, module) -> found.put(name,
                     new OnThePath(module, reachedFrom.getOrDefault(name, List.of()))));
@@ -650,7 +633,6 @@ public final class Front {
                     // this compiler will not read, is on the path and has been told so.
                     if (read.containsKey(needed) || refused.containsKey(needed)
                             || unreadable.containsKey(needed)
-                            || builtAgainstAnother.containsKey(needed)
                             || layout.idOfModule().containsKey(needed)
                             || Reserved.isQualifier(needed)) {
                         continue;
@@ -661,7 +643,6 @@ public final class Front {
             }
             SequencedSet<String> notRead = new LinkedHashSet<>(refused.keySet());
             notRead.addAll(unreadable.keySet());
-            notRead.addAll(builtAgainstAnother.keySet());
             return Answer.of(new FromPath.Of(Ordered.map(found), Ordered.set(notRead)), reports);
         }
     }
@@ -884,45 +865,6 @@ public final class Front {
                 .hint(new ModuleMessage.AddItToThisProjectsDependencies(needed))
                 .atCodeWrittenOutOfSight(ModuleReadback.provenanceOf(module))
                 .build();
-    }
-
-    /**
-     * That {@code module}, off the path, was built requiring {@code dependency}, and the module it
-     * names as this compilation has it does not declare it — said about {@code module}, which is the
-     * artifact built against another version of that one.
-     */
-    static Diagnostic builtRequiring(String module, ValueName.Behavior dependency) {
-        return Diagnostic.say(new ModuleMessage.ItWasBuiltRequiringWhatTheModuleDoesNotDeclare(
-                        module, dependency.name(), dependency.module()))
-                .hint(new ModuleMessage.RebuildItAgainstTheModuleThisCompilationReads(
-                        module, dependency.module()))
-                .atCodeWrittenOutOfSight(ModuleReadback.provenanceOf(module))
-                .build();
-    }
-
-    /**
-     * {@code name} as this compilation has it: as its source was written, or as it was read back off
-     * the path — or null where there is no such module to ask, one nothing has or one it has and will
-     * not read, each of which is said on its own.
-     */
-    private static Ast.Module inSight(Db db, Layout.Of layout, Map<String, ReadableModule> read,
-                                      String name) {
-        if (layout.idOfModule().containsKey(name)) {
-            return db.ask(new Exposed(name)).value();
-        }
-        ReadableModule off = read.get(name);
-        return off == null ? null : off.module();
-    }
-
-    /** Whether {@code module} declares a behavior of that name. Whether there is one, and nothing
-     *  about what it is. */
-    private static boolean declaresBehavior(Ast.Module module, String name) {
-        for (Ast.BehaviorDef behavior : module.behaviors()) {
-            if (behavior.name().equals(name)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /** What the path carries for {@code name}, or null when no module of that name came off it. */
@@ -1412,23 +1354,32 @@ public final class Front {
 
     /**
      * Every module a module read off the path reaches: what its declarations name
-     * ({@link #reaches(Ast.Module)}), and every module a dependency one of its behaviors is
-     * constructed with is declared in.
+     * ({@link #reaches(Ast.Module)}), every module a dependency one of its behaviors is constructed
+     * with is declared in, and every module a behavior its classes build is declared in.
      *
-     * <p>The second is not in the text. A composition's stages are not published, so a dependency a
-     * stage brings in may be declared in a module nothing the module carries mentions, and it is
-     * carried beside the module instead. A reader building the composition is handed that dependency
-     * and types it from its module; a reader comparing two builds of it follows it there. One answer
-     * for both sets of published classes, for the reason the one above is one.
+     * <p>The last two are not in the text, and are carried beside it. A composition's stages are not
+     * published, so a dependency a stage brings in may be declared in a module nothing the module
+     * carries mentions — and so may the stage itself, or a behavior a body calls by name, since the
+     * bodies are not published either and the import that named it goes with them. A reader building
+     * the composition is handed that dependency and types it from its module; a reader holding the
+     * module to what its classes build asks that module how it builds it; a reader comparing two
+     * builds follows it there. One answer for both sets of published classes, for the reason the one
+     * above is one.
      */
     public static SequencedSet<String> reaches(ReadableModule read) {
         String own = read.module().name();
         SequencedSet<String> names = new LinkedHashSet<>(reaches(read.module()).keySet());
+        List<ValueName.Behavior> named = new ArrayList<>();
         for (List<ValueName.Behavior> required : read.behaviorRequirements().values()) {
-            for (ValueName.Behavior dependency : required) {
-                if (!dependency.module().equals(own)) {
-                    names.add(dependency.module());
-                }
+            named.addAll(required);
+        }
+        for (ConstructionLink link : read.constructionLinks()) {
+            named.add(link.target());
+            named.addAll(link.dependencies());
+        }
+        for (ValueName.Behavior each : named) {
+            if (!each.module().equals(own)) {
+                names.add(each.module());
             }
         }
         return names;

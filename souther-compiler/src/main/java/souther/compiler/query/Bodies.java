@@ -66,7 +66,12 @@ import souther.compiler.core.GrowingFold;
 import souther.compiler.core.ValueShape;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.Message;
 import souther.compiler.diag.msg.ModuleMessage;
+import souther.compiler.diag.msg.Reported;
+import souther.compiler.codegen.ConstructionAbi;
+import souther.compiler.codegen.ConstructionLink;
+import souther.compiler.meta.ModuleReadback;
 import souther.compiler.claims.ClaimDiagnostics;
 import souther.compiler.claims.Claims;
 import souther.compiler.claims.UnreachableClaims;
@@ -1116,7 +1121,10 @@ public final class Bodies {
         public Answer<Map<String, List<BehaviorRequirement>>> compute(Db db) {
             Front.FromPath.OnThePath onThePath = Front.onThePath(db, name);
             if (onThePath != null) {
-                return published(onThePath);
+                // What a module built against another version of its dependencies says it requires
+                // is not taken in. Why is said where the module is held to them (BuiltAgainst).
+                return db.ask(new BuiltAgainst(name)).present()
+                        ? published(onThePath) : Answer.absent();
             }
             Answer<Lower.Lowered> lowering = db.ask(new Lowering(name));
             Answer<Set<ValueName.Behavior>> injected = db.ask(new ImportedInjected(name));
@@ -1137,11 +1145,8 @@ public final class Bodies {
     }
 
     /**
-     * What a module read off the path published each of its behaviors as requiring.
-     *
-     * <p>Taken as published. Every behavior named here was held to the module it names when the
-     * module was taken off the path ({@link Front.FromPath}), whatever of it anybody goes on to
-     * use; a module one of whose requirements names nothing there is not in this compilation.
+     * What a module read off the path published each of its behaviors as requiring, taken as
+     * published once the module has been held to what it was built against ({@link BuiltAgainst}).
      */
     private static Answer<Map<String, List<BehaviorRequirement>>> published(
             Front.FromPath.OnThePath onThePath) {
@@ -1154,6 +1159,163 @@ public final class Bodies {
             published.put(behavior, List.copyOf(each));
         });
         return Answer.of(Ordered.map(published));
+    }
+
+    /**
+     * The constructor of each behavior of a module that is built rather than supplied, as this
+     * compilation has the module: its JVM descriptor, by the behavior's name.
+     *
+     * <p>Only the behaviors Souther implements and someone has written. One Java supplies has no
+     * implementation of this compiler's to build, and one nobody has written has none either, so
+     * neither has a constructor here — and a module built against a version where it had one is
+     * told so, rather than told the constructor changed.
+     *
+     * <p>Worked out from what the module requires and what each requirement takes, by the rule the
+     * emitter declares and links a constructor by ({@link ConstructionAbi}). So a module read off the
+     * path is held to the constructors the module it builds from would emit, and not to a second
+     * account of how a descriptor is chosen.
+     */
+    public record Constructors(String name) implements Key<Map<String, ConstructionLink>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, ConstructionLink>> compute(Db db) {
+            Answer<Map<String, BehaviorImplementation>> implementations =
+                    db.ask(new Implementation(name));
+            Answer<Map<String, List<BehaviorRequirement>>> requirements =
+                    db.ask(new Requirements(name));
+            Answer<Map<ValueName.Behavior, Sig>> takes = db.ask(new RequirementSignatures(name));
+            if (!implementations.present() || !requirements.present() || !takes.present()) {
+                return Answer.absent();
+            }
+            Map<String, ConstructionLink> out = new LinkedHashMap<>();
+            implementations.value().forEach((behavior, implementation) -> {
+                if (implementation != BehaviorImplementation.IMPLEMENTED) {
+                    return;
+                }
+                List<BehaviorRequirement> required = requirements.value().get(behavior);
+                if (required == null) {
+                    throw new IllegalStateException("`" + name + "." + behavior + "` is built and"
+                            + " has no requirement set");
+                }
+                List<ValueName.Behavior> dependencies =
+                        souther.compiler.check.Requirements.names(required);
+                out.put(behavior, new ConstructionLink(new ValueName.Behavior(name, behavior),
+                        dependencies, ConstructionAbi.constructor(dependencies,
+                                dependency -> takes.value().get(dependency).inputTypes())
+                                .descriptorString()));
+            });
+            return Answer.of(Ordered.map(out));
+        }
+    }
+
+    /**
+     * Whether a module read off the path agrees with the modules this compilation has about what
+     * it was built against.
+     *
+     * <p>Two things the module carries name another module's behaviors, and both are held here: what
+     * each of its behaviors requires injected names behaviors the module it names must declare
+     * (spec {@code [#a-reached-name-is-declared-by-its-module]}), and every constructor its classes
+     * link against in another module must be the one that module builds the behavior with now
+     * (spec {@code [#a-published-module-agrees-with-what-it-was-built-against]}). A module where
+     * either does not hold was built against another version of that module.
+     *
+     * <p>Asked of every module read off the path, where the compilation's problems are gathered, and
+     * not by whoever goes on to use some of the module. What a module was built against is a fact
+     * about all of it.
+     *
+     * <p>A module compiled here is built against what it is compiled with, and agrees.
+     */
+    public record BuiltAgainst(String name) implements Key<Boolean> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Boolean> compute(Db db) {
+            Front.FromPath.OnThePath onThePath = Front.onThePath(db, name);
+            if (onThePath == null) {
+                return Answer.of(Boolean.TRUE);
+            }
+            List<Report> reports = new ArrayList<>();
+            for (List<ValueName.Behavior> required : onThePath.behaviorRequirements().values()) {
+                for (ValueName.Behavior dependency : required) {
+                    // A module nothing in this compilation has is said where the path is read.
+                    Ast.Module there = db.ask(new Front.Available(dependency.module())).value();
+                    if (there != null && !declaresBehavior(there, dependency.name())) {
+                        reports.add(Report.raised(builtAgainstAnother(
+                                new ModuleMessage.ItWasBuiltRequiringWhatTheModuleDoesNotDeclare(
+                                        name, dependency.name(), dependency.module()),
+                                name, dependency.module())));
+                    }
+                }
+            }
+            boolean unheld = false;
+            for (ConstructionLink link : onThePath.constructionLinks()) {
+                ValueName.Behavior target = link.target();
+                Answer<Map<String, ConstructionLink>> built =
+                        db.ask(new Constructors(target.module()));
+                if (!built.present()) {
+                    // A module that did not come out, or one this compilation does not have — each
+                    // said about it where it is found; there is nothing here to hold the link to.
+                    unheld = true;
+                    continue;
+                }
+                ConstructionLink now = built.value().get(target.name());
+                if (now == null) {
+                    reports.add(Report.raised(builtAgainstAnother(
+                            new ModuleMessage.ItBuildsWhatTheModuleDoesNotBuild(
+                                    name, target.name(), target.module()),
+                            name, target.module())));
+                } else if (!now.equals(link)) {
+                    reports.add(Report.raised(builtAgainstAnother(
+                            new ModuleMessage.ItBuildsItWithOtherDependencies(
+                                    name, target.name(), target.module(), shown(link),
+                                    shown(now)),
+                            name, target.module())));
+                }
+            }
+            if (!reports.isEmpty()) {
+                return Answer.absent(reports);
+            }
+            return unheld ? Answer.absent() : Answer.of(Boolean.TRUE);
+        }
+
+        /** What {@code link} hands the behavior and by which constructor, as a report shows it: the
+         *  dependencies in order, then the descriptor. */
+        private static String shown(ConstructionLink link) {
+            List<String> handed = new ArrayList<>();
+            for (ValueName.Behavior dependency : link.dependencies()) {
+                handed.add(dependency.module() + "." + dependency.name());
+            }
+            return "(" + String.join(", ", handed) + ") through " + link.constructor();
+        }
+
+        /** Whether {@code module} declares a behavior of that name — whether there is one, and
+         *  nothing about what it is. */
+        private static boolean declaresBehavior(Ast.Module module, String behavior) {
+            for (Ast.BehaviorDef each : module.behaviors()) {
+                if (each.name().equals(behavior)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /** {@code said} about {@code module}, which was built against another version of
+         *  {@code dependency}: said about the artifact to rebuild, whose code nobody here holds. */
+        private static <M extends Message & Reported> Diagnostic builtAgainstAnother(
+                M said, String module, String dependency) {
+            return Diagnostic.say(said)
+                    .hint(new ModuleMessage.RebuildItAgainstTheModuleThisCompilationReads(
+                            module, dependency))
+                    .atCodeWrittenOutOfSight(ModuleReadback.provenanceOf(module))
+                    .build();
+        }
     }
 
     /**
