@@ -12,9 +12,9 @@ import java.util.Map;
  *  so a {@code groupBy} that grows a map is O(n log n) rather than the O(n²) a whole-map copy costs.
  *  The language specifies no iteration order, and it is not insertion order; two maps that are equal
  *  are not guaranteed to iterate in the same order, so a caller may depend on no particular one
- *  ({@link PersistentHashMap}). The boundary does not depend on it either — a boundary map is written
- *  in ascending order of its rendered keys ({@link Representations#sortedObject}) — so that order is
- *  specified and this one is not. Inputs may be any {@code java.util.Map}
+ *  ({@link PersistentHashMap}). The boundary does not depend on it either — this runtime writes a
+ *  boundary map in ascending order of its rendered keys ({@link Representations#sortedObject}), so
+ *  the bytes follow from the keys and not from the trie. Inputs may be any {@code java.util.Map}
  *  (a decoded map comes from Raoh as a {@code LinkedHashMap}), so builders normalize through
  *  {@link PersistentHashMap#from}. */
 public final class Maps {

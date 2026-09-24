@@ -1,6 +1,38 @@
 # ADR-0094: A boundary writes what a value is, not how it was built or written
 
-Status: Accepted
+Status: Accepted. Revised 2026-09-24 — see *Revision*.
+
+## Revision (2026-09-24)
+
+The law is about the external representation, and bytes are a separate step. Equal values at one
+position write one representation; one implementation turns one representation into one byte
+sequence. The Decision below put both halves into "the same JSON, byte for byte", and a second
+implementation showed that they come apart: the JVM writes a product case's discriminator after the
+case's fields, souther-native-compiler writes it first, and nothing in the language said whether
+that was a disagreement (issue #1900).
+
+It is not. This ADR already decided that an object's member order does not count towards the
+sameness of two representations, and that is now what the specification says an object is
+(`[#an-object-is-a-mapping]`): a mapping from names to values, where an array's order is part of
+what it is and an object's is not. The byte-for-byte claim was the one sentence that disagreed with
+that, and it held only because the JVM's generated encoders happen to write one type's members in
+one order.
+
+What stays:
+
+- A `Decimal` is written as its amount. That settles the representation, not the bytes.
+- A `Set`'s array is written in ascending order of its members' representations. An array's order
+  is part of the representation, so the language has to decide it.
+- What one implementation writes at a position follows from the representation alone and never
+  from how the value was built (`[#bytes-follow-from-the-representation]`). This is the
+  construction-history problem the Decision set out to remove, placed where it belongs, and golden
+  tests, ETags and cache keys rest on it within one implementation.
+
+What goes: a boundary `Map`'s object being written in ascending order of its rendered keys is no
+longer the language's. An object has no order to specify. The JVM runtime still writes it that way,
+which is how it meets the rule above, and another implementation may meet the rule another way. Two
+implementations are not required to write the same bytes; a canonical form shared across them would
+be a separate decision.
 
 ## Context
 
@@ -155,7 +187,8 @@ that is reading something the language does not decide. Writing "the first inser
 
 ## References
 
-- Specification: `[#encode-law]`, `[#primitives]`, `[#collections]`, `[#stdlib-set]`, `[#stdlib-map]`
+- Specification: `[#encode-law]`, `[#bytes-follow-from-the-representation]`,
+  `[#an-object-is-a-mapping]`, `[#primitives]`, `[#collections]`, `[#stdlib-set]`, `[#stdlib-map]`
 - ADR-0039 (a `Set`'s external representation), ADR-0040 (what a boundary map key may be),
   ADR-0009 (`Decimal` ignores scale), ADR-0036 (a tuple has no external representation)
 - Issues #299 (the order was unstated), #327 (equal collections encoded differently); RFC 8785 (JCS)
