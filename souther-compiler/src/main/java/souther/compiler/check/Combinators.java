@@ -139,19 +139,7 @@ final class Combinators {
                 call.args().get(rule.containerArg()));
     }
 
-    /**
-     * The operations that take a function and hand it nothing a container holds. The library has
-     * none: every function it takes is applied to what a container argument holds, which is why the
-     * rules can be read off the signatures at all.
-     *
-     * <p>A signature the derivation gets no rule out of is not a gap it left — it is an operation
-     * whose closure is handed something else, and saying so is what tells the next reader which of
-     * the two a missing rule is. {@link Question#COMBINATOR} holds this to that.
-     */
-    static final Set<ValueName> HANDS_ITS_CLOSURE_NOTHING = Set.of();
-
-    /** The operations a rule was read off, for the check that a rule answers a question its
-     * operation is asked. */
+    /** The operations a rule was read off. */
     static Set<ValueName> answered() {
         return Derived.RULES.keySet();
     }

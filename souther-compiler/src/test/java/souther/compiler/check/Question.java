@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.stdlib.Stdlib;
-import souther.compiler.semantics.OperationSubject;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -15,16 +14,16 @@ import java.util.Set;
  * <p>A table with no row for an operation says two things at once: that nothing is true of it, and
  * that nobody looked. That is how {@code List.distinctBy} came to be credited by neither the
  * totality check nor the discharge one — a valid recursive helper rejected, a guard that stopped
- * discharging, and nothing said about a missing row. What settles which of the two a silence is, is
+ * discharging, and nothing said about a missing row. What settles which of the two an absence is, is
  * the range: what an operation is declared to be puts it in range of a question, and an operation in
- * range answers — with a rule, or by being named among the ones there is nothing to say of, with the
- * reason. So the library gaining an operation is the library asking these questions, and each is
- * unanswered until someone answers it.
+ * range is settled — with a rule, or by being named as deliberately unanswered, with the reason. So
+ * the library gaining an operation is the library asking these questions, and each is open until
+ * someone settles it.
  *
- * <p>One of the two and not either. A silence says that nothing is true under the subject, so it is
- * the denial of a rule rather than a spare row beside one, and an operation carrying both is one
- * where one of the two is wrong. Read as "a rule or a silence", a silence is only ever a filler, and
- * one that has become false covers the range as well as anything and stays where it is.
+ * <p>One of the two and not either. Each operation in range is one thing to settle, and these are the
+ * two ways it can be: a rule was written, or the question was considered and closed without one. A
+ * name among the closed ones beside a rule is a record the rule has overtaken. Read as "a rule or a
+ * closing", a stale closing covers the range as well as anything and stays where it is.
  *
  * <p>A range is read off the declaration and nothing else, so it holds an operation nobody thought
  * of. Where the answer too is read off the declaration the rule is derived rather than written
@@ -56,8 +55,14 @@ enum Question {
         }
 
         @Override
-        Set<ValueName> nothingSaidOf() {
-            return DefaultBoundOperationFacts.get().saysNothingOf(OperationSubject.COMBINATOR);
+        Set<ValueName> deliberatelyUnanswered() {
+            // The operations that take a function and hand it nothing a container holds. The
+            // library has none: every function it takes is applied to what a container argument
+            // holds, which is why the rules can be read off the signatures at all. A signature the
+            // derivation gets no rule out of is not a gap it left — it is an operation whose
+            // closure is handed something else, and saying so here is what tells the next reader
+            // which of the two a missing rule is.
+            return Set.of();
         }
     },
 
@@ -70,8 +75,8 @@ enum Question {
      * carries, is declared the same way.
      *
      * <p>The container is part of the range and not only of the answer. This asks whether an
-     * operation walks <em>a container</em>, so one given none is outside it rather than in it with
-     * nothing to say — an operation declared {@code ((A) -> A, A) -> A} repeats a step over no
+     * operation walks <em>a container</em>, so one given none is outside it rather than in it and
+     * deliberately unanswered — an operation declared {@code ((A) -> A, A) -> A} repeats a step over no
      * elements and is a different question, which nobody has had to ask yet.
      *
      * <p>Beside {@link #COMBINATOR} and not folded into it. What an operation hands its closure is
@@ -108,8 +113,14 @@ enum Question {
         }
 
         @Override
-        Set<ValueName> nothingSaidOf() {
-            return Reductions.REDUCES_NOTHING;
+        Set<ValueName> deliberatelyUnanswered() {
+            // The operations that take a container, a seed of the type they answer, and a closure
+            // answering that type, and are not a walk from the seed through the closure. The
+            // library has none, and that is a decision rather than an oversight: every operation
+            // the range holds today is a fold under some name. An operation that took this shape
+            // and applied its closure once, or answered without consulting the seed, would be
+            // named here with what it does instead.
+            return Set.of();
         }
     },
 
@@ -157,8 +168,14 @@ enum Question {
         }
 
         @Override
-        Set<ValueName> nothingSaidOf() {
-            return Accumulations.NO_SIMPLE_ACCUMULATION;
+        Set<ValueName> deliberatelyUnanswered() {
+            // `String.join` accumulates from no identity through no single step, and not because
+            // it answers a string. A separator stands between elements and not before the first,
+            // so what the walk does at each element depends on whether anything came before it —
+            // and an identity with a combine over two values of one type has nowhere to keep that.
+            // Written as `join(sep, xs)` it is a walk carrying more than the answer so far, which
+            // is a different question from this one.
+            return Set.of(op("String", "join"));
         }
     },
 
@@ -184,8 +201,28 @@ enum Question {
         }
 
         @Override
-        Set<ValueName> nothingSaidOf() {
-            return DefaultBoundOperationFacts.get().saysNothingOf(OperationSubject.BUILT);
+        Set<ValueName> deliberatelyUnanswered() {
+            // What a construction keeps of what it read, where the answer is nothing. Each group
+            // is a reason about what a shape can say, not about the operation being uninteresting.
+            //
+            // They answer something other than what they read. A map's keys and its entry pairs
+            // are not its values, `fromList` takes the values out of pairs, `groupBy` answers lists
+            // of the elements rather than the elements, `concat` reads the lists inside its
+            // argument, `zipShortest` pairs two lists, and `flatMap` makes any number of elements
+            // from each.
+            //
+            // They put in what the container they read did not hold. Nothing that held of every
+            // element still does. How many there are is said instead by the bound on the result.
+            //
+            // They answer the same elements in a container of another kind. That is true and
+            // unsayable: every statement names the kind it is about, so nothing said of a list is
+            // a statement about a set, and a rule between them would carry nothing.
+            return Set.of(op("Map", "keys"), op("Map", "toList"), op("Map", "fromList"),
+                    op("List", "groupBy"), op("List", "concat"), op("List", "zipShortest"),
+                    op("List", "flatMap"), op("Map", "insert"), op("Set", "insert"),
+                    op("Map", "union"), op("Set", "union"), op("List", "append"),
+                    op("Map", "updateOrInsert"), op("Map", "values"), op("Set", "toList"),
+                    op("Set", "fromList"), op("List", "indexBy"));
         }
     },
 
@@ -210,8 +247,14 @@ enum Question {
         }
 
         @Override
-        Set<ValueName> nothingSaidOf() {
-            return DefaultBoundOperationFacts.get().saysNothingOf(OperationSubject.PREDICATE_CARRY);
+        Set<ValueName> deliberatelyUnanswered() {
+            // A predicate over a string states something of the characters it holds in the order
+            // it holds them, and what would carry such a statement is a construction of a container
+            // from a container, which a string is not one of. An emptiness check is carried by what
+            // its size does and not as a property of elements.
+            return Set.of(op("String", "contains"), op("String", "startsWith"),
+                    op("String", "endsWith"), op("String", "matches"), op("List", "isEmpty"),
+                    op("Set", "isEmpty"), op("Map", "isEmpty"), op("String", "isEmpty"));
         }
     },
 
@@ -237,8 +280,8 @@ enum Question {
         }
 
         @Override
-        Set<ValueName> nothingSaidOf() {
-            return DefaultBoundOperationFacts.get().saysNothingOf(OperationSubject.EMPTINESS);
+        Set<ValueName> deliberatelyUnanswered() {
+            return Set.of();
         }
     },
 
@@ -265,8 +308,9 @@ enum Question {
         }
 
         @Override
-        Set<ValueName> nothingSaidOf() {
-            return DefaultBoundOperationFacts.get().saysNothingOf(OperationSubject.QUANTIFICATION);
+        Set<ValueName> deliberatelyUnanswered() {
+            // `List.any` states its predicate of some element and not of every one.
+            return Set.of(op("List", "any"));
         }
     },
 
@@ -294,8 +338,8 @@ enum Question {
         }
 
         @Override
-        Set<ValueName> nothingSaidOf() {
-            return DefaultBoundOperationFacts.get().saysNothingOf(OperationSubject.PROJECTION);
+        Set<ValueName> deliberatelyUnanswered() {
+            return Set.of();
         }
     },
 
@@ -318,8 +362,8 @@ enum Question {
         }
 
         @Override
-        Set<ValueName> nothingSaidOf() {
-            return DefaultBoundOperationFacts.get().saysNothingOf(OperationSubject.SIZE);
+        Set<ValueName> deliberatelyUnanswered() {
+            return Set.of();
         }
     },
 
@@ -347,8 +391,16 @@ enum Question {
         }
 
         @Override
-        Set<ValueName> nothingSaidOf() {
-            return DefaultBoundOperationFacts.get().saysNothingOf(OperationSubject.ORDER);
+        Set<ValueName> deliberatelyUnanswered() {
+            // Arithmetic and a choice between two values are not orders at all: what
+            // `Int.subtract` answers has the sign of one and says how far apart they are as well,
+            // and `min` answers one of the two rather than anything about the pair.
+            // `DateTime.minutesBetween` counts whole minutes, so a zero says the two are less than
+            // a minute apart rather than that they are equal, and a non-negative count does not say
+            // the second is not the earlier.
+            return Set.of(op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
+                    op("Int", "min"), op("Int", "max"), op("Int", "floorMod"),
+                    op("DateTime", "minutesBetween"));
         }
     },
 
@@ -386,8 +438,29 @@ enum Question {
         }
 
         @Override
-        Set<ValueName> nothingSaidOf() {
-            return DefaultBoundOperationFacts.get().saysNothingOf(OperationSubject.BOUNDS);
+        Set<ValueName> deliberatelyUnanswered() {
+            // Nothing bounds their result, for three reasons.
+            //
+            // The arithmetic and its function forms answer a number that may be anywhere, and a
+            // choice answers one of two values, which is what its cases bound.
+            //
+            // Two have their number whole in another fact. `Decimal.fromInt` answers the number it
+            // was given and `Date.daysBetween` the two day counts subtracted, and each says so as
+            // the form it answers (`AnswersAFormOfItsArguments`), which puts the result wherever
+            // what it is a form of stands. A bound written beside such a form would be a second,
+            // weaker answer to a question that has one, and which of them was read would be
+            // whichever reader arrived.
+            //
+            // And the narrowings of an exact value. What they are given is a Rational, which is on
+            // no carrier and has no counts for anything to be read in, so a bound relating what
+            // they answer to what they were handed has nothing to relate: `Decimal.toInt` states
+            // one because both sides of it are counted, and these have only one side that is.
+            return Set.of(op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
+                    op("Decimal", "add"), op("Decimal", "subtract"), op("Decimal", "multiply"),
+                    op("Int", "min"), op("Int", "max"), op("Int", "clamp"), op("Decimal", "min"),
+                    op("Decimal", "max"), op("Decimal", "clamp"), op("Decimal", "fromInt"),
+                    op("Decimal", "round"), op("Date", "daysBetween"),
+                    op("Rational", "toInt"), op("Rational", "toDecimal"));
         }
     },
 
@@ -416,8 +489,10 @@ enum Question {
         }
 
         @Override
-        Set<ValueName> nothingSaidOf() {
-            return DefaultBoundOperationFacts.get().saysNothingOf(OperationSubject.MEASURE);
+        Set<ValueName> deliberatelyUnanswered() {
+            // Months and years hold different numbers of days, so neither states a count of the
+            // one measure a pair of dates has.
+            return Set.of(op("Date", "addMonths"), op("Date", "addYears"));
         }
     },
 
@@ -444,8 +519,17 @@ enum Question {
         }
 
         @Override
-        Set<ValueName> nothingSaidOf() {
-            return DefaultBoundOperationFacts.get().saysNothingOf(OperationSubject.CHOICE);
+        Set<ValueName> deliberatelyUnanswered() {
+            // They compute a new number rather than answering one they were given: what `a + b`
+            // answers is neither `a` nor `b`, `compare` answers a sign, `floorMod` a remainder,
+            // `abs` a distance, `toInt` a whole number, `round` and `Rational.toDecimal` a value at
+            // another scale. `Decimal.fromInt` answers the number it was given unconditionally,
+            // which is a statement of its own rather than a case.
+            return Set.of(op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
+                    op("Decimal", "add"), op("Decimal", "subtract"), op("Decimal", "multiply"),
+                    op("Int", "compare"), op("Decimal", "compare"), op("Int", "floorMod"),
+                    op("Int", "abs"), op("Decimal", "abs"), op("Decimal", "toInt"),
+                    op("Decimal", "round"), op("Decimal", "fromInt"), op("Rational", "toDecimal"));
         }
     },
 
@@ -478,8 +562,42 @@ enum Question {
         }
 
         @Override
-        Set<ValueName> nothingSaidOf() {
-            return DefaultBoundOperationFacts.get().saysNothingOf(OperationSubject.FORM);
+        Set<ValueName> deliberatelyUnanswered() {
+            // What they answer is no form of what they were given, for three reasons.
+            //
+            // A product is one only where an operand is written down: `Int.multiply(a, b)` is
+            // arithmetic over `a` and `b` and is a form of neither, since what multiplies each is
+            // the other. A sum and a difference are not here at all — what they answer is a form
+            // of what they were given, and they say so by being the arithmetic they are — the
+            // operator a call to them is read as, which `ComputesANumber` records. So this question
+            // is answered for them and is not closed.
+            //
+            // A number of their own: `compare` answers a sign, `floorMod` a remainder, `abs` a
+            // distance with the sign dropped, `toInt` a whole number, `round` and
+            // `Rational.toDecimal` a value at another scale. What such a result is bounded by is a
+            // different statement from its being a value that was already there; and `min`, `max`
+            // and `clamp` answer one of their arguments, which one depending on the arguments, and
+            // that is what their cases say.
+            //
+            // And, among the temporal ones, a count that is not arithmetic over the counts it was
+            // given. Months and years hold different numbers of days, so neither shift moves a date
+            // by any number of them. `DateTime.minutesBetween` counts whole minutes over a carrier
+            // counting seconds and drops the remainder toward zero, so it is not the difference of
+            // the two counts — which is why it is the operation an author of the next such fact
+            // would reach for, and why the refusal is written down beside the ones that are
+            // accepted. A component of a value is no arithmetic over its count either, and is said
+            // as the representation that reads it rather than as a form: the parts of a day divide
+            // and take a remainder, and the parts of a date are the calendar's, which no step over a
+            // day count answers.
+            return Set.of(op("Int", "multiply"), op("Decimal", "multiply"), op("Int", "compare"),
+                    op("Decimal", "compare"), op("Int", "floorMod"), op("Int", "abs"),
+                    op("Decimal", "abs"), op("Decimal", "toInt"), op("Decimal", "round"),
+                    op("Int", "min"), op("Int", "max"), op("Int", "clamp"), op("Decimal", "min"),
+                    op("Decimal", "max"), op("Decimal", "clamp"), op("Date", "addMonths"),
+                    op("Date", "addYears"), op("DateTime", "minutesBetween"), op("Date", "year"),
+                    op("Date", "month"), op("Date", "day"), op("Time", "hour"),
+                    op("Time", "minute"), op("Time", "second"), op("DateTime", "toDate"),
+                    op("DateTime", "toTime"), op("Rational", "toDecimal"));
         }
     },
 
@@ -515,8 +633,12 @@ enum Question {
         }
 
         @Override
-        Set<ValueName> nothingSaidOf() {
-            return DefaultBoundOperationFacts.get().saysNothingOf(OperationSubject.NUMERIC_RESULT);
+        Set<ValueName> deliberatelyUnanswered() {
+            // They answer one of the values they were given, which is which case they are in and
+            // not arithmetic of their own.
+            return Set.of(op("Int", "min"), op("Int", "max"), op("Int", "clamp"),
+                    op("Int", "floorMod"), op("Int", "compare"), op("Decimal", "min"),
+                    op("Decimal", "max"), op("Decimal", "clamp"));
         }
     },
 
@@ -572,8 +694,31 @@ enum Question {
         }
 
         @Override
-        Set<ValueName> nothingSaidOf() {
-            return DefaultBoundOperationFacts.get().saysNothingOf(OperationSubject.READING);
+        Set<ValueName> deliberatelyUnanswered() {
+            // The number each of the first four answers arrives at one case of what it answers,
+            // and the other case says the text named no number at all. So the number exists and no
+            // representation reads the call: what a reading is applied to is one location, and the
+            // value standing there is the union. Which case it is in is settled where the union is
+            // taken apart, and what stands at the arm is a value with a name of its own rather than
+            // something this operation answered.
+            //
+            // Not "no conversion is ever read". `Decimal.fromInt` is a conversion and answers a
+            // form of its argument, because what it answers is a number at every call. The
+            // difference is the union and nothing else.
+            //
+            // And the walk that multiplies what its container holds. It answers a number at every
+            // call its elements are numbers at, and what reads a number is one account at a time:
+            // the account for a walk that adds is read off that walk, and a walk that multiplies
+            // would need its own — how a total is read off a row and what containers come to a
+            // given one are not the sum's answers with the step changed.
+            //
+            // The joins are not here, and are not in range either. What `String.concat` answers is
+            // declared to be a string, so there is no number for a representation to read;
+            // `List.concat` answers a list and is read by the body the language writes out, which
+            // is about that list.
+            return Set.of(op("String", "toInt"), op("String", "toDecimal"),
+                    op("Rational", "toWholeNumber"), op("Rational", "toFiniteDecimal"),
+                    op("List", "product"));
         }
     };
 
@@ -597,8 +742,15 @@ enum Question {
      * operation is asked — a rule under a name nothing asks is a rule nothing reaches. */
     abstract Set<ValueName> answeredOperations();
 
-    /** The operations this is asked of and has nothing to say of. */
-    abstract Set<ValueName> nothingSaidOf();
+    /**
+     * The operations this is asked of and answers nothing for, each named with the reason.
+     *
+     * <p>Held by the question and not by the facts the compiler reads. What a name here records is
+     * that the question was considered for that operation and closed; the reason is about the
+     * operation, but nothing in the compiler reads a closed question as a proposition, and what
+     * would have to be true for one of these to gain a rule is argued in the comment beside it.
+     */
+    abstract Set<ValueName> deliberatelyUnanswered();
 
     /**
      * The questions an operation declared with {@code signature} is in range of.
@@ -656,6 +808,10 @@ enum Question {
      */
     private static boolean hasASize(Type t) {
         return Type.elementOfAContainer(t) != null || t == Type.Prim.STRING;
+    }
+
+    private static ValueName op(String alias, String name) {
+        return ValueName.Stdlib.operation(alias, name);
     }
 
     @Override

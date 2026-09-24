@@ -86,8 +86,7 @@ final class DischargeRules {
     /** Denial, which the analysis representation keeps as the call it is. */
     static final ValueName NOT = op("Bool", "not");
 
-    /** The operations each table has a rule for. What is asked of them is {@link Question}'s to
-     * settle; these are so it can hold a rule to being one an operation is asked for. */
+    /** The operations each table has a rule for. */
     static Set<ValueName> builtOperations() {
         return facts().buildsItsResultFrom();
     }
@@ -158,17 +157,17 @@ final class DischargeRules {
     /**
      * The operations that answer, counted, some arithmetic over what they were given.
      *
-     * <p>Two sources and one question. Most of them say so by declaring the form
+     * <p>Two sources and one set. Most of them say so by declaring the form
      * ({@link BoundOperationFacts#answersAFormOfItsArguments}); a sum and a difference say it by
      * being the arithmetic they are. Declaring the form for those as well would be the same
-     * statement twice, and leaving them out of the question altogether would be worse: the silence
-     * beside it says there is nothing true here, and of {@code Int.add} that is false.
+     * statement twice, and leaving them out of the set would be worse: an operation missing from it
+     * answers no form of what it was given, and of {@code Int.add} that is false.
      *
      * <p>Which of them are is {@link #operator} and not a reading of its own. What that answers is
      * what a call to such an operation is read as where it stands ({@link Terms#asOperator}), so
      * asking it here is what makes the two the same statement — a second reading agreeing with it
-     * today is a second reading to keep agreeing with it, and where they came apart this question
-     * would want a silence written for an operation the grammar reads as a {@code +}.
+     * today is a second reading to keep agreeing with it, and where they came apart this set would
+     * leave out an operation the grammar reads as a {@code +}.
      *
      * <p>A product is left out because it is a form only where an operand is written down: what
      * multiplies each is the other.

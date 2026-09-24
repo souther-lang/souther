@@ -7,7 +7,6 @@ import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.semantics.NumericResult;
-import souther.compiler.semantics.OperationSubject;
 import souther.compiler.semantics.ResultBound;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
@@ -71,7 +70,6 @@ public final class BoundOperationFacts {
     private final Map<ValueName, List<ResultBound<DeclaredArgument>>> bounds;
     private final Map<ValueName, List<DeclaredArgument>> noSmallerThan;
     private final Map<ValueName, List<DefinitionCase<DeclaredArgument>>> cases;
-    private final Map<OperationSubject, Set<ValueName>> silences;
     private final Map<BinOp, List<ValueName>> writtenAs;
 
     /** Made by the binder and by nothing else: what these are is what a binding came to, and a
@@ -103,7 +101,6 @@ public final class BoundOperationFacts {
                 BoundOperationFact.ResultIsNoSmallerThan::container);
         cases = projected(BoundOperationFact.IsDefinedByCases.class,
                 BoundOperationFact.IsDefinedByCases::one);
-        silences = silences();
         writtenAs = writtenAs();
     }
 
@@ -137,30 +134,6 @@ public final class BoundOperationFacts {
             facts.forEach(each -> parts.add(part.apply(kind.cast(each))));
             out.put(operation, List.copyOf(parts));
         });
-        return Collections.unmodifiableMap(out);
-    }
-
-    /**
-     * The silences by what they are about, read off the filed facts.
-     *
-     * <p>A silence is a fact an operation carries several of — one per subject — so it is filed
-     * with that family and this is a second reading of the same list, by the subject a reader asks
-     * under. Two silences of one operation under one subject are refused here: the family admits
-     * several of a kind, and this is where what several may not be is said.
-     */
-    private Map<OperationSubject, Set<ValueName>> silences() {
-        Map<OperationSubject, Set<ValueName>> out = new LinkedHashMap<>();
-        several.getOrDefault(BoundOperationFact.SaysNothingOf.class, Map.of())
-                .forEach((operation, facts) -> facts.forEach(each -> {
-                    OperationSubject subject =
-                            ((BoundOperationFact.SaysNothingOf) each).subject();
-                    if (!out.computeIfAbsent(subject, _ -> new LinkedHashSet<>())
-                            .add(operation)) {
-                        throw new IllegalStateException(operation
-                                + " is declared to say nothing under " + subject + " twice");
-                    }
-                }));
-        out.replaceAll((_, named) -> Collections.unmodifiableSet(named));
         return Collections.unmodifiableMap(out);
     }
 
@@ -350,11 +323,6 @@ public final class BoundOperationFacts {
     /** The operations that answer one of the values they were given. */
     public Set<ValueName> isDefinedByCases() {
         return cases.keySet();
-    }
-
-    /** The operations declared to say nothing under {@code subject}. */
-    public Set<ValueName> saysNothingOf(OperationSubject subject) {
-        return silences.getOrDefault(subject, Set.of());
     }
 
     /** What walking {@code operation}'s container comes to, and over which argument — or null where

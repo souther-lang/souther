@@ -13,10 +13,9 @@ import souther.compiler.types.ValueName;
  * it stands would be right for every operation until the first that answers its number inside a
  * union, and wrong there without saying so.
  *
- * <p>Read by three kinds of reader and owned by none of them: what puts an operation in range of a
- * question ({@link Question}), what holds a declared fact to the signature it is about
- * ({@link DischargeRules}), and what lists the representations reading a number
- * ({@link NumericReadings}). Answered inside any one of them, the other two borrow a consumer's
+ * <p>Read by more than one kind of reader and owned by none of them: what holds a declared fact to
+ * the signature it is about ({@link DischargeRules}), and what lists the representations reading a
+ * number ({@link NumericReadings}). Answered inside one of them, the others borrow a consumer's
  * answer, and a reader that would rather not borrow writes a second answer — which agrees with the
  * first everywhere except a union, where nothing brings the two together to disagree.
  *

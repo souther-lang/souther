@@ -21,8 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * {@code List.distinctBy} came to be in neither of the two combinator tables it belonged in.
  *
  * <p>Here every question is held to its range, both ways round. An operation the library declares is
- * in range of a question by what it is declared to be, and one in range has exactly one answer — a
- * rule, or its name among the ones there is nothing to say of, and never both. Adding an operation
+ * in range of a question by what it is declared to be, and one in range is settled exactly once — by
+ * a rule, or by its name among the ones the question was closed for, and never both. Adding an operation
  * to the library therefore fails this until someone decides which, and the decision is written where
  * the next reader will find it.
  *
@@ -41,20 +41,21 @@ class AnOperationTheLibraryGainsIsAnsweredForTest {
     /**
      * One of the two, and not one or the other.
      *
-     * <p>A rule and a silence are not two ways of covering a range. A silence says that nothing is
-     * true of the operation under the subject, so beside a rule saying what is, it is the denial of
-     * what the rule says and one of the two is wrong. Asked as "a rule <em>or</em> a silence", a
-     * silence that has become false stays where it is: {@code Int.add} declared to say nothing of
-     * what it answers in what it was given, beside the arithmetic the language reads it as, covers
-     * the range as well as anything, and covering the range is all that such a question asks.
+     * <p>Answered and deliberately unanswered are not two ways of covering a range that may both
+     * hold. Each operation in range is one thing to settle, and naming it among the ones a question
+     * was closed for records that it was settled without a rule; beside a rule, that record is one
+     * the rule has overtaken. Asked as "a rule <em>or</em> a closing", a stale closing stays where
+     * it is: {@code Int.add} named as unanswered for what it answers in what it was given, beside the
+     * arithmetic the language reads it as, covers the range as well as anything, and covering the
+     * range is all that such a question asks.
      *
      * <p>A rule may be one another proposition already gives. What answers a question is what
      * {@link Question#answeredFor} says, which for some of them is derived from a fact declared
      * under a different subject; what is written down <em>for</em> a question is
-     * {@link Question#answeredOperations}, and the two are kept apart on purpose. So the
-     * contradiction between a rule and a silence is read here, over the range, rather than off the
-     * rows — read off the rows, an operation answered by another proposition and silenced here would
-     * be in neither list and would go unseen.
+     * {@link Question#answeredOperations}, and the two are kept apart on purpose. So an operation
+     * both answered and closed is found here, over the range, rather than off the rows — read off
+     * the rows, an operation answered by another proposition and closed here would be in neither
+     * list and would go unseen.
      */
     @Test
     void everyOperationInAQuestionsRangeAnswersItOneWayAndNotBoth() {
@@ -64,23 +65,22 @@ class AnOperationTheLibraryGainsIsAnsweredForTest {
             ValueName operation = e.getKey();
             for (Question question : Question.askedOf(DefaultStdlib.get(), e.getValue().signature())) {
                 boolean answered = question.answeredFor(DefaultStdlib.get(), operation);
-                boolean silent = question.nothingSaidOf().contains(operation);
-                if (answered != silent) {
+                boolean closed = question.deliberatelyUnanswered().contains(operation);
+                if (answered != closed) {
                     continue;
                 }
                 unsettled.add(e.getKey() + " — " + question
-                        + (answered ? " (a rule and a silence beside it)" : " (neither)"));
+                        + (answered ? " (both answered and deliberately unanswered)" : " (neither)"));
             }
         }
         assertEquals(List.of(), unsettled,
-                "these operations are in range of a question and do not answer it exactly once —"
-                        + " with neither a rule nor a name among the ones there is nothing to say"
-                        + " of, or with both, where the silence denies the rule");
+                "these operations are in range of a question and are not settled exactly once —"
+                        + " neither answered nor named as deliberately unanswered, or both");
     }
 
     /**
      * The other way round: every name written down must be one the question is asked of, whether it
-     * was written as a rule or as a silence. A table keyed by a name takes any name, so a row under
+     * was written as a rule or as deliberately unanswered. A table keyed by a name takes any name, so a row under
      * one nothing asks is a row nothing reaches — a library operation that was renamed or removed,
      * or a question whose range moved out from under it. Both directions are the same defect seen
      * from the two ends, so both are read off the tables themselves rather than off what the library
@@ -95,9 +95,9 @@ class AnOperationTheLibraryGainsIsAnsweredForTest {
                     unasked.add(operation + " — " + question + " (a rule)");
                 }
             }
-            for (ValueName operation : question.nothingSaidOf()) {
+            for (ValueName operation : question.deliberatelyUnanswered()) {
                 if (!question.asksOfOperation(DefaultStdlib.get(), operation)) {
-                    unasked.add(operation + " — " + question + " (nothing to say)");
+                    unasked.add(operation + " — " + question + " (deliberately unanswered)");
                 }
             }
         }

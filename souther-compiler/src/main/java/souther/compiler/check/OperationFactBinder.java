@@ -145,14 +145,11 @@ final class OperationFactBinder {
             // declarations are held to each other.
             case OperationFact.MeansTheSameAsASizeOfNought means ->
                     holdSizeEquivalence(stdlib, declaration, means.size());
-            // Neither of these names anything beyond the operation it is about — a silence names
-            // nothing by definition — so there is nothing about one to hold to a signature beyond
-            // the declaration every fact is held to above. What each comes to bound is the fact
-            // about that declaration.
+            // Names nothing beyond the operation it is about, so there is nothing about it to hold
+            // to a signature beyond the declaration every fact is held to above. What it comes to
+            // bound is the fact about that declaration.
             case OperationFact.StatesItsPredicateOfEveryElement _ ->
                     new BoundOperationFact.StatesItsPredicateOfEveryElement(operation);
-            case OperationFact.SaysNothingOf silence ->
-                    new BoundOperationFact.SaysNothingOf(operation, silence.subject());
             // Stated of the number an operation answers, so an operation that answers none is
             // one the proposition is not about. Waved through, it was a fact anything could
             // carry (#1027).
