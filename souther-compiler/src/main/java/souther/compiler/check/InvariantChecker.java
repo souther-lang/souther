@@ -5083,11 +5083,15 @@ public final class InvariantChecker {
             collectAlike(li.body(), key, terms.inside(li, at), alike);
             return;
         }
-        Map<Core, Choice.Decides> arms = new IdentityHashMap<>();
-        Choice choice = Choice.of(e);
-        if (choice != null) {
-            choice.arms().forEach(arm -> arms.put(arm.answers(), arm.decidedBy()));
+        // An operation defined by cases has arms that are not among its children and bind nothing,
+        // so a call is read without asking what its arms are.
+        Choice choice = e instanceof Core.PreservedCall ? null : Choice.of(e);
+        if (choice == null) {
+            Core.forEachChild(e, child -> collectAlike(child, key, at, alike));
+            return;
         }
+        Map<Core, Choice.Decides> arms = new IdentityHashMap<>();
+        choice.arms().forEach(arm -> arms.put(arm.answers(), arm.decidedBy()));
         Core.forEachChild(e, child -> {
             Choice.Decides decides = arms.get(child);
             collectAlike(child, key, decides == null ? at : terms.choosing(decides, at), alike);
