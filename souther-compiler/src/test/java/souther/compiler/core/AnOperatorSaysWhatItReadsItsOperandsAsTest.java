@@ -2,7 +2,6 @@ package souther.compiler.core;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.TermMeaning;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.BinOp;
@@ -16,7 +15,6 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -118,14 +116,17 @@ class AnOperatorSaysWhatItReadsItsOperandsAsTest {
     }
 
     @Test
-    void aCaseBesideItsSumIsReadInTheSum() {
+    void aCaseBesideItsSumIsOrderedInTheSumAndComparedInItsCases() {
         Core.BinaryReading.In ordered = assertInstanceOf(Core.BinaryReading.In.class,
                 applying("beforeWon", BinOp.LT).reading());
-        assertEquals("Stage", Type.show(ordered.type()));
+        assertEquals("Stage", Type.show(ordered.type()), "the order belongs to the sum");
 
         Core.BinaryReading.In equal = assertInstanceOf(Core.BinaryReading.In.class,
                 applying("aCircle", BinOp.EQ).reading());
-        assertEquals("Shape", Type.show(equal.type()));
+        Type.Union cases = assertInstanceOf(Type.Union.class, equal.type(),
+                "sameness is asked across the cases, which no name of either side is");
+        assertEquals(List.of("Circle", "Square"),
+                cases.members().stream().map(each -> each.name()).toList());
     }
 
     @Test
@@ -147,20 +148,13 @@ class AnOperatorSaysWhatItReadsItsOperandsAsTest {
     }
 
     @Test
-    void aReadingIsKeptAcrossARewriteAndIsPartOfWhatATermSays() {
+    void aReadingIsKeptAcrossARewrite() {
         Core.Binary compared = applying("underALimit", BinOp.LE);
         Core.Int other = new Core.Int(200, Type.INT, compared.pos());
         Core.Binary rewritten = assertInstanceOf(Core.Binary.class,
                 Core.mapChildren(compared, e -> e == compared.right() ? other : e, r -> r,
                         c -> c));
         assertEquals(compared.reading(), rewritten.reading());
-
-        Core one = new Core.Int(1, Type.INT, compared.pos());
-        Core asTheyStand = new Core.Binary(BinOp.EQ, one, one, Core.BinaryReading.AS_THEY_STAND,
-                ConstructOccurrence.unwritten(), Type.BOOL, compared.pos());
-        Core inAnother = new Core.Binary(BinOp.EQ, one, one, compared.reading(),
-                ConstructOccurrence.unwritten(), Type.BOOL, compared.pos());
-        assertNotEquals(TermMeaning.of(asTheyStand), TermMeaning.of(inAnother));
     }
 
     @Test

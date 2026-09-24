@@ -9,7 +9,9 @@ import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Typing a binary operator, including the rules that let a single-value newtype compare with and
@@ -258,13 +260,15 @@ public final class BinaryElaborator {
         }
         List<TypeSymbol> lCases = AtomSpace.subjectAtoms(lt, ctx.published());
         List<TypeSymbol> rCases = AtomSpace.subjectAtoms(rt, ctx.published());
-        if (!lCases.isEmpty() && !rCases.isEmpty()) {
-            if (lCases.containsAll(rCases)) {
-                return new Core.BinaryReading.In(lt);
-            }
-            if (rCases.containsAll(lCases)) {
-                return new Core.BinaryReading.In(rt);
-            }
+        if (!lCases.isEmpty() && !rCases.isEmpty()
+                && (lCases.containsAll(rCases) || rCases.containsAll(lCases))) {
+            // Read in the cases both sides range over, and not in either side's name: two sums
+            // listing one set of cases are both that set, and a sum and the union of its cases are
+            // one set spelled twice. Taken from a side, the reading would turn on which side was
+            // written first and on how the set was spelled.
+            Set<TypeSymbol> cases = new LinkedHashSet<>(lCases);
+            cases.addAll(rCases);
+            return new Core.BinaryReading.In(Type.union(cases));
         }
         if (BottomInfer.isBottom(lt)) {
             return new Core.BinaryReading.In(rt);

@@ -283,8 +283,13 @@ public sealed interface Core {
 
         /**
          * The pair as values of {@code type}, for this operator only: a literal beside the newtype it
-         * is compared with, a case beside the enumeration that orders it, a value beside one that
-         * states nothing about its own type.
+         * is compared with, a case beside the enumeration that orders it, two values tested for
+         * sameness across one set of cases, a value beside one that states nothing about its own
+         * type.
+         *
+         * <p>Never which side came first: what an operator reads its operands as is the same
+         * written either way round, so the type is one both sides settle and not one of theirs
+         * picked. Where two sides name one set of cases, it is that set as a union.
          */
         record In(Type type) implements BinaryReading {
             public In {
