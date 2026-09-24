@@ -487,14 +487,13 @@ public final class PathReachability {
                 // entered it in one of them only would be read with the name meaning two things.
                 ic.construct().values().forEach(given ->
                         walk(given.value(), k, at, reads, decided, nothingAbove));
-                Choice.Decides.ItWasBuilt held = new Choice.Decides.ItWasBuilt(ic);
+                Choice.Decides.ItWasBuilt held = Choice.Decides.ofBuilt(ic);
                 PathEngine.Entered built = engine.enteringBuilt(held, k, at);
                 walk(ic.then(), built.known(), built.at(),
                         reads.choosing(held, symbols, newtypes), decided, false);
                 for (Core.ElseArm arm : ic.els()) {
                     walk(arm.body(), k, at,
-                            reads.choosing(new Choice.Decides.ItDeparted(ic, arm), symbols,
-                                    newtypes),
+                            reads.choosing(Choice.Decides.ofDeparture(ic, arm), symbols, newtypes),
                             decided, false);
                 }
             }
@@ -530,8 +529,7 @@ public final class PathReachability {
                     // the case it selects, which is where a comparison written inside the arm draws
                     // its line.
                     walk(arm.body(), in.known(), in.at(),
-                            reads.choosing(new Choice.Decides.ACase(arm, match.scrutinee()),
-                                    symbols, newtypes),
+                            reads.choosing(Choice.Decides.ofCase(match, arm), symbols, newtypes),
                             decided, false);
                 }
             }
@@ -774,7 +772,7 @@ public final class PathReachability {
                     : new Reachability.Unsettled(whyNot(taken, iff.cond())));
         }
         walk(arm, inside, at,
-                reads.choosing(new Choice.Decides.ACondition(iff.cond(), holds), symbols, newtypes),
+                reads.choosing(Choice.Decides.ofCondition(iff, holds), symbols, newtypes),
                 under, false);
     }
 

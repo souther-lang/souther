@@ -53,16 +53,14 @@ public sealed interface ScopeStep {
         switch (e) {
             case Core.If iff -> {
                 each.accept(iff.cond(), SAME);
-                each.accept(iff.then(),
-                        new Chosen(new Choice.Decides.ACondition(iff.cond(), true)));
-                each.accept(iff.els(),
-                        new Chosen(new Choice.Decides.ACondition(iff.cond(), false)));
+                each.accept(iff.then(), new Chosen(Choice.Decides.ofCondition(iff, true)));
+                each.accept(iff.els(), new Chosen(Choice.Decides.ofCondition(iff, false)));
             }
             case Core.IfConstructed ic -> {
                 each.accept(ic.construct(), SAME);
-                each.accept(ic.then(), new Chosen(new Choice.Decides.ItWasBuilt(ic)));
+                each.accept(ic.then(), new Chosen(Choice.Decides.ofBuilt(ic)));
                 for (Core.ElseArm arm : ic.els()) {
-                    each.accept(arm.body(), new Chosen(new Choice.Decides.ItDeparted(ic, arm)));
+                    each.accept(arm.body(), new Chosen(Choice.Decides.ofDeparture(ic, arm)));
                 }
             }
             case Core.LetIn li -> {
@@ -73,7 +71,7 @@ public sealed interface ScopeStep {
             case Core.Match m -> {
                 each.accept(m.scrutinee(), SAME);
                 for (Core.Case arm : m.cases()) {
-                    each.accept(arm.body(), new Chosen(new Choice.Decides.ACase(arm, m.scrutinee())));
+                    each.accept(arm.body(), new Chosen(Choice.Decides.ofCase(m, arm)));
                 }
             }
             case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _, Core.Read _,

@@ -234,7 +234,7 @@ public final class CoverageRead {
                     arms.at(iff, part, into);
                     walk(parts[part],
                             naming.entering(new ScopeStep.Chosen(
-                                    new Choice.Decides.ACondition(iff.cond(), part == 0))),
+                                    Choice.Decides.ofCondition(iff, part == 0))),
                             into, observed);
                 }
             }
@@ -252,7 +252,7 @@ public final class CoverageRead {
                     Core.Case arm = match.cases().get(part);
                     walk(arm.body(),
                             naming.entering(new ScopeStep.Chosen(
-                                    new Choice.Decides.ACase(arm, match.scrutinee()))),
+                                    Choice.Decides.ofCase(match, arm))),
                             into, observed);
                 }
             }
@@ -275,13 +275,13 @@ public final class CoverageRead {
                 arms.at(constructed, part++, into);
                 walk(constructed.then(),
                         naming.entering(new ScopeStep.Chosen(
-                                new Choice.Decides.ItWasBuilt(constructed))),
+                                Choice.Decides.ofBuilt(constructed))),
                         into, observed);
                 for (Core.ElseArm departure : constructed.els()) {
                     arms.at(constructed, part++, into);
                     walk(departure.body(),
                             naming.entering(new ScopeStep.Chosen(
-                                    new Choice.Decides.ItDeparted(constructed, departure))),
+                                    Choice.Decides.ofDeparture(constructed, departure))),
                             into, observed);
                 }
             }

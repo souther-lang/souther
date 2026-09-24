@@ -617,7 +617,7 @@ public final class ValueArrivals<P> {
         Gathered out = new Gathered();
         for (int part = 0; part < match.cases().size(); part++) {
             Core.Case arm = match.cases().get(part);
-            ScopeStep into = new ScopeStep.Chosen(new Choice.Decides.ACase(arm, match.scrutinee()));
+            ScopeStep into = new ScopeStep.Chosen(Choice.Decides.ofCase(match, arm));
             Paths<P> body = settle(arm.body(), naming.entering(into), comparisons.entering(into),
                     inside(into, naming, comparisons, bound));
             if (!arrivesAt(arm.body())) {

@@ -387,12 +387,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                             reads, atoms, owned));
                 }
                 walk(iff.then(), in,
-                        reads.choosing(new Choice.Decides.ACondition(iff.cond(), true), symbols,
+                        reads.choosing(Choice.Decides.ofCondition(iff, true), symbols,
                                 in.newtypes()),
                         flow, taking(condition, true, in.read(), assumed),
                         live, out, forks, numbering);
                 walk(iff.els(), in,
-                        reads.choosing(new Choice.Decides.ACondition(iff.cond(), false), symbols,
+                        reads.choosing(Choice.Decides.ofCondition(iff, false), symbols,
                                 in.newtypes()),
                         flow, taking(condition, false, in.read(), assumed),
                         live, out, forks, numbering);
@@ -429,8 +429,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 for (int part = 0; part < match.cases().size(); part++) {
                     Core.Case arm = match.cases().get(part);
                     walk(arm.body(), in,
-                            reads.choosing(new Choice.Decides.ACase(arm, match.scrutinee()),
-                                    symbols, in.newtypes()),
+                            reads.choosing(Choice.Decides.ofCase(match, arm), symbols,
+                                    in.newtypes()),
                             flow,
                             entering(match, arm, part, in.read().domain(), reads, assumed,
                                     ruleSource, numbering),
