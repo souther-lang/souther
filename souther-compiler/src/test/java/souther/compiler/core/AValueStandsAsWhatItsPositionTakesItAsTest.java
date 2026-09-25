@@ -3,9 +3,13 @@ package souther.compiler.core;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.EmittedDefinition;
+import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -252,13 +256,7 @@ class AValueStandsAsWhatItsPositionTakesItAsTest {
     /** And the seed, a case of the sum the accumulator was settled at, stands as the sum. */
     @Test
     void andTheSeedStandsAsTheAccumulator() {
-        Core.Call fold = null;
-        for (Core.Call each : every(body("folded"), Core.Call.class)) {
-            if (each.args().size() > 1) {
-                fold = each;
-            }
-        }
-        assertNotNull(fold, "the fold is a call");
+        Core.Call fold = theWalk(body("folded"));
         Type accumulator = ((Type.FnOf) fold.args().get(0).type()).params().get(0);
         Core seed = fold.args().get(1);
         assertEquals(accumulator, seed.type(),
@@ -284,13 +282,7 @@ class AValueStandsAsWhatItsPositionTakesItAsTest {
     }
 
     private static void assertTheFoldIsReadAtWhatItSettled(Core body, String accumulator) {
-        Core.Call fold = null;
-        for (Core.Call each : every(body, Core.Call.class)) {
-            if (each.args().size() > 1) {
-                fold = each;
-            }
-        }
-        assertNotNull(fold, "the fold is a call");
+        Core.Call fold = theWalk(body);
         Type settled = fold.type();
         assertEquals(accumulator, Type.show(settled),
                 "the fold answers the accumulator its step grows");
@@ -340,8 +332,13 @@ class AValueStandsAsWhatItsPositionTakesItAsTest {
                 }
                 """, "Main");
         compilation.answerEverything();
-        assertFalse(compilation.errors().isEmpty(),
-                "an Int read out of the accumulator is not a String");
+        assertEquals(1, compilation.errors().size(), () -> "one refusal: " + compilation.errors());
+        Diagnostic refused = compilation.errors().getFirst().diagnostic();
+        assertEquals(DiagnosticCode.E1317.name(), refused.code(),
+                "a value that does not fit its position");
+        assertEquals("Int", refused.diff().actualType(),
+                "an element read out of the accumulator is an Int");
+        assertEquals("String", refused.diff().expectedType(), "and is not the String it is used as");
     }
 
     /**
@@ -351,13 +348,7 @@ class AValueStandsAsWhatItsPositionTakesItAsTest {
      */
     @Test
     void aFunctionTakingMoreAndAnsweringLessKeepsBothWhereTheyWereDecided() {
-        Core.Call fold = null;
-        for (Core.Call each : every(body("stepped"), Core.Call.class)) {
-            if (each.args().size() > 1) {
-                fold = each;
-            }
-        }
-        assertNotNull(fold, "the fold is a call");
+        Core.Call fold = theWalk(body("stepped"));
         Core step = fold.args().get(0);
         Core.Widen standing = assertInstanceOf(Core.Widen.class, step,
                 "a function taking the sum stands as one taking the case the call hands it");
@@ -424,6 +415,24 @@ class AValueStandsAsWhatItsPositionTakesItAsTest {
         assertTrue(anyWidened, "at least one " + what + " here is narrower than the position, so"
                 + " this says something about a Widen");
     }
+
+    /**
+     * The one call in {@code body} of the walk a fold is written over, picked by what it calls. A
+     * call picked by how many arguments it takes would be whichever such call came last, and a
+     * step that makes a call of its own would move it.
+     */
+    private static Core.Call theWalk(Core body) {
+        List<Core.Call> walks = every(body, Core.Call.class).stream()
+                .filter(call -> call.fn() instanceof Core.Reached.OfDeclaration(
+                        ReachName.OfLibrary(ValueName.Stdlib.Operation denotes))
+                        && denotes.equals(THE_WALK))
+                .toList();
+        assertEquals(1, walks.size(), () -> "one call of the walk in " + body);
+        return walks.getFirst();
+    }
+
+    private static final ValueName.Stdlib.Operation THE_WALK =
+            ValueName.Stdlib.operation("List", "foldFrom");
 
     private static <T extends Core> T only(Core body, Class<T> kind) {
         List<T> found = every(body, kind);
