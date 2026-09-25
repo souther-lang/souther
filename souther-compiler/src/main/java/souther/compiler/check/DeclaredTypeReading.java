@@ -357,7 +357,7 @@ public record DeclaredTypeReading(DeclarationFacts facts,
                             boundBy(bound, required, arrived.get(i))));
                 }
                 Type answers = ex.declaredReturn() == null
-                        ? null : TypeOps.resolveParamType(ex.declaredReturn());
+                        ? null : TypeOps.successType(ex.declaredReturn());
                 if (answers == null) {
                     return of(ex.body());
                 }
@@ -551,7 +551,7 @@ public record DeclaredTypeReading(DeclarationFacts facts,
                         : TypeOps.resolveParamType(parameter.type()));
             }
             Type answers = definition.declaredReturn() == null
-                    ? null : TypeOps.resolveParamType(definition.declaredReturn());
+                    ? null : TypeOps.successType(definition.declaredReturn());
             if (!(admits(written, answers, call) instanceof Settlement.Settled(var bindings))) {
                 return null;
             }

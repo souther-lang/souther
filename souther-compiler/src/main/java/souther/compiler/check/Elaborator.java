@@ -1150,12 +1150,10 @@ public final class Elaborator {
         return "`" + name + "` of `" + shown(ex) + "`";
     }
 
-    /** The one type the callee's declaration gives its result, or null where it declared none or
-     * declared a union — a union names one type where the body may answer several, so there is
-     * nothing single to hold the body to. */
+    /** The type the callee declares for its result, or null where it declares none. A union is one
+     * type here as it is on a binding: the body is read against it and the call answers it. */
     private static Type declaredResult(Hir.Expansion ex) {
-        return ex.declaredReturn() == null || ex.declaredReturn().cases().size() != 1 ? null
-                : TypeOps.resolveParamType(ex.declaredReturn());
+        return ex.declaredReturn() == null ? null : TypeOps.successType(ex.declaredReturn());
     }
 
     /** The callee as the caller wrote it, for a message about the call. A function the caller

@@ -1258,7 +1258,8 @@ public final class Backend {
      * the jar carries too — a change to how one of those texts is read moves this number as surely as
      * a change to a descriptor does, and it is the front end's change rather than this package's. A
      * rule that refuses text the front end used to admit is such a change: a jar written before it
-     * may carry that text. {@link souther.compiler.meta.ModuleReadback} refuses a jar whose number
+     * may carry that text. So is one that reads admitted text as another type: a jar's writer and
+     * its reader would then disagree about what a call it carries answers, and neither refuses. {@link souther.compiler.meta.ModuleReadback} refuses a jar whose number
      * disagrees, so the disagreement is reported as what it is instead of surfacing as an unresolved
      * name inside a body nobody wrote.
      *
@@ -1422,6 +1423,12 @@ public final class Backend {
      * each of its declarations offers another module's classes and what its own classes assumed
      * about each declaration of another module they link against, and the reading asks for both.
      *
+     * <p>Version 28 changes what the front end reads a carried helper's body as. A helper declaring
+     * a union as its result answers that union where it is expanded, and its body is read against
+     * it. A reader built under version 27 answers such a call with the narrower type the body
+     * produces, so it would refuse a carried body that matches on such a call as matching on no sum,
+     * and admit one that uses the call as the narrower type, which this reader refuses.
+     *
      * <p>That is also where this number stops. It says whether a jar and this compiler agree on
      * what the metadata says and on the rules a declaration is turned into JVM facts by — a
      * behavior's class and methods, how one is held and built, a type's layout and codecs. It does
@@ -1431,7 +1438,7 @@ public final class Backend {
      * {@code [#a-published-module-agrees-with-what-it-was-built-against]}). An edit to a
      * declaration moves that and not this; an edit to a rule moves this.
      */
-    public static final int BOUNDARY_VERSION = 27;
+    public static final int BOUNDARY_VERSION = 28;
 
     /** Emits the class a module's own declarations are published on, carrying {@code declarations}.
      * What it says is the caller's; that it is built like every other generated class — the same Java
@@ -1464,11 +1471,6 @@ public final class Backend {
 
     private ClassDesc cdBehaviorImpl(String name) {
         return ctx.cdBehaviorImpl(own(name));
-    }
-
-
-    private ClassDesc caseClass(TypeSymbol typeName) {
-        return ctx.caseClass(typeName);
     }
 
     // --- sum data (sealed interface) ---
@@ -1753,7 +1755,7 @@ public final class Backend {
                             Label doApply = code.newLabel();
                             for (TypeSymbol caseName : on.accepted()) {
                                 code.aload(1);
-                                code.instanceOf(caseClass(caseName));
+                                code.instanceOf(ctx.caseCarrierClass(caseName));
                                 code.ifne(doApply);
                             }
                             code.goto_(end);
