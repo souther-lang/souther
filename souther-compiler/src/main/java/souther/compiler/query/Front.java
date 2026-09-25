@@ -1,6 +1,8 @@
 package souther.compiler.query;
 
 import souther.compiler.cst.SourceLayout;
+import souther.compiler.copied.CopyRecord;
+import souther.compiler.copied.CopyTarget;
 import souther.compiler.Reserved;
 import souther.compiler.source.SourceId;
 
@@ -517,6 +519,17 @@ public final class Front {
              *  against. */
             public Map<LinkageTarget, LinkageRecord> requires() {
                 return read.requires();
+            }
+
+            /** What each of its declarations offers another module to copy, as its classes offered
+             *  it where they were built. */
+            public Map<CopyTarget, CopyRecord> providedCopies() {
+                return read.providedCopies();
+            }
+
+            /** What its classes copied of each declaration of another module. */
+            public Map<CopyTarget, CopyRecord> requiredCopies() {
+                return read.requiredCopies();
             }
 
             public List<Scoping.Claim> libraryClaims() {
@@ -1385,6 +1398,9 @@ public final class Front {
         }
         for (LinkageTarget linked : read.requires().keySet()) {
             named.add(linked.module());
+        }
+        for (CopyTarget copied : read.requiredCopies().keySet()) {
+            named.add(copied.module());
         }
         for (String each : named) {
             if (!each.equals(own)) {

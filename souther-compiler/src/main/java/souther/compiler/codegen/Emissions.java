@@ -1,5 +1,6 @@
 package souther.compiler.codegen;
 
+import souther.compiler.copied.CopyContract;
 import souther.compiler.generated.GeneratedImplementations;
 import souther.compiler.generated.ProbeImage;
 import souther.compiler.jvm.ClassFileImage;
@@ -63,6 +64,9 @@ public final class Emissions {
     private SortedMap<LinkageTarget, LinkageRecord> provides;
     /** What these classes were built against, once the generation has said so. */
     private SortedMap<LinkageTarget, LinkageRecord> requires;
+    /** What these classes offer to be copied and what they copied, once the compilation has said
+     *  so. */
+    private CopyContract copies;
     /** What was handed out, once there is such a thing. */
     private Map<String, ClassFileImage> sealed;
 
@@ -253,6 +257,33 @@ public final class Emissions {
                     + " has not said what its classes link against");
         }
         return requires;
+    }
+
+    /**
+     * That these classes offer {@code copies.provides()} to be copied, and carry {@code
+     * copies.requires()} — what each declaration of another module they copied was when they copied
+     * it. Said once, before the classes are sealed.
+     *
+     * <p>Said by the compilation and not by the generation. What a module copied is decided where
+     * its bodies were expanded, upstream of anything the generation reads, and the generation only
+     * writes out what it was handed.
+     */
+    public void copied(CopyContract copies) {
+        stillOpen("recording what the classes copied");
+        if (this.copies != null) {
+            throw new IllegalStateException("what the classes of " + module + " copied is said"
+                    + " once");
+        }
+        this.copies = Objects.requireNonNull(copies);
+    }
+
+    /** What these classes offer to be copied, and what they copied of other modules' declarations. */
+    public CopyContract copies() {
+        if (copies == null) {
+            throw new IllegalStateException("the compilation of " + module
+                    + " has not said what its classes copied");
+        }
+        return copies;
     }
 
     /**

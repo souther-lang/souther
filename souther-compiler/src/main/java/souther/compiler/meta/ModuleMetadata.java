@@ -139,7 +139,9 @@ public final class ModuleMetadata {
                         behaviors, ValueAnswers.written(module.name(),
                                 ValueEntries.publishedValues(resolved), settledValues),
                         PublishedLinkages.written(out.provides()),
-                        PublishedLinkages.written(out.requires()))));
+                        PublishedLinkages.written(out.requires()),
+                        PublishedCopies.written(out.copies().provides()),
+                        PublishedCopies.written(out.copies().requires()))));
     }
 
     /**
@@ -223,7 +225,9 @@ public final class ModuleMetadata {
                                                List<String> types, List<String> behaviors,
                                                List<String> valueAnswers,
                                                List<String> providedLinkages,
-                                               List<String> requiredLinkages) {
+                                               List<String> requiredLinkages,
+                                               List<String> providedCopies,
+                                               List<String> requiredCopies) {
         return Annotation.of(MODULE_ANN,
                 AnnotationElement.ofInt("compat", Backend.BOUNDARY_VERSION),
                 AnnotationElement.ofString("compiler", compilerVersion()),
@@ -235,7 +239,9 @@ public final class ModuleMetadata {
                 strings("invariantHelpers", invariantHelpers(module, resolved, slices)),
                 strings("valueAnswers", valueAnswers),
                 strings("providedLinkages", providedLinkages),
-                strings("requiredLinkages", requiredLinkages));
+                strings("requiredLinkages", requiredLinkages),
+                strings("providedCopies", providedCopies),
+                strings("requiredCopies", requiredCopies));
     }
 
     private static AnnotationElement strings(String name, List<String> values) {

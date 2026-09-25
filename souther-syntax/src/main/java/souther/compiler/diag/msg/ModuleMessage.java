@@ -81,6 +81,32 @@ public sealed interface ModuleMessage extends Message {
                                            String now)
             implements ModuleMessage, Reported {}
 
+    /** A module off the path carries a copy of the {@code kind} {@code name} of
+     * {@code declaredIn}, and the {@code declaredIn} this compilation reads offers nothing of that
+     * kind and name to copy. */
+    @Code(DiagnosticCode.E1510)
+    record ItCopiedWhatTheModuleDoesNotProvide(String module, String kind, String name,
+                                               String declaredIn)
+            implements ModuleMessage, Reported {}
+
+    /** A module off the path carries the constant {@code built} the value {@code name} of
+     * {@code declaredIn} folded to, and the {@code declaredIn} this compilation reads folds it to
+     * {@code now}: its classes answer with the old constant where the rest of the program answers
+     * with the new one. */
+    @Code(DiagnosticCode.E1510)
+    record ItCopiedAnotherConstant(String module, String name, String declaredIn, String built,
+                                   String now)
+            implements ModuleMessage, Reported {}
+
+    /** A module off the path carries a copy of the {@code kind} {@code name} of {@code declaredIn}
+     * as {@code form}, and the {@code declaredIn} this compilation reads offers another. What a body
+     * is copied as is not something a reader could hold against the source, so the form is named
+     * and the content is not. */
+    @Code(DiagnosticCode.E1510)
+    record ItCopiedAnotherVersion(String module, String kind, String name, String declaredIn,
+                                  String form)
+            implements ModuleMessage, Reported {}
+
     @Code(DiagnosticCode.E1507)
     record TheModuleDoesNotExposeIt(String name, String module) implements ModuleMessage, Reported {}
 

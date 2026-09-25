@@ -39,6 +39,7 @@ import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.Expansion;
 import souther.compiler.check.HelperGraph;
 import souther.compiler.check.HelperNames;
+import souther.compiler.copied.CopyTarget;
 import souther.compiler.check.HelperTable;
 import souther.compiler.check.InjectionSigs;
 import souther.compiler.inputs.InputDomain;
@@ -96,6 +97,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayDeque;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashSet;
@@ -105,6 +107,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.SequencedMap;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -1873,13 +1877,9 @@ public final class Bodies {
      */
     private static Map<String, Hir.FnDef> publishedDefinitions(Hir.Module from,
                                                                Collection<Hir.FnDef> roots,
-                                                               Expanding.Of against) {
+                                                               HelperInliner inliner) {
         Map<String, Hir.FnDef> out = new LinkedHashMap<>();
-        HelperInliner inliner = null;
         for (Hir.FnDef fn : roots) {
-            if (inliner == null) {
-                inliner = HelperInliner.over(against.table(), against.graph());
-            }
             Hir.FnDef closed = inliner.closeAcross(fn, from.name());
             out.put(closed.name(), closed);
         }
@@ -1915,11 +1915,32 @@ public final class Bodies {
     public static Map<String, Hir.FnDef> carriedClosure(Hir.Module from,
                                                         Collection<Hir.FnDef> roots,
                                                         Expanding.Of against) {
-        Map<String, Hir.FnDef> out = publishedDefinitions(from, roots, against);
-        if (out.isEmpty()) {
-            return out;
+        return carrying(from, roots, against).definitions();
+    }
+
+    /**
+     * What travels with {@code roots}, and what closing them copied of other modules' declarations.
+     *
+     * @param definitions what {@link #carriedClosure} answers
+     * @param copied      every declaration of a module other than the one that closes them that the
+     *                    closing expanded into a definition it hands over — which is what those
+     *                    definitions are as much as their own text is
+     */
+    public record Carried(Map<String, Hir.FnDef> definitions, SortedSet<CopyTarget> copied) {
+        public Carried {
+            definitions = Collections.unmodifiableMap(new LinkedHashMap<>(definitions));
+            copied = Collections.unmodifiableSortedSet(new TreeSet<>(copied));
         }
+    }
+
+    /** {@link #carriedClosure}, with what the closing copied. */
+    public static Carried carrying(Hir.Module from, Collection<Hir.FnDef> roots,
+                                   Expanding.Of against) {
         HelperInliner inliner = HelperInliner.over(against.table(), against.graph());
+        Map<String, Hir.FnDef> out = publishedDefinitions(from, roots, inliner);
+        if (out.isEmpty()) {
+            return new Carried(out, new TreeSet<>(inliner.copiedFromElsewhere()));
+        }
         Deque<String> work = new ArrayDeque<>(out.keySet());
         while (!work.isEmpty()) {
             for (ValueName.Helper reached : HelperNames.helpersReached(out.get(work.poll()).writtenBody())) {
@@ -1943,7 +1964,7 @@ public final class Bodies {
                 work.add(qualified);
             }
         }
-        return out;
+        return new Carried(out, new TreeSet<>(inliner.copiedFromElsewhere()));
     }
 
     /**
@@ -2575,6 +2596,9 @@ public final class Bodies {
                 }
                 roles.put(fn.name(), role.value());
             }
+            // What the methods below carry of other modules' declarations: what each expansion
+            // copied, and each method that is another module's helper taken on whole.
+            Set<CopyTarget> copied = new LinkedHashSet<>();
             // Both, and each stays where it was: what becomes a method is one question and what this
             // module declared is another, and the backend reads the first while every rule about the
             // declaring module reads the second.
@@ -2602,11 +2626,20 @@ public final class Bodies {
                     }
                     fns.add(body.value().value().definition());
                     carried.putAll(body.value().value().carried());
+                    copied.addAll(body.value().copied());
+                    if (roles.get(fn.name()) instanceof LoweringRole.Helper helper) {
+                        ValueName.Helper takenOn =
+                                CopyTarget.declaredElsewhere(helper.declaration(), name);
+                        if (takenOn != null) {
+                            copied.add(new CopyTarget.Helper(takenOn));
+                        }
+                    }
                 }
                 lowered.add(fns);
             }
             return Answer.of(new Lower.Lowered(settled.value(),
-                    Lower.lowered(settled.value(), lowered.get(0), lowered.get(1)), carried, roles));
+                    Lower.lowered(settled.value(), lowered.get(0), lowered.get(1)), carried, roles,
+                    new TreeSet<>(copied)));
         }
     }
 

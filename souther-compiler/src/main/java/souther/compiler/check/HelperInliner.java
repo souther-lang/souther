@@ -7,6 +7,7 @@ import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.StructuralCost;
 import souther.compiler.ast.WrittenName;
+import souther.compiler.copied.CopyTarget;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ApplicationOrigin;
@@ -512,6 +513,16 @@ public final class HelperInliner {
     private final java.util.SequencedSet<ReachName.Declaration> leftStanding = new java.util.LinkedHashSet<>();
 
     /**
+     * Every declaration of another module this expansion put a copy of into what it wrote: a helper
+     * it expanded, a value whose body or constant it wrote where the value was named.
+     *
+     * <p>Written where the copy is made, for the reason {@link #leftStanding} is. Afterwards the tree
+     * holds what the declaration said and nothing that names it, so a reader asking which
+     * declarations the tree was built from can no longer find out from the tree.
+     */
+    private final SequencedSet<CopyTarget> copied = new LinkedHashSet<>();
+
+    /**
      * What each expansion being asked about has left standing, innermost last.
      *
      * <p>Beside {@link #leftStanding} and not read off it. That set answers for every tree this
@@ -617,6 +628,35 @@ public final class HelperInliner {
      */
     public java.util.SequencedSet<ReachName.Declaration> leftStanding() {
         return java.util.Collections.unmodifiableSequencedSet(leftStanding);
+    }
+
+    /**
+     * What this expansion copied of other modules' declarations, in the order it copied them.
+     *
+     * <p>Read off the expansion that made the copies, as {@link #leftStanding} is, and for every tree
+     * this inliner was driven over: what a module's classes are built from is a question about the
+     * module, and a caller that drove it over one tree is the one that knows which tree that was.
+     */
+    public SequencedSet<CopyTarget> copiedFromElsewhere() {
+        return java.util.Collections.unmodifiableSequencedSet(copied);
+    }
+
+    /** That the helper {@code reaches} declares was copied here, where it is one this module copies
+     *  ({@link CopyTarget#declaredElsewhere}). */
+    private void copiesHelper(ReachName.Declaration reaches) {
+        ValueName.Helper declared = CopyTarget.declaredElsewhere(reaches, moduleName());
+        if (declared != null) {
+            copied.add(new CopyTarget.Helper(declared));
+        }
+    }
+
+    /** That the value {@code reaches} declares was copied here, its body or its constant, where it is
+     *  one this module copies. */
+    private void copiesValue(ReachName.Declaration reaches) {
+        ValueName.Helper declared = CopyTarget.declaredElsewhere(reaches, moduleName());
+        if (declared != null) {
+            copied.add(new CopyTarget.Value(declared));
+        }
     }
 
     /**
@@ -1595,6 +1635,13 @@ public final class HelperInliner {
         if (args.size() != helper.params().size()) {
             throw wrongArity(call, helper, args.size());
         }
+        // The body is copied here and the call is gone, so this is the last place that knows which
+        // declaration the copy is of — followed through the names that hold it, since a helper
+        // handed over and applied under a parameter's name is copied all the same.
+        ReachName.Declaration copiedFrom = callee == null ? null : reaches(callee);
+        if (copiedFrom != null) {
+            copiesHelper(copiedFrom);
+        }
         // Everything this expansion writes belongs to it: the bindings its arguments become,
         // the one a lambda given to a function parameter is registered under, the one its
         // declared return is carried on, and every binding copied out of the callee's body.
@@ -2229,6 +2276,9 @@ public final class HelperInliner {
             return v;
         }
         Hir.Expr settled = settled(named);
+        if (settled != named) {
+            copiesValue(reaches);
+        }
         return settled != null ? settled : substituted(named.reaches(), value.writtenBody());
     }
 
@@ -2245,6 +2295,7 @@ public final class HelperInliner {
      * position, and each is answered by what its position needs.
      */
     private Hir.Expr appliedValueBody(Hir.Var.Denoting named, Hir.FnDef value) {
+        copiesValue(named.reachesADeclaration());
         Hir.Expr settled = settled(named);
         return settled != null && settled != named
                 ? settled : substituted(named.reaches(), value.writtenBody());
@@ -2416,6 +2467,8 @@ public final class HelperInliner {
         if (body == null) {
             return;
         }
+        // Built here from its body rather than called where it is declared.
+        copiesValue(named.reachesADeclaration());
         MaterialisationSite where = site.get();
         Hir.Expr calls = insideThisBuild(named.denotes(), where, () -> inline(body));
         for (Hir.Var.Denoting each : List.copyOf(demandedHere(calls).values())) {
@@ -2614,7 +2667,26 @@ public final class HelperInliner {
      * of them once per path through it.
      */
     private Optional<Object> constantOf(Hir.Var.Denoting named) {
-        ReachName.Declaration reaches = named.reachesADeclaration();
+        return constantOf(named.reachesADeclaration());
+    }
+
+    /**
+     * What {@code value}, a value of this module, folds to, or empty where it is not a constant.
+     *
+     * <p>The same fold a reader in another module reaches the value through, so what the declaring
+     * module says its value is copied as is what a reader copies. Asked of an inliner the tree that
+     * runs is built with ({@link #callingValuesAsMethodsWhereEmitted}), which is the one that has
+     * the fold.
+     */
+    public Optional<Object> constantOfOwn(String value) {
+        if (constEval == null) {
+            throw new IllegalStateException("what a value folds to is asked of the fold a tree that"
+                    + " runs is built with, and this inliner builds no such tree");
+        }
+        return constantOf(new ReachName.Own(new ValueName.Helper(moduleName(), value)));
+    }
+
+    private Optional<Object> constantOf(ReachName.Declaration reaches) {
         Hir.FnDef value = reaches == null ? null : table.reached(reaches);
         if (value == null || !value.params().isEmpty() || value.body() == null
                 || graph.recurses(reaches)) {
@@ -2626,6 +2698,11 @@ public final class HelperInliner {
             constantOfValues.put(reaches, Optional.empty());
             known = constEval.eval(value.writtenBody());
             constantOfValues.put(reaches, known);
+        }
+        // A constant stands where it is named and is folded into whatever reads it, so another
+        // module's constant found here is one this tree carries.
+        if (known.isPresent()) {
+            copiesValue(reaches);
         }
         return known;
     }
@@ -2939,6 +3016,7 @@ public final class HelperInliner {
                 spreads.add(spread);
                 continue;
             }
+            copiesValue(spread.answered().reachesADeclaration());
             Hir.Binder name = writing.binders().binder(
                     "$s" + next() + "_" + spread.answered().denotes().name(), spread.pos());
             bound.add(name);

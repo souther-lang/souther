@@ -338,12 +338,37 @@ class ModuleReadbackTest {
                 "an older writer left them out, which is the boundary the two do not share");
     }
 
+    /** The same of what a module offers to be copied and what its classes copied, the other half of
+     *  what it was built against. */
+    @Test
+    void aModuleThatSaysNothingOfItsCopiesIsNotReadAsHavingNone() {
+        Map<String, ClassFileImage> classes = Compiler.compile("""
+                module shared.q exposing ( double )
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                """);
+
+        assertInstanceOf(Readback.Failure.UnreadableMetadata.class,
+                refusalOf("shared.q", viewing(classes,
+                        m -> withCopies(m, null, m.requiredCopies()))));
+        assertInstanceOf(Readback.Failure.UnreadableMetadata.class,
+                refusalOf("shared.q", viewing(classes,
+                        m -> withCopies(m, m.providedCopies(), null))));
+    }
+
     private static PublishedClasses.SoutherModuleView withLinkages(
             PublishedClasses.SoutherModuleView m, int compat, List<String> provided,
             List<String> required) {
         return new PublishedClasses.SoutherModuleView(compat, m.compiler(), m.header(),
                 m.imports(), m.types(), m.behaviors(), m.invariantHelpers(), m.valueAnswers(),
-                provided, required);
+                provided, required, m.providedCopies(), m.requiredCopies());
+    }
+
+    private static PublishedClasses.SoutherModuleView withCopies(
+            PublishedClasses.SoutherModuleView m, List<String> provided, List<String> required) {
+        return new PublishedClasses.SoutherModuleView(m.compat(), m.compiler(), m.header(),
+                m.imports(), m.types(), m.behaviors(), m.invariantHelpers(), m.valueAnswers(),
+                m.providedLinkages(), m.requiredLinkages(), provided, required);
     }
 
     /** {@code classes} with every behavior's requirement list replaced by {@code requirements}. */

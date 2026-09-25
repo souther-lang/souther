@@ -1,5 +1,7 @@
 package souther.compiler.execute;
 
+import souther.compiler.partition.FixtureTemplate;
+
 import java.math.BigDecimal;
 
 /**
@@ -15,6 +17,16 @@ import java.math.BigDecimal;
  * <p>Which primitive each becomes is the implementation's own business and is decided there.
  */
 public sealed interface WrittenValue {
+
+    /** The constant as a source writes it: a text quoted and escaped, a decimal at its scale. */
+    default String written() {
+        return switch (this) {
+            case Text(String text) -> FixtureTemplate.quoted(text);
+            case Whole(long whole) -> String.valueOf(whole);
+            case Truth(boolean truth) -> String.valueOf(truth);
+            case Decimal(BigDecimal decimal) -> decimal.toPlainString();
+        };
+    }
 
     /** A whole number. */
     record Whole(long value) implements WrittenValue {}

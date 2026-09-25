@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.ast.Hir;
+import souther.compiler.coverage.SuppliedRules;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.TypeKey;
@@ -66,7 +67,8 @@ public final class ClauseHelpers {
         // What these expansions could not remove comes back with what they produced. A clause is the
         // one place a module writes an expression that is not a definition, so a recursion reached
         // from one is reached from nowhere a reader of the module's declarations would look.
-        return new Expansion<>(withInlinedInvariants(inliner, settled), inliner.leftStanding());
+        return new Expansion<>(withInlinedInvariants(inliner, settled), inliner.leftStanding(),
+                inliner.copiedFromElsewhere(), ElementProvenance.NONE, SuppliedRules.NONE);
     }
 
     /**

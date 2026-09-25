@@ -72,4 +72,17 @@ public @interface SoutherModule {
      * they were compiled against, which a reader holds the declaring module to. No default, for the
      * reason {@link #providedLinkages} has none. */
     String[] requiredLinkages();
+
+    /** What each declaration of this module offers another module to copy into its classes — a
+     * helper expanded where it is called, a value's constant or body, a type's invariant: one entry
+     * per declaration, its kind, module and name, the form it is copied in and what it is copied as,
+     * each counted. Recorded where the module was built, for the reason {@link #providedLinkages} is.
+     * No default, for the reason {@link #providedLinkages} has none. */
+    String[] providedCopies();
+
+    /** What this module's classes copied of each declaration of another module, written as {@link
+     * #providedCopies} writes one: what that declaration was when they copied it, which a reader
+     * holds the declaring module to. No default, for the reason {@link #providedLinkages} has
+     * none. */
+    String[] requiredCopies();
 }

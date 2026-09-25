@@ -14,6 +14,8 @@ import souther.compiler.cst.SourceLayout;
 import souther.compiler.diag.SourceProvenance;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.check.BehaviorImplementation;
+import souther.compiler.copied.CopyRecord;
+import souther.compiler.copied.CopyTarget;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.LinkageRecord;
 import souther.compiler.jvm.LinkageTarget;
@@ -139,6 +141,15 @@ public final class ModuleReadback {
         SortedMap<LinkageTarget, LinkageRecord> requires = m.requiredLinkages() == null
                 ? null : PublishedLinkages.read(m.requiredLinkages());
         if (provides == null || requires == null) {
+            return unreadable(moduleName, new Readback.Failure.UnreadableMetadata());
+        }
+        // What its declarations offer to be copied, and what its classes copied — the other half of
+        // what it was built against, written by every writer at this boundary for the same reason.
+        SortedMap<CopyTarget, CopyRecord> providedCopies = m.providedCopies() == null
+                ? null : PublishedCopies.read(m.providedCopies());
+        SortedMap<CopyTarget, CopyRecord> requiredCopies = m.requiredCopies() == null
+                ? null : PublishedCopies.read(m.requiredCopies());
+        if (providedCopies == null || requiredCopies == null) {
             return unreadable(moduleName, new Readback.Failure.UnreadableMetadata());
         }
         StringBuilder declarations = new StringBuilder();
@@ -282,7 +293,7 @@ public final class ModuleReadback {
         return new Readback.Ready<>(
                 new AsRead(checked.module(), declared.declarations(), declared.asDeclared(),
                         implementations, requirements, provides, requires,
-                        checked.claims(),
+                        providedCopies, requiredCopies, checked.claims(),
                         readBack.laidOut(), answers));
     }
 
@@ -299,6 +310,8 @@ public final class ModuleReadback {
                   Map<String, List<ValueName.Behavior>> behaviorRequirements,
                   Map<LinkageTarget, LinkageRecord> provides,
                   Map<LinkageTarget, LinkageRecord> requires,
+                  Map<CopyTarget, CopyRecord> providedCopies,
+                  Map<CopyTarget, CopyRecord> requiredCopies,
                   java.util.List<Scoping.Claim> libraryClaims,
                   SourceLayout laidOutText,
                   Preserved.SettledValues valueAnswers) implements ReadableModule {
@@ -314,6 +327,8 @@ public final class ModuleReadback {
                     Collections.unmodifiableMap(new LinkedHashMap<>(behaviorRequirements));
             provides = Collections.unmodifiableMap(new TreeMap<>(provides));
             requires = Collections.unmodifiableMap(new TreeMap<>(requires));
+            providedCopies = Collections.unmodifiableMap(new TreeMap<>(providedCopies));
+            requiredCopies = Collections.unmodifiableMap(new TreeMap<>(requiredCopies));
             libraryClaims = List.copyOf(libraryClaims);
         }
     }
