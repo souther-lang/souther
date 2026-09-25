@@ -2,6 +2,7 @@ package souther.compiler.core;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.KeptCalls;
 import souther.compiler.check.EmittedDefinition;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticCode;
@@ -110,6 +111,19 @@ class AValueStandsAsWhatItsPositionTakesItAsTest {
 
             behavior dropped : (xs: List<Int>) -> List<Int>
             let dropped (xs) = List.drop(1, xs)
+
+            behavior counted : (xs: List<Int>) -> List<Int>
+            let counted (xs) = {
+                let (_, kept) = List.fold(
+                    (acc, x) -> {
+                        let (i, zs) = acc
+                        (i + 1, zs ++ [x])
+                    },
+                    (0, []),
+                    xs
+                )
+                kept
+            }
 
             behavior split : (xs: List<Int>) -> List<Int>
             let split (xs) = {
@@ -281,15 +295,51 @@ class AValueStandsAsWhatItsPositionTakesItAsTest {
         assertTheFoldIsReadAtWhatItSettled(body("split"), "(List<Int>, List<Int>)");
     }
 
+    /**
+     * And so in the tree an analysis reads, where the walk is kept standing as the operation it is
+     * rather than called: one application of one signature, settled once, whichever representation
+     * holds it.
+     */
+    @Test
+    void theWalkKeptStandingIsReadAtTheAccumulatorItSettled() {
+        Core.PreservedCall counted = keptWalk(bodies().analysisBodies().get("counted").core());
+        assertFoldIsReadAtWhatItSettled(counted.type(), counted.args(), "(Int, List<Int>)");
+        Core.PreservedCall split = keptWalk(bodies().analysisBodies().get("split").core());
+        assertFoldIsReadAtWhatItSettled(split.type(), split.args(), "(List<Int>, List<Int>)");
+    }
+
+    /** And a step answering an accumulator the seed cannot stand as is refused where it answers. */
+    @Test
+    void aStepAnsweringWhatTheSeedIsNotIsRefused() {
+        Compilation compilation = Compilation.ofSource("""
+                module demo
+
+                behavior renamed : (xs: List<Int>) -> Int
+                let renamed (xs) = {
+                    let (_, ys) = List.fold((acc, x) -> ("a", [x]), (0, []), xs)
+                    List.length(ys)
+                }
+                """, "Main");
+        compilation.answerEverything();
+        assertEquals(1, compilation.errors().size(), () -> "one refusal: " + compilation.errors());
+        Diagnostic refused = compilation.errors().getFirst().diagnostic();
+        assertEquals(DiagnosticCode.E1806.name(), refused.code(),
+                "a step answering what the accumulator is not");
+    }
+
     private static void assertTheFoldIsReadAtWhatItSettled(Core body, String accumulator) {
         Core.Call fold = theWalk(body);
-        Type settled = fold.type();
+        assertFoldIsReadAtWhatItSettled(fold.type(), fold.args(), accumulator);
+    }
+
+    private static void assertFoldIsReadAtWhatItSettled(Type settled, List<Core> args,
+                                                        String accumulator) {
         assertEquals(accumulator, Type.show(settled),
                 "the fold answers the accumulator its step grows");
-        Type.FnOf step = (Type.FnOf) fold.args().get(0).type();
+        Type.FnOf step = (Type.FnOf) args.get(0).type();
         assertEquals(settled, step.params().get(0), "the step takes the accumulator the call settled");
         assertEquals(settled, step.result(), "and answers it");
-        Core.Block block = only(fold.args().get(0), Core.Block.class);
+        Core.Block block = only(args.get(0), Core.Block.class);
         assertEquals(settled, block.paramTypes().get(0),
                 "the step's body read its accumulator at what the call settled");
         Core.Binder acc = block.params().get(0);
@@ -300,7 +350,7 @@ class AValueStandsAsWhatItsPositionTakesItAsTest {
         for (Core.Read read : reads) {
             assertEquals(settled, read.type(), "each read of the accumulator is of what it settled");
         }
-        Core.Widen seed = assertInstanceOf(Core.Widen.class, fold.args().get(1),
+        Core.Widen seed = assertInstanceOf(Core.Widen.class, args.get(1),
                 "the seed, narrower than the accumulator, stands as it");
         assertEquals(settled, seed.type());
         assertTrue(Type.mentions(seed.value().type(), Type.Nothing.class::isInstance),
@@ -428,6 +478,15 @@ class AValueStandsAsWhatItsPositionTakesItAsTest {
                         && denotes.equals(THE_WALK))
                 .toList();
         assertEquals(1, walks.size(), () -> "one call of the walk in " + body);
+        return walks.getFirst();
+    }
+
+    /** The one call in {@code body} of the walk, kept standing as the operation it is. */
+    private static Core.PreservedCall keptWalk(Core body) {
+        List<Core.PreservedCall> walks = every(body, Core.PreservedCall.class).stream()
+                .filter(call -> call.declared().equals(KeptCalls.declared(THE_WALK)))
+                .toList();
+        assertEquals(1, walks.size(), () -> "one kept call of the walk in " + body);
         return walks.getFirst();
     }
 

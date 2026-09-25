@@ -619,7 +619,10 @@ public final class Elaborator {
             narrowFailed = e;
         }
         if (narrowGot != null) {
-            BottomInfer.refineBottom(declaredStep.result(), narrowGot, bind);
+            // What the step answers is one more reading of the variables its result carries, weighed
+            // by the rule every other reading is: it settles what the seed left carrying the bottom
+            // where the seed may stand as it, and nothing else.
+            TypeOps.bindVars(declaredStep.result(), narrowGot, bind, ctx.published());
             Type want = TypeOps.substitute(declaredStep.result(), bind);
             if (want instanceof Type.Var) {
                 return narrowCore;

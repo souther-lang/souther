@@ -318,14 +318,21 @@ public final class CallElaborator {
     }
 
     /**
-     * The arguments of one call, each elaborated once, as the call's typing rule reaches it. A rule
-     * types its arguments in its own order and shape — some through a required type, a step through
-     * the accumulator the other arguments fixed — so the Core for each argument is collected here
-     * rather than by a separate walk that would have to reconstruct that context.
+     * The arguments of one call, as the call's typing rule reaches them. A rule types its arguments
+     * in its own order and shape — some through a required type, a step through the accumulator the
+     * other arguments fixed — so the Core for each argument is collected here rather than by a
+     * separate walk that would have to reconstruct that context.
      *
-     * <p>What is collected while the rule settles the signature's variables was read against a
-     * substitution that may still move, and is not what the call holds. The call holds {@link
-     * #cores} once {@link #materialized} has placed every argument at the settlement that is final.
+     * <p>A value argument is elaborated once ({@link #type}); what it is is not a question the
+     * settlement changes, only where it is placed. A function argument is elaborated at the
+     * parameters the settlement stood at when it was reached, which is evidence for settling and
+     * may not be what the call holds: where the final settlement has it take something else, it is
+     * elaborated again there ({@link #settledAs}), because what a block's body read its parameters
+     * at is part of the block.
+     *
+     * <p>So what is collected while the rule settles the signature's variables is not what the call
+     * holds. The call holds {@link #cores} once {@link #materialized} has placed every argument at
+     * the settlement that is final.
      */
     static final class CallArgs {
         private final List<Hir.Expr> args;
@@ -355,7 +362,8 @@ public final class CallElaborator {
          * Core that reached the tree would be the later one while the type a rule reasoned about was
          * the earlier. A rule may ask in whatever order it types in ({@link #requireTyped} already
          * rests on this), so the guarantee belongs here rather than in each rule remembering to ask
-         * once.
+         * once. It is a value argument's: a function argument is read at parameters, and read again
+         * where those move ({@link #settledAs}).
          */
         Type type(int i) {
             if (cores[i] == null) {
@@ -417,18 +425,26 @@ public final class CallElaborator {
          * it. What it answers stands as what the call takes it to answer, as {@link
          * Elaborator#answering} says, except where that is a variable nothing settled, which is no
          * type to stand as.
+         *
+         * <p>Held to that here, whether it was read again or not. A {@link Core.Widen} says the
+         * checker decided the one type may stand as the other, and it is placed here, so this is
+         * where that is decided: a settlement that stopped short of what the function answers would
+         * otherwise have its answer stand as something narrower.
          */
         void settledAs(int i, String fnName, Type.FnOf takes, String what) {
             Core read = cores[i];
             if (!((Type.FnOf) read.type()).params().equals(takes.params())) {
                 read = Elaborator.elaborateBlockArg(fnName, args.get(i), takes.params(), env, ctx);
-                Type answered = ((Type.FnOf) read.type()).result();
-                if (!TypeOps.assignable(answered, takes.result(), ctx.published())) {
-                    throw Elaborator.doesNotFit(args.get(i), answered, takes.result(), what);
-                }
             }
-            cores[i] = takes.result() instanceof Type.Var
-                    ? read : Elaborator.answering(read, takes.result());
+            if (takes.result() instanceof Type.Var) {
+                cores[i] = read;
+                return;
+            }
+            Type answered = ((Type.FnOf) read.type()).result();
+            if (!TypeOps.assignable(answered, takes.result(), ctx.published())) {
+                throw Elaborator.doesNotFit(args.get(i), answered, takes.result(), what);
+            }
+            cores[i] = Elaborator.answering(read, takes.result());
         }
 
         /** The elaborated arguments. Every argument must have been reached: a rule that yields a type
