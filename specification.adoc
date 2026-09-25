@@ -197,7 +197,7 @@ The extension is `+.sou+`. Each file defines one module.
 
 Two hold of the names inside it:
 
-* [[a-declaration-is-made-once]]a name is written once where one is expected — a `+let+`, a data, a field of one data, a field of one construction, an entry of one clause list;
+* [[a-declaration-is-made-once]]a name is written once where one is expected — a `+let+`, a data, a field of one data, a field of one construction, an entry of one clause list, and each name one form binds at once: a behavior signature's parameters, a `+let+`'s parameters — a helper's and a behavior implementation's alike — or a lambda's, together with every name their patterns bind, the names of one destructuring `+let+`, the names of one `+match+` arm. Those names are bound together, so none is inside another's scope, and a name written under them would have two bindings and nothing to choose between them. A binding written inside another's scope is a scope of its own and MAY take a name in force outside it (<<blocks>>). `+_+` is not a name (<<a-discard-stands-inside-a-pattern-for-what-is-not-read>>), and one form MAY write it more than once;
 * [[a-spelling-answers-one-thing-where-a-value-is-written]]a spelling has one answer where a value is written. A data is written as a value — a unit data is one, a newtype is applied to what it wraps — so a `+let+` and a data of one name would be one spelling with two answers.
 
 [[a-binding-does-not-shadow-a-builtin]]A binding MUST NOT take the name of a built-in value. A binding is in force over a region and everything outside it is unaffected (<<blocks>>), which is what makes shadowing a model's own names harmless; a built-in has no declaration to read instead, so a binding over one takes it away with nothing to point at.
@@ -2304,7 +2304,7 @@ behavior decidePreApproval : (
 ) -> List<PreApprovalReason>
 ----
 
-A parameter name is for the reader and does not affect type identity. The implementation (`+let+`) gives its own names and corresponds by position. A type MUST NOT be written without a name: if `+(String)+` were writable, whether it meant "the type String" or "the name String" would be unreadable.
+A parameter name is for the reader and does not affect type identity. It is still the name a clause reads the parameter by, so the parameters of one signature are named apart (<<a-declaration-is-made-once>>). The implementation (`+let+`) gives its own names and corresponds by position. A type MUST NOT be written without a name: if `+(String)+` were writable, whether it meant "the type String" or "the name String" would be unreadable.
 
 Zero arguments is written `+()+` (as in `+now+`). "No argument" and "takes one `+Unit+`" are different; `+Unit+` is not exposed at the surface (<<algebraic-types>>).
 
@@ -5332,7 +5332,7 @@ Reported at the field (<<a-case-does-not-declare-the-discriminator-field>>). A p
 data `Amount` is already defined.
 ----
 
-Reported at the second declaration (<<a-declaration-is-made-once>>): a `+let+`, a data, a field of one data, an entry written twice in one clause list.
+Reported at the second declaration (<<a-declaration-is-made-once>>): a `+let+`, a data, a field of one data, an entry written twice in one clause list, a name one form binds twice — two parameters of one parameter list, whether a signature's, a `+let+`'s or a lambda's, counting the names their patterns bind; two names of one pattern or one `+match+` arm.
 
 [#e1012]
 === A `let` and a data share a spelling

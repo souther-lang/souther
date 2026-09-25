@@ -733,12 +733,15 @@ public final class AstBuilder {
         if (sig.isPresent()) {
             SyntaxNode s = sig.get();
             List<Ast.Param> params = new ArrayList<>();
+            List<SyntaxToken> paramNames = new ArrayList<>();
             s.child(SyntaxKind.PARAM_LIST).ifPresent(pl -> {
                 for (SyntaxNode p : childNodes(pl, SyntaxKind.PARAM)) {
+                    paramNames.add(firstIdentToken(p));
                     params.add(new Ast.Param(nameOf(firstIdentToken(p)),
                             retType(p.child(SyntaxKind.RET_TYPE).orElseThrow())));
                 }
             });
+            eachNameOnce(paramNames, "the parameters of `" + declared.canonical() + "`");
             Ast.RetType ret = retType(s.child(SyntaxKind.RET_TYPE).orElseThrow());
             List<Ast.Name> constructs = new ArrayList<>();
             List<Ast.Var> dependsOn = new ArrayList<>();
@@ -815,13 +818,20 @@ public final class AstBuilder {
         List<Ast.FnParam> params = new ArrayList<>();
         // parallel to params: the pattern a parameter was written as, or null where it was a name
         List<SyntaxNode> paramPatterns = new ArrayList<>();
+        List<SyntaxToken> paramNames = new ArrayList<>();
         n.child(SyntaxKind.FN_PARAM_LIST).ifPresent(pl -> {
             for (SyntaxNode p : childNodes(pl, SyntaxKind.FN_PARAM)) {
                 SyntaxNode pat = optionalPatternChild(p);
                 paramPatterns.add(pat);
                 params.add(fnParam(p, pat));
+                if (pat == null) {
+                    paramNames.add(firstIdentToken(p));
+                } else {
+                    namesBoundBy(pat, paramNames);
+                }
             }
         });
+        eachNameOnce(paramNames, "the parameters of `" + declared.canonical() + "`");
         Ast.RetType declaredReturn = n.child(SyntaxKind.RET_TYPE).map(AstBuilder.this::retType).orElse(null);
         boolean partial = n.child(SyntaxKind.PARTIAL_MODIFIER).isPresent();
         Optional<SyntaxNode> privateModifier = n.child(SyntaxKind.PRIVATE_MODIFIER);
@@ -1150,6 +1160,11 @@ public final class AstBuilder {
     private Ast.Expr lambda(SyntaxNode n) {
         SourcePos pos = pos(n);
         List<SyntaxNode> pats = patternChildren(n);
+        List<SyntaxToken> paramNames = new ArrayList<>();
+        for (SyntaxNode p : pats) {
+            namesBoundBy(p, paramNames);
+        }
+        eachNameOnce(paramNames, "the parameters of a lambda");
         List<Ast.Binder> params = new ArrayList<>();
         for (SyntaxNode p : pats) {
             // A parameter the author named is a name written where it is written; one that is a
@@ -1259,6 +1274,9 @@ public final class AstBuilder {
         // newtype constructor destructuring `X(inner)` / nested `X(Y(s))`: the ident chain inside the
         // parens. The last ident is the bound variable; each earlier ident names a newtype layer peeled.
         List<Ast.Name> unwrapNames = new ArrayList<>();
+        // the names the arm binds, in the order they are written
+        List<SyntaxToken> armNames = new ArrayList<>();
+        SyntaxToken unwrapped = null;   // the name the innermost layer binds
         if (i < es.size() && isToken(es.get(i), SyntaxKind.LPAREN)) {
             int depth = 0;
             while (at[0] < es.size()) {
@@ -1273,6 +1291,7 @@ public final class AstBuilder {
                         break;
                     }
                 } else if (isToken(e, SyntaxKind.IDENT)) {
+                    unwrapped = (SyntaxToken) e;
                     unwrapNames.add(dottedName(es, at));   // a layer is named like any other type
                 } else {
                     break;
@@ -1303,7 +1322,7 @@ public final class AstBuilder {
         }
         // field destructuring `{ field [= var], ... }`
         List<String> fieldNames = new ArrayList<>();
-        List<Ast.Binder> fieldVars = new ArrayList<>();
+        List<SyntaxToken> fieldTokens = new ArrayList<>();
         if (i < es.size() && isToken(es.get(i), SyntaxKind.LBRACE)) {
             i++;   // {
             while (i < es.size() && !isToken(es.get(i), SyntaxKind.RBRACE)) {
@@ -1316,7 +1335,7 @@ public final class AstBuilder {
                     varToken = (SyntaxToken) es.get(i++);
                 }
                 fieldNames.add(ident(fieldToken));
-                fieldVars.add(binderOf(varToken));
+                fieldTokens.add(varToken);
                 if (i < es.size() && isToken(es.get(i), SyntaxKind.COMMA)) {
                     i++;
                 }
@@ -1341,6 +1360,16 @@ public final class AstBuilder {
             throw error(casePos, new ParseMessage.SomeParensOpenAWrappedNewtype(
                     unwrapNames.get(0).written()));
         }
+        if (unwrapped != null) {
+            armNames.add(unwrapped);
+        } else if (someBinding != null) {
+            armNames.add(bindingToken);
+        }
+        armNames.addAll(fieldTokens);
+        if (asBinding != null) {
+            armNames.add(bindingToken);
+        }
+        eachNameOnce(armNames, "one `match` arm");
         // skip the arrow, then the body is the trailing expression node
         SyntaxNode bodyNode = lastExprChild(n);
         Ast.Expr body = expr(bodyNode);
@@ -1355,7 +1384,7 @@ public final class AstBuilder {
                 bindingToken = null;   // the arm holds the value in a name nobody wrote
             }
             for (int k = fieldNames.size() - 1; k >= 0; k--) {
-                body = new Ast.LetIn(fieldVars.get(k),
+                body = new Ast.LetIn(binderOf(fieldTokens.get(k)),
                         new Ast.FieldAccess(Ast.Var.desugared(whole, casePos, reference()), fieldNames.get(k),
                                 casePos),
                         body, casePos, bodyRegion);
@@ -1528,11 +1557,61 @@ public final class AstBuilder {
             }
             case LET_DESTRUCTURE -> {
                 SyntaxNode pat = patternChild(s);
+                List<SyntaxToken> names = new ArrayList<>();
+                namesBoundBy(pat, names);
+                eachNameOnce(names, "one pattern");
                 yield bindPattern(pat, expr(onlyExpr(s)),
                         foldStatements(stmts, index + 1, result), pos(pat), held);
             }
             default -> throw error(pos, new ParseMessage.AStatementWasExpected());
         };
+    }
+
+    /**
+     * The tokens that write the names {@code pat} binds, added to {@code out} in the order they are
+     * written. A record pattern binds the name after a field's {@code =}, or the field's own name
+     * where there is none; a constructor pattern binds what the pattern inside it binds, and the
+     * type it names binds nothing. A discard is added too, and {@link #eachNameOnce} passes over it.
+     */
+    private void namesBoundBy(SyntaxNode pat, List<SyntaxToken> out) {
+        switch (pat.kind()) {
+            case PATTERN_NAME -> out.add(firstIdentToken(pat));
+            case PATTERN_TUPLE -> {
+                for (SyntaxNode elem : patternChildren(pat)) {
+                    namesBoundBy(elem, out);
+                }
+            }
+            case PATTERN_CTOR -> namesBoundBy(patternChild(pat), out);
+            case PATTERN_RECORD -> {
+                for (SyntaxNode field : childNodes(pat, SyntaxKind.PATTERN_FIELD)) {
+                    out.add(boundByField(field));
+                }
+            }
+            default -> throw error(pos(pat), new ParseMessage.APatternWasExpected());
+        }
+    }
+
+    /** The token naming what a record pattern's field binds: {@code n} in {@code { quantity = n }},
+     * and the field's own name in {@code { quantity }}. */
+    private SyntaxToken boundByField(SyntaxNode field) {
+        List<SyntaxToken> names = identTokens(field);
+        return names.size() > 1 ? names.get(1) : names.get(0);
+    }
+
+    /**
+     * Refuses the second of two names {@code written} spells alike, at the second. The tokens are
+     * the names one form binds at once, so no one of them is inside another's scope and a name
+     * written under them could not say which it means (spec §a-declaration-is-made-once). Names are
+     * compared as the builder settles them, so two spellings of one canonical name are one name. A
+     * discard is not a name, and any number of them may stand.
+     */
+    private void eachNameOnce(List<SyntaxToken> written, String listedIn) {
+        Set<String> seen = new HashSet<>();
+        for (SyntaxToken t : written) {
+            if (t.kind() != SyntaxKind.UNDERSCORE && !seen.add(ident(t))) {
+                throw error(posOf(t), new DataMessage.NameIsListedMoreThanOnce(ident(t), listedIn));
+            }
+        }
     }
 
     /**
@@ -1600,10 +1679,8 @@ public final class AstBuilder {
                 Ast.Expr body = rest;
                 List<SyntaxNode> fields = childNodes(pat, SyntaxKind.PATTERN_FIELD);
                 for (int k = fields.size() - 1; k >= 0; k--) {
-                    List<SyntaxToken> names = identTokens(fields.get(k));
-                    String field = ident(names.get(0));
-                    SyntaxToken var = names.size() > 1 ? names.get(1) : names.get(0);
-                    body = new Ast.LetIn(binderOf(var),
+                    String field = ident(identTokens(fields.get(k)).get(0));
+                    body = new Ast.LetIn(binderOf(boundByField(fields.get(k))),
                             new Ast.FieldAccess(Ast.Var.desugared(whole, pos, reference()), field, pos), body,
                             pos, held);
                 }
