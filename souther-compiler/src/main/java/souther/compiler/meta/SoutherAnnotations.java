@@ -110,7 +110,7 @@ final class SoutherAnnotations {
                 moduleString(a, "header", ""),
                 strings(a, "imports"), strings(a, "types"), strings(a, "behaviors"),
                 strings(a, "invariantHelpers"), strings(a, "valueAnswers"),
-                stringsOrNull(a, "constructions"), stringsOrNull(a, "constructors"));
+                stringsOrNull(a, "providedLinkages"), stringsOrNull(a, "requiredLinkages"));
     }
 
     /**

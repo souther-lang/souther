@@ -21,8 +21,9 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.check.Exposing;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.Scoping;
-import souther.compiler.codegen.ConstructionLink;
 import souther.compiler.frontend.CstFrontend;
+import souther.compiler.jvm.LinkageRecord;
+import souther.compiler.jvm.LinkageTarget;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.meta.PublishedClasses;
@@ -506,14 +507,16 @@ public final class Front {
                 return read.behaviorRequirements();
             }
 
-            /** The constructors of other modules' behaviors its classes link against. */
-            public List<ConstructionLink> constructionLinks() {
-                return read.constructionLinks();
+            /** What each of its declarations offers another module's classes, as its classes
+             *  offered it where they were built. */
+            public Map<LinkageTarget, LinkageRecord> provides() {
+                return read.provides();
             }
 
-            /** The constructor each of its behavior implementations declares. */
-            public List<ConstructionLink> constructors() {
-                return read.constructors();
+            /** What its classes assumed about each declaration of another module they link
+             *  against. */
+            public Map<LinkageTarget, LinkageRecord> requires() {
+                return read.requires();
             }
 
             public List<Scoping.Claim> libraryClaims() {
@@ -1360,31 +1363,32 @@ public final class Front {
     /**
      * Every module a module read off the path reaches: what its declarations name
      * ({@link #reaches(Ast.Module)}), every module a dependency one of its behaviors is constructed
-     * with is declared in, and every module a behavior its classes build is declared in.
+     * with is declared in, and every module a declaration its classes link against is declared in.
      *
      * <p>The last two are not in the text, and are carried beside it. A composition's stages are not
      * published, so a dependency a stage brings in may be declared in a module nothing the module
-     * carries mentions — and so may the stage itself, or a behavior a body calls by name, since the
-     * bodies are not published either and the import that named it goes with them. A reader building
-     * the composition is handed that dependency and types it from its module; a reader holding the
-     * module to what its classes build asks that module how it builds it; a reader comparing two
-     * builds follows it there. One answer for both sets of published classes, for the reason the one
-     * above is one.
+     * carries mentions — and so may anything its bodies link against, since the bodies are not
+     * published either and the import that named it goes with them. A reader building the
+     * composition is handed that dependency and types it from its module; a reader holding the module
+     * to what its classes were built against asks each of those modules what it offers; a reader
+     * comparing two builds follows it there. One answer for both sets of published classes, for the
+     * reason the one above is one.
      */
     public static SequencedSet<String> reaches(ReadableModule read) {
         String own = read.module().name();
         SequencedSet<String> names = new LinkedHashSet<>(reaches(read.module()).keySet());
-        List<ValueName.Behavior> named = new ArrayList<>();
+        List<String> named = new ArrayList<>();
         for (List<ValueName.Behavior> required : read.behaviorRequirements().values()) {
-            named.addAll(required);
+            for (ValueName.Behavior each : required) {
+                named.add(each.module());
+            }
         }
-        for (ConstructionLink link : read.constructionLinks()) {
-            named.add(link.target());
-            named.addAll(link.dependencies());
+        for (LinkageTarget linked : read.requires().keySet()) {
+            named.add(linked.module());
         }
-        for (ValueName.Behavior each : named) {
-            if (!each.module().equals(own)) {
-                names.add(each.module());
+        for (String each : named) {
+            if (!each.equals(own)) {
+                names.add(each);
             }
         }
         return names;

@@ -29,6 +29,7 @@ import souther.compiler.coverage.ComparisonEmissionSite;
 
 import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.jvm.GeneratedClass;
+import souther.compiler.jvm.LinkageProjection;
 import souther.compiler.types.Refinement;
 import souther.compiler.types.ValueName;
 import java.lang.classfile.ClassFile;
@@ -109,8 +110,6 @@ final class BodyGen {
         private final Map<BindingId, Var> locals = new HashMap<>();
         private int nextSlot;
         private Set<ValueName.Behavior> reqNames = Set.of();
-        private Map<ValueName.Behavior, Type> reqSuccess = Map.of();
-        private Map<ValueName.Behavior, List<Type>> reqParams = Map.of();
         /** The fields the class this body is emitted into keeps its injected behaviors in. */
         private InjectionSlots held = InjectionSlots.none();
         /** The last line already bound in this method's {@code LineNumberTable}; skips consecutive
@@ -172,11 +171,8 @@ final class BodyGen {
         }
 
         /** Makes injected required behaviors callable inline from this body (spec §unmarked-output, §fn). */
-        void requireds(Set<ValueName.Behavior> names, Map<ValueName.Behavior, Type> success,
-                       Map<ValueName.Behavior, List<Type>> params, InjectionSlots held) {
+        void requireds(Set<ValueName.Behavior> names, InjectionSlots held) {
             this.reqNames = names;
-            this.reqSuccess = success;
-            this.reqParams = params;
             this.held = held;
         }
 
@@ -192,11 +188,13 @@ final class BodyGen {
                     && reached.denotes() instanceof ValueName.Behavior behavior ? behavior : null;
         }
 
-        /** A {@code ReqSig} view of the injected behaviors in scope, for re-typing a closure body. */
+        /** A {@code ReqSig} view of the injected behaviors in scope, for re-typing a closure body:
+         *  what each takes and answers, as its projection says. */
         private Map<ValueName.Behavior, ReqSig> reqSigs() {
             Map<ValueName.Behavior, ReqSig> sigs = new HashMap<>();
             for (ValueName.Behavior n : reqNames) {
-                sigs.put(n, new ReqSig(reqParams.get(n), reqSuccess.get(n)));
+                LinkageProjection.Behavior linked = ctx.behavior(n);
+                sigs.put(n, new ReqSig(linked.takes(), linked.answers()));
             }
             return sigs;
         }
@@ -289,9 +287,7 @@ final class BodyGen {
         private byte[] generateLambdaClass(ClassDesc cd, List<Core.Binder> params, Core body,
                                            List<Type> paramTypes,
                                            List<Core.Read> captures,
-                                           List<ValueName.Behavior> injectedNames,
-                                           Map<ValueName.Behavior, Type> reqSuccess,
-                                           Map<ValueName.Behavior, List<Type>> reqParams) {
+                                           List<ValueName.Behavior> injectedNames) {
             // The lambda is a class of its own, so it keeps the behaviors it calls in fields of its
             // own — at its own positions, which are not the enclosing class's.
             InjectionSlots carried = InjectionSlots.of(injectedNames, ctx);
@@ -349,13 +345,7 @@ final class BodyGen {
                     if (!injectedNames.isEmpty()) {
                         // the captured behaviors live in this closure's own fields; requiredCall reads
                         // `this.<name>`, so route them the same way the enclosing behavior does
-                        Map<ValueName.Behavior, Type> succ = new HashMap<>();
-                        Map<ValueName.Behavior, List<Type>> parm = new HashMap<>();
-                        for (ValueName.Behavior inj : injectedNames) {
-                            succ.put(inj, reqSuccess.get(inj));
-                            parm.put(inj, reqParams.get(inj));
-                        }
-                        g.requireds(new HashSet<>(injectedNames), succ, parm, carried);
+                        g.requireds(new HashSet<>(injectedNames), carried);
                     }
                     for (int i = 0; i < paramTypes.size(); i++) {
                         Type pt = paramTypes.get(i);
@@ -398,7 +388,6 @@ final class BodyGen {
          * type the checker pinned rather than a bottom. Null when no declared type is in scope.
          */
         void emitTail(Core e, ClassDesc cdB, Set<ValueName.Behavior> requiredNames,
-                      Map<ValueName.Behavior, Type> requiredSuccess,
                       Type expected) {
             emitLine(e);
             switch (e) {
@@ -423,17 +412,17 @@ final class BodyGen {
                         storeLet(li, vt);
                     }
                     emitLine(li);   // re-pin: a bound value may have moved the line off the call
-                    emitTail(li.body(), cdB, requiredNames, requiredSuccess, expected);
+                    emitTail(li.body(), cdB, requiredNames, expected);
                 }
                 case Core.If iff -> {
                     genExpr(iff.cond());
                     Label elseL = code.newLabel();
                     code.ifeq(elseL);
                     probe(iff, 0);
-                    emitTail(iff.then(), cdB, requiredNames, requiredSuccess, expected);
+                    emitTail(iff.then(), cdB, requiredNames, expected);
                     code.labelBinding(elseL);
                     probe(iff, 1);
-                    emitTail(iff.els(), cdB, requiredNames, requiredSuccess, expected);
+                    emitTail(iff.els(), cdB, requiredNames, expected);
                 }
                 // Both branches stay in tail position, so a self-recursive helper guarded by an
                 // attempt loops exactly as one guarded by a plain condition does. Falling through to
@@ -442,18 +431,18 @@ final class BodyGen {
                     Attempt a = emitAttempt(ic);
                     bind(ic.binder(), a.slot(), ic.construct().type());
                     probe(ic, 0);
-                    emitTail(ic.then(), cdB, requiredNames, requiredSuccess, expected);
+                    emitTail(ic.then(), cdB, requiredNames, expected);
                     code.labelBinding(a.elseLabel());
                     // Each departure is in tail position too, so it returns on its own and needs no
                     // jump past the ones emitted after it.
                     emitDepartures(ic, a,
-                            body -> emitTail(body, cdB, requiredNames, requiredSuccess, expected),
+                            body -> emitTail(body, cdB, requiredNames, expected),
                             null);
                 }
-                case Core.Match m -> emitTailMatch(m, cdB, requiredNames, requiredSuccess, expected);
+                case Core.Match m -> emitTailMatch(m, cdB, requiredNames, expected);
                 // What it holds is in tail position: the value returned is the value it holds.
                 case Core.Widen w ->
-                        emitTail(w.value(), cdB, requiredNames, requiredSuccess, expected);
+                        emitTail(w.value(), cdB, requiredNames, expected);
                 case Core.Call call when tcoName != null && call.name().equals(tcoName)
                         && call.args().size() == tcoParams.size() -> emitSelfTailCall(call);
                 case Core.Construct nd when DataChecker.isInvariantBearing(nd.typeName(), symbols) -> {
@@ -921,8 +910,7 @@ final class BodyGen {
          * List.get}) loops rather than recursing. Each arm returns (or tail-loops), so no join label is
          * needed — the next arm's dispatch follows its predecessor's {@code nextCase}. */
         private void emitTailMatch(Core.Match m, ClassDesc cdB,
-                                   Set<ValueName.Behavior> requiredNames,
-                                   Map<ValueName.Behavior, Type> requiredSuccess, Type expected) {
+                                   Set<ValueName.Behavior> requiredNames, Type expected) {
             Type st = genExpr(m.scrutinee());
             int sSlot = slot(st);
             store(code, sSlot, st);
@@ -934,7 +922,7 @@ final class BodyGen {
 
                 emitCaseGuard(c, sSlot, st, nextCase);
                 probe(m, i);
-                emitTail(c.body(), cdB, requiredNames, requiredSuccess, expected);
+                emitTail(c.body(), cdB, requiredNames, expected);
                 if (c.binder() != null) {
                 }
                 code.labelBinding(nextCase);
@@ -1284,10 +1272,11 @@ final class BodyGen {
                 case Core.Reaches.APublishedValue(ValueName.Helper value) -> {
                     // The value runs in the module that declares it. What is called is that module's
                     // entry, which is public and takes nothing, so no type the value is built from
-                    // is named here.
-                    code.invokestatic(ctx.cd(new GeneratedClass.Values(value.module())), value.name(),
-                            MethodTypeDesc.of(CD_Object));
-                    castFromObject(code, call.type());
+                    // is named here; what its answer is taken as is what the entry offers.
+                    LinkageProjection.Value entered = ctx.publishedValue(value);
+                    code.invokestatic(entered.entry().ownerClass(), entered.entry().method(),
+                            entered.entry().methodType());
+                    castFromObject(code, entered.answers());
                 }
                 case Core.Reaches.AHelper _ -> {
                     // The one loop the language has is emitted where it stands, not called.
@@ -1304,12 +1293,8 @@ final class BodyGen {
                 case Core.Reaches.ABehavior(ValueName.Behavior behavior) -> {
                     if (reqNames.contains(behavior)) {
                         requiredCall(call);
-                    } else if (ctx.calleeSig(behavior) != null) {
-                        behaviorCall(call);
                     } else {
-                        throw new IllegalStateException("`" + call.name() + "` reaches the behavior "
-                                + behavior + ", which is neither supplied to this class nor"
-                                + " implemented by a module this one was told about");
+                        behaviorCall(call);
                     }
                 }
             }
@@ -1583,35 +1568,44 @@ final class BodyGen {
          */
         private void behaviorCall(Core.Call call) {
             ValueName.Behavior callee = behaviorOf(call);
-            ReqSig sig = ctx.calleeSig(callee);
-            ClassDesc impl = ctx.cdBehaviorImpl(callee);
-            code.new_(impl);
-            code.dup();
-            ctx.linksConstructor(callee, List.of(), MTD_void);
-            code.invokespecial(impl, "<init>", MTD_void);
-            if (sig.params().size() == 1) {
-                Type at = genExpr(call.args().get(0));
-                box(code, at);
-                code.invokeinterface(CD_Behavior, "apply", MTD_apply);
-                project(callee, sig.success());
-                castFromObject(code, sig.success());
-                return;
+            LinkageProjection.Behavior linked = ctx.behavior(callee);
+            LinkageProjection.Construction built = linked.construction().orElseThrow(() ->
+                    new IllegalStateException("`" + call.name() + "` reaches the behavior "
+                            + callee + ", which is neither supplied to this class nor has an"
+                            + " implementation to build"));
+            if (!built.dependencies().isEmpty()) {
+                throw new IllegalStateException("`" + callee + "` is called by name and its"
+                        + " implementation is handed " + built.dependencies());
             }
+            code.new_(built.implementationClass());
+            code.dup();
+            code.invokespecial(built.implementationClass(), "<init>", built.constructorType());
             for (Core arg : call.args()) {
                 Type at = genExpr(arg);
                 box(code, at);
             }
-            code.invokeinterface(ctx.cdBehavior(callee), "apply",
-                    ctx.typedApplyDesc(callee, sig.params(), sig.success()));
-            project(callee, sig.success());
-            castFromObject(code, sig.success());
+            invoke(linked.apply());
+            project(linked);
+            castFromObject(code, linked.answers());
+        }
+
+        /** Emits the instruction {@code invocation} describes. */
+        private void invoke(LinkageProjection.Invocation invocation) {
+            if (invocation.onInterface()) {
+                code.invokeinterface(invocation.ownerClass(), invocation.method(),
+                        invocation.methodType());
+            } else {
+                code.invokevirtual(invocation.ownerClass(), invocation.method(),
+                        invocation.methodType());
+            }
         }
 
         /** Emits an inline call to an injected required behavior, leaving its success value on
          * the stack cast to the success type (spec §unmarked-output, §fn). */
         private void requiredCall(Core.Call call) {
             ValueName.Behavior callee = behaviorOf(call);
-            Type success = reqSuccess.get(callee);
+            LinkageProjection.Behavior linked = ctx.behavior(callee);
+            Type success = linked.answers();
             // An injected behavior's body is supplied from outside, so there is no `apply` of this
             // compiler's to hold it to what it declared. The line is the one the Decoder draws: where
             // an answer enters the domain. What the arguments were has to survive the call to be
@@ -1624,38 +1618,20 @@ final class BodyGen {
             // value project leaves, before checkAtCrossing hands anything to `Ensures.check`.
             List<Integer> saved = ctx.ensuresCheckOf(callee) instanceof EnsuresEnforcement.AtEachCrossing
                     ? new ArrayList<>() : null;
-            if (ctx.isStandaloneRequired(callee)) {
-                // other than one input: the required behavior is its own base class, called with a
-                // typed invokevirtual apply(A,B,…); each arg is left as its declared param type
-                // (issue #57). A `() -> R` produces, so the call hands it nothing.
-                MethodTypeDesc desc = ctx.requiredApplyDesc(callee);
-                code.aload(0);
-                code.getfield(cdName, held.of(callee).fieldName(), ctx.cdBehavior(callee));
-                for (Core arg : call.args()) {
-                    Type at = genExpr(arg);
-                    box(code, at);   // a primitive boxes to its apply-param type; a reference already matches
-                    keepForTheCheck(saved);
-                }
-                // Java's is its abstract base; one with an implementation of its own is held as
-                // its interface, which declares the same typed apply.
-                if (ctx.isInjectionTarget(callee)) {
-                    code.invokevirtual(ctx.cdBehavior(callee), "apply", desc);
-                } else {
-                    code.invokeinterface(ctx.cdBehavior(callee), "apply", desc);
-                }
-                project(callee, success);
-                CanonicalizeAtCrossing.emit(code, success);
-                checkAtCrossing(callee, saved);
-                castFromObject(code, success);
-                return;
-            }
+            // Held as its projection says — the unary Behavior for one input, its own class for any
+            // other number — and applied by what it says a caller applies one held that way with: a
+            // base Java extends virtually, an interface through the interface. A `() -> R`
+            // produces, so the call hands it nothing.
+            InjectionSlots.Slot slot = held.of(callee);
             code.aload(0);
-            code.getfield(cdName, held.of(callee).fieldName(), CD_Behavior);
-            Type at = genExpr(call.args().get(0));
-            box(code, at);
-            keepForTheCheck(saved);
-            code.invokeinterface(CD_Behavior, "apply", MTD_apply);
-            project(callee, success);
+            code.getfield(cdName, slot.fieldName(), slot.type());
+            for (Core arg : call.args()) {
+                Type at = genExpr(arg);
+                box(code, at);   // a primitive boxes to its apply-param type; a reference already matches
+                keepForTheCheck(saved);
+            }
+            invoke(linked.apply());
+            project(linked);
             CanonicalizeAtCrossing.emit(code, success);
             checkAtCrossing(callee, saved);
             castFromObject(code, success);
@@ -1714,9 +1690,8 @@ final class BodyGen {
          * the callee's module are not members of this module's union. Projected here, the value is a
          * Souther value again and this behavior's own return puts it into its own bridge case.
          */
-        private void project(ValueName.Behavior callee, Type calleeOut) {
-            List<TypeSymbol> bridged = ctx.bridgedMembersOf(callee, calleeOut);
-            ResultBoundary.project(code, ctx, callee, bridged, slot(Type.NOTHING));
+        private void project(LinkageProjection.Behavior callee) {
+            ResultBoundary.project(code, callee, slot(Type.NOTHING));
         }
 
         /**
@@ -2149,7 +2124,7 @@ final class BodyGen {
             GeneratedClass.Lambda lambda = new GeneratedClass.Lambda(pkg, ctx.nextLambdaId());
             ClassDesc cd = ctx.cd(lambda);
             ctx.addSynth(lambda, generateLambdaClass(cd, block.params(), block.body(), paramTypes,
-                    captures, injectedNames, reqSuccess, reqParams));
+                    captures, injectedNames));
 
             // the same condition generateLambdaClass interned on — it must stay the same one
             if (captures.isEmpty() && injectedNames.isEmpty()) {

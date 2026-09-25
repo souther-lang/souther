@@ -271,11 +271,12 @@ class AStageAnotherModuleDeclaresBringsWhatItRequiresTest {
                 behavior step = bonus >-> double
                 """);
 
-        ModuleMessage.ItBuildsItWithOtherDependencies said = assertInstanceOf(
-                ModuleMessage.ItBuildsItWithOtherDependencies.class, refusal(path, USES_ONLY_INC));
+        ModuleMessage.ItWasBuiltAgainstAnotherLinkage said = assertInstanceOf(
+                ModuleMessage.ItWasBuiltAgainstAnotherLinkage.class, refusal(path, USES_ONLY_INC));
         assertEquals("lib.b", said.module());
         assertEquals("step", said.name());
         assertEquals("lib.c", said.declaredIn());
+        assertEquals("built with", said.fact());
     }
 
     /** The same two dependencies, taken in the other order. */
@@ -293,14 +294,16 @@ class AStageAnotherModuleDeclaresBringsWhatItRequiresTest {
                 behavior step = tax >-> rate
                 """);
 
-        assertInstanceOf(ModuleMessage.ItBuildsItWithOtherDependencies.class,
-                refusal(path, USES_ONLY_INC));
+        ModuleMessage.ItWasBuiltAgainstAnotherLinkage said = assertInstanceOf(
+                ModuleMessage.ItWasBuiltAgainstAnotherLinkage.class, refusal(path, USES_ONLY_INC));
+        assertEquals("step", said.name());
+        assertEquals("built with", said.fact());
     }
 
     /** The same dependency, by the same name, taking two inputs where it took one. It is held as
      *  its own class rather than the unary Behavior, so the constructor taking it is another one —
-     *  the one `step` declares, and the one `lib.b`'s own `priced` declares, which is handed the
-     *  same dependency. Both are said. */
+     *  the one `step` declares — and `lib.b`'s own `priced`, handed the same dependency, holds it
+     *  as it no longer is. Both are said about `lib.b`, whose classes read both. */
     @Test
     void aDependencyTakingOtherInputsChangesTheConstructorAndIsSaid() {
         Map<String, ClassFileImage> path = builtAgainst("""
@@ -324,13 +327,13 @@ class AStageAnotherModuleDeclaresBringsWhatItRequiresTest {
         List<Object> said = saidCompiling(USES_ONLY_INC, path);
 
         assertTrue(said.stream().anyMatch(each ->
-                        each instanceof ModuleMessage.ItBuildsItWithOtherDependencies b
-                                && b.name().equals("step")),
+                        each instanceof ModuleMessage.ItWasBuiltAgainstAnotherLinkage b
+                                && b.module().equals("lib.b") && b.name().equals("step")),
                 "lib.b builds step through a constructor it no longer has: " + said);
         assertTrue(said.stream().anyMatch(each ->
-                        each instanceof ModuleMessage.ItsImplementationTakesItsDependenciesAnotherWay b
-                                && b.module().equals("lib.b") && b.name().equals("priced")),
-                "lib.b's own priced takes rate as it no longer is: " + said);
+                        each instanceof ModuleMessage.ItWasBuiltAgainstAnotherLinkage b
+                                && b.module().equals("lib.b") && b.name().equals("rate")),
+                "lib.b's own priced holds rate as it no longer is: " + said);
     }
 
     /** A stage `lib.b` builds is one Java supplies now, so there is no implementation of it to build. */
@@ -346,9 +349,12 @@ class AStageAnotherModuleDeclaresBringsWhatItRequiresTest {
                 behavior step : (n: Int) -> Int
                 """);
 
-        ModuleMessage.ItBuildsWhatTheModuleDoesNotBuild said = assertInstanceOf(
-                ModuleMessage.ItBuildsWhatTheModuleDoesNotBuild.class, refusal(path, USES_ONLY_INC));
+        ModuleMessage.ItWasBuiltAgainstAnotherLinkage said = assertInstanceOf(
+                ModuleMessage.ItWasBuiltAgainstAnotherLinkage.class, refusal(path, USES_ONLY_INC));
         assertEquals("step", said.name());
+        assertEquals("realized as", said.fact());
+        assertEquals("implemented", said.built());
+        assertEquals("supplied by Java", said.now());
     }
 
     /** A behavior of another module `lib.b` calls by name, built where it is called with nothing to
@@ -373,11 +379,14 @@ class AStageAnotherModuleDeclaresBringsWhatItRequiresTest {
                 let twice (n, rate) = rate(n)
                 """);
 
-        ModuleMessage.ItBuildsItWithOtherDependencies said = assertInstanceOf(
-                ModuleMessage.ItBuildsItWithOtherDependencies.class, refusal(path, USES_ONLY_INC));
+        ModuleMessage.ItWasBuiltAgainstAnotherLinkage said = assertInstanceOf(
+                ModuleMessage.ItWasBuiltAgainstAnotherLinkage.class, refusal(path, USES_ONLY_INC));
         assertEquals("twice", said.name());
-        assertEquals("() through ()V", said.built());
-        assertEquals("(lib.c.rate) through (Lsouther/runtime/Behavior;)V", said.now());
+        assertEquals("built with", said.fact());
+        assertTrue(said.built().startsWith("() through ") && said.built().endsWith("()V"),
+                said.built());
+        assertTrue(said.now().startsWith("(lib.c.rate) through ")
+                && said.now().endsWith("(Lsouther/runtime/Behavior;)V"), said.now());
     }
 
     /** `lib.b` without the module whose behavior it builds. Nothing `lib.b` publishes names `lib.c` —
@@ -476,8 +485,9 @@ class AStageAnotherModuleDeclaresBringsWhatItRequiresTest {
      * older `lib.c` that was built against an older `lib.d`. `lib.b` builds `step` handing it
      * `lib.d.rate` as the class `lib.d.Rate`, which is what `step` takes against this `lib.d`; the
      * `lib.c` on the path declares it taking the unary Behavior, which is what it took against the
-     * `lib.d` it was built with. What `lib.b` links against is held to what that `lib.c` declares,
-     * and what that `lib.c` declares is held to this `lib.d` — both are said.
+     * `lib.d` it was built with. What `lib.b` links against is held to what that `lib.c` offers,
+     * as its classes record it, and what that `lib.c` was built against is held to this `lib.d` —
+     * both are said, each about the module whose classes read the declaration.
      */
     @Test
     void aModuleOnThePathIsHeldToWhatItsClassesDeclareAndNotToWhatItWouldDeclareNow() {
@@ -490,11 +500,11 @@ class AStageAnotherModuleDeclaresBringsWhatItRequiresTest {
         List<Object> said = saidCompiling(USES_ONLY_INC, path);
 
         assertTrue(said.stream().anyMatch(each ->
-                        each instanceof ModuleMessage.ItsImplementationTakesItsDependenciesAnotherWay c
-                                && c.module().equals("lib.c") && c.name().equals("step")),
-                "the lib.c on the path declares step against another lib.d: " + said);
+                        each instanceof ModuleMessage.ItWasBuiltAgainstAnotherLinkage c
+                                && c.module().equals("lib.c") && c.name().equals("rate")),
+                "the lib.c on the path was built against another lib.d's rate: " + said);
         assertTrue(said.stream().anyMatch(each ->
-                        each instanceof ModuleMessage.ItBuildsItWithOtherDependencies b
+                        each instanceof ModuleMessage.ItWasBuiltAgainstAnotherLinkage b
                                 && b.module().equals("lib.b") && b.name().equals("step")),
                 "lib.b links against a constructor the lib.c on the path does not declare: "
                         + said);

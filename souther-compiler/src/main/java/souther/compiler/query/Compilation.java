@@ -600,6 +600,9 @@ public final class Compilation {
                 for (Report report : db.ask(new Bodies.BuiltAgainst(module)).reports()) {
                     found.add(new Db.Found(module, null, report));
                 }
+                for (Report report : db.ask(new Linkages.Held(module)).reports()) {
+                    found.add(new Db.Found(module, null, report));
+                }
             }
         }
         return found;

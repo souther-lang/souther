@@ -5,6 +5,7 @@ import souther.compiler.diag.SourceLayouts;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.DerivedSymbols;
+import souther.compiler.check.NewtypeInners;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
@@ -70,9 +71,10 @@ class APlannedArmNothingEmittedIsNamedTest {
         DerivedSymbols symbols = Scopes.derived(compilation.db(), MODULE).value();
         CodegenContext ctx = new CodegenContext(MODULE, symbols,
                 Shapes.publishedDeclarations(compilation.db()),
-                Shapes.declarationKinds(compilation.db()),
+                Shapes.declarationKinds(compilation.db()), NewtypeInners.asWritten(symbols),
                 symbols.library().kernelSignatures(), Map.of(), Map.of(), true, Set.of(), Map.of(),
-                SourceLayouts.NONE, new QuotedFrom.TextItCannotName());
+                SourceLayouts.NONE, new QuotedFrom.TextItCannotName(),
+                new LinkageReader(MODULE, Map.of(), _ -> null, Map.of()));
         ctx.setCoveragePlan(plan);
         return ctx;
     }

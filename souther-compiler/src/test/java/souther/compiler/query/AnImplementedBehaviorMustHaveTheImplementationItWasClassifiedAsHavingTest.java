@@ -70,9 +70,9 @@ class AnImplementedBehaviorMustHaveTheImplementationItWasClassifiedAsHavingTest 
         assertNotNull(in, "the module reaches the emitter, or this says nothing");
         return Backend.generate(in.lowered(), in.scope(), in.published(), in.kinds(),
                 in.scope().library().kernelSignatures(), in.typePackages(), in.sigs(),
-                in.requirementSigs(), in.injected(), new BehaviorBodies("m", claimed),
-                in.callees(), in.requirements(), in.foreignStages(), in.checked(),
+                in.injected(), new BehaviorBodies("m", claimed), in.requirements(), in.checked(),
                 in.compositions(), in.dischargeClauses(), in.invariantStatements(), in.shapes(),
-                in.checks(), in.standingCalls(), new TheTextsThisCompileHolds(compilation.db()));
+                in.checks(), in.standingCalls(), new TheTextsThisCompileHolds(compilation.db()),
+                in.linkage());
     }
 }

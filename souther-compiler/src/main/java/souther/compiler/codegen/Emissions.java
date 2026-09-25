@@ -5,16 +5,18 @@ import souther.compiler.generated.ProbeImage;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.JvmClassName;
+import souther.compiler.jvm.LinkageRecord;
+import souther.compiler.jvm.LinkageTarget;
 import souther.compiler.jvm.SoutherJvmAbi;
 
 import java.lang.classfile.ClassFile;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.SortedMap;
 import java.util.TreeMap;
 
 /**
@@ -57,12 +59,10 @@ public final class Emissions {
     private final String module;
     /** Whose numbers these classes record a run in, where they record one at all. */
     private final ProbeImage probes;
-    /** The constructors of other modules' behaviors these classes link against, once the generation
-     *  has said so. */
-    private List<ConstructionLink> constructionLinks;
-    /** The constructors these classes declare, one per behavior implementation, once the generation
-     *  has said so. */
-    private List<ConstructionLink> constructors;
+    /** What these classes offer another module's, once the generation has said so. */
+    private SortedMap<LinkageTarget, LinkageRecord> provides;
+    /** What these classes were built against, once the generation has said so. */
+    private SortedMap<LinkageTarget, LinkageRecord> requires;
     /** What was handed out, once there is such a thing. */
     private Map<String, ClassFileImage> sealed;
 
@@ -213,47 +213,46 @@ public final class Emissions {
     }
 
     /**
-     * That these classes build {@code links} — every constructor of another module's behavior an
-     * instruction of theirs links against — and declare {@code declared}, the constructor of each
-     * behavior implementation among them. Said once, by the generation, when every class is written.
+     * That these classes offer {@code provides}, and were built against {@code requires} — what
+     * each declaration of another module they read offered when they read it. Said once, by the
+     * generation, when every class is written.
      *
-     * <p>The two halves of one contract, each as the bytecode has it: what a class of this module
-     * calls, and what a class of this module can be called by. A module read off the path is held to
-     * both, and neither is worked out again from what the module declares.
+     * <p>The two halves of one contract: what a class of another module may link by, and what a
+     * class of this module links by. A module read off the path is held to both as they are recorded
+     * here, and neither is worked out again from what the module declares.
      */
-    void constructs(List<ConstructionLink> links, List<ConstructionLink> declared) {
-        stillOpen("recording what the classes link against");
-        if (constructionLinks != null) {
-            throw new IllegalStateException("what the classes of " + module + " build is said once");
+    void linked(SortedMap<LinkageTarget, LinkageRecord> provides,
+                SortedMap<LinkageTarget, LinkageRecord> requires) {
+        stillOpen("recording what the classes link by");
+        if (this.provides != null) {
+            throw new IllegalStateException("what the classes of " + module + " link by is said"
+                    + " once");
         }
-        constructionLinks = List.copyOf(links);
-        constructors = List.copyOf(declared);
+        this.provides = Collections.unmodifiableSortedMap(new TreeMap<>(provides));
+        this.requires = Collections.unmodifiableSortedMap(new TreeMap<>(requires));
     }
 
-    /** The constructor each behavior implementation of these classes declares, as the class that
-     *  declares it was emitted with. */
-    public List<ConstructionLink> constructors() {
-        if (constructors == null) {
+    /** What each declaration of these classes' module offers another module's classes. */
+    public SortedMap<LinkageTarget, LinkageRecord> provides() {
+        if (provides == null) {
             throw new IllegalStateException("the generation of " + module
-                    + " has not said what its classes declare");
+                    + " has not said what its classes offer");
         }
-        return constructors;
+        return provides;
     }
 
     /**
-     * The constructors of other modules' behaviors these classes link against, as the instructions
-     * that link them recorded them.
+     * What these classes assumed about each declaration of another module they link against.
      *
      * <p>What a module published about itself is its declarations; this is what its classes assumed
-     * about somebody else's, which a reader of the module off the path holds the module it builds
-     * from to.
+     * about somebody else's, which a reader of the module off the path holds those declarations to.
      */
-    public List<ConstructionLink> constructionLinks() {
-        if (constructionLinks == null) {
+    public SortedMap<LinkageTarget, LinkageRecord> requires() {
+        if (requires == null) {
             throw new IllegalStateException("the generation of " + module
-                    + " has not said what its classes build");
+                    + " has not said what its classes link against");
         }
-        return constructionLinks;
+        return requires;
     }
 
     /**

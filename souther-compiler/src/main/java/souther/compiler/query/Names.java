@@ -7,6 +7,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.DeclarationKind;
+import souther.compiler.check.DeclarationReads;
 import souther.compiler.check.DeclarationRefusals;
 import souther.compiler.check.Derived;
 import souther.compiler.check.DerivedSymbols;
@@ -778,9 +779,19 @@ public final class Names {
      */
     public static Answer<DerivedSymbols> derivedSymbols(
             Db db, String name) {
+        return derivedSymbols(db, name, DeclarationReads.NOBODY);
+    }
+
+    /**
+     * The same, telling {@code reads} of every declaration a reader of it is answered about — for a
+     * reader whose output records which declarations it was built against.
+     */
+    public static Answer<DerivedSymbols> derivedSymbols(Db db, String name,
+                                                        DeclarationReads reads) {
         return symbols(db, name, (names, stdlib) -> DerivedSymbols
-                .over(name, derivedRegistry(db), normalizedRegistry(db), resolvedRegistry(db),
-                        names, stdlib));
+                .over(name, reads.readingRegistry(derivedRegistry(db)),
+                        reads.readingRegistry(normalizedRegistry(db)),
+                        reads.readingRegistry(resolvedRegistry(db)), names, stdlib));
     }
 
     /**

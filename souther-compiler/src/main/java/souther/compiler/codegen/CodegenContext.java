@@ -3,7 +3,6 @@ package souther.compiler.codegen;
 import souther.compiler.check.ExpandedClauseLookup;
 import souther.compiler.check.InvariantStatements;
 import souther.compiler.check.AtomSpace;
-import souther.compiler.check.ReqSig;
 import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.core.Kernel;
 import souther.compiler.core.KernelSignature;
@@ -19,9 +18,11 @@ import souther.compiler.diag.QuotedFrom;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.TypeOps;
 import souther.compiler.jvm.GeneratedClass;
+import souther.compiler.jvm.LinkageProjection;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.ValueName;
 
@@ -128,24 +129,31 @@ final class CodegenContext {
     private final Map<GeneratedClass, byte[]> synthClasses = new LinkedHashMap<>();
     private int lambdaCounter = 0;
 
-    /** Per-injected-behavior input/success types, set once the module's required behaviors are known
-     * ({@link Backend#generate}). Drives the unary-vs-standalone dispatch (issue #57): a required
-     * behavior that does not take exactly one input is stored by its own base class and called with
-     * {@code invokevirtual}, not the unary {@code Behavior}. Both {@link Backend} and
-     * {@link Backend.Gen}/{@code BodyGen} read this, so the field type, ctor param and call
-     * descriptor cannot drift apart. */
-    private Map<ValueName.Behavior, List<Type>> reqParams = Map.of();
-    private Map<ValueName.Behavior, Type> reqSuccess = Map.of();
-    /** The behaviors Java supplies. A required one of them is held as its abstract base class, and
-     *  any other required behavior as its interface, which is what a call on it is linked against. */
-    private Set<ValueName.Behavior> injectionTargets = Set.of();
+    /**
+     * Where what a behavior, a declared type or a published value offers on the JVM is read, and
+     * where reading another module's is recorded.
+     *
+     * <p>How a behavior is held, applied and built is read off its projection and nowhere else —
+     * this module's own as much as another's, so the field a class holds a behavior in, the
+     * constructor that fills it and every call on it are one answer. The declarations this module's
+     * code reads through {@link #symbols}, {@link #published}, {@link #kinds} and {@link #inners}
+     * are recorded through the same reader, which those were built reading into.
+     */
+    private final LinkageReader linkage;
 
-    void setRequiredSignatures(Map<ValueName.Behavior, List<Type>> params,
-                               Map<ValueName.Behavior, Type> success,
-                               Set<ValueName.Behavior> injectionTargets) {
-        this.reqParams = params;
-        this.reqSuccess = success;
-        this.injectionTargets = Set.copyOf(injectionTargets);
+    /** What {@code behavior} offers: how it is held, applied and built. */
+    LinkageProjection.Behavior behavior(ValueName.Behavior behavior) {
+        return linkage.behavior(behavior);
+    }
+
+    /** What the declared type at {@code key} offers: its form, its class, what a read finds. */
+    LinkageProjection.Data declaredType(TypeKey key) {
+        return linkage.data(key);
+    }
+
+    /** What the published value {@code value} offers: its entry, and what it answers. */
+    LinkageProjection.Value publishedValue(ValueName.Helper value) {
+        return linkage.value(value);
     }
 
     /**
@@ -360,126 +368,23 @@ final class CodegenContext {
         return pkg;
     }
 
-    /** The behaviors a body may call by name — the ones whose requirement set is empty (spec
-     * {@code [#calling-a-behavior]}). A call to one is built where it is called rather than read out
-     * of a field, so it needs no injection; what is kept is the signature the call was typed against,
-     * which decides the descriptor the call links to. Set once, with the required signatures. */
-    private Map<ValueName.Behavior, ReqSig> callees = Map.of();
-
-    void setCalleeSignatures(Map<ValueName.Behavior, ReqSig> sigs) {
-        this.callees = sigs;
-    }
-
-    /** The signature a behavior called by name was typed against, or null when the name is not one. */
-    ReqSig calleeSig(ValueName.Behavior name) {
-        return callees.get(name);
-    }
-
-    /** A required behavior takes other than one input, so it is held as its own class — the base
-     * Java extends, or the interface of one with an implementation — rather than the unary
-     * {@code Behavior} (spec §java-base-class). Two inputs are too many to
-     * hand along an arrow and none is too few, so both are called on their own class with a typed
-     * {@code apply}; only a single input is the transformation {@code Behavior} describes. */
-    boolean isStandaloneRequired(ValueName.Behavior name) {
-        List<Type> params = reqParams.get(name);
-        return params != null && params.size() != 1;   // absent: not a required behavior at all
-    }
-
-    /** Whether Java supplies {@code name}: its class is then the abstract base a typed {@code apply}
-     *  is called on virtually, where a behavior with an implementation is an interface. */
-    boolean isInjectionTarget(ValueName.Behavior name) {
-        return injectionTargets.contains(name);
-    }
-
-    /** The JVM type a required behavior is stored/injected as: its own base class unless it takes
-     * exactly one input, which is the unary {@code Behavior} composition contract. */
+    /** The JVM type a behavior is held as, in a field and as a constructor parameter. */
     ClassDesc requiredFieldType(ValueName.Behavior name) {
-        List<Type> params = reqParams.get(name);
-        if (params == null) {
-            throw new IllegalStateException("`" + name.module() + "." + name.name()
-                    + "` is held as a field here with no signature to hold it by");
-        }
-        return ConstructionAbi.heldAs(name, params);
+        return behavior(name).heldAsClass();
     }
 
-    /**
-     * The constructors of other modules' behaviors this module's classes link against, by the
-     * behavior built. One per behavior: two classes of one module building a behavior are built from
-     * one answer about what it takes, so two descriptors for it would be this compiler emitting two
-     * programs.
-     */
-    private final Map<ValueName.Behavior, ConstructionLink> constructedElsewhere =
-            new LinkedHashMap<>();
-
-    /** Records that the instruction being emitted hands {@code dependencies} to {@code target}'s
-     *  implementation through {@code constructor}, where {@code target} is another module's. */
-    void linksConstructor(ValueName.Behavior target, List<ValueName.Behavior> dependencies,
-                          MethodTypeDesc constructor) {
-        if (target.module().equals(pkg)) {
-            return;
-        }
-        ConstructionLink link =
-                new ConstructionLink(target, dependencies, constructor.descriptorString());
-        ConstructionLink before = constructedElsewhere.putIfAbsent(target, link);
-        if (before != null && !before.equals(link)) {
-            throw new IllegalStateException("`" + target.module() + "." + target.name()
-                    + "` is built here as " + before + " and as " + link);
-        }
-    }
-
-    /** What {@link #linksConstructor} recorded, in the order it was first recorded. */
-    List<ConstructionLink> constructionLinks() {
-        return List.copyOf(constructedElsewhere.values());
-    }
-
-    /** The constructors this module's behaviors' implementations declare, by the behavior. */
-    private final Map<ValueName.Behavior, ConstructionLink> declared = new LinkedHashMap<>();
-
-    /** Records that the class being emitted is {@code own}'s implementation and declares
-     *  {@code constructor}, taking {@code dependencies} in that order. Said once per behavior. */
-    void providesConstructor(ValueName.Behavior own, List<ValueName.Behavior> dependencies,
-                             MethodTypeDesc constructor) {
-        ConstructionLink provided =
-                new ConstructionLink(own, dependencies, constructor.descriptorString());
-        if (declared.putIfAbsent(own, provided) != null) {
-            throw new IllegalStateException("`" + own.module() + "." + own.name()
-                    + "`'s implementation declares a constructor twice");
-        }
-    }
-
-    /** What {@link #providesConstructor} recorded, in the order the classes were emitted. */
-    List<ConstructionLink> constructors() {
-        return List.copyOf(declared.values());
-    }
-
-    /** The typed {@code apply(A,B,…)} descriptor of a standalone required behavior's base — the same
-     * descriptor {@link Backend#generateRequiredBase} declared, so an {@code invokevirtual} on it links. */
-    MethodTypeDesc requiredApplyDesc(ValueName.Behavior name) {
-        return typedApplyDesc(name, reqParams.get(name), reqSuccess.get(name));
-    }
-
-    /** The interface-facing apply descriptor for a multi-input behavior: each param and the return
-     * mapped to its runtime reference type. A collection keeps its {@code java.util.List/Map/Set} (or
-     * runtime {@code Option}) interface — not degraded to {@code Object} — with the element type
-     * carried by {@link #applySignatureOrNull} (issue #57). */
+    /** The typed {@code apply} descriptor of one of this module's behaviors, by the rule its
+     * projection is made by ({@link BehaviorAbi#typedApply}). A collection keeps its
+     * {@code java.util.List/Map/Set} (or runtime {@code Option}) interface — not degraded to
+     * {@code Object} — with the element type carried by {@link #applySignatureOrNull}. */
     MethodTypeDesc typedApplyDesc(ValueName.Behavior name, List<Type> paramTypes, Type retType) {
-        ClassDesc[] p = new ClassDesc[paramTypes.size()];
-        for (int i = 0; i < p.length; i++) {
-            p[i] = applyParamType(paramTypes.get(i), name);
-        }
-        return MethodTypeDesc.of(applyParamType(retType, name), p);
+        return BehaviorAbi.typedApply(paramTypes, retType, cdBehaviorResult(name), this::caseClass);
     }
 
-    /** The JVM reference type an {@code apply} slot takes for {@code t}: a collection keeps its raw
-     * runtime interface ({@code java.util.List/Map/Set}, runtime {@code Option}); a data/union/primitive
-     * maps to its ref; anything erased (type var, tuple, fn) falls back to {@code Object}. */
+    /** The JVM reference type an {@code apply} slot takes for {@code t} ({@link
+     * BehaviorAbi#applyParamType}). */
     ClassDesc applyParamType(Type t, ValueName.Behavior name) {
-        if (t instanceof Type.ListOf || t instanceof Type.MapOf
-                || t instanceof Type.SetOf || t instanceof Type.OptionOf) {
-            return JvmTypes.jvmType(t, this);
-        }
-        ClassDesc r = refTypeOrNull(t, name);
-        return r != null ? r : CD_Object;
+        return BehaviorAbi.applyParamType(t, cdBehaviorResult(name), this::caseClass);
     }
 
     /** A generic {@code Signature} for a typed {@code apply}, or null when no param/return is a
@@ -517,25 +422,16 @@ final class CodegenContext {
         return r != null ? r.descriptorString() : null;
     }
 
-    /** The same, for an emitter that has not been handed what the declarations wrap — read off the
-     *  scope it is emitting against instead. */
-    CodegenContext(String pkg, DerivedSymbols symbols, PublishedDeclarations published,
-                   DeclarationKinds kinds,
-                   KernelSignatures kernels,
-                   Map<String, List<GeneratedClass>> caseToSums,
-                   Map<String, String> typePackage, boolean exposeAll, Set<String> exposed,
-                   Map<String, Type> standingCalls, SourceLayouts layouts, QuotedFrom home) {
-        this(pkg, symbols, published, kinds, NewtypeInners.asWritten(symbols), kernels, caseToSums,
-                typePackage, exposeAll, exposed, standingCalls, layouts, home);
-    }
-
     CodegenContext(String pkg, DerivedSymbols symbols, PublishedDeclarations published,
                    DeclarationKinds kinds,
                    NewtypeInners inners,
                    KernelSignatures kernels,
                    Map<String, List<GeneratedClass>> caseToSums,
                    Map<String, String> typePackage, boolean exposeAll, Set<String> exposed,
-                   Map<String, Type> standingCalls, SourceLayouts layouts, QuotedFrom home) {
+                   Map<String, Type> standingCalls, SourceLayouts layouts, QuotedFrom home,
+                   LinkageReader linkage) {
+        this.linkage = Objects.requireNonNull(linkage,
+                "what a module's classes are built against is read through one place");
         this.layouts = layouts;
         this.home = Objects.requireNonNull(home, "the classes of a module are of the text it was read from");
         this.pkg = pkg;
@@ -562,11 +458,13 @@ final class CodegenContext {
     private final Map<GeneratedClass, ClassDesc> descs = new HashMap<>();
 
     /** The descriptor of a generated class. What it is called is {@link SoutherJvmAbi}'s to say; this
-     * only remembers the answer. */
+     * only remembers the answer. A class of another module's declaration named here is a class this
+     * module is built against, and is recorded as that declaration. */
     ClassDesc cd(GeneratedClass generated) {
         // Asked when a class is first named and not at each reference to it: the answer does not
         // change, and a reference to a class of another module reads that module's exposing.
         return descs.computeIfAbsent(generated, g -> {
+            linkage.named(g);
             if (g instanceof GeneratedClass.Value value
                     && value.type() instanceof TypeSymbol.AtModule declared
                     && !symbols.scope().isExposed(declared)) {
@@ -663,12 +561,6 @@ final class CodegenContext {
         return bridgedMembersIn(pkg, out);
     }
 
-    /** The bridged members of a behavior's output, decided in the module that declares that behavior:
-     * a member is local to the union's own module, which for a call is the callee's, not this one's. */
-    List<TypeSymbol> bridgedMembersOf(ValueName.Behavior behavior, Type out) {
-        return bridgedMembersIn(behavior.module(), out);
-    }
-
     private List<TypeSymbol> bridgedMembersIn(String module, Type out) {
         if (!(out instanceof Type.Union)) {
             return List.of();
@@ -683,12 +575,6 @@ final class CodegenContext {
         }
         return bridged;
     }
-
-    /** The bridge case of {@code member} in the module that declares {@code behavior}. */
-    ClassDesc bridgeCaseClassOf(ValueName.Behavior behavior, TypeSymbol member) {
-        return cd(new GeneratedClass.BridgeCase(behavior.module(), member));
-    }
-
 
     /** The {@code $Fns} method name for a definition the module emits. A module-own helper keeps its
      * bare name; one reached under a qualified name ({@code List.foldFrom}) has the dot mangled to
@@ -740,13 +626,8 @@ final class CodegenContext {
      * list/option/map, which has no single reference class to name here.
      */
     ClassDesc refTypeOrNull(Type t, ValueName.Behavior behaviorName) {
-        if (t instanceof Type.Union) {
-            return cdBehaviorResult(behaviorName);
-        }
-        if (t instanceof Type.Ref r) {
-            return cd(r.name());
-        }
-        return JvmTypes.boxedPrim(t);
+        return BehaviorAbi.refTypeOrNull(t,
+                t instanceof Type.Union ? cdBehaviorResult(behaviorName) : null, this::caseClass);
     }
 
     Map<String, Type> fieldTypes(Hir.Data data) {
