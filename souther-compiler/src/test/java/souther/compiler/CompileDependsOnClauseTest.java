@@ -196,11 +196,13 @@ class CompileDependsOnClauseTest {
                             constructs Out
                             depends on Up.lookup, Other.lookup
 
-                        let use (n, m, lookup, lookup) = Out { n = lookup(n) }
+                        let use (n, m, up, other) = Out { n = up(n) }
                         """), souther.compiler.meta.ModulePath.EMPTY));
 
         assertEquals("E1011", refused.code(), refused.getMessage());
         assertTrue(refused.getMessage().contains("lookup"),
                 "the spelling the two would take is the one named: " + refused.getMessage());
+        assertTrue(refused.getMessage().contains("`depends on`"),
+                "refused as the clause's two entries: " + refused.getMessage());
     }
 }
