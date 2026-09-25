@@ -155,7 +155,8 @@ public final class CheckedRow {
 
         WithStandIns(RowStatement.Stated stated, List<CheckedHelper> inputDefinitions,
                      ValueTypes types, Position answers,
-                     Map<ValueName.Behavior, List<Position>> arguments) {
+                     Map<ValueName.Behavior, List<Position>> arguments,
+                     Map<ValueName.Behavior, StandsIn.Computed> computed) {
             this.asking = new Asking(stated, types, answers);
             this.inputDefinitions = computing(stated, inputDefinitions);
             if (stated.standIns().isEmpty()) {
@@ -166,7 +167,8 @@ public final class CheckedRow {
             // of its stand-ins and what a reader asks them are one fact, and taking the second as a
             // list would let a row answer one thing about a dependency through `states` and another
             // through `standsIn`. What comes from outside is where each dependency's arguments
-            // stand, which is what its declaration says and not what the row states.
+            // stand, which is what its declaration says and not what the row states, and what
+            // computes each value a stand-in states, which `StandsIn` holds to what it states.
             List<StandsIn> standIns = new ArrayList<>();
             for (StoodIn stoodIn : stated.standIns()) {
                 List<Position> stands = arguments.get(stoodIn.dependency());
@@ -175,7 +177,12 @@ public final class CheckedRow {
                             + stoodIn.dependency() + "` stand, which is what its stand-in is asked"
                             + " at");
                 }
-                standIns.add(new StandsIn(stoodIn, types, stands));
+                StandsIn.Computed values = computed.get(stoodIn.dependency());
+                if (values == null) {
+                    throw new IllegalArgumentException("nothing says what computes the values the"
+                            + " stand-in for `" + stoodIn.dependency() + "` states");
+                }
+                standIns.add(new StandsIn(stoodIn, types, stands, values));
             }
             this.standIns = List.copyOf(standIns);
         }

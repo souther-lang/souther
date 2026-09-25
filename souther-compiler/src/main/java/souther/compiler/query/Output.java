@@ -1,6 +1,10 @@
 package souther.compiler.query;
 
 import souther.compiler.execute.ExampleExecution;
+import souther.compiler.observe.ObservedValue;
+import souther.compiler.observe.RowOutcome;
+import souther.compiler.observe.RowStatement;
+import souther.compiler.observe.StoodIn;
 import souther.compiler.observe.WrittenStatements;
 import souther.compiler.observe.Observations;
 import souther.compiler.observe.ArmObservation;
@@ -17,6 +21,8 @@ import souther.compiler.execute.WrittenValue;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.ExpandedClauseLookup;
+import souther.compiler.check.FakeTables;
+import souther.compiler.check.Prepared;
 import souther.compiler.check.InvariantStatements;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.ExpandedClauses;
@@ -36,6 +42,7 @@ import souther.compiler.codegen.Emissions;
 import souther.compiler.codegen.Instrumentation;
 import souther.compiler.codegen.LinkageReader;
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.ExampleMessage;
@@ -50,6 +57,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -1071,8 +1079,12 @@ public final class Output {
              * @param inputDefinitions the name of the definition computing each input, in order;
              *     empty where the source's declarations were not read, so no written row was in
              *     hand to read it off
+             * @param standInDefinitions what computes each value the row states a dependency
+             *     answers, by the dependency; empty where the row states no stand-in, and where the
+             *     source's declarations were not read
              */
-            record Ran(souther.compiler.observe.RowOutcome outcome, List<String> inputDefinitions)
+            record Ran(souther.compiler.observe.RowOutcome outcome, List<String> inputDefinitions,
+                       Map<ValueName.Behavior, StandInDefinitions> standInDefinitions)
                     implements ReadRow {
 
                 public Ran {
@@ -1081,6 +1093,8 @@ public final class Output {
                     }
                     inputDefinitions = inputDefinitions == null ? List.of()
                             : List.copyOf(inputDefinitions);
+                    standInDefinitions = standInDefinitions == null ? Map.of()
+                            : Collections.unmodifiableMap(new LinkedHashMap<>(standInDefinitions));
                 }
 
                 @Override
@@ -1115,6 +1129,60 @@ public final class Output {
                                 + " fell short, and this row was not read");
                     }
                 }
+            }
+        }
+
+        /**
+         * What computes each value a row states one dependency answers, by the name each was
+         * emitted under.
+         *
+         * <p>In the shape of the {@link StoodIn} it is about and in its order: an entry for each of
+         * its entries, the arguments before the answer, and what computes the answer for the rest
+         * where it states one. So which entries there are is what the evaluation found the table
+         * can answer with, and nothing here decides it again.
+         */
+        public record StandInDefinitions(List<EntryDefinitions> entries, Otherwise otherwise) {
+
+            public StandInDefinitions {
+                entries = List.copyOf(entries);
+                if (otherwise == null) {
+                    throw new IllegalArgumentException("what a stand-in answers for the rest is"
+                            + " computed by something, or stated by nothing");
+                }
+            }
+
+            /** What computes one entry's arguments, in the order the dependency takes them, and
+             *  its answer. */
+            public record EntryDefinitions(List<String> arguments, String answer) {
+
+                public EntryDefinitions {
+                    arguments = List.copyOf(arguments);
+                    if (answer == null) {
+                        throw new IllegalArgumentException("an entry's answer is computed by"
+                                + " something");
+                    }
+                }
+            }
+
+            /**
+             * What computes the answer for the rest, as {@link StoodIn.Otherwise} says whether
+             * there is one.
+             */
+            public sealed interface Otherwise {
+
+                /** The answer for the rest is computed by this. */
+                record Computed(String definition) implements Otherwise {
+
+                    public Computed {
+                        if (definition == null) {
+                            throw new IllegalArgumentException("an answer is computed by"
+                                    + " something");
+                        }
+                    }
+                }
+
+                /** The stand-in states no answer for the rest, so nothing computes one. */
+                record NothingStated() implements Otherwise {}
             }
         }
 
@@ -1227,7 +1295,7 @@ public final class Output {
                 if (observed != null) {
                     for (souther.compiler.observe.RowOutcome row : observed.rows()) {
                         into.computeIfAbsent(row.target(), _ -> new ArrayList<>())
-                                .add(new ReadRow.Ran(row, List.of()));
+                                .add(new ReadRow.Ran(row, List.of(), Map.of()));
                         named.add(row.target());
                     }
                 }
@@ -1243,7 +1311,8 @@ public final class Output {
                     souther.compiler.observe.RowOutcome came = observed == null ? null
                             : among(observed.rows(), written.target(), row);
                     if (came != null) {
-                        mine.add(new ReadRow.Ran(came, inputDefinitions(prepared, row)));
+                        mine.add(new ReadRow.Ran(came, inputDefinitions(prepared, row),
+                                standInDefinitions(prepared, row, came)));
                         continue;
                     }
                     mine.add(new ReadRow.NotRun(row.identity(), row.pos(),
@@ -1273,14 +1342,124 @@ public final class Output {
                                                      souther.compiler.ast.Hir.ExampleRow row) {
             List<String> names = new ArrayList<>();
             for (souther.compiler.ast.Hir.Expr input : row.inputs()) {
-                String emitted = prepared.operandMethods().get(input);
-                if (emitted == null) {
-                    throw new IllegalStateException("an input of the row at " + row.pos()
-                            + " is computed by nothing the module emitted");
-                }
-                names.add(emitted);
+                names.add(emittedFor(prepared, input, "an input of the row at " + row.pos()));
             }
             return names;
+        }
+
+        /**
+         * What computes each value {@code row} states a dependency answers, by the dependency.
+         *
+         * <p>Joined, as {@link #among} joins a row to what came back for it: each stand-in the
+         * evaluation read is found among what the module wrote by where it says it is written, and
+         * each of its entries among that table's rows the same way. Which stand-in a row runs
+         * against and which of a table's rows it can answer with were decided by the evaluation,
+         * and are read off what it came back with rather than decided again here.
+         */
+        private static Map<ValueName.Behavior, StandInDefinitions> standInDefinitions(
+                Prepared prepared, Hir.ExampleRow row, RowOutcome came) {
+            if (!(came.statement() instanceof RowStatement.Stated stated)) {
+                return Map.of();
+            }
+            Map<ValueName.Behavior, StandInDefinitions> byDependency = new LinkedHashMap<>();
+            for (StoodIn stoodIn : stated.standIns()) {
+                byDependency.put(stoodIn.dependency(), definitionsOf(prepared, row, stoodIn));
+            }
+            return byDependency;
+        }
+
+        /** What computes each value {@code stoodIn} states: a {@code with} on the row, or a table
+         *  the module writes. */
+        private static StandInDefinitions definitionsOf(Prepared prepared, Hir.ExampleRow row,
+                                                        StoodIn stoodIn) {
+            for (Hir.With with : row.withs()) {
+                if (with.pos().equals(stoodIn.at())) {
+                    // A `with` lists nothing and answers everything, which is how the evaluation
+                    // states it.
+                    if (!stoodIn.entries().isEmpty()
+                            || !(stoodIn.otherwise() instanceof StoodIn.Otherwise.Answer)) {
+                        throw new IllegalStateException("the `with` at " + with.pos()
+                                + " is read as a stand-in that lists entries or answers nothing");
+                    }
+                    return new StandInDefinitions(List.of(),
+                            new StandInDefinitions.Otherwise.Computed(emittedFor(prepared,
+                                    with.value(), "what the `with` at " + with.pos()
+                                            + " answers")));
+                }
+            }
+            for (FakeTables.Occurrence written : prepared.forExamples().fakes().written()) {
+                if (written.read().pos().equals(stoodIn.at())) {
+                    return definitionsOf(prepared, written.read(), stoodIn);
+                }
+            }
+            throw new IllegalStateException("what stands in for `" + stoodIn.dependency()
+                    + "` is read as written at " + stoodIn.at() + ", where the module writes"
+                    + " neither a `with` of the row at " + row.pos() + " nor a table");
+        }
+
+        private static StandInDefinitions definitionsOf(Prepared prepared, Hir.Fake table,
+                                                        StoodIn stoodIn) {
+            List<StandInDefinitions.EntryDefinitions> entries = new ArrayList<>();
+            for (StoodIn.Entry entry : stoodIn.entries()) {
+                Hir.FakeRow written = rowOf(table, entry.at());
+                if (!(written.matched() instanceof Hir.Matched.Arguments(List<Hir.Expr> stated))) {
+                    throw new IllegalStateException("the entry at " + entry.at() + " is read as"
+                            + " stating arguments, and the row there states none");
+                }
+                List<String> arguments = new ArrayList<>();
+                for (Hir.Expr argument : stated) {
+                    arguments.add(emittedFor(prepared, argument,
+                            "an argument of the entry at " + entry.at()));
+                }
+                entries.add(new StandInDefinitions.EntryDefinitions(arguments, emittedFor(prepared,
+                        written.output(), "the answer of the entry at " + entry.at())));
+            }
+            StandInDefinitions.Otherwise otherwise = switch (stoodIn.otherwise()) {
+                case StoodIn.Otherwise.Answer(ObservedValue _, SourcePos at) ->
+                        new StandInDefinitions.Otherwise.Computed(emittedFor(prepared,
+                                answerForTheRestAt(table, at),
+                                "the answer for the rest at " + at));
+                case StoodIn.Otherwise.NothingStated _ ->
+                        new StandInDefinitions.Otherwise.NothingStated();
+            };
+            return new StandInDefinitions(entries, otherwise);
+        }
+
+        /** The row of {@code table} written at {@code at}. */
+        private static Hir.FakeRow rowOf(Hir.Fake table, SourcePos at) {
+            for (Hir.FakeRow row : table.rows()) {
+                if (row.pos().equals(at)) {
+                    return row;
+                }
+            }
+            throw new IllegalStateException("an entry is read as written at " + at + ", where the"
+                    + " table at " + table.pos() + " writes no row");
+        }
+
+        /** The answer of {@code table}'s {@code _} row, which the evaluation quotes where the answer
+         *  is written. */
+        private static Hir.Expr answerForTheRestAt(Hir.Fake table, SourcePos at) {
+            for (Hir.FakeRow row : table.rows()) {
+                if (row.matched() instanceof Hir.Matched.Anything && row.output().pos().equals(at)) {
+                    return row.output();
+                }
+            }
+            throw new IllegalStateException("the answer for the rest is read as written at " + at
+                    + ", where the table at " + table.pos() + " writes no `_` row's answer");
+        }
+
+        /**
+         * The definition {@code operand} was emitted as, off the correspondence the preparation
+         * constructed. An operand it emitted nothing for is one its walk over the rows and tables
+         * did not reach, which is that walk and this reading having come apart.
+         */
+        private static String emittedFor(Prepared prepared, Hir.Expr operand, String what) {
+            String emitted = prepared.operandMethods().get(operand);
+            if (emitted == null) {
+                throw new IllegalStateException(what + " is computed by nothing the module"
+                        + " emitted");
+            }
+            return emitted;
         }
 
         /** The outcome recorded for {@code row} of {@code behavior}, or null where nothing came
