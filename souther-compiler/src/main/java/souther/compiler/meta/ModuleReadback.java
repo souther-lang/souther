@@ -8,7 +8,6 @@ import souther.compiler.check.Preserved;
 import souther.compiler.check.Scoping;
 import souther.compiler.check.Registry;
 import souther.compiler.codegen.Backend;
-import souther.compiler.codegen.ConstructionLink;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Region;
 import souther.compiler.cst.SourceLayout;
@@ -16,6 +15,8 @@ import souther.compiler.diag.SourceProvenance;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.jvm.GeneratedClass;
+import souther.compiler.jvm.LinkageRecord;
+import souther.compiler.jvm.LinkageTarget;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.ValueName;
 
@@ -26,6 +27,8 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.SortedMap;
+import java.util.TreeMap;
 
 /**
  * Reading a module back from what {@link ModuleMetadata} wrote into its classes: the declarations
@@ -128,14 +131,14 @@ public final class ModuleReadback {
         if (m.compat() != Backend.BOUNDARY_VERSION || m.header().isBlank()) {
             return unreadable(moduleName, new Readback.Failure.Incompatible(m.compiler()));
         }
-        // What its classes build of other modules. Written by every writer at this boundary, empty
-        // where they build nothing, so a module at this number without it is not one this wrote.
-        List<ConstructionLink> constructions = m.constructions() == null
-                ? null : PublishedConstructions.read(m.constructions());
-        // And the constructors its own implementations declare, for the same reason.
-        List<ConstructionLink> constructors = m.constructors() == null
-                ? null : PublishedConstructions.read(m.constructors());
-        if (constructions == null || constructors == null) {
+        // What its declarations offer another module's classes, and what its own classes were built
+        // against. Written by every writer at this boundary, so a module at this number without
+        // either is not one this wrote.
+        SortedMap<LinkageTarget, LinkageRecord> provides = m.providedLinkages() == null
+                ? null : PublishedLinkages.read(m.providedLinkages());
+        SortedMap<LinkageTarget, LinkageRecord> requires = m.requiredLinkages() == null
+                ? null : PublishedLinkages.read(m.requiredLinkages());
+        if (provides == null || requires == null) {
             return unreadable(moduleName, new Readback.Failure.UnreadableMetadata());
         }
         StringBuilder declarations = new StringBuilder();
@@ -279,7 +282,7 @@ public final class ModuleReadback {
         }
         return new Readback.Ready<>(
                 new AsRead(checked.module(), declared.declarations(), declared.asDeclared(),
-                        implementations, requirements, constructions, constructors,
+                        implementations, requirements, provides, requires,
                         checked.claims(),
                         readBack.laidOut(), answers));
     }
@@ -295,8 +298,8 @@ public final class ModuleReadback {
                   java.util.List<String> asDeclared,
                   Map<String, BehaviorImplementation> behaviorImplementations,
                   Map<String, List<ValueName.Behavior>> behaviorRequirements,
-                  List<ConstructionLink> constructionLinks,
-                  List<ConstructionLink> constructors,
+                  Map<LinkageTarget, LinkageRecord> provides,
+                  Map<LinkageTarget, LinkageRecord> requires,
                   java.util.List<Scoping.Claim> libraryClaims,
                   SourceLayout laidOutText,
                   Preserved.SettledValues valueAnswers) implements ReadableModule {
@@ -310,8 +313,8 @@ public final class ModuleReadback {
                     Collections.unmodifiableMap(new LinkedHashMap<>(behaviorImplementations));
             behaviorRequirements =
                     Collections.unmodifiableMap(new LinkedHashMap<>(behaviorRequirements));
-            constructionLinks = List.copyOf(constructionLinks);
-            constructors = List.copyOf(constructors);
+            provides = Collections.unmodifiableMap(new TreeMap<>(provides));
+            requires = Collections.unmodifiableMap(new TreeMap<>(requires));
             libraryClaims = List.copyOf(libraryClaims);
         }
     }

@@ -53,8 +53,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  */
 class NoQuestionAboutAShapeIsAnsweredOutOfAnothersAnswerTest {
 
-    /** Who asks what is readable off a value: the reading of a field access, the accessor a sum's
-     *  interface declares, what a construction may spread, what the model writes where a value
+    /** Who asks what is readable off a value: the reading of a field access, the accessors a sum
+     *  offers another module's classes (which its interface is emitted declaring), what a
+     *  construction may spread, what the model writes where a value
      *  stands, the reading of a behavior's inputs, and the walk that reads a row at a position —
      *  which asks whether a name may be read there before taking it off the value it holds, so that
      *  a case carrying a name of its own does not make it readable for the rows that are that case.
@@ -67,7 +68,7 @@ class NoQuestionAboutAShapeIsAnsweredOutOfAnothersAnswerTest {
             "souther.compiler.check.DataChecker",
             "souther.compiler.check.FieldRead",
             "souther.compiler.check.ValueReading",
-            "souther.compiler.codegen.ValueClassGen",
+            "souther.compiler.codegen.LinkageProjections",
             "souther.compiler.inputs.InputDomain",
             "souther.compiler.partition.BehaviorInputs$Standing");
 

@@ -2,10 +2,11 @@ package souther.compiler.meta;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.BehaviorImplementation;
-import souther.compiler.codegen.ConstructionLink;
 import souther.compiler.check.Preserved;
 import souther.compiler.check.Scoping;
 import souther.compiler.cst.SourceLayout;
+import souther.compiler.jvm.LinkageRecord;
+import souther.compiler.jvm.LinkageTarget;
 import souther.compiler.types.ValueName;
 import java.util.List;
 
@@ -81,24 +82,23 @@ public sealed interface ReadableModule permits ModuleReadback.AsRead {
     Map<String, List<ValueName.Behavior>> behaviorRequirements();
 
     /**
-     * The constructors of other modules' behaviors its classes link against, as the instructions
-     * that link them recorded them where the module was built.
+     * What each of its declarations offers another module's classes, as its classes offered it
+     * where they were built.
      *
-     * <p>Not a declaration of this module's: what its classes assumed about the modules it was built
-     * against. A compilation reading it holds those modules, as it has them, to the same
-     * constructors.
+     * <p>Not worked out again from what it declares: what a declaration offers can rest on the
+     * declarations of the modules it was built against, and those may not be the ones a reader has.
+     * A class built against this module is held to what these classes offer.
      */
-    List<ConstructionLink> constructionLinks();
+    Map<LinkageTarget, LinkageRecord> provides();
 
     /**
-     * The constructor each of its behavior implementations declares, as the class was emitted.
+     * What its classes assumed about each declaration of another module they link against, as they
+     * were compiled.
      *
-     * <p>What a class built against this module links against when it builds one of its behaviors,
-     * and what this module's own dependencies were when it was built. Not worked out again from
-     * its requirements: the signatures a reader has for those dependencies may not be the ones it
-     * was compiled against, and the constructor is the one it was compiled with.
+     * <p>Not a declaration of this module's: what it was built against. A compilation reading it
+     * holds each of those declarations, as it has them, to what is recorded here.
      */
-    List<ConstructionLink> constructors();
+    Map<LinkageTarget, LinkageRecord> requires();
 
     /** What its library import lines brought in, which the module itself no longer says. */
     List<Scoping.Claim> libraryClaims();

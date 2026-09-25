@@ -19,7 +19,6 @@ import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.BehaviorBodies;
 import souther.compiler.check.BehaviorRequirement;
-import souther.compiler.check.ReqSig;
 import souther.compiler.check.Requirements;
 import souther.compiler.core.Contract;
 import souther.compiler.core.ValueShape;
@@ -37,6 +36,7 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.generated.ProbeImage;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.JvmClassName;
+import souther.compiler.jvm.LinkageProjection;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.ValueName;
 import java.lang.classfile.Annotation;
@@ -150,35 +150,29 @@ public final class Backend {
 
     /** Generates a module's classes. {@code symbols} covers own plus imported definitions;
      * {@code typePackage} maps an imported type or behavior name to its declaring module (spec §modules);
-     * {@code requirementSigs} carries the signature of every behavior a class here holds injected,
-     * which is what its field, its constructor parameter and a call on it are typed from;
-     * {@code injectionTargets} are the injection targets the module builds against — its own, and the
-     * imported ones a composition here inherits as requirements to inject and bind (spec
-     * §injected-behavior, §composition-with-requirements); {@code bodies} is where each behavior of
+     * {@code injectionTargets} are the module's own behaviors Java supplies, each of which gets an
+     * abstract base here (spec §injected-behavior); {@code bodies} is where each behavior of
      * the module gets its body, which is also what tells one nobody has written from one Java
      * supplies; {@code requirements} says what each behavior takes injected and in
      * what order — the answer the example verifier reads too, so a fake reaches the parameter this
-     * constructor binds it to; {@code foreignStages} says the same of each stage another module
-     * declares, which a composition here builds; {@code checked} carries the type checker's elaborated bodies, which is what
-     * the emitter reads instead of inferring types again (issue #81); {@code dischargeInvariants} carries
+     * constructor binds it to; {@code checked} carries the type checker's elaborated bodies, which is what
+     * the emitter reads instead of inferring types again; {@code dischargeInvariants} carries
      * this module's invariant clauses in the representation the language's own operations survive in, which
      * is what a derived decoder's constraint mapping reads (spec §decoder-error); {@code shapes} says
      * what a value of each declared data is made of and what must hold of one, which is what a
-     * construction is refused by and is the checker's answer rather than this emitter's
-     * (issue #1080). */
+     * construction is refused by and is the checker's answer rather than this emitter's;
+     * {@code linkage} is where what every behavior, type and value these classes link against offers
+     * is read, and where reading another module's is recorded — {@code symbols}, {@code published}
+     * and {@code kinds} read into it too. */
     public static Emissions generate(Hir.Module module, DerivedSymbols symbols,
                                                PublishedDeclarations published,
                                                DeclarationKinds kinds,
                                                KernelSignatures kernels,
                                                Map<String, String> typePackage,
                                                Map<ValueName.Behavior, Sig> sigs,
-                                               Map<ValueName.Behavior, Sig> requirementSigs,
                                                Set<ValueName.Behavior> injectionTargets,
                                                BehaviorBodies bodies,
-                                               Map<ValueName.Behavior, ReqSig> calleeSigs,
                                                Map<String, List<BehaviorRequirement>> requirements,
-                                               Map<ValueName.Behavior, List<ValueName.Behavior>>
-                                                       foreignStages,
                                                Bodies.Elaborated checked,
                                                Map<ValueName.Behavior, Composition> compositions,
                                                ExpandedClauseLookup dischargeInvariants,
@@ -186,11 +180,12 @@ public final class Backend {
                                                Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                Map<String, Type> standingCalls,
-                                               SourceLayouts layouts) {
+                                               SourceLayouts layouts,
+                                               LinkageReader linkage) {
         return generate(module, symbols, published, kinds, kernels, typePackage, sigs,
-                requirementSigs, injectionTargets, bodies,
-                calleeSigs, requirements, foreignStages, checked, compositions, dischargeInvariants,
-                invariantStatements, shapes, checks, standingCalls, layouts, Instrumentation.NONE);
+                injectionTargets, bodies, requirements, checked, compositions, dischargeInvariants,
+                invariantStatements, shapes, checks, standingCalls, layouts, linkage,
+                Instrumentation.NONE);
     }
 
     /**
@@ -212,13 +207,9 @@ public final class Backend {
                                                KernelSignatures kernels,
                                                Map<String, String> typePackage,
                                                Map<ValueName.Behavior, Sig> sigs,
-                                               Map<ValueName.Behavior, Sig> requirementSigs,
                                                Set<ValueName.Behavior> injectionTargets,
                                                BehaviorBodies bodies,
-                                               Map<ValueName.Behavior, ReqSig> calleeSigs,
                                                Map<String, List<BehaviorRequirement>> requirements,
-                                               Map<ValueName.Behavior, List<ValueName.Behavior>>
-                                                       foreignStages,
                                                Bodies.Elaborated checked,
                                                Map<ValueName.Behavior, Composition> compositions,
                                                ExpandedClauseLookup dischargeInvariants,
@@ -227,13 +218,13 @@ public final class Backend {
                                                Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                Map<String, Type> standingCalls,
                                                SourceLayouts layouts,
+                                               LinkageReader linkage,
                                                Instrumentation instrumentation) {
         try {
             return generating(module, symbols, published, kinds, kernels, typePackage, sigs,
-                    requirementSigs,
-                    injectionTargets, bodies, calleeSigs, requirements, foreignStages, checked, compositions,
+                    injectionTargets, bodies, requirements, checked, compositions,
                     dischargeInvariants, invariantStatements, shapes, checks, standingCalls,
-                    layouts, instrumentation);
+                    layouts, linkage, instrumentation);
         } catch (IllegalArgumentException e) {
             // Something the writer would not hold, from a member no definition here claimed — a
             // synthesised class, a shared one. It belongs to the module, which is as near as anything
@@ -248,13 +239,9 @@ public final class Backend {
                                         KernelSignatures kernels,
                                                   Map<String, String> typePackage,
                                                   Map<ValueName.Behavior, Sig> sigs,
-                                                  Map<ValueName.Behavior, Sig> requirementSigs,
                                                   Set<ValueName.Behavior> injectionTargets,
                                                   BehaviorBodies bodies,
-                                                  Map<ValueName.Behavior, ReqSig> calleeSigs,
                                                   Map<String, List<BehaviorRequirement>> requirements,
-                                                  Map<ValueName.Behavior, List<ValueName.Behavior>>
-                                                          foreignStages,
                                                   Bodies.Elaborated checked,
                                                   Map<ValueName.Behavior, Composition> compositions,
                                                   ExpandedClauseLookup dischargeInvariants,
@@ -263,6 +250,7 @@ public final class Backend {
                                                   Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                   Map<String, Type> standingCalls,
                                                   SourceLayouts layouts,
+                                                  LinkageReader linkage,
                                                   Instrumentation instrumentation) {
         Map<String, List<GeneratedClass>> caseToSums = new HashMap<>();
         for (Hir.Def def : module.defs()) {
@@ -294,7 +282,7 @@ public final class Backend {
                 souther.compiler.check.NewtypeInners.asWritten(symbols), kernels,
                 caseToSums, typePackage,
                 module.exposing().isEmpty(), exposed, standingCalls, layouts,
-                module.pos().quotedFrom());
+                module.pos().quotedFrom(), linkage);
         ctx.setDischargeInvariants(dischargeInvariants);
         ctx.setInvariantStatements(invariantStatements);
         ctx.setValueShapes(shapes);
@@ -440,32 +428,15 @@ public final class Backend {
                                         reqParams, b.successType(spec.ret()))));
             }
         }
-        // Every behavior a class here holds as a field — an injection target, or a behavior with an
-        // implementation of its own that declares `depends on` — whichever module declares it and
-        // whether or not this one names it: a stage of another module brings its dependencies in
-        // with it. Its arity decides whether it is held as the unary Behavior or as its own class.
-        Map<ValueName.Behavior, Type> requiredSuccess = new HashMap<>();
-        Map<ValueName.Behavior, List<Type>> requiredParam = new HashMap<>();
-        requirementSigs.forEach((dependency, sig) -> {
-            requiredParam.put(dependency, sig.inputTypes());
-            requiredSuccess.put(dependency, sig.outputType());
-        });
-        // The unary-vs-multi dispatch for required behaviors reads these; set once, so the base class,
-        // the $Impl field/ctor, the bind factory, and every call site agree (issue #57).
-        b.ctx.setRequiredSignatures(requiredParam, requiredSuccess, injectionTargets);
-        // A behavior that depends on nothing is called by being built where it is called, so it is not
-        // in the injection maps above; what a call site needs is the signature it was typed against.
-        b.ctx.setCalleeSignatures(calleeSigs);
-        // What each behavior takes injected, worked out once and read here and at an example
-        // (Bodies.Requirements): the order is this constructor's parameter order.
+        // What each behavior of this module takes injected, worked out once and read here and at an
+        // example (Bodies.Requirements): the order is this constructor's parameter order. A stage
+        // another module declares is built by what its projection says it is built with, and how
+        // every behavior a class here holds is held is what its projection says too.
         Map<ValueName.Behavior, List<ValueName.Behavior>> behaviorDeps = new LinkedHashMap<>();
         for (Map.Entry<String, List<BehaviorRequirement>> e : requirements.entrySet()) {
             behaviorDeps.put(new ValueName.Behavior(module.name(), e.getKey()),
                     Requirements.names(e.getValue()));
         }
-        // A stage another module declares is built here too, handed what its module said it takes —
-        // the same list this module's own requirement sets took it from.
-        behaviorDeps.putAll(foreignStages);
         // Which definition implements each behavior, and which of that definition's parameters are
         // the declared inputs, asked once for the module rather than worked out here: the snapshot's
         // assembler reads its binders from the same answer, so which local an input arrives in
@@ -527,8 +498,7 @@ public final class Backend {
                                     // (spec §jvm-anonymous-union).
                                     out.put(new GeneratedClass.BehaviorImpl(module.name(),
                                                     spec.name()),
-                                            b.generateSpecFn(spec, implemented,
-                                                    requiredSuccess, requiredParam));
+                                            b.generateSpecFn(spec, implemented));
                                 } else {
                                     // Written down where it is decided. What is missing from the
                                     // classes cannot say whether this compile owed one, and a row
@@ -573,8 +543,8 @@ public final class Backend {
                         // nothing emitted.
                         if (checked.emits().contains(pipe.name())) {
                             out.put(new GeneratedClass.BehaviorImpl(module.name(), pipe.name()),
-                                    b.generatePipe(pipe, composedOf(compositions, named),
-                                            injectionTargets, sigs, behaviorDeps));
+                                    b.generatePipe(pipe, composedOf(compositions, named), sigs,
+                                            behaviorDeps));
                         } else {
                             out.leftOut(pipe.name());
                         }
@@ -625,7 +595,7 @@ public final class Backend {
                     + " site(s) that nothing emitted: " + missed
                     + "; a body was walked without counting what it holds");
         }
-        out.constructs(b.ctx.constructionLinks(), b.ctx.constructors());
+        out.linked(linkage.recordsProvided(), linkage.recordsRead());
         return out;
     }
 
@@ -731,8 +701,7 @@ public final class Backend {
                     // a recursive helper declares its return type; thread it so a tail-position fold
                     // over an empty seed materialises its step at the declared type, not a bottom (#70)
                     Type helperReturn = h.declaredReturn() == null ? null : successType(h.declaredReturn());
-                    gen.emitTail(definition.body(),
-                            cdFns, Set.of(), Map.of(), helperReturn);
+                    gen.emitTail(definition.body(), cdFns, Set.of(), helperReturn);
                 });
             }
         });
@@ -808,25 +777,22 @@ public final class Backend {
     private void emitInjection(ClassBuilder cb, ClassDesc cdX, ValueName.Behavior own,
                                InjectionSlots held) {
         List<ValueName.Behavior> takes = new ArrayList<>();
+        List<ClassDesc> params = new ArrayList<>();
         for (InjectionSlots.Slot slot : held.all()) {
             takes.add(slot.dependency());
+            params.add(slot.type());
         }
+        MethodTypeDesc ctorDesc = BehaviorAbi.constructor(params);
+        itIsBuiltAsItsProjectionSays(own, takes, ctorDesc);
         if (held.isEmpty()) {
-            ctx.providesConstructor(own, takes, MTD_void);
             emitPublicCtor(cb);
             return;
         }
         for (InjectionSlots.Slot slot : held.all()) {
             // a multi-input required behavior is stored as its own base class (invokevirtual), not the
-            // unary Behavior — see CodegenContext.requiredFieldType (issue #57)
+            // unary Behavior — see CodegenContext.requiredFieldType
             cb.withField(slot.fieldName(), slot.type(), ClassFile.ACC_FINAL);
         }
-        ClassDesc[] params = new ClassDesc[held.all().size()];
-        for (int i = 0; i < params.length; i++) {
-            params[i] = held.all().get(i).type();
-        }
-        MethodTypeDesc ctorDesc = MethodTypeDesc.of(ConstantDescs.CD_void, params);
-        ctx.providesConstructor(own, takes, ctorDesc);
         cb.withMethodBody("<init>", ctorDesc, ClassFile.ACC_PUBLIC, code -> {
             code.aload(0);
             code.invokespecial(CD_Object, "<init>", MTD_void);
@@ -838,6 +804,30 @@ public final class Backend {
             }
             code.return_();
         });
+    }
+
+    /**
+     * That the implementation of {@code own} being emitted takes what its projection says a class
+     * elsewhere builds it with.
+     *
+     * <p>What a class elsewhere links against is the projection, which this module records it
+     * provides; the class is emitted from the slots the implementation holds. The two are made by one
+     * rule from one answer about what each dependency is held as, so they agree — and where they do
+     * not, this compiler has two answers to what the module offers, and the one a reader was told is
+     * the one its classes do not have.
+     */
+    private void itIsBuiltAsItsProjectionSays(ValueName.Behavior own,
+                                              List<ValueName.Behavior> takes,
+                                              MethodTypeDesc constructor) {
+        LinkageProjection.Construction said = ctx.behavior(own).construction().orElseThrow(() ->
+                new IllegalStateException("`" + own + "` is emitted with an implementation its"
+                        + " projection says it has none of"));
+        if (!said.dependencies().equals(takes)
+                || !said.constructor().equals(constructor.descriptorString())) {
+            throw new IllegalStateException("`" + own + "` is emitted taking " + takes + " through "
+                    + constructor.descriptorString() + ", and its projection says "
+                    + said.dependencies() + " through " + said.constructor());
+        }
     }
 
     /**
@@ -966,7 +956,7 @@ public final class Backend {
                             CanonicalizeAtCrossing.emit(code, t);
                             slot += width(t);
                         }
-                        code.invokestatic(cdType, "__construct", MethodTypeDesc.of(CD_Result, fieldDs));
+                        CodegenContext.invoke(code, ctx.construction(data.declares()));
                         code.invokestatic(CD_ConstraintViolation, "orThrow", MTD_orThrow);
                         code.checkcast(cdType);
                         code.areturn();
@@ -1018,7 +1008,16 @@ public final class Backend {
      * collection (issue #57). */
     private void emitAbstractApply(ClassBuilder cb, String name, List<Type> paramTypes, Type retType) {
         String sig = ctx.applySignatureOrNull(own(name), paramTypes, retType);
-        cb.withMethod("apply", ctx.typedApplyDesc(own(name), paramTypes, retType),
+        MethodTypeDesc typed = ctx.typedApplyDesc(own(name), paramTypes, retType);
+        // What a class elsewhere applies this behavior by is its projection, which says the same
+        // rule over the same signature — so a difference is two answers to what this module offers.
+        MethodTypeDesc offered = ctx.behavior(own(name)).apply().methodType();
+        if (!offered.equals(typed)) {
+            throw new IllegalStateException("`" + own(name) + "` declares apply"
+                    + typed.descriptorString() + ", and its projection says a caller applies it by "
+                    + offered.descriptorString());
+        }
+        cb.withMethod("apply", typed,
                 ClassFile.ACC_PUBLIC | ClassFile.ACC_ABSTRACT, mb -> {
                     if (sig != null) {
                         mb.with(SignatureAttribute.of(MethodSignature.parseFrom(sig)));
@@ -1418,8 +1417,21 @@ public final class Backend {
      * patterns bind, one destructuring {@code let}, one {@code match} arm — are refused where two are
      * alike. A jar written before it was not held to that: a signature or a published helper's body
      * it carries may bind one name twice, and this reader would refuse text its writer admitted.
+     *
+     * <p>Version 27 changes what a module's metadata carries: the module annotation records what
+     * each of its declarations offers another module's classes and what its own classes assumed
+     * about each declaration of another module they link against, and the reading asks for both.
+     *
+     * <p>That is also where this number stops. It says whether a jar and this compiler agree on
+     * what the metadata says and on the rules a declaration is turned into JVM facts by — a
+     * behavior's class and methods, how one is held and built, a type's layout and codecs. It does
+     * not say whether a jar agrees with the jars beside it: a module built against one version of a
+     * dependency and read beside another is held, declaration by declaration, to what each
+     * declaration it links against offers now (spec
+     * {@code [#a-published-module-agrees-with-what-it-was-built-against]}). An edit to a
+     * declaration moves that and not this; an edit to a rule moves this.
      */
-    public static final int BOUNDARY_VERSION = 26;
+    public static final int BOUNDARY_VERSION = 27;
 
     /** Emits the class a module's own declarations are published on, carrying {@code declarations}.
      * What it says is the caller's; that it is built like every other generated class — the same Java
@@ -1469,9 +1481,7 @@ public final class Backend {
      * leading parameters name the inputs (their types come from the behavior); the trailing ones
      * name the injected behaviors and are resolved as inline calls, not bound as locals.
      */
-    private byte[] generateSpecFn(Hir.SpecBehavior spec, SpecImplementation.Implemented implemented,
-                                  Map<ValueName.Behavior, Type> requiredSuccess,
-                                  Map<ValueName.Behavior, List<Type>> requiredParam) {
+    private byte[] generateSpecFn(Hir.SpecBehavior spec, SpecImplementation.Implemented implemented) {
         ClassDesc cdB = cdBehaviorImpl(spec.name());   // the $Impl behind the public interface
         int n = spec.params().size();
         // declared dependencies, validated to equal what the fn calls (E1602/E1603); the same order is
@@ -1507,7 +1517,7 @@ public final class Backend {
                 // The one body a coverage plan is made from, so the one body whose arms are counted.
                 gen.armsAreCounted();
                 gen.injectsInto(successType(spec.ret()));
-                gen.requireds(held, requiredSuccess, requiredParam, injected);
+                gen.requireds(held, injected);
                 for (SpecImplementation.ParameterBinding.AnInput input
                         : implemented.declaredInputs()) {
                     // the definition's input names the binding; its type comes from the behavior,
@@ -1526,7 +1536,7 @@ public final class Backend {
                 // thread the behavior's declared output so a tail-position fold over an empty seed
                 // materialises its step at the output type, not a bottom (issue #70)
                 gen.emitTail(elaborated(checked.behaviorBodies(), implemented.definition().name()),
-                        cdB, held, requiredSuccess, successType(spec.ret()));
+                        cdB, held, successType(spec.ret()));
             });
             if (n != 1) {
                 List<Type> pts = new ArrayList<>();
@@ -1564,7 +1574,6 @@ public final class Backend {
                                    MethodTypeDesc mtdApply, int n) {
         ClassDesc cdEnsures = ctx.cd(new GeneratedClass.Ensures(
                 new GeneratedClass.BehaviorInterface(ctx.pkg, spec.name())));
-        List<TypeSymbol> bridged = ctx.bridgedMembers(successType(spec.ret()));
         List<ClassDesc> checkParams = new ArrayList<>();
         for (int i = 0; i <= n; i++) {
             checkParams.add(CD_Object);
@@ -1590,8 +1599,8 @@ public final class Backend {
             code.invokespecial(cdB, "apply$body", mtdApply);
             code.astore(answered);
             code.aload(answered);
-            ResultBoundary.project(code, ctx, new ValueName.Behavior(ctx.pkg, spec.name()),
-                    bridged, carrier);
+            ResultBoundary.project(code, ctx.behavior(new ValueName.Behavior(ctx.pkg, spec.name())),
+                    carrier);
             code.astore(carrier);
             for (int i = 0; i < n; i++) {
                 code.aload(i + 1);
@@ -1696,7 +1705,6 @@ public final class Backend {
      * derivations of one rule, one of them in a backend.
      */
     private byte[] generatePipe(Hir.PipeBehavior pipe, Composition composed,
-                                Set<ValueName.Behavior> injectionTargets,
                                 Map<ValueName.Behavior, Sig> sigs,
                                 Map<ValueName.Behavior, List<ValueName.Behavior>> behaviorDeps) {
         ClassDesc cdP = cdBehaviorImpl(pipe.name());   // the $Impl behind the public interface
@@ -1730,8 +1738,8 @@ public final class Backend {
                     code.astore(i + 1);
                 }
                 // stage 0 consumes the pipeline's arguments unconditionally
-                applyFirstStage(code, cdP, stages.get(0).behavior(), arity, injectionTargets,
-                        reqStages, behaviorDeps, stages.get(0).answers(), arity + 1);
+                applyFirstStage(code, cdP, stages.get(0).behavior(), arity, reqStages,
+                        stages.get(0).answers(), arity + 1);
                 Label end = code.newLabel();
                 for (int i = 1; i < stages.size(); i++) {
                     Composition.Stage stage = stages.get(i);
@@ -1753,8 +1761,7 @@ public final class Backend {
                         }
                         case Composition.Routing.Always _ -> { }
                     }
-                    applyStage(code, cdP, stage.behavior(), injectionTargets, reqStages, behaviorDeps,
-                            stage.answers(), arity + 1);
+                    applyStage(code, cdP, stage.behavior(), reqStages, stage.answers(), arity + 1);
                 }
                 code.labelBinding(end);
                 code.aload(1);
@@ -1781,40 +1788,28 @@ public final class Backend {
      * zero-input stage takes that same path with nothing to cast.
      */
     private void applyFirstStage(CodeBuilder code, ClassDesc cdP, ValueName.Behavior stage,
-                                 int arity, Set<ValueName.Behavior> injectionTargets,
-                                 InjectionSlots held,
-                                 Map<ValueName.Behavior, List<ValueName.Behavior>> behaviorDeps,
-                                 Type stageOut, int slot) {
+                                 int arity, InjectionSlots held, Type stageOut, int slot) {
         if (arity == 1) {
-            applyStage(code, cdP, stage, injectionTargets, held, behaviorDeps, stageOut, slot);
+            applyStage(code, cdP, stage, held, stageOut, slot);
             return;
         }
-        pushStage(code, cdP, stage, injectionTargets, held, behaviorDeps);
-        if (injectionTargets.contains(stage)) {
-            MethodTypeDesc desc = ctx.requiredApplyDesc(stage);
-            for (int i = 0; i < arity; i++) {
-                code.aload(i + 1);
-                ClassDesc param = desc.parameterType(i);
-                if (!param.equals(CD_Object)) {
-                    code.checkcast(param);
-                }
-            }
-            code.invokevirtual(cdBehavior(stage), "apply", desc);
-            projectStage(code, stage, stageOut, slot);
-            CanonicalizeAtCrossing.emit(code, stageOut);
-            checkStageAtCrossing(code, stage, arity, slot + 1);
-            code.astore(1);
-            return;
-        }
+        LinkageProjection.Behavior linked = ctx.behavior(stage);
+        pushStage(code, cdP, stage, held);
+        LinkageProjection.Invocation apply = linked.construction()
+                .map(LinkageProjection.Construction::erasedApply)
+                .orElse(linked.apply());
+        // What a stage Java supplies is applied by is its typed apply, so the arguments are cast
+        // from the erased apply(Object,…) this body lives on; one built here is applied by the
+        // erased apply on its implementation, and takes them as they are.
         for (int i = 0; i < arity; i++) {
             code.aload(i + 1);
+            ClassDesc param = apply.methodType().parameterType(i);
+            if (!param.equals(CD_Object)) {
+                code.checkcast(param);
+            }
         }
-        ClassDesc[] params = new ClassDesc[arity];
-        java.util.Arrays.fill(params, CD_Object);
-        // a multi-input first stage with a `let` is a fn/pipe behavior; call the erased apply on its $Impl
-        code.invokevirtual(ctx.cdBehaviorImpl(stage), "apply",
-                MethodTypeDesc.of(CD_Object, params));
-        projectStage(code, stage, stageOut, slot);
+        CodegenContext.invoke(code, apply);
+        projectStage(code, linked, slot);
         CanonicalizeAtCrossing.emit(code, stageOut);
         checkStageAtCrossing(code, stage, arity, slot + 1);
         code.astore(1);
@@ -1823,15 +1818,14 @@ public final class Backend {
     /** Applies one pipeline stage to the running value in slot 1, storing the result back. A stage
      * is a behavior, or a {@code Type.decoder}/{@code Type.encoder} boundary codec (spec §sequential-composition). */
     private void applyStage(CodeBuilder code, ClassDesc cdP, ValueName.Behavior stage,
-                            Set<ValueName.Behavior> injectionTargets, InjectionSlots held,
-                            Map<ValueName.Behavior, List<ValueName.Behavior>> behaviorDeps,
-                            Type stageOut, int slot) {
+                            InjectionSlots held, Type stageOut, int slot) {
         // decode/encode are boundary edges, not pipeline stages (spec §sequential-composition): `>->` composes
         // behaviors only.
-        pushStage(code, cdP, stage, injectionTargets, held, behaviorDeps);
+        LinkageProjection.Behavior linked = ctx.behavior(stage);
+        pushStage(code, cdP, stage, held);
         code.aload(1);
-        code.invokeinterface(CD_Behavior, "apply", MTD_apply);
-        projectStage(code, stage, stageOut, slot);
+        CodegenContext.invoke(code, linked.apply());
+        projectStage(code, linked, slot);
         CanonicalizeAtCrossing.emit(code, stageOut);
         checkStageAtCrossing(code, stage, 1, slot + 1);
         code.astore(1);
@@ -1866,53 +1860,51 @@ public final class Backend {
 
     /** A stage answered with a member of its own result union; the running value the next stage sees
      * is a Souther value again (spec §jvm-anonymous-union). The same conversion a body does after a call. */
-    private void projectStage(CodeBuilder code, ValueName.Behavior stage, Type stageOut,
-                              int slot) {
-        ResultBoundary.project(code, ctx, stage, ctx.bridgedMembersOf(stage, stageOut), slot);
+    private void projectStage(CodeBuilder code, LinkageProjection.Behavior stage, int slot) {
+        ResultBoundary.project(code, stage, slot);
     }
 
     /** Pushes the behavior object for a pipeline stage: an injected required field, or a fresh
      * body-behavior instance constructed with the required dependencies it declares (spec
      * §composition-with-requirements).
      *
-     * <p>Which of the two is decided by whether Java supplies the stage and by nothing else. A
-     * behavior with an implementation is built here even where another behavior of the module holds
-     * it as a dependency: the composition was handed what that behavior requires, not the behavior. */
+     * <p>Which of the two is decided by whether the stage's projection says there is an
+     * implementation to build and by nothing else. A behavior with an implementation is built here
+     * even where another behavior of the module holds it as a dependency: the composition was
+     * handed what that behavior requires, not the behavior. */
     private void pushStage(CodeBuilder code, ClassDesc cdP, ValueName.Behavior stage,
-                           Set<ValueName.Behavior> injectionTargets, InjectionSlots held,
-                           Map<ValueName.Behavior, List<ValueName.Behavior>> behaviorDeps) {
-        if (injectionTargets.contains(stage)) {
+                           InjectionSlots held) {
+        LinkageProjection.Behavior linked = ctx.behavior(stage);
+        if (linked.construction().isEmpty()) {
             InjectionSlots.Slot slot = held.of(stage);
             code.aload(0);
             code.getfield(cdP, slot.fieldName(), slot.type());
             return;
         }
-        ClassDesc cdStage = ctx.cdBehaviorImpl(stage);   // the $Impl, not the interface
-        code.new_(cdStage);
+        LinkageProjection.Construction built = linked.construction().get();
+        code.new_(built.implementationClass());
         code.dup();
-        List<ValueName.Behavior> deps = behaviorDeps.get(stage);
-        if (deps == null) {
-            throw new IllegalStateException("`" + stage.module() + "." + stage.name()
-                    + "` is built as a stage here with no word on what it takes");
-        }
-        ClassDesc[] ctorParams = new ClassDesc[deps.size()];
+        List<ValueName.Behavior> deps = built.dependencies();
         for (int i = 0; i < deps.size(); i++) {
             // Reuse the composition's own field: it holds the dependency and hands it to the stage
             // it builds. Which field that is is the composition's to say — the stage keeps the same
             // dependency in a field of its own, at whatever position its own list puts it — so the
             // read is asked of the slots this class was emitted with.
             //
-            // A multi-arg injected dependency is stored and wired by its base class rather than the
-            // unary Behavior (issue #57), and the field descriptor and the stage's constructor
-            // parameter are the same type because both come from the dependency.
+            // The field is typed by what the dependency's projection says it is held as, and the
+            // stage's constructor takes it as what the stage's projection says: one fact about the
+            // dependency, read twice, which a class that verifies has to find the same.
             InjectionSlots.Slot slot = held.of(deps.get(i));
+            ClassDesc takes = built.constructorType().parameterType(i);
+            if (!slot.type().equals(takes)) {
+                throw new IllegalStateException("`" + stage + "` is built taking `" + deps.get(i)
+                        + "` as " + takes.descriptorString() + ", and it is held here as "
+                        + slot.type().descriptorString());
+            }
             code.aload(0);
             code.getfield(cdP, slot.fieldName(), slot.type());
-            ctorParams[i] = slot.type();
         }
-        MethodTypeDesc constructor = MethodTypeDesc.of(ConstantDescs.CD_void, ctorParams);
-        ctx.linksConstructor(stage, deps, constructor);
-        code.invokespecial(cdStage, "<init>", constructor);
+        code.invokespecial(built.implementationClass(), "<init>", built.constructorType());
     }
 
     // --- value class members ---

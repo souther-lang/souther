@@ -1,6 +1,7 @@
 package souther.compiler.codegen;
 
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 import java.lang.classfile.Annotation;
 import java.lang.classfile.ClassBuilder;
 import java.lang.classfile.ClassFile;
@@ -13,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.SequencedMap;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import static souther.compiler.codegen.Descriptors.*;
 
@@ -213,6 +215,11 @@ final class JvmTypes {
     /** The JVM class carrying a value of {@code type}: primitives unboxed, containers as their raw
      * interface, a data reference through {@link CodegenContext#caseClass}. */
     static ClassDesc jvmType(Type type, CodegenContext ctx) {
+        return jvmType(type, name -> ctx.caseClass(name));
+    }
+
+    /** The same, with a declared type's class answered by {@code classOf}. */
+    static ClassDesc jvmType(Type type, Function<TypeSymbol, ClassDesc> classOf) {
         return switch (type) {
             case Type.Prim p -> {
                 ClassDesc carrier = primCarrier(p);
@@ -238,7 +245,7 @@ final class JvmTypes {
             // a pair is typed as the pair, so its elements are read as fields rather than through
             // the Tuple interface: every fold-carried tuple is one, and that read is per element
             case Type.TupleOf tu -> tu.elements().size() == 2 ? CD_TuplePair : CD_Tuple;
-            case Type.Ref r -> ctx.caseClass(r.name());
+            case Type.Ref r -> classOf.apply(r.name());
             // the checker refuses both before emitting a module, so meeting one is a compiler fault
             case Type.Never _ -> throw new IllegalStateException("no JVM carrier for Never");
             case Type.Erroneous _ -> throw new IllegalStateException("no JVM carrier for ?");

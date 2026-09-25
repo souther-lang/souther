@@ -5,9 +5,10 @@ import souther.compiler.Compiler;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.ast.Ast;
 import souther.compiler.codegen.Backend;
-import souther.compiler.codegen.ConstructionLink;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.jvm.ClassFileImage;
+import souther.compiler.jvm.LinkageRecord;
+import souther.compiler.jvm.LinkageTarget;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
@@ -18,6 +19,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -221,10 +223,11 @@ class ModuleReadbackTest {
                 refusalOf("shared.q", garbled));
     }
 
-    /** What a module's classes build of another module comes back with it: the behavior, what it is
-     *  handed in order, and the constructor linked against. */
+    /** What a module's classes assumed about another module's declarations comes back with it, and
+     *  so does what its own declarations offer: a stage it builds, with what the stage is handed and
+     *  the constructor linked against, and the composition it declares. */
     @Test
-    void whatItsClassesBuildOfAnotherModuleIsCarried() {
+    void whatItsClassesLinkAgainstAndWhatItOffersAreCarried() {
         ReadableModule read = readBack("shared.b", Compiler.compileModules(List.of("""
                 module shared.c exposing ( rate, step : Int )
                 behavior rate : (n: Int) -> Int
@@ -239,16 +242,30 @@ class ModuleReadbackTest {
                 behavior priced = step >-> inc
                 """)));
 
-        assertEquals(List.of(new ConstructionLink(new ValueName.Behavior("shared.c", "step"),
-                        List.of(new ValueName.Behavior("shared.c", "rate")),
-                        "(Lsouther/runtime/Behavior;)V")),
-                read.constructionLinks());
+        LinkageRecord step = read.requires().get(
+                new LinkageTarget.Behavior(new ValueName.Behavior("shared.c", "step")));
+        assertNotNull(step, "shared.b builds shared.c's step: " + read.requires().keySet());
+        String built = factOf(step, "built with");
+        assertTrue(built.startsWith("(shared.c.rate) through ")
+                        && built.endsWith("(Lsouther/runtime/Behavior;)V"), built);
+        assertNotNull(read.provides().get(
+                        new LinkageTarget.Behavior(new ValueName.Behavior("shared.b", "priced"))),
+                "shared.b offers its own composition: " + read.provides().keySet());
     }
 
-    /** A module at this boundary that says nothing of what its classes build was not written by
-     *  this compiler, and is not read as building nothing. */
+    private static String factOf(LinkageRecord record, String label) {
+        String value = record.facts().get(label);
+        if (value == null) {
+            throw new AssertionError("no `" + label + "` in " + record);
+        }
+        return value;
+    }
+
+    /** A module at this boundary that says nothing of what its declarations offer, or of what its
+     *  classes were built against, was not written by this compiler, and is not read as offering
+     *  or linking against nothing. */
     @Test
-    void aModuleThatSaysNothingOfWhatItBuildsIsNotReadAsBuildingNothing() {
+    void aModuleThatSaysNothingOfItsLinkageIsNotReadAsHavingNone() {
         Map<String, ClassFileImage> classes = Compiler.compile("""
                 module shared.q exposing ( double )
                 behavior double : (n: Int) -> Int
@@ -256,18 +273,23 @@ class ModuleReadbackTest {
                 """);
 
         assertInstanceOf(Readback.Failure.UnreadableMetadata.class,
-                refusalOf("shared.q", viewing(classes, m -> withConstructions(m, m.compat(), null))));
+                refusalOf("shared.q", viewing(classes,
+                        m -> withLinkages(m, m.compat(), null, m.requiredLinkages()))));
+        assertInstanceOf(Readback.Failure.UnreadableMetadata.class,
+                refusalOf("shared.q", viewing(classes,
+                        m -> withLinkages(m, m.compat(), m.providedLinkages(), null))));
         assertInstanceOf(Readback.Failure.Incompatible.class,
                 refusalOf("shared.q", viewing(classes,
-                        m -> withConstructions(m, Backend.BOUNDARY_VERSION - 1, null))),
-                "an older writer left it out, which is the boundary the two do not share");
+                        m -> withLinkages(m, Backend.BOUNDARY_VERSION - 1, null, null))),
+                "an older writer left them out, which is the boundary the two do not share");
     }
 
-    private static PublishedClasses.SoutherModuleView withConstructions(
-            PublishedClasses.SoutherModuleView m, int compat, List<String> constructions) {
+    private static PublishedClasses.SoutherModuleView withLinkages(
+            PublishedClasses.SoutherModuleView m, int compat, List<String> provided,
+            List<String> required) {
         return new PublishedClasses.SoutherModuleView(compat, m.compiler(), m.header(),
                 m.imports(), m.types(), m.behaviors(), m.invariantHelpers(), m.valueAnswers(),
-                constructions, m.constructors());
+                provided, required);
     }
 
     /** {@code classes} with every behavior's requirement list replaced by {@code requirements}. */

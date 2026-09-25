@@ -62,26 +62,23 @@ public sealed interface ModuleMessage extends Message {
     record RebuildItAgainstTheModuleThisCompilationReads(String module, String dependency)
             implements ModuleMessage, Supporting {}
 
-    /** A module off the path builds {@code name} of {@code declaredIn}, and the {@code declaredIn}
-     * this compilation reads has no implementation of it to build: Java supplies it, or nobody has
-     * written it. */
+    /** A module off the path was built linking against the {@code kind} {@code name} of
+     * {@code declaredIn}, and the {@code declaredIn} this compilation reads declares nothing of that
+     * kind and name. */
     @Code(DiagnosticCode.E1510)
-    record ItBuildsWhatTheModuleDoesNotBuild(String module, String name, String declaredIn)
+    record ItLinksAgainstWhatTheModuleDoesNotProvide(String module, String kind, String name,
+                                                     String declaredIn)
             implements ModuleMessage, Reported {}
 
-    /** A module off the path declares {@code name}'s implementation taking {@code built}, and
-     * against the modules this compilation reads it would take {@code now}: its dependencies moved
-     * under it since it was built. */
+    /** A module off the path was built against the {@code kind} {@code name} of
+     * {@code declaredIn} with {@code fact} being {@code built}, and the {@code declaredIn} this
+     * compilation reads offers it with {@code fact} being {@code now}: its classes link to
+     * something else, or to nothing, against this one. The first fact that moved, in the order a
+     * projection lists them. */
     @Code(DiagnosticCode.E1510)
-    record ItsImplementationTakesItsDependenciesAnotherWay(String module, String name, String built,
-                                                           String now)
-            implements ModuleMessage, Reported {}
-
-    /** A module off the path builds {@code name} of {@code declaredIn} by the constructor
-     * {@code built}, and the {@code declaredIn} this compilation reads builds it by {@code now}. */
-    @Code(DiagnosticCode.E1510)
-    record ItBuildsItWithOtherDependencies(String module, String name, String declaredIn,
-                                           String built, String now)
+    record ItWasBuiltAgainstAnotherLinkage(String module, String kind, String name,
+                                           String declaredIn, String fact, String built,
+                                           String now)
             implements ModuleMessage, Reported {}
 
     @Code(DiagnosticCode.E1507)

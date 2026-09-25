@@ -6,14 +6,12 @@ import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.Ordering;
-import souther.compiler.check.ReadableFields;
-import souther.compiler.check.Shape;
 import souther.compiler.check.TypeOps;
-import souther.compiler.check.TypeView;
 import souther.compiler.core.ValueShape;
 
 import souther.compiler.jvm.DecoderKind;
 import souther.compiler.jvm.GeneratedClass;
+import souther.compiler.jvm.LinkageProjection;
 import java.lang.classfile.Attribute;
 import java.lang.classfile.ClassBuilder;
 import java.lang.classfile.ClassFile;
@@ -241,14 +239,12 @@ final class ValueClassGen {
                 cb.withInterfaceSymbols(ifaces);
             }
             cb.with(PermittedSubclassesAttribute.ofSymbols(caseCds));
-            // A field every case spreads is readable on the sum (issue #160): declared here, and
-            // implemented by each case record's accessor of the same name and descriptor.
-            if (TypeView.asWritten(Type.ref(sum.declares()), symbols, ctx.published).shape()
-                    instanceof Shape.Sum shape) {
-                for (Map.Entry<String, Type> e : ReadableFields.of(shape).declaredFields().entrySet()) {
-                    cb.withMethod(e.getKey(), MethodTypeDesc.of(jvmType(e.getValue())),
-                            ClassFile.ACC_PUBLIC | ClassFile.ACC_ABSTRACT, mb -> { });
-                }
+            // A field every case spreads is readable on the sum: declared here, and implemented by
+            // each case record's accessor of the same name and descriptor. Which fields those are
+            // is what the sum offers another module's classes, so it is read off that.
+            for (LinkageProjection.Field field : ctx.declaredType(sum.declaredKey()).fields()) {
+                cb.withMethod(field.name(), MethodTypeDesc.of(jvmType(field.type())),
+                        ClassFile.ACC_PUBLIC | ClassFile.ACC_ABSTRACT, mb -> { });
             }
             // An enumeration travels as its case's name (issue #161): one place says which name that
             // is, and the codecs on both sides read it from here.
@@ -738,7 +734,15 @@ final class ValueClassGen {
         // Public for an exposed type: a behavior of another module may declare `constructs T`
         // (ADR-0002 never restricted that to T's own module), and this is the path it takes — the one
         // that runs the invariant. A type this module keeps to itself keeps its entry package-private.
-        cb.withMethod("__construct", MethodTypeDesc.of(CD_Result, fieldDescs(fields)),
+        // Declared as what the type offers, which is what every caller of it — another module's or
+        // this one's — invokes; so the method and each call on it are one answer.
+        LinkageProjection.Invocation offered = ctx.construction(data.declares());
+        MethodTypeDesc declared = MethodTypeDesc.of(CD_Result, fieldDescs(fields));
+        if (!offered.methodType().equals(declared)) {
+            throw new IllegalStateException("`" + data.declaredKey() + "` declares __construct"
+                    + declared.descriptorString() + ", and it offers " + offered.descriptor());
+        }
+        cb.withMethod(offered.method(), offered.methodType(),
                 ClassFile.ACC_STATIC | ctx.pub(data.name()), mb -> {
                     mb.with(SignatureAttribute.of(
                             MethodSignature.parseFrom(constructSignature(fields, cdName))));

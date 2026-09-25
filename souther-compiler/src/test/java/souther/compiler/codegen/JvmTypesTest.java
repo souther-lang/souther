@@ -17,14 +17,16 @@ class JvmTypesTest {
     @Test
     void aTypeWithNoCarrierIsRefusedByName() {
         IllegalStateException never =
-                assertThrows(IllegalStateException.class, () -> JvmTypes.jvmType(Type.NEVER, null));
+                assertThrows(IllegalStateException.class,
+                        () -> JvmTypes.jvmType(Type.NEVER, (CodegenContext) null));
         assertEquals("no JVM carrier for Never", never.getMessage());
         IllegalStateException erroneous =
                 assertThrows(IllegalStateException.class,
-                        () -> JvmTypes.jvmType(Type.ERRONEOUS, null));
+                        () -> JvmTypes.jvmType(Type.ERRONEOUS, (CodegenContext) null));
         assertEquals("no JVM carrier for ?", erroneous.getMessage());
         IllegalStateException raw =
-                assertThrows(IllegalStateException.class, () -> JvmTypes.jvmType(Type.RAW, null));
+                assertThrows(IllegalStateException.class,
+                        () -> JvmTypes.jvmType(Type.RAW, (CodegenContext) null));
         assertEquals("no JVM carrier for Raw", raw.getMessage());
     }
 

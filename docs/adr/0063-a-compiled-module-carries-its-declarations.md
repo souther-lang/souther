@@ -1,6 +1,26 @@
 # ADR-0063: A compiled module carries its own declarations
 
-Status: Accepted (decided 2026-07-27). Resolves issue #128.
+Status: Accepted (decided 2026-07-27). Resolves issue #128. Revised 2026-09-25 — see *Revision*.
+
+## Revision (2026-09-25)
+
+The Decision put one number, `BOUNDARY_VERSION`, over everything an importing module reaches. That number says whether a jar and this compiler agree on the rules; it does not move when a declaration does. A module built against one version of a dependency and read beside another was held by nothing: its classes had baked in facts about the declarations they read — which class a behavior is called on and by which instruction, what its constructor takes, how a type's fields are laid out, what a published value's entry answers — and a dependency rebuilt with one of those facts changed left the module linking to nothing, or to something else, when it ran (issue #1948; PR #1947 had closed one case of it, the constructor of a stage).
+
+What changes:
+
+- `BOUNDARY_VERSION` is the generation of the metadata's shape and of the rules a declaration is turned into JVM facts by. It answers whether a jar and this compiler agree, and no longer stands for whether a jar agrees with the jars beside it.
+- That is answered per declaration. A compiled module records, for each of its declarations, the projection of it another module's classes link by — what it provides — and, for each declaration of another module its classes read, the projection they read — what it requires. A module read off the path is admitted only where every projection it requires is what the declaring module provides here: as that module's classes record it when it is on the path, and as its classes are about to offer it when it is compiled here.
+- A requirement is recorded where a fact is read, not where a class name is emitted. A behavior taking one input is held as the runtime's unary `Behavior`, so a class holding one names that interface and never the behavior, and depends on how many inputs the behavior takes all the same. Emission reads another module's behaviors, types and values through one reader that records what it hands out, and the doors that read declarations below the check are built reading into it.
+- What a module provides is what its classes offer. It is not worked out again from its dependencies as they are now: that would be the module as it would be if rebuilt, not the classes on the path.
+- A projection depends on three things only: the module's own settled declarations, the projections of other modules' declarations it read — which its requires records — and the rules the number stands for. So a stale module is found by its own requires, and a module that read nothing of the declaration that moved is not held to it.
+- The unit is the declaration. An edit to a declaration nothing links against leaves every dependent as it was; an edit to any part of one a class links against makes that class's module stale, even where it links against another part.
+- What is recorded is the projection's facts as text, and admission compares them. The types in a projection are the compiler's own; reading them back would take a second syntax for types, which the Decision refused for declarations, and the text keeps what moved sayable in a report.
+
+What a projection does not hold: what a behavior's body computes, what an invariant states, the body of a published helper. The first two run inside the declaring module's classes. A helper's body is still expanded where it is called (ADR-0072), so a declaration of a third module it names is one the reader's classes read, and it is in the reader's requires. An invariant a spread takes in, or a helper's body itself, is compiled into the reader as source and is not held here. Two rules are fixed by `BOUNDARY_VERSION` rather than recorded: the rule a generated class is named by from the declaration's name, and that a call into another module's behavior never runs that module's `ensures` check. The descriptor the naming rule gives a declaration is still a fact a class links by, and a projection carries it where one does — the class a construction is invoked on, say.
+
+A value another module declares runs in that module whichever body names it (ADR-0074). A helper's body is closed with its own module's values copied into it (ADR-0075), and a value of a third module it names stays a reference, so the reader's classes call that module's entry and record reading it, as they would for the value named directly.
+
+The Consequence that a library and everything built against it must be rebuilt together now holds only across releases that move the number. Between them, the modules whose classes read a declaration that moved are the ones to rebuild, and a compile names them.
 
 ## Context
 

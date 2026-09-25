@@ -70,8 +70,6 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.Message;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.Reported;
-import souther.compiler.codegen.ConstructionAbi;
-import souther.compiler.codegen.ConstructionLink;
 import souther.compiler.meta.ModuleReadback;
 import souther.compiler.claims.ClaimDiagnostics;
 import souther.compiler.claims.Claims;
@@ -96,7 +94,6 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
-import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayDeque;
 import java.util.Collection;
 import java.util.ArrayList;
@@ -104,7 +101,6 @@ import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.SequencedSet;
 import java.util.List;
 import java.util.Map;
 import java.util.SequencedMap;
@@ -1185,78 +1181,13 @@ public final class Bodies {
     }
 
     /**
-     * The constructor of each behavior of a module that is built rather than supplied, as this
-     * compilation has the module: its JVM descriptor, by the behavior's name.
+     * Whether what a module read off the path requires injected names behaviors the modules it names
+     * declare (spec {@code [#a-reached-name-is-declared-by-its-module]}).
      *
-     * <p>Only the behaviors Souther implements and someone has written. One Java supplies has no
-     * implementation of this compiler's to build, and one nobody has written has none either, so
-     * neither has a constructor here — and a module built against a version where it had one is
-     * told so, rather than told the constructor changed.
-     *
-     * <p>For a module read off the path, the constructors its classes declare, as they were emitted.
-     * Its classes were compiled against the dependencies it had then, and those may not be the ones
-     * this compilation has, so what they declare is read and not worked out. Whether they still
-     * agree with the dependencies here is a question about that module, asked where it is held to
-     * what it was built against ({@link BuiltAgainst}).
-     *
-     * <p>For a module compiled here, worked out from what it requires and what each requirement
-     * takes, by the rule the emitter declares and links a constructor by ({@link ConstructionAbi}):
-     * these are the constructors it is about to emit.
-     */
-    public record Constructors(String name) implements Key<Map<String, ConstructionLink>> {
-        @Override
-        public String module() {
-            return name;
-        }
-
-        @Override
-        public Answer<Map<String, ConstructionLink>> compute(Db db) {
-            Front.FromPath.OnThePath onThePath = Front.onThePath(db, name);
-            if (onThePath != null) {
-                Map<String, ConstructionLink> declared = new LinkedHashMap<>();
-                for (ConstructionLink constructor : onThePath.constructors()) {
-                    declared.put(constructor.target().name(), constructor);
-                }
-                return Answer.of(Ordered.map(declared));
-            }
-            Answer<BehaviorBodies> implementations = db.ask(new Implementation(name));
-            Answer<Map<String, List<BehaviorRequirement>>> requirements =
-                    db.ask(new Requirements(name));
-            Answer<Map<ValueName.Behavior, Sig>> takes = db.ask(new RequirementSignatures(name));
-            if (!implementations.present() || !requirements.present() || !takes.present()) {
-                return Answer.absent();
-            }
-            Map<String, ConstructionLink> out = new LinkedHashMap<>();
-            implementations.value().states().forEach((behavior, implementation) -> {
-                if (implementation != BehaviorImplementation.IMPLEMENTED) {
-                    return;
-                }
-                List<BehaviorRequirement> required = requirements.value().get(behavior);
-                if (required == null) {
-                    throw new IllegalStateException("`" + name + "." + behavior + "` is built and"
-                            + " has no requirement set");
-                }
-                List<ValueName.Behavior> dependencies =
-                        souther.compiler.check.Requirements.names(required);
-                out.put(behavior, new ConstructionLink(new ValueName.Behavior(name, behavior),
-                        dependencies, ConstructionAbi.constructor(dependencies,
-                                dependency -> takes.value().get(dependency).inputTypes())
-                                .descriptorString()));
-            });
-            return Answer.of(Ordered.map(out));
-        }
-    }
-
-    /**
-     * Whether a module read off the path agrees with the modules this compilation has about what
-     * it was built against.
-     *
-     * <p>Two things the module carries name another module's behaviors, and both are held here: what
-     * each of its behaviors requires injected names behaviors the module it names must declare
-     * (spec {@code [#a-reached-name-is-declared-by-its-module]}), and every constructor its classes
-     * link against in another module must be the one that module builds the behavior with now
-     * (spec {@code [#a-published-module-agrees-with-what-it-was-built-against]}). A module where
-     * either does not hold was built against another version of that module.
+     * <p>A question about names, beside the one about linkage ({@link Linkages.Held}). What a
+     * behavior requires is what a composition built from it here is handed, whatever the module's
+     * classes link against, so a requirement naming a behavior its module no longer declares is said
+     * as that: the module was built against another version of the module it names.
      *
      * <p>Asked of every module read off the path, where the compilation's problems are gathered, and
      * not by whoever goes on to use some of the module. What a module was built against is a fact
@@ -1289,95 +1220,7 @@ public final class Bodies {
                     }
                 }
             }
-            boolean unheld = false;
-            // What its own implementations take, as they were emitted, held to what the modules
-            // they take from have here. A dependency whose number of inputs moved is held another
-            // way, so the constructor a class compiled now would link against is not the one this
-            // module declares — whoever builds it, this compilation's own classes included.
-            for (ConstructionLink declared : onThePath.constructors()) {
-                MethodTypeDesc here = constructorHere(db, declared.dependencies());
-                if (here == null) {
-                    // A dependency missing from its module, or a module not here: each said where
-                    // it is found.
-                    unheld = true;
-                } else if (!here.descriptorString().equals(declared.constructor())) {
-                    ConstructionLink now = new ConstructionLink(declared.target(),
-                            declared.dependencies(), here.descriptorString());
-                    reports.add(Report.raised(builtAgainstAnother(
-                            new ModuleMessage.ItsImplementationTakesItsDependenciesAnotherWay(
-                                    name, declared.target().name(), shown(declared), shown(now)),
-                            name, dependencyModules(declared))));
-                }
-            }
-            for (ConstructionLink link : onThePath.constructionLinks()) {
-                ValueName.Behavior target = link.target();
-                Answer<Map<String, ConstructionLink>> built =
-                        db.ask(new Constructors(target.module()));
-                if (!built.present()) {
-                    // A module that did not come out, or one this compilation does not have — each
-                    // said about it where it is found; there is nothing here to hold the link to.
-                    unheld = true;
-                    continue;
-                }
-                ConstructionLink now = built.value().get(target.name());
-                if (now == null) {
-                    reports.add(Report.raised(builtAgainstAnother(
-                            new ModuleMessage.ItBuildsWhatTheModuleDoesNotBuild(
-                                    name, target.name(), target.module()),
-                            name, target.module())));
-                } else if (!now.equals(link)) {
-                    reports.add(Report.raised(builtAgainstAnother(
-                            new ModuleMessage.ItBuildsItWithOtherDependencies(
-                                    name, target.name(), target.module(), shown(link),
-                                    shown(now)),
-                            name, target.module())));
-                }
-            }
-            if (!reports.isEmpty()) {
-                return Answer.absent(reports);
-            }
-            return unheld ? Answer.absent() : Answer.of(Boolean.TRUE);
-        }
-
-        /**
-         * The constructor an implementation taking {@code dependencies} is declared with against the
-         * modules this compilation has — or null where one of them has no signature here to hold it
-         * by.
-         *
-         * <p>Each signature asked of its own module, and not through the requirements of the module
-         * being held: those are what this is deciding whether to take in.
-         */
-        private static MethodTypeDesc constructorHere(Db db, List<ValueName.Behavior> dependencies) {
-            Map<ValueName.Behavior, List<Type>> takes = new LinkedHashMap<>();
-            for (ValueName.Behavior dependency : dependencies) {
-                Map<String, Sig> declared = db.ask(new Signatures(dependency.module())).value();
-                Sig sig = declared == null ? null : declared.get(dependency.name());
-                if (sig == null) {
-                    return null;
-                }
-                takes.put(dependency, sig.inputTypes());
-            }
-            return ConstructionAbi.constructor(dependencies, takes::get);
-        }
-
-        /** The modules {@code declared}'s dependencies are declared in, as a report names what to
-         *  rebuild against. */
-        private static String dependencyModules(ConstructionLink declared) {
-            SequencedSet<String> modules = new LinkedHashSet<>();
-            for (ValueName.Behavior dependency : declared.dependencies()) {
-                modules.add(dependency.module());
-            }
-            return String.join(", ", modules);
-        }
-
-        /** What {@code link} hands the behavior and by which constructor, as a report shows it: the
-         *  dependencies in order, then the descriptor. */
-        private static String shown(ConstructionLink link) {
-            List<String> handed = new ArrayList<>();
-            for (ValueName.Behavior dependency : link.dependencies()) {
-                handed.add(dependency.module() + "." + dependency.name());
-            }
-            return "(" + String.join(", ", handed) + ") through " + link.constructor();
+            return reports.isEmpty() ? Answer.of(Boolean.TRUE) : Answer.absent(reports);
         }
 
         /** Whether {@code module} declares a behavior of that name — whether there is one, and
@@ -1393,7 +1236,7 @@ public final class Bodies {
 
         /** {@code said} about {@code module}, which was built against another version of
          *  {@code dependency}: said about the artifact to rebuild, whose code nobody here holds. */
-        private static <M extends Message & Reported> Diagnostic builtAgainstAnother(
+        static <M extends Message & Reported> Diagnostic builtAgainstAnother(
                 M said, String module, String dependency) {
             return Diagnostic.say(said)
                     .hint(new ModuleMessage.RebuildItAgainstTheModuleThisCompilationReads(
@@ -1444,57 +1287,6 @@ public final class Bodies {
                             + " does not leave to Java");
                 }
                 out.put(stage, souther.compiler.check.Requirements.names(requirements));
-            }
-            return Answer.of(Ordered.map(out));
-        }
-    }
-
-    /**
-     * The signature of every behavior this module's classes take injected, by the declaration it
-     * is.
-     *
-     * <p>What a field, a constructor parameter and a call on one are typed from. Read off the
-     * requirement sets and not off the import lines: a dependency a stage of another module brings
-     * in is taken by this module's constructor whether or not anything here names it.
-     */
-    public record RequirementSignatures(String name)
-            implements Key<Map<ValueName.Behavior, Sig>> {
-        @Override
-        public String module() {
-            return name;
-        }
-
-        @Override
-        public Answer<Map<ValueName.Behavior, Sig>> compute(Db db) {
-            Answer<Map<String, List<BehaviorRequirement>>> requirements =
-                    db.ask(new Requirements(name));
-            if (!requirements.present()) {
-                return Answer.absent();
-            }
-            Map<ValueName.Behavior, Sig> out = new LinkedHashMap<>();
-            for (List<BehaviorRequirement> each : requirements.value().values()) {
-                for (BehaviorRequirement requirement : each) {
-                    ValueName.Behavior dependency = requirement.dependency();
-                    if (out.containsKey(dependency)) {
-                        continue;
-                    }
-                    Answer<Map<String, Sig>> declared =
-                            db.ask(new Signatures(dependency.module()));
-                    if (!declared.present()) {
-                        return Answer.absent();
-                    }
-                    Sig sig = declared.value().get(dependency.name());
-                    if (sig == null) {
-                        // Nothing to type the field by, and nothing to say here either. A behavior
-                        // whose signature did not build is reported where it is written; one a
-                        // module on the path was built requiring and its module no longer declares
-                        // is reported by what holds that module to what it was built against
-                        // (BuiltAgainst), which every compilation asks of every such module and which
-                        // this cannot count on having been asked first.
-                        return Answer.absent();
-                    }
-                    out.put(dependency, sig);
-                }
             }
             return Answer.of(Ordered.map(out));
         }

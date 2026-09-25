@@ -59,16 +59,17 @@ public @interface SoutherModule {
     /** What each value the module declares was settled as, one {@code name=type} entry each. */
     String[] valueAnswers() default {};
 
-    /** The constructors of other modules' behaviors this module's classes link against: the
-     * declaring module, the behavior and the constructor's descriptor, each counted. What the classes
-     * assumed about a module they were built against, which a reader holds that module to. No
-     * default: a writer that says nothing about it has not said its classes build nothing. */
-    String[] constructions();
+    /** What each declaration of this module offers the classes of another module on the JVM: one
+     * entry per declaration, its kind, module and name and then the facts a class compiled against it
+     * links by, each counted. Recorded where the module was built, so a reader holds a class built
+     * against this module to what these classes offer and not to what they would offer if built
+     * again. No default: a writer that says nothing about it has not said its module offers
+     * nothing. */
+    String[] providedLinkages();
 
-    /** The constructor each of this module's behavior implementations declares, written as
-     * {@link #constructions} writes one: what a class built against this module links against when
-     * it builds that behavior. Recorded where the class was emitted, since the dependencies it was
-     * emitted against may not be the ones a reader has. No default, for the reason
-     * {@link #constructions} has none. */
-    String[] constructors();
+    /** What this module's classes assumed about each declaration of another module they link
+     * against, written as {@link #providedLinkages} writes one: the projection of that declaration
+     * they were compiled against, which a reader holds the declaring module to. No default, for the
+     * reason {@link #providedLinkages} has none. */
+    String[] requiredLinkages();
 }

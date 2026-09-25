@@ -1,9 +1,9 @@
 package souther.compiler.codegen;
 
 import souther.compiler.check.TypeOps;
+import souther.compiler.jvm.LinkageProjection;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
-import souther.compiler.types.ValueName;
 
 import java.lang.classfile.CodeBuilder;
 import java.lang.classfile.Label;
@@ -62,26 +62,30 @@ final class ResultBoundary {
         code.areturn();
     }
 
-    /** Reads the Souther value out of the union member on the stack, leaving it boxed. */
-    static void project(CodeBuilder code, CodegenContext ctx, ValueName.Behavior callee,
-                        List<TypeSymbol> bridged,
-                        int slot) {
+    /**
+     * Reads the Souther value out of the union member on the stack, leaving it boxed.
+     *
+     * <p>Over what the callee's projection says its members reach the union through: a member is
+     * local to the union's own module, which for a call is the callee's and not this one's, and
+     * which bridge class it arrives in is that module's to say.
+     */
+    static void project(CodeBuilder code, LinkageProjection.Behavior callee, int slot) {
+        List<LinkageProjection.Bridged> bridged = callee.answeredThrough();
         if (bridged.isEmpty()) {
             return;
         }
         code.astore(slot);
         Label done = code.newLabel();
-        for (TypeSymbol member : bridged) {
+        for (LinkageProjection.Bridged member : bridged) {
             Label next = code.newLabel();
-            ClassDesc bridge = ctx.bridgeCaseClassOf(callee, member);
+            ClassDesc bridge = member.bridgeClass();
             code.aload(slot);
             code.instanceOf(bridge);
             code.ifeq(next);
             code.aload(slot);
             code.checkcast(bridge);
-            Type held = TypeOps.caseBindType(member);
-            code.invokevirtual(bridge, "value", MethodTypeDesc.of(JvmTypes.jvmType(held, ctx)));
-            JvmTypes.box(code, held);
+            code.invokevirtual(bridge, "value", member.valueType());
+            JvmTypes.box(code, TypeOps.caseBindType(member.member()));
             code.goto_(done);
             code.labelBinding(next);
         }

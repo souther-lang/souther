@@ -8,6 +8,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.DerivedSymbols;
+import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.TypeOps;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.meta.ModulePath;
@@ -203,9 +204,9 @@ class AnEmitterWritesWhatItWasHandedTest {
             }
         }
         return new CodecGen(new CodegenContext("m", symbols, said, forms,
-                symbols.library().kernelSignatures(),
+                NewtypeInners.asWritten(symbols), symbols.library().kernelSignatures(),
                 caseToSums, Map.of(), true, Set.of(), Map.of(), SourceLayouts.NONE,
-                new QuotedFrom.TextItCannotName()));
+                new QuotedFrom.TextItCannotName(), new LinkageReader("m", Map.of(), _ -> null, Map.of())));
     }
 
 }
