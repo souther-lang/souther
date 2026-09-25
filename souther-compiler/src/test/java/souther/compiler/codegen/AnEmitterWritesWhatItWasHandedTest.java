@@ -22,7 +22,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -205,7 +204,7 @@ class AnEmitterWritesWhatItWasHandedTest {
         }
         return new CodecGen(new CodegenContext("m", symbols, said, forms,
                 NewtypeInners.asWritten(symbols), symbols.library().kernelSignatures(),
-                caseToSums, Map.of(), true, Set.of(), Map.of(), SourceLayouts.NONE,
+                caseToSums, Map.of(), module.published(), Map.of(), SourceLayouts.NONE,
                 new QuotedFrom.TextItCannotName(), new LinkageReader("m", Map.of(), _ -> null, Map.of())));
     }
 

@@ -89,7 +89,7 @@ class CompileImplicitUnitDataTest {
      * can return. Reading it as a unit is what lets the mismatch be reported (E1604) rather than the
      * name being called unknown. */
     @Test
-    void aCaseOnlyAnExposedCompositionNamesIsAMismatch() {
+    void aCaseOnlyACompositionsDeclaredOutputNamesIsAMismatch() {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
                 module demo exposing ( process : Doubled | Refused )
 

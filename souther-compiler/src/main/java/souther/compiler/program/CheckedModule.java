@@ -239,7 +239,7 @@ public final class CheckedModule {
     }
 
     /**
-     * The entries this module publishes, one per value it lists in {@code exposing}.
+     * The entries this module publishes, one per value it publishes.
      *
      * <p>Not the value's own body: an entry is the nullary bridge ADR-0074 describes, which another
      * module calls in place of holding a copy of the value. Every published value has one here, a

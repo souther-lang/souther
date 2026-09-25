@@ -92,7 +92,7 @@ public sealed interface DeclarationMessage extends Message {
     record UpdateTheOutputOrHandleTheCase() implements DeclarationMessage, Supporting {}
 
     @Code(DiagnosticCode.E1605)
-    record AnExposedCompositionDeclaresItsOutput(String composition) implements DeclarationMessage, Reported {}
+    record ACompositionTheClauseNamesDeclaresItsOutput(String composition) implements DeclarationMessage, Reported {}
 
     record WriteTheOutputSignature(String composition, String output) implements DeclarationMessage, Supporting {}
 

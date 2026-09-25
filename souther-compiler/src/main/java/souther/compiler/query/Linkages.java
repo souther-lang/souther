@@ -265,7 +265,7 @@ public final class Linkages {
             requirements.value().forEach((behavior, each) ->
                     required.put(behavior, Requirements.names(each)));
             SortedMap<LinkageTarget, LinkageProjection> provides = LinkageProjections.of(
-                    new LinkageProjections.Settled(name, written.exposing(), declarations,
+                    new LinkageProjections.Settled(name, written.published(), declarations,
                             signatures.value(), implementations.value().states(), required,
                             values, symbols.value(),
                             reader.readingPublished(Shapes.publishedDeclarations(db))),

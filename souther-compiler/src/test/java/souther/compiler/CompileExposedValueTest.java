@@ -12,6 +12,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -141,6 +142,43 @@ class CompileExposedValueTest {
                 behavior bill : (p: Priced) -> Receipt constructs Receipt, Amount
                 let bill (p) = Receipt { total = Amount(p.total.value + cap.value) }
                 """), path));
+    }
+
+    private static final String UPSTREAM_WITH_NO_CLAUSE = """
+            module pricing
+
+            data Amount = Int
+            data Priced = { total: Amount, note: String }
+
+            let cap = Amount(1000)
+            let doubled (a: Amount) : Amount = Amount(a.value * 2)
+            """;
+
+    private static final String READER_OF_NO_CLAUSE = """
+            module order exposing ( Receipt, bill )
+
+            import pricing ( Amount, Priced, cap, doubled )
+
+            data Receipt = { total: Amount }
+
+            behavior bill : (p: Priced) -> Receipt constructs Receipt, Amount
+            let bill (p) = Receipt { total = doubled(Amount(p.total.value + cap.value)) }
+            """;
+
+    /** A module that writes no clause publishes every declaration it makes, its values and helpers
+     *  among them (spec §a-module-publishes-what-it-declares). */
+    @Test
+    void aModuleWritingNoClausePublishesItsValuesAndHelpers() {
+        assertDoesNotThrow(() -> Compiler.compileModules(
+                List.of(UPSTREAM_WITH_NO_CLAUSE, READER_OF_NO_CLAUSE)));
+    }
+
+    /** And the jar it compiles to carries them, as it does for a module whose clause names them. */
+    @Test
+    void whatAModuleWritingNoClausePublishesCrossesAProjectBoundary() throws Exception {
+        ModulePath path = ModulePath.of(Compiler.compile(UPSTREAM_WITH_NO_CLAUSE));
+
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of(READER_OF_NO_CLAUSE), path));
     }
 
     /**
@@ -455,15 +493,26 @@ class CompileExposedValueTest {
             let bill (i) = Out { v = cap.value + i.n }
             """;
 
-    /** A module that lists nothing is public to Java and offers no name to import, so another
-     * module cannot call a value of it and the module publishes no entry for one. */
+    /** A module that writes no clause publishes its values, so another module calls one through the
+     * entry the module publishes for it. */
     @Test
-    void aModuleThatListsNothingOffersNoValueToImportAndPublishesNoEntry() {
+    void aModuleWritingNoClauseOffersItsValuesAndPublishesTheirEntries() {
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of(OPEN, OPEN_READER)));
+
+        assertTrue(Compiler.compile(OPEN).containsKey("pricing.$Values"));
+    }
+
+    /** One writing {@code exposing ()} publishes none of them: an importer is refused, and there is
+     * no entry to call through. */
+    @Test
+    void aModuleWritingAnEmptyClauseOffersNoValueAndPublishesNoEntry() {
+        String closed = OPEN.replace("module pricing\n", "module pricing exposing ()\n");
+
         CompileException refused = assertThrows(CompileException.class,
-                () -> Compiler.compileModules(List.of(OPEN, OPEN_READER)));
+                () -> Compiler.compileModules(List.of(closed, OPEN_READER)));
         assertTrue(refused.getMessage().contains("not exposed"), refused.getMessage());
 
-        assertTrue(!Compiler.compile(OPEN).containsKey("pricing.$Values"));
+        assertFalse(Compiler.compile(closed).containsKey("pricing.$Values"));
     }
 
     /** What a module says it settled its values as is what it publishes and nothing more: the

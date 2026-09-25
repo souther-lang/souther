@@ -4,6 +4,7 @@ import souther.compiler.DefaultStdlib;
 import souther.compiler.Compiler;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.ExposingClause;
 import souther.compiler.codegen.Backend;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.jvm.ClassFileImage;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -70,6 +72,26 @@ class ModuleReadbackTest {
         assertEquals(List.of("charge"), back.behaviors().stream().map(Ast.BehaviorDef::name).toList());
         // the invariant needs `withinCap`, so it came; `charge` and `unrelated` are implementation
         assertEquals(List.of("withinCap"), back.fns().stream().map(Ast.FnDef::name).toList());
+    }
+
+    /** A module writing no clause and one writing {@code exposing ()} publish different things, and
+     *  each comes back as the one it was, with what it publishes. */
+    @Test
+    void whetherAClauseIsWrittenComesBack() {
+        ReadableModule open = readBack("shared.open", Compiler.compile("""
+                module shared.open
+                data Amount = Int
+                let doubled (a: Amount) : Amount = Amount(a.value * 2)
+                """));
+        ReadableModule closed = readBack("shared.closed", Compiler.compile("""
+                module shared.closed exposing ()
+                data Amount = Int
+                """));
+
+        assertEquals(ExposingClause.Omitted.INSTANCE, open.module().exposing());
+        assertEquals(Set.of("Amount", "doubled"), open.module().published());
+        assertEquals(new ExposingClause.Written(List.of()), closed.module().exposing());
+        assertEquals(Set.of(), closed.module().published());
     }
 
     /** The declaration is the same declaration, invariant and all — that is what the discharge

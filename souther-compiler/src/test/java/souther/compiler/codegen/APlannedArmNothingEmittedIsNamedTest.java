@@ -10,13 +10,13 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.Front;
 import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -72,7 +72,8 @@ class APlannedArmNothingEmittedIsNamedTest {
         CodegenContext ctx = new CodegenContext(MODULE, symbols,
                 Shapes.publishedDeclarations(compilation.db()),
                 Shapes.declarationKinds(compilation.db()), NewtypeInners.asWritten(symbols),
-                symbols.library().kernelSignatures(), Map.of(), Map.of(), true, Set.of(), Map.of(),
+                symbols.library().kernelSignatures(), Map.of(), Map.of(),
+                compilation.db().ask(new Front.PublishedNames(MODULE)).value(), Map.of(),
                 SourceLayouts.NONE, new QuotedFrom.TextItCannotName(),
                 new LinkageReader(MODULE, Map.of(), _ -> null, Map.of()));
         ctx.setCoveragePlan(plan);

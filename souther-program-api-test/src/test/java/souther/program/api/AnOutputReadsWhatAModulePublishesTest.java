@@ -1,6 +1,7 @@
 package souther.program.api;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.program.CheckedBehavior;
 import souther.compiler.program.CheckedData;
 import souther.compiler.program.CheckedModule;
@@ -41,9 +42,9 @@ class AnOutputReadsWhatAModulePublishesTest {
             """;
 
     /**
-     * A module that writes no clause publishes nothing, which is what an importer is told: naming
-     * one of these in an import is E1507. An empty clause says the same thing, and the language
-     * makes no distinction between the two.
+     * A module that writes no clause publishes every declaration it makes, and one that writes
+     * {@code exposing ()} publishes none (spec §a-module-publishes-what-it-declares). The two are
+     * different modules, and each is asked here.
      */
     private static final String WITH_NONE = """
             module plainly
@@ -81,6 +82,12 @@ class AnOutputReadsWhatAModulePublishesTest {
             data Amount = { value: Int }
             """;
 
+    private static final String WITH_AN_EMPTY_DATA_CLAUSE = """
+            module closed exposing ()
+
+            data Amount = { value: Int }
+            """;
+
     @Test
     void aNameTheClauseListsIsPublishedAndOneItDoesNotIsKept() {
         CheckedModule module = CheckedProgram.of(List.of(WITH_A_CLAUSE)).module("pricing");
@@ -90,16 +97,16 @@ class AnOutputReadsWhatAModulePublishesTest {
     }
 
     @Test
-    void aModuleThatWritesNoClausePublishesNothing() {
+    void aModuleThatWritesNoClausePublishesEveryBehavior() {
         CheckedModule module = CheckedProgram.of(List.of(WITH_NONE)).module("plainly");
 
-        assertEquals(Publication.KEPT, publicationOf(module, "one"));
-        assertEquals(Publication.KEPT, publicationOf(module, "other"));
+        assertEquals(Publication.PUBLISHED, publicationOf(module, "one"));
+        assertEquals(Publication.PUBLISHED, publicationOf(module, "other"));
     }
 
-    /** And an empty clause is that same answer and not another one. */
+    /** An empty clause is written, and names nothing: it is not the module that wrote none. */
     @Test
-    void anEmptyClausePublishesNothingEither() {
+    void anEmptyClausePublishesNothing() {
         CheckedModule module = CheckedProgram.of(List.of(WITH_AN_EMPTY_CLAUSE)).module("emptily");
 
         assertEquals(Publication.KEPT, publicationOf(module, "one"));
@@ -122,13 +129,54 @@ class AnOutputReadsWhatAModulePublishesTest {
      */
     @Test
     void whatIsKeptIsWhatAnImporterIsRefused() {
-        assertThrows(CompileException.class, () -> CheckedProgram.of(List.of(WITH_NONE, """
+        CompileException refused = assertThrows(CompileException.class,
+                () -> CheckedProgram.of(List.of(WITH_AN_EMPTY_CLAUSE, """
+                        module reader
+                        import emptily ( one )
+
+                        behavior used : (a: Int) -> Int
+                        let used (a) = one(a)
+                        """)));
+
+        assertEquals(new ModuleMessage.TheModuleDoesNotExposeIt("one", "emptily"),
+                refused.diagnostic().said());
+    }
+
+    /**
+     * A name the module does not declare is refused as that and not as one it keeps, whether it
+     * writes a clause or not: what it publishes is taken from what it declares, so the second
+     * question is never the one that fails first.
+     */
+    @Test
+    void aNameNoModuleDeclaresIsRefusedAsUndeclaredAndNotAsKept() {
+        for (String upstream : List.of(WITH_NONE, WITH_AN_EMPTY_CLAUSE)) {
+            String module = upstream.lines().findFirst().orElseThrow().split(" ")[1];
+            CompileException refused = assertThrows(CompileException.class,
+                    () -> CheckedProgram.of(List.of(upstream, """
+                            module reader
+                            import %s ( nobody )
+
+                            behavior used : (a: Int) -> Int
+                            let used (a) = a
+                            """.formatted(module))));
+
+            assertEquals(new ModuleMessage.TheModuleDeclaresNoSuchName("nobody", module),
+                    refused.diagnostic().said(), module);
+        }
+    }
+
+    /** And what a module publishes by writing no clause is what an importer may name. */
+    @Test
+    void whatIsPublishedWithNoClauseIsWhatAnImporterMayName() {
+        CheckedProgram program = CheckedProgram.of(List.of(WITH_NONE, """
                 module reader
                 import plainly ( one )
 
                 behavior used : (a: Int) -> Int
                 let used (a) = one(a)
-                """)));
+                """));
+
+        assertEquals(Publication.PUBLISHED, publicationOf(program.module("plainly"), "one"));
     }
 
     /** A data answers the same way a behavior does: named by the clause, published; otherwise kept. */
@@ -150,14 +198,19 @@ class AnOutputReadsWhatAModulePublishesTest {
         assertThrows(IllegalArgumentException.class, () -> amounts.publicationOf(elsewheresAmount));
     }
 
-    /**
-     * A module that writes no clause publishes no data either — #1867's own text said the opposite
-     * ("everything is published then"), which #1866 already settled against: a module with no
-     * clause keeps everything, data included.
-     */
+    /** A data answers as a behavior does where no clause is written: published. */
     @Test
-    void aModuleThatWritesNoClausePublishesNoDataEither() {
+    void aModuleThatWritesNoClausePublishesItsData() {
         CheckedModule module = CheckedProgram.of(List.of(WITH_NO_DATA_CLAUSE)).module("unexposed");
+
+        assertEquals(Publication.PUBLISHED, publicationOfData(module, "Amount"));
+    }
+
+    /** And where an empty one is: kept. */
+    @Test
+    void anEmptyClausePublishesNoData() {
+        CheckedModule module = CheckedProgram.of(List.of(WITH_AN_EMPTY_DATA_CLAUSE))
+                .module("closed");
 
         assertEquals(Publication.KEPT, publicationOfData(module, "Amount"));
     }

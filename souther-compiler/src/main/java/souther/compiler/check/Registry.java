@@ -6,7 +6,6 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -108,7 +107,7 @@ public interface Registry<D> {
      * what came back said a declaration was there under a name the registry did not have.
      *
      * @param declarations what it declares, by the name written there
-     * @param exposed      the base type names it exposes ({@link #baseNames})
+     * @param exposed      the names it publishes ({@link Ast.Module#published})
      */
     record Declared<D>(Map<String, D> declarations, List<String> asDeclared, Set<String> exposed) {
 
@@ -196,16 +195,5 @@ public interface Registry<D> {
     /** What one resolved module declares, and the declarations it may not have. */
     static DeclaredNames.Index<Hir.Def> indexed(Hir.Module module) {
         return DeclaredNames.index(module.defs(), Hir.Def::name);
-    }
-
-    /** An {@code exposing} list as the type names it names: {@code Amount.decoder} exposes
-     * {@code Amount}. */
-    static Set<String> baseNames(Iterable<String> exposing) {
-        Set<String> names = new LinkedHashSet<>();
-        for (String e : exposing) {
-            int dot = e.indexOf('.');
-            names.add(dot < 0 ? e : e.substring(0, dot));
-        }
-        return Set.copyOf(names);
     }
 }

@@ -1,6 +1,7 @@
 package souther.compiler.sites;
 
 import souther.compiler.Reserved;
+import souther.compiler.ast.ExposingClause;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.BindingEvidence;
@@ -28,9 +29,11 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSpelling;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * What is known about one revision of one module's source, as an editor asks it.
@@ -253,16 +256,40 @@ public final class SemanticSnapshot {
         };
     }
 
-    /** What a module of this compilation publishes, in the order its {@code exposing} line writes
-     *  them. */
+    /** What a module of this compilation publishes, in the order its {@code exposing} clause writes
+     *  them, or in the order the module declares them where it writes no clause. */
     private List<Published> offeredBy(String named) {
         Answer<Hir.Module> offering = db.ask(new Names.Resolved(named));
         if (!offering.present()) {
             return List.of();
         }
         Hir.Module offered = offering.value();
+        Set<String> inOrder = new LinkedHashSet<>();
+        if (offered.exposing() instanceof ExposingClause.Written written) {
+            inOrder.addAll(written.entries());
+        } else {
+            // Every kind of declaration is its own list, so the order they were written in is
+            // asked of where each was written: a `let` above a `data` comes first. Only what is
+            // published is placed, which is all written in the module's own text.
+            List<Map.Entry<SourcePos, String>> declared = new ArrayList<>();
+            for (Hir.Def def : offered.defs()) {
+                declared.add(Map.entry(def.pos(), def.name()));
+            }
+            for (Hir.BehaviorDef behavior : offered.behaviors()) {
+                declared.add(Map.entry(behavior.pos(), behavior.name()));
+            }
+            for (Hir.FnDef fn : offered.fns()) {
+                declared.add(Map.entry(fn.pos(), fn.name()));
+            }
+            declared.removeIf(each -> !offered.published().contains(each.getValue()));
+            declared.sort(Map.Entry.comparingByKey(SourcePos.IN_WRITTEN_ORDER));
+            for (Map.Entry<SourcePos, String> each : declared) {
+                inOrder.add(each.getValue());
+            }
+        }
+        inOrder.retainAll(offered.published());
         List<Published> out = new ArrayList<>();
-        for (String name : offered.exposing()) {
+        for (String name : inOrder) {
             published(offered, name).ifPresent(out::add);
         }
         return List.copyOf(out);

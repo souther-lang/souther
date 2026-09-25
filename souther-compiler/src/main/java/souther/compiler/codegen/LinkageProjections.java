@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
@@ -53,8 +54,7 @@ public final class LinkageProjections {
      * What a module's declarations settled, as a projection is made from them.
      *
      * @param module          the module
-     * @param exposing        the names its {@code exposing} line lists, empty where it writes none —
-     *                        which exposes everything
+     * @param publishedNames  the names it publishes ({@code Ast.Module#published})
      * @param declarations    its declared types, in the order it writes them
      * @param signatures      what each of its behaviors takes and answers, by the behavior
      * @param implementations where each of its behaviors gets its body
@@ -63,7 +63,7 @@ public final class LinkageProjections {
      * @param symbols         its declarations, reading into what records another module's
      * @param published       what declarations say, reading into the same
      */
-    public record Settled(String module, List<String> exposing, List<TypeKey> declarations,
+    public record Settled(String module, Set<String> publishedNames, List<TypeKey> declarations,
                           Map<String, Sig> signatures,
                           Map<String, BehaviorImplementation> implementations,
                           Map<String, List<ValueName.Behavior>> requirements,
@@ -75,12 +75,12 @@ public final class LinkageProjections {
                 throw new IllegalArgumentException("a projection reads what each declaration it"
                         + " rests on says, so it is handed somewhere to read every one of them");
             }
-            exposing = List.copyOf(exposing);
+            publishedNames = Set.copyOf(publishedNames);
             declarations = List.copyOf(declarations);
         }
 
         boolean exposes(String name) {
-            return exposing.isEmpty() || exposing.contains(name);
+            return publishedNames.contains(name);
         }
     }
 

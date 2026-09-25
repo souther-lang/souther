@@ -621,7 +621,7 @@ public final class Resolve {
                     "`" + m.name() + "` reached resolution having already taken helpers on");
         }
         return new Resolution(
-                new Hir.Module(m.name(), m.exposing(), exposedOutputs,
+                new Hir.Module(m.name(), m.exposing(), m.published(), exposedOutputs,
                         r.imports(m), defs, behaviors, fns, List.of(), examples, fakes,
                         m.exampleFileTarget(), m.pos()),
                 new ResolutionIndex(List.copyOf(r.denotations), List.copyOf(r.values0),

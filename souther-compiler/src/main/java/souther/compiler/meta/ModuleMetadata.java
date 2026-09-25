@@ -299,7 +299,7 @@ public final class ModuleMetadata {
                 }
             }
         }
-        Set<String> exposed = new java.util.HashSet<>(module.exposing());
+        Set<String> exposed = module.published();
         for (Hir.FnDef fn : own.values()) {
             if (exposed.contains(fn.name()) && fn.body() instanceof Hir.FnBody.Written w) {
                 reached.add(fn.name());

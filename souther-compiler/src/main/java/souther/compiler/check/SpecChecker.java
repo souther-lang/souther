@@ -30,8 +30,8 @@ import java.util.Set;
 /**
  * The checks a {@code behavior} and its implementing {@code let} are subject to: that the two agree
  * on inputs and output, that a {@code depends on} names something with a requirement of its own, that
- * no behavior reaches itself, that a stage takes one input, and that an exposed composition declares
- * the output it actually produces.
+ * no behavior reaches itself, that a stage takes one input, and that a composition the
+ * {@code exposing} clause names declares the output it actually produces.
  */
 public final class SpecChecker {
 
@@ -190,17 +190,20 @@ public final class SpecChecker {
     }
 
     /**
-     * An exposed composition ({@code >->}) behavior must declare its output in the {@code exposing} list
-     * ({@code exposing ( name : A | B )}, spec §declared-composition-output, ADR-0024), and the declaration
+     * A composition ({@code >->}) the {@code exposing} clause names must declare its output there
+     * ({@code exposing ( name : A | B )}, spec §declared-composition-output), and the declaration
      * must match the inferred output exactly. A far-away change that grows the output then fails here, at the
      * module boundary, instead of reaching separately-compiled consumers unannounced.
      *
-     * <p>The requirement applies only to a composition that is explicitly exposed: a module with no
-     * {@code exposing} publishes everything with inference intact, and a non-composition behavior
-     * states its type at its definition, so a signature on one is rejected.
+     * <p>The requirement applies only to a composition the clause names, which is why this reads
+     * what the clause wrote and not what the module publishes: a module with no {@code exposing}
+     * publishes every composition with its inference intact (spec
+     * §a-module-publishes-what-it-declares), and a non-composition behavior states its type at its
+     * definition, so a signature on one is rejected.
      */
-    static void checkExposedPipeOutputs(Hir.Module module, Set<String> exposed,
-            Map<String, Sig> sigs, PublishedDeclarations published) {
+    static void checkExposedPipeOutputs(Hir.Module module, Map<String, Sig> sigs,
+            PublishedDeclarations published) {
+        Set<String> named = Set.copyOf(module.exposing().named());
         Set<String> pipeNames = new HashSet<>();
         for (Hir.BehaviorDef b : module.behaviors()) {
             if (b instanceof Hir.PipeBehavior p) {
@@ -213,9 +216,9 @@ public final class SpecChecker {
                 throw CompileException.of(Diagnostic.at(module.pos()).say(new DeclarationMessage.OnlyACompositionTakesAnOutputSignature(name)).build());
             }
         }
-        // every exposed composition must declare its output, matching the inferred one
+        // every composition the clause names must declare its output, matching the inferred one
         for (Hir.BehaviorDef b : module.behaviors()) {
-            if (!(b instanceof Hir.PipeBehavior pipe) || !exposed.contains(pipe.name())) {
+            if (!(b instanceof Hir.PipeBehavior pipe) || !named.contains(pipe.name())) {
                 continue;
             }
             Sig sig = sigs.get(pipe.name());
@@ -232,7 +235,7 @@ public final class SpecChecker {
                 throw CompileException.of(Diagnostic.at(pipe.pos())
                                 
                                 .hint(new DeclarationMessage.WriteTheOutputSignature(pipe.name(), PipelineSigs.caseList(inferred)))
-                                .say(new DeclarationMessage.AnExposedCompositionDeclaresItsOutput(pipe.name())).build());
+                                .say(new DeclarationMessage.ACompositionTheClauseNamesDeclaresItsOutput(pipe.name())).build());
             }
             // What was written is read first, and whether it can be compared with what is produced
             // is asked of the reading. A member no arm can name is a mistake in the declaration
@@ -649,7 +652,7 @@ public final class SpecChecker {
      * this clause.
      */
     static void checkInjectionConstructs(Hir.SpecBehavior spec, Symbols symbols,
-                                                 boolean exposeAll, Set<String> exposed) {
+                                                 Set<String> exposed) {
         for (Hir.Name name : spec.constructs()) {
             String c = name.written();
             if (name.answered() == null) {
@@ -658,10 +661,11 @@ public final class SpecChecker {
             TypeSymbol built = name.answered().type();
             // What Java needs is a way in: the decoder, which a module publishes by exposing the type.
             // For a type of another module that is its own `exposing` to answer, not this one's.
-            // `exposed` lists this module's own names, so the resolved name is what to look up — a
-            // type of this module written through it (`down.Out`) is the same one as `Out`
+            // `exposed` is what this module publishes of its own names, so the resolved name is what
+            // to look up — a type of this module written through it (`down.Out`) is the same one as
+            // `Out`
             boolean buildable = symbols.scope().isForeign(built)
-                    ? symbols.scope().isExposed(built) : exposeAll || exposed.contains(built.name());
+                    ? symbols.scope().isExposed(built) : exposed.contains(built.name());
             if (!buildable) {
                 throw CompileException.of(Diagnostic.at(spec.pos())
                                 .hint(new DeclarationMessage.ExposeIt(c)).say(new DeclarationMessage.AnInjectedBehaviorConstructsWhatIsKept(spec.name(), c)).build());
@@ -690,11 +694,8 @@ public final class SpecChecker {
      */
     static void checkExposedSurface(Hir.Module module, Set<String> injectionTargets,
                                     Map<String, Sig> sigs, Symbols symbols,
-                                    boolean exposeAll, Set<String> exposed,
+                                    Set<String> exposed,
                                     Map<String, Type> definitionTypes) {
-        if (exposeAll) {
-            return;   // nothing is kept to the module, so nothing can be rested on
-        }
         for (Hir.Def d : module.defs()) {
             if (!(d instanceof Hir.Data data) || !exposed.contains(data.name())) {
                 continue;
@@ -713,7 +714,7 @@ public final class SpecChecker {
                                 field, hidden))
                                 .hint(new ModuleMessage.WhatReachesOutMayNotRestOnWhatIsKept(hidden,
                                 data.name())),
-                        data.pos(), symbols, exposeAll, exposed);
+                        data.pos(), symbols, exposed);
             }
         }
         // A published definition may not rest on a type the module keeps to itself: a reader would
@@ -743,7 +744,7 @@ public final class SpecChecker {
                                         p.name(), hidden))
                                 .hint(new ModuleMessage.WhatReachesOutMayNotRestOnWhatIsKept(hidden,
                                         fn.name())),
-                        fn.pos(), symbols, exposeAll, exposed);
+                        fn.pos(), symbols, exposed);
             }
             // A definition whose check did not settle a type has none to ask about: it failed its own
             // check, which is reported, or it returns a function, which does not cross into another
@@ -755,7 +756,7 @@ public final class SpecChecker {
                                 hidden))
                                 .hint(new ModuleMessage.WhatReachesOutMayNotRestOnWhatIsKept(hidden,
                                 fn.name())),
-                        fn.pos(), symbols, exposeAll, exposed);
+                        fn.pos(), symbols, exposed);
             }
         }
         // Read off the signature map rather than the declarations: a composition's input and output
@@ -784,7 +785,7 @@ public final class SpecChecker {
                                         .hint(new ModuleMessage
                                                 .WhatReachesOutMayNotRestOnWhatIsKept(hidden,
                                                         b.name())),
-                        b.pos(), symbols, exposeAll, exposed);
+                        b.pos(), symbols, exposed);
             }
             refuseHidden(sig.outputType(),
                     hidden -> injected
@@ -798,14 +799,13 @@ public final class SpecChecker {
                                             b.name(), hidden))
                                     .hint(new ModuleMessage.WhatReachesOutMayNotRestOnWhatIsKept(
                                             hidden, b.name())),
-                    b.pos(), symbols, exposeAll, exposed);
+                    b.pos(), symbols, exposed);
         }
     }
 
     private static void refuseHidden(Type written,
                                      java.util.function.Function<String, Diagnostic.Builder> saying,
-                                     SourcePos pos, Symbols symbols,
-                                     boolean exposeAll, Set<String> exposed) {
+                                     SourcePos pos, Symbols symbols, Set<String> exposed) {
         if (written == null) {
             return;   // an unresolved reference has its own error
         }
@@ -813,7 +813,7 @@ public final class SpecChecker {
         // collection carries its element out with it too (`List<Id>` names `Id`).
         TypeSymbol[] hidden = new TypeSymbol[1];
         Type.mentions(written, t -> {
-            if (t instanceof Type.Ref ref && !nameableOutside(ref.name(), symbols, exposeAll, exposed)) {
+            if (t instanceof Type.Ref ref && !nameableOutside(ref.name(), symbols, exposed)) {
                 hidden[0] = ref.name();
                 return true;
             }
@@ -827,10 +827,9 @@ public final class SpecChecker {
     }
 
     /** Whether a reader outside the declaring module can write {@code name}. */
-    private static boolean nameableOutside(TypeSymbol name, Symbols symbols, boolean exposeAll,
-                                           Set<String> exposed) {
+    private static boolean nameableOutside(TypeSymbol name, Symbols symbols, Set<String> exposed) {
         return symbols.scope().isForeign(name)
-                ? symbols.scope().isExposed(name) : exposeAll || exposed.contains(name.name());
+                ? symbols.scope().isExposed(name) : exposed.contains(name.name());
     }
 
     /**

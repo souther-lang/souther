@@ -232,6 +232,14 @@ public final class Scoping {
                                ModuleUniverse.InSight.Read there, List<Refusal> refused) {
         String imported = named.text();
         boolean written = named.pos() != null;
+        // Declared, then published, in the order the two questions depend on each other: what a
+        // module publishes is taken from what it declares, so a name it never declared is a
+        // mistake about what is there and not about what it keeps (spec
+        // §a-reached-name-is-declared-by-its-module).
+        if (!there.declares(imported)) {
+            refused.add(new Refusal.NoSuchName(imp, imported));
+            return new Claim.DoesNot(imp, imported, written);
+        }
         if (!there.exposes(imported)) {
             refused.add(new Refusal.NotExposed(imp, imported));
             return new Claim.DoesNot(imp, imported, written);
@@ -251,14 +259,10 @@ public final class Scoping {
             return new Claim.Stands(imp, imported, written,
                     new Brought.AHelper(published.get()));
         }
-        if (there.declaresValue(imported)) {
-            // Declared and exposed, and nothing to hand over. Nothing is wrong with the line and
-            // nothing arrived, so no claim is made on the spelling at all — it is not in scope
-            // here, and a use of it is a name this module never had.
-            return null;
-        }
-        refused.add(new Refusal.NoSuchName(imp, imported));
-        return new Claim.DoesNot(imp, imported, written);
+        // A value declared and exposed with nothing to hand over. Nothing is wrong with the line and
+        // nothing arrived, so no claim is made on the spelling at all — it is not in scope here,
+        // and a use of it is a name this module never had.
+        return null;
     }
 
     /** Every name a line asks for, claimed by nothing — the line could not do its job at all. */

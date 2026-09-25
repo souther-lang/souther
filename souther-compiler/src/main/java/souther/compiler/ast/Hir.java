@@ -338,10 +338,11 @@ public interface Hir {
     /**
      * A whole source file: its public surface, imports, and definitions.
      *
-     * <p>{@code exposedOutputs} maps an exposed composition behavior's name to the output signature written
-     * in the {@code exposing} list ({@code exposing ( name : A | B )}, spec §declared-composition-output). An
-     * exposed {@code >->} composition must have one, checked to match its inferred output (ADR-0024); other
-     * exposed names carry no signature (their type is at the definition).
+     * <p>{@code exposedOutputs} maps the name of a composition the {@code exposing} clause names to the
+     * output signature written for it there ({@code exposing ( name : A | B )}, spec
+     * §declared-composition-output). A composition the clause names must have one, checked to match its
+     * inferred output; other names in the clause carry no signature (their type is at the definition),
+     * and a composition published because no clause is written has none.
      *
      * <p>{@code fns} is what the source wrote, and it stays that at every stage. {@code takenOn} is
      * what the module emits as methods of its own without having written them, which is two kinds of
@@ -370,9 +371,15 @@ public interface Hir {
      * methods its bodies call missing, which is the failure this separation is here to make
      * impossible. The arity says something has to be passed; that it is this module's own is what a
      * reader of the rebuild has to see, which is why every one of them names it.
+     *
+     * <p>{@code exposing} is the clause as written and {@code published} is what the module
+     * publishes, worked out once from the declarations its source made ({@link Ast.Module#published})
+     * and carried from there. Carried and not worked out again here, so that which declarations may
+     * be published is decided by one rule and not by one per tree.
      */
     record Module(String name,
-                  List<String> exposing,
+                  ExposingClause exposing,
+                  Set<String> published,
                   Map<String, RetType> exposedOutputs,
                   List<Import> imports,
                   List<Def> defs,
@@ -384,6 +391,11 @@ public interface Hir {
                   String exampleFileTarget,
                   SourcePos pos) implements Hir {
 
+        public Module {
+            Objects.requireNonNull(exposing, "a module says whether it writes an exposing clause");
+            published = Set.copyOf(published);
+        }
+
         /**
          * This module with {@code replacement} standing where its declarations were.
          *
@@ -393,37 +405,37 @@ public interface Hir {
          * the ones it took on.
          */
         public Module withDefs(List<Def> replacement) {
-            return new Module(name, exposing, exposedOutputs, imports, replacement, behaviors, fns,
+            return new Module(name, exposing, published, exposedOutputs,imports, replacement, behaviors, fns,
                     takenOn, examples, fakes, exampleFileTarget, pos);
         }
 
         /** This module with its behavior declarations replaced. */
         public Module withBehaviors(List<BehaviorDef> replacement) {
-            return new Module(name, exposing, exposedOutputs, imports, defs, replacement, fns,
+            return new Module(name, exposing, published, exposedOutputs,imports, defs, replacement, fns,
                     takenOn, examples, fakes, exampleFileTarget, pos);
         }
 
         /** This module with {@code replacement} standing where its definitions were. */
         public Module withFns(List<FnDef> replacement) {
-            return new Module(name, exposing, exposedOutputs, imports, defs, behaviors, replacement,
+            return new Module(name, exposing, published, exposedOutputs,imports, defs, behaviors, replacement,
                     takenOn, examples, fakes, exampleFileTarget, pos);
         }
 
         /** This module with {@code replacement} standing where what it took on was. */
         public Module withTakenOn(List<FnDef> replacement) {
-            return new Module(name, exposing, exposedOutputs, imports, defs, behaviors, fns,
+            return new Module(name, exposing, published, exposedOutputs,imports, defs, behaviors, fns,
                     replacement, examples, fakes, exampleFileTarget, pos);
         }
 
         /** This module with {@code replacement} standing where its example blocks were. */
         public Module withExamples(List<Example> replacement) {
-            return new Module(name, exposing, exposedOutputs, imports, defs, behaviors, fns,
+            return new Module(name, exposing, published, exposedOutputs,imports, defs, behaviors, fns,
                     takenOn, replacement, fakes, exampleFileTarget, pos);
         }
 
         /** This module with {@code replacement} standing where its fake tables were. */
         public Module withFakes(List<Fake> replacement) {
-            return new Module(name, exposing, exposedOutputs, imports, defs, behaviors, fns,
+            return new Module(name, exposing, published, exposedOutputs,imports, defs, behaviors, fns,
                     takenOn, examples, replacement, exampleFileTarget, pos);
         }
     }

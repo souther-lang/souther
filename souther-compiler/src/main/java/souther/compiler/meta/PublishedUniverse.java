@@ -207,11 +207,11 @@ public final class PublishedUniverse {
         return Registry.ofRead(declared);
     }
 
-    /** What a registry has under one reading's name. The {@code exposing} list is read here, on
+    /** What a registry has under one reading's name. What the module publishes is read here, on
      *  this side of the seam, and by nothing downstream of it. */
     private static Registry.Declared<Ast.Def> declaredBy(ReadableModule readable) {
         return new Registry.Declared<>(readable.declarations(), readable.asDeclared(),
-                Registry.baseNames(readable.module().exposing()));
+                readable.module().published());
     }
 
     /**

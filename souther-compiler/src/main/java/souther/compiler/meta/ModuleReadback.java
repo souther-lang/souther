@@ -446,9 +446,9 @@ public final class ModuleReadback {
      *
      * <p>Needed is decided on the words of the published text rather than on the parsed
      * declarations, and a word is a word wherever it is written — in a field's type, a spread, an
-     * invariant, a helper an invariant calls, an exposed composition's output. A walk over the
-     * parsed forms would have to name every place a type can appear and would drop an import the day
-     * one is added; a word that is written nowhere cannot be referred to by anything.
+     * invariant, a helper an invariant calls, the output the clause declares for a composition. A
+     * walk over the parsed forms would have to name every place a type can appear and would drop an
+     * import the day one is added; a word that is written nowhere cannot be referred to by anything.
      *
      * <p>The words of every declaration, and nothing else: {@code passedOver} is where the text holds
      * something else — the import lines being decided about, and syntax written only to carry a

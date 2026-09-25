@@ -142,7 +142,7 @@ public final class Backend {
         return body;
     }
 
-    /** {@code ACC_PUBLIC} when the name is exposed (or the module exposes all), else 0. */
+    /** {@code ACC_PUBLIC} when the module publishes the name, else 0. */
     private int pub(String name) {
         return ctx.pub(name);
     }
@@ -252,9 +252,6 @@ public final class Backend {
                 }
             }
         }
-        // The checker has already run and rejects any dotted `A.decoder`/`.encoder` member
-        // (exposing is type-granular, spec §jvm-codec), so every entry that reaches codegen is a bare name.
-        Set<String> exposed = new HashSet<>(module.exposing());
         // After the Lower stage the only non-behavior fns left are recursive helpers (spec §fn-declaration);
         // each is lowered to a static method on the module's `$Fns` class rather than inlined.
         Set<String> behaviorNames = new HashSet<>();
@@ -272,7 +269,7 @@ public final class Backend {
         CodegenContext ctx = new CodegenContext(module.name(), symbols, published, kinds,
                 souther.compiler.check.NewtypeInners.asWritten(symbols), kernels,
                 caseToSums, typePackage,
-                module.exposing().isEmpty(), exposed, standingCalls, layouts,
+                module.published(), standingCalls, layouts,
                 module.pos().quotedFrom(), linkage);
         ctx.setDischargeInvariants(dischargeInvariants);
         ctx.setInvariantStatements(invariantStatements);
@@ -1418,6 +1415,13 @@ public final class Backend {
      * produces, so it would refuse a carried body that matches on such a call as matching on no sum,
      * and admit one that uses the call as the narrower type, which this reader refuses.
      *
+     * <p>Version 29 changes what a module publishes. A module writing no {@code exposing} clause
+     * publishes every declaration it makes, and one writing {@code exposing ()} publishes none. A
+     * writer built under version 28 read both as one empty list: it offered an importer nothing of
+     * the first, and made the classes of the second public and recorded its types as exposed. Read
+     * under this rule, a jar of the first would be trusted for published helpers and values it
+     * never carried, and one of the second would record an offer this reader says it did not make.
+     *
      * <p>That is also where this number stops. It says whether a jar and this compiler agree on
      * what the metadata says and on the rules a declaration is turned into JVM facts by — a
      * behavior's class and methods, how one is held and built, a type's layout and codecs. It does
@@ -1427,7 +1431,7 @@ public final class Backend {
      * {@code [#a-published-module-agrees-with-what-it-was-built-against]}). An edit to a
      * declaration moves that and not this; an edit to a rule moves this.
      */
-    public static final int BOUNDARY_VERSION = 28;
+    public static final int BOUNDARY_VERSION = 29;
 
     /** Emits the class a module's own declarations are published on, carrying {@code declarations}.
      * What it says is the caller's; that it is built like every other generated class — the same Java

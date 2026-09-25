@@ -8,10 +8,12 @@ import souther.compiler.types.SourceReferenceOrigin;
 import souther.compiler.types.TypeKey;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * The abstract syntax: a module as the characters that spell it were read, with every name still a
@@ -198,10 +200,11 @@ public interface Ast {
     /**
      * A whole source file: its public surface, imports, and definitions.
      *
-     * <p>{@code exposedOutputs} maps an exposed composition behavior's name to the output signature written
-     * in the {@code exposing} list ({@code exposing ( name : A | B )}, spec §declared-composition-output). An
-     * exposed {@code >->} composition must have one, checked to match its inferred output (ADR-0024); other
-     * exposed names carry no signature (their type is at the definition).
+     * <p>{@code exposedOutputs} maps the name of a composition the {@code exposing} clause names to the
+     * output signature written for it there ({@code exposing ( name : A | B )}, spec
+     * §declared-composition-output). A composition the clause names must have one, checked to match its
+     * inferred output; other names in the clause carry no signature (their type is at the definition),
+     * and a composition published because no clause is written has none.
      *
      * <p>{@code fns} is what the source wrote, and it stays that at every stage. {@code takenOn} is
      * what the module emits as methods of its own without having written them, which is two kinds of
@@ -223,7 +226,7 @@ public interface Ast {
      * reader of the rebuild has to see, which is why every one of them names it.
      */
     record Module(String name,
-                  List<String> exposing,
+                  ExposingClause exposing,
                   Map<String, RetType> exposedOutputs,
                   List<Import> imports,
                   List<Def> defs,
@@ -233,7 +236,46 @@ public interface Ast {
                   List<Example> examples,
                   List<Fake> fakes,
                   String exampleFileTarget,
-                  SourcePos pos) implements Ast {}
+                  SourcePos pos) implements Ast {
+
+        public Module {
+            Objects.requireNonNull(exposing, "a module says whether it writes an exposing clause");
+        }
+
+        /**
+         * The names this module publishes (spec §a-module-publishes-what-it-declares): of the
+         * declarations it makes itself, the ones its {@code exposing} clause publishes.
+         *
+         * <p>What may be published is asked of the declarations and not of the names in scope. Its
+         * data and behaviors are its own. Of its definitions, the ones its source wrote are, and a
+         * core module's {@code private let} is not; a value an attached file declares is the rows',
+         * and a definition this module takes on to emit is another module's
+         * (spec §only-a-modules-own-declarations-are-published).
+         *
+         * <p>Walked over those declarations, each asked of the clause, so what is published is a
+         * part of what may be whatever the clause writes: an entry naming anything else is not a
+         * declaration anybody asks about.
+         *
+         * <p>The one place this is worked out. What a reader outside the module may name, which
+         * classes are public on the JVM, and what a single-file run may reach all read it.
+         */
+        public Set<String> published() {
+            Set<String> publishable = new LinkedHashSet<>();
+            for (Def def : defs) {
+                publishable.add(def.name());
+            }
+            for (BehaviorDef behavior : behaviors) {
+                publishable.add(behavior.name());
+            }
+            for (FnDef fn : fns) {
+                if (fn.role() instanceof DefinitionRole.Ordinary && !fn.isPrivate()) {
+                    publishable.add(fn.name());
+                }
+            }
+            publishable.removeIf(declaration -> !exposing.admits(declaration));
+            return Set.copyOf(publishable);
+        }
+    }
 
     /**
      * {@code fake <injected> | (in) -> out | ...} — a test double for an injected behavior, used to

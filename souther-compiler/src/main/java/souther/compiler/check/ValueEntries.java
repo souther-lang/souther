@@ -46,9 +46,8 @@ public final class ValueEntries {
      * The values {@code module} publishes: the definitions it wrote that {@link LoweringRole}
      * settles as a value's executable home, and that it exposes.
      *
-     * <p>What the module lists and no more, which is what another Souther module can import. A module
-     * that lists nothing is public to Java and offers no name to import, so nothing of it is called
-     * from another module. What a published helper names of this module's is not here either: a
+     * <p>What the module publishes and no more ({@link Hir.Module#published}), which is what another
+     * Souther module can import. What a published helper names of this module's is not here: a
      * helper is expanded into its reader, so nothing of the module's is called from outside on its
      * behalf.
      *
@@ -64,7 +63,7 @@ public final class ValueEntries {
         for (Hir.BehaviorDef behavior : module.behaviors()) {
             behaviors.add(behavior.name());
         }
-        Set<String> listed = new HashSet<>(module.exposing());
+        Set<String> listed = module.published();
         Set<String> published = new LinkedHashSet<>();
         for (Hir.FnDef fn : module.fns()) {
             boolean implementsBehavior = behaviors.contains(fn.name());

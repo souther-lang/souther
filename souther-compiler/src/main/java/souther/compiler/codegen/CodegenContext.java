@@ -82,9 +82,7 @@ final class CodegenContext {
     }
     final Map<String, List<GeneratedClass>> caseToSums;
     final Map<String, String> typePackage;
-    /** True when the module has no {@code exposing} clause: everything stays public. */
-    final boolean exposeAll;
-    /** Base names the module exposes (only these are public when {@link #exposeAll} is false). */
+    /** The names the module publishes ({@code Hir.Module#published}); only these are public. */
     final Set<String> exposed;
     /**
      * What a call this module leaves standing is typed against, by the name it is reached by.
@@ -451,7 +449,7 @@ final class CodegenContext {
                    NewtypeInners inners,
                    KernelSignatures kernels,
                    Map<String, List<GeneratedClass>> caseToSums,
-                   Map<String, String> typePackage, boolean exposeAll, Set<String> exposed,
+                   Map<String, String> typePackage, Set<String> exposed,
                    Map<String, Type> standingCalls, SourceLayouts layouts, QuotedFrom home,
                    LinkageReader linkage) {
         this.linkage = Objects.requireNonNull(linkage,
@@ -466,14 +464,13 @@ final class CodegenContext {
         this.kernels = kernels;
         this.caseToSums = caseToSums;
         this.typePackage = typePackage;
-        this.exposeAll = exposeAll;
         this.exposed = exposed;
         this.standingCalls = standingCalls;
     }
 
-    /** {@code ACC_PUBLIC} when the name is exposed (or the module exposes all), else 0. */
+    /** {@code ACC_PUBLIC} when the module publishes the name, else 0. */
     int pub(String name) {
-        return (exposeAll || exposed.contains(name)) ? ClassFile.ACC_PUBLIC : 0;
+        return exposed.contains(name) ? ClassFile.ACC_PUBLIC : 0;
     }
 
     // The same handful of classes is turned into a descriptor again at every emission site, and

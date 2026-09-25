@@ -265,17 +265,26 @@ before, and moves the boundary version with it (<<exposed-values>>).
 data TravelRequest = Drafting | Submitted | AwaitingPreApproval | PreApproved
 ----
 
-Public elements are listed with `+exposing+`.
+[[a-module-publishes-what-it-declares]]A module publishes what it declares to the modules outside it, and an `+exposing+` clause is what narrows that. A module that writes no clause publishes every declaration it makes. A module that writes one publishes exactly the declarations the clause names, so `+exposing ()+` publishes nothing: leaving the clause out and writing it empty are two different modules. Published and exposed mean the same thing in this specification; a name the clause itself lists is said to be *named by the clause*.
 
-[,souther]
+[,text]
 ----
+module example.open
+// every declaration of example.open is published
+
+module example.closed exposing ()
+// example.closed publishes no declaration
+
 module example.businesstrip exposing ( TravelRequest, submitTravelRequest, preApprove )
+// only these three are published
 ----
+
+[[only-a-modules-own-declarations-are-published]]What a module publishes is taken from its own declarations: its data, its behaviors, and its values and helpers (<<fn-declaration>>). Leaving the clause out publishes no definition the module did not declare, and so no definition carried in from another module; it publishes no value an attached file declares (<<an-attached-files-values-are-for-its-rows>>), and no core module's `+private let+` (<<stdlib>>). Naming any of these in a clause does not publish it either (<<exposing-lists-this-modules-own-definitions>>).
 
 `+exposing+` exposes at type granularity. A public data's `+decoder()+` / `+encoder()+` is always public API (<<jvm-codec>>), so member-level narrowing such as `+TravelRequest.decoder+` is not written — there is nothing to narrow.
 
 
-When an exposed behavior is a `+>->+` composition, its output SHALL be written in `+exposing+` in the form `+name : cases+` (<<declared-composition-output>>). A composition's output is inferred from its stages (<<composition-with-requirements>>), but at the public boundary a signature is required rather than inference, so that the contract used by another module or by Java does not change silently when an upstream stage changes. Omitting it is a compile error (E1605).
+When a behavior named by the clause is a `+>->+` composition, its output SHALL be written in `+exposing+` in the form `+name : cases+` (<<declared-composition-output>>). A composition's output is inferred from its stages (<<composition-with-requirements>>), but at a boundary the module states a signature is required rather than inference, so that the contract used by another module or by Java does not change silently when an upstream stage changes. Omitting it is a compile error (E1605). A composition a module publishes by writing no clause keeps its inferred output: the module has stated no boundary to hold it to, and has no clause to write one in.
 
 [,souther]
 ----
@@ -327,7 +336,7 @@ A published body's source travels in the jar and is read back by the importing c
 
 An exposed value SHALL NOT stand for a type the module keeps to itself, and an exposed helper SHALL NOT return one or take one — a reader would hold a value it has no name for, or be unable to write the argument it has to pass. What a definition stands for is its *type*, settled from its body (<<fn-rules>>), and not the constructions the body makes on the way: a definition may name a type it never builds (`+let published (n: Int) : List<Hidden> = []+`), and a type its body reached for on the way is its own workings — requiring those would put every inner type back in the reader's import list, which is what publishing the definition was for.
 
-The same holds for an injected behavior — one with no `+let+` — whether or not it is in `+exposing+`, because the abstract base it generates is public regardless (<<java-base-class>>) and the implementation writes both types where it overrides `+apply+`.
+The same holds for an injected behavior — one with no `+let+` — whether or not the module publishes it, because the abstract base it generates is public regardless (<<java-base-class>>) and the implementation writes both types where it overrides `+apply+`.
 
 Otherwise a reader is handed a value it has no name for, and the generated classes carry a public surface over classes it may not touch. It is reported where the module decides it, not at each reader that runs into it.
 
@@ -391,8 +400,8 @@ the compile classpath, and the CLI takes `+-cp+` / `+--class-path+`.
 souther compile app/order.sou -d out-app -cp out-lib
 ----
 
-What crosses that boundary is what crosses a boundary within one compilation: `+exposing+` is the
-gate, and an imported type may not be a case of a sum declared here (<<e1606>>). An imported type in
+What crosses that boundary is what crosses a boundary within one compilation: what a module
+publishes is the gate (<<a-module-publishes-what-it-declares>>), and an imported type may not be a case of a sum declared here (<<e1606>>). An imported type in
 a behavior's output union is unaffected — it joins through a bridge case this module emits
 (<<bridge-case>>), so nothing of the imported module has to be regenerated for it. A module read this
 way is not generated again — its classes and its examples belong to the build that produced them.
@@ -403,7 +412,8 @@ misunderstood. A module compiled here SHALL NOT also be on the class path, and a
 path that needs one absent from it is reported against the path.
 
 A module on the class path needs another when what it declares names it — in a field's type, a
-spread, an invariant, a helper an invariant calls, or an exposed composition's output. A `+let+` body
+spread, an invariant, a helper an invariant calls, or the output an `+exposing+` clause declares for a
+composition. A `+let+` body
 is not published, so an `+import+` only a `+let+` used is not one the importing project has to
 satisfy: a dependency's implementation-only dependencies need not be on the class path.
 
@@ -1211,7 +1221,7 @@ Because a local shadowing a built-in value is always an error, using a *built-in
 
 A field is read as `+e.field+`, where `+e+` is a name, a call, or a construction, and `+.a.b+` chains from the left. So `+amountOf(i).value+` opens a newtype on the call that builds it, with no `+let+` written to hold the result. This never competes with the bare `+.field+` getter of <<blocks>>: a getter starts an expression, a read follows one.
 
-*Reading* a field is possible wherever that data's type is visible. Within the same module, any data of that module may be read. A data of another module may have its fields read if it is exposed with `+exposing+` — being importable means it is exposed. An exposed data has all fields readable (there is no per-field exposure). A behavior may read the fields of its input data even when they come from another module.
+*Reading* a field is possible wherever that data's type is visible. Within the same module, any data of that module may be read. A data of another module may have its fields read if that module publishes it (<<a-module-publishes-what-it-declares>>) — being importable means it is exposed. An exposed data has all fields readable (there is no per-field exposure). A behavior may read the fields of its input data even when they come from another module.
 
 A value of a type its module keeps to itself never arrives in another module, because the field that would have carried it there cannot exist: what a module reaches out with may not rest on what it keeps (<<exposed-surface>>). So "the data's type is visible" is the whole rule, and there is no second one about what a reader may do with a value it has no name for.
 
@@ -1993,7 +2003,7 @@ All of them are given at the one place the conjunct is written; the parts have n
 [#invariant-reify]
 ==== Reifying a cross-behavior relation
 
-The check does not infer relations across behaviors: an implicit relation would be an implicit cross-unit contract, which the language declines — `+depends on+` and an exposed composition's output are always declared, not inferred (<<depends-on>>). The consistent way to carry a relation that fits in one value is to *reify it as a type invariant*, which the seeding then assumes downstream for free. A relation between a behavior's parameters and its answer, which cannot fit in the answer without changing the model's shape, is declared with `+ensures+` (<<ensures>>).
+The check does not infer relations across behaviors: an implicit relation would be an implicit cross-unit contract, which the language declines — `+depends on+`, and the output of a composition an `+exposing+` clause names, are always declared, not inferred (<<depends-on>>, <<declared-composition-output>>). The consistent way to carry a relation that fits in one value is to *reify it as a type invariant*, which the seeding then assumes downstream for free. A relation between a behavior's parameters and its answer, which cannot fit in the answer without changing the model's shape, is declared with `+ensures+` (<<ensures>>).
 
 [,souther]
 ----
@@ -2876,7 +2886,7 @@ The type comes from the behavior. The `+let+` side only names its arguments, cor
 
 Arguments are the behavior's argument list followed by `+depends on+` in declaration order. A `+let+` is the pre-injection function and a behavior's type is the post-injection type, so a `+let+` has as many more arguments as there are `+depends on+` (<<depends-on>>). If `+depends on+` is empty, both have the same arguments.
 
-A `+let+` with no corresponding behavior is a *helper*. Not being a domain behavior, it does not pollute the behavior list, cannot be placed in a `+>->+` stage, and does not appear in `+exposing+`. It states its own type, though a parameter whose type its body determines may leave it unwritten (below).
+A `+let+` with no corresponding behavior is a *helper*. Not being a domain behavior, it does not pollute the behavior list and cannot be placed in a `+>->+` stage. It states its own type, though a parameter whose type its body determines may leave it unwritten (below).
 
 [,souther]
 ----
@@ -3016,12 +3026,12 @@ public abstract class FindMember implements Behavior<MemberId, FindMemberResult>
 
 Java `+extends+` this and implements `+apply+` (<<java-example>>). Success values (such as `+Member+`) are assembled by the decoder; failure cases are created by the inherited `+protected+` factory. Because a data's constructor is non-public, the implementation may be placed outside the generated package (in any package). An output case that is not a unit or that carries an invariant gets no factory and is obtained via the decoder.
 
-This abstract base class is *always public*, regardless of whether it is in `+exposing+`, so that a Java implementation can `+extends+` it from any module; a behavior subject to injection is by definition implemented outside the module. `+exposing+` controls the exposure of domain types, but the injection base class is scaffolding for implementation and is exposed independently. Without it the injection example of <<example>> would not hold.
+This abstract base class is *always public*, regardless of whether the module publishes the behavior, so that a Java implementation can `+extends+` it from any module; a behavior subject to injection is by definition implemented outside the module. What a module publishes (<<a-module-publishes-what-it-declares>>) controls the exposure of domain types, but the injection base class is scaffolding for implementation and is exposed independently. Without it the injection example of <<example>> would not hold.
 
 Because the base is public and the implementation overrides `+apply+` from outside the module, the implementation *writes* the behavior's input type and its output type. A type the module keeps to itself cannot be written there, and no raw-typed override stands in for it — the erased signature clashes with the one being overridden. So an injected behavior's input and output MUST be exposed by the module that declares them, whether or not the behavior itself is in `+exposing+` (<<exposed-surface>>).
 
 [#injected-constructs-are-creatable]
-When a data listed in `+constructs+` is not exposed with `+exposing+`, it is a compile error (E1305). A non-exposed data has no public decoder, so a Java implementation would have no way to create that value; if exposed, it can be created via the decoder (<<jvm-codec>>). Every entry is a non-unit data (<<constructs-excludes-unit-data>>), so this reaches all of them. A unit case of the output is creatable without being exposed, through the `+protected+` factory the base class carries for it.
+When a data listed in `+constructs+` is one its module does not publish (<<a-module-publishes-what-it-declares>>), it is a compile error (E1305). A non-exposed data has no public decoder, so a Java implementation would have no way to create that value; if exposed, it can be created via the decoder (<<jvm-codec>>). Every entry is a non-unit data (<<constructs-excludes-unit-data>>), so this reaches all of them. A unit case of the output is creatable without being exposed, through the `+protected+` factory the base class carries for it.
 
 What is confined is <<invariant-on-construct>>. An invariant-bearing data is always checked whether it goes through `+__construct+` or the decoder. So even if it can be created from outside, *no unvalidated value can be created*. A unit data has nothing to validate, so nothing is lost by allowing it to be created from outside.
 
@@ -3235,7 +3245,7 @@ behavior placeOrder = validateOrder >-> priceOrder >-> allocateStock -> PlacedOr
 Input is not declared. A pipeline is point-free, and the input is decided by the first stage (<<sequential-composition>>). Only the output may be declared. A dependency (`+depends on+`) has the same distant-change risk, but a composition leaves it inferred (<<depends-on>>).
 
 [#exposed-composition-declares-its-output]
-For an internal composition this declaration is optional. But for a composition exposed with `+exposing+` it is *required*, written not on the definition line but in the exposing list as `+name : cases+` (<<modules>>). Leaving a public boundary to inference means that when an upstream stage adds a case, it reaches another compilation unit (another module, or a non-exhaustive Java switch or JSON serialization) silently, and the definition site has nothing to signal it. Placing a signature in `+exposing+` makes the composition's definition error (E1604) the moment a case is added, and the author chooses to handle the case or update the signature. If no signature exists, it is E1605. A non-composition behavior writes its type at the definition, so it MUST NOT write a signature in `+exposing+` (doing so is E1605). This division corresponds to.
+For an internal composition this declaration is optional, and so it is for one published because its module writes no `+exposing+` clause (<<a-module-publishes-what-it-declares>>). But for a composition named by an `+exposing+` clause it is *required*, written not on the definition line but in the exposing list as `+name : cases+` (<<modules>>). Leaving a public boundary to inference means that when an upstream stage adds a case, it reaches another compilation unit (another module, or a non-exhaustive Java switch or JSON serialization) silently, and the definition site has nothing to signal it. Placing a signature in `+exposing+` makes the composition's definition error (E1604) the moment a case is added, and the author chooses to handle the case or update the signature. If no signature exists, it is E1605. A non-composition behavior writes its type at the definition, so it MUST NOT write a signature in `+exposing+` (doing so is E1605). This division corresponds to.
 
 [#case-propagation]
 == behavior case propagation and Decoder error accumulation
@@ -4293,9 +4303,9 @@ not one.
 Writing `+T(v)+` on its own still aborts (<<violation-destination>>). This is the form a writer
 chooses at the site, and it is what lets a rule be stated once — the rule lives in the type's
 `+invariant+`, and a guard restating it can drift from it. Across a module boundary the restatement
-cannot be written at all: a helper `+let+` an invariant names is not exposed (<<exposed-surface>>), and a
-behavior cannot be called from an invariant (<<invariant-expressions>>). The attempt names the type,
-which the declaring module does expose.
+may not be writable at all: a helper `+let+` an invariant names may be one the declaring module keeps
+(<<a-module-publishes-what-it-declares>>), and a behavior cannot be called from an invariant
+(<<invariant-expressions>>). The attempt names the type, which the declaring module does publish.
 
 Newtype arithmetic (<<newtype-arithmetic>>) re-wraps rather than constructs, so it is not what `+as+`
 takes; write the construction out (`+T(a.value - b.value)+`).
@@ -4380,7 +4390,7 @@ let trim (s: String): String = intrinsic "string.trim"
 
 An intrinsic MUST declare its return type (it cannot be inferred from `+intrinsic+`). A call is type-checked against the declared signature — that is, `+trim+` is "a built-in function whose signature is placed in core", and this declaration, not a hardcoded compiler table, decides its arguments and return value — and the backend emits the bytecode for `+key+`. It is neither inlined nor lowered. Only the reserved namespace may write it. A user cannot call the JVM directly and only calls blessed functions (<<asymmetric-interop>>).
 
-A core module may also write `+private let+`. A `+private+` declaration is part of the library's implementation and not of its surface: it is reachable from the library's own modules and from nowhere else, so a module outside the reserved namespace that writes its name is told the library has no such member — the same answer a misspelling gets, because from where the caller stands they are the same thing. `+private+` is a core privilege like `+intrinsic+`; writing it in a user module is a syntax error, and there would be nothing for it to do there, since everything a user module declares is published (<<modules>>). `+List.foldFrom+`, which `+List.fold+` supplies the starting index for, is one.
+A core module may also write `+private let+`. A `+private+` declaration is part of the library's implementation and not of its surface: it is reachable from the library's own modules and from nowhere else, so a module outside the reserved namespace that writes its name is told the library has no such member — the same answer a misspelling gets, because from where the caller stands they are the same thing. `+private+` is a core privilege like `+intrinsic+`; writing it in a user module is a syntax error, and there would be nothing for it to do there, since a user module keeps a declaration to itself by writing an `+exposing+` clause that leaves it out (<<a-module-publishes-what-it-declares>>). `+List.foldFrom+`, which `+List.fold+` supplies the starting index for, is one.
 
 *Every* standard-library function is declared in a core module this way, whether its body is Souther (self-hosted, like `+List.map+` over `+foldFrom+`) or `+intrinsic "key"+` (a JVM kernel). The declaration is the single source of truth for the signature — there is no compiler table of signatures, and a function the compiler can call but a declaration does not describe does not exist. What stays in the compiler is what the *type language cannot say*, as a side condition on a declared signature rather than in place of one:
 
@@ -6230,7 +6240,7 @@ Reported where the name is written — in a `+depends on+` clause, or as a `+>->
 `Step`, which this module keeps to itself.
 ----
 
-Reported where the module that publishes the helper is compiled (<<a-published-helper-builds-only-what-its-reader-can-reach>>). A published helper is expanded into its reader, so the reader's classes name what the helper builds, and a type that is not in `+exposing+` is not one they can name. Nothing in the helper's signature shows it: `Step` may occur only in the body, or only in a private value the body names, which is expanded with it.
+Reported where the module that publishes the helper is compiled (<<a-published-helper-builds-only-what-its-reader-can-reach>>). A published helper is expanded into its reader, so the reader's classes name what the helper builds, and a type its module keeps is not one they can name. Nothing in the helper's signature shows it: `Step` may occur only in the body, or only in a private value the body names, which is expanded with it.
 
 Either expose the type, or build it somewhere the reader does not run — a published value runs in the module that declares it.
 
@@ -6276,18 +6286,18 @@ produces PlacedOrder | OutOfStock | BeingReturned.
 Hint: Update the declared output, or handle the extra case before the output.
 ----
 
-A composition with a written declaration requires exact agreement with the inferred output (<<declared-composition-output>>). An internal composition with none written stays inferred and this check does not run. A public composition requires the declaration, reconciling the signature placed in `+exposing+` with inference (<<declared-composition-output>>, E1605).
+A composition with a written declaration requires exact agreement with the inferred output (<<declared-composition-output>>). A composition with none written stays inferred and this check does not run, whether it is internal or published because its module writes no clause. A composition an `+exposing+` clause names requires the declaration, reconciling the signature placed in `+exposing+` with inference (<<declared-composition-output>>, E1605).
 
 [#e1605]
-=== Missing / misplaced output signature of a public composition
+=== Missing / misplaced output signature of a composition `exposing` names
 
 [,text]
 ----
-Exposed composition `placeOrder` must declare its output in `exposing`.
+`exposing` names the composition `placeOrder`, so it must declare its output there.
 Hint: Write `exposing ( placeOrder : PlacedOrder | OutOfStock )`.
 ----
 
-A `+>->+` composition exposed with `+exposing+` requires an output signature (<<declared-composition-output>>). Its absence is this error. Writing a signature in `+exposing+` for a non-composition behavior is also E1605, since the type is fixed at the definition.
+A `+>->+` composition named by an `+exposing+` clause requires an output signature (<<declared-composition-output>>). Its absence is this error. A composition its module publishes by writing no clause is not named by one, and keeps its inferred output. Writing a signature in `+exposing+` for a non-composition behavior is also E1605, since the type is fixed at the definition.
 
 [#e1606]
 === A declared sum's case is imported
