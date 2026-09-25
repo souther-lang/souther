@@ -9,7 +9,6 @@ import souther.compiler.observe.StoodIn;
 import souther.compiler.observe.ValueTypes;
 import souther.compiler.types.ValueName;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -50,27 +49,6 @@ public final class StandsIn {
             throw new IllegalArgumentException("what stands in for a dependency is what the row"
                     + " states of it, read with what the declarations say and where the dependency's"
                     + " arguments stand, and what computes each value it states");
-        }
-        // One fact, stated once: the entries and the rest are the ones `stated` holds, each with
-        // what computes it. Two lists a reader zipped would be a second place that said which
-        // definition is whose.
-        List<StoodIn.Entry> computedFor = new ArrayList<>();
-        for (Entry entry : computed.entries()) {
-            computedFor.add(entry.stated());
-        }
-        if (!computedFor.equals(stated.entries())) {
-            throw new IllegalArgumentException("what computes a stand-in's entries is said of the"
-                    + " entries it states: " + computedFor + " against " + stated.entries());
-        }
-        boolean agrees = switch (computed.otherwise()) {
-            case Otherwise.Answers answers -> answers.stated().equals(stated.otherwise());
-            case Otherwise.NothingStated _ ->
-                    stated.otherwise() instanceof StoodIn.Otherwise.NothingStated;
-        };
-        if (!agrees) {
-            throw new IllegalArgumentException("what computes a stand-in's answer for the rest is"
-                    + " said of the one it states: " + computed.otherwise() + " against "
-                    + stated.otherwise());
         }
         this.stated = stated;
         this.types = types;
@@ -306,8 +284,14 @@ public final class StandsIn {
         record NothingStated() implements Otherwise {}
     }
 
-    /** What the assembler hands a stand-in: its entries and its answer for the rest, each with what
-     *  computes it. */
+    /**
+     * What the assembler hands a stand-in: its entries and its answer for the rest, each with what
+     * computes it.
+     *
+     * <p>Which definition is whose is settled where these are made, against where each value is
+     * written, which the reading that named the definitions carried for that. Asked again here, it
+     * would be the entries compared with the ones they were made from.
+     */
     record Computed(List<Entry> entries, Otherwise otherwise) {
 
         Computed {

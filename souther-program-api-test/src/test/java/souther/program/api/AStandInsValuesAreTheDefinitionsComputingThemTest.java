@@ -66,10 +66,12 @@ class AStandInsValuesAreTheDefinitionsComputingThemTest {
 
             fake tierOf
                 | (Individual { name = "ada" }) -> Retail { rate = 1 }
+                | (Individual { name = "cy" }) -> Wholesale { rate = 5 }
                 | _ -> Wholesale { rate = 2 }
 
             example rateFor
                 | "listed" : (Individual { name = "ada" }) -> 1
+                | "owed" : (Individual { name = "cy" }) -> <?>
                 | "the rest" : (Corporation { company = "acme" }) -> 2
                 | "on the row" : (Corporation { company = "acme" }) with tierOf = Retail { rate = 3 } -> 3
 
@@ -99,8 +101,12 @@ class AStandInsValuesAreTheDefinitionsComputingThemTest {
                 .filter(it -> it.identity().equals(new RowIdentity.Named(named)))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("no row `" + named + "` among " + of.rows()));
-        List<StandsIn> standsIn =
-                assertInstanceOf(CheckedRow.WithStandIns.class, row.statement()).standsIn();
+        List<StandsIn> standsIn = switch (row.statement()) {
+            case CheckedRow.WithStandIns it -> it.standsIn();
+            case CheckedRow.AnswerOwed it -> it.standsIn();
+            case CheckedRow.SelfContained _, CheckedRow.NotReproducible _ ->
+                    throw new AssertionError(row + " is " + row.statement());
+        };
         assertEquals(1, standsIn.size(), () -> "what stands in for " + row + " is " + standsIn);
         return standsIn.getFirst();
     }
@@ -133,6 +139,42 @@ class AStandInsValuesAreTheDefinitionsComputingThemTest {
         assertEquals(declared("Individual"),
                 caseStandingAs(entry.argumentDefinitions().getFirst().body(), "Orderer"));
         assertEquals(declared("Retail"), caseStandingAs(entry.answerDefinition().body(), "Tier"));
+    }
+
+    /**
+     * Each entry is computed by the definitions of the row it is, and not of the row beside it: the
+     * table lists two, answering different cases.
+     */
+    @Test
+    void eachEntryIsComputedByTheDefinitionsOfItsOwnRow() {
+        CheckedProgram program = CheckedProgram.of(List.of(MODULE, ATTACHED));
+        List<StandsIn.Entry> entries = standingIn(program, "rateFor", "listed").entries();
+
+        assertEquals(List.of(declared("Retail"), declared("Wholesale")),
+                entries.stream().map(it -> caseStandingAs(it.answerDefinition().body(), "Tier"))
+                        .toList());
+    }
+
+    /**
+     * A row whose answer is owed hands over what stands in for its dependency as a row stating one
+     * does: an output running it to find the answer runs it against what the row states the
+     * dependency answers.
+     */
+    @Test
+    void aRowWhoseAnswerIsOwedHandsOverWhatStandsIn() {
+        CheckedProgram program = CheckedProgram.of(List.of(MODULE, ATTACHED));
+        CheckedRow owed = program.module("orders")
+                .behavior(new ValueName.Behavior("orders", "rateFor")).rows().stream()
+                .filter(it -> it.identity().equals(new RowIdentity.Named("owed")))
+                .findFirst().orElseThrow();
+        assertInstanceOf(CheckedRow.AnswerOwed.class, owed.statement());
+        StandsIn standsIn = standingIn(program, "rateFor", "owed");
+
+        assertEquals(List.of(declared("Retail"), declared("Wholesale")),
+                standsIn.entries().stream()
+                        .map(it -> caseStandingAs(it.answerDefinition().body(), "Tier")).toList());
+        assertEquals(declared("Wholesale"),
+                caseStandingAs(computingTheRest(standsIn).body(), "Tier"));
     }
 
     /** What a table answers for the rest is computed by the definition of its {@code _} row. */

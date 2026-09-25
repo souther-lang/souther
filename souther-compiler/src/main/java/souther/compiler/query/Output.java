@@ -1136,10 +1136,15 @@ public final class Output {
          * What computes each value a row states one dependency answers, by the name each was
          * emitted under.
          *
-         * <p>In the shape of the {@link StoodIn} it is about and in its order: an entry for each of
-         * its entries, the arguments before the answer, and what computes the answer for the rest
-         * where it states one. So which entries there are is what the evaluation found the table
-         * can answer with, and nothing here decides it again.
+         * <p>In the shape of the {@link StoodIn} it is about: an entry for each of its entries, the
+         * arguments before the answer, and what computes the answer for the rest where it states
+         * one. So which entries there are is what the evaluation found the table can answer with,
+         * and nothing here decides it again.
+         *
+         * <p>Each entry, and the answer for the rest, carries where the stand-in says it is
+         * written, which is what it was found among the module's tables by. A reader putting these
+         * beside the stand-in's own entries holds each to that rather than to where it sits in a
+         * list.
          */
         public record StandInDefinitions(List<EntryDefinitions> entries, Otherwise otherwise) {
 
@@ -1152,14 +1157,15 @@ public final class Output {
             }
 
             /** What computes one entry's arguments, in the order the dependency takes them, and
-             *  its answer. */
-            public record EntryDefinitions(List<String> arguments, String answer) {
+             *  its answer; {@code at} is where the entry is written, as {@link StoodIn.Entry#at}
+             *  says. */
+            public record EntryDefinitions(SourcePos at, List<String> arguments, String answer) {
 
                 public EntryDefinitions {
                     arguments = List.copyOf(arguments);
-                    if (answer == null) {
-                        throw new IllegalArgumentException("an entry's answer is computed by"
-                                + " something");
+                    if (at == null || answer == null) {
+                        throw new IllegalArgumentException("an entry is written somewhere, and its"
+                                + " answer is computed by something");
                     }
                 }
             }
@@ -1170,13 +1176,14 @@ public final class Output {
              */
             public sealed interface Otherwise {
 
-                /** The answer for the rest is computed by this. */
-                record Computed(String definition) implements Otherwise {
+                /** The answer for the rest, written at {@code at} as
+                 *  {@link StoodIn.Otherwise.Answer#at} says, is computed by this. */
+                record Computed(SourcePos at, String definition) implements Otherwise {
 
                     public Computed {
-                        if (definition == null) {
-                            throw new IllegalArgumentException("an answer is computed by"
-                                    + " something");
+                        if (at == null || definition == null) {
+                            throw new IllegalArgumentException("an answer is written somewhere and"
+                                    + " computed by something");
                         }
                     }
                 }
@@ -1382,9 +1389,9 @@ public final class Output {
                                 + " is read as a stand-in that lists entries or answers nothing");
                     }
                     return new StandInDefinitions(List.of(),
-                            new StandInDefinitions.Otherwise.Computed(emittedFor(prepared,
-                                    with.value(), "what the `with` at " + with.pos()
-                                            + " answers")));
+                            new StandInDefinitions.Otherwise.Computed(with.value().pos(),
+                                    emittedFor(prepared, with.value(), "what the `with` at "
+                                            + with.pos() + " answers")));
                 }
             }
             for (FakeTables.Occurrence written : prepared.forExamples().fakes().written()) {
@@ -1411,14 +1418,16 @@ public final class Output {
                     arguments.add(emittedFor(prepared, argument,
                             "an argument of the entry at " + entry.at()));
                 }
-                entries.add(new StandInDefinitions.EntryDefinitions(arguments, emittedFor(prepared,
-                        written.output(), "the answer of the entry at " + entry.at())));
+                entries.add(new StandInDefinitions.EntryDefinitions(written.pos(), arguments,
+                        emittedFor(prepared, written.output(),
+                                "the answer of the entry at " + entry.at())));
             }
             StandInDefinitions.Otherwise otherwise = switch (stoodIn.otherwise()) {
-                case StoodIn.Otherwise.Answer(ObservedValue _, SourcePos at) ->
-                        new StandInDefinitions.Otherwise.Computed(emittedFor(prepared,
-                                answerForTheRestAt(table, at),
-                                "the answer for the rest at " + at));
+                case StoodIn.Otherwise.Answer(ObservedValue _, SourcePos at) -> {
+                    Hir.Expr answer = answerForTheRestAt(table, at);
+                    yield new StandInDefinitions.Otherwise.Computed(answer.pos(),
+                            emittedFor(prepared, answer, "the answer for the rest at " + at));
+                }
                 case StoodIn.Otherwise.NothingStated _ ->
                         new StandInDefinitions.Otherwise.NothingStated();
             };

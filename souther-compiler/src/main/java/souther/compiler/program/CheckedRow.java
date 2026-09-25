@@ -103,13 +103,13 @@ public final class CheckedRow {
     public static final class SelfContained implements Statement {
 
         private final Asking asking;
-        private final List<CheckedHelper> inputDefinitions;
+        private final Handover handover;
 
-        SelfContained(RowStatement.Stated stated, List<CheckedHelper> inputDefinitions,
-                      ValueTypes types, Position answers) {
+        SelfContained(RowStatement.Stated stated, Supplies supplies, ValueTypes types,
+                      Position answers) {
             this.asking = new Asking(stated, types, answers);
-            this.inputDefinitions = computing(stated, inputDefinitions);
-            if (!stated.standIns().isEmpty()) {
+            this.handover = Handover.of(stated, supplies, types);
+            if (!handover.standIns().isEmpty()) {
                 // What the behavior takes injected is the rest of what makes the row runnable, so a
                 // row stating one is not a row an output applies to its emission and nothing else.
                 throw new IllegalArgumentException("a row that needs something stood in for is not"
@@ -122,9 +122,9 @@ public final class CheckedRow {
             return asking.stated();
         }
 
-        /** What computes each value it hands over ({@link CheckedRow#computing}). */
+        /** What computes each value it hands over ({@link Handover#inputDefinitions}). */
         public List<CheckedHelper> inputDefinitions() {
-            return inputDefinitions;
+            return handover.inputDefinitions();
         }
 
         /** Whether {@code answered} is what this row states the behavior answers. */
@@ -150,41 +150,16 @@ public final class CheckedRow {
     public static final class WithStandIns implements Statement {
 
         private final Asking asking;
-        private final List<CheckedHelper> inputDefinitions;
-        private final List<StandsIn> standIns;
+        private final Handover handover;
 
-        WithStandIns(RowStatement.Stated stated, List<CheckedHelper> inputDefinitions,
-                     ValueTypes types, Position answers,
-                     Map<ValueName.Behavior, List<Position>> arguments,
-                     Map<ValueName.Behavior, StandsIn.Computed> computed) {
+        WithStandIns(RowStatement.Stated stated, Supplies supplies, ValueTypes types,
+                     Position answers) {
             this.asking = new Asking(stated, types, answers);
-            this.inputDefinitions = computing(stated, inputDefinitions);
-            if (stated.standIns().isEmpty()) {
+            this.handover = Handover.of(stated, supplies, types);
+            if (handover.standIns().isEmpty()) {
                 throw new IllegalArgumentException("a row with nothing stood in for is one an"
                         + " output can run on its own");
             }
-            // One per stand-in the row states, made here rather than handed in. What the row states
-            // of its stand-ins and what a reader asks them are one fact, and taking the second as a
-            // list would let a row answer one thing about a dependency through `states` and another
-            // through `standsIn`. What comes from outside is where each dependency's arguments
-            // stand, which is what its declaration says and not what the row states, and what
-            // computes each value a stand-in states, which `StandsIn` holds to what it states.
-            List<StandsIn> standIns = new ArrayList<>();
-            for (StoodIn stoodIn : stated.standIns()) {
-                List<Position> stands = arguments.get(stoodIn.dependency());
-                if (stands == null) {
-                    throw new IllegalArgumentException("nothing says where the arguments of `"
-                            + stoodIn.dependency() + "` stand, which is what its stand-in is asked"
-                            + " at");
-                }
-                StandsIn.Computed values = computed.get(stoodIn.dependency());
-                if (values == null) {
-                    throw new IllegalArgumentException("nothing says what computes the values the"
-                            + " stand-in for `" + stoodIn.dependency() + "` states");
-                }
-                standIns.add(new StandsIn(stoodIn, types, stands, values));
-            }
-            this.standIns = List.copyOf(standIns);
         }
 
         /** The values it hands over and what it states of the answer. */
@@ -192,9 +167,9 @@ public final class CheckedRow {
             return asking.stated();
         }
 
-        /** What computes each value it hands over ({@link CheckedRow#computing}). */
+        /** What computes each value it hands over ({@link Handover#inputDefinitions}). */
         public List<CheckedHelper> inputDefinitions() {
-            return inputDefinitions;
+            return handover.inputDefinitions();
         }
 
         /**
@@ -204,7 +179,7 @@ public final class CheckedRow {
          * answered is a row that stopped at the first import nothing was behind.
          */
         public List<StandsIn> standsIn() {
-            return standIns;
+            return handover.standIns();
         }
 
         /** Whether {@code answered} is what this row states the behavior answers. */
@@ -277,13 +252,18 @@ public final class CheckedRow {
      * <p>Made where the program is assembled and nowhere else, as the other arms are: what computes
      * each input is a definition of the module the row is written in, and one made with any other
      * would be a row running something its module does not hold.
+     *
+     * <p>Whether a row's answer is owed and whether it needs something stood in for are two
+     * questions, so a row of this arm hands over its stand-ins as the other two do. An output that
+     * runs it to find the answer the author owes runs it against what the row states the
+     * dependencies answer, as the compile did.
      */
     public static final class AnswerOwed implements Statement {
 
         private final RowStatement.Stated states;
-        private final List<CheckedHelper> inputDefinitions;
+        private final Handover handover;
 
-        AnswerOwed(RowStatement.Stated states, List<CheckedHelper> inputDefinitions) {
+        AnswerOwed(RowStatement.Stated states, Supplies supplies, ValueTypes types) {
             if (states == null) {
                 throw new IllegalArgumentException("a row whose answer is owed states its values");
             }
@@ -292,7 +272,7 @@ public final class CheckedRow {
                         + " no answer: " + states.expects());
             }
             this.states = states;
-            this.inputDefinitions = computing(states, inputDefinitions);
+            this.handover = Handover.of(states, supplies, types);
         }
 
         /** The values it hands over, and that its answer is owed. */
@@ -300,9 +280,17 @@ public final class CheckedRow {
             return states;
         }
 
-        /** What computes each value it hands over ({@link CheckedRow#computing}). */
+        /** What computes each value it hands over ({@link Handover#inputDefinitions}). */
         public List<CheckedHelper> inputDefinitions() {
-            return inputDefinitions;
+            return handover.inputDefinitions();
+        }
+
+        /**
+         * What answers each of the behavior's dependencies while the row runs, in the order it
+         * requires them; empty for a behavior that depends on nothing.
+         */
+        public List<StandsIn> standsIn() {
+            return handover.standIns();
         }
 
         @Override
@@ -312,28 +300,92 @@ public final class CheckedRow {
     }
 
     /**
-     * What computes each value a row hands over, in order, held to one for each.
+     * What the assembler hands a row that states values, whichever arm it is: what computes each
+     * input, where each dependency's arguments stand, and what computes each value its stand-ins
+     * state.
      *
-     * <p>The operand the row writes, as the definition its module holds for it: its body is the
-     * operand elaborated at the parameter it is handed to, and stands as that parameter, as a body
-     * standing at a declared type does. So a case of a sum written where the sum is taken stands as
-     * the sum, and a value given to an optional field is the optional. An output applying the
-     * behavior calls these, and does not build a value out of what {@code states()} observed —
-     * which would be the elaboration worked out a second time, outside the checker. Each is among
-     * its module's helpers, so what its body can end with is {@link CheckedProgram#abortsAt} of it.
-     *
-     * <p>Named apart from {@code states().inputs()}, which is a value and not a computation: what
-     * those calls answered when the compile ran the row, and the values the row is compared and
-     * reported by.
+     * <p>One value for every arm, so that what a row hands over is made the same way whether or not
+     * its answer is owed and whether or not it needs something stood in for. Handed to one arm at
+     * a time, what the others needed was a thing each of them had to be remembered for.
      */
-    private static List<CheckedHelper> computing(RowStatement.Stated stated,
-                                                 List<CheckedHelper> definitions) {
-        if (definitions == null || definitions.contains(null)
-                || definitions.size() != stated.inputs().size()) {
-            throw new IllegalArgumentException("a row that hands over " + stated.inputs().size()
-                    + " value(s) says what computes each of them: " + definitions);
+    record Supplies(List<CheckedHelper> inputDefinitions,
+                    Map<ValueName.Behavior, List<Position>> arguments,
+                    Map<ValueName.Behavior, StandsIn.Computed> computed) {
+
+        Supplies {
+            if (inputDefinitions == null || arguments == null || computed == null) {
+                throw new IllegalArgumentException("a row that states values is handed what"
+                        + " computes them, and what its stand-ins are asked at and computed by");
+            }
+            inputDefinitions = List.copyOf(inputDefinitions);
+            arguments = Map.copyOf(arguments);
+            computed = Map.copyOf(computed);
         }
-        return List.copyOf(definitions);
+    }
+
+    /**
+     * What a row that states values hands an output to run it with: what computes each input, and
+     * what answers each dependency.
+     *
+     * @param inputDefinitions what computes each value the row hands over, in order, one for each.
+     *     The operand the row writes, as the definition its module holds for it: its body is the
+     *     operand elaborated at the parameter it is handed to, and stands as that parameter, as a
+     *     body standing at a declared type does. So a case of a sum written where the sum is taken
+     *     stands as the sum, and a value given to an optional field is the optional. An output
+     *     applying the behavior calls these, and does not build a value out of what
+     *     {@code states()} observed, which would be the elaboration worked out a second time
+     *     outside the checker. Each is among its module's helpers, so what its body can end with
+     *     is {@link CheckedProgram#abortsAt} of it. Named apart from {@code states().inputs()},
+     *     which is a value and not a computation: what those calls answered when the compile ran
+     *     the row, and the values the row is compared and reported by
+     * @param standIns one for each stand-in the row states, in the order the behavior requires
+     *     them
+     */
+    private record Handover(List<CheckedHelper> inputDefinitions, List<StandsIn> standIns) {
+
+        private Handover {
+            inputDefinitions = List.copyOf(inputDefinitions);
+            standIns = List.copyOf(standIns);
+        }
+
+        /**
+         * What {@code stated} hands over, made of {@code supplies}.
+         *
+         * <p>The stand-ins are made here rather than handed in. What the row states of its
+         * stand-ins and what a reader asks them are one fact, and taking the second as a list
+         * would let a row answer one thing about a dependency through {@code states} and another
+         * through {@code standsIn}. What comes from outside is where each dependency's arguments
+         * stand, which is what its declaration says and not what the row states, and what computes
+         * each value a stand-in states.
+         */
+        static Handover of(RowStatement.Stated stated, Supplies supplies, ValueTypes types) {
+            if (stated == null || supplies == null || types == null) {
+                throw new IllegalArgumentException("a row hands over what it states, made of what"
+                        + " it was supplied with and read with what the declarations say");
+            }
+            List<CheckedHelper> inputs = supplies.inputDefinitions();
+            if (inputs.size() != stated.inputs().size()) {
+                throw new IllegalArgumentException("a row that hands over "
+                        + stated.inputs().size() + " value(s) says what computes each of them: "
+                        + inputs);
+            }
+            List<StandsIn> standIns = new ArrayList<>();
+            for (StoodIn stoodIn : stated.standIns()) {
+                List<Position> stands = supplies.arguments().get(stoodIn.dependency());
+                if (stands == null) {
+                    throw new IllegalArgumentException("nothing says where the arguments of `"
+                            + stoodIn.dependency() + "` stand, which is what its stand-in is asked"
+                            + " at");
+                }
+                StandsIn.Computed values = supplies.computed().get(stoodIn.dependency());
+                if (values == null) {
+                    throw new IllegalArgumentException("nothing says what computes the values the"
+                            + " stand-in for `" + stoodIn.dependency() + "` states");
+                }
+                standIns.add(new StandsIn(stoodIn, types, stands, values));
+            }
+            return new Handover(inputs, standIns);
+        }
     }
 
     /**
