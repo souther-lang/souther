@@ -17,7 +17,6 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.DefinitionRole;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
-import souther.compiler.check.BehaviorBodies;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Requirements;
 import souther.compiler.core.Contract;
@@ -150,10 +149,7 @@ public final class Backend {
 
     /** Generates a module's classes. {@code symbols} covers own plus imported definitions;
      * {@code typePackage} maps an imported type or behavior name to its declaring module (spec §modules);
-     * {@code injectionTargets} are the module's own behaviors Java supplies, each of which gets an
-     * abstract base here (spec §injected-behavior); {@code bodies} is where each behavior of
-     * the module gets its body, which is also what tells one nobody has written from one Java
-     * supplies; {@code requirements} says what each behavior takes injected and in
+     * {@code requirements} says what each behavior takes injected and in
      * what order — the answer the example verifier reads too, so a fake reaches the parameter this
      * constructor binds it to; {@code checked} carries the type checker's elaborated bodies, which is what
      * the emitter reads instead of inferring types again; {@code dischargeInvariants} carries
@@ -163,15 +159,14 @@ public final class Backend {
      * construction is refused by and is the checker's answer rather than this emitter's;
      * {@code linkage} is where what every behavior, type and value these classes link against offers
      * is read, and where reading another module's is recorded — {@code symbols}, {@code published}
-     * and {@code kinds} read into it too. */
+     * and {@code kinds} read into it too. Whether a behavior of the module is implemented, unwritten
+     * or supplied by Java is read there as well, and nowhere else. */
     public static Emissions generate(Hir.Module module, DerivedSymbols symbols,
                                                PublishedDeclarations published,
                                                DeclarationKinds kinds,
                                                KernelSignatures kernels,
                                                Map<String, String> typePackage,
                                                Map<ValueName.Behavior, Sig> sigs,
-                                               Set<ValueName.Behavior> injectionTargets,
-                                               BehaviorBodies bodies,
                                                Map<String, List<BehaviorRequirement>> requirements,
                                                Bodies.Elaborated checked,
                                                Map<ValueName.Behavior, Composition> compositions,
@@ -183,7 +178,7 @@ public final class Backend {
                                                SourceLayouts layouts,
                                                LinkageReader linkage) {
         return generate(module, symbols, published, kinds, kernels, typePackage, sigs,
-                injectionTargets, bodies, requirements, checked, compositions, dischargeInvariants,
+                requirements, checked, compositions, dischargeInvariants,
                 invariantStatements, shapes, checks, standingCalls, layouts, linkage,
                 Instrumentation.NONE);
     }
@@ -207,8 +202,6 @@ public final class Backend {
                                                KernelSignatures kernels,
                                                Map<String, String> typePackage,
                                                Map<ValueName.Behavior, Sig> sigs,
-                                               Set<ValueName.Behavior> injectionTargets,
-                                               BehaviorBodies bodies,
                                                Map<String, List<BehaviorRequirement>> requirements,
                                                Bodies.Elaborated checked,
                                                Map<ValueName.Behavior, Composition> compositions,
@@ -222,7 +215,7 @@ public final class Backend {
                                                Instrumentation instrumentation) {
         try {
             return generating(module, symbols, published, kinds, kernels, typePackage, sigs,
-                    injectionTargets, bodies, requirements, checked, compositions,
+                    requirements, checked, compositions,
                     dischargeInvariants, invariantStatements, shapes, checks, standingCalls,
                     layouts, linkage, instrumentation);
         } catch (IllegalArgumentException e) {
@@ -239,8 +232,6 @@ public final class Backend {
                                         KernelSignatures kernels,
                                                   Map<String, String> typePackage,
                                                   Map<ValueName.Behavior, Sig> sigs,
-                                                  Set<ValueName.Behavior> injectionTargets,
-                                                  BehaviorBodies bodies,
                                                   Map<String, List<BehaviorRequirement>> requirements,
                                                   Bodies.Elaborated checked,
                                                   Map<ValueName.Behavior, Composition> compositions,
@@ -388,12 +379,12 @@ public final class Backend {
         // reads it from a field or builds it. Being held as a field by something else does not make
         // a behavior injected: one may be a dependency of one behavior and a stage another builds.
         //
-        // Beside them, and not among them: a behavior Souther is to implement and nobody has
-        // (`bodies` says which) is nothing to inject — no base is emitted for it, so there is nothing
-        // a caller could be handed.
+        // Beside them, and not among them: a behavior Souther is to implement and nobody has is
+        // nothing to inject — no base is emitted for it, so there is nothing a caller could be handed.
         for (Hir.BehaviorDef bd : module.behaviors()) {
             ValueName.Behavior declared = new ValueName.Behavior(module.name(), bd.name());
-            if (bd instanceof Hir.SpecBehavior spec && injectionTargets.contains(declared)) {
+            if (bd instanceof Hir.SpecBehavior spec && ctx.behavior(declared).realization()
+                    == LinkageProjection.Realization.SUPPLIED_BY_JAVA) {
                 List<Type> reqParams = new ArrayList<>();
                 for (Hir.Param p : spec.params()) {
                     reqParams.add(b.successType(p.type()));
@@ -458,11 +449,11 @@ public final class Backend {
                 }
                 switch (bd) {
                     case Hir.SpecBehavior spec -> {
-                        // What this behavior is decided by where the module was classified. The
-                        // definition is what an implemented one is emitted from, and is asked for
-                        // only there: whether one is at hand says nothing of which of the three
-                        // this is.
-                        switch (bodies.of(named)) {
+                        // What this behavior is decided by its projection, which is where the
+                        // module's classification reaches the classes. The definition is what an
+                        // implemented one is emitted from, and is asked for only there: whether
+                        // one is at hand says nothing of which of the three this is.
+                        switch (ctx.behavior(named).realization()) {
                             case IMPLEMENTED -> {
                                 // Bodies arrive with their helper calls already inlined (the Lower
                                 // stage, ADR-0021), and are emitted as-is.
@@ -518,7 +509,7 @@ public final class Backend {
                                         b.generateBehaviorInterface(spec.name(), pts,
                                                 b.successType(spec.ret()), requiredBy(spec)));
                             }
-                            case UNIMPLEMENTED -> {
+                            case UNWRITTEN -> {
                                 // Souther's to implement and not written (spec
                                 // §unwritten-behavior). The declaration is emitted so its name
                                 // exists; nothing that would need the body it has not got is.
@@ -531,7 +522,7 @@ public final class Backend {
                                         b.generateUnwrittenBehaviorInterface(spec.name(), pts,
                                                 b.successType(spec.ret())));
                             }
-                            case INJECTION_TARGET -> {
+                            case SUPPLIED_BY_JAVA -> {
                                 // Its abstract base was generated above (spec §java-base-class).
                             }
                         }
@@ -1812,13 +1803,15 @@ public final class Backend {
             return;
         }
         LinkageProjection.Behavior linked = ctx.behavior(stage);
-        pushStage(code, cdP, stage, held);
-        LinkageProjection.Invocation apply = linked.construction()
-                .map(LinkageProjection.Construction::erasedApply)
-                .orElse(linked.apply());
+        pushStage(code, cdP, linked, held);
         // What a stage Java supplies is applied by is its typed apply, so the arguments are cast
         // from the erased apply(Object,…) this body lives on; one built here is applied by the
         // erased apply on its implementation, and takes them as they are.
+        LinkageProjection.Invocation apply = switch (linked.realization()) {
+            case IMPLEMENTED -> linked.construction().orElseThrow().erasedApply();
+            case SUPPLIED_BY_JAVA -> linked.apply();
+            case UNWRITTEN -> throw unwrittenStage(stage);
+        };
         for (int i = 0; i < arity; i++) {
             code.aload(i + 1);
             ClassDesc param = apply.methodType().parameterType(i);
@@ -1840,7 +1833,7 @@ public final class Backend {
         // decode/encode are boundary edges, not pipeline stages (spec §sequential-composition): `>->` composes
         // behaviors only.
         LinkageProjection.Behavior linked = ctx.behavior(stage);
-        pushStage(code, cdP, stage, held);
+        pushStage(code, cdP, linked, held);
         code.aload(1);
         CodegenContext.invoke(code, linked.apply());
         projectStage(code, linked, slot);
@@ -1886,20 +1879,34 @@ public final class Backend {
      * body-behavior instance constructed with the required dependencies it declares (spec
      * §composition-with-requirements).
      *
-     * <p>Which of the two is decided by whether the stage's projection says there is an
-     * implementation to build and by nothing else. A behavior with an implementation is built here
-     * even where another behavior of the module holds it as a dependency: the composition was
-     * handed what that behavior requires, not the behavior. */
-    private void pushStage(CodeBuilder code, ClassDesc cdP, ValueName.Behavior stage,
+     * <p>Which of the two is decided by the stage's realization and by nothing else. A behavior
+     * with an implementation is built here even where another behavior of the module holds it as a
+     * dependency: the composition was handed what that behavior requires, not the behavior. One
+     * nobody has written is neither, and the checker refuses a composition over it (spec
+     * §unwritten-behavior). */
+    private void pushStage(CodeBuilder code, ClassDesc cdP, LinkageProjection.Behavior linked,
                            InjectionSlots held) {
-        LinkageProjection.Behavior linked = ctx.behavior(stage);
-        if (linked.construction().isEmpty()) {
-            InjectionSlots.Slot slot = held.of(stage);
-            code.aload(0);
-            code.getfield(cdP, slot.fieldName(), slot.type());
-            return;
+        ValueName.Behavior stage = linked.behavior();
+        switch (linked.realization()) {
+            case SUPPLIED_BY_JAVA -> {
+                InjectionSlots.Slot slot = held.of(stage);
+                code.aload(0);
+                code.getfield(cdP, slot.fieldName(), slot.type());
+            }
+            case IMPLEMENTED -> buildStage(code, cdP, stage, linked.construction().orElseThrow(),
+                    held);
+            case UNWRITTEN -> throw unwrittenStage(stage);
         }
-        LinkageProjection.Construction built = linked.construction().get();
+    }
+
+    private static IllegalStateException unwrittenStage(ValueName.Behavior stage) {
+        return new IllegalStateException("`" + stage + "` is a stage here and nobody has written"
+                + " it, so there is nothing to hold and nothing to build");
+    }
+
+    /** Constructs {@code stage}'s implementation from the composition's own fields. */
+    private void buildStage(CodeBuilder code, ClassDesc cdP, ValueName.Behavior stage,
+                            LinkageProjection.Construction built, InjectionSlots held) {
         code.new_(built.implementationClass());
         code.dup();
         List<ValueName.Behavior> deps = built.dependencies();

@@ -117,7 +117,7 @@ public final class Output {
                 Emissions emitted = Backend.generate(
                         shipped(in), in.scope(), in.published(), in.kinds(),
                         in.scope().library().kernelSignatures(),
-                        in.typePackages(), in.sigs(), in.injected(), in.bodies(),
+                        in.typePackages(), in.sigs(),
                         in.requirements(), in.checked(), in.compositions(),
                         in.dischargeClauses(), in.invariantStatements(), in.shapes(), in.checks(),
                         in.standingCalls(), new TheTextsThisCompileHolds(db), in.linkage());
@@ -176,8 +176,6 @@ public final class Output {
                       souther.compiler.check.DeclarationKinds kinds,
                       Map<String, String> typePackages,
                       Map<ValueName.Behavior, Sig> sigs,
-                      Set<ValueName.Behavior> injected,
-                      BehaviorBodies bodies,
                       Map<String, List<BehaviorRequirement>> requirements,
                       Bodies.Elaborated checked,
                       Map<ValueName.Behavior, souther.compiler.core.Composition> compositions,
@@ -238,11 +236,6 @@ public final class Output {
             // The behaviors this module can name, each under the declaration it belongs to: what
             // the check typed the compositions against, so the emitter routes over the same ones.
             Answer<Map<ValueName.Behavior, Sig>> signatures = db.ask(new Bodies.Reachable(name));
-            // What Java supplies, and where every behavior of this module gets its body: the
-            // module's classification, which the emitter reads rather than counting `let`s.
-            Answer<Set<ValueName.Behavior>> injected =
-                    db.ask(new Bodies.InjectionTargets(name));
-            Answer<BehaviorBodies> bodies = db.ask(new Bodies.Implementation(name));
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Map<String, List<BehaviorRequirement>>> requirements =
                     db.ask(new Bodies.Requirements(name));
@@ -278,7 +271,7 @@ public final class Output {
             Answer<RuleReadingSource> reading = Shapes.ruleReading(db, name);
             if (!checked.present() || !compositions.present()
                     || !lowering.present()
-                    || !signatures.present() || !injected.present() || !bodies.present()
+                    || !signatures.present()
                     || !prepared.present() || !requirements.present() || !expandable.present()
                     || !checks.present() || !standing.present() || !shapes.present()
                     || !reading.present()) {
@@ -307,19 +300,11 @@ public final class Output {
                     ownSignatures.put(behavior, sig);
                 }
             });
-            // Java-supplied behaviors this module declares: the ones it emits an abstract base for.
-            // Another module's is read off its projection where it is held or built.
-            Set<ValueName.Behavior> ownInjected = new LinkedHashSet<>();
-            for (ValueName.Behavior each : injected.value()) {
-                if (each.module().equals(name)) {
-                    ownInjected.add(each);
-                }
-            }
             return new Inputs(lowering.value().lowered(), scope.value(),
                     linkage.readingPublished(Shapes.publishedDeclarations(db)),
                     linkage.readingKinds(Shapes.declarationKinds(db)),
                     prepared.value().importedFrom(), Map.copyOf(ownSignatures),
-                    Set.copyOf(ownInjected), bodies.value(), requirements.value(), checked.value(),
+                    requirements.value(), checked.value(),
                     compositions.value(),
                     Shapes.expandedClauses(db), InvariantStatements.of(reading.value()),
                     shapes.value(), checks.value(),
@@ -522,7 +507,7 @@ public final class Output {
                 Emissions emitted = Backend.generate(
                         in.lowered(), in.scope(), in.published(), in.kinds(),
                         in.scope().library().kernelSignatures(),
-                        in.typePackages(), in.sigs(), in.injected(), in.bodies(),
+                        in.typePackages(), in.sigs(),
                         in.requirements(), in.checked(), in.compositions(),
                         in.dischargeClauses(), in.invariantStatements(), in.shapes(), in.checks(),
                         in.standingCalls(), new TheTextsThisCompileHolds(db), in.linkage(),
