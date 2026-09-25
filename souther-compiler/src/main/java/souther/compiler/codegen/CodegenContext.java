@@ -27,6 +27,7 @@ import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.ValueName;
 
 import java.lang.classfile.ClassFile;
+import java.lang.classfile.CodeBuilder;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
@@ -149,6 +150,29 @@ final class CodegenContext {
     /** What the declared type at {@code key} offers: its form, its class, what a read finds. */
     LinkageProjection.Data declaredType(TypeKey key) {
         return linkage.data(key);
+    }
+
+    /**
+     * The entry a product or a newtype is built through: its {@code __construct}, as what the type
+     * offers says. Read where any class calls it — its own module's included — and where its own
+     * class declares it, so the call and the method are one answer.
+     */
+    LinkageProjection.Invocation construction(TypeSymbol.AtModule type) {
+        return declaredType(type.key()).construction().orElseThrow(() ->
+                new IllegalStateException("`" + type + "` is built through an entry and offers"
+                        + " none"));
+    }
+
+    /** Emits the instruction {@code invocation} describes. */
+    static void invoke(CodeBuilder code, LinkageProjection.Invocation invocation) {
+        switch (invocation.opcode()) {
+            case STATIC -> code.invokestatic(invocation.ownerClass(), invocation.method(),
+                    invocation.methodType());
+            case VIRTUAL -> code.invokevirtual(invocation.ownerClass(), invocation.method(),
+                    invocation.methodType());
+            case INTERFACE -> code.invokeinterface(invocation.ownerClass(), invocation.method(),
+                    invocation.methodType());
+        }
     }
 
     /** What the published value {@code value} offers: its entry, and what it answers. */

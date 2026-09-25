@@ -62,17 +62,17 @@ public sealed interface LinkageProjection {
     }
 
     /**
-     * An instruction a class elsewhere invokes a method with: the class it names, as its descriptor,
-     * whether that class is an interface, the method and its descriptor.
+     * An instruction a class elsewhere invokes a method with: which instruction, the class it names
+     * as its descriptor, the method and its descriptor.
      *
      * <p>Held as the descriptors the JVM writes, so a projection is compared by what a class file
      * says and not by how the class-file library represents it.
      */
-    record Invocation(String owner, boolean onInterface, String method, String descriptor) {
+    record Invocation(Opcode opcode, String owner, String method, String descriptor) {
 
-        public static Invocation of(ClassDesc owner, boolean onInterface, String method,
+        public static Invocation of(Opcode opcode, ClassDesc owner, String method,
                                     MethodTypeDesc descriptor) {
-            return new Invocation(owner.descriptorString(), onInterface, method,
+            return new Invocation(opcode, owner.descriptorString(), method,
                     descriptor.descriptorString());
         }
 
@@ -87,8 +87,20 @@ public sealed interface LinkageProjection {
         }
 
         String shown() {
-            return (onInterface ? "invokeinterface " : "invokevirtual ") + owner + "." + method
-                    + descriptor;
+            return opcode.written() + " " + owner + "." + method + descriptor;
+        }
+    }
+
+    /** The instructions a class elsewhere invokes a declaration's methods with. */
+    enum Opcode {
+        STATIC, VIRTUAL, INTERFACE;
+
+        String written() {
+            return switch (this) {
+                case STATIC -> "invokestatic";
+                case VIRTUAL -> "invokevirtual";
+                case INTERFACE -> "invokeinterface";
+            };
         }
     }
 
@@ -223,28 +235,40 @@ public sealed interface LinkageProjection {
     }
 
     /**
-     * A declared type as another module's classes reach it: the class, how it is built, what a read
-     * of it finds, and how it is decoded.
+     * A declared type as another module's classes reach it: the class, what a read of it finds, and
+     * the entry they build one through.
      *
-     * @param key      the declaration
-     * @param form     which of the four it was declared as
-     * @param exposed  whether its module exposes it, which is whether its class is public
-     * @param carrier  the descriptor of the class a value of it is
-     * @param fields   what a read of a value finds, in the order a value lays them out: a product's
-     *                 fields, a newtype's one value, and the fields a sum exposes because every case
-     *                 spreads them
-     * @param cases    a sum's cases, in the order it declares them
-     * @param checked  whether building one runs a check, so a class elsewhere builds it through
-     *                 {@code __construct} and not its constructor
-     * @param decoder  which derived decoder a product was given, or empty where it is no product
+     * <p>Each fact is here because a class elsewhere decides something by it, and nothing is here
+     * that only the type's own classes decide by. Whether building one runs a check is the second
+     * kind: a class elsewhere builds it through {@code __construct} either way, since its constructor
+     * is its own module's, so a type gaining or losing a rule leaves what that class links by as it
+     * was.
+     *
+     * @param key          the declaration
+     * @param form         which of the four it was declared as
+     * @param exposed      whether its module exposes it, which is whether its class is public
+     * @param carrier      the descriptor of the class a value of it is
+     * @param fields       what a read of a value finds, in the order a value lays them out: a
+     *                     product's fields, a newtype's one value, and the fields a sum exposes
+     *                     because every case spreads them
+     * @param cases        a sum's cases, in the order it declares them
+     * @param construction the entry a class elsewhere builds one through — a product's and a
+     *                     newtype's {@code __construct}; a sum is built as one of its cases and a
+     *                     unit is its one value, so neither has one
      */
     record Data(TypeKey key, Form form, boolean exposed, String carrier, List<Field> fields,
-                List<TypeSymbol> cases, boolean checked, Optional<String> decoder)
+                List<TypeSymbol> cases, Optional<Invocation> construction)
             implements LinkageProjection {
 
         public Data {
             fields = List.copyOf(fields);
             cases = List.copyOf(cases);
+            boolean built = form == Form.PRODUCT || form == Form.NEWTYPE;
+            if (construction.isPresent() != built) {
+                throw new IllegalArgumentException("`" + key + "` is a " + form.written()
+                        + ", and a class elsewhere builds exactly a product or a newtype through"
+                        + " an entry");
+            }
         }
 
         @Override
@@ -271,8 +295,7 @@ public sealed interface LinkageProjection {
                 facts.add(new Fact("cases", cases.stream().map(LinkageProjection::shown)
                         .collect(Collectors.joining(" | "))));
             }
-            facts.add(new Fact("built by", checked ? "__construct" : "its constructor"));
-            decoder.ifPresent(kind -> facts.add(new Fact("decoded by", kind)));
+            construction.ifPresent(entry -> facts.add(new Fact("built by", entry.shown())));
             return List.copyOf(facts);
         }
     }
@@ -308,8 +331,7 @@ public sealed interface LinkageProjection {
 
         @Override
         public List<Fact> facts() {
-            return List.of(new Fact("entered by", "invokestatic " + entry.owner() + "."
-                            + entry.method() + entry.descriptor()),
+            return List.of(new Fact("entered by", entry.shown()),
                     new Fact("answers", shown(answers)));
         }
     }

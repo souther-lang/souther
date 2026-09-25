@@ -956,7 +956,7 @@ public final class Backend {
                             CanonicalizeAtCrossing.emit(code, t);
                             slot += width(t);
                         }
-                        code.invokestatic(cdType, "__construct", MethodTypeDesc.of(CD_Result, fieldDs));
+                        CodegenContext.invoke(code, ctx.construction(data.declares()));
                         code.invokestatic(CD_ConstraintViolation, "orThrow", MTD_orThrow);
                         code.checkcast(cdType);
                         code.areturn();
@@ -1808,22 +1808,11 @@ public final class Backend {
                 code.checkcast(param);
             }
         }
-        invoke(code, apply);
+        CodegenContext.invoke(code, apply);
         projectStage(code, linked, slot);
         CanonicalizeAtCrossing.emit(code, stageOut);
         checkStageAtCrossing(code, stage, arity, slot + 1);
         code.astore(1);
-    }
-
-    /** Emits the instruction {@code invocation} describes. */
-    private static void invoke(CodeBuilder code, LinkageProjection.Invocation invocation) {
-        if (invocation.onInterface()) {
-            code.invokeinterface(invocation.ownerClass(), invocation.method(),
-                    invocation.methodType());
-        } else {
-            code.invokevirtual(invocation.ownerClass(), invocation.method(),
-                    invocation.methodType());
-        }
     }
 
     /** Applies one pipeline stage to the running value in slot 1, storing the result back. A stage
@@ -1835,7 +1824,7 @@ public final class Backend {
         LinkageProjection.Behavior linked = ctx.behavior(stage);
         pushStage(code, cdP, stage, held);
         code.aload(1);
-        invoke(code, linked.apply());
+        CodegenContext.invoke(code, linked.apply());
         projectStage(code, linked, slot);
         CanonicalizeAtCrossing.emit(code, stageOut);
         checkStageAtCrossing(code, stage, 1, slot + 1);

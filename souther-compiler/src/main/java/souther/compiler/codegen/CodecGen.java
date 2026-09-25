@@ -1622,7 +1622,11 @@ final class CodecGen {
                     gen.elaborate(init.value(), fields.get(field)), init.pos()));
         }
         gen.emitFieldValues(fields, values);
-        code.invokestatic(cdName, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(fields)));
+        if (!(Backend.names(construct.typeName()) instanceof TypeSymbol.AtModule built)) {
+            throw new IllegalStateException("a decoder builds `" + construct.typeName()
+                    + "`, which no module declares");
+        }
+        CodegenContext.invoke(code, ctx.construction(built));
         // Souther construction Result -> Raoh boundary Result. An invariant failure becomes a
         // Raoh failure (spec §violation-destination, §decoder-role); success wraps the constructed value.
         //

@@ -221,6 +221,46 @@ class AModuleOnThePathIsHeldToEachDeclarationItsClassesReadTest {
         assertEquals("(right, left)", said.now());
     }
 
+    /** `lib.b` builds and reads a type of `lib.c`, which only its fields say anything about. */
+    private static final String B_BUILDS_MONEY = """
+            module lib.b exposing ( inc, make )
+            import lib.c ( Money )
+            behavior inc : (n: Int) -> Int
+            let inc (n) = n + 1
+            behavior make : (n: Int) -> Int constructs Money
+            let make (n) = (Money { amount = n }).amount
+            """;
+
+    /**
+     * A type `lib.b` builds gains a rule, or loses one. A class of another module builds it through
+     * its {@code __construct} either way — its constructor is its own module's — so what `lib.b`
+     * links by has not moved, and `lib.b` is taken both ways: what a rule states runs inside the
+     * type's own class and is not linkage.
+     */
+    @Test
+    void aTypeGainingOrLosingARuleIsTaken() {
+        String bare = """
+                module lib.c exposing ( Money )
+                data Money = { amount: Int }
+                """;
+        String ruled = """
+                module lib.c exposing ( Money )
+                data Money = { amount: Int }
+                    invariant amount >= 0
+                """;
+
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of(USES_ONLY_INC),
+                ModulePath.of(builtAgainst(bare, B_BUILDS_MONEY, ruled))));
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of(USES_ONLY_INC),
+                ModulePath.of(builtAgainst(ruled, B_BUILDS_MONEY, bare))));
+        // And `lib.b` was built against it: a field it builds and reads holding another type moves
+        // what it links by, so being taken above is not `lib.b` reading nothing of the type.
+        assertEquals("field amount", moved(said(USES_ONLY_INC, builtAgainst(bare, B_BUILDS_MONEY, """
+                module lib.c exposing ( Money )
+                data Money = { amount: Decimal }
+                """)), "lib.b", "Money").fact());
+    }
+
     /** A published value `lib.b` reads that answers another type now: its classes take the entry's
      *  answer as what it was. */
     @Test

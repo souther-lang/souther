@@ -3,7 +3,6 @@ package souther.compiler.codegen;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.BehaviorImplementation;
-import souther.compiler.check.DataChecker;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.ReadableFields;
@@ -104,8 +103,8 @@ public final class LinkageProjections {
         settled.values().forEach((name, answers) -> {
             ValueName.Helper value = new ValueName.Helper(settled.module(), name);
             LinkageProjection.Value projection = new LinkageProjection.Value(value,
-                    LinkageProjection.Invocation.of(classOf(new GeneratedClass.Values(
-                            settled.module()), foreign), false, name,
+                    LinkageProjection.Invocation.of(LinkageProjection.Opcode.STATIC,
+                            classOf(new GeneratedClass.Values(settled.module()), foreign), name,
                             MethodTypeDesc.of(Descriptors.CD_Object)),
                     answers);
             out.put(projection.target(), projection);
@@ -133,9 +132,12 @@ public final class LinkageProjections {
         ClassDesc resultUnion = classOf(new GeneratedClass.BehaviorResult(settled.module(), name),
                 foreign);
         LinkageProjection.Invocation apply = takes.size() == 1
-                ? LinkageProjection.Invocation.of(CD_Behavior, true, "apply", MTD_apply)
-                : LinkageProjection.Invocation.of(own,
-                        realization != LinkageProjection.Realization.SUPPLIED_BY_JAVA, "apply",
+                ? LinkageProjection.Invocation.of(LinkageProjection.Opcode.INTERFACE, CD_Behavior,
+                        "apply", MTD_apply)
+                : LinkageProjection.Invocation.of(
+                        realization == LinkageProjection.Realization.SUPPLIED_BY_JAVA
+                                ? LinkageProjection.Opcode.VIRTUAL
+                                : LinkageProjection.Opcode.INTERFACE, own, "apply",
                         BehaviorAbi.typedApply(takes, answers, resultUnion,
                                 t -> typeClass(t, foreign)));
         Optional<LinkageProjection.Construction> construction = Optional.empty();
@@ -154,7 +156,8 @@ public final class LinkageProjections {
             construction = Optional.of(new LinkageProjection.Construction(
                     implementation.descriptorString(), dependencies,
                     BehaviorAbi.constructor(held).descriptorString(),
-                    LinkageProjection.Invocation.of(implementation, false, "apply",
+                    LinkageProjection.Invocation.of(LinkageProjection.Opcode.VIRTUAL,
+                            implementation, "apply",
                             BehaviorAbi.erasedApply(takes.size()))));
         }
         return new LinkageProjection.Behavior(behavior, realization, settled.exposes(name), takes,
@@ -215,20 +218,37 @@ public final class LinkageProjections {
                 .descriptorString();
         boolean exposed = settled.exposes(def.name());
         return switch (def) {
-            case Hir.Data data -> new LinkageProjection.Data(data.declaredKey(),
-                    data.newtype() ? LinkageProjection.Form.NEWTYPE
-                            : LinkageProjection.Form.PRODUCT,
-                    exposed, carrier, laidOut(data, settled.symbols()), List.of(),
-                    DataChecker.isInvariantBearing(data.declares(), settled.symbols()),
-                    Optional.of(settled.symbols().derived(data).decoder().getClass()
-                            .getSimpleName()));
+            case Hir.Data data -> {
+                List<LinkageProjection.Field> fields = laidOut(data, settled.symbols());
+                yield new LinkageProjection.Data(data.declaredKey(),
+                        data.newtype() ? LinkageProjection.Form.NEWTYPE
+                                : LinkageProjection.Form.PRODUCT,
+                        exposed, carrier, fields, List.of(),
+                        Optional.of(construction(carrier, fields, foreign)));
+            }
             case Hir.SumData sum -> new LinkageProjection.Data(sum.declaredKey(),
                     LinkageProjection.Form.SUM, exposed, carrier,
-                    shared(sum, settled), cases(sum), false, Optional.empty());
+                    shared(sum, settled), cases(sum), Optional.empty());
             case Hir.UnitData unit -> new LinkageProjection.Data(unit.declaredKey(),
-                    LinkageProjection.Form.UNIT, exposed, carrier, List.of(), List.of(), false,
+                    LinkageProjection.Form.UNIT, exposed, carrier, List.of(), List.of(),
                     Optional.empty());
         };
+    }
+
+    /**
+     * The entry every class builds a product or a newtype through, its own module's excepted where
+     * it builds one with nothing to check: {@code __construct}, taking the fields in the order a
+     * value lays them out and answering the construction's {@code Result}.
+     */
+    private static LinkageProjection.Invocation construction(
+            String carrier, List<LinkageProjection.Field> fields, LinkageReader foreign) {
+        ClassDesc[] params = new ClassDesc[fields.size()];
+        for (int i = 0; i < params.length; i++) {
+            params[i] = JvmTypes.jvmType(fields.get(i).type(), t -> typeClass(t, foreign));
+        }
+        return LinkageProjection.Invocation.of(LinkageProjection.Opcode.STATIC,
+                ClassDesc.ofDescriptor(carrier), "__construct",
+                MethodTypeDesc.of(Descriptors.CD_Result, params));
     }
 
     /** A product's fields in the order a value lays them out, which is the order its constructor

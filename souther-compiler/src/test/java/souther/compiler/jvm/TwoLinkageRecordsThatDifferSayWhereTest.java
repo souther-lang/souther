@@ -78,7 +78,9 @@ class TwoLinkageRecordsThatDifferSayWhereTest {
                 LinkageProjection.Form.PRODUCT, true, "Llib/c/Pair;",
                 List.of(new LinkageProjection.Field(first, Type.INT),
                         new LinkageProjection.Field(second, Type.INT)),
-                List.of(), false, Optional.of("ObjectDecoder"));
+                List.of(), Optional.of(new LinkageProjection.Invocation(
+                        LinkageProjection.Opcode.STATIC, "Llib/c/Pair;", "__construct",
+                        "(JJ)Lsouther/runtime/Result;")));
     }
 
     /** Nothing written blank is a fact. */

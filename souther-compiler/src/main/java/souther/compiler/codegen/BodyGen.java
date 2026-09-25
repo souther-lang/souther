@@ -446,11 +446,10 @@ final class BodyGen {
                 case Core.Call call when tcoName != null && call.name().equals(tcoName)
                         && call.args().size() == tcoParams.size() -> emitSelfTailCall(call);
                 case Core.Construct nd when DataChecker.isInvariantBearing(nd.typeName(), symbols) -> {
-                    ClassDesc cdType = cd(nd.typeName());
                     SequencedMap<String, Type> flds = fieldTypes((Hir.Data) symbols.declaredNode(nd.typeName()));
                     emitFieldValues(flds, nd.values());
                     emitLine(nd);   // re-pin: a field init may have moved the line off the construction
-                    code.invokestatic(cdType, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(flds)));
+                    invoke(ctx.construction(nd.typeName()));
                     code.invokestatic(CD_ConstraintViolation, "orThrow", MTD_orThrow);
                     returnValue();
                 }
@@ -1005,7 +1004,7 @@ final class BodyGen {
                 // ConstraintViolation. orThrow returns Object, so narrow it back to the value type.
                 emitFieldValues(flds, nd.values());
                 emitLine(nd);   // re-pin: a field init may have moved the line off the construction
-                finishInvariantConstruct(cdType, flds);
+                finishInvariantConstruct(built, cdType);
                 return;
             }
             MethodTypeDesc ctor = MethodTypeDesc.of(ConstantDescs.CD_void, fieldDescs(flds));
@@ -1069,7 +1068,7 @@ final class BodyGen {
             ClassDesc cdType = cd(nd.typeName());
             emitFieldValues(flds, nd.values());
             emitLine(ic);   // re-pin: a field init may have moved the line off the construction
-            code.invokestatic(cdType, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(flds)));
+            invoke(ctx.construction(nd.typeName()));
 
             int rSlot = slot(Type.STRING);   // a reference slot, as the codecs take for the same Result
             code.astore(rSlot);
@@ -1151,11 +1150,11 @@ final class BodyGen {
             }
         }
 
-        /** Emits the checked-construction tail — {@code __construct(fields) -> Result}, {@code orThrow}
-         * (yield, or abort on invariant violation), and a narrowing cast — with the field values
-         * already on the stack. */
-        private void finishInvariantConstruct(ClassDesc cdType, SequencedMap<String, Type> flds) {
-            code.invokestatic(cdType, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(flds)));
+        /** Emits the checked-construction tail — the entry the type offers ({@code __construct(fields)
+         * -> Result}), {@code orThrow} (yield, or abort on invariant violation), and a narrowing cast
+         * — with the field values already on the stack. */
+        private void finishInvariantConstruct(TypeSymbol.AtModule built, ClassDesc cdType) {
+            invoke(ctx.construction(built));
             code.invokestatic(CD_ConstraintViolation, "orThrow", MTD_orThrow);
             code.checkcast(cdType);
         }
@@ -1591,13 +1590,7 @@ final class BodyGen {
 
         /** Emits the instruction {@code invocation} describes. */
         private void invoke(LinkageProjection.Invocation invocation) {
-            if (invocation.onInterface()) {
-                code.invokeinterface(invocation.ownerClass(), invocation.method(),
-                        invocation.methodType());
-            } else {
-                code.invokevirtual(invocation.ownerClass(), invocation.method(),
-                        invocation.methodType());
-            }
+            CodegenContext.invoke(code, invocation);
         }
 
         /** Emits an inline call to an injected required behavior, leaving its success value on

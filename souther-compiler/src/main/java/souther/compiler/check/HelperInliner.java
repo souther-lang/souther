@@ -107,9 +107,20 @@ public final class HelperInliner {
     private boolean valuesAreMethods = false;
     /** Whether a value this module declares is built as a reference to its template. */
     private boolean valuesAreTemplates = false;
-    /** Whether a reference to a value is left as the reference, for a body being closed to carry
-     *  the values it names along with it. */
-    private boolean valuesStayNamed = false;
+    /** Which references to a value are left as the reference, for a body being closed to carry the
+     *  values it names along with it. */
+    private ValuesLeftNamed valuesStayNamed = ValuesLeftNamed.NONE;
+
+    /** Which values a body being closed names rather than copies. */
+    private enum ValuesLeftNamed {
+        /** Not closing: every value is read as the expansion's mode says. */
+        NONE,
+        /** A helper: its own module's values are copied into it, and another module's value runs
+         *  in that module, so it stays a reference. */
+        OF_OTHER_MODULES,
+        /** A value: it runs where it is declared, so everything it names stays a reference. */
+        ALL
+    }
     /** What each value folds to, empty where it is not a constant, by what it is reached by. */
     private final Map<ReachName.Declaration, Optional<Object>> constantOfValues = new HashMap<>();
     /** What the method emitted for each value takes, by what the value is reached by. */
@@ -732,10 +743,12 @@ public final class HelperInliner {
         // reference the graph over that module's table is keyed by.
         ReachName.Declaration here = new ReachName.Own(new ValueName.Helper(module, fn.name()));
         // A value stays a reference to the values it names: it runs where it is declared, so what
-        // it names is built there and never copied. A helper is expanded into its reader, and what
-        // it names is expanded with it, as it always was.
-        boolean namedBefore = valuesStayNamed;
-        valuesStayNamed = fn.params().isEmpty();
+        // it names is built there and never copied. A helper is expanded into its reader, and its
+        // own module's values are expanded with it; a value another module declares runs in that
+        // module whichever body names it, so it stays a reference in a helper as well.
+        ValuesLeftNamed namedBefore = valuesStayNamed;
+        valuesStayNamed = fn.params().isEmpty()
+                ? ValuesLeftNamed.ALL : ValuesLeftNamed.OF_OTHER_MODULES;
         Hir.Expr closed;
         try {
             closed = graph.recurses(here)
@@ -2209,7 +2222,7 @@ public final class HelperInliner {
         if (value == null || value.body() == null || graph.recurses(reaches)) {
             return v;
         }
-        if (valuesStayNamed || reading == ValueAtAReference.SHARED_PER_REGION) {
+        if (leftNamed(reaches) || reading == ValueAtAReference.SHARED_PER_REGION) {
             // Left standing here and read again by the walk that materialises it: which region the
             // body belongs at is a fact about where the reference stands, and an expansion in
             // progress is not yet at a region it can answer that with.
@@ -2566,6 +2579,17 @@ public final class HelperInliner {
         here.put(named.reaches(), called);
         order.add(called);
         values.add(invocationOf(named, site.get(), List.of()));
+    }
+
+    /** Whether a reference to the value reached by {@code reaches} is left as it stands by the body
+     *  being closed. */
+    private boolean leftNamed(ReachName.Declaration reaches) {
+        return switch (valuesStayNamed) {
+            case NONE -> false;
+            case OF_OTHER_MODULES -> reaches instanceof ReachName.OfModule of
+                    && !of.denotes().module().equals(moduleName());
+            case ALL -> true;
+        };
     }
 
     /**

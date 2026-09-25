@@ -734,7 +734,15 @@ final class ValueClassGen {
         // Public for an exposed type: a behavior of another module may declare `constructs T`
         // (ADR-0002 never restricted that to T's own module), and this is the path it takes — the one
         // that runs the invariant. A type this module keeps to itself keeps its entry package-private.
-        cb.withMethod("__construct", MethodTypeDesc.of(CD_Result, fieldDescs(fields)),
+        // Declared as what the type offers, which is what every caller of it — another module's or
+        // this one's — invokes; so the method and each call on it are one answer.
+        LinkageProjection.Invocation offered = ctx.construction(data.declares());
+        MethodTypeDesc declared = MethodTypeDesc.of(CD_Result, fieldDescs(fields));
+        if (!offered.methodType().equals(declared)) {
+            throw new IllegalStateException("`" + data.declaredKey() + "` declares __construct"
+                    + declared.descriptorString() + ", and it offers " + offered.descriptor());
+        }
+        cb.withMethod(offered.method(), offered.methodType(),
                 ClassFile.ACC_STATIC | ctx.pub(data.name()), mb -> {
                     mb.with(SignatureAttribute.of(
                             MethodSignature.parseFrom(constructSignature(fields, cdName))));
