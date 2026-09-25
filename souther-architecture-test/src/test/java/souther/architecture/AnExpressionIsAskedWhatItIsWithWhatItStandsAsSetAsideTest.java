@@ -518,7 +518,7 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
         String c = "souther/compiler/";
         String core = "L" + CORE + ";";
         row(out, c + "abort/AbortSites", "walk",
-                "(" + core + "L" + c + "core/KernelContracts;Ljava/util/Set;"
+                "(" + core + "L" + c + "core/KernelContracts;Ljava/util/Map;"
                         + "Ljava/util/IdentityHashMap;)V", 1,
                 "files each node's own answer and walks on through Core.forEachChild; a Widen"
                         + " answers nothing of its own, and what it holds is filed one step down");
