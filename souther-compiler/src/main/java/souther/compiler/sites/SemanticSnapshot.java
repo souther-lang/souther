@@ -1,6 +1,7 @@
 package souther.compiler.sites;
 
 import souther.compiler.Reserved;
+import souther.compiler.ast.ExposingClause;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.BindingEvidence;
@@ -263,15 +264,28 @@ public final class SemanticSnapshot {
             return List.of();
         }
         Hir.Module offered = offering.value();
-        Set<String> inOrder = new LinkedHashSet<>(offered.exposing().named());
-        for (Hir.Def def : offered.defs()) {
-            inOrder.add(def.name());
-        }
-        for (Hir.BehaviorDef behavior : offered.behaviors()) {
-            inOrder.add(behavior.name());
-        }
-        for (Hir.FnDef fn : offered.fns()) {
-            inOrder.add(fn.name());
+        Set<String> inOrder = new LinkedHashSet<>();
+        if (offered.exposing() instanceof ExposingClause.Written written) {
+            inOrder.addAll(written.entries());
+        } else {
+            // Every kind of declaration is its own list, so the order they were written in is
+            // asked of where each was written: a `let` above a `data` comes first. Only what is
+            // published is placed, which is all written in the module's own text.
+            List<Map.Entry<SourcePos, String>> declared = new ArrayList<>();
+            for (Hir.Def def : offered.defs()) {
+                declared.add(Map.entry(def.pos(), def.name()));
+            }
+            for (Hir.BehaviorDef behavior : offered.behaviors()) {
+                declared.add(Map.entry(behavior.pos(), behavior.name()));
+            }
+            for (Hir.FnDef fn : offered.fns()) {
+                declared.add(Map.entry(fn.pos(), fn.name()));
+            }
+            declared.removeIf(each -> !offered.published().contains(each.getValue()));
+            declared.sort(Map.Entry.comparingByKey(SourcePos.IN_WRITTEN_ORDER));
+            for (Map.Entry<SourcePos, String> each : declared) {
+                inOrder.add(each.getValue());
+            }
         }
         inOrder.retainAll(offered.published());
         List<Published> out = new ArrayList<>();
