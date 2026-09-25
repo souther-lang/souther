@@ -353,8 +353,8 @@ public final class CheckedRow {
          *
          * <p>The stand-ins are made here rather than handed in. What the row states of its
          * stand-ins and what a reader asks them are one fact, and taking the second as a list
-         * would let a row answer one thing about a dependency through {@code states} and another
-         * through {@code standsIn}. What comes from outside is where each dependency's arguments
+         * would let a row answer one thing about a dependency through {@code states()} and another
+         * through {@code standsIn()}. What comes from outside is where each dependency's arguments
          * stand, which is what its declaration says and not what the row states, and what computes
          * each value a stand-in states.
          */
