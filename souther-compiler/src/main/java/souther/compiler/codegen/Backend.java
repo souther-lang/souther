@@ -1803,7 +1803,7 @@ public final class Backend {
             return;
         }
         LinkageProjection.Behavior linked = ctx.behavior(stage);
-        pushStage(code, cdP, stage, held);
+        pushStage(code, cdP, linked, held);
         // What a stage Java supplies is applied by is its typed apply, so the arguments are cast
         // from the erased apply(Object,…) this body lives on; one built here is applied by the
         // erased apply on its implementation, and takes them as they are.
@@ -1833,7 +1833,7 @@ public final class Backend {
         // decode/encode are boundary edges, not pipeline stages (spec §sequential-composition): `>->` composes
         // behaviors only.
         LinkageProjection.Behavior linked = ctx.behavior(stage);
-        pushStage(code, cdP, stage, held);
+        pushStage(code, cdP, linked, held);
         code.aload(1);
         CodegenContext.invoke(code, linked.apply());
         projectStage(code, linked, slot);
@@ -1884,9 +1884,9 @@ public final class Backend {
      * dependency: the composition was handed what that behavior requires, not the behavior. One
      * nobody has written is neither, and the checker refuses a composition over it (spec
      * §unwritten-behavior). */
-    private void pushStage(CodeBuilder code, ClassDesc cdP, ValueName.Behavior stage,
+    private void pushStage(CodeBuilder code, ClassDesc cdP, LinkageProjection.Behavior linked,
                            InjectionSlots held) {
-        LinkageProjection.Behavior linked = ctx.behavior(stage);
+        ValueName.Behavior stage = linked.behavior();
         switch (linked.realization()) {
             case SUPPLIED_BY_JAVA -> {
                 InjectionSlots.Slot slot = held.of(stage);
