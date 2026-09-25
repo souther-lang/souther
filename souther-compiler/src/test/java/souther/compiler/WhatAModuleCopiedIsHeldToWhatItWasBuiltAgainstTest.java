@@ -172,11 +172,14 @@ class WhatAModuleCopiedIsHeldToWhatItWasBuiltAgainstTest {
                         """));
     }
 
-    /** A helper of a third module is expanded into a published one when that one is closed, so
-     *  what the middle module offers rests on it. The middle module is the one built against the
-     *  third's old helper, and it is the one said. */
+    /**
+     * A helper of a third module is expanded into a published one when that one is closed, and a
+     * reader expanding the published helper carries both. The reader is the one built against the
+     * third's old helper and is the one said. The middle module offers its helper as naming the
+     * third's, and its own classes never run the body, so it is not.
+     */
     @Test
-    void whatClosingAPublishedHelperCopiedIsHeldAgainstTheModuleThatClosedIt() {
+    void whatClosingAPublishedHelperCopiedIsHeldAgainstTheModuleThatCopiedTheHelper() {
         Map<String, ClassFileImage> path = new HashMap<>();
         Map<String, ClassFileImage> c = Compiler.compile("""
                 module lib.c exposing ( h )
@@ -201,9 +204,136 @@ class WhatAModuleCopiedIsHeldToWhatItWasBuiltAgainstTest {
                 let h (n: Int) = n + 2
                 """));
 
-        assertEquals(new ModuleMessage.ItCopiedAnotherVersion("lib.b", "helper", "h", "lib.c",
+        assertEquals(new ModuleMessage.ItCopiedAnotherVersion("app.a", "helper", "h", "lib.c",
                         "closed helper"),
                 refusal(path, readerOf("app.a")));
+        assertAccepted(path, """
+                module main.b
+                import lib.b ( f )
+                behavior go : (n: Int) -> Int
+                let go (n) = n
+                """);
+    }
+
+    private static final String C_LIMIT_SUMMED = """
+            module lib.c exposing ( limit )
+            let limit = 1 + 2
+            """;
+
+    private static final String B_BOUNDED_BY_C = """
+            module lib.b exposing ( Base )
+            import lib.c ( limit )
+            data Base = { n: Int }
+                invariant bound = n <= limit
+            """;
+
+    private static final String A_INCLUDES_B = """
+            module app.a exposing ( Wrapped, wrap )
+            import lib.b ( Base )
+            data Wrapped = { ...Base, w: Int }
+            behavior wrap : (x: Int) -> Wrapped
+            let wrap (x) = Wrapped { n = 1, w = x }
+            """;
+
+    private static final String READS_A = """
+            module main.m
+            import app.a ( wrap, Wrapped )
+            behavior go : (x: Int) -> Wrapped
+            let go (x) = wrap(x)
+            """;
+
+    /**
+     * A clause naming another module's constant is held, where a type includes it, to what that
+     * constant is and not to how it was written. `lib.b` is built against `limit = 1 + 2`, which is
+     * then written `3`; `app.a` is built including `Base` against the new `lib.c`, and `lib.b` is
+     * built again beside it. Nothing any of them carries moved, so nothing is refused.
+     */
+    @Test
+    void aConstantAClauseNamesIsHeldAsTheConstantThroughEveryTypeThatIncludesIt() {
+        Map<String, ClassFileImage> c = Compiler.compile("""
+                module lib.c exposing ( limit )
+                let limit = 3
+                """);
+        Map<String, ClassFileImage> path = new HashMap<>(c);
+        path.putAll(Compiler.compileModules(List.of(B_BOUNDED_BY_C),
+                ModulePath.of(Compiler.compile(C_LIMIT_SUMMED))));
+        path.putAll(Compiler.compileModules(List.of(A_INCLUDES_B), ModulePath.of(path)));
+
+        assertAccepted(path, READS_A);
+
+        path.putAll(Compiler.compileModules(List.of(B_BOUNDED_BY_C), ModulePath.of(c)));
+        assertAccepted(path, READS_A);
+    }
+
+    /** The same, with the constant moved: `app.a` carries the old one in the clause it checks, and
+     *  is said for it though what it names is only `Base`. */
+    @Test
+    void aConstantAnIncludedClauseNamesThatMovedIsSaidOfTheModuleThatIncludesIt() {
+        Map<String, ClassFileImage> built = new HashMap<>(Compiler.compile(C_LIMIT_SUMMED));
+        built.putAll(Compiler.compileModules(List.of(B_BOUNDED_BY_C), ModulePath.of(built)));
+        Map<String, ClassFileImage> path = new HashMap<>(
+                Compiler.compileModules(List.of(A_INCLUDES_B), ModulePath.of(built)));
+        Map<String, ClassFileImage> c = Compiler.compile("""
+                module lib.c exposing ( limit )
+                let limit = 4
+                """);
+        path.putAll(c);
+        path.putAll(Compiler.compileModules(List.of(B_BOUNDED_BY_C), ModulePath.of(c)));
+
+        assertEquals(new ModuleMessage.ItCopiedAnotherConstant("app.a", "limit", "lib.c", "3", "4"),
+                refusal(path, READS_A));
+    }
+
+    /** The departures of an attempted construction are a lookup by the clause that failed, so a
+     *  helper that writes them in another order is the helper it was. */
+    @Test
+    void theOrderDeparturesAreWrittenInIsNotPartOfTheCopy() {
+        Map<String, ClassFileImage> path = builtAgainst("""
+                module lib.g exposing ( R, graded )
+                data R = Int
+                    invariant low = value >= 0
+                    invariant high = value <= 100
+                let graded (x: Int) = if R(x) as r then 0 else
+                    | low -> 1
+                    | high -> 2
+                """, """
+                module app.g exposing ( use )
+                import lib.g ( graded )
+                behavior use : (n: Int) -> Int
+                let use (n) = graded(n)
+                """, """
+                module lib.g exposing ( R, graded )
+                data R = Int
+                    invariant low = value >= 0
+                    invariant high = value <= 100
+                let graded (x: Int) = if R(x) as r then 0 else
+                    | high -> 2
+                    | low -> 1
+                """);
+
+        assertAccepted(path, readerOf("app.g"));
+    }
+
+    /** A recursive helper of another module is emitted as a method of the reader, so the reader
+     *  carries its body. */
+    @Test
+    void aRecursiveHelperTakenOnAsAMethodIsHeld() {
+        Map<String, ClassFileImage> path = builtAgainst("""
+                module lib.n exposing ( steps )
+                partial let steps (n: Int): Int = if n <= 0 then 0 else 1 + steps(n - 1)
+                """, """
+                module app.n exposing ( use )
+                import lib.n ( steps )
+                behavior use : (n: Int) -> Int
+                let use (n) = steps(n)
+                """, """
+                module lib.n exposing ( steps )
+                partial let steps (n: Int): Int = if n <= 0 then 0 else 2 + steps(n - 1)
+                """);
+
+        assertEquals(new ModuleMessage.ItCopiedAnotherVersion("app.n", "helper", "steps", "lib.n",
+                        "closed helper"),
+                refusal(path, readerOf("app.n")));
     }
 
     /** Importing a constant and never reading it copies nothing of it. */

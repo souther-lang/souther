@@ -214,7 +214,7 @@ final class HelperParams {
                             Hir.RetType.of(
                                     List.of(Hir.TypeRef.of(generalize(t, generalized), p.pos())),
                                     p.pos()),
-                            p.typeFromPattern()));
+                            Hir.ParameterTypeFrom.INFERRED));
         }
         return new Hir.FnDef(h.written(), h.declaredIn(), params, h.declaredReturn(), h.body(),
                 h.modifiers(), h.role(), h.pos());

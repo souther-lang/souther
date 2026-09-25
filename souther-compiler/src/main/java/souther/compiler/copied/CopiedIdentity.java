@@ -9,19 +9,30 @@ import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 import souther.compiler.types.WrittenTypeMeaning;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 
 /**
  * What a reader copies of a declaration, written so that two compiles of the declaration write the
  * same thing.
  *
- * <p>Taken of what the reader is handed, which for a helper or a value is the definition closed over
- * its own module and for a type's invariant is the clauses as its module settled them — not the text
- * a jar carries and not a lowered method. The text answers to the author's layout, and a lowered
+ * <p>Taken of the declaration closed over its own module and no other — a helper or a value as
+ * closing hands it to a reader, a type's invariant as its clauses closed the same way — and not of
+ * the text a jar carries or a lowered method. The text answers to the author's layout, and a lowered
  * method to the call site the helper was expanded at.
+ *
+ * <p><b>Another module's definitions are written as what names them.</b> A value of another module
+ * is its name; a helper of another module that closing expanded is its callee and the arguments it
+ * was handed, and not the body the expansion copied. That body is a copy of that helper, held to
+ * what that helper offers, and a reader copying this declaration copies it as well and records it
+ * as such. Written in here instead, what this declaration is would move with what that helper is
+ * held as, and the two would be compared under two different sayings of one thing: a constant
+ * written another way is one constant, and the body it is written into would be another body.
  *
  * <p><b>What is left out, and why each.</b> Where the source put a term is where it was written and
  * not what it says. How a name was spelled — an alias, a qualification — is how it was reached, and
@@ -35,10 +46,13 @@ import java.util.Optional;
  * <p><b>What is kept.</b> Everything a run of the copy turns on: which node, the literal, the
  * operator, the field, the declaration a name reaches, the type a construct is written with, the
  * cases a match selects, and the children in the order the node holds them. A clause keeps its name,
- * which is what a refusal of the value says.
+ * which is what a refusal of the value says. The departures of an attempted construction are a
+ * lookup by the clause that failed and not a sequence (spec §attempt-departures), so they are written in
+ * the order of the clauses they answer, whatever order the source wrote them in.
  *
- * <p>What a helper's parameters are inferred as is not here. It follows from what is here and from
- * the rules the boundary revision stands for, so holding it again would be holding one fact twice.
+ * <p>What a helper's parameters are inferred as is not here, only what their author wrote of them
+ * ({@link Hir.ParameterTypeFrom}). An inferred type follows from what is here and from the rules the
+ * boundary revision stands for, so holding it again would be holding one fact twice.
  */
 public final class CopiedIdentity {
 
@@ -46,38 +60,56 @@ public final class CopiedIdentity {
     private final Map<BindingId, Integer> boundAt = new HashMap<>();
     /** The names read that nothing in what is written binds, where each was first read. */
     private final Map<BindingId, Integer> handedAt = new HashMap<>();
+    /** The module the declaration belongs to: what is written of another is what names it. */
+    private final String owner;
+    /** Its helpers, as the module declared them. */
+    private final Function<ValueName.Helper, Hir.FnDef> declaredHere;
     /** Whether a name bound outside what is written is a field of the declaration, which is what a
      *  clause reads. A helper or a value is closed, and one reading such a name is not. */
     private final boolean freeNamesAreFields;
 
-    private CopiedIdentity(boolean freeNamesAreFields) {
+    private CopiedIdentity(Owner owner, boolean freeNamesAreFields) {
+        this.owner = owner.module();
+        this.declaredHere = owner.declares();
         this.freeNamesAreFields = freeNamesAreFields;
     }
 
-    /** A helper as its reader expands it: {@code closed}, with parameters, closed over its module. */
-    public static CopyRecord helper(Hir.FnDef closed) {
+    /**
+     * The module a declaration belongs to, and what it declares.
+     *
+     * @param module   the module
+     * @param declares each helper of it as the module declared it, or null where it declares none of
+     *                 that name — which is where what its author wrote of a helper expanded into the
+     *                 declaration is read from
+     */
+    public record Owner(String module, Function<ValueName.Helper, Hir.FnDef> declares) {}
+
+    /** A helper as its reader expands it: {@code closed}, with parameters, closed over the module
+     *  that declares it. */
+    public static CopyRecord helper(Hir.FnDef closed, Owner owner) {
         if (closed.params().isEmpty()) {
             throw new IllegalArgumentException("`" + closed.name() + "` is a value, and is copied"
                     + " as one");
         }
-        CopiedIdentity writing = new CopiedIdentity(false);
+        CopiedIdentity writing = new CopiedIdentity(owner, false);
         writing.word("takes").count(closed.params().size());
         for (Hir.FnParam param : closed.params()) {
             writing.bind(param.binder());
-            writing.type(param.type());
+            writing.parameterType(param);
         }
         writing.word("answers").type(closed.declaredReturn());
         writing.expr(closed.writtenBody());
         return new CopyRecord(CopyRecord.Form.CLOSED_HELPER, writing.out.toString());
     }
 
-    /** A value as its reader copies its body: {@code closed}, taking nothing, closed over its module. */
-    private static CopyRecord body(Hir.FnDef closed) {
+    /** A value as its reader copies its body: {@code closed}, taking nothing, closed over the
+     *  module that declares it. */
+    private static CopyRecord body(Hir.FnDef closed, Owner owner) {
         if (!closed.params().isEmpty()) {
             throw new IllegalArgumentException("`" + closed.name() + "` takes parameters, and is"
                     + " copied as a helper");
         }
-        CopiedIdentity writing = new CopiedIdentity(false);
+        CopiedIdentity writing = new CopiedIdentity(owner, false);
         writing.word("answers").type(closed.declaredReturn());
         writing.expr(closed.writtenBody());
         return new CopyRecord(CopyRecord.Form.CLOSED_BODY, writing.out.toString());
@@ -91,19 +123,21 @@ public final class CopiedIdentity {
      * fold to one value are one copy. An exact ratio a division leaves is known at compile time and
      * has no literal to be held as, so a value folding to one is held as its body.
      *
-     * @param closed what the value is, closed over its module
+     * @param closed what the value is, closed over {@code owner}
      * @param folded what it folds to, or empty where it is not a constant
+     * @param owner  the module that declares it
      */
-    public static CopyRecord value(Hir.FnDef closed, Optional<Object> folded) {
+    public static CopyRecord value(Hir.FnDef closed, Optional<Object> folded, Owner owner) {
         WrittenValue constant = folded.map(ConstEval::asWritten).orElse(null);
         return constant != null
                 ? new CopyRecord(CopyRecord.Form.CONSTANT, constant.written())
-                : body(closed);
+                : body(closed, owner);
     }
 
-    /** A type's invariant as the types that include it check it: its clauses, in the order written. */
-    public static CopyRecord clauses(List<Hir.InvariantClause> clauses) {
-        CopiedIdentity writing = new CopiedIdentity(true);
+    /** A type's invariant as the types that include it check it: its clauses, closed over
+     *  {@code owner}, in the order written. */
+    public static CopyRecord clauses(List<Hir.InvariantClause> clauses, Owner owner) {
+        CopiedIdentity writing = new CopiedIdentity(owner, true);
         writing.count(clauses.size());
         for (Hir.InvariantClause clause : clauses) {
             writing.optional(clause.name());
@@ -177,7 +211,9 @@ public final class CopiedIdentity {
                 expr(it.construct());
                 bind(it.binder());
                 expr(it.then());
-                for (Hir.ElseArm arm : it.els()) {
+                List<Hir.ElseArm> byClause = new ArrayList<>(it.els());
+                byClause.sort(BY_CLAUSE);
+                for (Hir.ElseArm arm : byClause) {
                     optional(arm.clause());
                     expr(arm.body());
                 }
@@ -207,22 +243,27 @@ public final class CopiedIdentity {
                 }
                 expr(it.body());
             }
+            // The types an expansion carries are its callee's signature, instantiated at this call
+            // and with what the checker worked out written in beside what the author wrote, so
+            // they are not read here. What the callee's author wrote is read off the callee.
             case Hir.Expansion it -> {
-                word("expansion").reference(it.callee()).count(it.bound().size());
+                word(isElsewhere(it.callee()) ? "expansion elsewhere" : "expansion")
+                        .reference(it.callee()).count(it.bound().size());
                 for (Hir.Bound bound : it.bound()) {
                     expr(bound.value());
                     bind(bound.binder());
-                    type(bound.declaredType());
                 }
                 count(it.given().size());
                 for (Hir.Given given : it.given()) {
-                    type(given.declaredType());
                     word(String.valueOf(given.applied()));
-                    type(given.arrivesAs());
                     expr(given.value());
                 }
-                type(it.declaredReturn());
-                expr(it.body());
+                // What the expansion copied of another module's helper is that helper's, and is
+                // held as that helper.
+                if (!isElsewhere(it.callee())) {
+                    signatureOf(it.callee());
+                    expr(it.body());
+                }
             }
             case Hir.Block it -> {
                 word("block").count(it.params().size());
@@ -281,6 +322,47 @@ public final class CopiedIdentity {
             case ValueName.Stdlib.Namespace namespace -> word("namespace").word(namespace.alias());
         }
     }
+
+    /**
+     * What the author of {@code callee}, a helper of the module written here, wrote of what it takes
+     * and answers — or nothing, for a callee that is not one: a lambda a binding holds takes the
+     * types of the parameters it was written with, and those are in its body, and one of the
+     * language's is the same on every side of every artifact.
+     */
+    private void signatureOf(ValueName callee) {
+        Hir.FnDef declared = callee instanceof ValueName.Helper helper
+                && helper.module().equals(owner) ? declaredHere.apply(helper) : null;
+        if (declared == null) {
+            word("no signature here");
+            return;
+        }
+        word("signature").count(declared.params().size());
+        declared.params().forEach(this::parameterType);
+        type(declared.declaredReturn());
+    }
+
+    /** What the author wrote of {@code param}'s type, and that the checker worked it out where the
+     *  author wrote none. */
+    private void parameterType(Hir.FnParam param) {
+        if (param.typeFrom() == Hir.ParameterTypeFrom.INFERRED) {
+            word("inferred");
+        } else {
+            type(param.type());
+        }
+    }
+
+    /** Whether {@code callee} is a helper of a module other than the one written here, and other
+     *  than the language's, which is the same on every side of every artifact. */
+    private boolean isElsewhere(ValueName callee) {
+        return callee instanceof ValueName.Helper helper && !helper.module().equals(owner)
+                && !helper.isDeclaredByLanguage();
+    }
+
+    /** The departures of an attempted construction in the order of the clauses they answer: each
+     *  named one by its clause, and the one for any clause after them. */
+    private static final Comparator<Hir.ElseArm> BY_CLAUSE = Comparator
+            .comparing((Hir.ElseArm arm) -> arm.clause().isEmpty())
+            .thenComparing(arm -> arm.clause().orElse(""));
 
     /** What an expansion is of: the declaration its callee reaches, however it was spelled. */
     private CopiedIdentity reference(ValueName callee) {

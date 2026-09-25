@@ -522,6 +522,10 @@ public final class HelperInliner {
      */
     private final SequencedSet<CopyTarget> copied = new LinkedHashSet<>();
 
+    /** What each expansion being asked about has copied, innermost last — for the reason
+     *  {@link #standingHere} is kept beside {@link #leftStanding}. */
+    private final java.util.List<SequencedSet<CopyTarget>> copiedHere = new java.util.ArrayList<>();
+
     /**
      * What each expansion being asked about has left standing, innermost last.
      *
@@ -646,7 +650,7 @@ public final class HelperInliner {
     private void copiesHelper(ReachName.Declaration reaches) {
         ValueName.Helper declared = CopyTarget.declaredElsewhere(reaches, moduleName());
         if (declared != null) {
-            copied.add(new CopyTarget.Helper(declared));
+            copies(new CopyTarget.Helper(declared));
         }
     }
 
@@ -655,7 +659,16 @@ public final class HelperInliner {
     private void copiesValue(ReachName.Declaration reaches) {
         ValueName.Helper declared = CopyTarget.declaredElsewhere(reaches, moduleName());
         if (declared != null) {
-            copied.add(new CopyTarget.Value(declared));
+            copies(new CopyTarget.Value(declared));
+        }
+    }
+
+    /** {@code target}, copied: into what this inliner answers for and into every expansion being
+     *  asked about, which holds this one. */
+    private void copies(CopyTarget target) {
+        copied.add(target);
+        for (SequencedSet<CopyTarget> asked : copiedHere) {
+            asked.add(target);
         }
     }
 
@@ -799,6 +812,40 @@ public final class HelperInliner {
         return fn.reachedAs(new ReachName.OfModule(new ValueName.Helper(module, fn.name())))
                 .withBody(new Hir.FnBody.Written(
                         HelperNames.publishedBy(HelperNames.qualifyHelpersOf(closed, module), module)));
+    }
+
+    /**
+     * {@link #closeAcross}, with what closing it copied of other modules' declarations.
+     *
+     * <p>A reader handed the closed definition copies those along with it, since the closing wrote
+     * them into what it is handed and nothing there names them any more.
+     */
+    public Expansion<Hir.FnDef> closedAcross(Hir.FnDef fn, String module) {
+        return expanding(() -> closeAcross(fn, module));
+    }
+
+    /**
+     * The clauses of {@code data}, a declaration of {@code module}, closed over that module and no
+     * other: its own helpers and values expanded, and every definition of another module left as
+     * what names it — a value as its name, a helper as an expansion whose callee says which one.
+     *
+     * <p>What a declaration's invariant is, said in terms of its own module. The clauses a reader
+     * checks have the other modules' definitions written into them as well, and those are copies of
+     * those definitions, held to what they offer and not to what this declaration does.
+     */
+    public List<Hir.InvariantClause> closeClausesAcross(Hir.Data data, String module) {
+        if (!module.equals(table.module())) {
+            throw new IllegalArgumentException("`" + module + "` is not the module this expands"
+                    + " into, which is `" + table.module() + "`");
+        }
+        ValuesLeftNamed namedBefore = valuesStayNamed;
+        valuesStayNamed = ValuesLeftNamed.OF_OTHER_MODULES;
+        try {
+            BindingOwner declared = new BindingOwner.OfData(data.declares());
+            return Hir.mapClauses(data.invariants(), clause -> inline(clause, declared));
+        } finally {
+            valuesStayNamed = namedBefore;
+        }
     }
 
     /** The module these helpers belong to — the one whose bodies this expands into. */
@@ -1320,17 +1367,22 @@ public final class HelperInliner {
     }
 
     /**
-     * What one run of {@code expansion} left standing, for a driver expanding something this class
-     * has no single entry point for — the several clauses of one declaration, expanded one after
-     * another into the tree the declaration becomes.
+     * What one run of {@code expansion} left standing and what it copied of other modules'
+     * declarations, for a driver expanding something this class has no single entry point for — the
+     * several clauses of one declaration, expanded one after another into the tree the declaration
+     * becomes, or the definitions of a module closed one after another.
      */
     <T> Expansion<T> expanding(java.util.function.Supplier<T> expansion) {
         java.util.SequencedSet<ReachName.Declaration> asked = new java.util.LinkedHashSet<>();
+        SequencedSet<CopyTarget> copiedByIt = new LinkedHashSet<>();
         standingHere.add(asked);
+        copiedHere.add(copiedByIt);
         try {
-            return new Expansion<>(expansion.get(), asked);
+            return new Expansion<>(expansion.get(), asked, copiedByIt, ElementProvenance.NONE,
+                    souther.compiler.coverage.SuppliedRules.NONE);
         } finally {
             standingHere.remove(standingHere.size() - 1);
+            copiedHere.remove(copiedHere.size() - 1);
         }
     }
 
@@ -1628,6 +1680,11 @@ public final class HelperInliner {
         // takes nothing. The value is substituted and the arguments are applied to it.
         if (helper.params().isEmpty() && !args.isEmpty()
                 && call.function() instanceof Hir.Var named) {
+            // A body being closed leaves another module's value as its name, applied or not: the
+            // reader decides what stands for it, as it does wherever the value is named.
+            if (reaches != null && leftNamed(reaches)) {
+                return call.withArgs(args);
+            }
             Hir.FnDef applied = appliedValue(named);
             return inline(call.replacedBy(applied == null ? valueOf(named)
                     : appliedValueBody((Hir.Var.Denoting) named, applied), args));
@@ -3009,8 +3066,12 @@ public final class HelperInliner {
         for (Hir.Var spread : nd.spreads()) {
             // A spread is a reference (ADR-0072), so where references are materialised once in the
             // region that demands them, this is one of them and is left for that walk. Bound here
-            // as well, a value spread and named in one region would be built twice.
+            // as well, a value spread and named in one region would be built twice. A body being
+            // closed leaves the values it names as names, and a spread is one of the places it
+            // names them.
             Hir.FnDef value = reading == ValueAtAReference.SHARED_PER_REGION
+                    || spread instanceof Hir.Var.Denoting named
+                    && leftNamed(named.reachesADeclaration())
                     ? null : valueSpread(spread);
             if (value == null) {
                 spreads.add(spread);

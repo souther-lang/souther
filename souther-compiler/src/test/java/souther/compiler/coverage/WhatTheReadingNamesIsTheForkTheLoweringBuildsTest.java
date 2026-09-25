@@ -93,7 +93,7 @@ class WhatTheReadingNamesIsTheForkTheLoweringBuildsTest {
         for (int i = 0; i < rules.size(); i++) {
             Hir.Binder binder = new Hir.Binder(WrittenName.synthetic(rules.get(i), AT),
                     new BindingId(new BindingOwner.OfValue(MODULE, "f"), i), AT);
-            params.add(new Hir.FnParam(binder, aRuleType(), false));
+            params.add(new Hir.FnParam(binder, aRuleType()));
             guards.add(Hir.Var.local(binder, AT));
         }
         Hir.ListComp comp = new Hir.ListComp(new Hir.IntLit(1, AT, null), guards,

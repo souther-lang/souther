@@ -55,11 +55,13 @@ public final class InvariantSettled {
     private final Hir.Module module;
     private final java.util.SequencedSet<souther.compiler.types.ReachName.Declaration> standing;
     private final SequencedSet<CopyTarget> copied;
+    private final Map<TypeKey, SequencedSet<CopyTarget>> copiedBy;
 
-    private InvariantSettled(Expansion<Hir.Module> expanded) {
-        this.module = expanded.value();
-        this.standing = expanded.standing();
-        this.copied = expanded.copied();
+    private InvariantSettled(ClauseHelpers.SettledClauses settled) {
+        this.module = settled.expanded().value();
+        this.standing = settled.expanded().standing();
+        this.copied = settled.expanded().copied();
+        this.copiedBy = Map.copyOf(settled.copiedBy());
     }
 
     /**
@@ -99,6 +101,19 @@ public final class InvariantSettled {
      */
     public SequencedSet<CopyTarget> copiedFromElsewhere() {
         return copied;
+    }
+
+    /**
+     * What settling the clauses of {@code declaration} copied of other modules' declarations.
+     *
+     * <p>Asked by a reader that checks those clauses because a type of its own includes the
+     * declaration: the clauses it checks hold what those declarations said, so it copies them along
+     * with the clauses. None where the clauses copied nothing, or the declaration is not this
+     * module's.
+     */
+    public SequencedSet<CopyTarget> copiedBy(TypeKey declaration) {
+        SequencedSet<CopyTarget> found = copiedBy.get(declaration);
+        return found == null ? java.util.Collections.emptySortedSet() : found;
     }
 
 
@@ -208,12 +223,14 @@ public final class InvariantSettled {
     @Override
     public boolean equals(Object o) {
         return o instanceof InvariantSettled other && module.equals(other.module)
-                && standing.equals(other.standing) && copied.equals(other.copied);
+                && standing.equals(other.standing) && copied.equals(other.copied)
+                && copiedBy.equals(other.copiedBy);
     }
 
     @Override
     public int hashCode() {
-        return (module.hashCode() * 31 + standing.hashCode()) * 31 + copied.hashCode();
+        return ((module.hashCode() * 31 + standing.hashCode()) * 31 + copied.hashCode()) * 31
+                + copiedBy.hashCode();
     }
 
     @Override

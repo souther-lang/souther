@@ -84,6 +84,7 @@ class EveryFormHandedToADelegatedEqualityIsAccountedForTest {
                         "java.lang.String",
                         "java.math.BigDecimal",
                         "souther.compiler.ast.Hir$Fields",
+                        "souther.compiler.ast.Hir$ParameterTypeFrom",
                         "souther.compiler.types.BinOp",
                         "souther.compiler.types.LanguageCaseId",
                         "souther.compiler.types.Type$Prim"),

@@ -14,14 +14,18 @@ import souther.compiler.types.ReachName;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
+import java.util.SortedSet;
 import java.util.TreeMap;
+import java.util.TreeSet;
 
 /**
  * What each module's declarations offer another module to copy into its classes, and what a module's
@@ -42,20 +46,28 @@ public final class Copies {
     private Copies() {}
 
     /**
-     * What a module's declarations offer to be copied, and what of other modules' declarations was
-     * copied to work that out.
+     * What a module's declarations offer to be copied, what a copy of each takes along with it, and
+     * what of other modules' declarations what they offer rests on.
      *
      * @param provides what each declaration of the module offers, by the declaration
-     * @param read     each declaration of another module copied into what the module offers — a
-     *                 helper of a third module expanded into one of its own as it was closed, a
-     *                 constant of a third module one of its values folds through — and what it was
-     *                 copied as. Part of what the module is built against, for what it offers is
-     *                 what a reader copies.
+     * @param absorbed for each declaration of the module, the declarations of other modules a copy
+     *                 of it holds and does not name — a helper of a third module its closing
+     *                 expanded, a value its clauses were settled with. What it offers names them,
+     *                 so a reader copying it copies them as well, held to what they offer
+     * @param read     each declaration of another module what the module offers rests on, and what
+     *                 it was copied as — the constant of a third module one of its values folds
+     *                 through, and what folding it expanded. Part of what the module is built
+     *                 against, for what it offers is what a reader copies
      */
     public record Of(SortedMap<CopyTarget, CopyRecord> provides,
+                     SortedMap<CopyTarget, SortedSet<CopyTarget>> absorbed,
                      SortedMap<CopyTarget, CopyRecord> read) {
         public Of {
             provides = Collections.unmodifiableSortedMap(new TreeMap<>(provides));
+            SortedMap<CopyTarget, SortedSet<CopyTarget>> each = new TreeMap<>();
+            absorbed.forEach((target, along) ->
+                    each.put(target, Collections.unmodifiableSortedSet(new TreeSet<>(along))));
+            absorbed = Collections.unmodifiableSortedMap(each);
             read = Collections.unmodifiableSortedMap(new TreeMap<>(read));
         }
     }
@@ -81,13 +93,40 @@ public final class Copies {
     }
 
     /**
+     * What a copy of {@code target} holds of other modules' declarations and does not name, as the
+     * module that declares it works that out here.
+     *
+     * <p>Its own question for the reason {@link Projection} is.
+     */
+    public record Absorbed(CopyTarget target) implements Key<SortedSet<CopyTarget>> {
+        @Override
+        public String module() {
+            return target.module();
+        }
+
+        @Override
+        public Answer<SortedSet<CopyTarget>> compute(Db db) {
+            Answer<Of> provided = db.ask(new Provided(target.module()));
+            if (!provided.present()) {
+                return Answer.absent();
+            }
+            SortedSet<CopyTarget> along = provided.value().absorbed().get(target);
+            return along == null ? Answer.absent() : Answer.of(along);
+        }
+    }
+
+    /**
      * What a module's declarations offer to be copied.
      *
-     * <p>A helper or a value is offered as it is closed over its module — the definitions a reader is
-     * handed ({@link Bodies#carrying}) — and a value as the constant it folds to where it folds to
-     * one, which is what a reader carries of it then. A type's invariant is offered as its clauses as
-     * the module settled them. Only the module's own declarations: what closing carries along of a
-     * module further up is that module's to offer.
+     * <p>Each is offered closed over its own module and no other ({@link CopiedIdentity}): a helper
+     * or a value as closing hands it to a reader ({@link Bodies#carrying}), a value as the constant
+     * it folds to where it folds to one, and a type's invariant as its clauses closed the same way.
+     * What another module's definition is enters what this module offers only as what names it, so
+     * what this module offers moves with what it wrote and not with how another module's definition
+     * is said — which is what lets a copy of a copy be compared by the same rule as the copy. What a
+     * copy of it holds of those definitions is said beside it ({@link Of#absorbed}), and a reader
+     * copies them as copies of their own. Only the module's own declarations: what closing carries
+     * along of a module further up is that module's to offer.
      *
      * <p>For a module read off the path, made the same way out of what it published, and asked only
      * once the module has been held to what it was built against — its classes are what it offers,
@@ -107,10 +146,17 @@ public final class Copies {
                 return Answer.absent();
             }
             Answer<Hir.Module> settled = db.ask(new Bodies.Settled(name));
+            Answer<Hir.Module> resolved = db.ask(new Names.Resolved(name));
+            Answer<InvariantSettled> settling = db.ask(new Shapes.Settling(name));
             Answer<Bodies.Expanding.Of> against =
                     db.ask(new Bodies.Expanding(name, InliningPolicy.FULL));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
-            if (!settled.present() || !against.present() || !scope.present()) {
+            // What a module that did not check offers is not asked: a copy is written of what
+            // checked, and a module that did not has said why.
+            Answer<Bodies.ModuleCheck.Of> checked = db.ask(new Bodies.ModuleCheck(name));
+            if (!settled.present() || !resolved.present() || !settling.present()
+                    || !against.present() || !scope.present() || !checked.present()
+                    || !checked.value().sound()) {
                 return Answer.absent();
             }
             Hir.Module from = settled.value();
@@ -124,34 +170,55 @@ public final class Copies {
             HelperInliner folding = HelperInliner.over(against.value().table(),
                     against.value().graph()).callingValuesAsMethodsWhereEmitted(scope.value());
             SortedMap<CopyTarget, CopyRecord> provides = new TreeMap<>();
+            SortedMap<CopyTarget, SortedSet<CopyTarget>> absorbed = new TreeMap<>();
+            // What a constant is rests on everything folding it went through. A reader carries the
+            // constant and nothing of those, so they are what this module's offer rests on.
+            Set<CopyTarget> restsOn = new LinkedHashSet<>();
+            CopiedIdentity.Owner owner = new CopiedIdentity.Owner(name, helper ->
+                    against.value().table().reached(new ReachName.Own(helper)));
             for (Hir.FnDef def : carried.definitions().values()) {
                 ValueName.Helper declared = ownDefinition(def, name);
                 if (declared == null) {
                     continue;
                 }
+                SortedSet<CopyTarget> closing = carried.absorbed().get(def.name());
                 if (def.params().isEmpty()) {
-                    provides.put(new CopyTarget.Value(declared),
-                            CopiedIdentity.value(def, folding.constantOfOwn(declared.name())));
+                    CopyTarget.Value target = new CopyTarget.Value(declared);
+                    CopyRecord offered = CopiedIdentity.value(def,
+                            folding.constantOfOwn(declared.name()), owner);
+                    provides.put(target, offered);
+                    if (offered.form() == CopyRecord.Form.CONSTANT) {
+                        absorbed.put(target, new TreeSet<>());
+                        restsOn.addAll(closing);
+                    } else {
+                        absorbed.put(target, closing);
+                    }
                 } else {
-                    provides.put(new CopyTarget.Helper(declared), CopiedIdentity.helper(def));
+                    CopyTarget.Helper target = new CopyTarget.Helper(declared);
+                    provides.put(target, CopiedIdentity.helper(def, owner));
+                    absorbed.put(target, closing);
                 }
             }
-            for (Hir.Def def : from.defs()) {
-                if (scope.value().declaredNode(def.declares()) instanceof Hir.Data data) {
-                    provides.put(new CopyTarget.Invariant(data.declares().key()),
-                            CopiedIdentity.clauses(data.invariants()));
+            HelperInliner closingClauses = HelperInliner.over(against.value().table(),
+                    against.value().graph());
+            for (Hir.Def def : resolved.value().defs()) {
+                if (def instanceof Hir.Data data) {
+                    CopyTarget.Invariant target = new CopyTarget.Invariant(data.declares().key());
+                    provides.put(target, CopiedIdentity.clauses(
+                            closingClauses.closeClausesAcross(data, name), owner));
+                    absorbed.put(target,
+                            new TreeSet<>(settling.value().copiedBy(data.declares().key())));
                 }
             }
-            Set<CopyTarget> copied = new LinkedHashSet<>(carried.copied());
-            copied.addAll(folding.copiedFromElsewhere());
-            SortedMap<CopyTarget, CopyRecord> read = asOffered(db, copied);
+            restsOn.addAll(folding.copiedFromElsewhere());
+            SortedMap<CopyTarget, CopyRecord> read = asOffered(db, restsOn);
             if (read == null) {
                 return Answer.absent();
             }
             if (onThePath != null) {
                 itOffersWhatItsClassesOffer(name, provides, onThePath.providedCopies());
             }
-            return Answer.of(new Of(provides, read));
+            return Answer.of(new Of(provides, absorbed, read));
         }
     }
 
@@ -169,10 +236,12 @@ public final class Copies {
      *
      * <p>Gathered from where each copy was made: the expansions of every method the module emits
      * ({@link Lower.Lowered#copied}), the expansion of its clauses ({@link
-     * InvariantSettled#copiedFromElsewhere}), the declarations of other modules its types include,
-     * whose clauses its constructions check, and what working out its own offers copied. A decoder
-     * checks the same clauses its constructions do, expanded under a policy that differs only in
-     * the language's own operations, so it copies nothing the clauses did not.
+     * InvariantSettled#copiedFromElsewhere}), and the declarations of other modules its types
+     * include, whose clauses its constructions check. Then what each of those holds of further
+     * declarations ({@link Absorbed}), and so on, since what a copy holds the classes carry as much
+     * as the copy itself. And what its own offers rest on. A decoder checks the same clauses its
+     * constructions do, expanded under a policy that differs only in the language's own
+     * operations, so it copies nothing the clauses did not.
      */
     public record Required(String name) implements Key<SortedMap<CopyTarget, CopyRecord>> {
         @Override
@@ -201,7 +270,22 @@ public final class Copies {
                     }
                 }
             }
-            SortedMap<CopyTarget, CopyRecord> out = asOffered(db, copied);
+            // A copy holds what the declaration it is of absorbed, and so on down: each of those is
+            // copied here as much as the declaration that absorbed it is.
+            Set<CopyTarget> along = new LinkedHashSet<>();
+            Deque<CopyTarget> pending = new ArrayDeque<>(copied);
+            while (!pending.isEmpty()) {
+                CopyTarget target = pending.poll();
+                if (!along.add(target)) {
+                    continue;
+                }
+                Answer<SortedSet<CopyTarget>> absorbed = db.ask(new Absorbed(target));
+                if (!absorbed.present()) {
+                    return Answer.absent();
+                }
+                pending.addAll(absorbed.value());
+            }
+            SortedMap<CopyTarget, CopyRecord> out = asOffered(db, along);
             if (out == null) {
                 return Answer.absent();
             }

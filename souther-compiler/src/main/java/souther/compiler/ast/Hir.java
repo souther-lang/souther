@@ -947,13 +947,23 @@ public interface Hir {
 
     /** A {@code fn} parameter: a name, and a type only when the {@code fn} is a helper (spec §fn-declaration).
      * A helper's parameter type may be a function type {@link FnType}; a behavior fn's parameter
-     * carries no type ({@code type} is null). {@code typeFromPattern} marks a type read off a
-     * constructor pattern in parameter position rather than written beside the name — a behavior's
-     * implementation may write the pattern, and its type still comes from the behavior. */
-    record FnParam(Binder binder, RetType type, boolean typeFromPattern) implements Hir {
+     * carries no type ({@code type} is null). {@code typeFrom} says where the type came from. */
+    record FnParam(Binder binder, RetType type, ParameterTypeFrom typeFrom) implements Hir {
+
+        public FnParam {
+            Objects.requireNonNull(typeFrom, "a parameter says where its type came from");
+        }
+
         /** A parameter whose type, if any, the author wrote (the common case). */
         public FnParam(Binder binder, RetType type) {
-            this(binder, type, false);
+            this(binder, type, ParameterTypeFrom.WRITTEN);
+        }
+
+        /** Whether the type was read off a constructor pattern in parameter position rather than
+         *  written beside the name — a behavior's implementation may write the pattern, and its
+         *  type still comes from the behavior. */
+        public boolean typeFromPattern() {
+            return typeFrom == ParameterTypeFrom.A_PATTERN;
         }
 
         public String name() {
@@ -969,6 +979,24 @@ public interface Hir {
         public SourcePos pos() {
             return binder.pos();
         }
+    }
+
+    /**
+     * Where a parameter's type came from.
+     *
+     * <p>Kept on the parameter because the settling that infers a type writes it where a written one
+     * stands, and afterwards the two read alike. What the author said of a helper is part of what
+     * the helper is; what the checker worked out from its body follows from the body and from the
+     * rules it was worked out by, and a reader that holds the helper to what it is holds the first
+     * and not the second.
+     */
+    enum ParameterTypeFrom implements DelegatedEqualityIsTheCrossingAnswer {
+        /** Written beside the name, or not written and not yet worked out. */
+        WRITTEN,
+        /** Read off a constructor pattern in parameter position. */
+        A_PATTERN,
+        /** Worked out from the body where the author wrote none. */
+        INFERRED
     }
 
     /**
