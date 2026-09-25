@@ -45,6 +45,9 @@ public sealed interface LinkageProjection {
      *
      * <p>Every component is in here. Two projections with the same facts are one projection, and a
      * component left out would be a fact a class links by that an artifact does not record.
+     *
+     * <p>What is said is what stands under each label, and never where a fact stands among the
+     * others ({@link LinkageRecord}). An order a class links by is said inside one fact's value.
      */
     List<Fact> facts();
 
@@ -255,6 +258,12 @@ public sealed interface LinkageProjection {
             facts.add(new Fact("declared as", form.written()));
             facts.add(new Fact("exposed", String.valueOf(exposed)));
             facts.add(new Fact("carried as", carrier));
+            if (form == Form.PRODUCT || form == Form.NEWTYPE) {
+                // The order a constructor and __construct take the fields in, which two fields of
+                // one type can trade places in with nothing else about them moving.
+                facts.add(new Fact("laid out as", fields.stream().map(Field::name)
+                        .collect(Collectors.joining(", ", "(", ")"))));
+            }
             for (Field field : fields) {
                 facts.add(new Fact("field " + field.name(), shown(field.type())));
             }

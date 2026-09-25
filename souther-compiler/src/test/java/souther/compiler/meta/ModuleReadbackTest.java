@@ -7,7 +7,6 @@ import souther.compiler.ast.Ast;
 import souther.compiler.codegen.Backend;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.jvm.ClassFileImage;
-import souther.compiler.jvm.LinkageProjection;
 import souther.compiler.jvm.LinkageRecord;
 import souther.compiler.jvm.LinkageTarget;
 import souther.compiler.types.ValueName;
@@ -255,12 +254,11 @@ class ModuleReadbackTest {
     }
 
     private static String factOf(LinkageRecord record, String label) {
-        for (LinkageProjection.Fact fact : record.facts()) {
-            if (fact.label().equals(label)) {
-                return fact.value();
-            }
+        String value = record.facts().get(label);
+        if (value == null) {
+            throw new AssertionError("no `" + label + "` in " + record);
         }
-        throw new AssertionError("no `" + label + "` in " + record);
+        return value;
     }
 
     /** A module at this boundary that says nothing of what its declarations offer, or of what its

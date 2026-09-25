@@ -3,7 +3,6 @@ package souther.compiler.meta;
 import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.GeneratedClass;
-import souther.compiler.jvm.LinkageProjection;
 import souther.compiler.jvm.LinkageRecord;
 import souther.compiler.jvm.LinkageTarget;
 import souther.compiler.jvm.DecoderKind;
@@ -148,8 +147,8 @@ class EveryClassOfAnotherModuleAClassNamesIsOneItRecordsReadingTest {
             for (GeneratedClass generated : classesOf(target)) {
                 out.add(SoutherJvmAbi.nameOf(generated).binaryName());
             }
-            for (LinkageProjection.Fact fact : record.facts()) {
-                Matcher m = DESCRIPTOR.matcher(fact.value());
+            for (String said : record.facts().values()) {
+                Matcher m = DESCRIPTOR.matcher(said);
                 while (m.find()) {
                     out.add(m.group(1).replace('/', '.'));
                 }

@@ -192,6 +192,35 @@ class AModuleOnThePathIsHeldToEachDeclarationItsClassesReadTest {
         assertEquals("field amount", moved(said(USES_ONLY_INC, path), "lib.b", "Money").fact());
     }
 
+    /**
+     * Two fields of one type trading places in a type `lib.b` builds. Every descriptor stays as it
+     * was, so its classes would link and hand each field the other's value; the layout moving is
+     * what says so.
+     */
+    @Test
+    void fieldsOfOneTypeTradingPlacesIsSaid() {
+        Map<String, ClassFileImage> path = builtAgainst("""
+                module lib.c exposing ( Pair )
+                data Pair = { left: Int, right: Int }
+                """, """
+                module lib.b exposing ( inc, make )
+                import lib.c ( Pair )
+                behavior inc : (n: Int) -> Int
+                let inc (n) = n + 1
+                behavior make : (n: Int) -> Pair constructs Pair
+                let make (n) = Pair { left = n, right = 0 }
+                """, """
+                module lib.c exposing ( Pair )
+                data Pair = { right: Int, left: Int }
+                """);
+
+        ModuleMessage.ItWasBuiltAgainstAnotherLinkage said =
+                moved(said(USES_ONLY_INC, path), "lib.b", "Pair");
+        assertEquals("laid out as", said.fact());
+        assertEquals("(left, right)", said.built());
+        assertEquals("(right, left)", said.now());
+    }
+
     /** A published value `lib.b` reads that answers another type now: its classes take the entry's
      *  answer as what it was. */
     @Test

@@ -1,14 +1,12 @@
 package souther.compiler.meta;
 
-import souther.compiler.jvm.LinkageProjection;
 import souther.compiler.jvm.LinkageRecord;
 import souther.compiler.jvm.LinkageTarget;
 
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
@@ -30,10 +28,9 @@ final class PublishedLinkages {
                     .append(PublishedRequirements.counted(target.kind()))
                     .append(PublishedRequirements.counted(target.module()))
                     .append(PublishedRequirements.counted(target.name()));
-            for (LinkageProjection.Fact fact : record.facts()) {
-                entry.append(PublishedRequirements.counted(fact.label()))
-                        .append(PublishedRequirements.counted(fact.value()));
-            }
+            record.facts().forEach((label, value) ->
+                    entry.append(PublishedRequirements.counted(label))
+                            .append(PublishedRequirements.counted(value)));
             out.add(entry.toString());
         });
         return out;
@@ -53,15 +50,13 @@ final class PublishedLinkages {
             if (target == null) {
                 return null;
             }
-            List<LinkageProjection.Fact> facts = new ArrayList<>();
-            Set<String> labels = new HashSet<>();
+            Map<String, String> facts = new LinkedHashMap<>();
             while (at[0] < entry.length()) {
                 String label = PublishedRequirements.counted(entry, at);
                 String value = label == null ? null : PublishedRequirements.counted(entry, at);
-                if (value == null || !labels.add(label)) {
+                if (value == null || facts.put(label, value) != null) {
                     return null;
                 }
-                facts.add(new LinkageProjection.Fact(label, value));
             }
             if (out.put(target, new LinkageRecord(facts)) != null) {
                 return null;
