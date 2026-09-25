@@ -380,10 +380,7 @@ public final class CheckedProgram {
      *     where what it declares is not built out of fields
      */
     public AbortSet constructionAborts(TypeSymbol.AtModule type) {
-        if (!(declaration(type).data() instanceof CheckedData.WithFields)) {
-            throw new IllegalArgumentException(
-                    "`" + type + "` is not a declaration a construction builds");
-        }
+        declaration(type);
         return aborts.ordinaryConstructionOf(type);
     }
 

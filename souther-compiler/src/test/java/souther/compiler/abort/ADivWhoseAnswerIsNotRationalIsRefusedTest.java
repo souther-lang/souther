@@ -14,7 +14,6 @@ import souther.compiler.types.WrittenOwner;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -43,7 +42,7 @@ class ADivWhoseAnswerIsNotRationalIsRefusedTest {
                 POS);
 
         IllegalStateException thrown = assertThrows(IllegalStateException.class,
-                () -> AbortSites.of(List.of(malformed), KERNELS, Set.of()));
+                () -> AbortSites.of(List.of(malformed), KERNELS, List.of()));
 
         assertTrue(thrown.getMessage().contains("Rational"), thrown.getMessage());
     }

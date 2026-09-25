@@ -19,7 +19,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -65,7 +64,7 @@ class ASharedCoreInstanceUnderTwoContextsIsRefusedTest {
         Core root = new Core.Tuple(List.of(shared, attempt), Type.INT, POS);
 
         IllegalStateException thrown = assertThrows(IllegalStateException.class,
-                () -> AbortSites.of(List.of(root), KERNELS, Set.of(PERSON)));
+                () -> AbortSites.of(List.of(root), KERNELS, List.of(new Constructible(PERSON, true))));
 
         assertTrue(thrown.getMessage().contains("INVARIANT_NOT_HELD"), thrown.getMessage());
     }

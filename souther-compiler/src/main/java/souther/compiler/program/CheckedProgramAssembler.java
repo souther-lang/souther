@@ -23,6 +23,7 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.derive.CodecShape;
 import souther.compiler.derive.Deriver;
 import souther.compiler.abort.AbortSites;
+import souther.compiler.abort.Constructible;
 import souther.compiler.core.Composition;
 import souther.compiler.core.Contract;
 import souther.compiler.core.Core;
@@ -54,7 +55,6 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -117,24 +117,25 @@ final class CheckedProgramAssembler {
         }
         KernelContracts kernels = KernelContracts.of(libraryOf(db).kernelSignatures());
         AbortSites aborts = AbortSites.of(everyCoreRootOf(modules, everyDeclaration), kernels,
-                constructedWithInvariants(everyDeclaration));
+                constructible(everyDeclaration));
         return new CheckedProgram(modules, language, onThePath, targets, kernels, aborts);
     }
 
     /**
-     * Every declared type at least one {@code invariant} clause names.
+     * Every declared type a construction can build, each with whether an {@code invariant} clause
+     * names it.
      *
-     * <p>Read off the same declarations {@link #languageDataOf} and {@link #dataOf} already
-     * answered, and not re-derived from the checker's own state: a second reading of what a type's
-     * invariants are would be a second place that could disagree with {@link ValueShape#invariants}
-     * about which types have one.
+     * <p>Every one, and not only the ones with an invariant: a list of those would leave a type with
+     * none and a type it never reached reading the same. Read off the same declarations
+     * {@link #languageDataOf} and {@link #dataOf} already answered, and not re-derived from the
+     * checker's own state: a second reading of what a type's invariants are would be a second place
+     * that could disagree with {@link ValueShape#invariants} about which types have one.
      */
-    private static Set<TypeSymbol.AtModule> constructedWithInvariants(
-            List<CheckedData> everyDeclaration) {
-        Set<TypeSymbol.AtModule> found = new LinkedHashSet<>();
+    private static List<Constructible> constructible(List<CheckedData> everyDeclaration) {
+        List<Constructible> found = new ArrayList<>();
         for (CheckedData declared : everyDeclaration) {
-            if (declared instanceof CheckedData.WithFields fields && !fields.invariants().isEmpty()) {
-                found.add(declared.name());
+            if (declared instanceof CheckedData.WithFields fields) {
+                found.add(new Constructible(declared.name(), !fields.invariants().isEmpty()));
             }
         }
         return found;

@@ -6,9 +6,10 @@ import souther.compiler.types.BinOp;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 
 /**
  * Every {@link Core} site of a program, classified by which {@link AbortKind} a run reaching it can
@@ -38,12 +39,12 @@ import java.util.Set;
 public final class AbortSites {
 
     private final IdentityHashMap<Core, AbortSet> local;
-    private final Set<TypeSymbol.AtModule> constructedWithInvariants;
+    private final Map<TypeSymbol.AtModule, Constructible> constructible;
 
     private AbortSites(IdentityHashMap<Core, AbortSet> local,
-                       Set<TypeSymbol.AtModule> constructedWithInvariants) {
+                       Map<TypeSymbol.AtModule, Constructible> constructible) {
         this.local = local;
-        this.constructedWithInvariants = Set.copyOf(constructedWithInvariants);
+        this.constructible = constructible;
     }
 
     /**
@@ -67,18 +68,28 @@ public final class AbortSites {
      * holds them in; order carries no meaning here. Which {@code Core} a program's roots are is
      * the caller's to say, and nothing here assumes they are bodies.
      *
-     * @param constructedWithInvariants every declared type at least one {@code invariant} clause
-     *     names, read off the program's own declarations rather than re-derived here — the same
-     *     answer {@link souther.compiler.program.CheckedData.WithFields#invariants} gives, asked
-     *     once for the whole program rather than once per construction site
+     * @param constructible every declared type a construction can build, each with whether it
+     *     holds its values to an invariant, read off the program's own declarations rather than
+     *     collected from the constructions the roots happen to hold
+     * @throws IllegalArgumentException where {@code constructible} names one type twice
+     * @throws IllegalStateException where a root constructs a type {@code constructible} does not
+     *     name
      */
     public static AbortSites of(List<Core> roots, KernelContracts kernels,
-                                Set<TypeSymbol.AtModule> constructedWithInvariants) {
+                                List<Constructible> constructible) {
+        Map<TypeSymbol.AtModule, Constructible> byType = new HashMap<>();
+        for (Constructible each : constructible) {
+            if (byType.putIfAbsent(each.type(), each) != null) {
+                throw new IllegalArgumentException(
+                        "`" + each.type() + "` is named as constructible twice");
+            }
+        }
+        Map<TypeSymbol.AtModule, Constructible> held = Map.copyOf(byType);
         IdentityHashMap<Core, AbortSet> local = new IdentityHashMap<>();
         for (Core root : roots) {
-            walk(root, kernels, constructedWithInvariants, local);
+            walk(root, kernels, held, local);
         }
-        return new AbortSites(local, constructedWithInvariants);
+        return new AbortSites(local, held);
     }
 
     /**
@@ -90,15 +101,38 @@ public final class AbortSites {
      * every ordinary {@code Core.Construct} this walked was filed with, so the two cannot come apart.
      * Not the answer for {@link Core.IfConstructed#construct}, which takes its else arm instead and
      * ends nothing.
+     *
+     * @throws IllegalArgumentException where {@code type} is not one this was told a construction
+     *     builds — never answered as {@link AbortSet#NONE}, for the reason {@link #at} is not
      */
     public AbortSet ordinaryConstructionOf(TypeSymbol.AtModule type) {
-        return ordinaryConstruction(type, constructedWithInvariants);
+        Constructible found = constructible.get(type);
+        if (found == null) {
+            throw new IllegalArgumentException(
+                    "`" + type + "` is not a type a program's AbortSites was told is constructible");
+        }
+        return ordinaryConstruction(found);
+    }
+
+    /**
+     * What {@code construct} builds, among the types this was told a construction can build.
+     *
+     * @throws IllegalStateException where it is not among them: a construction the checker wrote
+     *     of a type the program's declarations do not list, which no answer here would be right for
+     */
+    private static Constructible declared(Core.Construct construct,
+                                          Map<TypeSymbol.AtModule, Constructible> constructible) {
+        Constructible found = constructible.get(construct.typeName());
+        if (found == null) {
+            throw new IllegalStateException("a construction of `" + construct.typeName()
+                    + "`, which the program was not told is constructible: " + construct);
+        }
+        return found;
     }
 
     /** The one place a construction's abort is decided, for a site this walks and for one it does not. */
-    private static AbortSet ordinaryConstruction(TypeSymbol.AtModule type,
-                                                 Set<TypeSymbol.AtModule> constructedWithInvariants) {
-        return constructedWithInvariants.contains(type)
+    private static AbortSet ordinaryConstruction(Constructible type) {
+        return type.holdsInvariants()
                 ? AbortSet.of(AbortKind.INVARIANT_NOT_HELD)
                 : AbortSet.NONE;
     }
@@ -112,20 +146,20 @@ public final class AbortSites {
      * the first time.
      */
     private static void walk(Core node, KernelContracts kernels,
-                             Set<TypeSymbol.AtModule> constructedWithInvariants,
+                             Map<TypeSymbol.AtModule, Constructible> constructible,
                              IdentityHashMap<Core, AbortSet> into) {
-        if (!file(node, localAbortOf(node, kernels, constructedWithInvariants), into)) {
+        if (!file(node, localAbortOf(node, kernels, constructible), into)) {
             return;
         }
         if (node instanceof Core.IfConstructed ic) {
-            walkGuarded(ic.construct(), kernels, constructedWithInvariants, into);
-            walk(ic.then(), kernels, constructedWithInvariants, into);
+            walkGuarded(ic.construct(), kernels, constructible, into);
+            walk(ic.then(), kernels, constructible, into);
             for (Core.ElseArm arm : ic.els()) {
-                walk(arm.body(), kernels, constructedWithInvariants, into);
+                walk(arm.body(), kernels, constructible, into);
             }
             return;
         }
-        Core.forEachChild(node, child -> walk(child, kernels, constructedWithInvariants, into));
+        Core.forEachChild(node, child -> walk(child, kernels, constructible, into));
     }
 
     /**
@@ -137,13 +171,16 @@ public final class AbortSites {
      * building the value the attempt goes on to test.
      */
     private static void walkGuarded(Core.Construct construct, KernelContracts kernels,
-                                    Set<TypeSymbol.AtModule> constructedWithInvariants,
+                                    Map<TypeSymbol.AtModule, Constructible> constructible,
                                     IdentityHashMap<Core, AbortSet> into) {
+        // Asked for the same reason an unguarded one is: a construction of a type nothing lists is
+        // refused here too, rather than filed as ending nothing because a guard stands over it.
+        declared(construct, constructible);
         if (!file(construct, AbortSet.NONE, into)) {
             return;
         }
         Core.forEachChild(construct,
-                child -> walk(child, kernels, constructedWithInvariants, into));
+                child -> walk(child, kernels, constructible, into));
     }
 
     /**
@@ -182,13 +219,13 @@ public final class AbortSites {
      * exhaustive switch.
      */
     private static AbortSet localAbortOf(Core node, KernelContracts kernels,
-                                         Set<TypeSymbol.AtModule> constructedWithInvariants) {
+                                         Map<TypeSymbol.AtModule, Constructible> constructible) {
         return switch (node) {
             case Core.Unreachable _ -> AbortSet.of(AbortKind.UNREACHABLE_REACHED);
             case Core.Binary b -> arithmetic(b);
             case Core.Neg n -> negation(n);
             case Core.Call c -> callAborts(c, kernels);
-            case Core.Construct c -> ordinaryConstruction(c.typeName(), constructedWithInvariants);
+            case Core.Construct c -> ordinaryConstruction(declared(c, constructible));
             // A node the checker never lets carry a clause of its own to break, and never a
             // representation to run past the end of: a literal, a read, a unit or materialised
             // value, an already-tagged construction slot's parent, a fold, a tuple. What any of
