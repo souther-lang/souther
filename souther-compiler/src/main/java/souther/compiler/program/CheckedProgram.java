@@ -366,6 +366,28 @@ public final class CheckedProgram {
     }
 
     /**
+     * Every {@link souther.compiler.abort.AbortKind} an ordinary construction of {@code type} can
+     * end without a value for, where the construction is not a site this program holds.
+     *
+     * <p>An output that builds a value of a declared type out of something other than a body — what
+     * a row states, which the compile read as a value and not as an expression — writes a
+     * construction {@link #abortsAt} has never seen, and asking it of that would be refused. This is
+     * the same question asked of the type instead of the site, answered by the classification every
+     * {@code Core.Construct} this program holds was filed with. Not the answer for the construction
+     * an {@code IfConstructed} tests, which takes its else arm instead and ends nothing.
+     *
+     * @throws IllegalArgumentException where nothing this compile read declares {@code type}, or
+     *     where what it declares is not built out of fields
+     */
+    public AbortSet constructionAborts(TypeSymbol.AtModule type) {
+        if (!(declaration(type).data() instanceof CheckedData.WithFields)) {
+            throw new IllegalArgumentException(
+                    "`" + type + "` is not a declaration a construction builds");
+        }
+        return aborts.ordinaryConstructionOf(type);
+    }
+
+    /**
      * What the language itself declares, which no module of any compilation does.
      *
      * <p>Here so that an output that has to materialise them has the list rather than a walk of its

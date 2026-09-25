@@ -38,9 +38,12 @@ import java.util.Set;
 public final class AbortSites {
 
     private final IdentityHashMap<Core, AbortSet> local;
+    private final Set<TypeSymbol.AtModule> constructedWithInvariants;
 
-    private AbortSites(IdentityHashMap<Core, AbortSet> local) {
+    private AbortSites(IdentityHashMap<Core, AbortSet> local,
+                       Set<TypeSymbol.AtModule> constructedWithInvariants) {
         this.local = local;
+        this.constructedWithInvariants = Set.copyOf(constructedWithInvariants);
     }
 
     /**
@@ -75,7 +78,29 @@ public final class AbortSites {
         for (Core root : roots) {
             walk(root, kernels, constructedWithInvariants, local);
         }
-        return new AbortSites(local);
+        return new AbortSites(local, constructedWithInvariants);
+    }
+
+    /**
+     * Every reason an ordinary construction of {@code type} can end without a value for: a
+     * {@link Core.Construct} of it standing where nothing catches an unheld invariant first.
+     *
+     * <p>For a construction no program holds as a site — a value an output builds out of what a row
+     * states, say — and so one {@link #at} cannot be asked of. Answered by the same classification
+     * every ordinary {@code Core.Construct} this walked was filed with, so the two cannot come apart.
+     * Not the answer for {@link Core.IfConstructed#construct}, which takes its else arm instead and
+     * ends nothing.
+     */
+    public AbortSet ordinaryConstructionOf(TypeSymbol.AtModule type) {
+        return ordinaryConstruction(type, constructedWithInvariants);
+    }
+
+    /** The one place a construction's abort is decided, for a site this walks and for one it does not. */
+    private static AbortSet ordinaryConstruction(TypeSymbol.AtModule type,
+                                                 Set<TypeSymbol.AtModule> constructedWithInvariants) {
+        return constructedWithInvariants.contains(type)
+                ? AbortSet.of(AbortKind.INVARIANT_NOT_HELD)
+                : AbortSet.NONE;
     }
 
     /**
@@ -163,9 +188,7 @@ public final class AbortSites {
             case Core.Binary b -> arithmetic(b);
             case Core.Neg n -> negation(n);
             case Core.Call c -> callAborts(c, kernels);
-            case Core.Construct c -> constructedWithInvariants.contains(c.typeName())
-                    ? AbortSet.of(AbortKind.INVARIANT_NOT_HELD)
-                    : AbortSet.NONE;
+            case Core.Construct c -> ordinaryConstruction(c.typeName(), constructedWithInvariants);
             // A node the checker never lets carry a clause of its own to break, and never a
             // representation to run past the end of: a literal, a read, a unit or materialised
             // value, an already-tagged construction slot's parent, a fold, a tuple. What any of
