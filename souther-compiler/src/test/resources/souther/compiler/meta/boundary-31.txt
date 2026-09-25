@@ -13,7 +13,9 @@ Lsouther/runtime/meta/SoutherModule;
   imports: array of string
   invariantHelpers: array of string
   name: string
+  providedCopies: array of string
   providedLinkages: array of string
+  requiredCopies: array of string
   requiredLinkages: array of string
   types: array of string
   valueAnswers: array of string

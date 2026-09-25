@@ -632,8 +632,11 @@ public sealed interface Core {
      * <p>A kernel's signature ({@link KernelSignature}) is declared once with type variables, and
      * each application settles them: what that application takes each argument as is the checker's
      * answer, and an output reading it off here does not substitute the signature again under a rule
-     * of its own. A call to anything else takes its arguments as its declaration says, which leaves
-     * nothing for one application to settle.
+     * of its own. A call to anything else may settle variables of its declaration too — a recursive
+     * helper such as {@code List.foldFrom} is declared over {@code 'acc} — but carries nothing
+     * here for it: each argument stands as what the application settled it takes that argument as,
+     * and the call is of what it settled it answers, so the settlement is already in the call's
+     * arguments and type. {@link None} says there is nothing further, not that nothing was settled.
      *
      * <p>Sealed on purpose: a fact belongs here because the checker settled it about one application
      * and it became part of that application's meaning, not because some pass found it convenient to
@@ -643,8 +646,8 @@ public sealed interface Core {
      */
     sealed interface CallSettlement {
 
-        /** A call that is no kernel's application, so there is nothing about it for one application
-         *  to settle. */
+        /** A call that is no kernel's application, so nothing about it is carried beyond what its
+         *  arguments and its type already say. */
         enum None implements CallSettlement {
             INSTANCE
         }

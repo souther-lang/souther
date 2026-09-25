@@ -210,7 +210,7 @@ public final class CallElaborator {
             // was applied, the two are a field read and the name it was bound to.
             return new Core.Apply(
                     new Core.Read(local.name(), local.id(), env.typeOf(local.id()), call.pos()),
-                    ca.cores(), result, call.pos());
+                    typed.args(), result, call.pos());
         }
         // Typing the call above refuses what is not a name outright, so what is left here names a
         // declaration and says which one and how this module reaches it.
@@ -235,7 +235,7 @@ public final class CallElaborator {
             throw new IllegalStateException("`" + call.written() + "` was elaborated as a call and"
                     + " reaches " + reaches + ", which no method is emitted for");
         }
-        return new Core.Call(reached(declaration, ctx), ca.cores(), wroteIt(call, ctx),
+        return new Core.Call(reached(declaration, ctx), typed.args(), wroteIt(call, ctx),
                 typed.settlement(), result, call.pos());
     }
 
@@ -298,13 +298,10 @@ public final class CallElaborator {
                 }
             }
         }
-        // What each function argument answers stands as what the signature settled it to answer,
-        // which is known once every argument has been read.
-        for (int i = 0; i < params.size(); i++) {
-            if (params.get(i) instanceof Type.FnOf declared) {
-                ca.answering(i, TypeOps.substitute(declared.result(), bind));
-            }
-        }
+        // Every argument stands as what the signature settled it to be taken as, which is known once
+        // every argument has been read.
+        Applied applied = new Applied(new Type.FnOf(params, kept.result()), bind);
+        List<Core> placed = materialized(call, applied, ca);
         // The operation as the signature that just typed this call says it: what was applied and
         // what it takes are one answer, and asking anything a second time for the name would be
         // reaching for a declaration this already has in hand.
@@ -314,17 +311,28 @@ public final class CallElaborator {
         // this applies is the callee's, and why the application is here is the application's — and
         // a call kept for a reader to quote is not always one an author wrote, a library operation
         // used as a value being expanded into a block whose application is kept the same way.
-        return new Core.PreservedCall(kept.declaring(), ca.cores(),
+        return new Core.PreservedCall(kept.declaring(), placed,
                 new Core.KeptCallPlace(call.answered().origin(), call.application(),
                         ctx.lineage()),
-                TypeOps.substitute(kept.result(), bind), call.pos());
+                applied.result(), call.pos());
     }
 
     /**
-     * The arguments of one call, each elaborated once, as the call's typing rule reaches it. A rule
-     * types its arguments in its own order and shape — some through a required type, a step through
-     * the accumulator the other arguments fixed — so the Core for each argument is collected here
-     * rather than by a separate walk that would have to reconstruct that context.
+     * The arguments of one call, as the call's typing rule reaches them. A rule types its arguments
+     * in its own order and shape — some through a required type, a step through the accumulator the
+     * other arguments fixed — so the Core for each argument is collected here rather than by a
+     * separate walk that would have to reconstruct that context.
+     *
+     * <p>A value argument is elaborated once ({@link #type}); what it is is not a question the
+     * settlement changes, only where it is placed. A function argument is elaborated at the
+     * parameters the settlement stood at when it was reached, which is evidence for settling and
+     * may not be what the call holds: where the final settlement has it take something else, it is
+     * elaborated again there ({@link #settledAs}), because what a block's body read its parameters
+     * at is part of the block.
+     *
+     * <p>So what is collected while the rule settles the signature's variables is not what the call
+     * holds. The call holds {@link #cores} once {@link #materialized} has placed every argument at
+     * the settlement that is final.
      */
     static final class CallArgs {
         private final List<Hir.Expr> args;
@@ -354,7 +362,8 @@ public final class CallElaborator {
          * Core that reached the tree would be the later one while the type a rule reasoned about was
          * the earlier. A rule may ask in whatever order it types in ({@link #requireTyped} already
          * rests on this), so the guarantee belongs here rather than in each rule remembering to ask
-         * once.
+         * once. It is a value argument's: a function argument is read at parameters, and read again
+         * where those move ({@link #settledAs}).
          */
         Type type(int i) {
             if (cores[i] == null) {
@@ -368,6 +377,17 @@ public final class CallElaborator {
         void require(int i, Type expected, String what) {
             cores[i] = Elaborator.standing(args.get(i), Elaborator.elaborate(args.get(i), env, ctx),
                     expected, ctx.published(), what);
+        }
+
+        /** Argument {@code i}, elaborated once by {@link #type}, required to fit {@code required}
+         *  while the signature's variables are still being settled. Nothing is handed to the call:
+         *  what it is placed at is decided by {@link #requireTyped} once the settlement is final. */
+        void fits(int i, Type required, String what) {
+            if (cores[i] == null) {
+                throw new IllegalStateException(
+                        "argument " + (i + 1) + " required before it was typed");
+            }
+            Elaborator.requireType(args.get(i), cores[i].type(), required, ctx.published(), what);
         }
 
         /** Argument {@code i}, elaborated once by {@link #type}, required to fit {@code required}
@@ -394,10 +414,37 @@ public final class CallElaborator {
             cores[i] = c;
         }
 
-        /** Argument {@code i}, a function value already read, answering {@code result} as
-         *  {@link Elaborator#answering} says. */
-        void answering(int i, Type result) {
-            cores[i] = Elaborator.answering(cores[i], result);
+        /**
+         * Argument {@code i}, a function value already read, handed to the call as one taking and
+         * answering what {@code takes} says, now that the signature's variables are settled.
+         *
+         * <p>Read again where what it was read taking is not what the call takes. A block's
+         * parameter types are what its body read its parameters at, so a block read at a
+         * substitution that moved afterwards cannot be given the settled ones, and it cannot stand
+         * as a function taking them either: one that takes less does not take what the call hands
+         * it. What it answers stands as what the call takes it to answer, as {@link
+         * Elaborator#answering} says, except where that is a variable nothing settled, which is no
+         * type to stand as.
+         *
+         * <p>Held to that here, whether it was read again or not. A {@link Core.Widen} says the
+         * checker decided the one type may stand as the other, and it is placed here, so this is
+         * where that is decided: a settlement that stopped short of what the function answers would
+         * otherwise have its answer stand as something narrower.
+         */
+        void settledAs(int i, String fnName, Type.FnOf takes, String what) {
+            Core read = cores[i];
+            if (!((Type.FnOf) read.type()).params().equals(takes.params())) {
+                read = Elaborator.elaborateBlockArg(fnName, args.get(i), takes.params(), env, ctx);
+            }
+            if (takes.result() instanceof Type.Var) {
+                cores[i] = read;
+                return;
+            }
+            Type answered = ((Type.FnOf) read.type()).result();
+            if (!TypeOps.assignable(answered, takes.result(), ctx.published())) {
+                throw Elaborator.doesNotFit(args.get(i), answered, takes.result(), what);
+            }
+            cores[i] = Elaborator.answering(read, takes.result());
         }
 
         /** The elaborated arguments. Every argument must have been reached: a rule that yields a type
@@ -589,42 +636,61 @@ public final class CallElaborator {
 
     /** Each value argument held to the parameter it was given to, at its own position — the
      * refusal {@link SignatureApplication#settledByValues} leaves to whoever has the argument in
-     * hand. */
+     * hand. Held and not placed: a function argument read afterwards may settle further a variable
+     * the parameter reads. */
     private static void requireValueArgs(Hir.Apply call, List<Type> params, CallArgs ca,
                                          Map<String, Type> bind) {
         for (int i = 0; i < params.size(); i++) {
             Type param = params.get(i);
             if (!(param instanceof Type.FnOf)) {
-                ca.requireTyped(i, TypeOps.substitute(param, bind),
+                ca.fits(i, TypeOps.substitute(param, bind),
                         "argument " + (i + 1) + " of " + call.written());
             }
         }
     }
 
     /**
-     * Each value argument placed at what the application settled it takes that argument as, once the
-     * settlement is final. A value argument was required against the substitution as it stood when
-     * the value arguments were read, and what a function argument settled afterwards, or a kernel's
-     * own rule, may have settled a variable its parameter reads further.
+     * The arguments the call holds: each placed at what {@code applied} says the application takes
+     * it as, once the settlement is final.
+     *
+     * <p>The one place a call's arguments are decided. Every argument was read while the signature's
+     * variables were being settled, and what a function argument settled afterwards, or a kernel's
+     * own rule, may have settled further a variable an earlier argument was read against. A value
+     * stands as what its parameter settled to, and a function is read again where it was read
+     * taking something else ({@link CallArgs#settledAs}).
      */
-    private static void placedAt(Hir.Apply call, List<Type> declared, List<Type> takes,
-                                 CallArgs ca) {
+    private static List<Core> materialized(Hir.Apply call, Applied applied, CallArgs ca) {
+        List<Type> declared = applied.signature().params();
+        List<Type> takes = applied.takes();
         for (int i = 0; i < declared.size(); i++) {
-            if (!(declared.get(i) instanceof Type.FnOf)) {
-                ca.requireTyped(i, takes.get(i), "argument " + (i + 1) + " of " + call.written());
+            String what = "argument " + (i + 1) + " of " + call.written();
+            if (declared.get(i) instanceof Type.FnOf) {
+                ca.settledAs(i, call.written(), (Type.FnOf) takes.get(i), what);
+            } else {
+                ca.requireTyped(i, takes.get(i), what);
             }
         }
+        return ca.cores();
     }
 
     /**
-     * What typing a call answers: the result type, together with what the checker settled about
-     * this application along the way ({@link Core.CallSettlement}) — for a kernel, what it takes
-     * each argument as and any fact of its own; {@code None} for any other call.
+     * What typing a call answers: the arguments the call holds, the result type, and what the
+     * checker settled about this application along the way ({@link Core.CallSettlement}) — for a
+     * kernel, what it takes each argument as and any fact of its own; {@code None} for any other
+     * call.
+     *
+     * <p>One answer, so the arguments and the type are read off one settlement. Collected apart, the
+     * arguments would be whatever the typing left behind when it finished, read against whichever
+     * substitution stood when each was read.
      */
-    record TypedCall(Type type, Core.CallSettlement settlement) {
+    record TypedCall(List<Core> args, Type type, Core.CallSettlement settlement) {
 
-        TypedCall(Type type) {
-            this(type, Core.CallSettlement.None.INSTANCE);
+        TypedCall {
+            args = List.copyOf(args);
+        }
+
+        TypedCall(List<Core> args, Type type) {
+            this(args, type, Core.CallSettlement.None.INSTANCE);
         }
     }
 
@@ -705,9 +771,8 @@ public final class CallElaborator {
             } else {
                 fact = Core.KernelFact.None.INSTANCE;
             }
-            List<Type> takes = applied.takes();
-            placedAt(call, intrinsic.parameters(), takes, ca);
-            return new TypedCall(applied.result(), new Core.CallSettlement.AtKernel(takes, fact));
+            return new TypedCall(materialized(call, applied, ca), applied.result(),
+                    new Core.CallSettlement.AtKernel(applied.takes(), fact));
         }
         // a function-typed value in scope (a helper's function parameter) applied to
         // arguments — f(x) (spec §fn-declaration). A newtype construction 金額(500) never
@@ -725,7 +790,8 @@ public final class CallElaborator {
                                 .at(call.appliedAt())
                                 .say(new DeclarationMessage.AppliedToAnotherNumberOfArguments(call.written(), String.valueOf(fn.params().size()), String.valueOf(args.size()))).build());
             }
-            return new TypedCall(applySignature(call, fn, ca, expected, env, ctx).result());
+            Applied applied = applySignature(call, fn, ca, expected, env, ctx);
+            return new TypedCall(materialized(call, applied, ca), applied.result());
         }
         // A library name that matched no builtin or intrinsic above. Which of the two it is the
         // library says, and the two are not one report. A name it declares reached here without
@@ -788,7 +854,7 @@ public final class CallElaborator {
         for (int i = 0; i < required.params().size(); i++) {
             ca.require(i, required.params().get(i), "argument " + (i + 1) + " of " + call.written());
         }
-        return new TypedCall(required.success());
+        return new TypedCall(ca.cores(), required.success());
     }
 
     /**

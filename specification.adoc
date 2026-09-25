@@ -4350,7 +4350,7 @@ An outside-world dependency is declared as a behavior with no implementation, an
 == Standard library
 
 
-[[an-empty-collections-element-type-is-determined]]An operation seeded with an empty collection MUST have its element or accumulator type determined where it is written — by the binding it feeds, by the field or output position it lands in, or by a non-empty seed. What an empty collection holds does not follow from it.
+[[an-empty-collections-element-type-is-determined]]An operation handed an empty collection MUST have that collection's element or accumulator type determined where it is written, by the application the collection is an argument of: by the position the operation's result lands in — the binding it feeds, the field or output it is given to — by the operation's other arguments — a non-empty seed, the key and value `+Map.insert+` puts in an empty map — or, for a fold's accumulator, by what its step answers where the seed may stand as that. What an empty collection holds does not follow from the collection itself. A step is handed the accumulator at the type so determined, and so reads every part of it at that type — an element read out of a list the seed held empty is an element of the list the fold grows.
 
 [#reserved-namespace]
 === Reserved namespace
@@ -6539,7 +6539,7 @@ Hint: Annotate the binding it feeds (`let x: <type> = ...`), place the fold dire
 position — the field or behavior output it feeds — or seed it with a non-empty value.
 ----
 
-Reported at the operation (<<an-empty-collections-element-type-is-determined>>). What an empty collection holds does not follow from the collection, so it follows from the position it is written in or from nothing at all.
+Reported at the operation (<<an-empty-collections-element-type-is-determined>>). What an empty collection holds does not follow from the collection, so it follows from the application it is written in — the position the result lands in, the other arguments, what a fold's step answers — or from nothing at all.
 
 [#e1816]
 === What is ordered by is not an ordered value

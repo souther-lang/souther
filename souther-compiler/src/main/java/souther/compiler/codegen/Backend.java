@@ -1422,7 +1422,13 @@ public final class Backend {
      * under this rule, a jar of the first would be trusted for published helpers and values it
      * never carried, and one of the second would record an offer this reader says it did not make.
      *
-     * <p>Version 30 changes what a module's metadata carries: the module annotation records what
+     * <p>Version 30 changes what the checker reads a carried helper's body as. A fold whose seed
+     * holds an empty collection has its step read at the accumulator the call settles, and not at
+     * the seed's type. A reader built under version 29 read the accumulator's empty parts as a
+     * list of nothing, which fits wherever it is used, so it would admit a carried body that uses
+     * an element of the accumulator as something the element is not, which this reader refuses.
+     *
+     * <p>Version 31 changes what a module's metadata carries: the module annotation records what
      * each of its declarations offers another module to copy into its classes and what its own
      * classes copied of each declaration of another module, and the reading asks for both. A jar
      * written before it says nothing of what it copied, and would be admitted beside a dependency
@@ -1438,7 +1444,7 @@ public final class Backend {
      * {@code [#a-published-module-agrees-with-what-it-copied]}). An edit to a declaration moves
      * that and not this; an edit to a rule moves this.
      */
-    public static final int BOUNDARY_VERSION = 30;
+    public static final int BOUNDARY_VERSION = 31;
 
     /** Emits the class a module's own declarations are published on, carrying {@code declarations}.
      * What it says is the caller's; that it is built like every other generated class — the same Java
