@@ -28,6 +28,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -94,17 +95,37 @@ public final class Linkages {
                 if (Reserved.isNamespace(module) || !seen.add(module)) {
                     continue;
                 }
-                Front.FromPath.OnThePath onThePath = Front.onThePath(db, module);
-                if (onThePath != null) {
-                    pending.addAll(Front.reaches(onThePath.read()));
-                } else {
-                    Ast.Module written = db.ask(new Front.Available(module)).value();
-                    if (written != null) {
-                        pending.addAll(Front.reaches(written).keySet());
-                    }
+                List<String> named = db.ask(new Named(module)).value();
+                if (named != null) {
+                    pending.addAll(named);
                 }
             }
             return Answer.of(List.copyOf(seen));
+        }
+    }
+
+    /**
+     * The modules one module names: what it imports or writes as a qualifier, and, for a module
+     * off the path, what it carries beside its text as reaching.
+     *
+     * <p>Its own question so a module's text is walked for these once, whichever module's
+     * {@link InSight} it is on the way to.
+     */
+    public record Named(String name) implements Key<List<String>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<List<String>> compute(Db db) {
+            Front.FromPath.OnThePath onThePath = Front.onThePath(db, name);
+            if (onThePath != null) {
+                return Answer.of(List.copyOf(Front.reaches(onThePath.read())));
+            }
+            Ast.Module written = db.ask(new Front.Available(name)).value();
+            return written == null ? Answer.of(List.of())
+                    : Answer.of(List.copyOf(Front.reaches(written).keySet()));
         }
     }
 
@@ -361,8 +382,10 @@ public final class Linkages {
             if (!Boolean.TRUE.equals(db.ask(new Names.Sound(name)).value())) {
                 return Answer.absent();
             }
+            // What each module offers, worked out once for all the declarations of it required.
+            Map<String, Map<LinkageTarget, LinkageRecord>> offeredBy = new HashMap<>();
             LinkageAgreement.Held held = LinkageAgreement.of(onThePath.requires(),
-                    module -> offered(db, module));
+                    module -> offeredBy.computeIfAbsent(module, m -> offered(db, m)));
             // A behavior the module was built requiring injected that its module no longer declares
             // is said as that (Bodies.BuiltAgainst); its classes linking against it is the
             // same missing behavior, and one problem is said once.

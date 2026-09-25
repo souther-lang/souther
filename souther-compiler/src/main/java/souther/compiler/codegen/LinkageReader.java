@@ -174,6 +174,12 @@ public final class LinkageReader implements DeclarationReads {
             }
             return found;
         }
+        // Read once, answered from what was recorded: a declaration is met at every door that
+        // reads it, and the answer does not change within one emission.
+        LinkageProjection recorded = read.get(target);
+        if (recorded != null) {
+            return recorded;
+        }
         LinkageProjection found = elsewhere.apply(target);
         if (found == null) {
             throw new IllegalStateException(module + " is emitted reading the " + target.kind()

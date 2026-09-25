@@ -1,6 +1,6 @@
 package souther.compiler.meta;
 
-import souther.compiler.conformance.ConformanceCorpus;
+import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.LinkageProjection;
@@ -42,7 +42,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * a class file can show: a name in a constant pool that nothing recorded would be a link site the
  * recording missed.
  *
- * <p>Over every model this repository carries, and a fixture beside them that reaches another
+ * <p>Over every model this repository carries, as they are compiled once for the JVM that asks
+ * ({@link RepositoryModels}), and a fixture beside them that reaches another
  * module in each of the ways a class can: calling a behavior by name, building a stage, holding a
  * dependency, reading a field, reading a published value, taking an answer apart through a bridge
  * case.
@@ -85,14 +86,10 @@ class EveryClassOfAnotherModuleAClassNamesIsOneItRecordsReadingTest {
     void everyClassOfAnotherModuleNamedIsOfADeclarationRecordedAsRead() {
         List<String> unrecorded = new ArrayList<>();
         int checked = 0;
-        Map<String, List<String>> corpora = new LinkedHashMap<>();
-        corpora.put("reaching every way", REACHING_EVERY_WAY);
-        for (String corpus : ConformanceCorpus.manifest().keySet()) {
-            corpora.put(corpus, ConformanceCorpus.sourcesOf(corpus));
-        }
-        for (Map.Entry<String, List<String>> corpus : corpora.entrySet()) {
-            Compilation compilation = Compilation.ofSources(corpus.getValue(),
-                    ModulePath.of(Map.of()));
+        Compilation fixture = Compilation.ofSources(REACHING_EVERY_WAY, ModulePath.of(Map.of()));
+        List<Compilation> compilations = new ArrayList<>(List.of(fixture));
+        compilations.addAll(RepositoryModels.all());
+        for (Compilation compilation : compilations) {
             Map<String, Map<String, ClassFileImage>> byModule = new LinkedHashMap<>();
             Map<String, ClassFileImage> all = new LinkedHashMap<>();
             for (String module : compilation.modules()) {
@@ -103,7 +100,7 @@ class EveryClassOfAnotherModuleAClassNamesIsOneItRecordsReadingTest {
                     all.putAll(classes);
                 }
             }
-            if (corpus.getValue() == REACHING_EVERY_WAY) {
+            if (compilation == fixture) {
                 assertEquals(Set.of("lib.b", "lib.c"), byModule.keySet(),
                         () -> "the fixture compiles, or it reaches nothing: "
                                 + compilation.db().allReports().stream()
@@ -122,8 +119,7 @@ class EveryClassOfAnotherModuleAClassNamesIsOneItRecordsReadingTest {
                         }
                         checked++;
                         if (!covered.contains(named)) {
-                            unrecorded.add(corpus.getKey() + ": " + clazz.getKey() + " names "
-                                    + named);
+                            unrecorded.add(clazz.getKey() + " names " + named);
                         }
                     }
                 }
