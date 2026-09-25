@@ -361,7 +361,13 @@ public final class Runner {
     private static Blocker pipelineBlocker(Hir.PipeBehavior pipe,
             Map<String, List<BehaviorRequirement>> requirements) {
         List<BehaviorRequirement> requires = requirements.get(pipe.name());
-        if (requires == null || requires.isEmpty()) {
+        if (requires == null) {
+            // An entry for every behavior the module declares, so a missing one is not a pipeline
+            // that needs nothing supplied.
+            throw new IllegalStateException("`" + pipe.name() + "` is declared and has no"
+                    + " requirement set");
+        }
+        if (requires.isEmpty()) {
             return null;
         }
         // What the composition would be handed, and who wanted it. A dependency the composition
@@ -404,7 +410,13 @@ public final class Runner {
                                                                         Prepared module) {
         Map<String, List<BehaviorRequirement>> answered =
                 compilation.db().ask(new Bodies.Requirements(module.name())).value();
-        return answered == null ? Map.of() : answered;
+        if (answered == null) {
+            // The module compiled, so this was answered. Read as no requirements at all, every
+            // composition in it would be offered as one `run` can build.
+            throw new IllegalStateException("`" + module.name() + "` compiled and what its"
+                    + " behaviors require was not answered");
+        }
+        return answered;
     }
 
     /**

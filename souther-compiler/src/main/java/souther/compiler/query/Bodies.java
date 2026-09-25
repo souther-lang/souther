@@ -1117,6 +1117,11 @@ public final class Bodies {
      * What each behavior of a module requires injected to be constructed, and which definitions ask
      * for it ({@link Requirements}).
      *
+     * <p>An entry for every behavior the module declares, an injected one answered with nothing.
+     * So a reader asks for a behavior's entry and takes a missing one as this answer not holding
+     * together, rather than working out from the behavior's implementation which of the two a
+     * missing entry is.
+     *
      * <p>The order is the injecting constructor's parameter order, so it is also the order an
      * example passes its fakes in: the emitter and the example verifier ask this one question rather
      * than each walking the stages, because a fake bound to the wrong parameter is not something
@@ -3857,8 +3862,13 @@ public final class Bodies {
                     || supplied == null) {
                 return null;
             }
+            List<BehaviorRequirement> required = supplied.get(behavior);
+            if (required == null) {
+                throw new IllegalStateException("`" + module + "." + behavior + "` is declared and"
+                        + " has no requirement set");
+            }
             Set<ValueName.Behavior> injected = new LinkedHashSet<>();
-            for (BehaviorRequirement each : supplied.getOrDefault(behavior, List.of())) {
+            for (BehaviorRequirement each : required) {
                 injected.add(each.dependency());
             }
             Set<ValueName.Behavior> constructs = new LinkedHashSet<>(reached.value());

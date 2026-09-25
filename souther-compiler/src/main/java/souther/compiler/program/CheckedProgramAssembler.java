@@ -254,7 +254,7 @@ final class CheckedProgramAssembler {
             CheckedImplementation implementation = implementedAs(state, named, declared,
                     implementations, module.checked(), module.compositions());
             BehaviorTarget target = new BehaviorTarget(signature, implementation,
-                    constructionRequirementsOf(named, implementation, module.requirements()));
+                    constructionRequirementsOf(named, module.requirements()));
             file(targets, named, target);
             declares.put(named, target);
         }
@@ -314,31 +314,27 @@ final class CheckedProgramAssembler {
                 }
                 CheckedImplementation implementation = publishedAs(implementations.of(named));
                 file(targets, named, new BehaviorTarget(signature, implementation,
-                        constructionRequirementsOf(named, implementation, required)));
+                        constructionRequirementsOf(named, required)));
             }
         }
     }
 
     /**
-     * What constructing {@code named} requires injected, out of what this compile answered for its
-     * module.
+     * What constructing {@code named} requires injected, as this compile answered for its module.
      *
-     * <p>An injected behavior is not constructed by Souther, so it has no entry and requires
-     * nothing. Every other behavior is constructed by some build, and one this compile has no entry
-     * for is refused rather than read as requiring nothing: an absent answer taken for an empty one
-     * is a stage built without what it needs. An unwritten behavior is not special here — it may
-     * declare what it depends on before anyone writes it.
+     * <p>Read and handed on, and not worked out from the implementation. The answer has an entry
+     * for every behavior the module declares, an injected one requiring nothing, so a missing entry
+     * is the answer not holding together and is refused rather than read as requiring nothing. An
+     * entry that disagrees with the implementation reaches {@link BehaviorTarget}, which refuses it:
+     * supplying the value the implementation says it should be would make that refusal one that
+     * never runs on what a compile produces.
      */
     private static List<ValueName.Behavior> constructionRequirementsOf(
-            ValueName.Behavior named, CheckedImplementation implementation,
-            Map<String, List<ValueName.Behavior>> requirements) {
-        if (implementation instanceof CheckedImplementation.Injected) {
-            return List.of();
-        }
+            ValueName.Behavior named, Map<String, List<ValueName.Behavior>> requirements) {
         List<ValueName.Behavior> required = requirements.get(named.name());
         if (required == null) {
-            throw new IllegalStateException("`" + named + "` is constructed by Souther and this"
-                    + " compile has no requirement set for it");
+            throw new IllegalStateException("`" + named + "` is declared and this compile has no"
+                    + " requirement set for it");
         }
         return required;
     }

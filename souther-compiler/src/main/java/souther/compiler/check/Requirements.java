@@ -46,9 +46,13 @@ public final class Requirements {
     }
 
     /**
-     * The requirement list of every behavior in {@code module} that is constructed here, keyed by
-     * name. An injected behavior is not constructed — the Java side supplies it — so it is not a key
-     * (it appears as a dependency of the definitions that name it).
+     * What constructing each behavior {@code module} declares requires injected, keyed by name, one
+     * entry for every behavior it declares. An injected behavior is not constructed by Souther, so
+     * what it requires is nothing; it appears as a dependency of the definitions that name it.
+     *
+     * <p>Every behavior and not only the ones constructed here. A behavior with no entry is then an
+     * answer that does not hold together, and nowhere does a reader have to tell that apart from an
+     * injected behavior by asking something else.
      *
      * <p>{@code injected} is every injection target this module builds against, its own and the ones
      * it borrows. Handed in and not read off {@code module}: which behaviors Java supplies is decided
@@ -72,13 +76,15 @@ public final class Requirements {
                     injected, memo, new LinkedHashSet<>());
         }
         Map<String, List<BehaviorRequirement>> out = new LinkedHashMap<>();
-        for (Map.Entry<ValueName.Behavior, Map<ValueName.Behavior, List<String>>> e
-                : memo.entrySet()) {
+        for (Hir.BehaviorDef bd : module.behaviors()) {
+            ValueName.Behavior named = new ValueName.Behavior(module.name(), bd.name());
             List<BehaviorRequirement> reqs = new ArrayList<>();
-            for (Map.Entry<ValueName.Behavior, List<String>> r : e.getValue().entrySet()) {
-                reqs.add(new BehaviorRequirement(r.getKey(), List.copyOf(r.getValue())));
+            if (!injected.contains(named)) {
+                for (Map.Entry<ValueName.Behavior, List<String>> r : memo.get(named).entrySet()) {
+                    reqs.add(new BehaviorRequirement(r.getKey(), List.copyOf(r.getValue())));
+                }
             }
-            out.put(e.getKey().name(), List.copyOf(reqs));
+            out.put(bd.name(), List.copyOf(reqs));
         }
         return out;
     }

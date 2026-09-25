@@ -177,8 +177,9 @@ class ModuleReadbackTest {
                 read.behaviorImplementations());
     }
 
-    /** What constructing each behavior requires comes back beside it, for every behavior but one
-     *  Java supplies. A composition's is carried because the stages it comes from are not. */
+    /** What constructing each behavior requires comes back beside it, for every behavior the module
+     *  declares — one supplied from outside Souther requiring nothing. A composition's is carried
+     *  because the stages it comes from are not. */
     @Test
     void whatEachBehaviorRequiresIsCarried() {
         ReadableModule read = readBack("shared.q", Compiler.compile("""
@@ -192,8 +193,39 @@ class ModuleReadbackTest {
                 """));
 
         ValueName.Behavior rate = new ValueName.Behavior("shared.q", "rate");
-        assertEquals(Map.of("double", List.of(), "priced", List.of(rate), "charged", List.of(rate)),
+        assertEquals(Map.of("rate", List.of(), "double", List.of(), "priced", List.of(rate),
+                        "charged", List.of(rate)),
                 read.behaviorRequirements());
+    }
+
+    /**
+     * A class saying its behavior is supplied from outside Souther and that constructing it
+     * requires something says two things, and is not read as either of them.
+     *
+     * <p>Every behavior of the module is written as requiring the same entry, so what tells the
+     * refused module from the read one is only that one of its behaviors is injected.
+     */
+    @Test
+    void anInjectedBehaviorSaidToRequireSomethingIsNotRead() {
+        List<String> requiresDouble = List.of("8:shared.q6:double");
+        PublishedClasses withInjected = requirementsWritten(Compiler.compile("""
+                module shared.q exposing ( rate, double )
+                behavior rate : (n: Int) -> Int
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                """), requiresDouble);
+        PublishedClasses withoutInjected = requirementsWritten(Compiler.compile("""
+                module shared.q exposing ( double )
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                """), requiresDouble);
+
+        assertInstanceOf(Readback.Failure.UnreadableMetadata.class,
+                refusalOf("shared.q", withInjected));
+        assertEquals(Map.of("double", List.of(new ValueName.Behavior("shared.q", "double"))),
+                assertInstanceOf(ReadableModule.class, assertInstanceOf(Readback.Ready.class,
+                        ModuleReadback.read("shared.q", withoutInjected,
+                                DefaultStdlib.get().names())).value()).behaviorRequirements());
     }
 
     /** A behavior annotation at this boundary that says nothing of what the behavior requires was

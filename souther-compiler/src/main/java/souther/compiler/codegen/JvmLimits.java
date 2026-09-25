@@ -132,7 +132,14 @@ final class JvmLimits {
         if (bd instanceof Hir.SpecBehavior spec) {
             return implemented.contains(spec.name()) ? spec.dependsOn().size() : 0;
         }
-        return Requirements.names(requirements.getOrDefault(bd.name(), List.of())).size();
+        List<BehaviorRequirement> required = requirements.get(bd.name());
+        if (required == null) {
+            // An entry for every behavior the module declares, so a missing one is not a
+            // composition holding nothing.
+            throw new IllegalStateException("`" + bd.name() + "` is declared and has no"
+                    + " requirement set");
+        }
+        return Requirements.names(required).size();
     }
 
     /**

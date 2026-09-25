@@ -42,10 +42,12 @@ import java.util.List;
  * ({@link CheckedSignature#declaredParameters()}).
  *
  * <p>Where the construction requirements are held to the implementation. Souther does not construct
- * an injected behavior — Java supplies it whole — so an injected one requires nothing to construct,
- * and a target saying otherwise is refused. That is the only implementation held to it: an
- * unwritten behavior may declare what it depends on before anyone writes it, and what it requires
- * is not where its implementation comes from.
+ * an injected behavior — it is supplied from outside Souther — so an injected one requires nothing
+ * to construct, and a target saying otherwise is refused. Refused here and not corrected where a
+ * target is made: a target is made from what the compile answered, and one answer saying two
+ * things is not settled by keeping the half an implementation agrees with. That is the only
+ * implementation held to it: an unwritten behavior may declare what it depends on before anyone
+ * writes it, and what it requires is not where its implementation comes from.
  *
  * <p>A class and not a record. What a target is known to be will grow — what a caller may
  * assume of the answer is a decision this compilation does not make for a behavior another module
