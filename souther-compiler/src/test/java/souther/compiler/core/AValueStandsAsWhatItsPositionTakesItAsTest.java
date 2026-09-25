@@ -103,6 +103,22 @@ class AValueStandsAsWhatItsPositionTakesItAsTest {
                     if k > 0 then (acc, s) -> acc + radius(s) else (acc, s) -> acc
                 List.fold(f, 0, cs)
             }
+
+            behavior dropped : (xs: List<Int>) -> List<Int>
+            let dropped (xs) = List.drop(1, xs)
+
+            behavior split : (xs: List<Int>) -> List<Int>
+            let split (xs) = {
+                let (small, _) = List.fold(
+                    (acc, x) -> {
+                        let (s, l) = acc
+                        if x < 10 then (s ++ [x], l) else (s, l ++ [x])
+                    },
+                    ([], []),
+                    xs
+                )
+                small
+            }
             """;
 
     @Test
@@ -249,6 +265,83 @@ class AValueStandsAsWhatItsPositionTakesItAsTest {
                 "the seed stands as the accumulator the step was read at");
         assertEquals("Square", Type.show(Core.withoutStanding(seed).type()),
                 "while what it holds is the case it is");
+    }
+
+    /**
+     * A fold whose seed holds the empty list settles its accumulator from what the step answers,
+     * after the step was first read at the seed's type. The step the call holds is read at the
+     * accumulator the call settled, and the seed stands as that accumulator.
+     */
+    @Test
+    void aStepIsReadAtTheAccumulatorTheCallSettledAndNotAtItsSeed() {
+        assertTheFoldIsReadAtWhatItSettled(body("dropped"), "(Int, List<Int>)");
+    }
+
+    /** And so where every part of the seed is the empty list. */
+    @Test
+    void andSoWhereEveryPartOfTheSeedIsEmpty() {
+        assertTheFoldIsReadAtWhatItSettled(body("split"), "(List<Int>, List<Int>)");
+    }
+
+    private static void assertTheFoldIsReadAtWhatItSettled(Core body, String accumulator) {
+        Core.Call fold = null;
+        for (Core.Call each : every(body, Core.Call.class)) {
+            if (each.args().size() > 1) {
+                fold = each;
+            }
+        }
+        assertNotNull(fold, "the fold is a call");
+        Type settled = fold.type();
+        assertEquals(accumulator, Type.show(settled),
+                "the fold answers the accumulator its step grows");
+        Type.FnOf step = (Type.FnOf) fold.args().get(0).type();
+        assertEquals(settled, step.params().get(0), "the step takes the accumulator the call settled");
+        assertEquals(settled, step.result(), "and answers it");
+        Core.Block block = only(fold.args().get(0), Core.Block.class);
+        assertEquals(settled, block.paramTypes().get(0),
+                "the step's body read its accumulator at what the call settled");
+        Core.Binder acc = block.params().get(0);
+        List<Core.Read> reads = every(block.body(), Core.Read.class).stream()
+                .filter(read -> read.binding().equals(acc.binding()))
+                .toList();
+        assertFalse(reads.isEmpty(), "the step reads its accumulator");
+        for (Core.Read read : reads) {
+            assertEquals(settled, read.type(), "each read of the accumulator is of what it settled");
+        }
+        Core.Widen seed = assertInstanceOf(Core.Widen.class, fold.args().get(1),
+                "the seed, narrower than the accumulator, stands as it");
+        assertEquals(settled, seed.type());
+        assertTrue(Type.mentions(seed.value().type(), Type.Nothing.class::isInstance),
+                "while what it holds is the empty list it was written as");
+    }
+
+    /**
+     * And so the step is held to what it reads there: an element of the accumulator is what the
+     * accumulator settled it as, and not a nothing that fits wherever it is used.
+     */
+    @Test
+    void aStepUsingAnElementOfTheAccumulatorAsWhatItIsNotIsRefused() {
+        Compilation compilation = Compilation.ofSource("""
+                module demo
+
+                behavior firsts : (xs: List<Int>) -> Int
+                let firsts (xs) = {
+                    let (n, _) = List.fold(
+                        (acc, x) -> {
+                            let (i, ys) = acc
+                            match List.get(0, ys) with
+                                | Some y -> (i + String.length(y), ys ++ [x])
+                                | None -> (i, ys ++ [x])
+                        },
+                        (0, []),
+                        xs
+                    )
+                    n
+                }
+                """, "Main");
+        compilation.answerEverything();
+        assertFalse(compilation.errors().isEmpty(),
+                "an Int read out of the accumulator is not a String");
     }
 
     /**

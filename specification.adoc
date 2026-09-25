@@ -4348,7 +4348,7 @@ An outside-world dependency is declared as a behavior with no implementation, an
 == Standard library
 
 
-[[an-empty-collections-element-type-is-determined]]An operation seeded with an empty collection MUST have its element or accumulator type determined where it is written — by the binding it feeds, by the field or output position it lands in, or by a non-empty seed. What an empty collection holds does not follow from it.
+[[an-empty-collections-element-type-is-determined]]An operation seeded with an empty collection MUST have its element or accumulator type determined where it is written — by the binding it feeds, by the field or output position it lands in, or by a non-empty seed. What an empty collection holds does not follow from it. A step is handed the accumulator at the type so determined, and so reads every part of it at that type — an element read out of a list the seed held empty is an element of the list the fold grows.
 
 [#reserved-namespace]
 === Reserved namespace
