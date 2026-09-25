@@ -567,14 +567,14 @@ final class CheckedProgramAssembler {
     private static CheckedModule moduleOf(ModuleBoundaries module, ValueTypes types,
                                           Map<ValueName.Behavior, BehaviorTarget> targets) {
         ModuleReading read = module.read();
+        Emitted emitted = emittedBy(read.name(), read.checked());
         List<CheckedBehavior> behaviors = new ArrayList<>();
         module.declared().forEach((named, target) ->
                 behaviors.add(new CheckedBehavior(named, target,
                         EnsuresEnforcement.in(read.checks(), read.name(), named),
                         rowsOf(read.rowsByBehavior().getOrDefault(named.name(), List.of()), types,
-                                target.signature(), targets),
+                                target.signature(), targets, emitted.rowValues()),
                         read.requirements().getOrDefault(named.name(), List.of()))));
-        Emitted emitted = emittedBy(read.name(), read.checked());
         return new CheckedModule(read.name(), behaviors, emitted.helpers(), emitted.values(),
                 emitted.valueEntries(), read.data(), read.published());
     }
@@ -587,15 +587,18 @@ final class CheckedProgramAssembler {
      * {@link CheckedRow.SelfContained#holds} takes — how a value's parts are read, and where this
      * behavior's answer stands — so that asking is not a question about the program the row came
      * from. A row that stands something in for a dependency is given where that dependency's
-     * arguments stand as well, for the same reason.
+     * arguments stand as well, for the same reason. And a row that hands over values is given the
+     * definition computing each of them, out of {@code rowValues}: the helpers of the module the
+     * row is written in that compute a row's operand, by the name each was emitted under.
      */
     private static List<CheckedRow> rowsOf(List<Output.RowsRead.ReadRow> read, ValueTypes types,
                                            CheckedSignature signature,
-                                           Map<ValueName.Behavior, BehaviorTarget> targets) {
+                                           Map<ValueName.Behavior, BehaviorTarget> targets,
+                                           Map<String, CheckedHelper> rowValues) {
         List<CheckedRow> rows = new ArrayList<>();
         for (Output.RowsRead.ReadRow row : read) {
             rows.add(new CheckedRow(row.identity(), row.at(),
-                    statementOf(row, types, signature, targets)));
+                    statementOf(row, types, signature, targets, rowValues)));
         }
         return rows;
     }
@@ -614,7 +617,8 @@ final class CheckedProgramAssembler {
      */
     private static CheckedRow.Statement statementOf(Output.RowsRead.ReadRow row, ValueTypes types,
                                                     CheckedSignature signature,
-                                                    Map<ValueName.Behavior, BehaviorTarget> targets) {
+                                                    Map<ValueName.Behavior, BehaviorTarget> targets,
+                                                    Map<String, CheckedHelper> rowValues) {
         // A switch over both sums, so a row nothing came back for is written down here rather than
         // being whatever falls out of reading a list of the ones that did — which is a row an output
         // would never hear of, and a behavior reading as having said nothing about an input someone
@@ -627,11 +631,11 @@ final class CheckedProgramAssembler {
                 // and what it asked would be answered against no statement at all.
                 case RowStatement.Stated stated
                         when stated.expects() instanceof Expectation.Owed ->
-                        new CheckedRow.AnswerOwed(stated);
+                        new CheckedRow.AnswerOwed(stated, computing(outcome, rowValues));
                 case RowStatement.Stated stated -> stated.standIns().isEmpty()
-                        ? new CheckedRow.SelfContained(stated, types,
+                        ? new CheckedRow.SelfContained(stated, computing(outcome, rowValues), types,
                                 Position.at(signature.answers()))
-                        : new CheckedRow.WithStandIns(stated, types,
+                        : new CheckedRow.WithStandIns(stated, computing(outcome, rowValues), types,
                                 Position.at(signature.answers()),
                                 whereArgumentsStand(stated, targets));
                 case RowStatement.NotStated why -> new CheckedRow.NotReproducible(why);
@@ -648,6 +652,29 @@ final class CheckedProgramAssembler {
             case Output.RowsRead.ReadRow.NotRun notRun ->
                     new CheckedRow.NotReproducible(new RowStatement.NotRead(notRun.why()));
         };
+    }
+
+    /**
+     * The definition computing each input of {@code outcome}'s row, as its module holds it.
+     *
+     * <p>Looked up by the name the row says each was emitted under, among the helpers the module
+     * holds for a row's operand. A name with nothing under it is a row read against a module other
+     * than the one whose helpers are in hand, which the row would otherwise carry into the program
+     * as an input nothing computes.
+     */
+    private static List<CheckedHelper> computing(RowOutcome outcome,
+                                                 Map<String, CheckedHelper> rowValues) {
+        List<CheckedHelper> inputs = new ArrayList<>();
+        for (String method : outcome.computedBy()) {
+            CheckedHelper helper = rowValues.get(method);
+            if (helper == null) {
+                throw new IllegalStateException("an input of " + outcome.target() + " "
+                        + outcome.identity().shown() + " at " + outcome.at() + " is computed by `"
+                        + method + "`, which the module holds no helper for");
+            }
+            inputs.add(helper);
+        }
+        return inputs;
     }
 
     /**
@@ -990,7 +1017,8 @@ final class CheckedProgramAssembler {
      * filed under is where the module holds it.
      */
     private record Emitted(List<CheckedHelper> helpers, List<CheckedValue> values,
-                           List<CheckedValueEntry> valueEntries) {}
+                           List<CheckedValueEntry> valueEntries,
+                           Map<String, CheckedHelper> rowValues) {}
 
     /**
      * {@link Emitted} for {@code module}, off what its check emitted.
@@ -1008,6 +1036,7 @@ final class CheckedProgramAssembler {
         List<CheckedHelper> helpers = new ArrayList<>();
         List<CheckedValue> values = new ArrayList<>();
         List<CheckedValueEntry> valueEntries = new ArrayList<>();
+        Map<String, CheckedHelper> rowValues = new LinkedHashMap<>();
         checked.emittedDefinitions().forEach((name, emitted) -> {
             switch (emitted.role()) {
                 case LoweringRole.ValueHome home ->
@@ -1017,11 +1046,15 @@ final class CheckedProgramAssembler {
                         helpers.add(new CheckedHelper(helper.declaration(), parametersOf(emitted),
                                 emitted.body()));
                 // What the harness calls, under the name the module holds the method at, which no
-                // source declares and which is the only reference to it.
-                case LoweringRole.RowValue _ ->
-                        helpers.add(new CheckedHelper(
-                                new ReachName.Own(new ValueName.Helper(module, name)),
-                                parametersOf(emitted), emitted.body()));
+                // source declares and which is the only reference to it. A row names it by that
+                // name as what computes one of its inputs.
+                case LoweringRole.RowValue _ -> {
+                    CheckedHelper helper = new CheckedHelper(
+                            new ReachName.Own(new ValueName.Helper(module, name)),
+                            parametersOf(emitted), emitted.body());
+                    helpers.add(helper);
+                    rowValues.put(name, helper);
+                }
                 case LoweringRole.PublishedValueEntry entry -> {
                     if (!emitted.parameters().isEmpty()) {
                         // ADR-0074: the entry takes nothing and answers with the value. A parameter
@@ -1036,7 +1069,7 @@ final class CheckedProgramAssembler {
                 }
             }
         });
-        return new Emitted(helpers, values, valueEntries);
+        return new Emitted(helpers, values, valueEntries, rowValues);
     }
 
     /** What a helper's method takes: what its source wrote. */

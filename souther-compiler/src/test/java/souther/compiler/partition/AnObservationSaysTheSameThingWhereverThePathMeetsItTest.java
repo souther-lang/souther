@@ -115,6 +115,7 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
                 read.row().stage(), read.row().disposition(), read.row().failurePhase(),
                 read.row().expectedArm(), read.row().resultArm(), read.row().inputCases(),
                 List.of(new ObservedValue.Constructed(request.type(), fields)),
+                read.row().computedBy(),
                 statingTheSame(read.row(),
                         List.of(new ObservedValue.Constructed(request.type(), fields))),
                 read.row().run());
