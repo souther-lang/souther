@@ -30,6 +30,7 @@ import souther.compiler.core.Core;
 import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.core.KernelContracts;
 import souther.compiler.core.ValueShape;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.Expectation;
 import souther.compiler.observe.FieldTypes;
@@ -615,8 +616,9 @@ final class CheckedProgramAssembler {
      * behavior's answer stands — so that asking is not a question about the program the row came
      * from. A row that stands something in for a dependency is given where that dependency's
      * arguments stand as well, for the same reason. And a row that hands over values is given the
-     * definition computing each of them, out of {@code rowValues}: the helpers of the module the
-     * row is written in that compute a row's operand, by the name each was emitted under.
+     * definition computing each of them, and each value its stand-ins state, out of
+     * {@code rowValues}: the helpers of the module the row is written in that compute a row's
+     * operand, by the name each was emitted under.
      */
     private static List<CheckedRow> rowsOf(List<Output.RowsRead.ReadRow> read, ValueTypes types,
                                            CheckedSignature signature,
@@ -658,13 +660,15 @@ final class CheckedProgramAssembler {
                 // and what it asked would be answered against no statement at all.
                 case RowStatement.Stated stated
                         when stated.expects() instanceof Expectation.Owed ->
-                        new CheckedRow.AnswerOwed(stated, computing(ran, stated, rowValues));
+                        new CheckedRow.AnswerOwed(stated,
+                                suppliesOf(ran, stated, targets, rowValues), types);
                 case RowStatement.Stated stated -> stated.standIns().isEmpty()
-                        ? new CheckedRow.SelfContained(stated, computing(ran, stated, rowValues),
-                                types, Position.at(signature.answers()))
-                        : new CheckedRow.WithStandIns(stated, computing(ran, stated, rowValues),
-                                types, Position.at(signature.answers()),
-                                whereArgumentsStand(stated, targets));
+                        ? new CheckedRow.SelfContained(stated,
+                                suppliesOf(ran, stated, targets, rowValues), types,
+                                Position.at(signature.answers()))
+                        : new CheckedRow.WithStandIns(stated,
+                                suppliesOf(ran, stated, targets, rowValues), types,
+                                Position.at(signature.answers()));
                 case RowStatement.NotStated why -> new CheckedRow.NotReproducible(why);
                 // What acceptance guarantees, asserted where the guarantee is relied on. A row an
                 // evaluation stopped before the values of is one the language refuses the program
@@ -679,6 +683,22 @@ final class CheckedProgramAssembler {
             case Output.RowsRead.ReadRow.NotRun notRun ->
                     new CheckedRow.NotReproducible(new RowStatement.NotRead(notRun.why()));
         };
+    }
+
+    /**
+     * What {@code ran}'s row hands over, for whichever arm it is: what computes each input, where
+     * each dependency's arguments stand, and what computes each value its stand-ins state.
+     *
+     * <p>Made the same way for every arm that states values. Whether the row's answer is owed and
+     * whether it needs something stood in for are two questions, and what an arm is handed does
+     * not turn on the first.
+     */
+    private static CheckedRow.Supplies suppliesOf(Output.RowsRead.ReadRow.Ran ran,
+                                                  RowStatement.Stated stated,
+                                                  Map<ValueName.Behavior, BehaviorTarget> targets,
+                                                  Map<String, CheckedHelper> rowValues) {
+        return new CheckedRow.Supplies(computing(ran, stated, rowValues),
+                whereArgumentsStand(stated, targets), computingStandIns(ran, stated, rowValues));
     }
 
     /**
@@ -703,15 +723,124 @@ final class CheckedProgramAssembler {
         }
         List<CheckedHelper> inputs = new ArrayList<>();
         for (String method : ran.inputDefinitions()) {
-            CheckedHelper helper = rowValues.get(method);
-            if (helper == null) {
-                throw new IllegalStateException("an input of " + outcome.target() + " "
-                        + outcome.identity().shown() + " at " + outcome.at() + " is computed by `"
-                        + method + "`, which the module holds no helper for");
-            }
-            inputs.add(helper);
+            inputs.add(definitionNamed(method, rowValues, "an input", outcome));
         }
         return inputs;
+    }
+
+    /**
+     * What computes each value {@code ran}'s row states a dependency answers, by the dependency.
+     *
+     * <p>Looked up as {@link #computing} looks up the inputs, among the same helpers. Each entry the
+     * reading named is held to the entry of the stand-in it is put beside by where the two say the
+     * entry is written, and the answer for the rest the same way: that is what the reading found
+     * each of them among the module's tables by. A stand-in the reading named nothing for, or named
+     * a different number of entries, an entry written elsewhere, or another answer for the rest
+     * for, is the two readings of one row having come apart, and is refused rather than carried in
+     * with values something else computes.
+     */
+    private static Map<ValueName.Behavior, StandsIn.Computed> computingStandIns(
+            Output.RowsRead.ReadRow.Ran ran, RowStatement.Stated stated,
+            Map<String, CheckedHelper> rowValues) {
+        RowOutcome outcome = ran.outcome();
+        Map<ValueName.Behavior, StandsIn.Computed> byDependency = new LinkedHashMap<>();
+        for (StoodIn stoodIn : stated.standIns()) {
+            Output.RowsRead.StandInDefinitions named =
+                    ran.standInDefinitions().get(stoodIn.dependency());
+            if (named == null || named.entries().size() != stoodIn.entries().size()) {
+                throw new IllegalStateException("a program the language accepted holds a row whose"
+                        + " stand-in for `" + stoodIn.dependency() + "` states the entries "
+                        + stoodIn.entries() + " and whose reading names " + named
+                        + " as computing them: " + outcome.target() + " "
+                        + outcome.identity().shown() + " at " + outcome.at());
+            }
+            List<StandsIn.Entry> entries = new ArrayList<>();
+            for (int i = 0; i < stoodIn.entries().size(); i++) {
+                Output.RowsRead.StandInDefinitions.EntryDefinitions each = named.entries().get(i);
+                StoodIn.Entry stoodInEntry = stoodIn.entries().get(i);
+                if (!each.at().equals(stoodInEntry.at())) {
+                    throw new IllegalStateException("a program the language accepted holds a row"
+                            + " whose stand-in for `" + stoodIn.dependency() + "` states the entry"
+                            + " at " + stoodInEntry.at() + " where its reading names what computes"
+                            + " the entry at " + each.at() + ": " + outcome.target() + " "
+                            + outcome.identity().shown() + " at " + outcome.at());
+                }
+                List<CheckedHelper> arguments = new ArrayList<>();
+                for (String method : each.arguments()) {
+                    arguments.add(definitionNamed(method, rowValues, "an argument a stand-in states",
+                            outcome));
+                }
+                entries.add(new StandsIn.Entry(stoodInEntry, arguments,
+                        definitionNamed(each.answer(), rowValues, "an answer a stand-in states",
+                                outcome)));
+            }
+            byDependency.put(stoodIn.dependency(), new StandsIn.Computed(entries,
+                    computingTheRest(stoodIn, named.otherwise(), rowValues, outcome)));
+        }
+        return byDependency;
+    }
+
+    /**
+     * What computes what {@code stoodIn} answers for the rest, off what the row's reading named.
+     *
+     * <p>Over both sums, so that a stand-in answering something for the rest with nothing named to
+     * compute it, and one stating nothing with something named, are each refused by name rather
+     * than sharing whatever arm the two happen to fall into.
+     */
+    private static StandsIn.Otherwise computingTheRest(
+            StoodIn stoodIn, Output.RowsRead.StandInDefinitions.Otherwise named,
+            Map<String, CheckedHelper> rowValues, RowOutcome outcome) {
+        return switch (stoodIn.otherwise()) {
+            case StoodIn.Otherwise.Answer answer -> switch (named) {
+                case Output.RowsRead.StandInDefinitions.Otherwise.Computed(
+                        SourcePos at, String method) -> {
+                    if (!at.equals(answer.at())) {
+                        throw new IllegalStateException("a program the language accepted holds a"
+                                + " row whose stand-in for `" + stoodIn.dependency() + "` answers"
+                                + " for the rest with what is written at " + answer.at()
+                                + " where its reading names what computes the value at " + at
+                                + ": " + outcome.target() + " " + outcome.identity().shown()
+                                + " at " + outcome.at());
+                    }
+                    yield new StandsIn.Otherwise.Answers(answer, definitionNamed(method, rowValues,
+                            "what a stand-in answers for the rest", outcome));
+                }
+                case Output.RowsRead.StandInDefinitions.Otherwise.NothingStated _ ->
+                        throw new IllegalStateException("a program the language accepted holds a"
+                                + " row whose stand-in for `" + stoodIn.dependency() + "` answers"
+                                + " for the rest and whose reading names nothing computing it: "
+                                + outcome.target() + " " + outcome.identity().shown() + " at "
+                                + outcome.at());
+            };
+            case StoodIn.Otherwise.NothingStated _ -> switch (named) {
+                case Output.RowsRead.StandInDefinitions.Otherwise.Computed(
+                        SourcePos _, String method) ->
+                        throw new IllegalStateException("a program the language accepted holds a"
+                                + " row whose stand-in for `" + stoodIn.dependency() + "` states"
+                                + " nothing for the rest and whose reading names `" + method
+                                + "` as computing it: " + outcome.target() + " "
+                                + outcome.identity().shown() + " at " + outcome.at());
+                case Output.RowsRead.StandInDefinitions.Otherwise.NothingStated _ ->
+                        new StandsIn.Otherwise.NothingStated();
+            };
+        };
+    }
+
+    /**
+     * The helper the module holds under {@code method}, which the reading of {@code outcome}'s row
+     * named as computing {@code what}. A name with nothing under it is a row read against a module
+     * other than the one whose helpers are in hand, which the row would otherwise carry into the
+     * program as a value nothing computes.
+     */
+    private static CheckedHelper definitionNamed(String method, Map<String, CheckedHelper> rowValues,
+                                                 String what, RowOutcome outcome) {
+        CheckedHelper helper = rowValues.get(method);
+        if (helper == null) {
+            throw new IllegalStateException(what + " of " + outcome.target() + " "
+                    + outcome.identity().shown() + " at " + outcome.at() + " is computed by `"
+                    + method + "`, which the module holds no helper for");
+        }
+        return helper;
     }
 
     /**

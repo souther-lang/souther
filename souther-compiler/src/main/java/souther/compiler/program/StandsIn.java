@@ -30,22 +30,31 @@ import java.util.List;
  * <p>What it takes is what {@link CheckedRow.SelfContained#holds} takes: values as they were
  * observed. An output that can say what its own answer was — which holding a row to what it states
  * already asks of it — can say what its emission handed the import.
+ *
+ * <p>What it gives back is a value as well, and an output that has to put the answer behind the
+ * import in code of its own computes it rather than building it out of that value: {@link #entries}
+ * and {@link #otherwise} say which definition computes each value the stand-in states, as
+ * {@link CheckedRow.WithStandIns#inputDefinitions} does for a row's inputs.
  */
 public final class StandsIn {
 
     private final StoodIn stated;
     private final ValueTypes types;
     private final List<Position> arguments;
+    private final List<Entry> entries;
+    private final Otherwise otherwise;
 
-    StandsIn(StoodIn stated, ValueTypes types, List<Position> arguments) {
-        if (stated == null || types == null || arguments == null) {
+    StandsIn(StoodIn stated, ValueTypes types, List<Position> arguments, Computed computed) {
+        if (stated == null || types == null || arguments == null || computed == null) {
             throw new IllegalArgumentException("what stands in for a dependency is what the row"
                     + " states of it, read with what the declarations say and where the dependency's"
-                    + " arguments stand");
+                    + " arguments stand, and what computes each value it states");
         }
         this.stated = stated;
         this.types = types;
         this.arguments = List.copyOf(arguments);
+        this.entries = computed.entries();
+        this.otherwise = computed.otherwise();
     }
 
     /** The behavior this stands in for, which is the one an output emits as an import. */
@@ -61,6 +70,25 @@ public final class StandsIn {
      */
     public StoodIn stated() {
         return stated;
+    }
+
+    /**
+     * Each entry the stand-in answers with, with what computes the values it states.
+     *
+     * <p>The entries of {@link #stated}, in the same order, which is the order {@link #answering}
+     * reads them in: the first stating what a call arrived with answers it. Whether an argument is
+     * what an entry states is still that rule's to say. This says only what computes each value, so
+     * that an output answering the dependency in code of its own holds each argument as the checker
+     * elaborated it at the dependency's parameter, and hands back the answer as the checker
+     * elaborated it at what the dependency answers.
+     */
+    public List<Entry> entries() {
+        return entries;
+    }
+
+    /** What the stand-in answers where no entry states what it was asked, with what computes it. */
+    public Otherwise otherwise() {
+        return otherwise;
     }
 
     /**
@@ -155,5 +183,123 @@ public final class StandsIn {
 
         /** It states no answer for what it was asked. */
         record NothingStated() implements Answer {}
+    }
+
+    /**
+     * One entry a stand-in answers with, and what computes each value it states.
+     *
+     * <p>Each definition is one its module holds for the value as written, with its body elaborated
+     * where the value is handed over: an argument at the parameter of the dependency it is in the
+     * place of, the answer at what the dependency answers. So a case of a sum written where the sum
+     * is taken stands as the sum there, as a row's input does
+     * ({@link CheckedRow.WithStandIns#inputDefinitions}).
+     *
+     * <p>Made where the program is assembled and nowhere else, as a row is: one made with a
+     * definition its module does not hold would be a stand-in answering with something the program
+     * does not run.
+     */
+    public static final class Entry {
+
+        private final StoodIn.Entry stated;
+        private final List<CheckedHelper> argumentDefinitions;
+        private final CheckedHelper answerDefinition;
+
+        Entry(StoodIn.Entry stated, List<CheckedHelper> argumentDefinitions,
+              CheckedHelper answerDefinition) {
+            if (stated == null || argumentDefinitions == null || argumentDefinitions.contains(null)
+                    || answerDefinition == null) {
+                throw new IllegalArgumentException("an entry states values, and says what computes"
+                        + " each of them");
+            }
+            if (argumentDefinitions.size() != stated.arguments().size()) {
+                throw new IllegalArgumentException("an entry stating " + stated.arguments().size()
+                        + " argument(s) says what computes each of them: " + argumentDefinitions);
+            }
+            this.stated = stated;
+            this.argumentDefinitions = List.copyOf(argumentDefinitions);
+            this.answerDefinition = answerDefinition;
+        }
+
+        /** What the entry states: the arguments it answers for and its answer, as values. */
+        public StoodIn.Entry stated() {
+            return stated;
+        }
+
+        /** What computes each argument the entry states, in the order the dependency takes them. */
+        public List<CheckedHelper> argumentDefinitions() {
+            return argumentDefinitions;
+        }
+
+        /** What computes the answer the entry states. */
+        public CheckedHelper answerDefinition() {
+            return answerDefinition;
+        }
+
+        @Override
+        public String toString() {
+            return stated.toString();
+        }
+    }
+
+    /**
+     * What a stand-in answers where no entry states what it was asked, and what computes it.
+     *
+     * <p>The two arms {@link StoodIn.Otherwise} has, so that a stand-in stating nothing for the rest
+     * is not read as one whose answer for the rest nothing computes.
+     */
+    public sealed interface Otherwise {
+
+        /** It answers this, and this definition computes it. */
+        final class Answers implements Otherwise {
+
+            private final StoodIn.Otherwise.Answer stated;
+            private final CheckedHelper definition;
+
+            Answers(StoodIn.Otherwise.Answer stated, CheckedHelper definition) {
+                if (stated == null || definition == null) {
+                    throw new IllegalArgumentException("an answer for the rest is stated, and"
+                            + " computed by something");
+                }
+                this.stated = stated;
+                this.definition = definition;
+            }
+
+            /** The answer as a value. */
+            public StoodIn.Otherwise.Answer stated() {
+                return stated;
+            }
+
+            /** What computes it, elaborated at what the dependency answers. */
+            public CheckedHelper definition() {
+                return definition;
+            }
+
+            @Override
+            public String toString() {
+                return stated.toString();
+            }
+        }
+
+        /** It states no answer for anything it does not list. */
+        record NothingStated() implements Otherwise {}
+    }
+
+    /**
+     * What the assembler hands a stand-in: its entries and its answer for the rest, each with what
+     * computes it.
+     *
+     * <p>Which definition is whose is settled where these are made, against where each value is
+     * written, which the reading that named the definitions carried for that. Asked again here, it
+     * would be the entries compared with the ones they were made from.
+     */
+    record Computed(List<Entry> entries, Otherwise otherwise) {
+
+        Computed {
+            entries = List.copyOf(entries);
+            if (otherwise == null) {
+                throw new IllegalArgumentException("a stand-in answers something for the rest, or"
+                        + " states nothing for it");
+            }
+        }
     }
 }
