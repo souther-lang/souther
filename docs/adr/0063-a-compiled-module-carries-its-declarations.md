@@ -1,6 +1,19 @@
 # ADR-0063: A compiled module carries its own declarations
 
-Status: Accepted (decided 2026-07-27). Resolves issue #128. Revised 2026-09-25 — see *Revision*.
+Status: Accepted (decided 2026-07-27). Resolves issue #128. Revised 2026-09-25 and 2026-09-26 — see *Revision*.
+
+## Revision (2026-09-26): what a module copies
+
+The revision below holds what a module's classes link by. Some of what they take from another module's declaration is not linked but compiled into them, and afterwards nothing in the classes names the declaration. A published helper is expanded where it is called (ADR-0075), and a recursive one is emitted as a method of the reader. A published value that folds to a constant is carried as that constant (ADR-0074). A value that answers with a block is applied by copying the block. A type's invariant is checked in the classes of every type that includes it, and a helper or value an invariant names is expanded into the clause, and so into the construction and the decoder that check it. A dependency rebuilt with one of those changed was admitted beside a module that copied it, and one program answered one definition two ways (issue #1961).
+
+What a module was built against is what it links against and what it copied, and both are held. The alternatives were to state that a copy binds the reader to the version it was built against, as Java does for a constant (JLS §13.4.9) and Kotlin for a public inline function, or to stop copying helpers. The first leaves a stale artifact that is found only when it runs, which is what this ADR's revision was written to remove. The second does not reach a constant, which a pattern needs when the reader is compiled.
+
+- A copy is recorded where it is made, from what the reader's shipped classes are built of, and carried out beside what was built. It is not worked out afterwards from the finished tree, which no longer names what it copied, and not from what the reader was handed, which holds definitions nothing expands. What the compiler reads of a declaration only to check the reader is not a copy.
+- The unit is the declaration and what of it was copied: a helper, a value's constant, a value's block, a type's invariant. A requirement names the declaration the fact came from, never where it landed — a decoder carrying a pattern an invariant names requires the invariant, and a codec is not something a module copies.
+- A helper is held as it is closed over its own module, so a value or helper of that module it names is part of its copy and is not a target of its own: an edit to one of those moves the helper, and nothing kept by the module is named in another module's requirements. A block is closed the same way.
+- A constant is held as the value it folds to. `1 + 2` and `3` are one constant, and a module that copied one is not refused for the other.
+- A body is held as a structure over what it means rather than as its text or a hash of it. Where the source put a term, how it spelled a name that resolves to the same declaration, and the names the compiler gave its bindings are left out; a binding is written as the place it is bound at. What a helper's parameters are inferred as is not held: it follows from what is held and from the rules `BOUNDARY_VERSION` stands for. Its text would refuse a module for a comment, and a hash would make a promise of the artifact rest on no two bodies colliding.
+- The declaring module records what it offers to be copied, as it records what it offers to be linked, and admission compares the two the same way.
 
 ## Revision (2026-09-25)
 
