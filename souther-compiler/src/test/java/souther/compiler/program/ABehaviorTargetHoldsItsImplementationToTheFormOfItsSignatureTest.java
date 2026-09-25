@@ -42,37 +42,41 @@ class ABehaviorTargetHoldsItsImplementationToTheFormOfItsSignatureTest {
 
     @Test
     void aDeclarationIsWrittenAsABodyInjectedOrUnwritten() {
-        assertDoesNotThrow(() -> new BehaviorTarget(DECLARED, body()));
-        assertDoesNotThrow(() -> new BehaviorTarget(DECLARED, new CheckedImplementation.Injected()));
-        assertDoesNotThrow(() -> new BehaviorTarget(DECLARED, new CheckedImplementation.Unwritten()));
+        assertDoesNotThrow(() -> target(DECLARED, body()));
+        assertDoesNotThrow(() -> target(DECLARED, new CheckedImplementation.Injected()));
+        assertDoesNotThrow(() -> target(DECLARED, new CheckedImplementation.Unwritten()));
     }
 
     @Test
     void aDeclarationIsNotWrittenAsAComposition() {
-        assertThrows(IllegalArgumentException.class,
-                () -> new BehaviorTarget(DECLARED, composed()));
+        assertThrows(IllegalArgumentException.class, () -> target(DECLARED, composed()));
     }
 
     @Test
     void aCompositionIsWrittenAsAComposition() {
-        assertDoesNotThrow(() -> new BehaviorTarget(COMPOSED, composed()));
+        assertDoesNotThrow(() -> target(COMPOSED, composed()));
     }
 
     @Test
     void aCompositionIsNotWrittenAsABodyInjectedOrUnwritten() {
-        assertThrows(IllegalArgumentException.class, () -> new BehaviorTarget(COMPOSED, body()));
+        assertThrows(IllegalArgumentException.class, () -> target(COMPOSED, body()));
         assertThrows(IllegalArgumentException.class,
-                () -> new BehaviorTarget(COMPOSED, new CheckedImplementation.Injected()));
+                () -> target(COMPOSED, new CheckedImplementation.Injected()));
         assertThrows(IllegalArgumentException.class,
-                () -> new BehaviorTarget(COMPOSED, new CheckedImplementation.Unwritten()));
+                () -> target(COMPOSED, new CheckedImplementation.Unwritten()));
     }
 
     @Test
     void anImplementationAnotherCompileEmittedIsEitherForm() {
-        assertDoesNotThrow(
-                () -> new BehaviorTarget(DECLARED, new CheckedImplementation.ImplementedElsewhere()));
-        assertDoesNotThrow(
-                () -> new BehaviorTarget(COMPOSED, new CheckedImplementation.ImplementedElsewhere()));
+        assertDoesNotThrow(() -> target(DECLARED, new CheckedImplementation.ImplementedElsewhere()));
+        assertDoesNotThrow(() -> target(COMPOSED, new CheckedImplementation.ImplementedElsewhere()));
+    }
+
+    /** Requiring nothing to construct, which every implementation may: the form of the signature is
+     *  the only thing asked of it here. */
+    private static BehaviorTarget target(CheckedSignature signature,
+                                         CheckedImplementation implementation) {
+        return new BehaviorTarget(signature, implementation, List.of());
     }
 
     private static CheckedImplementation.Body body() {

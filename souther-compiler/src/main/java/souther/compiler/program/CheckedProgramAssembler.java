@@ -251,9 +251,10 @@ final class CheckedProgramAssembler {
                         + " compile has no reading of it");
             }
             BehaviorImplementation state = module.implementations().of(named);
-            BehaviorTarget target = new BehaviorTarget(signature,
-                    implementedAs(state, named, declared, implementations, module.checked(),
-                            module.compositions()));
+            CheckedImplementation implementation = implementedAs(state, named, declared,
+                    implementations, module.checked(), module.compositions());
+            BehaviorTarget target = new BehaviorTarget(signature, implementation,
+                    constructionRequirementsOf(named, module.requirements()));
             file(targets, named, target);
             declares.put(named, target);
         }
@@ -284,11 +285,17 @@ final class CheckedProgramAssembler {
             Map<String, DeclaredSig> declaredSignatures =
                     db.ask(new Bodies.DeclaredSignatures(module)).value();
             BehaviorBodies implementations = db.ask(new Bodies.Implementation(module)).value();
+            // The answer a composition here that uses one of these as a stage was worked out from,
+            // and not a second reading of what the module published: this is the answer that holds
+            // the module to what it was built against.
+            Map<String, List<BehaviorRequirement>> requirements =
+                    db.ask(new Bodies.Requirements(module)).value();
             if (declares == null || signatures == null || declaredSignatures == null
-                    || implementations == null) {
+                    || implementations == null || requirements == null) {
                 throw new IllegalStateException("`" + module + "` was read off the path and this"
                         + " compile has nothing to say about the behaviors it declares");
             }
+            Map<String, List<ValueName.Behavior>> required = requirementsOf(requirements);
             for (Ast.BehaviorDef declared : declares.behaviors()) {
                 ValueName.Behavior named = new ValueName.Behavior(module, declared.name());
                 CheckedSignature signature = switch (declared) {
@@ -305,10 +312,31 @@ final class CheckedProgramAssembler {
                     throw new IllegalStateException("`" + named + "` is declared by a module this"
                             + " compile read off the path and this compile has no reading of it");
                 }
-                file(targets, named, new BehaviorTarget(signature,
-                        publishedAs(implementations.of(named))));
+                CheckedImplementation implementation = publishedAs(implementations.of(named));
+                file(targets, named, new BehaviorTarget(signature, implementation,
+                        constructionRequirementsOf(named, required)));
             }
         }
+    }
+
+    /**
+     * What constructing {@code named} requires injected, as this compile answered for its module.
+     *
+     * <p>Read and handed on, and not worked out from the implementation. The answer has an entry
+     * for every behavior the module declares, an injected one requiring nothing, so a missing entry
+     * is the answer not holding together and is refused rather than read as requiring nothing. An
+     * entry that disagrees with the implementation reaches {@link BehaviorTarget}, which refuses it:
+     * supplying the value the implementation says it should be would make that refusal one that
+     * never runs on what a compile produces.
+     */
+    private static List<ValueName.Behavior> constructionRequirementsOf(
+            ValueName.Behavior named, Map<String, List<ValueName.Behavior>> requirements) {
+        List<ValueName.Behavior> required = requirements.get(named.name());
+        if (required == null) {
+            throw new IllegalStateException("`" + named + "` is declared and this compile has no"
+                    + " requirement set for it");
+        }
+        return required;
     }
 
     /**
@@ -573,8 +601,7 @@ final class CheckedProgramAssembler {
                 behaviors.add(new CheckedBehavior(named, target,
                         EnsuresEnforcement.in(read.checks(), read.name(), named),
                         rowsOf(read.rowsByBehavior().getOrDefault(named.name(), List.of()), types,
-                                target.signature(), targets, emitted.rowValues()),
-                        read.requirements().getOrDefault(named.name(), List.of()))));
+                                target.signature(), targets, emitted.rowValues()))));
         return new CheckedModule(read.name(), behaviors, emitted.helpers(), emitted.values(),
                 emitted.valueEntries(), read.data(), read.published());
     }

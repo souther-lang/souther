@@ -1,5 +1,9 @@
 package souther.compiler.check;
 
+import souther.compiler.types.ValueName;
+
+import java.util.List;
+
 /**
  * Where a behavior's body comes from.
  *
@@ -30,6 +34,18 @@ public enum BehaviorImplementation {
     /** Whether Java supplies this one, so an abstract base is emitted and a caller injects it. */
     public boolean isInjectionTarget() {
         return this == INJECTION_TARGET;
+    }
+
+    /**
+     * Whether a behavior in this state may be said to require {@code constructionRequirements}
+     * injected to be constructed.
+     *
+     * <p>Souther does not construct an injected behavior, so it requires nothing. Every other state
+     * may require anything, an unwritten behavior included: what it declares it depends on is what
+     * constructing it will take once someone writes it.
+     */
+    public boolean admits(List<ValueName.Behavior> constructionRequirements) {
+        return !isInjectionTarget() || constructionRequirements.isEmpty();
     }
 
     /** Whether there is a body here to run, to compile a row against, and to generate from. */

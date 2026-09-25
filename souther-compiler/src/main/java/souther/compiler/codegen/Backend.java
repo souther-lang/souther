@@ -551,9 +551,7 @@ public final class Backend {
                         Sig sig = declaredSig(module.name(), pipe, sigs);
                         out.put(new GeneratedClass.BehaviorInterface(module.name(), pipe.name()),
                                 b.generateBehaviorInterface(pipe.name(), sig.inputTypes(), sig.outputType(),
-                                        behaviorDeps.getOrDefault(
-                                                new ValueName.Behavior(module.name(), pipe.name()),
-                                                List.of())));
+                                        constructionRequirementsOf(behaviorDeps, named)));
                     }
                 }
             });
@@ -1697,6 +1695,24 @@ public final class Backend {
     }
 
     /**
+     * What constructing {@code named} takes injected, in its constructor's parameter order.
+     *
+     * <p>The requirements answer has an entry for every behavior the module declares, so a missing
+     * one is that answer not holding together, and a class built as though it took nothing would
+     * not link against what constructs it.
+     */
+    private static List<ValueName.Behavior> constructionRequirementsOf(
+            Map<ValueName.Behavior, List<ValueName.Behavior>> behaviorDeps,
+            ValueName.Behavior named) {
+        List<ValueName.Behavior> required = behaviorDeps.get(named);
+        if (required == null) {
+            throw new IllegalStateException("`" + named + "` is declared and has no requirement"
+                    + " set");
+        }
+        return required;
+    }
+
+    /**
      * The class behind a composed behavior: what {@code composed} says the composition does, in
      * bytecode.
      *
@@ -1713,7 +1729,7 @@ public final class Backend {
         // the pipeline's injected fields are the union of its stages' requirements (spec
         // §composition-with-requirements)
         InjectionSlots reqStages =
-                InjectionSlots.of(behaviorDeps.getOrDefault(own(pipe.name()), List.of()), ctx);
+                InjectionSlots.of(constructionRequirementsOf(behaviorDeps, own(pipe.name())), ctx);
         // the pipeline takes whatever its first stage takes (spec §sequential-composition), which is
         // what its own signature was built with
         Sig declared = declaredSig(ctx.pkg, pipe, sigs);

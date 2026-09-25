@@ -2135,11 +2135,10 @@ public final class Analyzer {
      * {@link Bodies.Requirements} carries a composition's stages' requirements as its own, so a row
      * for one supplies what the stages want.
      *
-     * <p>A behavior that is itself injected requires nothing and is not a key there — the one place
-     * a name being missing says something rather than being something missing. Which of the two it
-     * is, is asked of the behavior rather than read off the absence: a name that is not there for
-     * any other reason is an answer that does not hold together, and a row written as though it
-     * required nothing would state no stand-in for what it depends on.
+     * <p>A behavior that is itself injected is there requiring nothing, like every other behavior
+     * the module declares. A name that is not there is an answer that does not hold together, and
+     * nothing is offered for it: a row written as though it required nothing would state no
+     * stand-in for what it depends on.
      */
     private static Optional<CompletionItem> rowToWrite(
             Prepared prepared, Hir.BehaviorDef declared, Map<String, Sig> signatures,
@@ -2149,15 +2148,11 @@ public final class Analyzer {
         if (sig == null) {
             return Optional.empty();
         }
-        List<BehaviorRequirement> required = List.of();
         // A behavior that takes dependencies as arguments is offered a row that supplies them,
-        // whether or not its `let` has been written yet. An injection target takes none.
-        if (!prepared.implementationOf(new ValueName.Behavior(module, declared.name()))
-                .isInjectionTarget()) {
-            required = requirements.get(declared.name());
-            if (required == null) {
-                return Optional.empty();
-            }
+        // whether or not its `let` has been written yet.
+        List<BehaviorRequirement> required = requirements.get(declared.name());
+        if (required == null) {
+            return Optional.empty();
         }
         List<String> unsupplied = ExampleProvisioning.unsupplied(List.of(),
                         Requirements.names(required), prepared.forExamples().fakes()).stream()

@@ -55,8 +55,15 @@ public record RequiredDependencies(List<Required> inOrder) {
         if (required == null || reachable == null) {
             return null;
         }
+        List<BehaviorRequirement> its = required.get(behavior);
+        if (its == null) {
+            // An entry for every behavior the module declares, so a missing one is not a behavior
+            // requiring nothing — a row composed as though it were stands nothing in.
+            throw new IllegalStateException("`" + module + "." + behavior + "` has no requirement"
+                    + " set, and is asked what it requires");
+        }
         List<Required> out = new ArrayList<>();
-        for (BehaviorRequirement each : required.getOrDefault(behavior, List.of())) {
+        for (BehaviorRequirement each : its) {
             Sig signature = reachable.get(each.dependency());
             if (signature == null) {
                 // Nothing this module reaches says what the dependency answers, so no value can be

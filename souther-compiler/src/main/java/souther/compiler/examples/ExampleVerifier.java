@@ -936,9 +936,15 @@ public final class ExampleVerifier {
             if (!b.name().equals(name)) {
                 continue;
             }
+            // An entry for every behavior the module declares, so a missing one is not a behavior
+            // requiring nothing.
+            List<BehaviorRequirement> required = requirements.get(name);
+            if (required == null) {
+                throw new IllegalStateException("`" + module.name() + "." + name + "` is declared"
+                        + " and has no requirement set");
+            }
             Answerer.Answer answer = answerer.of(name);
-            return new ExampleTarget(name, requirements.getOrDefault(name, List.of()), answer,
-                    heldTo(name, answer));
+            return new ExampleTarget(name, required, answer, heldTo(name, answer));
         }
         return null;
     }

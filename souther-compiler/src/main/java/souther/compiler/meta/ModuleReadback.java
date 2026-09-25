@@ -201,14 +201,13 @@ public final class ModuleReadback {
             implementations.put(behavior, implementation);
             List<ValueName.Behavior> required = carried.behaviorRequirements() == null
                     ? null : PublishedRequirements.read(carried.behaviorRequirements());
-            if (required == null) {
+            // An injection target is not constructed by Souther, so it requires nothing; it is the
+            // dependency. A class saying it is one and that it requires something says two things,
+            // and neither is taken over the other.
+            if (required == null || !implementation.admits(required)) {
                 return unreadable(moduleName, new Readback.Failure.UnreadableMetadata());
             }
-            // An injection target is not constructed by Souther, so it is not among what a
-            // construction is answered for; it is the dependency.
-            if (!implementation.isInjectionTarget()) {
-                requirements.put(behavior, required);
-            }
+            requirements.put(behavior, required);
         }
         for (String helper : m.invariantHelpers()) {
             declarations.append('\n').append(helper).append('\n');

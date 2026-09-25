@@ -117,11 +117,15 @@ public final class ModuleMetadata {
             };
             BehaviorImplementation implementation = implementations.get(b.name());
             List<ValueName.Behavior> required = requirements.get(b.name());
-            if (implementation.isInjectionTarget()) {
-                required = List.of();
-            } else if (required == null) {
+            if (required == null) {
                 throw new IllegalStateException("`" + module.name() + "." + b.name()
-                        + "` is constructed here and reached publication with no requirement set");
+                        + "` reached publication with no requirement set");
+            }
+            if (!implementation.admits(required)) {
+                // What a reader of the class refuses to read, so it is not written.
+                throw new IllegalStateException("`" + module.name() + "." + b.name() + "` is "
+                        + implementation.written() + " and reached publication requiring "
+                        + required);
             }
             add(out, new GeneratedClass.BehaviorInterface(module.name(), b.name()),
                     Annotation.of(BEHAVIOR_ANN,
