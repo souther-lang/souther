@@ -133,7 +133,7 @@ public final class Names {
             public Set<String> exposedBy(String moduleName) {
                 // `exposing` is written in the source and no pass rewrites it, so which stage this
                 // registry reads makes no difference to the answer.
-                Set<String> exposed = db.ask(new Front.Exposes(moduleName)).value();
+                Set<String> exposed = db.ask(new Front.PublishedNames(moduleName)).value();
                 return exposed == null ? Set.of() : exposed;
             }
 
@@ -178,7 +178,7 @@ public final class Names {
 
             @Override
             public Set<String> exposedBy(String moduleName) {
-                Set<String> exposed = db.ask(new Front.Exposes(moduleName)).value();
+                Set<String> exposed = db.ask(new Front.PublishedNames(moduleName)).value();
                 return exposed == null ? Set.of() : exposed;
             }
 
@@ -225,7 +225,7 @@ public final class Names {
 
             @Override
             public Set<String> exposedBy(String moduleName) {
-                Set<String> exposed = db.ask(new Front.Exposes(moduleName)).value();
+                Set<String> exposed = db.ask(new Front.PublishedNames(moduleName)).value();
                 return exposed == null ? Set.of() : exposed;
             }
 
@@ -280,7 +280,7 @@ public final class Names {
 
             @Override
             public Set<String> exposedBy(String moduleName) {
-                Set<String> exposed = db.ask(new Front.Exposes(moduleName)).value();
+                Set<String> exposed = db.ask(new Front.PublishedNames(moduleName)).value();
                 return exposed == null ? Set.of() : exposed;
             }
 

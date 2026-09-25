@@ -14,7 +14,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * With an {@code exposing} clause, only listed types are public; the rest are package-private, so the module
  * boundary is enforced at the JVM level (spec §modules, §field-visibility, §jvm-construction-privacy). A
- * module without an {@code exposing} clause keeps everything public.
+ * module without an {@code exposing} clause keeps everything public, and one writing
+ * {@code exposing ()} keeps nothing public.
  */
 class CompileVisibilityTest {
 
@@ -72,5 +73,17 @@ class CompileVisibilityTest {
                 """), getClass().getClassLoader());
         assertTrue(Modifier.isPublic(loader.loadClass("demo.A").getModifiers()),
                 "without exposing, types stay public");
+    }
+
+    /** An empty clause is written and names nothing, so it keeps what no clause would publish. */
+    @Test
+    void anEmptyExposingKeepsEverythingPackagePrivate() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo exposing ()
+
+                data A = { v: Int }
+                """), getClass().getClassLoader());
+        assertFalse(Modifier.isPublic(loader.loadClass("demo.A").getModifiers()),
+                "exposing () publishes nothing, so the type is package-private");
     }
 }

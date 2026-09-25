@@ -48,4 +48,36 @@ class CompileInjectionConstructsTest {
                 """));
         assertEquals("E1305", e.code());
     }
+
+    /** A module with no clause publishes the case, so Java has its decoder. */
+    @Test
+    void aCaseOfAModuleWritingNoClauseIsAllowed() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                data Id = String
+                data Member = { id: Id }
+                data 保存データ不正 = { reason: String }
+
+                behavior findMember : (id: Id) -> Member | 保存データ不正
+                    constructs 保存データ不正
+                """));
+    }
+
+    /** One writing {@code exposing ()} publishes nothing, the case included. */
+    @Test
+    void aCaseOfAModuleWritingAnEmptyClauseIsE1305() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+                exposing ()
+
+                data Id = String
+                data Member = { id: Id }
+                data 保存データ不正 = { reason: String }
+
+                behavior findMember : (id: Id) -> Member | 保存データ不正
+                    constructs 保存データ不正
+                """));
+        assertEquals("E1305", e.code());
+    }
 }

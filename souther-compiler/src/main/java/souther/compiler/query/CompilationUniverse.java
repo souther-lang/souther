@@ -69,10 +69,10 @@ public record CompilationUniverse(Db db) implements ModuleUniverse {
      * built on it.
      *
      * <p>Both halves asked of the questions that already answer them — a name written twice is
-     * refused once, where declarations are indexed, and what a module exposes is read off its
-     * source in one place ({@link Front.Exposes}). Worked out here instead, the {@code exposing}
-     * list would have a second reader, which is what left one walk taking {@code Amount.decoder}
-     * for a name and another taking it for {@code Amount}.
+     * refused once, where declarations are indexed, and what a module publishes is worked out in
+     * one place ({@link Front.PublishedNames}). Worked out here instead, the {@code exposing}
+     * clause would have a second reader, which is what left one walk taking
+     * {@code Amount.decoder} for a name and another taking it for {@code Amount}.
      */
     private static Registry.Declared<Ast.Def> declaredBy(Db db, String name) {
         // Asked only once the caller has a module to ask it of, which is why every caller reads
@@ -84,7 +84,7 @@ public record CompilationUniverse(Db db) implements ModuleUniverse {
         if (!declarations.present()) {
             return null;
         }
-        Set<String> exposed = db.ask(new Front.Exposes(name)).value();
+        Set<String> exposed = db.ask(new Front.PublishedNames(name)).value();
         return exposed == null ? null : new Registry.Declared<>(declarations.value().declarations(),
                 declarations.value().asDeclared(), exposed);
     }

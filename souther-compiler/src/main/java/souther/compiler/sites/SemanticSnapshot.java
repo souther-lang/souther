@@ -28,9 +28,11 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSpelling;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * What is known about one revision of one module's source, as an editor asks it.
@@ -253,16 +255,27 @@ public final class SemanticSnapshot {
         };
     }
 
-    /** What a module of this compilation publishes, in the order its {@code exposing} line writes
-     *  them. */
+    /** What a module of this compilation publishes, in the order its {@code exposing} clause writes
+     *  them, or in the order the module declares them where it writes no clause. */
     private List<Published> offeredBy(String named) {
         Answer<Hir.Module> offering = db.ask(new Names.Resolved(named));
         if (!offering.present()) {
             return List.of();
         }
         Hir.Module offered = offering.value();
+        Set<String> inOrder = new LinkedHashSet<>(offered.exposing().named());
+        for (Hir.Def def : offered.defs()) {
+            inOrder.add(def.name());
+        }
+        for (Hir.BehaviorDef behavior : offered.behaviors()) {
+            inOrder.add(behavior.name());
+        }
+        for (Hir.FnDef fn : offered.fns()) {
+            inOrder.add(fn.name());
+        }
+        inOrder.retainAll(offered.published());
         List<Published> out = new ArrayList<>();
-        for (String name : offered.exposing()) {
+        for (String name : inOrder) {
             published(offered, name).ifPresent(out::add);
         }
         return List.copyOf(out);

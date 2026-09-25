@@ -494,9 +494,9 @@ public final class HelperInliner {
      * a module nothing has resolved, and everything after resolution asks the same question of one
      * it has. The rule is the same one, so it is here rather than restated over each tree.
      */
-    public static boolean publishes(Set<String> exposing, String fn, boolean hasWrittenBody,
+    public static boolean publishes(Set<String> published, String fn, boolean hasWrittenBody,
                                     List<String> wanted) {
-        return hasWrittenBody && exposing.contains(fn) && wanted.contains(fn);
+        return hasWrittenBody && published.contains(fn) && wanted.contains(fn);
     }
 
     /**

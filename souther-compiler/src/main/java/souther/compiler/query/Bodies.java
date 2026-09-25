@@ -2090,16 +2090,12 @@ public final class Bodies {
                 return Answer.absent();
             }
             Hir.Module from = settled.value();
-            // A module that exposes nothing in particular exposes everything.
-            if (from.exposing().isEmpty()) {
-                return Answer.of(Boolean.TRUE);
-            }
-            Set<String> exposing = Set.copyOf(from.exposing());
             // Every declaration of the module is a class of its own, whichever form it was written
-            // in, and only the ones `exposing` names are public.
+            // in, and only the ones it publishes are public.
+            Set<String> publishing = from.published();
             Set<String> kept = new LinkedHashSet<>();
             for (Hir.Def def : from.defs()) {
-                if (!exposing.contains(def.declares().name())) {
+                if (!publishing.contains(def.declares().name())) {
                     kept.add(def.declares().name());
                 }
             }
@@ -2111,7 +2107,7 @@ public final class Bodies {
             List<Hir.FnDef> roots = new ArrayList<>();
             for (Hir.FnDef fn : HelperInliner.helpersOf(from).values()) {
                 if (fn.body() instanceof Hir.FnBody.Written && !fn.params().isEmpty()
-                        && exposing.contains(fn.name())) {
+                        && publishing.contains(fn.name())) {
                     roots.add(fn);
                 }
             }

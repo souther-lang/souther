@@ -553,10 +553,10 @@ final class CheckedProgramAssembler {
         Hir.Module declarations = lowering.settled();
         Hir.Module bodies = lowering.lowered();
         // What the module publishes, asked of the one answer everything that reaches across a
-        // module boundary asks. Read off the `exposing` clause again here, this would be a second
-        // reading of a decision the check already made — and the two would agree until one of them
-        // learnt something.
-        Set<String> published = db.ask(new Front.Exposes(module)).value();
+        // module boundary asks. Worked out again here from the `exposing` clause, this would be a
+        // second reading of a decision the check already made — and the two would agree until one
+        // of them learnt something.
+        Set<String> published = db.ask(new Front.PublishedNames(module)).value();
         if (published == null) {
             // The same reading as every other answer above: a module taken as checked is one every
             // question about it has been answered for, and nothing here turns an answer that was

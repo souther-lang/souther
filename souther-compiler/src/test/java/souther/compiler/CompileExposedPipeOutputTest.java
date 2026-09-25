@@ -20,8 +20,10 @@ class CompileExposedPipeOutputTest {
     /** {@code capAmount} retires {@code TooLarge}; {@code toDoubled} yields {@code Doubled}, so
      * {@code process = capAmount >-> toDoubled} produces {@code Doubled | TooLarge}. */
     private static String mod(String exposing) {
-        return """
-                module demo exposing ( Amount, %s )
+        return "module demo exposing ( Amount, %s )\n".formatted(exposing) + DECLARATIONS;
+    }
+
+    private static final String DECLARATIONS = """
 
                 data Amount = Int
                 data TooLarge = { limit: Int }
@@ -37,8 +39,7 @@ class CompileExposedPipeOutputTest {
                 let toDoubled (a) = Doubled { value = a.value }
 
                 behavior process = capAmount >-> toDoubled
-                """.formatted(exposing);
-    }
+                """;
 
     @Test
     void exposedCompositionWithMatchingSignatureCompiles() {
@@ -70,5 +71,12 @@ class CompileExposedPipeOutputTest {
     void anUnexposedCompositionNeedsNoSignature() {
         // `process` is defined but not exposed, so inference stands and no signature is required.
         assertDoesNotThrow(() -> Compiler.compile(mod("Doubled")));
+    }
+
+    /** A module writing no clause publishes `process`, but no clause names it, so it states no
+     *  boundary and its output stays inferred (spec §a-module-publishes-what-it-declares). */
+    @Test
+    void aCompositionPublishedByWritingNoClauseNeedsNoSignature() {
+        assertDoesNotThrow(() -> Compiler.compile("module demo\n" + DECLARATIONS));
     }
 }

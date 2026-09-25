@@ -296,10 +296,9 @@ public final class TypeScope {
 
     /** Whether the module that declares {@code name} exposes it — its own names always count. */
     public boolean isExposed(TypeSymbol name) {
-        // What the language and its library give is reachable from everywhere and kept from nobody.
-        // The library's modules write no `exposing` line, and a rule about what a module keeps to
-        // itself is a rule about a module of the compilation — asking it of `souther.decimal` reads
-        // an empty answer as a decision that module made.
+        // What the language and its library give is reachable from everywhere and kept from nobody,
+        // which is the language's to say and not a clause's: a rule about what a module keeps to
+        // itself is a rule about a module of the compilation, and `souther.decimal` is not one.
         if (!(name instanceof TypeSymbol.AtModule at)
                 || name.equals(languageNames.get(name.name()))) {
             return true;

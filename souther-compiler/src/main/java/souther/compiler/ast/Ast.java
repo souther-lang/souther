@@ -8,10 +8,12 @@ import souther.compiler.types.SourceReferenceOrigin;
 import souther.compiler.types.TypeKey;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * The abstract syntax: a module as the characters that spell it were read, with every name still a
@@ -223,7 +225,7 @@ public interface Ast {
      * reader of the rebuild has to see, which is why every one of them names it.
      */
     record Module(String name,
-                  List<String> exposing,
+                  ExposingClause exposing,
                   Map<String, RetType> exposedOutputs,
                   List<Import> imports,
                   List<Def> defs,
@@ -233,7 +235,41 @@ public interface Ast {
                   List<Example> examples,
                   List<Fake> fakes,
                   String exampleFileTarget,
-                  SourcePos pos) implements Ast {}
+                  SourcePos pos) implements Ast {
+
+        public Module {
+            Objects.requireNonNull(exposing, "a module says whether it writes an exposing clause");
+        }
+
+        /**
+         * The names this module publishes (spec §a-module-publishes-what-it-declares): of the
+         * declarations it makes itself, the ones its {@code exposing} clause publishes.
+         *
+         * <p>What may be published is asked of the declarations and not of the names in scope. Its
+         * data and behaviors are its own. Of its definitions, the ones its source wrote are, and a
+         * core module's {@code private let} is not; a value an attached file declares is the rows',
+         * and a definition this module takes on to emit is another module's
+         * (spec §only-a-modules-own-declarations-are-published).
+         *
+         * <p>The one place this is worked out. What a reader outside the module may name, which
+         * classes are public on the JVM, and what a single-file run may reach all read it.
+         */
+        public Set<String> published() {
+            Set<String> publishable = new LinkedHashSet<>();
+            for (Def def : defs) {
+                publishable.add(def.name());
+            }
+            for (BehaviorDef behavior : behaviors) {
+                publishable.add(behavior.name());
+            }
+            for (FnDef fn : fns) {
+                if (fn.role() instanceof DefinitionRole.Ordinary && !fn.isPrivate()) {
+                    publishable.add(fn.name());
+                }
+            }
+            return exposing.publishedFrom(publishable);
+        }
+    }
 
     /**
      * {@code fake <injected> | (in) -> out | ...} — a test double for an injected behavior, used to

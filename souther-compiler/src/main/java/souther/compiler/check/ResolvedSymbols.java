@@ -56,7 +56,7 @@ public final class ResolvedSymbols implements Symbols {
         return new ResolvedSymbols(new SymbolTable<>(m.name(),
                 Registry.ofRead(Map.of(m.name(), new Registry.Declared<>(
                         declared.declarations(), declared.asDeclared(),
-                        Registry.baseNames(m.exposing())))),
+                        m.published()))),
                 Denoting.of(names, Map.of()), Declarations.Vocabulary.of(stdlib), stdlib,
                 each -> each));
     }

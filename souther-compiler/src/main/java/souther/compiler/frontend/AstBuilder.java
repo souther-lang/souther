@@ -4,6 +4,7 @@ import souther.compiler.CanonicalNames;
 import souther.compiler.diag.msg.Reported;
 import souther.compiler.diag.msg.Supporting;
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.ExposingClause;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.RuleOrigin;
@@ -127,7 +128,6 @@ public final class AstBuilder {
         String name;
         SourcePos pos;
         Map<String, Ast.RetType> exposedOutputs = new HashMap<>();
-        List<String> exposing = new ArrayList<>();
         if (header.isPresent()) {
             SyntaxNode h = header.get();
             name = qualifiedNameText(h.child(SyntaxKind.QUALIFIED_NAME).orElseThrow());
@@ -149,8 +149,11 @@ public final class AstBuilder {
             throw error(pos(file), new ParseMessage.ASourceFileStartsWithAModuleDeclaration());
         }
         moduleName = name;   // set before any type is read, so type-variable gating knows the namespace
-        header.flatMap(h -> h.child(SyntaxKind.EXPOSING_CLAUSE))
-                .ifPresent(c -> readExposing(c, exposing, exposedOutputs));
+        // Whether the clause is written at all is kept: a header without one and a header writing
+        // `exposing ()` publish different things.
+        ExposingClause exposing = header.flatMap(h -> h.child(SyntaxKind.EXPOSING_CLAUSE))
+                .<ExposingClause>map(c -> readExposing(c, exposedOutputs))
+                .orElse(ExposingClause.Omitted.INSTANCE);
 
         List<Ast.Import> imports = new ArrayList<>();
         List<Ast.Def> defs = new ArrayList<>();
@@ -244,20 +247,25 @@ public final class AstBuilder {
                 default -> { /* ERROR nodes already reported */ }
             }
         }
-        return new Ast.Module(target, List.of(), new HashMap<>(), List.of(), List.of(), List.of(),
-                values, List.of(), examples, fakes, target, pos);
+        // An attached file writes no header clause; it joins a module whose own header says what that
+        // module publishes, and nothing it declares is published.
+        return new Ast.Module(target, ExposingClause.Omitted.INSTANCE, new HashMap<>(), List.of(),
+                List.of(), List.of(), values, List.of(), examples, fakes, target, pos);
     }
 
     private CompileException onlyExamples(SyntaxNode n) {
         return CompileException.of(Diagnostic.at(pos(n)).say(new ExampleMessage.AnExamplesFileHoldsOnlyExamples()).build());
     }
 
-    private void readExposing(SyntaxNode clause, List<String> names, Map<String, Ast.RetType> outputs) {
+    private ExposingClause.Written readExposing(SyntaxNode clause,
+                                                Map<String, Ast.RetType> outputs) {
+        List<String> names = new ArrayList<>();
         for (SyntaxNode entry : childNodes(clause, SyntaxKind.EXPOSED_ENTRY)) {
             String name = qualifiedNameText(entry.child(SyntaxKind.QUALIFIED_NAME).orElseThrow());
             names.add(name);
             entry.child(SyntaxKind.RET_TYPE).ifPresent(rt -> outputs.put(name, retType(rt)));
         }
+        return new ExposingClause.Written(names);
     }
 
     private Ast.Import importDecl(SyntaxNode n) {

@@ -284,10 +284,10 @@ public final class Runner {
      * marks a generated class {@code ACC_PUBLIC} ({@code CodegenContext.pub}), and it is asked here
      * for that reason: the runner reaches the compiled behavior by reflection from another package,
      * which the JVM allows only for a class the module published. A module with no {@code exposing}
-     * list keeps nothing to itself, so a header-less file publishes everything in it.
+     * clause keeps nothing to itself, so a header-less file publishes everything in it.
      */
     private static boolean exposes(Prepared module, String name) {
-        return module.exposing().isEmpty() || module.exposing().contains(name);
+        return module.published().contains(name);
     }
 
     /**

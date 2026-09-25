@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * The module a best-effort reading of a compilation runs over, assembled once.
@@ -223,9 +224,9 @@ public final class CheckSurface implements Assembly {
         return settling.module().behaviors();
     }
 
-    /** The names it exposes. */
-    public List<String> exposing() {
-        return settling.module().exposing();
+    /** The names it publishes ({@link Hir.Module#published}). */
+    public Set<String> published() {
+        return settling.module().published();
     }
 
     /** Whether {@code behavior} is a {@code >->} composition, whose arms, positions and lines are

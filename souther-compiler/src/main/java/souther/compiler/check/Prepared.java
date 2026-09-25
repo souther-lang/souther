@@ -153,9 +153,9 @@ public final class Prepared {
         return Requirements.isComposition(behavior);
     }
 
-    /** The names its source offers to whatever reads it, which no stage rewrites. */
-    public List<String> exposing() {
-        return surface.exposing();
+    /** The names it publishes to whatever reads it, which no stage rewrites. */
+    public Set<String> published() {
+        return surface.published();
     }
 
     /**

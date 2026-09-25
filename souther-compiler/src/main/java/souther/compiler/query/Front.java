@@ -684,7 +684,7 @@ public final class Front {
     /**
      * The modules a module imports, named once each, in the order it names them.
      *
-     * <p>Its own question for the same reason {@link Exposes} is: what reads this wants the shape of
+     * <p>Its own question for the same reason {@link PublishedNames} is: what reads this wants the shape of
      * the workspace around a module, and that shape survives almost every edit to the module itself.
      * Reading the module here would put every body on the far side of an answer about its header.
      */
@@ -882,14 +882,15 @@ public final class Front {
     }
 
     /**
-     * The type names a module exposes.
+     * The names a module publishes: what a reader outside it may name
+     * ({@link Ast.Module#published}).
      *
      * <p>Its own question, not a read of the module. Everything that resolves a name against another
-     * module asks this, and a module changes far more often than its {@code exposing} line does —
-     * reading the whole module here would mean a new behavior in one module rebuilding every module
-     * that imports a type from it.
+     * module asks this, and what a module publishes changes far less often than the module does — an
+     * edit to a body leaves it as it was, so a module that imports from this one is not read again
+     * for it.
      */
-    public record Exposes(String name) implements Key<Set<String>> {
+    public record PublishedNames(String name) implements Key<Set<String>> {
         @Override
         public String module() {
             return name;
@@ -898,16 +899,15 @@ public final class Front {
         @Override
         public Answer<Set<String>> compute(Db db) {
             Ast.Module m = db.ask(new Available(name)).value();
-            return Answer.of(m == null ? Set.of()
-                    : souther.compiler.check.Registry.baseNames(m.exposing()));
+            return Answer.of(m == null ? Set.of() : m.published());
         }
     }
 
     /**
      * The behavior names a module declares.
      *
-     * <p>Its own question for the reason {@link Exposes} is: what reads this wants one line of a
-     * module's header, and that survives almost every edit to the module itself.
+     * <p>Its own question for the reason {@link PublishedNames} is: what reads this wants a part of
+     * a module that survives almost every edit to the module itself.
      */
     public record Behaviors(String name) implements Key<Set<String>> {
         @Override
@@ -929,7 +929,7 @@ public final class Front {
     /**
      * The types a module declares, in the order it writes them.
      *
-     * <p>Its own question for the reason {@link Exposes} and {@link Behaviors} are theirs: what
+     * <p>Its own question for the reason {@link PublishedNames} and {@link Behaviors} are theirs: what
      * reads this wants which names a module introduces, and that survives every edit to what the
      * declarations say and to the bodies beside them. A reader taking the declarations instead
      * would be worked out again by an edit to any rule in the module.
