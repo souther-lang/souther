@@ -184,8 +184,8 @@ public final class Linkages {
     /** Whether this compilation has {@code module}, compiled here or on the path. */
     private static boolean held(Db db, String module) {
         return Front.onThePath(db, module) != null
-                || db.ask(new Front.Declared()).value() instanceof List<String> declared
-                        && declared.contains(module);
+                || (db.ask(new Front.Declared()).value() instanceof List<String> declared
+                        && declared.contains(module));
     }
 
     /**
