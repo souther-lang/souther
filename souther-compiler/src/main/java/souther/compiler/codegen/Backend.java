@@ -1252,14 +1252,20 @@ public final class Backend {
      * unusable and has to move this number with it; a change confined to the inside of a generated
      * method does not touch it.
      *
-     * <p>The other is the source a jar carries for a reader to compile: a data's invariant, and the
-     * body of every value and helper the module publishes ({@link
-     * souther.compiler.meta.ModuleMetadata}). Those are read back by whichever compiler imports the
-     * module, so what the front end makes of them is a promise the jar carries too — a change to how
-     * one of those bodies is read moves this number as surely as a change to a descriptor does, and
-     * it is the front end's change rather than this package's. {@link
-     * souther.compiler.meta.ModuleReadback} refuses a jar that disagrees, so the disagreement is
-     * reported as what it is instead of surfacing as an unresolved name inside a body nobody wrote.
+     * <p>The other is the source a jar carries for a reader to compile: every declaration the module
+     * publishes as text — a behavior's signature, a data and its invariant — and the body of every
+     * value and helper it publishes ({@link souther.compiler.meta.ModuleMetadata}). Those are read
+     * back by whichever compiler imports the module, so what the front end makes of them is a promise
+     * the jar carries too — a change to how one of those texts is read moves this number as surely as
+     * a change to a descriptor does, and it is the front end's change rather than this package's. A
+     * rule that refuses text the front end used to admit is such a change: a jar written before it
+     * may carry that text. {@link souther.compiler.meta.ModuleReadback} refuses a jar whose number
+     * disagrees, so the disagreement is reported as what it is instead of surfacing as an unresolved
+     * name inside a body nobody wrote.
+     *
+     * <p>Nothing compares the front end with this number. What the annotations carry is recorded
+     * under it and held to it; how the text they carry is read is not, so whoever changes a rule the
+     * front end or the checker applies to a declaration or a published body is the one who moves it.
      *
      * <p>A third thing arrived with version 6: what a published helper's declaration promises. A helper
      * written without {@code partial} carries the termination guarantee for everything it reaches (spec
@@ -1406,8 +1412,14 @@ public final class Backend {
      * injected, and the reading asks for it. A composition's requirements come from stages the jar
      * does not carry. A reader of a jar written before this version has no list for one, and a
      * composition it builds on one would be constructed without what those stages need.
+     *
+     * <p>Version 26 narrows what the front end reads a carried text as. The names one form binds at
+     * once — a signature's parameters, a {@code let}'s or a lambda's parameters with what their
+     * patterns bind, one destructuring {@code let}, one {@code match} arm — are refused where two are
+     * alike. A jar written before it was not held to that: a signature or a published helper's body
+     * it carries may bind one name twice, and this reader would refuse text its writer admitted.
      */
-    public static final int BOUNDARY_VERSION = 25;
+    public static final int BOUNDARY_VERSION = 26;
 
     /** Emits the class a module's own declarations are published on, carrying {@code declarations}.
      * What it says is the caller's; that it is built like every other generated class — the same Java

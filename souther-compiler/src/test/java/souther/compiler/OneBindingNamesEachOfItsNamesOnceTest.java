@@ -12,7 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The names one form binds at once are written once each (spec §a-declaration-is-made-once): a
- * signature's parameters, a helper's or a lambda's parameters with every name their patterns bind,
+ * signature's parameters, a {@code let}'s parameters — a helper's and a behavior implementation's
+ * alike — or a lambda's, with every name their patterns bind,
  * one destructuring {@code let}, one {@code match} arm. Each is refused at the second of the two,
  * before anything reads the names — a written name is answered by one binding, and two bindings
  * taken at once under one spelling leave a reader of the name nothing to choose between them.
