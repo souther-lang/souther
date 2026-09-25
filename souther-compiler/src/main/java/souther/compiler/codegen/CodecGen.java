@@ -94,9 +94,6 @@ final class CodecGen {
     private ClassDesc cd(Hir.Def def) { return ctx.cd(def); }
     private ClassDesc cd(TypeSymbol typeName) { return ctx.cd(typeName); }
     private SequencedMap<String, Type> fieldTypes(Hir.Data data) { return ctx.laidOutFields(data); }
-    private ClassDesc[] fieldDescs(SequencedMap<String, Type> fields) {
-        return JvmTypes.fieldDescs(fields, ctx);
-    }
     private void unbox(CodeBuilder code, Type type, int slot) { JvmTypes.unbox(code, type, slot, ctx); }
 
     private static String srcFactory(Src s) {
@@ -599,10 +596,10 @@ final class CodecGen {
                 AstExpressions gen = new AstExpressions(new BodyGen(ctx, code, data, cdName, 3));
                 switch (dec) {
                     case Hir.PrimDecoder prim ->
-                            emitPrimDecode(code, gen, cdName, prim, fields, src, invariants);
-                    case Hir.ObjectDecoder obj -> emitObjectDecode(code, gen, cdName, obj, fields, src);
+                            emitPrimDecode(code, gen, prim, fields, src, invariants);
+                    case Hir.ObjectDecoder obj -> emitObjectDecode(code, gen, obj, fields, src);
                     case Hir.NewtypeDecoder nt ->
-                            emitNewtypeDecode(code, gen, cdName, nt, fields, src, invariants);
+                            emitNewtypeDecode(code, gen, nt, fields, src, invariants);
                 }
             });
             // One key-remap helper per key type used as a map key anywhere in this decoder; the
@@ -1061,7 +1058,7 @@ final class CodecGen {
         emitToTheSecond(code, temporal);
     }
 
-    private void emitPrimDecode(CodeBuilder code, AstExpressions gen, ClassDesc cdName, Hir.PrimDecoder prim,
+    private void emitPrimDecode(CodeBuilder code, AstExpressions gen, Hir.PrimDecoder prim,
                                 SequencedMap<String, Type> fields, Src src, Invariants invariants) {
         Type inputType = TypeOps.primType(prim.from());
         ClassDesc leaf = srcLeafOwner(src);
@@ -1099,7 +1096,7 @@ final class CodecGen {
         int inputSlot = gen.slot(inputType);
         unbox(code, inputType, inputSlot);
         gen.bind(prim.input().binding(), prim.input().name(), inputSlot, inputType);
-        emitConstructCall(code, gen, cdName, prim.result(), fields);
+        emitConstructCall(code, gen, prim.result(), fields);
     }
 
     /**
@@ -1107,7 +1104,7 @@ final class CodecGen {
      * result in X (spec §newtype). Same Err short-circuit as {@link #emitPrimDecode}, but the leaf is
      * Y's decoder rather than a primitive one.
      */
-    private void emitNewtypeDecode(CodeBuilder code, AstExpressions gen, ClassDesc cdName, Hir.NewtypeDecoder dec,
+    private void emitNewtypeDecode(CodeBuilder code, AstExpressions gen, Hir.NewtypeDecoder dec,
                                    SequencedMap<String, Type> fields, Src src, Invariants invariants) {
         if (dec.inner() instanceof Hir.MapDecRef mp) {
             // The map's own decoder, then its two halves of invariant either side of the key remap.
@@ -1148,7 +1145,7 @@ final class CodecGen {
         int inSlot = gen.slot(innerType);
         unbox(code, innerType, inSlot);                             // cast Object -> Y, store
         gen.bind(dec.input().binding(), dec.input().name(), inSlot, innerType);
-        emitConstructCall(code, gen, cdName, dec.result(), fields);
+        emitConstructCall(code, gen, dec.result(), fields);
     }
 
     /**
@@ -1219,7 +1216,7 @@ final class CodecGen {
         code.labelBinding(ok);
     }
 
-    private void emitObjectDecode(CodeBuilder code, AstExpressions gen, ClassDesc cdName, Hir.ObjectDecoder obj,
+    private void emitObjectDecode(CodeBuilder code, AstExpressions gen, Hir.ObjectDecoder obj,
                                   SequencedMap<String, Type> fields, Src src) {
         emitObjectGuard(code, src, gen.slot(Type.STRING));
         List<Hir.Bind> binds = obj.binds();
@@ -1287,7 +1284,7 @@ final class CodecGen {
                 gen.bind(bind.binder().binding(), bind.binder().name(), vSlot, t);
             }
         }
-        emitConstructCall(code, gen, cdName, obj.result(), fields);
+        emitConstructCall(code, gen, obj.result(), fields);
     }
 
     private Type bindType(Hir.DecRef ref) {
@@ -1604,7 +1601,7 @@ final class CodecGen {
      * {@code emitPrimDecode}, {@code emitNewtypeDecode}, {@code emitObjectDecode} — are all such
      * bodies whose {@code BodyGen} locals start above slot 2, so slot 2 always holds the path.
      */
-    private void emitConstructCall(CodeBuilder code, AstExpressions gen, ClassDesc cdName, Hir.Construct construct,
+    private void emitConstructCall(CodeBuilder code, AstExpressions gen, Hir.Construct construct,
                                    SequencedMap<String, Type> fields) {
         // The decoder is still AST-level; elaborate its field inits so the shared emitFieldValues
         // consumes one representation, with the type the checker decides for each (ADR-0021, #81).
