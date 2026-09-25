@@ -142,6 +142,29 @@ class AnOutputReadsWhatAModulePublishesTest {
                 refused.diagnostic().said());
     }
 
+    /**
+     * A name the module does not declare is refused as that and not as one it keeps, whether it
+     * writes a clause or not: what it publishes is taken from what it declares, so the second
+     * question is never the one that fails first.
+     */
+    @Test
+    void aNameNoModuleDeclaresIsRefusedAsUndeclaredAndNotAsKept() {
+        for (String upstream : List.of(WITH_NONE, WITH_AN_EMPTY_CLAUSE)) {
+            String module = upstream.lines().findFirst().orElseThrow().split(" ")[1];
+            CompileException refused = assertThrows(CompileException.class,
+                    () -> CheckedProgram.of(List.of(upstream, """
+                            module reader
+                            import %s ( nobody )
+
+                            behavior used : (a: Int) -> Int
+                            let used (a) = a
+                            """.formatted(module))));
+
+            assertEquals(new ModuleMessage.TheModuleDeclaresNoSuchName("nobody", module),
+                    refused.diagnostic().said(), module);
+        }
+    }
+
     /** And what a module publishes by writing no clause is what an importer may name. */
     @Test
     void whatIsPublishedWithNoClauseIsWhatAnImporterMayName() {

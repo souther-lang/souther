@@ -73,6 +73,45 @@ class AModulePublishesWhatItDeclaresTest {
     @Test
     void aValueAnAttachedFileDeclaresIsNotPublishedByWritingNoClause() {
         Ast.Module written = CstFrontend.parse("module m\n" + DECLARATIONS, null);
+
+        assertEquals(written.published(), withAnAttachedValue(written).published());
+    }
+
+    /** Naming a {@code private let} in a clause does not publish it either: the clause admits among
+     *  what may be published, and a {@code private let} is not among it. */
+    @Test
+    void aPrivateLetNamedByTheClauseIsNotPublished() {
+        Ast.Module module = CstFrontend.parse("""
+                module souther.sample exposing ( visible, hidden )
+
+                let visible (n: Int) : Int = hidden(n)
+                private let hidden (n: Int) : Int = n + 1
+                """, null);
+
+        assertEquals(Set.of("visible"), module.published());
+    }
+
+    /** Nor does naming a value an attached file declares. */
+    @Test
+    void aValueAnAttachedFileDeclaresNamedByTheClauseIsNotPublished() {
+        Ast.Module written = CstFrontend.parse(
+                "module m exposing ( cap, sample )\n" + DECLARATIONS, null);
+
+        assertEquals(Set.of("cap"), withAnAttachedValue(written).published());
+    }
+
+    /** Nor does naming what the module does not declare at all. */
+    @Test
+    void aNameTheModuleDoesNotDeclareIsNotPublished() {
+        Ast.Module module = CstFrontend.parse(
+                "module m exposing ( cap, Elsewhere )\n" + DECLARATIONS, null);
+
+        assertEquals(Set.of("cap"), module.published());
+    }
+
+    /** {@code written} with the value {@code sample} of an attached file joined to it, as the rows'
+     *  module is. */
+    private static Ast.Module withAnAttachedValue(Ast.Module written) {
         Ast.Module attached = CstFrontend.parse("""
                 examples for m
 
@@ -82,11 +121,8 @@ class AModulePublishesWhatItDeclaresTest {
                 "the attached file declares the value this is about");
         List<Ast.FnDef> fns = new ArrayList<>(written.fns());
         fns.addAll(attached.fns());
-        Ast.Module joined = new Ast.Module(written.name(), written.exposing(),
-                written.exposedOutputs(), written.imports(), written.defs(), written.behaviors(),
-                fns, written.takenOn(), written.examples(), written.fakes(),
-                written.exampleFileTarget(), written.pos());
-
-        assertEquals(written.published(), joined.published());
+        return new Ast.Module(written.name(), written.exposing(), written.exposedOutputs(),
+                written.imports(), written.defs(), written.behaviors(), fns, written.takenOn(),
+                written.examples(), written.fakes(), written.exampleFileTarget(), written.pos());
     }
 }

@@ -138,6 +138,17 @@ public interface ModuleUniverse {
                 return declared.declarations().get(name);
             }
 
+            /**
+             * Whether the module declares anything of that name: a data, a behavior or a value.
+             *
+             * <p>The question a reached name is asked first (spec
+             * §a-reached-name-is-declared-by-its-module). What a module publishes is taken from what
+             * it declares, so {@link #exposes} answers only about a name this has said yes to.
+             */
+            public boolean declares(String name) {
+                return declaration(name) != null || declaresBehavior(name) || declaresValue(name);
+            }
+
             /** Whether the module offers that name to a reader at all. */
             public boolean exposes(String name) {
                 return declared.exposed().contains(name);

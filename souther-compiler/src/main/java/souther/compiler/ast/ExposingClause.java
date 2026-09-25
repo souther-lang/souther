@@ -1,8 +1,6 @@
 package souther.compiler.ast;
 
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 
 /**
  * What a module's header says about its {@code exposing} clause: that it writes none, or the entries
@@ -14,21 +12,28 @@ import java.util.Set;
  * value, and every reader has to decide for itself which of them an empty list was.
  *
  * <p>This is what was written, and it is not what the module publishes. What it publishes is
- * {@link #publishedFrom}, worked out from this together with the declarations the module makes, and
- * the way is one direction only: nothing reads the clause back out of what is published. The two differ
- * where a rule turns on the author having named a declaration — a composition named by the clause
- * states its output there, and one published because no clause was written keeps its inferred one.
+ * {@link Ast.Module#published}: the module's own declarations that may be published, each asked
+ * whether this clause {@link #admits} it. Asked one declaration at a time and never answered as a
+ * set of names, so that nothing the clause writes can publish a name the module does not have to
+ * publish — an entry naming an import, a value an attached file declares or a core module's
+ * {@code private let} admits nothing, because nothing asks about it (spec
+ * §only-a-modules-own-declarations-are-published).
+ *
+ * <p>The way is one direction only: nothing reads the clause back out of what is published. The two
+ * differ where a rule turns on the author having named a declaration — a composition named by the
+ * clause states its output there, and one published because no clause was written keeps its inferred
+ * one.
  */
 public sealed interface ExposingClause {
 
     /**
-     * The names this module publishes, out of {@code publishable}: every declaration of the module's
-     * own that may be published at all.
+     * Whether this clause lets the module publish {@code declaration}, one of the module's own
+     * declarations that may be published at all.
      *
-     * <p>A clause names types at type granularity, so an entry written {@code Amount.decoder} is
-     * {@code Amount} here.
+     * <p>A clause names types at type granularity, so an entry written {@code Amount.decoder}
+     * admits {@code Amount}.
      */
-    Set<String> publishedFrom(Set<String> publishable);
+    boolean admits(String declaration);
 
     /** The module writes no {@code exposing} clause. */
     record Omitted() implements ExposingClause {
@@ -38,8 +43,8 @@ public sealed interface ExposingClause {
         public static final Omitted INSTANCE = new Omitted();
 
         @Override
-        public Set<String> publishedFrom(Set<String> publishable) {
-            return Set.copyOf(publishable);
+        public boolean admits(String declaration) {
+            return true;
         }
     }
 
@@ -51,13 +56,14 @@ public sealed interface ExposingClause {
         }
 
         @Override
-        public Set<String> publishedFrom(Set<String> publishable) {
-            Set<String> names = new LinkedHashSet<>();
+        public boolean admits(String declaration) {
             for (String entry : entries) {
                 int dot = entry.indexOf('.');
-                names.add(dot < 0 ? entry : entry.substring(0, dot));
+                if ((dot < 0 ? entry : entry.substring(0, dot)).equals(declaration)) {
+                    return true;
+                }
             }
-            return Set.copyOf(names);
+            return false;
         }
     }
 
@@ -66,7 +72,7 @@ public sealed interface ExposingClause {
      * written.
      *
      * <p>What the author wrote and nothing more. Whether a name is published is
-     * {@link #publishedFrom}, and an empty answer here says nothing about it.
+     * {@link Ast.Module#published}, and an empty answer here says nothing about it.
      */
     default List<String> named() {
         return this instanceof Written written ? written.entries() : List.of();

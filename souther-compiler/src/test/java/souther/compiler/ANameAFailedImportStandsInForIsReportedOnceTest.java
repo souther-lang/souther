@@ -34,9 +34,11 @@ class ANameAFailedImportStandsInForIsReportedOnceTest {
             module probe.lib exposing ( Sku )
 
             data Sku = String
+            data Amount = Int
             """;
 
-    /** A module importing a name `probe.lib` does not expose, and writing it three times. */
+    /** A module importing a name `probe.lib` declares and does not expose, and writing it three
+     *  times. */
     private static final String APP = """
             module probe.app
 
