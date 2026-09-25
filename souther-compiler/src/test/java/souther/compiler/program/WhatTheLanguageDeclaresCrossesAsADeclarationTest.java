@@ -88,7 +88,7 @@ class WhatTheLanguageDeclaresCrossesAsADeclarationTest {
     /** A program with no {@code Core} of its own to classify — every fixture here is about the
      *  address an index is built over, not about a body. */
     private static AbortSites noAborts() {
-        return AbortSites.of(List.of(), kernels(), Set.of());
+        return AbortSites.of(List.of(), kernels(), List.of());
     }
 
     private static TypeSymbol.AtModule named(String module, String name) {

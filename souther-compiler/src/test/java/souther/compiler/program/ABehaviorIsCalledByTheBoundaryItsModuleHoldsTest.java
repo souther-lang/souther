@@ -95,7 +95,7 @@ class ABehaviorIsCalledByTheBoundaryItsModuleHoldsTest {
                 List.of(), List.of(), index,
                 KernelContracts.of(DefaultStdlib.get().kernelSignatures()),
                 AbortSites.of(List.of(),
-                        KernelContracts.of(DefaultStdlib.get().kernelSignatures()), Set.of()));
+                        KernelContracts.of(DefaultStdlib.get().kernelSignatures()), List.of()));
     }
 
     /** One boundary, made afresh each time it is asked for: what tells two of these apart is that
