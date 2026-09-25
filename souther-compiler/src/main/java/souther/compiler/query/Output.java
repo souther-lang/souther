@@ -1033,8 +1033,8 @@ public final class Output {
             public List<souther.compiler.observe.RowOutcome> ran() {
                 List<souther.compiler.observe.RowOutcome> out = new ArrayList<>();
                 for (ReadRow row : rows) {
-                    if (row instanceof ReadRow.Ran(souther.compiler.observe.RowOutcome outcome)) {
-                        out.add(outcome);
+                    if (row instanceof ReadRow.Ran ran) {
+                        out.add(ran.outcome());
                     }
                 }
                 return out;
@@ -1057,13 +1057,30 @@ public final class Output {
             /** Where it is written. */
             souther.compiler.diag.SourcePos at();
 
-            /** The row ran, and this is what it came to. */
-            record Ran(souther.compiler.observe.RowOutcome outcome) implements ReadRow {
+            /**
+             * The row ran, and this is what it came to; and the definition each of its inputs is
+             * computed by.
+             *
+             * <p>The second is not something the row came to. It is which definition of the module
+             * the operand the row writes was emitted as, which the preparation decided before
+             * anything ran, and it is carried beside the outcome rather than inside it so that what
+             * an evaluation observed stays that and nothing else. It is read here, where the written
+             * row and what came back for it are joined, off the correspondence the preparation
+             * constructed — never counted out again.
+             *
+             * @param inputDefinitions the name of the definition computing each input, in order;
+             *     empty where the source's declarations were not read, so no written row was in
+             *     hand to read it off
+             */
+            record Ran(souther.compiler.observe.RowOutcome outcome, List<String> inputDefinitions)
+                    implements ReadRow {
 
                 public Ran {
                     if (outcome == null) {
                         throw new IllegalArgumentException("a row that ran came to something");
                     }
+                    inputDefinitions = inputDefinitions == null ? List.of()
+                            : List.copyOf(inputDefinitions);
                 }
 
                 @Override
@@ -1210,7 +1227,7 @@ public final class Output {
                 if (observed != null) {
                     for (souther.compiler.observe.RowOutcome row : observed.rows()) {
                         into.computeIfAbsent(row.target(), _ -> new ArrayList<>())
-                                .add(new ReadRow.Ran(row));
+                                .add(new ReadRow.Ran(row, List.of()));
                         named.add(row.target());
                     }
                 }
@@ -1226,7 +1243,7 @@ public final class Output {
                     souther.compiler.observe.RowOutcome came = observed == null ? null
                             : among(observed.rows(), written.target(), row);
                     if (came != null) {
-                        mine.add(new ReadRow.Ran(came));
+                        mine.add(new ReadRow.Ran(came, inputDefinitions(prepared, row)));
                         continue;
                     }
                     mine.add(new ReadRow.NotRun(row.identity(), row.pos(),
@@ -1244,6 +1261,26 @@ public final class Output {
                     }
                 }
             }
+        }
+
+        /**
+         * The definition each input of {@code row} is computed by, in order: the operand as written,
+         * which the preparation emitted as a definition of its own answering as the parameter it is
+         * handed to. An input the preparation emitted nothing for is an operand its walk over the
+         * rows did not reach, which is that walk and this reading having come apart.
+         */
+        private static List<String> inputDefinitions(souther.compiler.check.Prepared prepared,
+                                                     souther.compiler.ast.Hir.ExampleRow row) {
+            List<String> names = new ArrayList<>();
+            for (souther.compiler.ast.Hir.Expr input : row.inputs()) {
+                String emitted = prepared.operandMethods().get(input);
+                if (emitted == null) {
+                    throw new IllegalStateException("an input of the row at " + row.pos()
+                            + " is computed by nothing the module emitted");
+                }
+                names.add(emitted);
+            }
+            return names;
         }
 
         /** The outcome recorded for {@code row} of {@code behavior}, or null where nothing came

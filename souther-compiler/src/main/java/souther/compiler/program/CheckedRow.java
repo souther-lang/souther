@@ -103,9 +103,12 @@ public final class CheckedRow {
     public static final class SelfContained implements Statement {
 
         private final Asking asking;
+        private final List<CheckedHelper> inputDefinitions;
 
-        SelfContained(RowStatement.Stated stated, ValueTypes types, Position answers) {
+        SelfContained(RowStatement.Stated stated, List<CheckedHelper> inputDefinitions,
+                      ValueTypes types, Position answers) {
             this.asking = new Asking(stated, types, answers);
+            this.inputDefinitions = computing(stated, inputDefinitions);
             if (!stated.standIns().isEmpty()) {
                 // What the behavior takes injected is the rest of what makes the row runnable, so a
                 // row stating one is not a row an output applies to its emission and nothing else.
@@ -117,6 +120,11 @@ public final class CheckedRow {
         /** The values it hands over and what it states of the answer. */
         public RowStatement.Stated states() {
             return asking.stated();
+        }
+
+        /** What computes each value it hands over ({@link CheckedRow#computing}). */
+        public List<CheckedHelper> inputDefinitions() {
+            return inputDefinitions;
         }
 
         /** Whether {@code answered} is what this row states the behavior answers. */
@@ -142,11 +150,14 @@ public final class CheckedRow {
     public static final class WithStandIns implements Statement {
 
         private final Asking asking;
+        private final List<CheckedHelper> inputDefinitions;
         private final List<StandsIn> standIns;
 
-        WithStandIns(RowStatement.Stated stated, ValueTypes types, Position answers,
+        WithStandIns(RowStatement.Stated stated, List<CheckedHelper> inputDefinitions,
+                     ValueTypes types, Position answers,
                      Map<ValueName.Behavior, List<Position>> arguments) {
             this.asking = new Asking(stated, types, answers);
+            this.inputDefinitions = computing(stated, inputDefinitions);
             if (stated.standIns().isEmpty()) {
                 throw new IllegalArgumentException("a row with nothing stood in for is one an"
                         + " output can run on its own");
@@ -172,6 +183,11 @@ public final class CheckedRow {
         /** The values it hands over and what it states of the answer. */
         public RowStatement.Stated states() {
             return asking.stated();
+        }
+
+        /** What computes each value it hands over ({@link CheckedRow#computing}). */
+        public List<CheckedHelper> inputDefinitions() {
+            return inputDefinitions;
         }
 
         /**
@@ -250,10 +266,17 @@ public final class CheckedRow {
      *
      * <p>Said rather than left out. The row is written, an author owes it an answer, and a reader
      * that never heard of it would count a behavior's rows and find one fewer than were written.
+     *
+     * <p>Made where the program is assembled and nowhere else, as the other arms are: what computes
+     * each input is a definition of the module the row is written in, and one made with any other
+     * would be a row running something its module does not hold.
      */
-    public record AnswerOwed(RowStatement.Stated states) implements Statement {
+    public static final class AnswerOwed implements Statement {
 
-        public AnswerOwed {
+        private final RowStatement.Stated states;
+        private final List<CheckedHelper> inputDefinitions;
+
+        AnswerOwed(RowStatement.Stated states, List<CheckedHelper> inputDefinitions) {
             if (states == null) {
                 throw new IllegalArgumentException("a row whose answer is owed states its values");
             }
@@ -261,7 +284,49 @@ public final class CheckedRow {
                 throw new IllegalArgumentException("a row whose answer is owed is one that states"
                         + " no answer: " + states.expects());
             }
+            this.states = states;
+            this.inputDefinitions = computing(states, inputDefinitions);
         }
+
+        /** The values it hands over, and that its answer is owed. */
+        public RowStatement.Stated states() {
+            return states;
+        }
+
+        /** What computes each value it hands over ({@link CheckedRow#computing}). */
+        public List<CheckedHelper> inputDefinitions() {
+            return inputDefinitions;
+        }
+
+        @Override
+        public String toString() {
+            return states.toString();
+        }
+    }
+
+    /**
+     * What computes each value a row hands over, in order, held to one for each.
+     *
+     * <p>The operand the row writes, as the definition its module holds for it: its body is the
+     * operand elaborated at the parameter it is handed to, and stands as that parameter, as a body
+     * standing at a declared type does. So a case of a sum written where the sum is taken stands as
+     * the sum, and a value given to an optional field is the optional. An output applying the
+     * behavior calls these, and does not build a value out of what {@code states()} observed —
+     * which would be the elaboration worked out a second time, outside the checker. Each is among
+     * its module's helpers, so what its body can end with is {@link CheckedProgram#abortsAt} of it.
+     *
+     * <p>Named apart from {@code states().inputs()}, which is a value and not a computation: what
+     * those calls answered when the compile ran the row, and the values the row is compared and
+     * reported by.
+     */
+    private static List<CheckedHelper> computing(RowStatement.Stated stated,
+                                                 List<CheckedHelper> definitions) {
+        if (definitions == null || definitions.contains(null)
+                || definitions.size() != stated.inputs().size()) {
+            throw new IllegalArgumentException("a row that hands over " + stated.inputs().size()
+                    + " value(s) says what computes each of them: " + definitions);
+        }
+        return List.copyOf(definitions);
     }
 
     /**
