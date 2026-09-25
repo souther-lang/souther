@@ -103,12 +103,12 @@ public final class CheckedRow {
     public static final class SelfContained implements Statement {
 
         private final Asking asking;
-        private final List<CheckedHelper> inputs;
+        private final List<CheckedHelper> inputDefinitions;
 
-        SelfContained(RowStatement.Stated stated, List<CheckedHelper> inputs, ValueTypes types,
-                      Position answers) {
+        SelfContained(RowStatement.Stated stated, List<CheckedHelper> inputDefinitions,
+                      ValueTypes types, Position answers) {
             this.asking = new Asking(stated, types, answers);
-            this.inputs = computing(stated, inputs);
+            this.inputDefinitions = computing(stated, inputDefinitions);
             if (!stated.standIns().isEmpty()) {
                 // What the behavior takes injected is the rest of what makes the row runnable, so a
                 // row stating one is not a row an output applies to its emission and nothing else.
@@ -123,8 +123,8 @@ public final class CheckedRow {
         }
 
         /** What computes each value it hands over ({@link CheckedRow#computing}). */
-        public List<CheckedHelper> inputs() {
-            return inputs;
+        public List<CheckedHelper> inputDefinitions() {
+            return inputDefinitions;
         }
 
         /** Whether {@code answered} is what this row states the behavior answers. */
@@ -150,13 +150,14 @@ public final class CheckedRow {
     public static final class WithStandIns implements Statement {
 
         private final Asking asking;
-        private final List<CheckedHelper> inputs;
+        private final List<CheckedHelper> inputDefinitions;
         private final List<StandsIn> standIns;
 
-        WithStandIns(RowStatement.Stated stated, List<CheckedHelper> inputs, ValueTypes types,
-                     Position answers, Map<ValueName.Behavior, List<Position>> arguments) {
+        WithStandIns(RowStatement.Stated stated, List<CheckedHelper> inputDefinitions,
+                     ValueTypes types, Position answers,
+                     Map<ValueName.Behavior, List<Position>> arguments) {
             this.asking = new Asking(stated, types, answers);
-            this.inputs = computing(stated, inputs);
+            this.inputDefinitions = computing(stated, inputDefinitions);
             if (stated.standIns().isEmpty()) {
                 throw new IllegalArgumentException("a row with nothing stood in for is one an"
                         + " output can run on its own");
@@ -185,8 +186,8 @@ public final class CheckedRow {
         }
 
         /** What computes each value it hands over ({@link CheckedRow#computing}). */
-        public List<CheckedHelper> inputs() {
-            return inputs;
+        public List<CheckedHelper> inputDefinitions() {
+            return inputDefinitions;
         }
 
         /**
@@ -273,9 +274,9 @@ public final class CheckedRow {
     public static final class AnswerOwed implements Statement {
 
         private final RowStatement.Stated states;
-        private final List<CheckedHelper> inputs;
+        private final List<CheckedHelper> inputDefinitions;
 
-        AnswerOwed(RowStatement.Stated states, List<CheckedHelper> inputs) {
+        AnswerOwed(RowStatement.Stated states, List<CheckedHelper> inputDefinitions) {
             if (states == null) {
                 throw new IllegalArgumentException("a row whose answer is owed states its values");
             }
@@ -284,7 +285,7 @@ public final class CheckedRow {
                         + " no answer: " + states.expects());
             }
             this.states = states;
-            this.inputs = computing(states, inputs);
+            this.inputDefinitions = computing(states, inputDefinitions);
         }
 
         /** The values it hands over, and that its answer is owed. */
@@ -293,8 +294,8 @@ public final class CheckedRow {
         }
 
         /** What computes each value it hands over ({@link CheckedRow#computing}). */
-        public List<CheckedHelper> inputs() {
-            return inputs;
+        public List<CheckedHelper> inputDefinitions() {
+            return inputDefinitions;
         }
 
         @Override
@@ -314,16 +315,18 @@ public final class CheckedRow {
      * which would be the elaboration worked out a second time, outside the checker. Each is among
      * its module's helpers, so what its body can end with is {@link CheckedProgram#abortsAt} of it.
      *
-     * <p>{@code states().inputs()} is what those calls answered when the compile ran the row, and
-     * stays the values the row is compared and reported by.
+     * <p>Named apart from {@code states().inputs()}, which is a value and not a computation: what
+     * those calls answered when the compile ran the row, and the values the row is compared and
+     * reported by.
      */
     private static List<CheckedHelper> computing(RowStatement.Stated stated,
-                                                 List<CheckedHelper> inputs) {
-        if (inputs == null || inputs.contains(null) || inputs.size() != stated.inputs().size()) {
+                                                 List<CheckedHelper> definitions) {
+        if (definitions == null || definitions.contains(null)
+                || definitions.size() != stated.inputs().size()) {
             throw new IllegalArgumentException("a row that hands over " + stated.inputs().size()
-                    + " value(s) says what computes each of them: " + inputs);
+                    + " value(s) says what computes each of them: " + definitions);
         }
-        return List.copyOf(inputs);
+        return List.copyOf(definitions);
     }
 
     /**

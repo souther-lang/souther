@@ -624,19 +624,19 @@ final class CheckedProgramAssembler {
         // would never hear of, and a behavior reading as having said nothing about an input someone
         // wrote down.
         return switch (row) {
-            case Output.RowsRead.ReadRow.Ran(RowOutcome outcome) -> switch (outcome.statement()) {
+            case Output.RowsRead.ReadRow.Ran ran -> switch (ran.outcome().statement()) {
                 // A row whose answer is owed first, because what a reader can do with a row turns on
                 // whether there is anything to hold before it turns on what the row needs to run.
                 // Sorted the other way, such a row would arrive as one an output applies and asks,
                 // and what it asked would be answered against no statement at all.
                 case RowStatement.Stated stated
                         when stated.expects() instanceof Expectation.Owed ->
-                        new CheckedRow.AnswerOwed(stated, computing(outcome, rowValues));
+                        new CheckedRow.AnswerOwed(stated, computing(ran, stated, rowValues));
                 case RowStatement.Stated stated -> stated.standIns().isEmpty()
-                        ? new CheckedRow.SelfContained(stated, computing(outcome, rowValues), types,
-                                Position.at(signature.answers()))
-                        : new CheckedRow.WithStandIns(stated, computing(outcome, rowValues), types,
-                                Position.at(signature.answers()),
+                        ? new CheckedRow.SelfContained(stated, computing(ran, stated, rowValues),
+                                types, Position.at(signature.answers()))
+                        : new CheckedRow.WithStandIns(stated, computing(ran, stated, rowValues),
+                                types, Position.at(signature.answers()),
                                 whereArgumentsStand(stated, targets));
                 case RowStatement.NotStated why -> new CheckedRow.NotReproducible(why);
                 // What acceptance guarantees, asserted where the guarantee is relied on. A row an
@@ -646,8 +646,8 @@ final class CheckedProgramAssembler {
                 // this one can read.
                 case RowStatement.StoppedBeforeItsValues _ -> throw new IllegalStateException(
                         "a program the language accepted holds a row its evaluation stopped before"
-                                + " the values of: " + outcome.target() + " "
-                                + outcome.identity().shown() + " at " + outcome.at());
+                                + " the values of: " + ran.outcome().target() + " "
+                                + ran.outcome().identity().shown() + " at " + ran.outcome().at());
             };
             case Output.RowsRead.ReadRow.NotRun notRun ->
                     new CheckedRow.NotReproducible(new RowStatement.NotRead(notRun.why()));
@@ -655,17 +655,27 @@ final class CheckedProgramAssembler {
     }
 
     /**
-     * The definition computing each input of {@code outcome}'s row, as its module holds it.
+     * The definition computing each input of {@code ran}'s row, as its module holds it.
      *
-     * <p>Looked up by the name the row says each was emitted under, among the helpers the module
-     * holds for a row's operand. A name with nothing under it is a row read against a module other
-     * than the one whose helpers are in hand, which the row would otherwise carry into the program
-     * as an input nothing computes.
+     * <p>Looked up by the name the reading of the row says each was emitted under, among the
+     * helpers the module holds for a row's operand. One for each value the row states: a program
+     * the language accepted had its rows read with the declarations in hand, so a row stating
+     * values names what computes each of them. A name with nothing under it is a row read against
+     * a module other than the one whose helpers are in hand, which the row would otherwise carry
+     * into the program as an input nothing computes.
      */
-    private static List<CheckedHelper> computing(RowOutcome outcome,
+    private static List<CheckedHelper> computing(Output.RowsRead.ReadRow.Ran ran,
+                                                 RowStatement.Stated stated,
                                                  Map<String, CheckedHelper> rowValues) {
+        RowOutcome outcome = ran.outcome();
+        if (ran.inputDefinitions().size() != stated.inputs().size()) {
+            throw new IllegalStateException("a program the language accepted holds a row stating "
+                    + stated.inputs().size() + " value(s) whose reading names "
+                    + ran.inputDefinitions() + " as computing them: " + outcome.target() + " "
+                    + outcome.identity().shown() + " at " + outcome.at());
+        }
         List<CheckedHelper> inputs = new ArrayList<>();
-        for (String method : outcome.computedBy()) {
+        for (String method : ran.inputDefinitions()) {
             CheckedHelper helper = rowValues.get(method);
             if (helper == null) {
                 throw new IllegalStateException("an input of " + outcome.target() + " "

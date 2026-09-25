@@ -1412,30 +1412,8 @@ public final class ExampleVerifier {
         Reached reached = state.reached;
         return new RowOutcome(row.pos(), target.name(), row.identity(), expectationOf(row),
                 reached.stage(), state.disposition, state.failurePhase, state.expectedArm,
-                state.resultArm, state.inputCases, state.inputs, computedBy(row), state.statement,
+                state.resultArm, state.inputCases, state.inputs, state.statement,
                 ran(reached, new Counting.Read(state.stepsSpent, state.recorded)));
-    }
-
-    /**
-     * The definition each of the row's inputs is computed by, in order, as the module's preparation
-     * emitted them: the operand as written, answering as the parameter it is handed to.
-     *
-     * <p>Read off the correspondence the preparation constructed, never counted out again, and off
-     * the row's source, so it is the same however the row ended. An input the preparation emitted
-     * nothing for is an operand the module's rows were not walked for, which is that walk having
-     * moved away from the rows this reads.
-     */
-    private List<String> computedBy(Hir.ExampleRow row) {
-        List<String> names = new ArrayList<>();
-        for (Hir.Expr input : row.inputs()) {
-            String emitted = module.operandMethods().get(input);
-            if (emitted == null) {
-                throw new IllegalStateException("an input of the row at " + row.pos()
-                        + " is computed by nothing the module emitted");
-            }
-            names.add(emitted);
-        }
-        return names;
     }
 
     /**
@@ -1520,7 +1498,7 @@ public final class ExampleVerifier {
                         row.identity(), expectationOf(row), reached.stage(), Disposition.INCOMPLETE,
                         FailurePhase.TIMEOUT, null, null, List.of(),
                         stated instanceof RowStatement.Stated values ? values.inputs() : List.of(),
-                        computedBy(row), stated, ran(reached, new Counting.Unread())));
+                        stated, ran(reached, new Counting.Unread())));
             }
             case Deadline.Outcome.Threw(Throwable cause) -> {
                 // The evaluated code stopped itself, having gone through more than it was allowed.

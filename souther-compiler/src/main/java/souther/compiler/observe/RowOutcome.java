@@ -96,11 +96,6 @@ import java.util.Objects;
  * @param inputCases     the case each input fixture constructs, in order; an entry is null where the
  *                       text does not say
  * @param inputs         each input as the compiler owns it, in order
- * @param computedBy     the name of the definition each input is computed by, in order: the operand
- *                       as written, which the module emits as a definition of its own answering as
- *                       the parameter it is handed to. Off the row's source and not off the run, so
- *                       it is the same however the row ended; a row that states its values has one
- *                       for each of them
  * @param statement      what the row states, taken as this evaluation read it. Here rather than
  *                       worked out again, because reading it is running what the fixtures name: a
  *                       second reading would apply the same helpers a second time, and a helper
@@ -126,7 +121,6 @@ public record RowOutcome(SourcePos at,
                          TypeSymbol resultArm,
                          List<TypeSymbol> inputCases,
                          List<ObservedValue> inputs,
-                         List<String> computedBy,
                          RowStatement statement,
                          Run run) {
 
@@ -155,15 +149,6 @@ public record RowOutcome(SourcePos at,
         inputCases = inputCases == null ? List.of()
                 : java.util.Collections.unmodifiableList(new java.util.ArrayList<>(inputCases));
         inputs = inputs == null ? List.of() : List.copyOf(inputs);
-        computedBy = computedBy == null ? List.of() : List.copyOf(computedBy);
-        if (statement instanceof RowStatement.Stated values
-                && computedBy.size() != values.inputs().size()) {
-            // A reader handed the values is handed what computes each of them, one for one: an input
-            // with nothing named for it is one a reader would have to build out of the value, which
-            // is the elaboration the definition already is.
-            throw new IllegalArgumentException("a row that states " + values.inputs().size()
-                    + " input(s) names what computes each of them, and names " + computedBy);
-        }
         Objects.requireNonNull(run, "a row says what became of its evaluation");
         if (stage.reached(Stage.INVOKED) == run.applied() instanceof Applied.Nothing) {
             // Held here because the two are written from one evaluation and read apart: a stage that

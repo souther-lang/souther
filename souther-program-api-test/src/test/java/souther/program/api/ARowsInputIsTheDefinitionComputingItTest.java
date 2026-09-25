@@ -2,6 +2,7 @@ package souther.program.api;
 
 import souther.compiler.abort.AbortKind;
 import souther.compiler.core.Core;
+import souther.compiler.observe.RowIdentity;
 import souther.compiler.program.CheckedBehavior;
 import souther.compiler.program.CheckedHelper;
 import souther.compiler.program.CheckedModule;
@@ -19,7 +20,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -56,6 +57,9 @@ class ARowsInputIsTheDefinitionComputingItTest {
                 | Some held -> 1
                 | None -> 0
 
+            behavior everyone : (orderers: List<Orderer>) -> Int
+            let everyone (orderers) = List.length(orderers)
+
             behavior doubled : (q: Quantity) -> Int
             let doubled (q) = q.value * 2
 
@@ -71,6 +75,9 @@ class ARowsInputIsTheDefinitionComputingItTest {
             example slotted
                 | "one held" : (Slot { held = Corporation { company = "acme" } }) -> 1
 
+            example everyone
+                | "both kinds" : ([Individual { name = "ada" }, Corporation { company = "acme" }]) -> 2
+
             example doubled
                 | "two" : (Quantity(2)) -> 4
 
@@ -84,14 +91,44 @@ class ARowsInputIsTheDefinitionComputingItTest {
                 | "owed" : (Quantity(3)) -> <?>
             """;
 
+    /** Rows of the same module written in a file of their own, after the module's. */
+    private static final String ATTACHED = """
+            examples for orders
+
+            example named
+                | "a corporation" : (Corporation { company = "acme" }) -> "acme"
+            """;
+
     private static TypeSymbol.AtModule declared(String name) {
         return TypeSymbols.declared(new TypeKey("orders", name));
     }
 
-    private static CheckedRow firstRow(CheckedProgram program, String behavior) {
+    private static CheckedRow row(CheckedProgram program, String behavior, String named) {
         CheckedBehavior of = program.module("orders")
                 .behavior(new ValueName.Behavior("orders", behavior));
-        return of.rows().getFirst();
+        return of.rows().stream()
+                .filter(it -> it.identity().equals(new RowIdentity.Named(named)))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no row `" + named + "` among " + of.rows()));
+    }
+
+    private static CheckedHelper computingOnlyInput(CheckedRow row) {
+        List<CheckedHelper> definitions = switch (row.statement()) {
+            case CheckedRow.SelfContained it -> it.inputDefinitions();
+            case CheckedRow.WithStandIns it -> it.inputDefinitions();
+            case CheckedRow.AnswerOwed it -> it.inputDefinitions();
+            case CheckedRow.NotReproducible it ->
+                    throw new AssertionError("the row states no values: " + it.why());
+        };
+        assertEquals(1, definitions.size(), () -> "what computes " + row + " is " + definitions);
+        return definitions.getFirst();
+    }
+
+    /** The case a definition's body builds, standing as {@code at}. */
+    private static TypeSymbol.AtModule caseStandingAs(Core body, String at) {
+        Core.Widen standing = assertInstanceOf(Core.Widen.class, body);
+        assertEquals(Type.ref(declared(at)), standing.type());
+        return assertInstanceOf(Core.Construct.class, standing.value()).typeName();
     }
 
     /**
@@ -101,28 +138,42 @@ class ARowsInputIsTheDefinitionComputingItTest {
     @Test
     void aCaseWrittenWhereItsSumIsTakenStandsAsTheSum() {
         CheckedProgram program = CheckedProgram.of(List.of(MODULE));
-        CheckedRow.SelfContained row = assertInstanceOf(CheckedRow.SelfContained.class,
-                firstRow(program, "named").statement());
 
-        Core.Widen standing = assertInstanceOf(Core.Widen.class,
-                row.inputs().getFirst().body());
-        assertEquals(Type.ref(declared("Orderer")), standing.type());
-        Core.Construct built = assertInstanceOf(Core.Construct.class, standing.value());
-        assertEquals(declared("Individual"), built.typeName());
+        assertEquals(declared("Individual"), caseStandingAs(
+                computingOnlyInput(row(program, "named", "an individual")).body(), "Orderer"));
     }
 
     /** A value given to an optional field is the optional, holding the case standing as the sum. */
     @Test
     void aValueGivenToAnOptionalFieldIsTheOptional() {
         CheckedProgram program = CheckedProgram.of(List.of(MODULE));
-        CheckedRow.SelfContained row = assertInstanceOf(CheckedRow.SelfContained.class,
-                firstRow(program, "slotted").statement());
 
-        Core.Construct slot = assertInstanceOf(Core.Construct.class, row.inputs().getFirst().body());
+        Core.Construct slot = assertInstanceOf(Core.Construct.class,
+                computingOnlyInput(row(program, "slotted", "one held")).body());
         Core.OptionSome held = assertInstanceOf(Core.OptionSome.class,
                 slot.values().getFirst().value());
-        Core.Widen standing = assertInstanceOf(Core.Widen.class, held.value());
-        assertEquals(Type.ref(declared("Orderer")), standing.type());
+        assertEquals(declared("Corporation"), caseStandingAs(held.value(), "Orderer"));
+    }
+
+    /**
+     * A list of cases is the list its elements joined at, standing as the parameter's list.
+     *
+     * <p>Which is not each element standing as the sum. A list is elaborated from its elements up,
+     * as it is in a body, and only the whole of it stands where the parameter takes it — a shape
+     * an output rebuilding the value from what was observed would have had to guess, and could
+     * guess otherwise.
+     */
+    @Test
+    void aListOfCasesIsTheListTheyJoinedAtStandingAsTheParameters() {
+        CheckedProgram program = CheckedProgram.of(List.of(MODULE));
+
+        Core.Widen standing = assertInstanceOf(Core.Widen.class,
+                computingOnlyInput(row(program, "everyone", "both kinds")).body());
+        assertEquals(Type.list(Type.ref(declared("Orderer"))), standing.type());
+        Core.ListLit list = assertInstanceOf(Core.ListLit.class, standing.value());
+        assertEquals(List.of(declared("Individual"), declared("Corporation")),
+                list.elements().stream().map(it -> assertInstanceOf(Core.Construct.class,
+                        Core.withoutStanding(it)).typeName()).toList());
     }
 
     /**
@@ -134,9 +185,7 @@ class ARowsInputIsTheDefinitionComputingItTest {
     void theDefinitionIsTheModulesAndItsSitesAreAnsweredFor() {
         CheckedProgram program = CheckedProgram.of(List.of(MODULE));
         CheckedModule module = program.module("orders");
-        CheckedRow.SelfContained row = assertInstanceOf(CheckedRow.SelfContained.class,
-                firstRow(program, "doubled").statement());
-        CheckedHelper computing = row.inputs().getFirst();
+        CheckedHelper computing = computingOnlyInput(row(program, "doubled", "two"));
 
         assertTrue(module.helpers().stream().anyMatch(it -> it == computing),
                 () -> computing + " is not among " + module.helpers());
@@ -150,28 +199,41 @@ class ARowsInputIsTheDefinitionComputingItTest {
     void everyArmHandingOverValuesSaysWhatComputesThem() {
         CheckedProgram program = CheckedProgram.of(List.of(MODULE));
 
-        CheckedRow.WithStandIns stood = assertInstanceOf(CheckedRow.WithStandIns.class,
-                firstRow(program, "counted").statement());
-        assertEquals(stood.states().inputs().size(), stood.inputs().size());
-        assertInstanceOf(Core.Construct.class, stood.inputs().getFirst().body());
+        CheckedRow stood = row(program, "counted", "looked up");
+        assertInstanceOf(CheckedRow.WithStandIns.class, stood.statement());
+        assertInstanceOf(Core.Construct.class, computingOnlyInput(stood).body());
 
-        CheckedRow.AnswerOwed owed = assertInstanceOf(CheckedRow.AnswerOwed.class,
-                firstRow(program, "lookUp").statement());
-        assertEquals(owed.states().inputs().size(), owed.inputs().size());
-        assertInstanceOf(Core.Construct.class, owed.inputs().getFirst().body());
+        CheckedRow owed = row(program, "lookUp", "owed");
+        assertInstanceOf(CheckedRow.AnswerOwed.class, owed.statement());
+        assertInstanceOf(Core.Construct.class, computingOnlyInput(owed).body());
     }
 
     /** Two rows writing the same value are two operands, and each is computed by its own. */
     @Test
     void eachOperandIsComputedByItsOwnDefinition() {
         CheckedProgram program = CheckedProgram.of(List.of(MODULE));
-        CheckedHelper doubled = assertInstanceOf(CheckedRow.SelfContained.class,
-                firstRow(program, "doubled").statement()).inputs().getFirst();
-        CheckedHelper counted = assertInstanceOf(CheckedRow.WithStandIns.class,
-                firstRow(program, "counted").statement()).inputs().getFirst();
 
-        assertTrue(doubled != counted, "two operands share " + doubled);
-        assertSame(doubled, assertInstanceOf(CheckedRow.SelfContained.class,
-                firstRow(program, "doubled").statement()).inputs().getFirst());
+        assertNotSame(computingOnlyInput(row(program, "doubled", "two")),
+                computingOnlyInput(row(program, "counted", "looked up")));
+    }
+
+    /**
+     * A row written in an attached file names the definition of its own operand, and not one of
+     * the rows written before it in the module's source.
+     *
+     * <p>The definitions are numbered over every row the module has, wherever it is written, so a
+     * reading that numbered one source's rows from nought would hand this row the module's first
+     * operand — an individual, where it wrote a corporation.
+     */
+    @Test
+    void aRowOfAnAttachedFileIsComputedByItsOwnOperand() {
+        CheckedProgram program = CheckedProgram.of(List.of(MODULE, ATTACHED));
+
+        CheckedHelper inline = computingOnlyInput(row(program, "named", "an individual"));
+        CheckedHelper attached = computingOnlyInput(row(program, "named", "a corporation"));
+
+        assertEquals(declared("Individual"), caseStandingAs(inline.body(), "Orderer"));
+        assertEquals(declared("Corporation"), caseStandingAs(attached.body(), "Orderer"));
+        assertNotSame(inline, attached);
     }
 }
