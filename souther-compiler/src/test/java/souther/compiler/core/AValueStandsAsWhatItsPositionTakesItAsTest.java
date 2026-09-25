@@ -2,10 +2,15 @@ package souther.compiler.core;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.KeptCalls;
 import souther.compiler.check.EmittedDefinition;
+import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -102,6 +107,35 @@ class AValueStandsAsWhatItsPositionTakesItAsTest {
                 let f: (Int, Shape) -> Int =
                     if k > 0 then (acc, s) -> acc + radius(s) else (acc, s) -> acc
                 List.fold(f, 0, cs)
+            }
+
+            behavior dropped : (xs: List<Int>) -> List<Int>
+            let dropped (xs) = List.drop(1, xs)
+
+            behavior counted : (xs: List<Int>) -> List<Int>
+            let counted (xs) = {
+                let (_, kept) = List.fold(
+                    (acc, x) -> {
+                        let (i, zs) = acc
+                        (i + 1, zs ++ [x])
+                    },
+                    (0, []),
+                    xs
+                )
+                kept
+            }
+
+            behavior split : (xs: List<Int>) -> List<Int>
+            let split (xs) = {
+                let (small, _) = List.fold(
+                    (acc, x) -> {
+                        let (s, l) = acc
+                        if x < 10 then (s ++ [x], l) else (s, l ++ [x])
+                    },
+                    ([], []),
+                    xs
+                )
+                small
             }
             """;
 
@@ -236,13 +270,7 @@ class AValueStandsAsWhatItsPositionTakesItAsTest {
     /** And the seed, a case of the sum the accumulator was settled at, stands as the sum. */
     @Test
     void andTheSeedStandsAsTheAccumulator() {
-        Core.Call fold = null;
-        for (Core.Call each : every(body("folded"), Core.Call.class)) {
-            if (each.args().size() > 1) {
-                fold = each;
-            }
-        }
-        assertNotNull(fold, "the fold is a call");
+        Core.Call fold = theWalk(body("folded"));
         Type accumulator = ((Type.FnOf) fold.args().get(0).type()).params().get(0);
         Core seed = fold.args().get(1);
         assertEquals(accumulator, seed.type(),
@@ -252,19 +280,125 @@ class AValueStandsAsWhatItsPositionTakesItAsTest {
     }
 
     /**
+     * A fold whose seed holds the empty list settles its accumulator from what the step answers,
+     * after the step was first read at the seed's type. The step the call holds is read at the
+     * accumulator the call settled, and the seed stands as that accumulator.
+     */
+    @Test
+    void aStepIsReadAtTheAccumulatorTheCallSettledAndNotAtItsSeed() {
+        assertTheFoldIsReadAtWhatItSettled(body("dropped"), "(Int, List<Int>)");
+    }
+
+    /** And so where every part of the seed is the empty list. */
+    @Test
+    void andSoWhereEveryPartOfTheSeedIsEmpty() {
+        assertTheFoldIsReadAtWhatItSettled(body("split"), "(List<Int>, List<Int>)");
+    }
+
+    /**
+     * And so in the tree an analysis reads, where the walk is kept standing as the operation it is
+     * rather than called: one application of one signature, settled once, whichever representation
+     * holds it.
+     */
+    @Test
+    void theWalkKeptStandingIsReadAtTheAccumulatorItSettled() {
+        Core.PreservedCall counted = keptWalk(bodies().analysisBodies().get("counted").core());
+        assertFoldIsReadAtWhatItSettled(counted.type(), counted.args(), "(Int, List<Int>)");
+        Core.PreservedCall split = keptWalk(bodies().analysisBodies().get("split").core());
+        assertFoldIsReadAtWhatItSettled(split.type(), split.args(), "(List<Int>, List<Int>)");
+    }
+
+    /** And a step answering an accumulator the seed cannot stand as is refused where it answers. */
+    @Test
+    void aStepAnsweringWhatTheSeedIsNotIsRefused() {
+        Compilation compilation = Compilation.ofSource("""
+                module demo
+
+                behavior renamed : (xs: List<Int>) -> Int
+                let renamed (xs) = {
+                    let (_, ys) = List.fold((acc, x) -> ("a", [x]), (0, []), xs)
+                    List.length(ys)
+                }
+                """, "Main");
+        compilation.answerEverything();
+        assertEquals(1, compilation.errors().size(), () -> "one refusal: " + compilation.errors());
+        Diagnostic refused = compilation.errors().getFirst().diagnostic();
+        assertEquals(DiagnosticCode.E1806.name(), refused.code(),
+                "a step answering what the accumulator is not");
+    }
+
+    private static void assertTheFoldIsReadAtWhatItSettled(Core body, String accumulator) {
+        Core.Call fold = theWalk(body);
+        assertFoldIsReadAtWhatItSettled(fold.type(), fold.args(), accumulator);
+    }
+
+    private static void assertFoldIsReadAtWhatItSettled(Type settled, List<Core> args,
+                                                        String accumulator) {
+        assertEquals(accumulator, Type.show(settled),
+                "the fold answers the accumulator its step grows");
+        Type.FnOf step = (Type.FnOf) args.get(0).type();
+        assertEquals(settled, step.params().get(0), "the step takes the accumulator the call settled");
+        assertEquals(settled, step.result(), "and answers it");
+        Core.Block block = only(args.get(0), Core.Block.class);
+        assertEquals(settled, block.paramTypes().get(0),
+                "the step's body read its accumulator at what the call settled");
+        Core.Binder acc = block.params().get(0);
+        List<Core.Read> reads = every(block.body(), Core.Read.class).stream()
+                .filter(read -> read.binding().equals(acc.binding()))
+                .toList();
+        assertFalse(reads.isEmpty(), "the step reads its accumulator");
+        for (Core.Read read : reads) {
+            assertEquals(settled, read.type(), "each read of the accumulator is of what it settled");
+        }
+        Core.Widen seed = assertInstanceOf(Core.Widen.class, args.get(1),
+                "the seed, narrower than the accumulator, stands as it");
+        assertEquals(settled, seed.type());
+        assertTrue(Type.mentions(seed.value().type(), Type.Nothing.class::isInstance),
+                "while what it holds is the empty list it was written as");
+    }
+
+    /**
+     * And so the step is held to what it reads there: an element of the accumulator is what the
+     * accumulator settled it as, and not a nothing that fits wherever it is used.
+     */
+    @Test
+    void aStepUsingAnElementOfTheAccumulatorAsWhatItIsNotIsRefused() {
+        Compilation compilation = Compilation.ofSource("""
+                module demo
+
+                behavior firsts : (xs: List<Int>) -> Int
+                let firsts (xs) = {
+                    let (n, _) = List.fold(
+                        (acc, x) -> {
+                            let (i, ys) = acc
+                            match List.get(0, ys) with
+                                | Some y -> (i + String.length(y), ys ++ [x])
+                                | None -> (i, ys ++ [x])
+                        },
+                        (0, []),
+                        xs
+                    )
+                    n
+                }
+                """, "Main");
+        compilation.answerEverything();
+        assertEquals(1, compilation.errors().size(), () -> "one refusal: " + compilation.errors());
+        Diagnostic refused = compilation.errors().getFirst().diagnostic();
+        assertEquals(DiagnosticCode.E1317.name(), refused.code(),
+                "a value that does not fit its position");
+        assertEquals("Int", refused.diff().actualType(),
+                "an element read out of the accumulator is an Int");
+        assertEquals("String", refused.diff().expectedType(), "and is not the String it is used as");
+    }
+
+    /**
      * And a function that takes more than the call hands it and answers less than the call takes
      * stands as what the call takes, while the function itself stays of the type its body was
      * checked at: what it takes is said around it, and what it answers is said at its body.
      */
     @Test
     void aFunctionTakingMoreAndAnsweringLessKeepsBothWhereTheyWereDecided() {
-        Core.Call fold = null;
-        for (Core.Call each : every(body("stepped"), Core.Call.class)) {
-            if (each.args().size() > 1) {
-                fold = each;
-            }
-        }
-        assertNotNull(fold, "the fold is a call");
+        Core.Call fold = theWalk(body("stepped"));
         Core step = fold.args().get(0);
         Core.Widen standing = assertInstanceOf(Core.Widen.class, step,
                 "a function taking the sum stands as one taking the case the call hands it");
@@ -331,6 +465,33 @@ class AValueStandsAsWhatItsPositionTakesItAsTest {
         assertTrue(anyWidened, "at least one " + what + " here is narrower than the position, so"
                 + " this says something about a Widen");
     }
+
+    /**
+     * The one call in {@code body} of the walk a fold is written over, picked by what it calls. A
+     * call picked by how many arguments it takes would be whichever such call came last, and a
+     * step that makes a call of its own would move it.
+     */
+    private static Core.Call theWalk(Core body) {
+        List<Core.Call> walks = every(body, Core.Call.class).stream()
+                .filter(call -> call.fn() instanceof Core.Reached.OfDeclaration(
+                        ReachName.OfLibrary(ValueName.Stdlib.Operation denotes))
+                        && denotes.equals(THE_WALK))
+                .toList();
+        assertEquals(1, walks.size(), () -> "one call of the walk in " + body);
+        return walks.getFirst();
+    }
+
+    /** The one call in {@code body} of the walk, kept standing as the operation it is. */
+    private static Core.PreservedCall keptWalk(Core body) {
+        List<Core.PreservedCall> walks = every(body, Core.PreservedCall.class).stream()
+                .filter(call -> call.declared().equals(KeptCalls.declared(THE_WALK)))
+                .toList();
+        assertEquals(1, walks.size(), () -> "one kept call of the walk in " + body);
+        return walks.getFirst();
+    }
+
+    private static final ValueName.Stdlib.Operation THE_WALK =
+            ValueName.Stdlib.operation("List", "foldFrom");
 
     private static <T extends Core> T only(Core body, Class<T> kind) {
         List<T> found = every(body, kind);

@@ -599,8 +599,12 @@ public final class Elaborator {
      * (the step matches on the accumulator, which needs its sum) or is not a fixpoint (the step grows
      * the accumulator into its sum) is the accumulator widened to the sum that case belongs to, and the
      * step re-typed there. An empty-collection seed's bottom is refined from the block's result along
-     * the way. Shared by the checker's call typing and the backend's step materialization, so the two
-     * resolve identically.
+     * the way.
+     *
+     * <p>Answers the step as it was read while settling, which is not always what the call holds. A
+     * bottom refined here moves the accumulator after the step was read at the seed's type, so the
+     * step answered was read taking what the call no longer takes. Which step the call holds is
+     * decided once the settlement is final, by {@link CallElaborator}.
      */
     public static Core resolveStepBinding(String fnName, Type.FnOf declaredStep, Hir.Expr stepArg,
                                           Map<String, Type> bind, Scope env, CheckContext ctx) {
@@ -615,13 +619,16 @@ public final class Elaborator {
             narrowFailed = e;
         }
         if (narrowGot != null) {
-            BottomInfer.refineBottom(declaredStep.result(), narrowGot, bind);
+            // What the step answers is one more reading of the variables its result carries, weighed
+            // by the rule every other reading is: it settles what the seed left carrying the bottom
+            // where the seed may stand as it, and nothing else.
+            TypeOps.bindVars(declaredStep.result(), narrowGot, bind, ctx.published());
             Type want = TypeOps.substitute(declaredStep.result(), bind);
             if (want instanceof Type.Var) {
                 return narrowCore;
             }
             if (TypeOps.assignable(narrowGot, want, ctx.published())) {
-                return answering(narrowCore, want);   // the narrow accumulator is a fixpoint
+                return narrowCore;   // the narrow accumulator is a fixpoint
             }
         }
         // The step matches on, or grows the accumulator into, the sum the seed's case belongs to.
@@ -635,8 +642,7 @@ public final class Elaborator {
                 Type got = ((Type.FnOf) widenedCore.type()).result();
                 if (TypeOps.assignable(got, sum, ctx.published())) {
                     bind.put(accVar.name(), sum);
-                    // the step is emitted at the widened accumulator
-                    return answering(widenedCore, sum);
+                    return widenedCore;
                 }
             }
         }

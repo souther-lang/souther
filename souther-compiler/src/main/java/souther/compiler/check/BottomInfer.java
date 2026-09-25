@@ -22,25 +22,29 @@ public final class BottomInfer {
 
     private BottomInfer() {}
 
-    /** Refines the type-variable bindings from a function argument's actual result: where the
-     * function's declared result is a type variable and its current binding is unknown or an
-     * empty-collection bottom, replace it with the concrete result the step grows. This is how a
-     * {@code foldFrom} seeded with {@code []} recovers its accumulator type — the block returns the
-     * grown list, not the bottom the seed carried. A composite result (a tuple of accumulators, as
-     * {@code partition}/{@code distinct} fold) refines position by position. */
-    public static void refineBottom(Type declaredResult, Type got, Map<String, Type> bind) {
-        if (declaredResult instanceof Type.Var v) {
-            Type cur = bind.get(v.name());
-            if ((cur == null || Type.mentions(cur, BottomInfer::isBottom))
-                    && !Type.mentions(got, BottomInfer::isBottom)) {
-                bind.put(v.name(), got);
-            }
-        } else if (declaredResult instanceof Type.TupleOf dt && got instanceof Type.TupleOf gt
-                && dt.elements().size() == gt.elements().size()) {
-            for (int i = 0; i < dt.elements().size(); i++) {
-                refineBottom(dt.elements().get(i), gt.elements().get(i), bind);
-            }
+    /**
+     * Whether {@code reading}, a later reading of a variable one application already read at
+     * {@code held}, is what the variable stands for from now on.
+     *
+     * <p>A reading that carries the bottom said what the value is made of and not what it holds:
+     * {@code []} is a list, and {@code (0, [])} a count beside a list, of nothing yet. A later
+     * reading that says what it holds is what stands, at whatever depth the bottom turned up — a
+     * fold seeded with {@code (0, [])} whose step answers {@code (Int, List<Int>)}, a map built
+     * from {@code Map.empty} and the key and value put in it. It stands only where what was held
+     * may stand as it. A reading the held one cannot stand as says the variable is something else,
+     * which is a disagreement between the two and not a refinement of either.
+     *
+     * <p>The one rule. Every reader that settles a signature's variables asks it, so the evidence
+     * an application weighs does not depend on which of them settled it: one that refined only a
+     * bare bottom settled {@code (Int, List<Nothing>)} where the others settled {@code (Int,
+     * List<Int>)}, and the call it settled read its step and seed at the first.
+     */
+    static boolean refines(Type held, Type reading, PublishedDeclarations published) {
+        if (isBottom(held)) {
+            return true;
         }
+        return !isBottom(reading) && Type.mentions(held, BottomInfer::isBottom)
+                && TypeOps.assignable(held, reading, published);
     }
 
     /** The scalar empty-collection bottom: the element type of a {@code []} whose type is not yet

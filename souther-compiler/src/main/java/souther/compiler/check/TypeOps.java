@@ -796,10 +796,11 @@ public final class TypeOps {
         switch (param) {
             case Type.Var v -> {
                 Type bound = bindings.get(v.name());
-                if (bound == null || bound instanceof Type.Nothing) {
-                    // first sight, or widen an empty-collection bottom to a concrete element: an
-                    // earlier `[]` / `Map.empty` argument bound NOTHING, and a later real element
-                    // fixes it (ADR-0028). Order-independent, so insert(k, v, Map.empty) infers V.
+                if (bound == null || BottomInfer.refines(bound, arg, published)) {
+                    // first sight, or a reading that says what an earlier one carrying the
+                    // empty-collection bottom did not (ADR-0028), at whatever depth: an earlier
+                    // `[]` / `Map.empty` / `(0, [])` argument bound the bottom, and a later reading
+                    // fixes it. Order-independent, so insert(k, v, Map.empty) infers V.
                     bindings.put(v.name(), arg);
                 } else if (arg instanceof Type.Nothing) {
                     // the empty bottom absorbs into the concrete binding already learned

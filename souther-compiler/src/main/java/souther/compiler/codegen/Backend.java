@@ -1422,6 +1422,12 @@ public final class Backend {
      * under this rule, a jar of the first would be trusted for published helpers and values it
      * never carried, and one of the second would record an offer this reader says it did not make.
      *
+     * <p>Version 30 changes what the checker reads a carried helper's body as. A fold whose seed
+     * holds an empty collection has its step read at the accumulator the call settles, and not at
+     * the seed's type. A reader built under version 29 read the accumulator's empty parts as a
+     * list of nothing, which fits wherever it is used, so it would admit a carried body that uses
+     * an element of the accumulator as something the element is not, which this reader refuses.
+     *
      * <p>That is also where this number stops. It says whether a jar and this compiler agree on
      * what the metadata says and on the rules a declaration is turned into JVM facts by — a
      * behavior's class and methods, how one is held and built, a type's layout and codecs. It does
@@ -1431,7 +1437,7 @@ public final class Backend {
      * {@code [#a-published-module-agrees-with-what-it-was-built-against]}). An edit to a
      * declaration moves that and not this; an edit to a rule moves this.
      */
-    public static final int BOUNDARY_VERSION = 29;
+    public static final int BOUNDARY_VERSION = 30;
 
     /** Emits the class a module's own declarations are published on, carrying {@code declarations}.
      * What it says is the caller's; that it is built like every other generated class — the same Java
