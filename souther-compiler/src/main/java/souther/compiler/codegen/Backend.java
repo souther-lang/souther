@@ -1473,11 +1473,6 @@ public final class Backend {
         return ctx.cdBehaviorImpl(own(name));
     }
 
-
-    private ClassDesc caseClass(TypeSymbol typeName) {
-        return ctx.caseClass(typeName);
-    }
-
     // --- sum data (sealed interface) ---
 
     // --- behaviors ---
@@ -1760,7 +1755,7 @@ public final class Backend {
                             Label doApply = code.newLabel();
                             for (TypeSymbol caseName : on.accepted()) {
                                 code.aload(1);
-                                code.instanceOf(caseClass(caseName));
+                                code.instanceOf(ctx.caseCarrierClass(caseName));
                                 code.ifne(doApply);
                             }
                             code.goto_(end);

@@ -45,7 +45,7 @@ final class ResultBoundary {
         for (TypeSymbol member : bridged) {
             Label next = code.newLabel();
             code.aload(slot);
-            code.instanceOf(ctx.matchCaseClass(member));
+            code.instanceOf(ctx.caseCarrierClass(member));
             code.ifeq(next);
             ClassDesc bridge = ctx.bridgeCaseClass(member);
             Type held = TypeOps.caseBindType(member);

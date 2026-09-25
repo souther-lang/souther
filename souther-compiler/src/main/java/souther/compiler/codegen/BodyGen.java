@@ -207,6 +207,20 @@ final class BodyGen {
             put(locals, binding, new Var(slot, type, name));
         }
 
+        /**
+         * Turns the value on the stack, held as {@code held}, into how a value standing as {@code as}
+         * is held. A value held as a reference is laid out as every type it may stand as: a case is
+         * an instance of its sum's interface, and a collection, an optional and a tuple hold
+         * references whatever they are of. A primitive is not. Standing as a union it is a case of,
+         * it is held as its box, which is the class every reader that tells the cases apart tests it
+         * against ({@link CodegenContext#caseCarrierClass}).
+         */
+        private void standAs(Type held, Type as) {
+            if (isReference(as) && !isReference(held)) {
+                box(code, held);
+            }
+        }
+
         /** Stores the value a {@code let} was just emitted as, at {@code stored} — what is on the
          * stack — and binds its name to that slot at {@link Core.LetIn#bindType}, the type the
          * checker read the body with. The two differ where the value is one case of the sum the
@@ -399,7 +413,8 @@ final class BodyGen {
                         // Behavior contract and a multi-input base (issue #57), leaving the success
                         // value cast on the stack
                         requiredCall(call);
-                        storeLet(li, call.type());
+                        standAs(call.type(), li.value().type());
+                        storeLet(li, li.value().type());
                     } else {
                         Type vt = li.value().type();
                         if (vt instanceof Type.FnOf fn) {
@@ -491,11 +506,7 @@ final class BodyGen {
                 params.add(locals.get(p.binding()));
             }
             for (int i = 0; i < call.args().size(); i++) {
-                Type at = genExpr(call.args().get(i));
-                Type pt = params.get(i).type();
-                if (isReference(pt) && !isReference(at)) {
-                    box(code, at);
-                }
+                standAs(genExpr(call.args().get(i)), params.get(i).type());
             }
             for (int i = call.args().size() - 1; i >= 0; i--) {
                 store(code, params.get(i).slot(), params.get(i).type());
@@ -786,15 +797,11 @@ final class BodyGen {
                 }
                 case Core.OptionNone _ ->
                         code.invokestatic(CD_Option, "none", MethodTypeDesc.of(CD_Option), true);
-                // Every type a value may stand as is laid out here the way the value already is: a
-                // case is an instance of its sum's interface, and a collection, an optional and a
-                // tuple hold references whatever they are of. So the value is emitted as it is.
-                //
                 // What the position asks for is handed on and nothing more. Standing as a type is
                 // not a position stating one: an `unreachable` a comparison or an operator is
                 // handed still has nothing that says what it leaves, whatever the checker let it
                 // stand as.
-                case Core.Widen w -> genExpr(w.value(), expected);
+                case Core.Widen w -> standAs(genExpr(w.value(), expected), w.type());
                 case Core.Unreachable u -> unreachable(u, expected);
                 // A build in the tree an analysis reads. What is emitted calls the value's method.
                 case Core.MaterialisedValue m -> throw new IllegalStateException(

@@ -32,9 +32,9 @@ final class CaseGen {
      *  represented by. */
     static ClassDesc carrierOf(CodegenContext ctx, CaseSelector selector) {
         return switch (selector.refinement()) {
-            case Refinement.Direct ignored -> ctx.matchCaseClass(selector.name());
-            case Refinement.OptionPresent ignored -> CD_OptionSome;
-            case Refinement.OptionAbsent ignored -> CD_OptionNone;
+            case Refinement.Direct _ -> ctx.caseCarrierClass(selector.name());
+            case Refinement.OptionPresent _ -> CD_OptionSome;
+            case Refinement.OptionAbsent _ -> CD_OptionNone;
         };
     }
 
@@ -79,13 +79,13 @@ final class CaseGen {
      */
     static void pushBound(CodeBuilder code, Refinement refinement, int subjectSlot) {
         switch (refinement) {
-            case Refinement.OptionPresent ignored -> {
+            case Refinement.OptionPresent _ -> {
                 code.aload(subjectSlot);
                 code.checkcast(CD_OptionSome);
                 code.invokevirtual(CD_OptionSome, "value", MTD_Object);
             }
-            case Refinement.Direct ignored -> code.aload(subjectSlot);
-            case Refinement.OptionAbsent ignored -> { }
+            case Refinement.Direct _ -> code.aload(subjectSlot);
+            case Refinement.OptionAbsent _ -> { }
         }
     }
 }

@@ -616,9 +616,11 @@ final class CodegenContext {
         return cd(typeName);
     }
 
-    /** The class a match case is tested against: a boxed/reference class for a primitive case,
-     * otherwise the case's data class, which its resolved name already names. */
-    ClassDesc matchCaseClass(TypeSymbol caseName) {
+    /** The class a value standing as a case of a union is held as, and so the class every reader
+     * that tells the cases apart at run time tests it against — a {@code match}, the routing between
+     * a composition's stages, an output's boundary and an {@code ensures}. A primitive case is its
+     * box; any other case is its data class, which its resolved name already names. */
+    ClassDesc caseCarrierClass(TypeSymbol caseName) {
         if (!caseName.isPrimitive()) {
             return caseClass(caseName);
         }

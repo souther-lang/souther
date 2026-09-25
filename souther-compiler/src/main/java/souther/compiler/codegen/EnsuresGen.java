@@ -321,7 +321,7 @@ final class EnsuresGen {
         for (TypeSymbol leaf : answersFor(selected)) {
             Label notThis = code.newLabel();
             code.aload(answer);
-            code.instanceOf(ctx.matchCaseClass(leaf));
+            code.instanceOf(ctx.caseCarrierClass(leaf));
             code.ifeq(notThis);
             pushDeclaredCase(code, leaf);
             code.astore(into);
