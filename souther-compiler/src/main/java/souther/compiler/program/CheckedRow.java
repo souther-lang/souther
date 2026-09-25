@@ -265,12 +265,17 @@ public final class CheckedRow {
      *
      * <p>Said rather than left out. The row is written, an author owes it an answer, and a reader
      * that never heard of it would count a behavior's rows and find one fewer than were written.
+     *
+     * <p>Made where the program is assembled and nowhere else, as the other arms are: what computes
+     * each input is a definition of the module the row is written in, and one made with any other
+     * would be a row running something its module does not hold.
      */
-    public record AnswerOwed(RowStatement.Stated states, List<CheckedHelper> inputs)
-            implements Statement {
+    public static final class AnswerOwed implements Statement {
 
-        /** @param inputs what computes each value it hands over ({@link CheckedRow#computing}) */
-        public AnswerOwed {
+        private final RowStatement.Stated states;
+        private final List<CheckedHelper> inputs;
+
+        AnswerOwed(RowStatement.Stated states, List<CheckedHelper> inputs) {
             if (states == null) {
                 throw new IllegalArgumentException("a row whose answer is owed states its values");
             }
@@ -278,7 +283,23 @@ public final class CheckedRow {
                 throw new IllegalArgumentException("a row whose answer is owed is one that states"
                         + " no answer: " + states.expects());
             }
-            inputs = computing(states, inputs);
+            this.states = states;
+            this.inputs = computing(states, inputs);
+        }
+
+        /** The values it hands over, and that its answer is owed. */
+        public RowStatement.Stated states() {
+            return states;
+        }
+
+        /** What computes each value it hands over ({@link CheckedRow#computing}). */
+        public List<CheckedHelper> inputs() {
+            return inputs;
+        }
+
+        @Override
+        public String toString() {
+            return states.toString();
         }
     }
 
