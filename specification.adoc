@@ -265,17 +265,26 @@ before, and moves the boundary version with it (<<exposed-values>>).
 data TravelRequest = Drafting | Submitted | AwaitingPreApproval | PreApproved
 ----
 
-Public elements are listed with `+exposing+`.
+[[a-module-publishes-what-it-declares]]A module publishes what it declares to the modules outside it, and an `+exposing+` clause is what narrows that. A module that writes no clause publishes every declaration it makes. A module that writes one publishes exactly the declarations the clause names, so `+exposing ()+` publishes nothing: leaving the clause out and writing it empty are two different modules. Published and exposed mean the same thing in this specification; a name the clause itself lists is said to be *named by the clause*.
 
-[,souther]
+[,text]
 ----
+module example.open
+// every declaration of example.open is published
+
+module example.closed exposing ()
+// example.closed publishes no declaration
+
 module example.businesstrip exposing ( TravelRequest, submitTravelRequest, preApprove )
+// only these three are published
 ----
+
+[[only-a-modules-own-declarations-are-published]]What a module publishes is taken from its own declarations: its data, its behaviors, and its values and helpers (<<fn-declaration>>). Leaving the clause out publishes no definition the module did not declare, and so no definition carried in from another module; it publishes no value an attached file declares (<<an-attached-files-values-are-for-its-rows>>), and no core module's `+private let+` (<<stdlib>>). Naming any of these in a clause does not publish it either (<<exposing-lists-this-modules-own-definitions>>).
 
 `+exposing+` exposes at type granularity. A public data's `+decoder()+` / `+encoder()+` is always public API (<<jvm-codec>>), so member-level narrowing such as `+TravelRequest.decoder+` is not written — there is nothing to narrow.
 
 
-When an exposed behavior is a `+>->+` composition, its output SHALL be written in `+exposing+` in the form `+name : cases+` (<<declared-composition-output>>). A composition's output is inferred from its stages (<<composition-with-requirements>>), but at the public boundary a signature is required rather than inference, so that the contract used by another module or by Java does not change silently when an upstream stage changes. Omitting it is a compile error (E1605).
+When a behavior named by the clause is a `+>->+` composition, its output SHALL be written in `+exposing+` in the form `+name : cases+` (<<declared-composition-output>>). A composition's output is inferred from its stages (<<composition-with-requirements>>), but at a boundary the module states a signature is required rather than inference, so that the contract used by another module or by Java does not change silently when an upstream stage changes. Omitting it is a compile error (E1605). A composition a module publishes by writing no clause keeps its inferred output: the module has stated no boundary to hold it to, and has no clause to write one in.
 
 [,souther]
 ----
@@ -2876,7 +2885,7 @@ The type comes from the behavior. The `+let+` side only names its arguments, cor
 
 Arguments are the behavior's argument list followed by `+depends on+` in declaration order. A `+let+` is the pre-injection function and a behavior's type is the post-injection type, so a `+let+` has as many more arguments as there are `+depends on+` (<<depends-on>>). If `+depends on+` is empty, both have the same arguments.
 
-A `+let+` with no corresponding behavior is a *helper*. Not being a domain behavior, it does not pollute the behavior list, cannot be placed in a `+>->+` stage, and does not appear in `+exposing+`. It states its own type, though a parameter whose type its body determines may leave it unwritten (below).
+A `+let+` with no corresponding behavior is a *helper*. Not being a domain behavior, it does not pollute the behavior list and cannot be placed in a `+>->+` stage. It states its own type, though a parameter whose type its body determines may leave it unwritten (below).
 
 [,souther]
 ----
@@ -3235,7 +3244,7 @@ behavior placeOrder = validateOrder >-> priceOrder >-> allocateStock -> PlacedOr
 Input is not declared. A pipeline is point-free, and the input is decided by the first stage (<<sequential-composition>>). Only the output may be declared. A dependency (`+depends on+`) has the same distant-change risk, but a composition leaves it inferred (<<depends-on>>).
 
 [#exposed-composition-declares-its-output]
-For an internal composition this declaration is optional. But for a composition exposed with `+exposing+` it is *required*, written not on the definition line but in the exposing list as `+name : cases+` (<<modules>>). Leaving a public boundary to inference means that when an upstream stage adds a case, it reaches another compilation unit (another module, or a non-exhaustive Java switch or JSON serialization) silently, and the definition site has nothing to signal it. Placing a signature in `+exposing+` makes the composition's definition error (E1604) the moment a case is added, and the author chooses to handle the case or update the signature. If no signature exists, it is E1605. A non-composition behavior writes its type at the definition, so it MUST NOT write a signature in `+exposing+` (doing so is E1605). This division corresponds to.
+For an internal composition this declaration is optional, and so it is for one published because its module writes no `+exposing+` clause (<<a-module-publishes-what-it-declares>>). But for a composition named by an `+exposing+` clause it is *required*, written not on the definition line but in the exposing list as `+name : cases+` (<<modules>>). Leaving a public boundary to inference means that when an upstream stage adds a case, it reaches another compilation unit (another module, or a non-exhaustive Java switch or JSON serialization) silently, and the definition site has nothing to signal it. Placing a signature in `+exposing+` makes the composition's definition error (E1604) the moment a case is added, and the author chooses to handle the case or update the signature. If no signature exists, it is E1605. A non-composition behavior writes its type at the definition, so it MUST NOT write a signature in `+exposing+` (doing so is E1605). This division corresponds to.
 
 [#case-propagation]
 == behavior case propagation and Decoder error accumulation
@@ -4380,7 +4389,7 @@ let trim (s: String): String = intrinsic "string.trim"
 
 An intrinsic MUST declare its return type (it cannot be inferred from `+intrinsic+`). A call is type-checked against the declared signature — that is, `+trim+` is "a built-in function whose signature is placed in core", and this declaration, not a hardcoded compiler table, decides its arguments and return value — and the backend emits the bytecode for `+key+`. It is neither inlined nor lowered. Only the reserved namespace may write it. A user cannot call the JVM directly and only calls blessed functions (<<asymmetric-interop>>).
 
-A core module may also write `+private let+`. A `+private+` declaration is part of the library's implementation and not of its surface: it is reachable from the library's own modules and from nowhere else, so a module outside the reserved namespace that writes its name is told the library has no such member — the same answer a misspelling gets, because from where the caller stands they are the same thing. `+private+` is a core privilege like `+intrinsic+`; writing it in a user module is a syntax error, and there would be nothing for it to do there, since everything a user module declares is published (<<modules>>). `+List.foldFrom+`, which `+List.fold+` supplies the starting index for, is one.
+A core module may also write `+private let+`. A `+private+` declaration is part of the library's implementation and not of its surface: it is reachable from the library's own modules and from nowhere else, so a module outside the reserved namespace that writes its name is told the library has no such member — the same answer a misspelling gets, because from where the caller stands they are the same thing. `+private+` is a core privilege like `+intrinsic+`; writing it in a user module is a syntax error, and there would be nothing for it to do there, since a user module keeps a declaration to itself by writing an `+exposing+` clause that leaves it out (<<a-module-publishes-what-it-declares>>). `+List.foldFrom+`, which `+List.fold+` supplies the starting index for, is one.
 
 *Every* standard-library function is declared in a core module this way, whether its body is Souther (self-hosted, like `+List.map+` over `+foldFrom+`) or `+intrinsic "key"+` (a JVM kernel). The declaration is the single source of truth for the signature — there is no compiler table of signatures, and a function the compiler can call but a declaration does not describe does not exist. What stays in the compiler is what the *type language cannot say*, as a side condition on a declared signature rather than in place of one:
 
