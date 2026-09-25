@@ -85,7 +85,7 @@ class ABehaviorTargetHoldsItsTwoReadingsOfWhatItTakesTogetherTest {
         return new BehaviorTarget(
                 CheckedSignature.declared(parameters,
                         new CheckedBoundaryOutput.Scalar(LeafScalar.INT)),
-                implementation);
+                implementation, List.of());
     }
 
     private static CheckedImplementation.Body body(Core.Binder... parameters) {
