@@ -338,10 +338,11 @@ public interface Hir {
     /**
      * A whole source file: its public surface, imports, and definitions.
      *
-     * <p>{@code exposedOutputs} maps an exposed composition behavior's name to the output signature written
-     * in the {@code exposing} list ({@code exposing ( name : A | B )}, spec §declared-composition-output). An
-     * exposed {@code >->} composition must have one, checked to match its inferred output (ADR-0024); other
-     * exposed names carry no signature (their type is at the definition).
+     * <p>{@code exposedOutputs} maps the name of a composition the {@code exposing} clause names to the
+     * output signature written for it there ({@code exposing ( name : A | B )}, spec
+     * §declared-composition-output). A composition the clause names must have one, checked to match its
+     * inferred output; other names in the clause carry no signature (their type is at the definition),
+     * and a composition published because no clause is written has none.
      *
      * <p>{@code fns} is what the source wrote, and it stays that at every stage. {@code takenOn} is
      * what the module emits as methods of its own without having written them, which is two kinds of

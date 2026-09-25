@@ -431,8 +431,8 @@ public final class TypeChecker {
         // is Java-buildable from outside when it is published (E1305), and what is published may not
         // rest on what is kept. The names the clause itself writes are held to its own rules first.
         Set<String> exposed = module.published();
-        // `exposing` lists a module's own public surface. A module's own type names, as opposed to
-        // `symbols`, which also holds the data it imports — an imported name is not re-exported.
+        // A name the clause writes is one of the module's own. A module's own type names, as opposed
+        // to `symbols`, which also holds the data it imports — an imported name is not re-exported.
         Set<String> ownTypes = new HashSet<>();
         for (Hir.Def d : module.defs()) {
             ownTypes.add(d.name());
@@ -447,8 +447,9 @@ public final class TypeChecker {
                 throw CompileException.of(Diagnostic.say(new ModuleMessage.ExposingIsTypeGranular(e.substring(0, dot), e))
                                 .at(module.pos()).build());
             }
-            // an exposed name must be one of this module's own definitions. An imported name that is
-            // merely visible here is not re-exported — importers reach it from its declaring module.
+            // a name the clause writes must be one of this module's own definitions. An imported name
+            // that is merely visible here is not re-exported — importers reach it from its declaring
+            // module.
             if (!ownTypes.contains(e) && !allBehaviors.contains(e)) {
                 // A value and a helper are both part of what a module offers: a limit a rule is
                 // written against, and the rule itself. A behavior's own `let` is not — what a reader

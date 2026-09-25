@@ -30,8 +30,8 @@ import java.util.Set;
 /**
  * The checks a {@code behavior} and its implementing {@code let} are subject to: that the two agree
  * on inputs and output, that a {@code depends on} names something with a requirement of its own, that
- * no behavior reaches itself, that a stage takes one input, and that an exposed composition declares
- * the output it actually produces.
+ * no behavior reaches itself, that a stage takes one input, and that a composition the
+ * {@code exposing} clause names declares the output it actually produces.
  */
 public final class SpecChecker {
 
@@ -190,8 +190,8 @@ public final class SpecChecker {
     }
 
     /**
-     * An exposed composition ({@code >->}) behavior must declare its output in the {@code exposing} list
-     * ({@code exposing ( name : A | B )}, spec §declared-composition-output, ADR-0024), and the declaration
+     * A composition ({@code >->}) the {@code exposing} clause names must declare its output there
+     * ({@code exposing ( name : A | B )}, spec §declared-composition-output), and the declaration
      * must match the inferred output exactly. A far-away change that grows the output then fails here, at the
      * module boundary, instead of reaching separately-compiled consumers unannounced.
      *
@@ -235,7 +235,7 @@ public final class SpecChecker {
                 throw CompileException.of(Diagnostic.at(pipe.pos())
                                 
                                 .hint(new DeclarationMessage.WriteTheOutputSignature(pipe.name(), PipelineSigs.caseList(inferred)))
-                                .say(new DeclarationMessage.AnExposedCompositionDeclaresItsOutput(pipe.name())).build());
+                                .say(new DeclarationMessage.ACompositionTheClauseNamesDeclaresItsOutput(pipe.name())).build());
             }
             // What was written is read first, and whether it can be compared with what is produced
             // is asked of the reading. A member no arm can name is a mistake in the declaration

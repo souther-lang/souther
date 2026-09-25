@@ -9,11 +9,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * An exposed {@code >->} composition must declare its output in the {@code exposing} list
- * ({@code exposing ( name : A | B )}, spec §declared-composition-output, ADR-0024), and the declaration must match the
- * inferred output exactly. This is the module boundary where a far-away case addition would
- * otherwise reach separately-compiled consumers unannounced. The requirement is boundary-only:
- * an unexposed composition keeps inference, and a signature on a non-composition is rejected.
+ * A {@code >->} composition the {@code exposing} clause names must declare its output there
+ * ({@code exposing ( name : A | B )}, spec §declared-composition-output), and the declaration must
+ * match the inferred output exactly. This is the boundary a module states, where a far-away case
+ * addition would otherwise reach separately-compiled consumers unannounced. The requirement is on
+ * that statement only: a composition the clause does not name keeps inference, whether it is kept
+ * or published because no clause is written, and a signature on a non-composition is rejected.
  */
 class CompileExposedPipeOutputTest {
 
