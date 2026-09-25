@@ -149,4 +149,42 @@ class ABehaviorNobodyHasWrittenYetIsNotAnInjectionTargetTest {
 
         assertEquals("E1627", refused.code(), refused.getMessage());
     }
+
+    /**
+     * A composition builds each stage with a body and holds each one Java supplies, and one nobody
+     * has written is neither. Refused where the composition is written, whichever module declares
+     * the stage, so emitting a stage never meets one.
+     */
+    @Test
+    void aCompositionThatWouldHaveToBuildItIsRefused() {
+        String restated = """
+                behavior restated : (out: Out) -> Out
+                let restated (out) = out
+                """;
+        CompileException here = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of(HEAD + restated + """
+                        behavior outer : (id: Id) -> Out
+                            depends on inner
+
+                        behavior whole = outer >-> restated
+                        """)));
+        CompileException elsewhere = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(withUpstream(List.of("""
+                        module example.owed exposing ( Id, Out, inner, outer, restated )
+
+                        data Id = { n: Int }
+                        data Out = { n: Int }
+
+                        behavior inner : (id: Id) -> Out
+                        behavior outer : (id: Id) -> Out
+                            depends on inner
+                        """ + restated), """
+                        module example.reader exposing ( whole )
+                        import example.owed ( outer, restated )
+                        behavior whole = outer >-> restated
+                        """)));
+
+        assertEquals("E1627", here.code(), here.getMessage());
+        assertEquals("E1627", elsewhere.code(), elsewhere.getMessage());
+    }
 }
