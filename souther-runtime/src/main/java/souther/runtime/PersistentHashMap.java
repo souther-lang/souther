@@ -295,8 +295,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
     private static Node mergeTwoPairs(Object k0, int h0, Object v0,
                                       Object k1, int h1, Object v1, int shift) {
         if (h0 == h1) {
-            return new HashCollisionNode(h0, PersistentVector.empty().append(k0).append(k1),
-                    PersistentVector.empty().append(v0).append(v1));
+            return HashCollisionNode.of(h0, k0, v0, k1, v1);
         }
         int mask0 = (h0 >>> shift) & MASK;
         int mask1 = (h1 >>> shift) & MASK;
@@ -570,17 +569,45 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
         final PersistentVector<Object> keys;
         final PersistentVector<Object> values;
 
-        HashCollisionNode(int hash, PersistentVector<Object> keys, PersistentVector<Object> values) {
+        /**
+         * What the bucket holds in place of {@code null}. A map built from a foreign one can hold a
+         * {@code null} key or value, and a {@link PersistentVector} is a {@code List} of the
+         * language, which holds none; the bucket keeps its own stand-in for it, and nothing but the
+         * bucket ever sees the stand-in.
+         */
+        private static final Object NULL_HELD = new Object();
+
+        private HashCollisionNode(int hash, PersistentVector<Object> keys, PersistentVector<Object> values) {
             this.hash = hash;
             this.keys = keys;
             this.values = values;
+        }
+
+        /** The bucket of two entries whose keys share {@code hash}. */
+        static HashCollisionNode of(int hash, @Nullable Object k0, @Nullable Object v0,
+                                    @Nullable Object k1, @Nullable Object v1) {
+            return new HashCollisionNode(hash,
+                    PersistentVector.empty().append(held(k0)).append(held(k1)),
+                    PersistentVector.empty().append(held(v0)).append(held(v1)));
+        }
+
+        private static Object held(@Nullable Object given) {
+            return given == null ? NULL_HELD : given;
+        }
+
+        /** What {@code held} was given. The node API carries a foreign map's {@code null} under the
+         *  {@code Object} it is typed with, as {@link BitmapIndexedNode}'s arrays hold one, so the
+         *  bucket gives back what it was handed on the same terms. */
+        @SuppressWarnings("NullAway")
+        private static Object given(Object held) {
+            return held == NULL_HELD ? null : held;
         }
 
         /** Where {@code key} is in the bucket, or -1 where it is not. */
         private int indexOf(@Nullable Object key) {
             int at = 0;
             for (Object k : keys) {
-                if (Values.equal(k, key)) {
+                if (Values.equal(given(k), key)) {
                     return at;
                 }
                 at++;
@@ -594,7 +621,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
                 return NOT_FOUND;
             }
             int at = indexOf(key);
-            return at < 0 ? NOT_FOUND : values.get(at);
+            return at < 0 ? NOT_FOUND : given(values.get(at));
         }
 
         @Override
@@ -613,13 +640,13 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
             }
             int at = indexOf(key);
             if (at >= 0) {
-                if (Values.equal(values.get(at), val)) {
+                if (Values.equal(given(values.get(at)), val)) {
                     return this;
                 }
-                return new HashCollisionNode(hash, keys, replaced(values, at, val));
+                return new HashCollisionNode(hash, keys, replaced(values, at, held(val)));
             }
             addedLeaf.value = true;
-            return new HashCollisionNode(hash, keys.append(key), values.append(val));
+            return new HashCollisionNode(hash, keys.append(held(key)), values.append(held(val)));
         }
 
         @Override
@@ -635,7 +662,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
                 int other = at == 0 ? 1 : 0;
                 // Fall back to a one-entry bitmap node at this level for the surviving key.
                 return new BitmapIndexedNode(1 << ((hash >>> shift) & MASK), 0,
-                        new Object[]{keys.get(other), values.get(other)});
+                        new Object[]{given(keys.get(other)), given(values.get(other))});
             }
             return new HashCollisionNode(hash, without(keys, at), without(values, at));
         }
@@ -669,12 +696,12 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
 
         @Override
         public Object keyAt(int i) {
-            return keys.get(i);
+            return given(keys.get(i));
         }
 
         @Override
         public Object valAt(int i) {
-            return values.get(i);
+            return given(values.get(i));
         }
 
         @Override

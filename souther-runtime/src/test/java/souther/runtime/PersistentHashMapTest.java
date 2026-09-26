@@ -23,6 +23,40 @@ class PersistentHashMapTest {
         }
     }
 
+    /**
+     * A map built from a foreign one can hold a {@code null} key and a {@code null} value, and
+     * {@code null} hashes as {@code ""} does, so the two share a collision bucket — which keeps its
+     * keys and values where {@code null} has no place of its own, and answers with them all the same.
+     */
+    @Test
+    void aForeignNullKeyAndValueAreHeldInACollisionBucket() {
+        Map<Object, Object> foreign = new LinkedHashMap<>();
+        foreign.put(null, 1);
+        foreign.put("", null);
+        foreign.put(new Key(1, 0), 3);
+        PersistentHashMap<Object, Object> m = PersistentHashMap.from(foreign);
+
+        assertEquals(3, m.size());
+        assertEquals(1, m.get(null));
+        assertTrue(m.containsKey(""));
+        assertNull(m.get(""));
+        assertEquals(3, m.get(new Key(1, 0)));
+        assertEquals(foreign, m);
+        assertEquals(m, foreign);
+        assertEquals(foreign.hashCode(), m.hashCode());
+        assertEquals(foreign.entrySet(), m.entrySet());
+
+        assertEquals(5, m.assoc("", 5).get(""));
+        PersistentHashMap<Object, Object> two = m.without(new Key(1, 0));
+        assertEquals(2, two.size());
+        assertTrue(two.containsKey(""));
+        assertNull(two.get(""));
+        PersistentHashMap<Object, Object> one = two.without("");
+        assertEquals(1, one.size());
+        assertFalse(one.containsKey(""));
+        assertEquals(1, one.get(null));
+    }
+
     @Test
     void putGetRemoveMatchOracleRandomized() {
         Random rnd = new Random(42);
