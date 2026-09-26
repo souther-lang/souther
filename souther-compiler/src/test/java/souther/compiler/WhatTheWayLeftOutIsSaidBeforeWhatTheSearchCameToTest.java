@@ -76,11 +76,11 @@ class WhatTheWayLeftOutIsSaidBeforeWhatTheSearchCameToTest {
                 constructs No
 
             let f (s, n) = {
-                guard String.matches("(a+)\\\\1", s) else No { why = 0 }
+                guard UNREAD else No { why = 0 }
                 guard n < 10 else No { why = 1 }
                 Yes { v = 1 }
             }
-            """;
+            """.replace("UNREAD", ARuleNoReadingTakesIn.narrowly("s"));
 
     /**
      * A point nothing composed a row for with the way used whole, which is the control.

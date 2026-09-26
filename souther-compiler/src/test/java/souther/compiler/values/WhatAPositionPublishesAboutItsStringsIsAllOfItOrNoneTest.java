@@ -32,7 +32,7 @@ class WhatAPositionPublishesAboutItsStringsIsAllOfItOrNoneTest {
     private static AdmittedPlan matching(String regex) {
         PatternRead said = PatternParser.read(regex);
         return new AdmittedPlan.Pattern(PatternPlan.of(
-                assertInstanceOf(PatternRead.Read.class, said).syntax()));
+                assertInstanceOf(PatternRead.Read.class, said).meaning()));
     }
 
     /** The one block these are published for, which is one position on its own. */

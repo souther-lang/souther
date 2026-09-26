@@ -719,7 +719,7 @@ An external representation may contain null, but internal data forbids null. nul
 
 [[a-temporal-built-from-parts-is-refused-where-the-parts-name-none]]`+Date.fromParts+` and `+Time.fromParts+` MUST answer `+NotADate+` / `+NotATime+` where the Ints they are given name no day and no time of day, and MUST NOT normalise. February the 30th is not the 2nd of March here, and the 25th hour is not one o'clock the next day. They are the inverses of the part readers, so `+Date.fromParts(Date.year(d), Date.month(d), Date.day(d)) == d+` holds of every `+Date+` and `+Time.fromParts(Time.hour(t), Time.minute(t), Time.second(t)) == t+` of every `+Time+`. This is where a refusal belongs once the parts are values rather than text: the arithmetic normalises, because shifting a date by a month has to land somewhere, so a model that reaches an impossible day by adding gets a real one back and no sign that it asked for a day the calendar does not have.
 
-[[a-matches-pattern-is-a-literal-regular-expression]]`+String.matches+` takes a pattern that is a string literal and a valid regular expression. Both are read at compile time, which is the point of writing it out: a pattern computed at run time could not be checked at all. A character the pattern writes by its number is a scalar value: an escape spelling half of a surrogate pair — `+\uD800+` on its own, `+\x{DC00}+`, a `+\N{…}+` naming one — names a character no `+String+` holds (<<a-string-holds-no-half-of-a-surrogate-pair>>), and is refused. The rule is about the escape as written, wherever in the pattern it is written: one inside a comment under the `+x+` flag is refused too, although the engine reads nothing there. Text between `+\Q+` and `+\E+`, and a backslash written before another, are not escapes, so `+\Q\uD800\E+` writes six characters and is not refused. A high surrogate's escape followed at once by a low one's — `+\uD83D+` and then `+\uDE00+` — is the one character the two encode, U+1F600. A run is over scalar values, so `+[\x{D7FF}-\x{E000}]+` holds the two characters at its ends and none between.
+[[a-matches-pattern-is-a-literal-regular-expression]]`+String.matches+` takes a pattern that evaluates to a string at compile time, and that string MUST be a pattern of the language (<<string-patterns>>). Both are read at compile time, which is the point of writing it out: a pattern computed at run time could not be checked at all. Text that is no pattern is refused whatever a host's regular-expression engine would make of it — a lookaround, a back reference, a property class, a flag group are refused because the language does not have them, not because a carrier might lack them. A character the pattern writes by its number is a scalar value: an escape spelling half of a surrogate pair — `+\uD800+` on its own, `+\x{DC00}+` — names a character no `+String+` holds (<<a-string-holds-no-half-of-a-surrogate-pair>>), and is refused. A backslash written before another is not an escape, so `+\\uD800+` writes six characters and is not refused. A high surrogate's escape followed at once by a low one's — `+\uD83D+` and then `+\uDE00+` — is the one character the two encode, U+1F600. A run is over scalar values, so `+[\x{D7FF}-\x{E000}]+` holds the two characters at its ends and none between.
 
 [#primitives]
 === Primitive types
@@ -4465,7 +4465,7 @@ Grapheme-cluster counts and display widths depend on Unicode segmentation and on
 
 What is canonical is the *value*; nothing about comparison changes. NFC and not NFKC — compatibility folding turns `+①+` into `+1+` and a half-width kana into a full-width one, which is a claim about the text that a stored name does not want. A variation sequence (`+葛+` followed by U+E0101) is stable under every normalization form and stays two code points, so this is not a way to make a name count as its characters look; that is the grapheme-cluster question above. A decoder therefore transforms as well as validates, and what it answers is not always byte-for-byte what arrived — anything needing the bytes as sent keeps them outside the decoder.
 
-`+matches(pattern, s)+` is a whole-string regular-expression match (Java `+Pattern+` flavour, anchored: the *entire* string must match), returning a plain `+Bool+`. It is what states a format-constrained value as an invariant — `+data PostalCode = String invariant String.matches("[0-9]{3}-[0-9]{4}", value)+`. The `+pattern+` MUST evaluate to a string at compile time: it is validated there (compiled once to confirm it is well-formed), so a malformed regex is a compile error rather than a runtime exception. A string literal evaluates to one, and so does a `{plus}{plus}` of literals and of values — a `+let+` with no parameter list (<<fn-declaration>>) — which is how types whose formats share a part hold that part once instead of spelling it out in each of them:
+`+matches(pattern, s)+` is true exactly when the whole of `+s+` is one of the strings `+pattern+` denotes (<<string-patterns>>), and returns a plain `+Bool+`. It is what states a format-constrained value as an invariant — `+data PostalCode = String invariant String.matches("[0-9]{3}-[0-9]{4}", value)+`. The `+pattern+` MUST evaluate to a string at compile time: it is read there, so text that is no pattern is a compile error rather than a runtime exception. A string literal evaluates to one, and so does a `{plus}{plus}` of literals and of values — a `+let+` with no parameter list (<<fn-declaration>>) — which is how types whose formats share a part hold that part once instead of spelling it out in each of them:
 
 [,souther]
 ----
@@ -4475,7 +4475,23 @@ data SiteId = String
     invariant String.matches(sitePrefix ++ "[0-9A-Za-z]{12}", value)
 ----
 
-What is validated is the string the whole expression evaluates to, not the pieces it is written in. At run time the pattern is compiled on first use and cached, not recompiled on each call. A regex backslash class is written with a doubled backslash (`+"\\d{3}"+`), since `+\d+` is not an escape a string literal reads and a lone backslash before `+d+` is refused (<<string-literal>>). A pattern a run-time value takes part in is therefore not accepted (a future `+Regex+`/`+fromString+` would carry that, returning a case for an invalid pattern); a pattern the compiler can read is what the invariant needs. Regex lives in core rather than a package, since Souther has no package layer. A pathological pattern can backtrack; keep invariant patterns simple.
+What is read is the string the whole expression evaluates to, not the pieces it is written in. A pattern's backslash class is written with a doubled backslash (`+"\\d{3}"+`), since `+\d+` is not an escape a string literal reads and a lone backslash before `+d+` is refused (<<string-literal>>). A pattern a run-time value takes part in is therefore not accepted (a future `+Regex+`/`+fromString+` would carry that, returning a case for an invalid pattern); a pattern the compiler can read is what the invariant needs. Patterns live in core rather than a package, since Souther has no package layer. How long a carrier takes to match is its own, and some carriers take time that grows quickly with the pattern on some inputs; keep invariant patterns simple.
+
+[#string-patterns]
+**A pattern** denotes a set of strings, and nothing else: it says which strings match and not how a match is found or where it sits, which is why the language has no lookaround, no back reference and no flag, and why a matcher's strategy — greedy, reluctant — changes nothing. Every set a pattern denotes is a regular language over scalar values (<<a-string-is-a-sequence-of-scalar-values>>). The compiler reads a pattern once, and what every carrier runs is the set that reading denotes, so no carrier's engine decides what a pattern means.
+
+A pattern is built from these, and from nothing else:
+
+* A character that is not one of `+\ . [ ( ) { | ? * ^ $+` and `{plus}` stands for itself. A character past the basic plane is one character.
+* An escape stands for one character: `+\t+`, `+\n+`, `+\r+`, `+\f+`, `+\a+` (U+0007), `+\e+` (U+001B); `+\0+` followed by one to three octal digits up to 377; `+\x+` followed by two hex digits, or by hex digits in braces up to 10FFFF; `+\u+` followed by four hex digits, where a high surrogate's `+\u+` followed at once by a low one's is the one character the two encode. A backslash before a character that is neither a letter nor a digit stands for that character, so `+\.+` is a full stop and `+\\+` a backslash.
+* `+.+` stands for every character but the five line terminators U+000A, U+000D, U+0085, U+2028 and U+2029.
+* `+\d+` stands for U+0030–U+0039; `+\w+` for U+0041–U+005A, U+0061–U+007A, U+0030–U+0039 and U+005F; `+\s+` for U+0020 and U+0009–U+000D. `+\D+`, `+\W+` and `+\S+` stand for every character the small one does not. These are ASCII and are not String whitespace (<<string-whitespace>>), which `+trim+` and `+words+` read.
+* A class `+[…]+` stands for the characters it lists: characters and escapes, shorthands, and runs `+a-z+` whose ends are one character each and whose low end is not above its high one. A run is over scalar values. `+[^…]+` stands for every character the class does not list, the line terminators included. A `+-+` first or last in a class stands for itself. A class lists at least one character.
+* `+AB+` is a string of `+A+` followed by one of `+B+`; `+A|B+` is either; `+(A)+` and `+(?:A)+` are `+A+`.
+* `+A?+`, `+A*+`, `A{plus}`, `+A{n}+`, `+A{n,}+` and `+A{n,m}+` are between the two counts of `+A+`, the second no smaller than the first. A `+?+` after any of them is allowed and changes nothing.
+* `+^+` and `+$+` are the start and the end of the string. The whole string is matched, so one at the edge adds nothing: `+^[0-9]{3}$+` is `+[0-9]{3}+`. A `+^+` after something every string of which has a character leaves no string. Anywhere its answer would turn on the string matched — after something that may or may not take a character, `+(a|)^b+`; in a repetition that is not of exactly one; a `+$+` before something that must take one — it is refused.
+
+Everything else is refused (<<e1323>>): a group beginning `+(?+` other than `+(?:+`, which is a lookaround, a named group or a flag; `+\1+`–`+\9+` and `+\k+`; `+\p+` and `+\P+`; `+\b+`, `+\B+`, `+\A+`, `+\z+`, `+\Z+`, `+\G+`, `+\R+`; `+\Q+` and `+\E+`; a class inside a class and `+&&+`; a possessive count — `{plus}{plus}`, or any other count followed by `{plus}`; and a backslash before any letter not named above. A pattern nesting groups more deeply than the compiler reads is refused as a limit of the compiler and not of the language (<<e2104>>).
 
 [#string-whitespace]
 **String whitespace** is this fixed set of code points, matching Unicode 18.0's `+White_Space+` property:
@@ -5146,7 +5162,7 @@ The model author does not write this type name in Souther source; they only writ
 [#compiler-pipeline]
 == Compiler structure
 
-[[source-nesting-is-bounded]]A source MUST nest no deeper than the compiler reads. The limit is stated as the compiler's rather than as any one pass's, and it is reached while reading, so it is reported at the token that reached it — including by the formatter, which reads sources it cannot compile. Breaking the nesting into named parts is how a text past it is written instead.
+[[source-nesting-is-bounded]]A source MUST nest no deeper than the compiler reads. The limit is stated as the compiler's rather than as any one pass's, and it is reached while reading, so it is reported at the token that reached it — including by the formatter, which reads sources it cannot compile. Breaking the nesting into named parts is how a text past it is written instead. A `+String.matches+` pattern is held to a limit of the same kind, counted in the groups it nests one inside another and reported at the pattern.
 
 [[source-structural-complexity-is-bounded]]A definition MUST have a structural complexity of 320 or less. Its complexity is counted over what the source wrote:
 
@@ -5916,7 +5932,7 @@ Reported at the value (<<a-temporal-value-is-written-as-a-literal>>). The text i
 This code is about *writing* a temporal. Parts that name no moment are not this: they are values rather than text, so `+Date.fromParts+` answers `+NotADate+` at the position that built them (<<a-temporal-built-from-parts-is-refused-where-the-parts-name-none>>).
 
 [#e1323]
-=== A `String.matches` pattern is not a literal regular expression
+=== A `String.matches` pattern is not a written-out pattern of the language
 
 [,text]
 ----
@@ -5924,7 +5940,14 @@ The pattern of `String.matches` must evaluate to a string at compile time, so it
 there: write a string literal.
 ----
 
-Reported at the pattern (<<a-matches-pattern-is-a-literal-regular-expression>>). A pattern computed at run time could not be checked at all, so writing it out is what makes the check possible; the same code says when what was written is not a valid expression, and when it writes half of a surrogate pair as a character, which no `+String+` holds (<<a-string-holds-no-half-of-a-surrogate-pair>>).
+[,text]
+----
+`String.matches` pattern writes `(?=`, which is not in the pattern language. A pattern says which
+strings match; this says how a match is found or where it sits, or names characters in a way the
+language does not.
+----
+
+Reported at the pattern (<<a-matches-pattern-is-a-literal-regular-expression>>). A pattern computed at run time could not be checked at all, so writing it out is what makes the check possible. The same code says when what was written is no pattern of the language (<<string-patterns>>) — something left open, a count or an escape with no meaning, a construct the language does not have, quoted as it was written, or an anchor whose answer would turn on the string — and when it writes half of a surrogate pair as a character, which no `+String+` holds (<<a-string-holds-no-half-of-a-surrogate-pair>>). A construct is refused because the language does not have it; which of them a host's regular-expression engine would accept has no part in it.
 
 [#e1324]
 === Newtype arithmetic does not follow the units
@@ -7419,6 +7442,14 @@ bounded too, and far above this.
 Reported where reading a source descends past the depth the compiler holds itself to (<<source-nesting-is-bounded>>). It is reached while reading, so it is reported wherever the reading is done, including by the formatter, which reads sources it cannot compile, and at the token that reached it.
 
 Naming the parts is the answer to this one, and what the parts add up to is a separate limit — <<e2107>>, which is far above this one and counted differently. What a pass builds from a source may be deeper than the source was; this limit says nothing about that.
+
+[,text]
+----
+This pattern nests groups deeper than I read, which is 200 groups inside one another. Write it with
+fewer groups around each other.
+----
+
+The same limit for a `+String.matches+` pattern (<<string-patterns>>), reported at the pattern. A pattern is text inside a string literal, so it is read where the call is checked rather than with the source; the language has no depth past which a pattern stops being one, and the limit is the compiler's.
 
 [#e2107]
 === A definition is more complex than the compiler holds

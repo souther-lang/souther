@@ -5,7 +5,7 @@ import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
 import souther.compiler.regex.PatternParser;
 import souther.compiler.regex.PatternRead;
-import souther.compiler.regex.PatternSyntax;
+import souther.compiler.regex.PatternMeaning;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
@@ -63,20 +63,20 @@ public enum StringPredicates {
     MATCHES(Kernel.STRING_MATCHES, null),
 
     /** The strings that hold the written one somewhere. */
-    CONTAINS(Kernel.STRING_CONTAINS, written -> new PatternSyntax.InTurn(List.of(
-            PatternSyntax.anything(), PatternSyntax.text(written), PatternSyntax.anything()))),
+    CONTAINS(Kernel.STRING_CONTAINS, written -> new PatternMeaning.InTurn(List.of(
+            PatternMeaning.anything(), PatternMeaning.text(written), PatternMeaning.anything()))),
 
     /** The strings that begin with it. */
-    STARTS_WITH(Kernel.STRING_STARTS_WITH, written -> new PatternSyntax.InTurn(List.of(
-            PatternSyntax.text(written), PatternSyntax.anything()))),
+    STARTS_WITH(Kernel.STRING_STARTS_WITH, written -> new PatternMeaning.InTurn(List.of(
+            PatternMeaning.text(written), PatternMeaning.anything()))),
 
     /** The strings that end with it. */
-    ENDS_WITH(Kernel.STRING_ENDS_WITH, written -> new PatternSyntax.InTurn(List.of(
-            PatternSyntax.anything(), PatternSyntax.text(written))));
+    ENDS_WITH(Kernel.STRING_ENDS_WITH, written -> new PatternMeaning.InTurn(List.of(
+            PatternMeaning.anything(), PatternMeaning.text(written))));
 
     /** What the strings around the written text may be, or null where the text is a pattern. */
     private interface Around {
-        PatternSyntax accepting(String written);
+        PatternMeaning accepting(String written);
     }
 
     private final Kernel kernel;
@@ -124,7 +124,7 @@ public enum StringPredicates {
      * <p>Never asked of {@link #MATCHES}: what a pattern accepts is what reading the pattern comes
      * to, and a caller holding one has already read it.
      */
-    public PatternSyntax accepting(String written) {
+    public PatternMeaning accepting(String written) {
         if (around == null) {
             throw new IllegalStateException(
                     this + " states a pattern, and what it accepts is the pattern's");
@@ -154,7 +154,7 @@ public enum StringPredicates {
     public sealed interface Reading {
 
         /** The strings the predicate admits at the position it is about. */
-        record Accepting(PatternSyntax accepts) implements Reading {
+        record Accepting(PatternMeaning accepts) implements Reading {
 
             public Accepting {
                 if (accepts == null) {
@@ -165,17 +165,21 @@ public enum StringPredicates {
         }
 
         /**
-         * A pattern it states that this reads no further into, and what stopped the reading.
+         * A pattern it states that is not read, and what the reader said instead.
          *
-         * <p>Only an entry whose text is a pattern arrives here. One that composes what it accepts
-         * out of text has nothing in that to be stopped by.
+         * <p>Only in a program the checker refuses. A pattern that is no pattern of the language, or
+         * one deeper than this compiler reads, is a compile error where the call is checked — but a
+         * reading of the rules goes on over a module with errors in it, and what it meets there is
+         * this rather than an answer nobody could give. Only an entry whose text is a pattern
+         * arrives here. One that composes what it accepts out of text has nothing in that to be
+         * stopped by.
          */
-        record PatternNotRead(PatternRead.Unsupported why) implements Reading {
+        record PatternNotRead(PatternRead why) implements Reading {
 
             public PatternNotRead {
-                if (why == null) {
+                if (why == null || why instanceof PatternRead.Read) {
                     throw new IllegalArgumentException(
-                            "a pattern nothing read was stopped by something");
+                            "a pattern nothing read was stopped by something: " + why);
                 }
             }
         }
@@ -248,7 +252,7 @@ public enum StringPredicates {
      *
      * <p>The whole of the reading, and the one copy of it. What each tree does for itself is reach
      * the call and work out the text — {@code ConstEval} on one side, {@link Terms#folded} on the
-     * other — and from that text onwards there is a single answer, so a construct the subset learns
+     * other — and from that text onwards there is a single answer, so a construct the language gains
      * is learned by both at once.
      */
     private Reading readingOf(String written) {
@@ -256,8 +260,9 @@ public enum StringPredicates {
             return new Reading.Accepting(accepting(written));
         }
         return switch (PatternParser.read(written)) {
-            case PatternRead.Read read -> new Reading.Accepting(read.syntax());
-            case PatternRead.NotRead not -> new Reading.PatternNotRead(not.why());
+            case PatternRead.Read read -> new Reading.Accepting(read.meaning());
+            case PatternRead.Refused refused -> new Reading.PatternNotRead(refused);
+            case PatternRead.TooDeep deep -> new Reading.PatternNotRead(deep);
         };
     }
 

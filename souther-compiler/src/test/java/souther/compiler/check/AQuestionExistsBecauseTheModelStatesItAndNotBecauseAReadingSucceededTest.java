@@ -2,16 +2,14 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.inputs.BlockReason;
+import souther.compiler.ARuleNoReadingTakesIn;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -178,15 +176,14 @@ class AQuestionExistsBecauseTheModelStatesItAndNotBecauseAReadingSucceededTest {
      */
     @Test
     void oneClauseCanBoundOneNumberAndLeaveTheNextStanding() {
-        String deep = "(".repeat(201) + "x" + ")".repeat(201);
         String source = """
                 module example.rooms
 
                 data Code = { a: String, b: String }
                     invariant one =
-                        (String.startsWith("A", a) && String.matches("%s", b))
-                            || (String.startsWith("A", a) && String.matches("%s", b))
-                """.formatted(deep, deep);
+                        (String.startsWith("A", a) && UNREAD)
+                            || (String.startsWith("A", a) && UNREAD)
+                """.replace("UNREAD", ARuleNoReadingTakesIn.narrowly("b"));
         assertEquals(Set.of(CoverageObligation.ADMITTED_VALUES, CoverageObligation.BOUNDARY),
                 raisedIn(source, "Code"),
                 "a line on one number and a question about the next");
@@ -216,41 +213,6 @@ class AQuestionExistsBecauseTheModelStatesItAndNotBecauseAReadingSucceededTest {
                 """;
         assertEquals(Set.of(RuleKey.of("a"), RuleKey.of("b")), boundedIn(source, "Code"),
                 "a line on each, and neither chosen between");
-    }
-
-    /**
-     * Two branches stopped by two things leave both of them standing, all the way to the accounting.
-     *
-     * <p>One branch is written more deeply than this reads and the other is written in a form it
-     * does not enter, and those go out under two different words. Kept as one, which of them an
-     * author is sent to would turn on which branch they wrote first — and each of the two is a thing
-     * that would have to change before the question could be answered, so neither stands for the
-     * other.
-     */
-    @Test
-    void twoBranchesStoppedByTwoThingsLeaveBothStanding() {
-        String deep = "(".repeat(201) + "x" + ")".repeat(201);
-        String source = """
-                module example.rooms
-
-                data Code = String
-                    invariant one =
-                        String.matches("%s", value) || String.matches(value, value)
-                """.formatted(deep);
-
-        assertEquals(List.of(new BlockReason.PatternTooDeeplyNested(),
-                        new BlockReason.UnreadValueRule()),
-                whyUndeterminedIn(source, "Code"),
-                "both of them, in the order the clause writes them");
-    }
-
-    /** What the one clause of {@code named} leaves the line question standing for. */
-    private static List<BlockReason.RuleReadingStopped> whyUndeterminedIn(String source,
-                                                                          String named) {
-        List<BlockReason.RuleReadingStopped> out = new ArrayList<>();
-        rulesOf(source, named).required().values().forEach(required ->
-                required.undetermined().forEach(each -> out.addAll(each.why())));
-        return out;
     }
 
     /** The numbers the one clause of {@code named} states the values stop on. */

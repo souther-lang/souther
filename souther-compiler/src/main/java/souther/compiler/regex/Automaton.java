@@ -130,7 +130,7 @@ final class Automaton {
     }
 
     /**
-     * The machine for {@code syntax}, or null where building it would take more than
+     * The machine for {@code meaning}, or null where building it would take more than
      * {@code mostStates}.
      *
      * <p>Null rather than a smaller machine. A repetition written large is a language with a great
@@ -142,18 +142,11 @@ final class Automaton {
      * pattern is worth this many states is a question about the answer being built, and nothing here
      * knows what that answer is for.
      */
-    static Automaton of(PatternSyntax syntax, Meter meter) {
-        // What the anchors come to, worked out before anything is made of them. Whoever read the
-        // pattern has already asked whether they can be settled, so what comes back here is a tree.
-        PatternSyntax placed = PatternSyntax.withoutAnchors(syntax);
-        if (placed == null) {
-            throw new IllegalArgumentException(
-                    "a pattern whose anchors have no answer is not read, so nothing builds it");
-        }
+    static Automaton of(PatternMeaning meaning, Meter meter) {
         Building building = new Building(meter.making());
         try {
             int start = building.state();
-            int accept = building.build(placed, start);
+            int accept = building.build(meaning, start);
             BitSet accepting = new BitSet();
             accepting.set(accept);
             return new Automaton(building.frozenSteps(), building.frozenFree(), accepting);
@@ -167,7 +160,7 @@ final class Automaton {
      *
      * <p>Walked a symbol at a time, where a symbol is a scalar value — a pair of units is one. Read
      * a unit at a time, a pattern naming a character past the basic plane would want two steps for
-     * what the engine takes in one. Text holding half a pair is no {@code String} and is accepted by
+     * what the pattern takes in one. Text holding half a pair is no {@code String} and is accepted by
      * nothing: no step is over a surrogate.
      */
     boolean accepts(String value) {
@@ -1063,43 +1056,40 @@ final class Automaton {
         }
 
         /**
-         * The states for {@code syntax}, walked into from {@code from}, and where it leaves off.
+         * The states for {@code meaning}, walked into from {@code from}, and where it leaves off.
          *
          * <p>One entry and one exit apiece, which is what makes the shapes compose without any of
-         * them knowing what it is inside. No {@code default}: a shape of syntax added and not built
-         * stops the compile rather than being read as whichever arm is nearest.
+         * them knowing what it is inside. No {@code default}: a shape added and not built stops the
+         * compile rather than being read as whichever arm is nearest.
          */
-        int build(PatternSyntax syntax, int from) {
-            return switch (syntax) {
-                case PatternSyntax.Nothing _ -> from;
+        int build(PatternMeaning meaning, int from) {
+            return switch (meaning) {
+                case PatternMeaning.Nothing _ -> from;
                 // Nothing leads out of it, so nothing after it is reached and no string gets to
                 // the end: a state made and left where it is says exactly that.
-                case PatternSyntax.Never _ -> state();
-                // Read before anything is built, so there are none left by the time this runs.
-                case PatternSyntax.Anchor _ -> throw new IllegalStateException(
-                        "an anchor is read into what it comes to before a machine is made of it");
-                case PatternSyntax.Symbols it -> {
+                case PatternMeaning.Never _ -> state();
+                case PatternMeaning.Symbols it -> {
                     int to = state();
                     step(from, it.held(), to);
                     yield to;
                 }
-                case PatternSyntax.InTurn it -> {
+                case PatternMeaning.InTurn it -> {
                     int at = from;
-                    for (PatternSyntax each : it.parts()) {
+                    for (PatternMeaning each : it.parts()) {
                         at = build(each, at);
                     }
                     yield at;
                 }
-                case PatternSyntax.EitherOf it -> {
+                case PatternMeaning.EitherOf it -> {
                     int out = state();
-                    for (PatternSyntax each : it.arms()) {
+                    for (PatternMeaning each : it.arms()) {
                         int in = state();
                         freely(from, in);
                         freely(build(each, in), out);
                     }
                     yield out;
                 }
-                case PatternSyntax.Repeated it -> repeated(it, from);
+                case PatternMeaning.Repeated it -> repeated(it, from);
             };
         }
 
@@ -1113,7 +1103,7 @@ final class Automaton {
          * repetition of a thing is that thing however many times — so the states are the cost of the
          * language, and the bound a caller passes is what says whether that cost is worth paying.
          */
-        int repeated(PatternSyntax.Repeated it, int from) {
+        int repeated(PatternMeaning.Repeated it, int from) {
             int at = from;
             for (int i = 0; i < it.least(); i++) {
                 at = build(it.what(), at);

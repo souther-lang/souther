@@ -137,18 +137,6 @@ class EveryNotReadReasonIsWrittenBySomeCompilationTest {
             AsACompilationAllows.admittedValues(),
             new PatternPlan.Budget(1, 1));
 
-    /**
-     * Written more deeply than the pattern reader descends, spelled as the reading's own test
-     * spells it ({@code APatternIsReadAsWhatItAcceptsTest}).
-     *
-     * <p>How deep the reader goes is that reader's and is not written here. What is written is a
-     * depth well past it, so that raising the reader's own figure by anything anybody would raise
-     * it by leaves this still deeper — and a run that did pass it fails here saying the word was
-     * not written, which is the reading to have.
-     */
-    private static final String DEEPER_THAN_THE_READING_GOES =
-            "(?:".repeat(500) + "a" + ")".repeat(500);
-
     /** The answers, and the units a behavior over them is written to return. */
     private static final String ANSWER = """
             data Yes
@@ -220,14 +208,6 @@ class EveryNotReadReasonIsWrittenBySomeCompilationTest {
                 behavior route : (code: String) -> Answer
                 let route (code) = if String.startsWith("JP", code) then Yes else No
                 """.formatted(ANSWER), new PatternPlan.Budget(1, 1)));
-        // A pattern bracketed deeper than the reader descends, written in a body so that the rule
-        // is one the measure was reading rather than a question a declaration left standing.
-        out.put(UndividedPosition.Reason.PATTERN_TOO_DEEPLY_NESTED, of("""
-                module m
-                %s
-                behavior f : (code: String) -> Answer
-                let f (code) = if String.matches("%s", code) then Yes else No
-                """.formatted(ANSWER, DEEPER_THAN_THE_READING_GOES)));
         // Values no line can be drawn on: two booleans are equal or they are not, and neither is
         // above the other.
         out.put(UndividedPosition.Reason.UNSUPPORTED_DOMAIN, of("""

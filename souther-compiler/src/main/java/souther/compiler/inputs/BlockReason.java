@@ -2,7 +2,6 @@ package souther.compiler.inputs;
 
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.regex.Meter;
-import souther.compiler.regex.PatternRead;
 
 import java.util.Comparator;
 import souther.compiler.values.UnreadReason;
@@ -216,7 +215,6 @@ public sealed interface BlockReason {
                 case CasePairingNotDetermined _ -> 3;
                 case RuleAboutADerivedValue _ -> 4;
                 case UnreadValueRule _ -> 5;
-                case PatternTooDeeplyNested _ -> 6;
                 case PatternTooCostly _ -> 7;
                 case OrderedExtentTooCostly _ -> 8;
                 case RuleAboutAnElementOfSeveralSequences _ -> 9;
@@ -256,7 +254,7 @@ public sealed interface BlockReason {
                 // And the same operator read the other way does widen it, which is the whole
                 // difference between the two: what the alternatives admit was not read here, so
                 // the position holds whatever a value taking the unread branch may hold.
-                case PatternTooCostly _, PatternTooDeeplyNested _, OrderedExtentTooCostly _,
+                case PatternTooCostly _, OrderedExtentTooCostly _,
                      UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
                      RuleAboutAnElementOfSeveralSequences _, UnreadValueRule _,
                      ValueRuleLeftOpenByAChoice _,
@@ -265,18 +263,16 @@ public sealed interface BlockReason {
         }
 
         /**
-         * One switch over the twelve, and the reason for it being one: a division of these into two
-         * is only reviewable where all twelve answers are visible together.
+         * One switch over all of them, and the reason for it being one: a division of these into
+         * two is only reviewable where every answer is visible together.
          */
         @Override
         default RunSensitivity runSensitivity() {
             return switch (this) {
-                // Three figures this compiler compared a rule against: the states a pattern is
-                // built into, how deeply one may be bracketed, and the machines that say where the
-                // strings it admits stop. A run allowed more of any of them need not stop at the
-                // same rule.
-                case PatternTooCostly _, PatternTooDeeplyNested _,
-                     OrderedExtentTooCostly _ -> RunSensitivity.MAY_CHANGE;
+                // Two figures this compiler compared a rule against: the states a pattern is built
+                // into, and the machines that say where the strings it admits stop. A run allowed
+                // more of either need not stop at the same rule.
+                case PatternTooCostly _, OrderedExtentTooCostly _ -> RunSensitivity.MAY_CHANGE;
                 // And eight where nothing was compared against anything. A form nothing takes
                 // apart, values no line can be drawn on, a rule about a value made from this one, a
                 // rule about an element of one of several sequences, a relation between two
@@ -394,7 +390,6 @@ public sealed interface BlockReason {
             // branch beside a clause that reads.
             case ALTERNATIVE_NOT_READ -> new ValueRuleLeftOpenByAChoice();
             case PATTERN_TOO_COSTLY -> new PatternTooCostly();
-            case PATTERN_TOO_DEEPLY_NESTED -> new PatternTooDeeplyNested();
             // Refused above, each of them, and named here so that a reason added to the vocabulary
             // stops this rather than arriving as whichever arm is nearest.
             case EXACT_VALUES_TOO_COSTLY, NOT_REACHED, NOT_REACHED_PAST_DEPTH_LIMIT ->
@@ -423,8 +418,7 @@ public sealed interface BlockReason {
             // the vocabulary is a decision about which of the two halves it is, and a default takes
             // that decision by arriving at whichever arm was written last.
             case EXACT_VALUES_TOO_COSTLY, RELATES_TWO_POSITIONS, FORM_NOT_READ,
-                 ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY, PATTERN_TOO_DEEPLY_NESTED ->
-                    ofAQuestionStandingOn(why);
+                 ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY -> ofAQuestionStandingOn(why);
         };
     }
 
@@ -444,8 +438,8 @@ public sealed interface BlockReason {
     static QuestionStandingReason ofAQuestionStandingOn(souther.compiler.values.UnreadReason why) {
         return switch (why) {
             case EXACT_VALUES_TOO_COSTLY -> new ExactValuesTooCostly();
-            case RELATES_TWO_POSITIONS, FORM_NOT_READ, ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY,
-                 PATTERN_TOO_DEEPLY_NESTED -> ofARuleTheValueReadingLeft(why);
+            case RELATES_TWO_POSITIONS, FORM_NOT_READ, ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY ->
+                    ofARuleTheValueReadingLeft(why);
             case NOT_REACHED, NOT_REACHED_PAST_DEPTH_LIMIT -> throw new IllegalArgumentException(
                     "a reason about " + why.about() + " leaves no question of a rule standing: "
                             + why);
@@ -470,7 +464,7 @@ public sealed interface BlockReason {
             // Refused above, each of them, and named here so that a reason added to the vocabulary
             // stops this rather than arriving as whichever arm is nearest.
             case RELATES_TWO_POSITIONS, FORM_NOT_READ, ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY,
-                 PATTERN_TOO_DEEPLY_NESTED, NOT_REACHED, NOT_REACHED_PAST_DEPTH_LIMIT ->
+                 NOT_REACHED, NOT_REACHED_PAST_DEPTH_LIMIT ->
                     throw new IllegalStateException("refused above: " + why);
         };
     }
@@ -644,33 +638,19 @@ public sealed interface BlockReason {
     record PatternTooCostly() implements RuleReadingStopped {}
 
     /**
-     * A rule written more deeply nested than this compiler reads.
-     *
-     * <p>Its own case beside the two above, and the difference is again what an author does about
-     * it. {@link UnreadValueRule} sends them to the construct nothing here enters, and every
-     * construct in this one is entered; {@link PatternTooCostly} says the machine would be too
-     * large, and this never reached one. What is left is the brackets, which is something they can
-     * write differently.
-     */
-    record PatternTooDeeplyNested() implements RuleReadingStopped {}
-
-    /**
      * What a pattern nothing read is, in the words a rule left unread is said in.
      *
-     * <p>Here because two readings ask it. A declaration's clauses and a behavior's body both write
-     * rules whose text is a pattern, and both are stopped by the same things — so what an author is
-     * told is a fact about the pattern and about this compiler's reader, and not about which of the
-     * two tree walks met it. Written once per reader, the day one of them learned that a construct
-     * is the reading's own limit rather than one it has no word for, an author would be sent to the
-     * brackets by one reading and to a construct that was never the trouble by the other.
+     * <p>Only in a module the checker refuses. A pattern that is no pattern of the language, and one
+     * nested more deeply than the compiler reads, are compile errors where the call is checked; a
+     * reading of the rules goes on over a module with errors in it, and what it says of such a
+     * pattern is that the rule was not read, whichever of the two it was. The error beside it says
+     * which.
      *
-     * <p>Two answers and not one per code. A pattern written more deeply than this reads is the
-     * reading's own limit and is said as itself; every other construct is one the subset does not
-     * hold, which is a rule this could not read like any other.
+     * <p>Here because three readings ask it — a declaration's clauses, a behavior's body and what a
+     * behavior's rules divide — and all of them meet the same patterns.
      */
-    static RuleReadingStopped forAPatternNotRead(PatternRead.Unsupported why) {
-        return why == PatternRead.Unsupported.NESTED_TOO_DEEPLY
-                ? new PatternTooDeeplyNested() : new UnreadValueRule();
+    static RuleReadingStopped forAPatternNotRead() {
+        return new UnreadValueRule();
     }
 
     /**

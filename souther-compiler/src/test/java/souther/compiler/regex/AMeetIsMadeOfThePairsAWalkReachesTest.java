@@ -20,8 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AMeetIsMadeOfThePairsAWalkReachesTest {
 
     private static Automaton of(String regex, Meter meter) {
-        PatternSyntax syntax =
-                assertInstanceOf(PatternRead.Read.class, PatternParser.read(regex), regex).syntax();
+        PatternMeaning syntax =
+                assertInstanceOf(PatternRead.Read.class, PatternParser.read(regex), regex).meaning();
         Automaton made = Automaton.of(syntax, meter);
         assertNotNull(made, regex);
         return made;

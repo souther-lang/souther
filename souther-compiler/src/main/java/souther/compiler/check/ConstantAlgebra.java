@@ -10,8 +10,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Pattern;
-import java.util.regex.PatternSyntaxException;
+import souther.compiler.regex.PatternParser;
+import souther.compiler.regex.PatternPlan;
+import souther.compiler.regex.PatternRead;
+import souther.compiler.regex.Recognizer;
 import souther.unicode.Normalization;
 import souther.unicode.ScalarValues;
 
@@ -296,81 +298,33 @@ final class ConstantAlgebra {
     }
 
     /**
-     * Whether {@code s} matches {@code pattern}, or empty where answering it here would cost more
-     * than leaving it to the run time.
+     * Whether {@code s} matches {@code pattern}, or empty where this fold does not settle it.
      *
-     * <p>A backtracking engine can take exponential time on a pattern written to make it, and can
-     * exhaust the stack on one written to make that. Neither is this compiler's to survive by luck:
-     * an unbounded attempt would end the compilation rather than this fold, and what would end is a
-     * compile of a program nothing is wrong with. So the subject is handed over through a reader
-     * that stops the engine past a budget, and what the engine spends before answering is what
-     * decides whether the answer is worth having.
+     * <p>Answered by the language the pattern means, the one the analysis reads and every output
+     * lowers, so what the compiler folds a call to is what the run time answers for it. A walk over
+     * a machine reads each symbol once, so what could be expensive is building the machine, and
+     * that is what the allowance bounds.
      *
-     * <p>What each of the three refusals answers is the same thing: this fold does not settle the
-     * match, and the run-time check does. None of them is about the program.
+     * <p>Empty for text that is no pattern of the language, for a pattern deeper than the compiler
+     * reads, and for a machine past the allowance. The first two are refused where the call is
+     * checked, and a fold reached before that check has nothing to answer with; the third leaves
+     * the match to the run time. None of them is an answer about the program.
      */
     private static Optional<Object> matches(String pattern, String s) {
-        try {
-            return Optional.of(COMPILED.computeIfAbsent(pattern, Pattern::compile)
-                    .matcher(new Budgeted(s)).matches());
-        } catch (PatternSyntaxException | Budgeted.Spent | StackOverflowError _) {
-            return Optional.empty();   // a bad pattern is reported by the check that compiles it
-        }
+        return RECOGNIZERS.computeIfAbsent(pattern, ConstantAlgebra::recognizerOf)
+                .map(recognizer -> recognizer.accepts(s));
     }
 
-    /** Patterns already compiled. A declaration's pattern is asked about once per construction from
-     * it and once per reading of a branch, and compiling one is the only expensive thing here. */
-    private static final Map<String, Pattern> COMPILED = new ConcurrentHashMap<>();
-
-    /** A subject the regex engine may only read so many times. */
-    private static final class Budgeted implements CharSequence {
-
-        /** Enough for any pattern written to say what a value is, and far short of what one written
-         * to backtrack costs. */
-        private static final int READS = 200_000;
-
-        /** Raised where the engine has read past the budget. Not an error in the program: it says
-         * only that this is not answered here. */
-        static final class Spent extends RuntimeException {
-            private static final long serialVersionUID = 1L;
-            Spent() {
-                super(null, null, false, false);
-            }
+    private static Optional<Recognizer> recognizerOf(String pattern) {
+        if (!(PatternParser.read(pattern) instanceof PatternRead.Read read)) {
+            return Optional.empty();
         }
-
-        private final String of;
-        private final int[] read;
-
-        Budgeted(String of) {
-            this(of, new int[1]);
-        }
-
-        private Budgeted(String of, int[] read) {
-            this.of = of;
-            this.read = read;
-        }
-
-        @Override
-        public char charAt(int at) {
-            if (++read[0] > READS) {
-                throw new Spent();
-            }
-            return of.charAt(at);
-        }
-
-        @Override
-        public int length() {
-            return of.length();
-        }
-
-        @Override
-        public CharSequence subSequence(int from, int to) {
-            return new Budgeted(of.substring(from, to), read);
-        }
-
-        @Override
-        public String toString() {
-            return of;
-        }
+        return Optional.ofNullable(Recognizer.of(read.meaning(),
+                PatternPlan.Budget.OF_A_FOLD.meter()));
     }
+
+    /** What each pattern means, as the machine a fold walks. A declaration's pattern is asked about
+     * once per construction from it and once per reading of a branch, and building the machine is
+     * the only expensive thing here. */
+    private static final Map<String, Optional<Recognizer>> RECOGNIZERS = new ConcurrentHashMap<>();
 }

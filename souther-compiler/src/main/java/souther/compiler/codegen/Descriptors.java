@@ -207,6 +207,10 @@ final class Descriptors {
     static final ClassDesc CD_Instant = ClassDesc.of("java.time.Instant");
     static final ClassDesc CD_Lists = ClassDesc.of("souther.runtime.Lists");
     static final ClassDesc CD_Strings = ClassDesc.of("souther.runtime.Strings");
+    /** {@code Strings.matches(String subject, String pattern)}: whether the whole of the subject
+     *  matches a pattern the compiler wrote. */
+    static final MethodTypeDesc MTD_strings_matches =
+            MethodTypeDesc.of(ConstantDescs.CD_boolean, ConstantDescs.CD_String, ConstantDescs.CD_String);
     static final ClassDesc CD_Maps = ClassDesc.of("souther.runtime.Maps");
     static final ClassDesc CD_Sets = ClassDesc.of("souther.runtime.Sets");
     static final ClassDesc CD_Representations = ClassDesc.of("souther.runtime.Representations");

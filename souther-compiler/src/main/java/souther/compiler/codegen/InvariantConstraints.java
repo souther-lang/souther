@@ -9,6 +9,8 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
 import souther.compiler.numeric.EndSide;
+import souther.compiler.regex.PatternParser;
+import souther.compiler.regex.PatternRead;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
@@ -275,14 +277,15 @@ public final class InvariantConstraints {
     }
 
     private Optional<Constraint> ofCall(Core.PreservedCall call, Type base) {
-        // `String.matches(p, value)` is whole-string anchored (Strings.matches), and so is Raoh's
-        // pattern (Matcher.matches), so the two accept the same strings. The regex is asked for the
-        // same way the check asks — one reading of which expressions are compile-time strings and of
-        // what one composes to, so a pattern the check accepted cannot arrive here unrecognised and
-        // lose its constraint. It has been compiled once at check time, so it is known well-formed.
+        // Raoh's pattern constraint is a whole-string match (Matcher.matches), and what it is handed
+        // is the pattern's meaning written for that engine (JavaPatterns) — the same text the run
+        // time's check runs, so the two accept the same strings. The text is asked for the same way
+        // the check asks — one reading of which expressions are compile-time strings and of what
+        // one composes to — and read by the language's one reader, so a pattern the check accepted
+        // cannot arrive here unrecognised and lose its constraint.
         if (base == Type.STRING && applies(call, Kernel.STRING_MATCHES) && call.args().size() == 2
                 && isValue(call.args().get(1))) {
-            return Optional.ofNullable(read.textOf(call.args().get(0))).map(Pattern::new);
+            return Optional.ofNullable(read.textOf(call.args().get(0))).map(InvariantConstraints::matching);
         }
         // `List.allDistinctBy(x -> x, value)` says of the elements what Raoh's `unique()` says of them:
         // no two are equal, by the same value equality (spec §collections, ADR-0009). A projection that
@@ -354,6 +357,16 @@ public final class InvariantConstraints {
 
     private static boolean isValue(Core e) {
         return Core.withoutStanding(e) instanceof Core.Read read && read.name().equals(VALUE);
+    }
+
+    /** The constraint for a pattern the check read. A codec is generated only for a module whose
+     *  check is sound, so text that is no pattern here is the check's contract broken. */
+    private static Pattern matching(String text) {
+        if (!(PatternParser.read(text) instanceof PatternRead.Read reading)) {
+            throw new IllegalStateException(
+                    "a codec is generated for a checked module, whose patterns were read: " + text);
+        }
+        return new Pattern(JavaPatterns.of(reading.meaning()));
     }
 
     /**

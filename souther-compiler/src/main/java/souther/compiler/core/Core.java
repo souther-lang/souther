@@ -16,6 +16,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.regex.PatternMeaning;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -683,14 +684,23 @@ public sealed interface Core {
             INSTANCE
         }
 
-        /** The pattern text {@code String.matches}'s first argument folds to, proven acceptable to
-         * {@code java.util.regex.Pattern} where the call was checked: the checker folds the argument
-         * under the bindings in force, so an output reads the answer instead of evaluating the
-         * argument a second time. */
-        record StringMatches(String pattern) implements KernelFact {
+        /**
+         * What the pattern of {@code String.matches} means, read where the call was checked.
+         *
+         * <p>The checker folds the first argument under the bindings in force and reads the text it
+         * comes to as a pattern of the language (spec §string-patterns); the call exists only where
+         * that reading is a pattern. What an output lowers is {@code meaning}, so no output reads
+         * pattern text, and every output answers for the strings the checker read the pattern as.
+         *
+         * @param written the text the argument folds to, as the author wrote it. Provenance only: an
+         *                output may quote it and never reads it as a pattern
+         * @param meaning which strings the pattern accepts
+         */
+        record StringMatches(String written, PatternMeaning meaning) implements KernelFact {
 
             public StringMatches {
-                Objects.requireNonNull(pattern, "a settled pattern is settled to some text");
+                Objects.requireNonNull(written, "a settled pattern is settled from some text");
+                Objects.requireNonNull(meaning, "a settled pattern means some set of strings");
             }
         }
 

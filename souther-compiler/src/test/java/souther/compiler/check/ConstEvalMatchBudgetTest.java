@@ -20,10 +20,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Folding {@code String.matches} answers where answering is cheap and declines where it is not. A
- * backtracking engine recurses over its subject, and the walk that asks this fails open on a
- * {@code RuntimeException} — which a {@code StackOverflowError} is not — so an unbounded attempt
- * would end the compilation rather than the fold.
+ * Folding {@code String.matches} answers where answering is cheap and declines where it is not.
+ *
+ * <p>The fold walks the machine the pattern means, so a long subject is a long walk and nothing
+ * else: each symbol is read once, and no subject is past what the fold answers. What may cost more
+ * than the fold will spend is building the machine, and a pattern whose machine is past the
+ * allowance leaves the match to the run time.
  */
 class ConstEvalMatchBudgetTest {
 
@@ -49,10 +51,24 @@ class ConstEvalMatchBudgetTest {
         assertEquals(Optional.of(false), fold("[0-9][A-E]", "zz"));
     }
 
+    /** A subject a backtracking engine would recurse too deeply over is a walk like any other. */
     @Test
-    void aSubjectPastTheBudgetIsLeftToTheRunTime() {
-        // Far past what the budget allows the engine to read, and far past what it can recurse over
-        assertTrue(fold("(a|b)*", "a".repeat(100_000)).isEmpty(),
+    void aLongSubjectIsAnswered() {
+        assertEquals(Optional.of(true), fold("(a|b)*", "a".repeat(100_000)));
+        assertEquals(Optional.of(false), fold("(a|a)*b", "a".repeat(100_000)));
+    }
+
+    /** A machine past what the fold may build is left to the run time. */
+    @Test
+    void aPatternPastTheAllowanceIsLeftToTheRunTime() {
+        assertTrue(fold("a{60000}", "a").isEmpty(),
                 "declined rather than answered, and the compilation goes on");
+    }
+
+    /** Text that is no pattern is refused where the call is checked; the fold has nothing to answer
+     *  with. */
+    @Test
+    void textThatIsNoPatternIsNotFolded() {
+        assertTrue(fold("(a)\\1", "aa").isEmpty());
     }
 }

@@ -337,8 +337,8 @@ public final class BehaviorSetStatements {
                     new Outcome.OfADistinction(new Asked(each.origin(), each.statement(), term,
                             new AdmittedPlan.Pattern(PatternPlan.of(it.accepts())),
                             new AdmittedPlan.Pattern(PatternPlan.notMatching(it.accepts()))));
-            case StringPredicates.Reading.PatternNotRead it ->
-                    new Outcome.NotGot(term, BlockReason.forAPatternNotRead(it.why()));
+            case StringPredicates.Reading.PatternNotRead _ ->
+                    new Outcome.NotGot(term, BlockReason.forAPatternNotRead());
             // A rule whose text this compiler did not work out is a rule it did not read. Said as
             // anything about the values, it would be a distinction reported as absent from the model
             // when what is absent is this compiler's reading of it.

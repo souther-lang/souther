@@ -44,7 +44,7 @@ class AReadingShortOfAPositionPublishesNoPositiveAnswerTest {
     private static PlannedValues<String> aPatternWorthBuilding() {
         PatternRead said = PatternParser.read("a{300}");
         return PlannedValues.at(HERE, new AdmittedPlan.Pattern(PatternPlan.of(
-                assertInstanceOf(PatternRead.Read.class, said).syntax())));
+                assertInstanceOf(PatternRead.Read.class, said).meaning())));
     }
 
     /** Room for a machine of {@code states}, which is what settles whether the pattern is built. */

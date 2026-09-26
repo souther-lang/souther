@@ -102,18 +102,12 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // the same two things and is not a rule without a line. This table is what a rule leaves,
         // and that one is not about a rule.
         //
-        // The two figures a rule is compared against, and the only two rows here a wider run may
-        // get past: the states a pattern is built into, and how deeply one may be bracketed.
-        // Neither figure is one a caller can set today, which is not the question — what a wider
-        // run is, is the allowances widened, and whether a knob exists for one is a fact about
-        // which knobs exist this month.
+        // A figure a rule is compared against, and a row here a wider run may get past: the states
+        // a pattern is built into. It is not one a caller can set today, which is not the question
+        // — what a wider run is, is the allowances widened, and whether a knob exists for one is a
+        // fact about which knobs exist this month.
         table.put("PatternTooCostly", "EXACT_VALUES_TOO_COSTLY/MAY_CHANGE");
-        // And a rule this would not read that far in, which is short of both for the same reason:
-        // what the rule says is unknown, so what it would have divided or bounded is unknown too.
-        // Its own word and not the one above — that one reached the values and this did not.
-        table.put("PatternTooDeeplyNested",
-                "PATTERN_TOO_DEEPLY_NESTED/MAY_CHANGE");
-        // And the third figure, which is the further work of asking where the strings a rule was
+        // And the second figure, which is the further work of asking where the strings a rule was
         // read to actually stop. One word with `PatternTooCostly` because out there both are the
         // values coming out wider than the rules leave them; its own row because what was too much
         // is a machine nobody wrote, and an author sent after their pattern would find one this
@@ -413,7 +407,6 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.EndLeftOpenByAChoice(),
                 new BlockReason.ValueRuleLeftOpenByAChoice(),
                 new BlockReason.PatternTooCostly(),
-                new BlockReason.PatternTooDeeplyNested(),
                 new BlockReason.OrderedExtentTooCostly(
                         souther.compiler.regex.Meter.Stopped.ONE_MACHINE),
                 new BlockReason.ExactValuesTooCostly(),

@@ -1,100 +1,110 @@
 package souther.compiler.regex;
 
 /**
- * What came of reading a pattern's syntax.
+ * What came of reading a pattern.
  *
- * <p>Two answers and no third. Either the whole of the pattern is in the subset this reads, and what
- * comes back says which strings it accepts; or something in it is not, and what comes back says
- * which kind of thing that was. A pattern read in part is not an answer: a tree of the constructs
- * that were understood accepts a language the author did not write, and every reader downstream
- * would be holding a set narrower than the rule.
+ * <p>Three answers, and they are about three different things. {@link Read} is a pattern of the
+ * language, as what it means. {@link Refused} is text that is no pattern of the language, and says
+ * what in it is not. {@link TooDeep} is a pattern the language has and this compiler does not read,
+ * which is a limit of the compiler: an author told that their pattern is not in the language would
+ * go looking for a construct when every construct in it is one the language has.
+ *
+ * <p>A pattern read in part is not an answer: a tree of the constructs that were understood accepts
+ * a language the author did not write, and every reader downstream would be holding a set narrower
+ * than the rule.
  */
 public sealed interface PatternRead {
 
     /** The whole pattern, as the strings it accepts. */
-    record Read(PatternSyntax syntax) implements PatternRead {
+    record Read(PatternMeaning meaning) implements PatternRead {
 
         public Read {
-            if (syntax == null) {
+            if (meaning == null) {
                 throw new IllegalArgumentException("a pattern that was read says what it accepts");
             }
         }
     }
 
-    /** Something in it this does not read, and which kind of thing. */
-    record NotRead(Unsupported why) implements PatternRead {
+    /**
+     * Text that is no pattern of the language, and what stopped the reading.
+     *
+     * @param why       which kind of thing it is
+     * @param from      where in the text the construct that stopped it begins, in chars
+     * @param construct the construct as written, which is empty where the text ended before a
+     *                  construct it had begun was whole
+     */
+    record Refused(Refusal why, int from, String construct) implements PatternRead {
 
-        public NotRead {
-            if (why == null) {
-                throw new IllegalArgumentException("a pattern nothing read was stopped by something");
+        public Refused {
+            if (why == null || construct == null || from < 0) {
+                throw new IllegalArgumentException("a pattern refused was stopped by something");
             }
         }
     }
 
     /**
-     * Which construct stopped the reading.
+     * A pattern written more deeply than this compiler reads.
      *
-     * <p>Told apart by what an author wrote rather than by what this compiler would have to gain.
-     * Which of these is worth reading one day is a question about the words in front of somebody,
-     * and a reason saying only that something was unsupported answers none of it.
+     * <p>Not a refusal: the language has no depth past which a pattern stops being one. Every part
+     * that works a pattern out — the reader, the machines built from it, what an output lowers it to —
+     * walks it by its depth, and this is where the compiler says how deep it will go.
      *
-     * <p>Not a promise to anyone outside. What a document writes for a rule this could not read is
-     * one word, said where a document is written; these are for the reading that produced them and
-     * for whoever comes to widen the subset.
+     * @param deepest how deep a pattern may be written
      */
-    enum Unsupported {
+    record TooDeep(int deepest) implements PatternRead {}
+
+    /**
+     * What makes text no pattern of the language.
+     *
+     * <p>Told apart by what an author wrote. The first group is text that is no pattern at all —
+     * something left open, a count or an escape with no meaning. The rest is text that would be a
+     * pattern in some other language and is not one in this: each is a construct that says something
+     * about how a match is found or where it sits, which no set of strings states, or a way of
+     * naming symbols this language does not have.
+     */
+    enum Refusal {
+
+        /** A bracket, brace or parenthesis with nothing closing it, a class with nothing in it, or
+         *  a repetition with nothing before it to repeat. */
+        SOMETHING_UNCLOSED,
+
+        /** A repetition whose count is no count: one with no digits, one too large to hold, a
+         *  ceiling below its floor, or a run whose end comes before its start. */
+        A_COUNT_THIS_CANNOT_READ,
+
+        /** An escape with no meaning, or one with nothing after it. */
+        AN_ESCAPE_THIS_DOES_NOT_READ,
+
+        /**
+         * An escape writing half of a surrogate pair — {@code \\uD800} on its own,
+         * {@code \x{DC00}}.
+         *
+         * <p>No {@code String} holds such a character, so a pattern naming one says something about
+         * text that never arrives.
+         */
+        A_CHARACTER_NO_STRING_HOLDS,
 
         /** A group that says something about the match rather than about the strings — a lookahead,
-         *  a lookbehind, a named or capturing-by-name group, a flag group. */
+         *  a lookbehind, a named group, a flag group. */
         A_GROUP_ABOUT_THE_MATCH,
 
         /** A reference back to what another part of the pattern matched, which no set of strings
          *  states. */
         A_BACK_REFERENCE,
 
-        /** A property of a character rather than a run of them — `\p{Alpha}`, `\P{...}`. The subset
-         *  here names symbols by their numbers and has nothing to ask a property with. */
+        /** A property of a character — {@code \p{Alpha}}, {@code \P{...}}. The language names
+         *  symbols by their numbers and has nothing to ask a property with. */
         A_CHARACTER_PROPERTY,
 
-        /** A boundary — `\b`, `\B`, `\A`, `\z`, `\Z`, `\G`. It is about where a match sits in the
-         *  input, and the whole of the input is what is matched here. */
+        /** A boundary — {@code \b}, {@code \B}, {@code \A}, {@code \z}, {@code \Z}, {@code \G}. It
+         *  is about where a match sits in the input, and the whole of the input is what is matched. */
         A_BOUNDARY,
 
-        /** A quotation — `\Q ... \E` — which turns off the reading of what is inside it. */
+        /** A quotation — {@code \Q ... \E} — which turns off the reading of what is inside it. */
         A_QUOTATION,
 
-        /** Classes joined by `&&`, which is an operation over classes this does not read. */
+        /** A class inside a class, or classes joined by {@code &&}. */
         A_CLASS_OF_CLASSES,
-
-        /** A repetition of more than this reads: a count with no digits, or one past what a whole
-         *  number holds. */
-        A_COUNT_THIS_CANNOT_READ,
-
-        /** A bracket, brace or parenthesis with nothing closing it, or a class with nothing in it. */
-        SOMETHING_UNCLOSED,
-
-        /** An escape this has no meaning for, or one with nothing after it. */
-        AN_ESCAPE_THIS_DOES_NOT_READ,
-
-        /**
-         * An escape writing half of a surrogate pair — {@code \\uD800} on its own, {@code \x{DC00}}.
-         *
-         * <p>Not a construct outside the subset: no {@code String} holds such a character, and a
-         * pattern writing one is refused where it is checked. Stopped at here for a reader that
-         * meets the pattern before the check does.
-         */
-        A_CHARACTER_NO_STRING_HOLDS,
-
-        /**
-         * An anchor whose answer is not a property of the pattern.
-         *
-         * <p>{@code ^} and {@code $} are read where the shape says whether everything on that side
-         * of them takes a symbol or nothing on that side does. {@code (a|)^b} is neither: which
-         * strings it accepts is settled by which arm a string took, and this compiler has no shape
-         * for a language written that way. So the pattern is not read, rather than read as one of
-         * the two answers it is not.
-         */
-        AN_ANCHOR_THIS_CANNOT_PLACE,
 
         /**
          * A repetition that gives nothing back.
@@ -102,12 +112,18 @@ public sealed interface PatternRead {
          * <p>{@code ++}, {@code *+} and the rest. Unlike a reluctant marker, which changes the
          * order a matcher tries things and not which strings come out, a possessive one takes what
          * it can and never tries again — so a body that accepts the empty string takes it once and
-         * stops, and the language is smaller than the same repetition without the marker.
+         * stops, and which strings it accepts depends on how a matcher walks.
          */
         A_POSSESSIVE_REPETITION,
 
-        /** Written more deeply than this reads, which is a limit of the reading and not of the
-         *  language. */
-        NESTED_TOO_DEEPLY
+        /**
+         * An anchor whose answer is not a property of the pattern.
+         *
+         * <p>{@code ^} and {@code $} are read where the shape says whether everything on that side
+         * of them takes a symbol or nothing on that side does. {@code (a|)^b} is neither: which
+         * strings it accepts is settled by which arm a string took, and the language has no shape
+         * for a set written that way.
+         */
+        AN_ANCHOR_THIS_CANNOT_PLACE
     }
 }

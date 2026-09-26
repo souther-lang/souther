@@ -7,6 +7,7 @@ import net.unit8.raoh.Path;
 import net.unit8.raoh.Result;
 import net.unit8.raoh.decode.Decoder;
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
 
@@ -20,6 +21,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -33,10 +35,10 @@ import java.util.stream.Stream;
  *
  * <p>What the pattern must be is that it evaluates to a string at compile time, which a literal does
  * and so does a {@code ++} of literals and of named string values. Two readers ask for that string —
- * the check, which compiles the regex to prove it well-formed, and the codec derivation, which
- * carries it to the boundary as Raoh's {@code pattern} constraint — and they must not disagree about
- * which patterns are compile-time strings or about what string one composes to. So each expression
- * here is run through both.
+ * the check, which reads it as a pattern of the language, and the codec derivation, which carries
+ * what it means to the boundary as Raoh's {@code pattern} constraint — and they must not disagree
+ * about which patterns are compile-time strings or about what string one composes to. So each
+ * expression here is run through both.
  */
 class CompileComposedPatternTest {
 
@@ -63,7 +65,9 @@ class CompileComposedPatternTest {
 
     private static final String MATCHING = "123-4567";
     private static final String NOT_MATCHING = "12-345";
-    private static final String COMPOSED = "[0-9]{3}-[0-9]{4}";
+    /** The composed pattern as the boundary carries it: what it means, written by the compiler, and
+     *  not the text of either part. */
+    private static final String COMPOSED = "[0-9]{3}\\-[0-9]{4}";
 
     /** The check's reading: the composed pattern is a compile-time string, so the module compiles and
      *  the regex that runs is the composed one. */
@@ -118,8 +122,8 @@ class CompileComposedPatternTest {
                     invariant String.matches("[0-9]{3}" ++ "[", value)
                 """;
         CompileException ex = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertTrue(ex.getMessage().contains("not a valid regular expression"),
-                "the composed regex is what is compiled: " + ex.getMessage());
+        assertInstanceOf(TypeMessage.ThePatternEndsBeforeItIsWhole.class, ex.diagnostic().said(),
+                "the composed pattern is what is read: " + ex.getMessage());
     }
 
     /** The part held once may be held by another module: what a value denotes is settled where it is
@@ -172,7 +176,8 @@ class CompileComposedPatternTest {
                 behavior check : (i: In) -> Out constructs Out
                 let check (i) = Out(true)
                 """));
-        assertTrue(ex.getMessage().contains("not a valid regular expression"), ex.getMessage());
+        assertInstanceOf(TypeMessage.ThePatternEndsBeforeItIsWhole.class, ex.diagnostic().said(),
+                ex.getMessage());
     }
 
     /** A pattern only run time can produce is still refused: the composition rule extends what counts

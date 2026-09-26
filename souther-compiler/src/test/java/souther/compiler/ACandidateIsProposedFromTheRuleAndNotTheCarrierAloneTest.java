@@ -523,10 +523,11 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
      * string has at once, the values reading follows them and shows the declaration admits nothing,
      * and a model refused before a search is asked for is not one this can say anything about.
      *
-     * <p>What no pair clears is the ninth rule, which this compiler cannot take apart. Strings
-     * clearing all nine exist — a run of b's of even length is one — so the declaration is not an
-     * empty one, and what stops a row is that nothing here derives a value from a rule it could not
-     * read. Held that way because the rules it can read it meets with each other: eight formats that
+     * <p>What no pair clears is the ninth rule, which this compiler cannot take apart: what it looks
+     * for is made of the value itself. Whether any string clears all nine is a question about that
+     * rule, and it is not one the values reading answers — so what stops a row is that nothing here
+     * derives a value from a rule it could not read, and not that the declaration was shown to hold
+     * none. Held that way because the rules it can read it meets with each other: eight formats that
      * hold together are eight a proposal clears at once, and a pair built from them is a row.
      *
      * <p>Written two ways a map is said not to be empty. {@code /= 0} is read as a minimum too — a
@@ -540,7 +541,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
             formats += "    invariant p%d = String.matches(\"[a-h]{%d,}\", value)\n"
                     .formatted(i, i);
         }
-        formats += "    invariant twice = String.matches(\"(b+)\\\\1\", value)\n";
+        formats += "    invariant twice = " + ARuleNoReadingTakesIn.narrowly("value") + "\n";
         souther.compiler.partition.FillResult filled = generated("""
                 module nd.gen
 

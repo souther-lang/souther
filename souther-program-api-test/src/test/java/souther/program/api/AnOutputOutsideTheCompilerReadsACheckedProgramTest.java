@@ -13,6 +13,8 @@ import souther.compiler.program.CheckedHelper;
 import souther.compiler.program.CheckedImplementation;
 import souther.compiler.program.CheckedModule;
 import souther.compiler.program.CheckedProgram;
+import souther.compiler.regex.PatternParser;
+import souther.compiler.regex.PatternRead;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.LanguageCaseId;
 import souther.compiler.types.Type;
@@ -846,8 +848,11 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
         Core.KernelFact.StringMatches pattern = assertInstanceOf(
                 Core.KernelFact.StringMatches.class, factOf(matches),
                 "the checker settled this call's pattern, and the call carries it");
-        assertEquals("AB-[0-9]{4}", pattern.pattern(),
+        assertEquals("AB-[0-9]{4}", pattern.written(),
                 "settled under the binding the body holds in force, not read back from the argument");
+        assertEquals(new PatternRead.Read(pattern.meaning()), PatternParser.read("AB-[0-9]{4}"),
+                "and what it means is what the language's reader reads that text as, so an output"
+                        + " lowers the meaning and reads no text");
     }
 
     /**

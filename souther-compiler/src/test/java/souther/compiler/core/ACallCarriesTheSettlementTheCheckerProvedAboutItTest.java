@@ -5,6 +5,7 @@ import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.regex.PatternMeaning;
 
 import org.junit.jupiter.api.Test;
 
@@ -57,7 +58,7 @@ class ACallCarriesTheSettlementTheCheckerProvedAboutItTest {
     }
 
     private static Core.CallSettlement.AtKernel matching(String pattern) {
-        return at(TWO_STRINGS, new Core.KernelFact.StringMatches(pattern));
+        return at(TWO_STRINGS, new Core.KernelFact.StringMatches(pattern, PatternMeaning.text(pattern)));
     }
 
     @Test
@@ -74,7 +75,8 @@ class ACallCarriesTheSettlementTheCheckerProvedAboutItTest {
     void aCallToAnyOtherKernelIsRefusedAPattern() {
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> new Core.Call(TRIM, List.of(str("  x  ")), UNWRITTEN,
-                        at(List.of(Type.STRING), new Core.KernelFact.StringMatches("x")),
+                        at(List.of(Type.STRING), new Core.KernelFact.StringMatches("x",
+                                PatternMeaning.text("x"))),
                         Type.STRING, POS));
 
         assertTrue(e.getMessage().contains("String.trim"), e.getMessage());

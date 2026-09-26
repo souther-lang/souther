@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ARuleNoReadingTakesIn;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -80,27 +81,29 @@ class ARuleThatStatesNothingIsNotOneThatRestrictsThePositionTest {
         }
     }
 
-    /** A format this compiler does not read that far into, which is a reading that stopped. */
+    /** A predicate over the strings whose text this compiler does not work out, which is a reading
+     *  that stopped. */
     private static final String NOT_READ = """
             module probe
 
             data Ok
 
             data N = String
-                invariant format = String.matches("(a+)\\\\1", value)
+                invariant format = UNREAD
 
             behavior read : (n: N) -> Ok
             let read (n) = Ok
-            """;
+            """.replace("UNREAD", ARuleNoReadingTakesIn.narrowly("value"));
 
     /**
-     * A pattern this could not take apart is a reading that stopped, and never one that finished.
+     * A predicate this could not take apart is a reading that stopped, and never one that finished.
      *
-     * <p>The pair the reason exists for. Both are `String.matches` about one position, and what
-     * tells them apart is whether the pattern was read — so a producer deciding from the operation
-     * alone would say the rule holds the position down, which claims a set nobody worked out. A
-     * reader told the value written there has to be one the rule admits would be acting on a fact
-     * this compiler never established, and the rule they could rewrite would go unmentioned.
+     * <p>The pair the reason exists for. Both are predicates over strings about one position, and
+     * what tells them apart is whether what the predicate says was read — so a producer deciding from
+     * the operation alone would say the rule holds the position down, which claims a set nobody
+     * worked out. A reader told the value written there has to be one the rule admits would be
+     * acting on a fact this compiler never established, and the rule they could rewrite would go
+     * unmentioned.
      */
     @Test
     void aPatternThisCouldNotReadRestrictsNothing() {
@@ -108,7 +111,7 @@ class ARuleThatStatesNothingIsNotOneThatRestrictsThePositionTest {
 
         assertEquals(1, undivided.size(), undivided.toString());
         assertInstanceOf(UndividedPosition.Why.CannotDerive.class, undivided.get(0).why(),
-                "the pattern was not read, so nothing about what stands there follows");
+                "what the rule says was not read, so nothing about what stands there follows");
         assertFalse(reasonsOf(NOT_READ).contains(
                         UndividedPosition.Reason.POSITION_RESTRICTED_TO_WHAT_A_RULE_ADMITS),
                 "and the word for a rule that holds a position down is not said of it: "

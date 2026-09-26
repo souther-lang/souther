@@ -12,7 +12,7 @@ import souther.compiler.numeric.Text;
 import souther.compiler.regex.CodePoints;
 import souther.compiler.regex.Meter;
 import souther.compiler.regex.PatternPlan;
-import souther.compiler.regex.PatternSyntax;
+import souther.compiler.regex.PatternMeaning;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
@@ -49,8 +49,8 @@ class AValueStandingForEverythingElseIsOneThePositionAdmitsTest {
 
     /** The strings a rule about how many a value holds leaves, as the position admits them. */
     private static ValueSet lengths(int least, int most) {
-        return ValueSet.matching(PatternPlan.of(new PatternSyntax.Repeated(
-                        new PatternSyntax.Symbols(CodePoints.EVERYTHING), least, most))
+        return ValueSet.matching(PatternPlan.of(new PatternMeaning.Repeated(
+                        new PatternMeaning.Symbols(CodePoints.EVERYTHING), least, most))
                 .compile(meter()));
     }
 
@@ -69,7 +69,7 @@ class AValueStandingForEverythingElseIsOneThePositionAdmitsTest {
     @Test
     void aRuleOnTheLengthTakesTheEmptyStringOutOfTheChoice() {
         Place at = otherThan(Carrier.TEXT, List.of(Text.of("spring")), null,
-                lengths(1, PatternSyntax.Repeated.NO_CEILING));
+                lengths(1, PatternMeaning.Repeated.NO_CEILING));
 
         assertNotNull(at, "every string of a length the rule allows but `spring` stands for this");
         assertNotEquals("", Carrier.TEXT.written(at),
@@ -101,7 +101,7 @@ class AValueStandingForEverythingElseIsOneThePositionAdmitsTest {
      */
     @Test
     void theValueTheSetOffersFirstBeingSingledOutIsNotTheEndOfTheChoice() {
-        ValueSet admits = lengths(1, PatternSyntax.Repeated.NO_CEILING);
+        ValueSet admits = lengths(1, PatternMeaning.Repeated.NO_CEILING);
         Place first = Carrier.TEXT.somewhereIn(admits, new OrderedInterval(null, null),
                 PlacesApart.NONE, meter());
         assertNotNull(first, "the set has a value to offer, which is what this case is about");
@@ -250,7 +250,7 @@ class AValueStandingForEverythingElseIsOneThePositionAdmitsTest {
         Place at = otherThan(Carrier.TEXT, List.of(Text.of("m")),
                 new NumericDomain.Bounds(Endpoint.inclusive(Text.of("m")),
                         Endpoint.exclusive(Text.of("n"))),
-                lengths(1, PatternSyntax.Repeated.NO_CEILING));
+                lengths(1, PatternMeaning.Repeated.NO_CEILING));
 
         assertNotNull(at, "the strings from `m` up to `n` that are not `m` itself are without end");
         String some = Carrier.TEXT.written(at);

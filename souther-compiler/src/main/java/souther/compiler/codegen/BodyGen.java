@@ -1225,6 +1225,10 @@ final class BodyGen {
                     intDivide(call, false);
                     return;
                 }
+                case STRING_MATCHES -> {
+                    matches(call);
+                    return;
+                }
                 default -> { }
             }
             Intrinsics.emit(this, kernel, call);
@@ -1234,8 +1238,29 @@ final class BodyGen {
          *  for. Named rather than left to be read off the arms above, so the two sets can be held
          *  apart: a kernel emitted here and held there too would be one operation with two answers,
          *  and the one that ran would be whichever the arm above happened to reach first. */
-        static final Set<Kernel> WRITTEN_OUT =
-                Set.of(Kernel.INT_TRUNCATING_DIVIDE, Kernel.INT_TRUNCATING_REMAINDER);
+        static final Set<Kernel> WRITTEN_OUT = Set.of(Kernel.INT_TRUNCATING_DIVIDE,
+                Kernel.INT_TRUNCATING_REMAINDER, Kernel.STRING_MATCHES);
+
+        /**
+         * {@code String.matches}, run by the JVM's matcher over what the checker read the pattern
+         * as.
+         *
+         * <p>The pattern argument is not evaluated. It is text the checker folded at compile time,
+         * and what the call carries is what that text means ({@link JavaPatterns}), so the pattern
+         * handed to the runtime is written from the meaning and the author's text reaches no engine.
+         */
+        private void matches(Core.Call call) {
+            // The call cannot be built without this settlement, so a different one is the
+            // checker's contract broken and not something this backend lacks.
+            if (!(call.settlement() instanceof Core.CallSettlement.AtKernel(
+                    _, Core.KernelFact.StringMatches settled))) {
+                throw new IllegalStateException(
+                        "a String.matches call carries the pattern the checker read: " + call);
+            }
+            genExpr(call.args().get(1));
+            code.loadConstant(JavaPatterns.of(settled.meaning()));
+            code.invokestatic(CD_Strings, "matches", MTD_strings_matches);
+        }
 
         private void call(Core.Call call) {
             // Which kernel a call reaches is on the call, so what is emitted for one is asked of

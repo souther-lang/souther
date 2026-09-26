@@ -55,8 +55,8 @@ class TheStatesNoStringTellsApartAreOneStateTest {
     }
 
     private static Automaton canonicalMachineOf(String regex, Meter meter) {
-        PatternSyntax syntax =
-                assertInstanceOf(PatternRead.Read.class, PatternParser.read(regex), regex).syntax();
+        PatternMeaning syntax =
+                assertInstanceOf(PatternRead.Read.class, PatternParser.read(regex), regex).meaning();
         Automaton made = Automaton.of(syntax, meter);
         assertNotNull(made, regex);
         Automaton one = made.canonical(meter);

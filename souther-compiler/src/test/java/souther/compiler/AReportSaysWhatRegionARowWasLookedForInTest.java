@@ -40,7 +40,7 @@ class AReportSaysWhatRegionARowWasLookedForInTest {
                     invariant range = value >= 0 && value <= 100
 
                 data Tag = String
-                    invariant shape = String.matches("(a+)\\\\1", value)
+                    invariant shape = UNREAD
 
                 data Pair = { low: Amount, high: Amount, tag: Tag }
                     invariant together = low.value /= high.value
@@ -53,8 +53,10 @@ class AReportSaysWhatRegionARowWasLookedForInTest {
                     else Ok
 
                 example check
-                    | "one" : (Pair { low = Amount(5), high = Amount(7), tag = Tag("aa") }) -> Ok
-                """.formatted(above);
+                    | "one" : (Pair { low = Amount(5), high = Amount(7), tag = Tag(ADMITTED) }) -> Ok
+                """.formatted(above)
+                .replace("UNREAD", ARuleNoReadingTakesIn.narrowly("value"))
+                .replace("ADMITTED", ARuleNoReadingTakesIn.A_VALUE_THE_NARROW_ONE_ADMITS);
     }
 
     /** A comparison over a string, which draws no line and is on the way to one. */

@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.StringPredicates;
 import souther.compiler.regex.Language;
 import souther.compiler.regex.PatternPlan;
-import souther.compiler.regex.PatternSyntax;
+import souther.compiler.regex.PatternMeaning;
 
 import java.lang.constant.ClassDesc;
 import java.lang.reflect.Method;
@@ -124,7 +124,7 @@ class AStringPredicateAdmitsWhatItAcceptsAtRunTimeTest {
         }
     }
 
-    private static Language languageOf(PatternSyntax syntax) {
+    private static Language languageOf(PatternMeaning syntax) {
         Language made = PatternPlan.of(syntax).compile(PatternPlan.Budget.OF_A_WITNESS.meter());
         assertNotNull(made, "the lowering is a language this compiler can build");
         return made;

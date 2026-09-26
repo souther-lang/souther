@@ -405,23 +405,6 @@ class CompileExampleGenerateTest {
     }
 
     /**
-     * A rule this cannot read leaves the position what it had.
-     *
-     * <p>Reading a format rule is a way to offer a value, not a way to decide there is none. A lookahead
-     * is past what the reader understands, and the plain representative for the position — which built
-     * before any of this existed, and which this rule happens to accept — is still offered.
-     */
-    @Test
-    void unsupportedPatternThatAcceptsTheDefaultCandidateStillGenerates() {
-        String source = withField("""
-                data V = String
-                    invariant String.matches("(?=x)x", value)""", "V").formatted("V(\"x\")");
-
-        assertEquals(List.of("Req { v = V(\"x\"), f = No }"),
-                inputs(generated(source).get("take").composed()));
-    }
-
-    /**
      * Two rules on one position, in either order.
      *
      * <p>Every clause of an invariant has to hold, so the order they are written in cannot decide
@@ -593,8 +576,8 @@ class CompileExampleGenerateTest {
      * refused tells an author their model rules out a combination it does not.
      *
      * <p>What refuses every value here is a rule this compiler cannot take apart, which nothing
-     * derives a value from. Strings clearing both rules of a field exist — a run of y's of even
-     * length is one — so what stops a row is the search rather than the model. A second format
+     * derives a value from. Strings clearing both rules of a field exist — {@code "2a"} is one — so
+     * what stops a row is the search rather than the model. A second format
      * would not do: the formats a reading can take in are met with each other, and a value clearing
      * all of them is proposed. Nor would a rule counting the field — a floor is read too, and the
      * value built for it is one this model would accept.
@@ -606,10 +589,10 @@ class CompileExampleGenerateTest {
         for (char c = 'a'; c <= 'i'; c++) {
             declarations.append("""
                     data V%1$s = String
-                        invariant String.matches("[a-z]+", value)
-                        invariant String.matches("(y+)\\\\1", value)
+                        invariant String.matches("[0-9a-z]{2,}", value)
+                        invariant %2$s
 
-                    """.formatted(Character.toUpperCase(c)));
+                    """.formatted(Character.toUpperCase(c), ARuleNoReadingTakesIn.narrowly("value")));
             fields.append(c).append(": V").append(Character.toUpperCase(c)).append(", ");
         }
         String source = """
@@ -1172,15 +1155,16 @@ class CompileExampleGenerateTest {
             data Tag = Big | Small
 
             data C = String
-                invariant String.length(value) >= 2 && String.matches("(a+)\\\\1", value)
+                invariant String.length(value) >= 2 && UNREAD
 
             behavior label : (c: C, s: Size) -> Tag
 
             let label (c, s) = if s.value >= 5 then Big else Small
 
             example label
-                | "doubled" : (C("aa"), Size(9)) -> Big
-            """;
+                | "doubled" : (C(ADMITTED), Size(9)) -> Big
+            """.replace("UNREAD", ARuleNoReadingTakesIn.narrowly("value"))
+            .replace("ADMITTED", ARuleNoReadingTakesIn.A_VALUE_THE_NARROW_ONE_ADMITS);
 
     /**
      * A point of a border is said at every point of it, beside everything else a block says.
