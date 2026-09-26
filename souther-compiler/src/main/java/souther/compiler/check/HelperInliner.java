@@ -1693,6 +1693,19 @@ public final class HelperInliner {
             if (reaches != null && leftNamed(reaches)) {
                 return call.withArgs(args);
             }
+            // A binding that names the value is the same value applied, so the body it stands for is
+            // the one substituted. Read as a value written where a value goes, the binding is only
+            // itself, and applying it would ask this same question of the same call.
+            if (named instanceof Hir.Var.Denoting bound
+                    && bound.denotes() instanceof ValueName.Local) {
+                ReachName.Declaration held = reaches(bound);
+                if (held == null || graph.recurses(held) || leftNamed(held)) {
+                    return call.withArgs(args);
+                }
+                copiesValue(held);
+                return inline(call.replacedBy(substituted(held.rendered(), helper.writtenBody()),
+                        args));
+            }
             Hir.FnDef applied = appliedValue(named);
             return inline(call.replacedBy(applied == null ? valueOf(named)
                     : appliedValueBody((Hir.Var.Denoting) named, applied), args));
