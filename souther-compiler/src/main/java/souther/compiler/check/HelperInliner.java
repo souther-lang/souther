@@ -1045,6 +1045,11 @@ public final class HelperInliner {
         if (is == null || is.declaredReturn() == null) {
             return null;
         }
+        // A value takes nothing and is named where what it answers would be written, so what
+        // arrives is that type and no function of it.
+        if (is.params().isEmpty()) {
+            return is.declaredReturn();
+        }
         List<Hir.RetType> params = new ArrayList<>();
         for (Hir.FnParam p : is.params()) {
             if (p.type() == null) {
@@ -2370,13 +2375,12 @@ public final class HelperInliner {
         if (settled != null && settled != named) {
             return settled;
         }
-        return insideThisApplication(call, named.denotes(),
-                () -> substituted(value.reached().rendered(), value.definition().writtenBody()));
+        return insideThisApplication(call, named.denotes(), value);
     }
 
     /**
-     * {@code work} done over a copy of a value's body made by applying it at {@code call}, with
-     * what it writes belonging to that application.
+     * A copy of a value's body made by applying it at {@code call}, with what it writes belonging
+     * to that application.
      *
      * <p>Applying a value copies its body once per application, as expanding a helper copies its
      * body once per call, so two applications of one value are two copies and a call written in the
@@ -2385,17 +2389,26 @@ public final class HelperInliner {
      * {@link Hir.Expansion} around it, which is what every later walk and the elaborator's
      * occurrences read the copy off. A value takes no arguments of its own, so the expansion binds
      * nothing and declares no result.
+     *
+     * <p>What the body binds is the copy's own, as it is for a helper: a value answering a block
+     * holds that block's parameters, and two copies sharing them would be two places binding one
+     * name.
      */
     private Hir.Expr insideThisApplication(Hir.Apply call, ValueName applied,
-                                           Supplier<Hir.Expr> work) {
+                                           AppliedValue value) {
         if (!(call.application() instanceof ApplicationOrigin.Identified at)) {
             throw new IllegalStateException(
                     "a value applied at an application that says only why it is here: " + call);
         }
         ExpansionSite site = siteOf(at, call);
         BindingOwner mine = new BindingOwner.Expansion(writing.enclosing(), applied, at);
+        Hir.Expr written = value.definition().writtenBody();
+        Copy copy = new Copy(written, new Hir.Binders(mine));
+        provenance.carriedAcross(copy.renaming());
+        Renaming renaming = new Renaming(Map.of(), copy, null, null);
         Hir.Expr body = insideThisCopy(mine,
-                writing.lineage().copiedInto(applied, site), Map.of(), work);
+                writing.lineage().copiedInto(applied, site), Map.of(),
+                () -> substituted(value.reached().rendered(), rename(written, renaming)));
         return new Hir.Expansion(applied, mine, site, List.of(), List.of(), null, body, call.pos(),
                 call.region());
     }

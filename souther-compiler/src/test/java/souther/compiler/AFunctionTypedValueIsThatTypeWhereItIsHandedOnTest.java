@@ -1,0 +1,74 @@
+package souther.compiler;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+/**
+ * A definition that writes a function type is a value of that type, and a value is named where the
+ * value it stands for would be written (spec §fn-declaration, §fn-value-semantics). Each case names
+ * such a value as an argument, so it runs only where the name is read as the function it stands for
+ * and not as the nullary definition it is lowered to.
+ */
+class AFunctionTypedValueIsThatTypeWhereItIsHandedOnTest {
+
+    private static final String ADDER = "let adder (n: Int) = (x) -> x + n\n";
+
+    private static final String APPLY = "let apply (f: (Int) -> Int, x: Int) = f(f(x))\n";
+
+    @Test
+    void aValueAnsweredByAHelperIsHandedToAHelper() throws Exception {
+        assertEquals(20L, answer(ADDER + APPLY + """
+                let bump: (Int) -> Int = adder(5)
+                behavior use : (n: Int) -> Int
+                let use (n) = apply(bump, n)
+                """, 10L));
+    }
+
+    @Test
+    void aValueWhoseBodyIsABlockIsHandedToAHelper() throws Exception {
+        assertEquals(12L, answer(APPLY + """
+                let bump: (Int) -> Int = (m) -> m + 1
+                behavior use : (n: Int) -> Int
+                let use (n) = apply(bump, n)
+                """, 10L));
+    }
+
+    @Test
+    void aValueWhoseBodyIsABlockIsAppliedTwice() throws Exception {
+        assertEquals(12L, answer("""
+                let bump: (Int) -> Int = (m) -> m + 1
+                behavior use : (n: Int) -> Int
+                let use (n) = bump(bump(n))
+                """, 10L));
+    }
+
+    @Test
+    void aValueWhoseBodyIsABlockIsAppliedInTwoBranches() throws Exception {
+        assertEquals(-9L, answer("""
+                let bump: (Int) -> Int = (m) -> m + 1
+                behavior use : (n: Int) -> Int
+                let use (n) = if n > 0 then bump(n) + bump(n) else bump(n)
+                """, -10L));
+    }
+
+    @Test
+    void aValueAnsweredByAHelperIsHandedToAStandardLibraryFunction() throws Exception {
+        assertEquals(List.of(15L, 16L), answer(ADDER + """
+                let bump: (Int) -> Int = adder(5)
+                behavior use : (n: Int) -> List<Int>
+                let use (n) = List.map(bump, [n, n + 1])
+                """, 10L));
+    }
+
+    /** What {@code use} in {@code module demo} with {@code body} answers for {@code n}. */
+    private Object answer(String body, long n) throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(
+                Compiler.compile("module demo exposing ( use )\n" + body),
+                getClass().getClassLoader());
+        Object use = Emitted.behavior(loader, "demo", "use").getConstructor().newInstance();
+        return Codecs.apply(use, n);
+    }
+}
