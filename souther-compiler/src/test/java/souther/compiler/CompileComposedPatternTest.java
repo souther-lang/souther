@@ -36,9 +36,9 @@ import java.util.stream.Stream;
  * <p>What the pattern must be is that it evaluates to a string at compile time, which a literal does
  * and so does a {@code ++} of literals and of named string values. Two readers ask for that string —
  * the check, which reads it as a pattern of the language, and the codec derivation, which carries
- * what it means to the boundary as Raoh's {@code pattern} constraint — and they must not disagree
- * about which patterns are compile-time strings or about what string one composes to. So each
- * expression here is run through both.
+ * what it means to the boundary as a decoder refinement and quotes the composed pattern when a value
+ * fails it — and they must not disagree about which patterns are compile-time strings or about what
+ * string one composes to. So each expression here is run through both.
  */
 class CompileComposedPatternTest {
 
@@ -90,7 +90,7 @@ class CompileComposedPatternTest {
     }
 
     /** The codec derivation's reading of the same expression: the invariant reaches the boundary as
-     *  Raoh's format constraint, carrying the fully composed pattern. */
+     *  a format failure, quoting the fully composed pattern. */
     @ParameterizedTest(name = "{0}")
     @MethodSource("patterns")
     void aComposedPatternReachesTheBoundaryAsTheFormat(String name, String decls, String pattern)

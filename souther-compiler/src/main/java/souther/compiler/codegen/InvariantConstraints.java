@@ -280,10 +280,11 @@ public final class InvariantConstraints {
     }
 
     private Optional<Constraint> ofCall(Core.PreservedCall call, Type base) {
-        // Raoh's pattern constraint is a whole-string match (Matcher.matches), and what it is handed
-        // is what the pattern means written for that engine (JavaPatterns) — the same text the run
-        // time's check runs, so the two accept the same strings. The meaning is the one the checker
-        // settled on the call: this reads no pattern text.
+        // The generated boundary constraint runs what the pattern means, written for the JVM's
+        // engine (JavaPatterns), as a whole-string predicate — the same text the run time's check
+        // runs, so the two accept the same strings — and quotes the pattern the call was given when
+        // a value fails it. The meaning is the one the checker settled on the call: this reads no
+        // pattern text.
         if (base == Type.STRING && applies(call, Kernel.STRING_MATCHES) && call.args().size() == 2
                 && isValue(call.args().get(1))) {
             return Optional.of(matching(call));
