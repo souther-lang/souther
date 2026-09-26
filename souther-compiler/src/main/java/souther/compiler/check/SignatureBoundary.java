@@ -144,12 +144,13 @@ final class SignatureBoundary {
         };
     }
 
-    /** The scalar a primitive stands for. A primitive with no leaf codec, {@code Rational}, is the
-     *  language's own vocabulary rather than a model's, so it is refused as the name it is. */
+    /** The scalar a primitive stands for. A primitive with no leaf codec, {@code Rational}, has no
+     *  external representation, which is what it is refused for: no declaration of the model's own
+     *  would give it one. */
     private static LeafScalar scalar(Type.Prim prim, Where where) {
         LeafScalar scalar = LeafScalar.of(prim);
         if (scalar == null) {
-            throw foreignName(TypeSymbol.primitive(prim), where);
+            throw noExternalForm(prim, where);
         }
         return scalar;
     }
@@ -194,15 +195,16 @@ final class SignatureBoundary {
      * A member written in the language's own namespace, which crosses when it is a scalar the
      * boundary writes.
      *
-     * <p>{@code Rational} stands for no scalar, and {@code Some} and {@code None} are names of that
-     * namespace standing for no primitive at all. Each is the language's own word rather than a
-     * model's, which is what the report says.
+     * <p>{@code Some} and {@code None} are names of that namespace standing for no primitive at all,
+     * which makes them the language's own word rather than a model's. A primitive with no leaf
+     * codec is a different refusal: it is a primitive, and it has no external representation.
      */
     private static TypeSymbol scalarMember(TypeSymbol member, Where where) {
         Type.Prim prim = member.primitiveKind();
-        if (prim == null || LeafScalar.of(prim) == null) {
+        if (prim == null) {
             throw foreignName(member, where);
         }
+        scalar(prim, where);
         return member;
     }
 
@@ -232,6 +234,18 @@ final class SignatureBoundary {
     private static CompileException union(Type.Union u, Where where) {
         String shown = Type.show(u);
         return where.refusal(new TypeMessage.AParameterIsAnAnonymousUnion(where.name(), shown));
+    }
+
+    /** A primitive computation holds and no boundary writes. Said of the primitive, wherever in the
+     *  type it stands, because what the author has to change is that part and no name of theirs
+     *  would stand in for it. */
+    private static CompileException noExternalForm(Type.Prim prim, Where where) {
+        String shown = Type.show(prim);
+        return where.parameter()
+                ? where.refusal(new TypeMessage.AParameterCarriesAPrimitiveWithNoExternalForm(
+                        where.name(), shown))
+                : where.refusal(new TypeMessage.AnOutputCarriesAPrimitiveWithNoExternalForm(
+                        where.name(), shown));
     }
 
     /** A tuple is expression-level only: it has no external representation, so it cannot cross a
