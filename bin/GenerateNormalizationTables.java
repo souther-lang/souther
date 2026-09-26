@@ -4,6 +4,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Collections;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -17,7 +19,10 @@ import java.util.TreeSet;
  * version and emits three tables: the one-step canonical decomposition mapping (a compatibility
  * decomposition — one with a {@code <tag>} — is not this), the non-zero canonical combining
  * classes, and the composition exclusions {@code CompositionExclusions.txt} states outright (the
- * ones "script specific" enough that nothing in {@code UnicodeData.txt} implies them).
+ * ones "script specific" enough that nothing in {@code UnicodeData.txt} implies them). Beside them
+ * it emits one bound, {@code NFC_TRIVIAL_LIMIT}: every code point below it is a starter whose
+ * {@code NFC_Quick_Check} is Yes, which is UAX #15's condition for text made of such code points to
+ * be its own NFC.
  *
  * <p>Composition is not a fourth table. Two of the three ways a code point is excluded from
  * composing — its canonical decomposition has one member (a singleton), or the first member is
@@ -26,11 +31,13 @@ import java.util.TreeSet;
  * decomposition table it was derived from would let a hand slip and the two disagree. Composing
  * from decomposition, at the one place that reads both, is what keeps that impossible.
  *
- * <p>Reads {@code DerivedNormalizationProps.txt} only to check this generator's own derivation —
- * script-specific exclusions plus singleton and non-starter decompositions, recomputed here —
- * against the {@code Full_Composition_Exclusion} property Unicode publishes for the same version.
- * It is an oracle for this file's correctness, not a fourth runtime input; nothing it says reaches
- * {@code NormalizationTables.java}.
+ * <p>Reads two properties of {@code DerivedNormalizationProps.txt}, for two different things.
+ * {@code Full_Composition_Exclusion} checks this generator's own derivation — script-specific
+ * exclusions plus singleton and non-starter decompositions, recomputed here — against what Unicode
+ * publishes for the same version; nothing it says reaches {@code NormalizationTables.java}.
+ * {@code NFC_Quick_Check} is read rather than derived from the tables here, since it is Unicode's own
+ * answer to the question the bound asks; its first code point that is not Yes bounds
+ * {@code NFC_TRIVIAL_LIMIT}.
  *
  * <p>Fails closed: a version header that does not read Unicode {@link #UNICODE_VERSION}, or a
  * derived exclusion set that does not exactly match {@code Full_Composition_Exclusion}, stops the
@@ -85,12 +92,15 @@ public final class GenerateNormalizationTables {
                             + " published property");
         }
 
-        String source = render(decomp, ccc, scriptSpecific,
+        int trivialLimit = Math.min(Collections.min(ccc.keySet()), firstNotNfcQuickCheckYes(derivedNormalizationProps));
+
+        String source = render(decomp, ccc, scriptSpecific, trivialLimit,
                 checksum(unicodeData), checksum(compositionExclusions), checksum(derivedNormalizationProps));
         Files.writeString(OUTPUT, source, StandardCharsets.UTF_8);
         System.out.println("wrote " + OUTPUT + " (" + decomp.size() + " decompositions, " + ccc.size()
                 + " non-zero combining classes, " + scriptSpecific.size() + " script-specific exclusions,"
-                + " verified against " + published.size() + " published Full_Composition_Exclusion entries)");
+                + " verified against " + published.size() + " published Full_Composition_Exclusion entries,"
+                + " NFC_TRIVIAL_LIMIT " + hex(trivialLimit) + ")");
     }
 
     /** Neither file states its own version in {@code UnicodeData.txt}'s bare-line format, but both
@@ -204,6 +214,31 @@ public final class GenerateNormalizationTables {
         return published;
     }
 
+    /** The least code point whose {@code NFC_Quick_Check} is No or Maybe: the lines
+     *  {@code <range-or-code-point> ; NFC_QC; <N|M> # <comment>}. Every code point no line names is
+     *  Yes, as the file's {@code @missing} comment states. */
+    private static int firstNotNfcQuickCheckYes(Path path) throws IOException {
+        int first = Integer.MAX_VALUE;
+        for (String rawLine : Files.readAllLines(path, StandardCharsets.UTF_8)) {
+            String line = rawLine.replaceFirst("#.*", "").trim();
+            if (line.isEmpty()) {
+                continue;
+            }
+            String[] f = line.split(";", -1);
+            if (f.length < 3 || !f[1].trim().equals("NFC_QC")) {
+                continue;
+            }
+            String range = f[0].trim();
+            int dots = range.indexOf("..");
+            first = Math.min(first, Integer.parseInt(dots >= 0 ? range.substring(0, dots) : range, 16));
+        }
+        if (first == Integer.MAX_VALUE) {
+            throw new IllegalStateException(path + " states no NFC_QC value other than Yes — not the file"
+                    + " this generator reads");
+        }
+        return first;
+    }
+
     private static String hexSet(Set<Integer> cps) {
         StringBuilder sb = new StringBuilder("[");
         for (Integer cp : cps) {
@@ -226,21 +261,22 @@ public final class GenerateNormalizationTables {
     }
 
     private static String render(Map<Integer, int[]> decomp, Map<Integer, Integer> ccc,
-            Set<Integer> scriptSpecificExclusions, String unicodeDataSha256,
+            Set<Integer> scriptSpecificExclusions, int trivialLimit, String unicodeDataSha256,
             String compositionExclusionsSha256, String derivedNormalizationPropsSha256) {
         StringBuilder out = new StringBuilder();
         out.append("package souther.unicode;\n\n");
         out.append("/**\n");
         out.append(" * The Unicode ").append(UNICODE_VERSION)
                 .append(" canonical decomposition, combining class and script-specific composition\n");
-        out.append(" * exclusion data {@link Normalization#nfc} reads.\n");
+        out.append(" * exclusion data {@link Normalization#nfc} reads, and the bound below which text is its own NFC.\n");
         out.append(" *\n");
-        out.append(" * <p>Generated from Unicode ").append(UNICODE_VERSION).append("'s {@code UnicodeData.txt}")
-                .append(" and {@code CompositionExclusions.txt}\n")
-                .append(" * ({@code https://www.unicode.org/Public/").append(UNICODE_VERSION).append("/ucd/})")
-                .append(" by {@code bin/GenerateNormalizationTables.java},\n")
-                .append(" * checked against {@code DerivedNormalizationProps.txt}'s")
-                .append(" {@code Full_Composition_Exclusion} at generation time.\n");
+        out.append(" * <p>Generated from Unicode ").append(UNICODE_VERSION).append("'s {@code UnicodeData.txt},")
+                .append(" {@code CompositionExclusions.txt}\n")
+                .append(" * and {@code DerivedNormalizationProps.txt}'s {@code NFC_Quick_Check}")
+                .append(" ({@code https://www.unicode.org/Public/").append(UNICODE_VERSION).append("/ucd/})\n")
+                .append(" * by {@code bin/GenerateNormalizationTables.java},")
+                .append(" checked against {@code DerivedNormalizationProps.txt}'s\n")
+                .append(" * {@code Full_Composition_Exclusion} at generation time.\n");
         out.append(" * DO NOT EDIT — regenerate on a Unicode version bump with")
                 .append(" {@code java bin/GenerateNormalizationTables.java <ucd-directory>},\n");
         out.append(" * which this file's source checksums let a reviewer confirm ran against the version it claims.\n");
@@ -275,7 +311,12 @@ public final class GenerateNormalizationTables {
                 .append(" {@code Full_Composition_Exclusion} categories (singleton and non-starter")
                 .append(" decompositions) in from {@link #DECOMP}/{@link #CCC_KEYS} directly. */\n");
         out.append("    static final int[] SCRIPT_SPECIFIC_EXCLUSIONS = decodeSortedInts(\"")
-                .append(encodeSortedInts(scriptSpecificExclusions)).append("\");\n");
+                .append(encodeSortedInts(scriptSpecificExclusions)).append("\");\n\n");
+
+        out.append("    /** The least code point that is not a starter or whose {@code NFC_Quick_Check} is not Yes.")
+                .append(" Text made only of code points below it is its own NFC (UAX #15, the Detecting")
+                .append(" Normalization Forms section). */\n");
+        out.append("    static final int NFC_TRIVIAL_LIMIT = 0x").append(hex(trivialLimit)).append(";\n");
 
         out.append("}\n");
         return out.toString();
@@ -379,7 +420,7 @@ public final class GenerateNormalizationTables {
     }
 
     private static String hex(int v) {
-        return Integer.toHexString(v).toUpperCase(java.util.Locale.ROOT);
+        return Integer.toHexString(v).toUpperCase(Locale.ROOT);
     }
 
     private static String joinHex(int[] values, String sep) {

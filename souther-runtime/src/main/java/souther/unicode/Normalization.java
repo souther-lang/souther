@@ -44,6 +44,31 @@ public final class Normalization {
      * found out before that much is built, so a caller whose carrier has a bound on a text's length
      * can ask for the answer without asking for more than the bound.
      *
+     * <p>Text made only of code points below {@link NormalizationTables#NFC_TRIVIAL_LIMIT} is its own
+     * NFC, so it is answered with itself, as long as it is. Any other text is normalized, and its
+     * length says nothing about the answer's, which may be shorter.
+     */
+    public static @Nullable String nfcWithin(String s, long longest) {
+        if (belowTrivialLimit(s)) {
+            return s.length() <= longest ? s : null;
+        }
+        return normalizeWithin(s, longest);
+    }
+
+    private static boolean belowTrivialLimit(String s) {
+        for (int at = 0; at < s.length(); ) {
+            int cp = s.codePointAt(at);
+            if (cp >= NormalizationTables.NFC_TRIVIAL_LIMIT) {
+                return false;
+            }
+            at += Character.charCount(cp);
+        }
+        return true;
+    }
+
+    /**
+     * {@link #nfcWithin} worked out by the algorithm, whatever the text.
+     *
      * <p>The three steps are taken one combining run at a time, as the text is read: each code point
      * is decomposed as it arrives, the marks after a starter are held until the next starter, and
      * then they are put in canonical order and composed into it. Canonical ordering never moves a
@@ -53,7 +78,7 @@ public final class Normalization {
      * run's marks, never the decomposition of the whole text, which is longer than the text and
      * longer than the answer.
      */
-    public static @Nullable String nfcWithin(String s, long longest) {
+    static @Nullable String normalizeWithin(String s, long longest) {
         Composing composing = new Composing(longest, (int) Math.min(s.length(), longest));
         for (int at = 0; at < s.length(); ) {
             int cp = s.codePointAt(at);
