@@ -17,23 +17,30 @@ import java.math.BigInteger;
  * itself. A scale is a Souther {@code Int}, which is 64 bits, and a {@code BigDecimal} takes an
  * {@code int}: the narrowing is {@link #scale}, and it is exact or it aborts, so no division runs at
  * a scale other than the one written. And every one of these operations is partial — a sum, a
- * difference, a product or a quotient whose scale leaves what a {@code BigDecimal} holds raises
- * {@code ArithmeticException} — so each catches that and reports it as {@link #outOfRange}, the way
- * an {@code Int} overflow is reported (spec §jvm-abort). Neither is a business result.
+ * difference, a product or a quotient can have no value a {@code Decimal} holds — and each reports
+ * that as {@link #outOfRange}, the way an {@code Int} overflow is reported (spec §jvm-abort).
+ * Neither is a business result.
+ *
+ * <p>Whether {@code BigDecimal} refuses an operation is not the same question as whether the
+ * language has an answer for it. So where the language's rule decides the result's scale from the
+ * operands, as it does for a product, the scale is worked out here and checked against the range
+ * before {@code BigDecimal} is asked; what {@code BigDecimal} still refuses is caught and reported
+ * the same way.
  */
 public final class DecimalMath {
 
     private DecimalMath() {}
 
     /**
-     * The abort a {@code BigDecimal} operation's refusal is reported as.
+     * The abort an operation with no value a {@code Decimal} holds is reported as.
      *
-     * <p>{@code BigDecimal} answers on a range and not on every pair: a result whose scale leaves
-     * the 32 bits a scale is kept in raises {@code ArithmeticException} — "Overflow", "Underflow",
-     * or "BigInteger would overflow supported range" — and that is every operation here, the sum and
-     * the product included. Left alone it arrives at a boundary as a {@code java.math} exception
-     * from a program that has no such type. It is the same kind of thing an {@code Int} overflow is
-     * ({@link IntMath}): a model bug rather than a business result, so it aborts.
+     * <p>An operation here answers on a range and not on every pair: a result whose scale leaves
+     * the 32 bits a scale is kept in, or whose digits the representation has no room for, is not a
+     * {@code Decimal}. {@code BigDecimal} refuses most of those with {@code ArithmeticException} —
+     * "Overflow", "Underflow", or "BigInteger would overflow supported range" — which left alone
+     * arrives at a boundary as a {@code java.math} exception from a program that has no such type.
+     * It is the same kind of thing an {@code Int} overflow is ({@link IntMath}): a model bug rather
+     * than a business result, so it aborts.
      *
      * <p>Each operation catches the exception itself and builds {@code what} in the {@code catch}.
      * The message names both operands through {@link #describe}, which walks their digits, and an
@@ -118,9 +125,22 @@ public final class DecimalMath {
         }
     }
 
-    /** {@code Decimal.multiply(a, b)}, and the {@code *} operator. A product's scale is the sum of
-     *  its factors' scales, so this is the operation that reaches the end of the range first. */
+    /**
+     * {@code Decimal.multiply(a, b)}, and the {@code *} operator. A product's scale is the sum of
+     * its factors' scales, so this is the operation that reaches the end of the range first.
+     *
+     * <p>That sum is worked out here, and a product whose scale no {@code Decimal} holds aborts
+     * before {@code BigDecimal} is asked for it, whatever the product's value is. Asked first,
+     * {@code BigDecimal} answers some such products instead of refusing them — a nought factor on the
+     * left is multiplied at a scale moved back into range, and the same factor on the right is
+     * refused — so {@code a * b} and {@code b * a} would differ. A refusal that still comes back is
+     * the representation having no room for the product's digits.
+     */
     public static BigDecimal multiply(BigDecimal a, BigDecimal b) {
+        long scale = (long) a.scale() + b.scale();
+        if (scale != (int) scale) {
+            throw outOfRange("the product of " + describe(a) + " and " + describe(b));
+        }
         try {
             return a.multiply(b);
         } catch (ArithmeticException _) {

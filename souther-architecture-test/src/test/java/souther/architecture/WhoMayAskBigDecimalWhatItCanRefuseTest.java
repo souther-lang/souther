@@ -20,10 +20,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * call sites below, each of which says why the refusal is reported or cannot happen there.
  *
  * <p>A {@code Decimal} is a {@code BigDecimal}, and most of what {@code BigDecimal} does can end
- * without an answer: a sum, a product, a rescale or a stripped form whose scale leaves 32 bits
- * raises {@code ArithmeticException}, and a plain notation longer than a {@code String} raises an
- * error. Where that reaches a program it reaches it as a {@code java.math} exception from a program
- * that has no such type, and not as the abort the operation's contract names. The methods that
+ * without an answer, in two ways. A sum, a product, a rescale or a stripped form can raise
+ * {@code ArithmeticException} when {@code BigDecimal} cannot build the result it is asked for. A
+ * product also derives its result's scale by adding its factors' scales, and that scale can itself
+ * leave 32 bits, which a sum's, taken from the larger of its operands', cannot. And a plain notation
+ * longer than a {@code String} raises an error. Where that reaches a program it reaches it as a
+ * {@code java.math} exception from a program that has no such type, and not as the abort the
+ * operation's contract names. The methods that
  * answer on every value — its sign, scale, precision and digits, a comparison, a negation — are not
  * a question here.
  *
@@ -58,7 +61,9 @@ class WhoMayAskBigDecimalWhatItCanRefuseTest {
      * <p>Every {@code DecimalMath} row catches the refusal and reports it as the abort the operation
      * states, or — {@code plainText}, {@code leastDigits} — works out before the call that it cannot
      * be refused: the text's length against what a {@code String} holds, and the zeros that can be
-     * taken off before the scale reaches its floor. {@code ofDecimalText} is handed only text the
+     * taken off before the scale reaches its floor. {@code multiply} also works out the product's
+     * scale before the call, because {@code BigDecimal} answers some products whose scale is out of
+     * range instead of refusing them. {@code ofDecimalText} is handed only text the
      * decimal-text grammar accepted, which has no exponent to overflow. {@code RationalMath.toInt}
      * reports the refusal itself. {@code Representations.canonicalNumber} rescales to zero only after
      * counting the digits that asks for and finding them few.
