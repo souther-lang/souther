@@ -4,7 +4,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -39,9 +41,11 @@ import java.util.TreeSet;
  * answer to the question the bound asks; its first code point that is not Yes bounds
  * {@code NFC_TRIVIAL_LIMIT}.
  *
- * <p>Fails closed: a version header that does not read Unicode {@link #UNICODE_VERSION}, or a
- * derived exclusion set that does not exactly match {@code Full_Composition_Exclusion}, stops the
- * run rather than emitting a plausible-looking wrong table.
+ * <p>Fails closed: a version header that does not read Unicode {@link #UNICODE_VERSION}, a
+ * derived exclusion set that does not exactly match {@code Full_Composition_Exclusion}, a value
+ * given to that binary property, an {@code NFC_QC} value that is not Yes, No or Maybe, or an
+ * {@code NFC_QC} {@code @missing} line that does not give every code point Yes stops the run rather
+ * than emitting a plausible-looking wrong table.
  *
  * <p>Not part of the Maven build, for the reason {@code GenerateCaseTables.java} gives: a Unicode
  * version bump is a specification change, not a dependency bump. Run from the repository root:
@@ -79,7 +83,9 @@ public final class GenerateNormalizationTables {
 
         Set<Integer> scriptSpecific = parseCompositionExclusions(compositionExclusions);
         Set<Integer> derivedFull = deriveFullExclusion(decomp, ccc, scriptSpecific);
-        Set<Integer> published = parseFullCompositionExclusion(derivedNormalizationProps);
+        List<String> normalizationProps = Files.readAllLines(derivedNormalizationProps, StandardCharsets.UTF_8);
+        List<PropertyLine> propertyLines = PropertyLine.read(normalizationProps, false);
+        Set<Integer> published = fullCompositionExclusion(propertyLines);
         if (!derivedFull.equals(published)) {
             Set<Integer> missing = new TreeSet<>(published);
             missing.removeAll(derivedFull);
@@ -92,7 +98,8 @@ public final class GenerateNormalizationTables {
                             + " published property");
         }
 
-        int trivialLimit = Math.min(Collections.min(ccc.keySet()), firstNotNfcQuickCheckYes(derivedNormalizationProps));
+        int trivialLimit = Math.min(Collections.min(ccc.keySet()),
+                firstNotNfcQuickCheckYes(propertyLines, PropertyLine.read(normalizationProps, true)));
 
         String source = render(decomp, ccc, scriptSpecific, trivialLimit,
                 checksum(unicodeData), checksum(compositionExclusions), checksum(derivedNormalizationProps));
@@ -185,56 +192,97 @@ public final class GenerateNormalizationTables {
         return full;
     }
 
-    /** {@code <range-or-code-point> ; Full_Composition_Exclusion # <comment>}, expanded to every
-     *  code point in range. This file states many derived properties; every line for a different
-     *  one is skipped. */
-    private static Set<Integer> parseFullCompositionExclusion(Path path) throws IOException {
-        Set<Integer> published = new TreeSet<>();
-        for (String rawLine : Files.readAllLines(path, StandardCharsets.UTF_8)) {
-            String line = rawLine.replaceFirst("#.*", "").trim();
-            if (line.isEmpty()) {
-                continue;
-            }
-            String[] f = line.split(";", -1);
-            if (f.length < 2 || !f[1].trim().equals("Full_Composition_Exclusion")) {
-                continue;
-            }
-            String range = f[0].trim();
-            int dots = range.indexOf("..");
-            if (dots >= 0) {
-                int start = Integer.parseInt(range.substring(0, dots), 16);
-                int end = Integer.parseInt(range.substring(dots + 2), 16);
-                for (int cp = start; cp <= end; cp++) {
-                    published.add(cp);
+    /**
+     * One line of a UCD property file (UAX #44, the File Format Conventions section):
+     * {@code <range-or-code-point> ; <property> [; <value>]}. A binary property has no value field,
+     * and a line names a code point only where the property is true of it. Any other property has a
+     * value field, and a code point no line names has the value its {@code @missing} line states.
+     */
+    private record PropertyLine(int start, int end, String property, String value) {
+
+        private static final String MISSING = "# @missing:";
+
+        /** The data lines of {@code lines}; {@code missing} true reads the {@code @missing} lines
+         *  instead, which are comments to everything else. */
+        static List<PropertyLine> read(List<String> lines, boolean missing) {
+            List<PropertyLine> read = new ArrayList<>();
+            for (String rawLine : lines) {
+                if (missing != rawLine.startsWith(MISSING)) {
+                    continue;
                 }
-            } else {
-                published.add(Integer.parseInt(range, 16));
+                String line = (missing ? rawLine.substring(MISSING.length()) : rawLine).replaceFirst("#.*", "").trim();
+                if (line.isEmpty()) {
+                    continue;
+                }
+                String[] f = line.split(";", -1);
+                if (f.length != 2 && f.length != 3) {
+                    throw new IllegalStateException("not a property line: \"" + rawLine + "\"");
+                }
+                String range = f[0].trim();
+                int dots = range.indexOf("..");
+                int start = Integer.parseInt(dots >= 0 ? range.substring(0, dots) : range, 16);
+                int end = dots >= 0 ? Integer.parseInt(range.substring(dots + 2), 16) : start;
+                read.add(new PropertyLine(start, end, f[1].trim(), f.length == 3 ? f[2].trim() : ""));
+            }
+            return read;
+        }
+    }
+
+    /** The code points {@code Full_Composition_Exclusion}, a binary property, is true of. This file
+     *  states many derived properties; every line for a different one is skipped. */
+    private static Set<Integer> fullCompositionExclusion(List<PropertyLine> lines) {
+        Set<Integer> published = new TreeSet<>();
+        for (PropertyLine line : lines) {
+            if (!line.property().equals("Full_Composition_Exclusion")) {
+                continue;
+            }
+            if (!line.value().isEmpty()) {
+                throw new IllegalStateException("Full_Composition_Exclusion is binary, but a line gives it"
+                        + " the value \"" + line.value() + "\"");
+            }
+            for (int cp = line.start(); cp <= line.end(); cp++) {
+                published.add(cp);
             }
         }
         return published;
     }
 
-    /** The least code point whose {@code NFC_Quick_Check} is No or Maybe: the lines
-     *  {@code <range-or-code-point> ; NFC_QC; <N|M> # <comment>}. Every code point no line names is
-     *  Yes, as the file's {@code @missing} comment states. */
-    private static int firstNotNfcQuickCheckYes(Path path) throws IOException {
+    /** {@code NFC_Quick_Check}'s values, by their short and long names in
+     *  {@code PropertyValueAliases.txt}. */
+    private enum QuickCheck {
+        YES, NO, MAYBE;
+
+        static QuickCheck of(String value) {
+            return switch (value) {
+                case "Y", "Yes" -> YES;
+                case "N", "No" -> NO;
+                case "M", "Maybe" -> MAYBE;
+                default -> throw new IllegalStateException(
+                        "NFC_QC value \"" + value + "\" is none of Yes, No and Maybe");
+            };
+        }
+    }
+
+    /** The least code point whose {@code NFC_Quick_Check} is not Yes. That is the least one a line
+     *  gives No or Maybe only where every code point no line names is Yes, so the {@code @missing}
+     *  line has to say so over the whole code space. */
+    private static int firstNotNfcQuickCheckYes(List<PropertyLine> lines, List<PropertyLine> missing) {
+        List<PropertyLine> defaults = missing.stream().filter(line -> line.property().equals("NFC_QC")).toList();
+        if (defaults.size() != 1 || defaults.get(0).start() != 0 || defaults.get(0).end() != Character.MAX_CODE_POINT
+                || QuickCheck.of(defaults.get(0).value()) != QuickCheck.YES) {
+            throw new IllegalStateException("NFC_QC's @missing lines are " + defaults + ", not one line giving"
+                    + " every code point Yes — the least code point that is not Yes is then not read off"
+                    + " the lines that name one");
+        }
         int first = Integer.MAX_VALUE;
-        for (String rawLine : Files.readAllLines(path, StandardCharsets.UTF_8)) {
-            String line = rawLine.replaceFirst("#.*", "").trim();
-            if (line.isEmpty()) {
-                continue;
+        for (PropertyLine line : lines) {
+            if (line.property().equals("NFC_QC") && QuickCheck.of(line.value()) != QuickCheck.YES) {
+                first = Math.min(first, line.start());
             }
-            String[] f = line.split(";", -1);
-            if (f.length < 3 || !f[1].trim().equals("NFC_QC")) {
-                continue;
-            }
-            String range = f[0].trim();
-            int dots = range.indexOf("..");
-            first = Math.min(first, Integer.parseInt(dots >= 0 ? range.substring(0, dots) : range, 16));
         }
         if (first == Integer.MAX_VALUE) {
-            throw new IllegalStateException(path + " states no NFC_QC value other than Yes — not the file"
-                    + " this generator reads");
+            throw new IllegalStateException("no NFC_QC line gives No or Maybe — not the file this generator"
+                    + " reads");
         }
         return first;
     }
