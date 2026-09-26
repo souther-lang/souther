@@ -786,7 +786,12 @@ public final class CallElaborator {
             if (kernel == Kernel.STRING_MATCHES) {
                 fact = settledPattern(new BoundExpr(args.get(0), env.values()), ctx.symbols());
             } else if (orderingSubject != null) {
-                fact = new Core.KernelFact.OrderingSubject(orderingSubject);
+                // Empty where the requirement stood over nothing to order (`Nothing`, a type
+                // still open, bottom); the requirement refused every other type without an order.
+                Ordering how = Ordering.of(orderingSubject, ctx.inners(), ctx.symbols(),
+                        ctx.kinds(), ctx.published());
+                fact = new Core.KernelFact.OrderingSubject(orderingSubject,
+                        Optional.ofNullable(how).map(o -> new Core.OrderingBasis(o.basis())));
             } else {
                 fact = Core.KernelFact.None.INSTANCE;
             }

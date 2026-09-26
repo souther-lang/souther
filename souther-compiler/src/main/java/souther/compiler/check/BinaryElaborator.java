@@ -11,6 +11,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -78,7 +79,11 @@ public final class BinaryElaborator {
                     throw CompileException.of(Diagnostic
                                     .at(bin.pos()).say(new TypeMessage.ComparisonNeedsOrderedValuesOfOneType(Type.show(lt), Type.show(rt))).build());
                 }
+                // Admitted, so ordered: the reading exists only where the pair has an order.
+                Ordering how = Ordering.ofReading(reading, lt, ctx.inners(), ctx.symbols(),
+                        ctx.kinds(), ctx.published());
                 yield new Core.Binary(bin.op(), left, right, reading,
+                        Optional.of(new Core.OrderingBasis(how.basis())),
                         ctx.occurrenceOf(bin.origin()), Type.BOOL, bin.pos());
             }
             case ADD, SUB, MUL, DIV -> {
@@ -198,8 +203,8 @@ public final class BinaryElaborator {
      * implementation detail: the nominal boundary is the type, so {@code data StageA = Stage} and
      * {@code data StageB = Stage} open to one order and are still not comparable (ADR-0047). A
      * reading that reduced both sides first and then asked what orders them would admit that pair.
-     * How the type read here is ordered once it is opened is {@link Ordering#ofComparison}, which
-     * is the backend's and decides nothing about admission.
+     * What orders the type read here is {@link Ordering#ofReading}, which the caller puts on the
+     * comparison beside the reading and which decides nothing about admission.
      */
     static Core.BinaryReading orderedReading(Type lt, Type rt, Hir.Expr le, Hir.Expr re,
                                              NewtypeInners inners,

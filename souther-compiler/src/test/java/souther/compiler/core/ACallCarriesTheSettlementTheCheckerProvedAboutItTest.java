@@ -10,6 +10,7 @@ import souther.compiler.regex.PatternMeaning;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -199,10 +200,10 @@ class ACallCarriesTheSettlementTheCheckerProvedAboutItTest {
     @Test
     void anOrderingSubjectIsAcceptedOnAKernelCallOtherThanStringMatches() {
         Core.Call call = new Core.Call(TRIM, List.of(str("  x  ")), UNWRITTEN,
-                at(List.of(Type.STRING), new Core.KernelFact.OrderingSubject(Type.INT)),
+                at(List.of(Type.STRING), INT_ORDERED),
                 Type.STRING, POS);
 
-        assertEquals(new Core.KernelFact.OrderingSubject(Type.INT),
+        assertEquals(INT_ORDERED,
                 ((Core.CallSettlement.AtKernel) call.settlement()).fact());
     }
 
@@ -213,7 +214,11 @@ class ACallCarriesTheSettlementTheCheckerProvedAboutItTest {
     void aStringMatchesCallIsRefusedAnOrderingSubject() {
         assertThrows(IllegalArgumentException.class,
                 () -> new Core.Call(MATCHES, List.of(str("x"), str("x")), UNWRITTEN,
-                        at(TWO_STRINGS, new Core.KernelFact.OrderingSubject(Type.INT)),
+                        at(TWO_STRINGS, INT_ORDERED),
                         Type.BOOL, POS));
     }
+
+    private static final Core.KernelFact.OrderingSubject INT_ORDERED =
+            new Core.KernelFact.OrderingSubject(Type.INT,
+                    Optional.of(new Core.OrderingBasis(Type.INT)));
 }

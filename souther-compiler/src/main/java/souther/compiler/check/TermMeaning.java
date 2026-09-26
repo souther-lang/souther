@@ -264,6 +264,7 @@ public final class TermMeaning {
                 out.add(Core.Binary.class);
                 out.add(x.op());
                 out.add(x.reading());
+                out.add(x.ordering());
                 out.add(x.type());
                 project(x.left(), out);
                 project(x.right(), out);

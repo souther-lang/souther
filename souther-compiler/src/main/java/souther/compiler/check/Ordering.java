@@ -4,6 +4,8 @@ import souther.compiler.core.Core;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
+import java.util.Objects;
+
 /**
  * How the values of a type are ordered: whether they are ordered at all, and by what.
  *
@@ -47,8 +49,16 @@ public sealed interface Ordering {
      * <p>Which way round that is matters. The language says what the order is and a carrier's
      * {@code compareTo} is used where it answers the same; being {@code Comparable} is not a reason
      * for a type to be here, which is why {@link Strings} is not.
+     *
+     * @param basis the type whose order this is: the primitive itself, or the one a newtype held as
+     *              its own {@code Comparable} wraps
      */
-    record Natural() implements Ordering {}
+    record Natural(Type basis) implements Ordering {
+
+        public Natural {
+            Objects.requireNonNull(basis, "a natural order is the order of some type");
+        }
+    }
 
     /**
      * Text, ordered by scalar value ({@code Strings.compare}). A {@code java.lang.String} is
@@ -85,8 +95,22 @@ public sealed interface Ordering {
     }
 
     Ordering LONGS = new Longs();
-    Ordering NATURAL = new Natural();
     Ordering STRINGS = new Strings();
+
+    /**
+     * The type whose order this is, which is what the checker hands a backend in place of this: a
+     * {@link Core.OrderingBasis}. What is a representation here — that an {@code Int} is a
+     * {@code long}, that a newtype held as itself carries a {@code compareTo} — is left behind.
+     */
+    default Type basis() {
+        return switch (this) {
+            case Longs _ -> Type.INT;
+            case Strings _ -> Type.STRING;
+            case Natural natural -> natural.basis();
+            case Places places -> Type.ref(places.enumeration());
+            case Wrapped wrapped -> wrapped.inner().basis();
+        };
+    }
 
     /**
      * The sum that answers for values of {@code type}, or null where no generated sum does: the
@@ -134,31 +158,43 @@ public sealed interface Ordering {
     }
 
     /**
-     * How a comparison is emitted, once each operand has been opened to the value it wraps.
+     * How the operands of a comparison the checker admitted are ordered, where {@code reading} is
+     * what it read them as and {@code left} is the type of its left operand.
      *
-     * <p>Read off what the checker settled the comparison reads its operands as, and not off the
-     * pair of their types. Which enumeration orders a case beside its sum, and whether one exact
-     * side makes the pair exact, are the checker's answers and are in the reading; what is left
-     * here is how a value of that one type is ordered once its names are off. That the operands
-     * may be compared at all is not asked here either — the reading exists only where the checker
-     * admitted them.
+     * <p>The checker's alone: it settles the answer here and puts its {@link #basis} on the
+     * comparison, and what emits the comparison reads that ({@link #ofBasis}) and asks nothing of the
+     * operands' types. Which enumeration orders a case beside its sum, and whether one exact side
+     * makes the pair exact, are in the reading.
      */
-    static Ordering ofComparison(Comparison comparison, NewtypeInners inners, Symbols symbols,
-                                 DeclarationKinds kinds, PublishedDeclarations published) {
-        Type read = switch (comparison.reading()) {
-            case Core.BinaryReading.AsTheyStand _ -> comparison.left().type();
+    static Ordering ofReading(Core.BinaryReading reading, Type left, NewtypeInners inners,
+                              Symbols symbols, DeclarationKinds kinds,
+                              PublishedDeclarations published) {
+        Type read = switch (reading) {
+            case Core.BinaryReading.AsTheyStand _ -> left;
             case Core.BinaryReading.In in -> in.type();
             case Core.BinaryReading.ExactNumbers _ -> Type.RATIONAL;
         };
-        Ordering how = of(read, inners, symbols, kinds, published);
-        return how == null ? null : how.opened();
+        return of(read, inners, symbols, kinds, published);
+    }
+
+    /**
+     * How a value of the type an order is the order of is compared, once its names are off — or
+     * null where the checker's basis is not one that has an order, which is the checker and the
+     * emitter disagreeing.
+     *
+     * <p>A basis is never a newtype, since the spine was walked to the terminal to name it, so
+     * nothing is left to open.
+     */
+    static Ordering ofBasis(Core.OrderingBasis basis, NewtypeInners inners, Symbols symbols,
+                            DeclarationKinds kinds, PublishedDeclarations published) {
+        return of(basis.type(), inners, symbols, kinds, published);
     }
 
     /** How a value still held as the type it was asked of is ordered: a newtype by the {@code
      *  compareTo} its own class carries, everything else by itself. What the sort family reads,
      *  since it hands the value to the runtime as it stands. */
     default Ordering asHeld() {
-        return this instanceof Wrapped ? NATURAL : this;
+        return this instanceof Wrapped ? new Natural(basis()) : this;
     }
 
     /** How a value is ordered once the newtype spine has been opened to its terminal value. What the
@@ -177,11 +213,11 @@ public sealed interface Ordering {
                 case STRING -> STRINGS;
                 // Each of these is carried by a Comparable whose compareTo is the order the
                 // language gives it (spec §equality).
-                case DECIMAL, DATE, TIME, DATETIME, INSTANT -> NATURAL;
+                case DECIMAL, DATE, TIME, DATETIME, INSTANT -> new Natural(terminal);
                 // A Rational is ordered by its exact mathematical value (ADR-0116), and the runtime
                 // value that carries one compares by exactly that — one representation per value, so
                 // the order it carries and the equality it answers are the same reading of it.
-                case RATIONAL -> NATURAL;
+                case RATIONAL -> new Natural(terminal);
                 case BOOL -> null;
             };
             // A sum every one of whose cases is a unit data, one of its cases, or a union of them.

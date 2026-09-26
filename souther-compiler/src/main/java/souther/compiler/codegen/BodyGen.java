@@ -1944,16 +1944,18 @@ final class BodyGen {
          * added to {@link Ordering} would fall the same way through an {@code instanceof} chain.
          */
         private void ordered(Comparison comparison, ComparisonClaim.Cut cut) {
-            // Whether the two may be compared at all was settled by BinaryElaborator against the
-            // types as written; this reads what they open to.
-            Ordering how = Ordering.ofComparison(comparison, ctx.inners, symbols, ctx.kinds,
-                    ctx.published);
+            // Whether the two may be compared at all, and what orders them, was settled by
+            // BinaryElaborator against the types as written; this lowers that order.
+            Core.OrderingBasis basis = comparison.ordering().orElseThrow(
+                    () -> new IllegalStateException("a comparison the checker admitted says what"
+                            + " orders it: " + comparison.left().type() + " "
+                            + cut.statedRelation() + " " + comparison.right().type()));
+            Ordering how = Ordering.ofBasis(basis, ctx.inners, symbols, ctx.kinds, ctx.published);
             if (how == null) {
                 throw new IllegalStateException("a comparison the checker admitted has no order: "
-                        + comparison.left().type() + " " + cut.statedRelation() + " "
-                        + comparison.right().type());
+                        + Type.show(basis.type()));
             }
-            switch (how.opened()) {
+            switch (how) {
                 case Ordering.Longs _ -> {
                     unwrapNewtypeValue(genExpr(comparison.left()));
                     unwrapNewtypeValue(genExpr(comparison.right()));
