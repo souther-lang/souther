@@ -1,10 +1,14 @@
 package souther.compiler;
 
+import souther.compiler.diag.CompileException;
+import souther.compiler.diag.DiagnosticCode;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A definition that writes a function type is a value of that type, and a value is named where the
@@ -47,11 +51,24 @@ class AFunctionTypedValueIsThatTypeWhereItIsHandedOnTest {
 
     @Test
     void aValueWhoseBodyIsABlockIsAppliedInTwoBranches() throws Exception {
-        assertEquals(-9L, answer("""
+        String source = """
                 let bump: (Int) -> Int = (m) -> m + 1
                 behavior use : (n: Int) -> Int
                 let use (n) = if n > 0 then bump(n) + bump(n) else bump(n)
-                """, -10L));
+                """;
+        assertEquals(22L, answer(source, 10L));
+        assertEquals(-9L, answer(source, -10L));
+    }
+
+    @Test
+    void aValueThatIsNotAFunctionIsRefusedWhereAFunctionIsTaken() {
+        CompileException refused = assertThrows(CompileException.class, () -> answer(APPLY + """
+                let k: Int = 3
+                behavior use : (n: Int) -> Int
+                let use (n) = apply(k, n)
+                """, 10L));
+        assertEquals(DiagnosticCode.E1317.name(), refused.code());
+        assertTrue(refused.getMessage().contains("but got Int"), refused.getMessage());
     }
 
     @Test
