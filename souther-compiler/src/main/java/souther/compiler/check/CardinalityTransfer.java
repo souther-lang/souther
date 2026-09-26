@@ -222,7 +222,7 @@ final class CardinalityTransfer {
                 // Spaced too finely to count between two ends, or not spaced at all. A string bounded
                 // in length and a date bounded at both ends are finite and are not counted here: what
                 // it would take is a reading of each carrier's own values, and nothing asks yet.
-                case STRING, DECIMAL, RATIONAL, DATE, TIME, DATETIME, INSTANT, RAW ->
+                case STRING, DECIMAL, RATIONAL, DATE, TIME, DATETIME, INSTANT ->
                         Cardinality.UNKNOWN;
             };
             case Type.Ref ref -> ofRef(ref, path, counts, values, source, answers, granted, worn);

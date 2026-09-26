@@ -131,8 +131,8 @@ public sealed interface CodecShape {
         throw noRepresentation(o, d, field, pos);
     }
 
-    /** The scalar a primitive is written as. {@code Raw} is the language's own vocabulary and is
-     *  written as itself nowhere, so it has no leaf codec to be given one. */
+    /** The scalar a primitive is written as. A primitive with no leaf codec, {@code Rational}, is
+     *  written as itself nowhere, so it has none to be given. */
     private static Scalar scalar(Type.Prim prim, Type t, Hir.Data d, String field, SourcePos pos) {
         LeafScalar leaf = LeafScalar.of(prim);
         if (leaf == null) {

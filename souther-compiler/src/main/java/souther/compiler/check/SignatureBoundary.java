@@ -144,12 +144,12 @@ final class SignatureBoundary {
         };
     }
 
-    /** The scalar a primitive stands for. {@code Raw} is written like one and is the language's own
-     *  vocabulary rather than a model's, so it is refused as the name it is. */
+    /** The scalar a primitive stands for. A primitive with no leaf codec, {@code Rational}, is the
+     *  language's own vocabulary rather than a model's, so it is refused as the name it is. */
     private static LeafScalar scalar(Type.Prim prim, Where where) {
         LeafScalar scalar = LeafScalar.of(prim);
         if (scalar == null) {
-            throw foreignName(TypeSymbol.primitive("Raw"), where);
+            throw foreignName(TypeSymbol.primitive(prim), where);
         }
         return scalar;
     }
@@ -194,9 +194,9 @@ final class SignatureBoundary {
      * A member written in the language's own namespace, which crosses when it is a scalar the
      * boundary writes.
      *
-     * <p>{@code Raw} is spelled like a primitive and stands for no scalar, and {@code Some} and
-     * {@code None} are names of that namespace standing for no primitive at all. Each is the
-     * language's own word rather than a model's, which is what the report says.
+     * <p>{@code Rational} stands for no scalar, and {@code Some} and {@code None} are names of that
+     * namespace standing for no primitive at all. Each is the language's own word rather than a
+     * model's, which is what the report says.
      */
     private static TypeSymbol scalarMember(TypeSymbol member, Where where) {
         Type.Prim prim = member.primitiveKind();

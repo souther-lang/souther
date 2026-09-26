@@ -287,8 +287,7 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
 
     private static final Pattern QUALIFIED = Pattern.compile("TypeOps\\.caseNames\\s*\\(");
 
-    /** A call written without the class name — {@code caseNamesOf} is a different reader and is not
-     *  one, which is why the name is closed with its own parenthesis. */
+    /** A call written without the class name; the name is closed with its own parenthesis. */
     private static final Pattern UNQUALIFIED = Pattern.compile("(?<![\\w.])caseNames\\s*\\(");
 
     /** The declaration, which {@link #UNQUALIFIED} matches and which is no call. */

@@ -312,7 +312,7 @@ public final class AbortSites {
         }
         return switch (prim) {
             case INT, DECIMAL, RATIONAL -> AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
-            case STRING, BOOL, DATE, TIME, DATETIME, INSTANT, RAW -> throw new IllegalStateException(
+            case STRING, BOOL, DATE, TIME, DATETIME, INSTANT -> throw new IllegalStateException(
                     "`" + binary.op() + "` answers " + prim.shown()
                             + ", which no arithmetic the checker admits answers with");
         };
@@ -343,7 +343,7 @@ public final class AbortSites {
         return switch (prim) {
             case INT -> AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
             case DECIMAL, RATIONAL -> AbortSet.NONE;
-            case STRING, BOOL, DATE, TIME, DATETIME, INSTANT, RAW -> throw new IllegalStateException(
+            case STRING, BOOL, DATE, TIME, DATETIME, INSTANT -> throw new IllegalStateException(
                     "unary minus answers " + prim.shown()
                             + ", which no negation the checker admits answers with");
         };

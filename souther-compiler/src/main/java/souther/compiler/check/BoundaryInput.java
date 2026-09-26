@@ -22,7 +22,7 @@ import java.util.Objects;
  * <p>It lives beside {@link SignatureBoundary} because {@link Nominal} is closed to it: a name is a
  * thing the boundary either admits or refuses, and a case that could be assembled with a refused one
  * would be a witness of nothing. The cases that carry no name stay records, and hold: a scalar is a
- * closed set with no {@code Raw} in it, a key is a {@link CrossingMapKey} whose own naming cases are
+ * closed set, a key is a {@link CrossingMapKey} whose own naming cases are
  * closed the same way, and a list, a set or a map is built out of those.
  *
  * <p>There is no case for an anonymous union. A parameter names a single type, so an input cannot be

@@ -182,7 +182,7 @@ public sealed interface Ordering {
                 // value that carries one compares by exactly that — one representation per value, so
                 // the order it carries and the equality it answers are the same reading of it.
                 case RATIONAL -> NATURAL;
-                case BOOL, RAW -> null;
+                case BOOL -> null;
             };
             // A sum every one of whose cases is a unit data, one of its cases, or a union of them.
             // Null where more than one enumeration lists the case: the order belongs to the sum, so

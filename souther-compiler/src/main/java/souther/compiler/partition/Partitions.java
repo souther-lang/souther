@@ -1657,9 +1657,6 @@ public final class Partitions {
             case TIME -> List.of(FixtureTemplate.time("00:00:00"));
             case DATETIME -> List.of(FixtureTemplate.dateTime("2000-01-01T00:00:00"));
             case INSTANT -> List.of(FixtureTemplate.instant("2000-01-01T00:00:00Z"));
-            // Bytes nobody wrote. What a row would carry is a value of somebody's making, and there
-            // is none here to make it out of.
-            case RAW -> List.of();
             // A Rational reaches no position: it has no external form, so nothing declares one and no
             // row is written at one (ADR-0116). Said here rather than left to the numeric arm above,
             // which would offer a value of a type a fixture cannot carry.
@@ -1944,7 +1941,7 @@ public final class Partitions {
             // Ordered, some of them, and none of them counted in numbers of its own: a date is a
             // count of days and a string a count of characters, which is what a rule about them
             // counts rather than what the value is.
-            case STRING, BOOL, DATE, TIME, DATETIME, INSTANT, RAW -> null;
+            case STRING, BOOL, DATE, TIME, DATETIME, INSTANT -> null;
             // A Rational is a number and is counted on nothing: a carrier is what a position's values
             // are placed on, and no position holds a Rational (ADR-0116). The same answer
             // {@code Carrier} gives it, for the same reason.

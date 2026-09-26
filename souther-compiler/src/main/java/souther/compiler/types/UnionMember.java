@@ -49,16 +49,9 @@ public sealed interface UnionMember {
         if (m instanceof Type.Ref r) {
             return new Named(r.name());
         }
-        // Exhaustive over the primitives rather than a chain of comparisons, and reading the one
-        // spelling table rather than repeating it. A chain answers "not a member" for a primitive
-        // added later without asking anyone, and that answer is the truth about Raw and about
-        // nothing else.
+        // Every primitive is a member, so a primitive added later is one without asking anyone.
         if (m instanceof Type.Prim p) {
-            return switch (p) {
-                case INT, STRING, BOOL, DECIMAL, RATIONAL, DATE, TIME, DATETIME, INSTANT ->
-                        new Named(TypeSymbol.primitive(p.shown()));
-                case RAW -> NOT_A_MEMBER;
-            };
+            return new Named(TypeSymbol.primitive(p));
         }
         return NOT_A_MEMBER;
     }

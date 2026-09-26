@@ -1049,7 +1049,7 @@ public final class CallElaborator {
                 case TIME -> java.time.LocalTime.parse(text);
                 case DATETIME -> java.time.LocalDateTime.parse(text);
                 case INSTANT -> instantInUtc(text, at);
-                case INT, STRING, BOOL, DECIMAL, RATIONAL, RAW ->
+                case INT, STRING, BOOL, DECIMAL, RATIONAL ->
                         throw new IllegalStateException("`" + fn + "` names no temporal");
             };
         } catch (java.time.format.DateTimeParseException _) {

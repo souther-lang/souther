@@ -44,7 +44,7 @@ public final class AtomSpace {
      * What a value of {@code t} can be, descending every case that is itself a sum.
      *
      * <p>Answers for anything, not only a sum: a type that is no sum is the one atom it is, and a
-     * type that names no case at all — {@code Raw}, an optional, a type the compiler could not work
+     * type that names no case at all — an optional, a type the compiler could not work
      * out — has none. Which of those a reader treats as an answer and which as a refusal is the
      * reader's, and asking here does not decide it.
      *

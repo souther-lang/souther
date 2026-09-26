@@ -239,7 +239,7 @@ public sealed interface Carrier extends ValueOrder {
             case TIME -> Carrier.TIME;
             case INSTANT -> Carrier.INSTANT;
             // `String` is ordered lexicographically and stands for itself, having no count to
-            // embed into and needing none. `Bool` and `Raw` are not ordered at all.
+            // embed into and needing none. `Bool` is not ordered at all.
             case STRING -> TEXT;
             // A Rational is ordered and is still on no carrier. A carrier is what a position's
             // values are placed on, and no position is declared Rational: the type has no external
@@ -247,7 +247,7 @@ public sealed interface Carrier extends ValueOrder {
             // here beside the counted primitives rather than left to the ordering question above,
             // which this one is not the same as.
             case RATIONAL -> null;
-            case BOOL, RAW -> null;
+            case BOOL -> null;
         };
     }
 

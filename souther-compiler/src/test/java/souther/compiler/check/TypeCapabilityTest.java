@@ -57,11 +57,9 @@ class TypeCapabilityTest {
     }
 
     @Test
-    void boolAndRawCompareButDoNotOrder() {
+    void boolComparesButDoesNotOrder() {
         assertTrue(TypeOps.supportsEquality(Type.BOOL));
         assertFalse(TypeOps.supportsOrdering(Type.BOOL, NewtypeInners.NONE, null, DeclarationKinds.NONE, PublishedDeclarations.NONE));
-        assertTrue(TypeOps.supportsEquality(Type.RAW));
-        assertFalse(TypeOps.supportsOrdering(Type.RAW, NewtypeInners.NONE, null, DeclarationKinds.NONE, PublishedDeclarations.NONE));
     }
 
     @Test

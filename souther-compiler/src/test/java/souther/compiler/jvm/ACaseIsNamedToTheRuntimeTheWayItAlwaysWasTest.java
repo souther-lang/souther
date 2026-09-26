@@ -56,8 +56,7 @@ class ACaseIsNamedToTheRuntimeTheWayItAlwaysWasTest {
                         "DATE", "souther.Date",
                         "TIME", "souther.Time",
                         "DATETIME", "souther.DateTime",
-                        "INSTANT", "souther.Instant",
-                        "RAW", "souther.Raw"),
+                        "INSTANT", "souther.Instant"),
                 tokens);
     }
 

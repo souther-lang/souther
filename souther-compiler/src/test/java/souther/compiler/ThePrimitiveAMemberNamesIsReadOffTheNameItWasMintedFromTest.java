@@ -41,12 +41,12 @@ class ThePrimitiveAMemberNamesIsReadOffTheNameItWasMintedFromTest {
         assertNull(TypeSymbols.declared(new TypeKey("demo", "Int")).primitiveKind());
     }
 
-    /** `Raw` is a primitive and no scalar a leaf codec exists for, which is the one place the two
+    /** `Rational` is a primitive and no scalar a leaf codec exists for, which is the one place the two
      *  questions come apart. */
     @Test
-    void theReservedPrimitiveIsAPrimitiveAndNoLeafScalar() {
-        assertEquals(Type.Prim.RAW, TypeSymbol.primitive(Type.Prim.RAW).primitiveKind());
-        assertNull(LeafScalar.of(Type.Prim.RAW));
+    void aPrimitiveWithNoLeafCodecStillReadsBackAsThatPrimitive() {
+        assertEquals(Type.Prim.RATIONAL, TypeSymbol.primitive(Type.Prim.RATIONAL).primitiveKind());
+        assertNull(LeafScalar.of(Type.Prim.RATIONAL));
     }
 
     /**
