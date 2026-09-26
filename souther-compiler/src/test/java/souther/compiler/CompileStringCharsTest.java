@@ -94,6 +94,9 @@ class CompileStringCharsTest {
         assertEquals(-1L, runInt(src, "parse", Map.of("s", "")));     // NotANumber
         assertEquals(-1L, runInt(src, "parse", Map.of("s", " 5")));   // surrounding space: NotANumber
         assertEquals(-1L, runInt(src, "parse", Map.of("s", "99999999999999999999")));  // > Int64: NotANumber
+        assertEquals(5L, runInt(src, "parse", Map.of("s", "+5")));    // an ASCII plus sign parses
+        assertEquals(-1L, runInt(src, "parse", Map.of("s", "１２３"))); // full-width digits: NotANumber
+        assertEquals(-1L, runInt(src, "parse", Map.of("s", "٣")));     // Arabic-Indic digit: NotANumber
     }
 
     /** A wrong case name over the parse union names its members, not the type's internal form. */
