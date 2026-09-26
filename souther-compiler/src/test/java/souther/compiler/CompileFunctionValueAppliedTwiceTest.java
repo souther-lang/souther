@@ -76,9 +76,9 @@ class CompileFunctionValueAppliedTwiceTest {
 
     @Test
     void aValueHandedToAnOperationAndAppliedIsApplied() throws Exception {
-        assertEquals(3L, answered("""
+        assertEquals(6L, answered("""
                 let inc = adder(1)
-                """, "Count(List.length(List.map((y) -> inc(y), [c.value, inc(c.value)])) + inc(0))", 1L));
+                """, "Count(List.sum(List.map((y) -> inc(y), [c.value, inc(c.value)])) + inc(0))", 1L));
     }
 
     @Test
