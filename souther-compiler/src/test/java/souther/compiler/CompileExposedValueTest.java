@@ -1,6 +1,8 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Primary;
+import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
 
@@ -14,6 +16,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -165,6 +168,154 @@ class CompileExposedValueTest {
 
         assertEquals(11L, Codecs.apply(applied, 10L));
         assertEquals(12L, Codecs.apply(held, 10L));
+    }
+
+    /** A published value holding a function with no written type is refused at the value. What a
+     *  reader is handed is the value as it stands, and nothing it wrote says which function it is
+     *  — whether the function comes from a helper's answer, a fork of two blocks or a name. */
+    @Test
+    void aPublishedValueHoldingAFunctionWritesItsType() {
+        String fromAHelper = """
+                module shop exposing ( inc )
+
+                let adder (n: Int) = (x) -> x + n
+
+                let inc = adder(1)
+                """;
+        String fromAFork = """
+                module shop exposing ( inc )
+
+                let inc = if true then (x) -> x + 1 else (x) -> x
+                """;
+        String fromAName = """
+                module shop exposing ( inc )
+
+                let inc = String.trim
+                """;
+        // A module writing no clause publishes everything it declares, so the value is published
+        // without being named.
+        String publishedByWritingNoClause = """
+                module shop
+
+                let adder (n: Int) = (x) -> x + n
+
+                let inc = adder(1)
+                """;
+
+        for (String source : List.of(fromAHelper, fromAFork, fromAName, publishedByWritingNoClause)) {
+            CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(source));
+            assertInstanceOf(HelperMessage.TheValuesFunctionTypeIsNotWritten.class,
+                    e.diagnostic().said(), e.getMessage());
+            assertTrue(e.getMessage().contains("`inc`"), e.getMessage());
+        }
+    }
+
+    /** It is said at the value, where its type is to be written, and not at a body that applies it
+     *  or at the entry the module publishes it by. */
+    @Test
+    void theRefusalIsAtTheValue() {
+        String source = """
+                module shop exposing ( inc, use )
+
+                let adder (n: Int) = (x) -> x + n
+
+                let inc = adder(1)
+
+                behavior use : (n: Int) -> Int
+                let use (n) = inc(n)
+                """;
+
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(source));
+
+        assertEquals(5, WhereItSits.in(source,
+                ((Primary.InSource) e.diagnostic().primary()).place().region()).start().line());
+    }
+
+    /** A top-level definition is not typed from what applies it: `use` applying `inc` types the copy
+     *  substituted into `use`, and the published value is still one nothing typed. */
+    @Test
+    void anApplicationInTheDeclaringModuleDoesNotTypeAPublishedValue() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module shop exposing ( inc, use )
+
+                let adder (n: Int) = (x) -> x + n
+
+                let inc = adder(1)
+
+                behavior use : (n: Int) -> Int
+                let use (n) = inc(n)
+                """));
+
+        assertInstanceOf(HelperMessage.TheValuesFunctionTypeIsNotWritten.class,
+                e.diagnostic().said(), e.getMessage());
+    }
+
+    /**
+     * Asking for a type is decided by whether the module publishes the value, and not by what
+     * lowering goes on to do with it. A value read where an expression's answer is kept, such as an
+     * element of a list or a branch of an `if`, is run as a method of its own, and a value handed to
+     * a function stays a copy; neither is the language's to be asked about.
+     */
+    @Test
+    void anUnpublishedValueIsNotAskedForItsTypeWhateverItIsRunAs() throws Exception {
+        String head = """
+                module shop exposing ( use )
+
+                let adder (n: Int) = (x) -> x + n
+
+                let inc = adder(1)
+
+                let applyTo (f: (Int) -> Int, x: Int) = f(x)
+
+                behavior use : (n: Int) -> Int
+                """;
+
+        for (String kept : List.of(
+                "let use (n) = List.fold((acc, f) -> f(acc), n, [inc, inc])",
+                "let use (n) = (if n > 0 then inc else inc)(n)")) {
+            CompileException e = assertThrows(CompileException.class,
+                    () -> Compiler.compile(head + kept));
+            assertTrue(e.diagnostics().stream().noneMatch(d ->
+                            d.said() instanceof HelperMessage.TheValuesFunctionTypeIsNotWritten),
+                    e.getMessage());
+        }
+
+        BytesClassLoader loader = new BytesClassLoader(
+                Compiler.compile(head + "let use (n) = applyTo(inc, n)"),
+                getClass().getClassLoader());
+        Object use = Emitted.behavior(loader, "shop", "use").getConstructor().newInstance();
+        assertEquals(11L, Codecs.apply(use, 10L));
+    }
+
+    /** Kept to its module, the same value is substituted where it is applied and typed there. */
+    @Test
+    void aValueHoldingAFunctionKeptToItsModuleIsTypedWhereItIsApplied() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module shop exposing ( use )
+
+                let adder (n: Int) = (x) -> x + n
+
+                let inc = adder(1)
+
+                behavior use : (n: Int) -> Int
+                let use (n) = inc(n)
+                """), getClass().getClassLoader());
+
+        Object use = Emitted.behavior(loader, "shop", "use").getConstructor().newInstance();
+
+        assertEquals(11L, Codecs.apply(use, 10L));
+    }
+
+    /** The type is written with `Option<T>` where the function answers an optional. */
+    @Test
+    void aPublishedFunctionAnsweringAnOptionalWritesItsTypeWithOption() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module shop exposing ( pick )
+
+                let picker (n: Int) = (x) -> List.find((y) -> y > n, [x])
+
+                let pick: (Int) -> Option<Int> = picker(1)
+                """));
     }
 
     /** A value crosses a project boundary too: what is published is the declaration, read back from

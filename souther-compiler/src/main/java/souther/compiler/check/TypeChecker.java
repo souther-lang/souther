@@ -553,7 +553,8 @@ public final class TypeChecker {
         // declares, which is the same check every other definition of this module gets. There is
         // nothing left here for a reading of its own to ask.
         collect(errors, abandoned, () -> HelperTyping.checkHelpers(inliner, toCheck, symbols,
-                published, kinds, reqSigs, recursiveHelperFns, loweredBodies, elaborated));
+                published, kinds, reqSigs, recursiveHelperFns, loweredBodies,
+                ValueEntries.publishedValues(module), elaborated));
         // Recursion is total by default (spec §fn-declaration): a non-`partial` recursive helper must
         // be structurally recursive, so its examples terminate at compile time.
         collect(errors, abandoned, () -> TotalityChecker.check(inliner));

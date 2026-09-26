@@ -51,6 +51,7 @@ public final class HelperTyping {
                                      PublishedDeclarations published, DeclarationKinds kinds,
                                      Map<ValueName.Behavior, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns,
                                      Map<String, Hir.Expr> loweredBodies,
+                                     Set<String> publishedValues,
                                      TypeChecker.Elaborated elaborated) {
         // What each value of this module was settled as, filled in as they are checked. A value is
         // checked against these rather than against a copy of the body each of them stands for,
@@ -202,7 +203,18 @@ public final class HelperTyping {
             // that produces a function is elaborated against it and refused as a block is anywhere
             // it escapes — skipped, the claim would go unheld and the backend would be left a
             // method to emit with no elaborated body to emit it from.
+            //
+            // Such a definition is typed in each copy expanded into what reads it, and a top-level
+            // definition is not typed from what applies it. A value the module publishes is read as
+            // it stands, by an entry that is no copy of it, so there is no copy to type it in: it is
+            // refused here, at the value. Which values are published is the module's declaration,
+            // and does not move with which of them lowering happens to call as a method.
             if (declaredReturn == null && Elaborator.producesFunction(body)) {
+                if (publishedValues.contains(h.name())) {
+                    throw CompileException.of(Diagnostic.at(h.pos())
+                            .say(new HelperMessage.TheValuesFunctionTypeIsNotWritten(h.name()))
+                            .build());
+                }
                 continue;
             }
 

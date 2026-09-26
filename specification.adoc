@@ -2846,9 +2846,9 @@ A block is written where a function is taken, and that position is part of what 
 
 [[a-function-binding-has-one-type]]A binding holding a function has one type. Applied at two argument types, or given by two branches that produce different function types, it has no single one to be.
 
-[[a-function-bindings-type-is-known]]That type MUST be readable where the binding is written — from its annotation, or from an application in the same scope. Nothing outside the scope is consulted for it.
+[[a-function-bindings-type-is-known]]That type MUST be readable where the binding is written — from its annotation, or from an application in the same scope. Nothing outside the scope is consulted for it. A binding inside a block takes it from the applications in the body it is in force over. A top-level definition takes it from nothing that reads it: a reference in another definition is where a copy of the value is substituted and typed as that copy (<<fn-value-semantics>>), and the definition itself gets no type from it. A value the module publishes is handed to a reader as it stands, and no copy of it stands anywhere for it to be typed in, so a published value holding a function MUST write its type: `+let pick: (Int) -> Option<Int> = picker(1)+`. A value that is not published is not asked for one, whichever way the compiler goes on to run it: whether a program is accepted does not depend on that.
 
-[[an-annotation-on-a-function-binding-is-a-function-type]]An annotation on a binding that holds a function MUST be a function type. An ordinary type does not describe a function, so it settles nothing and disagrees with the value in the same breath. Leaving the annotation off is the other way to write the binding, and then the applications settle it.
+[[an-annotation-on-a-function-binding-is-a-function-type]]An annotation on a binding that holds a function MUST be a function type. An ordinary type does not describe a function, so it settles nothing and disagrees with the value in the same breath. For a binding inside a block, leaving the annotation off is the other way to write the binding, and then the applications in the body it is in force over settle it.
 
 A `+let+` is the implementation of a behavior. A behavior is the specification (<<behavior>>), and a `+let+` is what satisfies it.
 
@@ -6545,7 +6545,13 @@ Cannot infer the type of the function `f`: write its type (`let f: (Int) -> Bool
 it in this scope so its parameter types follow.
 ----
 
-Reported at the binding (<<a-function-bindings-type-is-known>>).
+[,text]
+----
+`inc` is published and holds a function, but its function type is not written: write it
+(`let inc: (Int) -> Bool = ...`).
+----
+
+Reported at the binding (<<a-function-bindings-type-is-known>>). The second form is a published top-level value. An application of it in another definition does not help there, so the message does not offer one.
 
 [#e1809]
 === A block is returned or stored

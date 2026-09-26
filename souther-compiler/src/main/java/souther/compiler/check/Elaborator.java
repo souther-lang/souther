@@ -1458,7 +1458,9 @@ public final class Elaborator {
             // its arguments became, and what those captured is what the lambda closes over
             case Hir.Expansion ex -> {
                 Applied applied = arguments(ex, env, ctx);
-                Core body = elaborateFunctionValue(ex.body(), paramTypes, applied.inner(), ctx);
+                // Everything the copy holds stands in this expansion, here as in {@link #expansion}.
+                Core body = elaborateFunctionValue(ex.body(), paramTypes, applied.inner(),
+                        ctx.inside(ex.application(), ex.callee(), ex.at()));
                 yield applied.wrap(body, body.type(), ex.pos());
             }
             case Hir.LetIn li -> {

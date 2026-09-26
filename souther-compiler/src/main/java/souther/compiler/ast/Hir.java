@@ -1805,7 +1805,12 @@ public interface Hir {
     }
 
     /**
-     * One application of a non-recursive helper, with the callee's body in place of the call.
+     * One application whose callee's body is copied in place of the call: a non-recursive helper, a
+     * function the caller supplied, or a value that answers a function.
+     *
+     * <p>A helper carries its instantiated signature. A value takes no arguments of its own, so its
+     * expansion has no {@code bound} and no {@code given} and declares no result; it is an expansion
+     * because applying it copies a body, and two applications are two copies.
      *
      * <p>It is one node rather than the bindings it becomes because a signature is one statement.
      * {@code emptyLike (xs: List<'a>) : List<'a>} says the result holds what the argument held, and
