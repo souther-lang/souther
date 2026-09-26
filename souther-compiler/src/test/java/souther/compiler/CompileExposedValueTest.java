@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
 
@@ -14,6 +15,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -165,6 +167,87 @@ class CompileExposedValueTest {
 
         assertEquals(11L, Codecs.apply(applied, 10L));
         assertEquals(12L, Codecs.apply(held, 10L));
+    }
+
+    /** A published value holding a function with no written type is refused at the value. What a
+     *  reader is handed is the value as it stands, and nothing it wrote says which function it is
+     *  — whether the function comes from a helper's answer, a fork of two blocks or a name. */
+    @Test
+    void aPublishedValueHoldingAFunctionWritesItsType() {
+        String fromAHelper = """
+                module shop exposing ( inc )
+
+                let adder (n: Int) = (x) -> x + n
+
+                let inc = adder(1)
+                """;
+        String fromAFork = """
+                module shop exposing ( inc )
+
+                let inc = if true then (x) -> x + 1 else (x) -> x
+                """;
+        String fromAName = """
+                module shop exposing ( inc )
+
+                let inc = String.trim
+                """;
+
+        for (String source : List.of(fromAHelper, fromAFork, fromAName)) {
+            CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(source));
+            assertInstanceOf(HelperMessage.TheValuesFunctionTypeIsNotWritten.class,
+                    e.diagnostic().said(), e.getMessage());
+            assertTrue(e.getMessage().contains("`inc`"), e.getMessage());
+        }
+    }
+
+    /** A top-level definition is not typed from what applies it: `use` applying `inc` types the copy
+     *  substituted into `use`, and the published value is still one nothing typed. */
+    @Test
+    void anApplicationInTheDeclaringModuleDoesNotTypeAPublishedValue() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module shop exposing ( inc, use )
+
+                let adder (n: Int) = (x) -> x + n
+
+                let inc = adder(1)
+
+                behavior use : (n: Int) -> Int
+                let use (n) = inc(n)
+                """));
+
+        assertInstanceOf(HelperMessage.TheValuesFunctionTypeIsNotWritten.class,
+                e.diagnostic().said(), e.getMessage());
+    }
+
+    /** Kept to its module, the same value is substituted where it is applied and typed there. */
+    @Test
+    void aValueHoldingAFunctionKeptToItsModuleIsTypedWhereItIsApplied() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module shop exposing ( use )
+
+                let adder (n: Int) = (x) -> x + n
+
+                let inc = adder(1)
+
+                behavior use : (n: Int) -> Int
+                let use (n) = inc(n)
+                """), getClass().getClassLoader());
+
+        Object use = Emitted.behavior(loader, "shop", "use").getConstructor().newInstance();
+
+        assertEquals(11L, Codecs.apply(use, 10L));
+    }
+
+    /** The type is written with `Option<T>` where the function answers an optional. */
+    @Test
+    void aPublishedFunctionAnsweringAnOptionalWritesItsTypeWithOption() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module shop exposing ( pick )
+
+                let picker (n: Int) = (x) -> List.find((y) -> y > n, [x])
+
+                let pick: (Int) -> Option<Int> = picker(1)
+                """));
     }
 
     /** A value crosses a project boundary too: what is published is the declaration, read back from

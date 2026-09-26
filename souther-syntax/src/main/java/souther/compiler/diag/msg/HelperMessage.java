@@ -121,6 +121,11 @@ public sealed interface HelperMessage extends Message {
     @Code(DiagnosticCode.E1808)
     record TheFunctionsTypeCannotBeRead(String name) implements HelperMessage, Reported {}
 
+    /** A top-level value holding a function has no written type, and something needs that type on
+     *  its own. What reads the value does not give it one. */
+    @Code(DiagnosticCode.E1808)
+    record TheValuesFunctionTypeIsNotWritten(String name) implements HelperMessage, Reported {}
+
     /** One function value is applied at two argument types. */
     @Code(DiagnosticCode.E1807)
     record TheFunctionIsAppliedAtTwoTypes(String name, String one, String other)

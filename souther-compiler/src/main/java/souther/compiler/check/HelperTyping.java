@@ -202,8 +202,21 @@ public final class HelperTyping {
             // that produces a function is elaborated against it and refused as a block is anywhere
             // it escapes — skipped, the claim would go unheld and the backend would be left a
             // method to emit with no elaborated body to emit it from.
+            //
+            // Skipped only where nothing is emitted for it. Such a definition is typed in each copy
+            // expanded into what reads it; one the backend emits is typed nowhere but here, and a
+            // top-level definition is not typed from what applies it elsewhere. A value of that kind
+            // is refused at itself. Anything else emitted goes on to the elaboration below, which
+            // refuses a block no position types.
             if (declaredReturn == null && Elaborator.producesFunction(body)) {
-                continue;
+                if (emitted == null) {
+                    continue;
+                }
+                if (settled != null) {
+                    throw CompileException.of(Diagnostic.at(h.pos())
+                            .say(new HelperMessage.TheValuesFunctionTypeIsNotWritten(h.name()))
+                            .build());
+                }
             }
 
             if (recursiveHelperFns.containsKey(h.name())) {

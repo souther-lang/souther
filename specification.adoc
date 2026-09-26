@@ -2846,7 +2846,7 @@ A block is written where a function is taken, and that position is part of what 
 
 [[a-function-binding-has-one-type]]A binding holding a function has one type. Applied at two argument types, or given by two branches that produce different function types, it has no single one to be.
 
-[[a-function-bindings-type-is-known]]That type MUST be readable where the binding is written — from its annotation, or from an application in the same scope. Nothing outside the scope is consulted for it.
+[[a-function-bindings-type-is-known]]That type MUST be readable where the binding is written — from its annotation, or from an application in the same scope. Nothing outside the scope is consulted for it. A binding inside a block takes it from the applications in the body it is in force over. A top-level definition takes it from nothing that reads it: a reference in another definition is where a copy of the value is substituted and typed as that copy (<<fn-value-semantics>>), and the definition itself gets no type from it. So a published value holding a function writes its type, since what a reader is handed is the value as it stands: `+let pick: (Int) -> Option<Int> = picker(1)+`.
 
 [[an-annotation-on-a-function-binding-is-a-function-type]]An annotation on a binding that holds a function MUST be a function type. An ordinary type does not describe a function, so it settles nothing and disagrees with the value in the same breath. Leaving the annotation off is the other way to write the binding, and then the applications settle it.
 
@@ -6545,7 +6545,12 @@ Cannot infer the type of the function `f`: write its type (`let f: (Int) -> Bool
 it in this scope so its parameter types follow.
 ----
 
-Reported at the binding (<<a-function-bindings-type-is-known>>).
+[,text]
+----
+`inc` holds a function, and nothing written says which: write its type (`let inc: (Int) -> Bool = ...`).
+----
+
+Reported at the binding (<<a-function-bindings-type-is-known>>). The second form is a top-level value that has to stand as a value of its own, such as one the module publishes. An application of it in another definition does not help there, so the message does not offer one.
 
 [#e1809]
 === A block is returned or stored
