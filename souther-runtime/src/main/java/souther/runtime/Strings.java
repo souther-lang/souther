@@ -28,6 +28,21 @@ import souther.unicode.ScalarValues;
  */
 public final class Strings {
 
+    /**
+     * The longest text, in UTF-16 units, every {@code java.lang.String} on this run time holds,
+     * whatever its characters are.
+     *
+     * <p>Not {@code Integer.MAX_VALUE}, which is only what a length is counted in. A {@code String}
+     * keeps its text in one array, a VM refuses an array a few elements short of that with "Requested
+     * array size exceeds VM limit" however much heap it has, and a text with any character outside
+     * Latin-1 — or any text at all where compact strings are off — takes two bytes a unit, which
+     * halves it again. This is the JDK's own portable bound on an array
+     * ({@code ArraysSupport.SOFT_MAX_ARRAY_LENGTH}) halved, so what has a place does not depend on
+     * which characters a text holds or on how the VM was started. A text within it is an ordinary
+     * allocation, which the heap may still refuse, as it may any other.
+     */
+    static final long LONGEST_TEXT = (Integer.MAX_VALUE - 8) / 2;
+
     private Strings() {}
 
     /**

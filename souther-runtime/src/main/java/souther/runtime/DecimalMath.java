@@ -230,14 +230,14 @@ public final class DecimalMath {
      * <p>Plain notation is as long as the scale is far from nought, whichever way — a scale of
      * {@code -2000000000} is two billion integer zeros, and one of {@code 2000000000} is two billion
      * fractional digits — so a {@code Decimal} a few bytes wide can have a text no {@code String}
-     * holds. That text is an answer with no place, the same abort a {@code String.repeat} count no
-     * {@code String} could hold is. The length is worked out before the text is, because
-     * {@code toPlainString} answers such a value with {@code ArithmeticException} at the floor of the
-     * scale range and with {@code OutOfMemoryError} everywhere else past it. A text within that
-     * length is an ordinary allocation, which the heap may still refuse, as it may any other.
+     * holds ({@link Strings#LONGEST_TEXT}). That text is an answer with no place, the same abort a
+     * {@code String.repeat} count no {@code String} could hold is. The length is worked out before
+     * the text is, because {@code toPlainString} answers such a value with
+     * {@code ArithmeticException} at the floor of the scale range and with {@code OutOfMemoryError}
+     * everywhere else past it.
      */
     public static String plainText(BigDecimal d) {
-        if (plainTextLength(d) > Integer.MAX_VALUE) {
+        if (plainTextLength(d) > Strings.LONGEST_TEXT) {
             throw new ConstraintViolation(
                     "the plain notation of " + describe(d) + " is longer than a String holds");
         }

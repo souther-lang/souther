@@ -37,14 +37,31 @@ class APlainTextIsMeasuredBeforeItIsWrittenTest {
                 () -> "(" + d.unscaledValue() + ", " + d.scale() + ") is \"" + d.toPlainString() + "\"");
     }
 
-    /** At the ends of the scale range the length is past what a {@code String} holds, and that is
-     *  what is answered — without the text being asked for. */
+    /** Past what a {@code String} holds, the abort is what is answered — without the text being
+     *  asked for. At the ends of the scale range; where the text is one unit past
+     *  {@link Strings#LONGEST_TEXT}, either side of nought; and where it is as long as a length can
+     *  count, which a VM refuses whatever the heap. */
     @Test
     void aTextNoStringHoldsAbortsBeforeItIsWritten() {
-        for (int scale : new int[] {Integer.MIN_VALUE, Integer.MIN_VALUE + 1, Integer.MAX_VALUE}) {
+        long past = Strings.LONGEST_TEXT + 1;
+        int[] scales = {
+                Integer.MIN_VALUE, Integer.MIN_VALUE + 1, Integer.MAX_VALUE,
+                (int) (past - 2),                                   // "0.0…1": the point and a nought
+                (int) -(past - 1),                                  // "10…0": one digit and the zeros
+                Integer.MAX_VALUE - 2, -(Integer.MAX_VALUE - 1)};   // as long as Integer.MAX_VALUE
+        for (int scale : scales) {
             BigDecimal d = new BigDecimal(BigInteger.ONE, scale);
             assertThrows(ConstraintViolation.class, () -> Strings.fromDecimal(d), () -> "scale " + scale);
         }
+    }
+
+    /** One unit short of past is a text that has a place: the length is exactly the bound. */
+    @Test
+    void theLongestTextIsAtTheBoundAndNotPastIt() {
+        assertEquals(Strings.LONGEST_TEXT,
+                DecimalMath.plainTextLength(new BigDecimal(BigInteger.ONE, (int) (Strings.LONGEST_TEXT - 2))));
+        assertEquals(Strings.LONGEST_TEXT,
+                DecimalMath.plainTextLength(new BigDecimal(BigInteger.ONE, (int) -(Strings.LONGEST_TEXT - 1))));
     }
 
     /** Nought is {@code "0"} at every scale up to zero, including the floor. */
