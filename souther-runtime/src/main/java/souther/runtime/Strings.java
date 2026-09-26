@@ -274,15 +274,39 @@ public final class Strings {
         return List.copyOf(out);
     }
 
-    /** Parses {@code s} as a decimal {@code Int}, or {@link NotANumber#INSTANCE} when it is not one
-     *  (Elm {@code String.toInt}, with a named case in place of {@code Maybe}). Returns a boxed
-     *  {@code Long} or the {@code NotANumber} singleton — the {@code Int | NotANumber} union. */
+    /** Parses {@code s} as integer text (spec §string-integer-text), or {@link NotANumber#INSTANCE}
+     *  when it is not integer text or names an integer outside {@code Int} (Elm {@code String.toInt},
+     *  with a named case in place of {@code Maybe}). Returns a boxed {@code Long} or the
+     *  {@code NotANumber} singleton — the {@code Int | NotANumber} union. Which text is accepted is
+     *  decided by {@link #isIntegerText}; {@code Long.parseLong} only converts text already accepted
+     *  and answers the range, because on its own it also reads every Unicode decimal digit its JDK
+     *  knows ({@code "１２３"}, {@code "٣"}). */
     public static Object toInt(String s) {
+        if (!isIntegerText(s)) {
+            return NotANumber.INSTANCE;
+        }
         try {
             return Long.parseLong(s);
         } catch (NumberFormatException _) {
             return NotANumber.INSTANCE;
         }
+    }
+
+    /** Integer text (spec §string-integer-text): an optional ASCII {@code +} or {@code -} followed by
+     *  one or more ASCII digits {@code 0}-{@code 9}, and nothing else. Checked by char because every
+     *  char it accepts is ASCII, so a surrogate half or any other non-ASCII char refuses the text. */
+    private static boolean isIntegerText(String s) {
+        int i = !s.isEmpty() && (s.charAt(0) == '+' || s.charAt(0) == '-') ? 1 : 0;
+        if (i == s.length()) {
+            return false;
+        }
+        for (; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c < '0' || c > '9') {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** The code points of {@code s} in the opposite order, canonicalized (Elm {@code String.reverse}).
