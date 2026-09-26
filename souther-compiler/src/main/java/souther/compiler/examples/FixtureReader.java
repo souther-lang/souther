@@ -29,6 +29,8 @@ import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
+import souther.runtime.ConstraintViolation;
+import souther.runtime.DecimalMath;
 import souther.runtime.Sets;
 
 import net.unit8.raoh.Err;
@@ -1525,24 +1527,36 @@ public final class FixtureReader {
         throw new FixtureException("only a number can be negated in a fixture");
     }
 
+    /**
+     * What the operator computes of two numbers a fixture wrote, as the run time computes it.
+     *
+     * <p>Reached by a value the module states and a row is written against, which is read by name
+     * and is no operand of any row, so nothing has emitted it. The result is the run time's or it
+     * is none: a sum, difference or product the run time aborts on is a fixture that cannot be
+     * built, and never a number {@code BigDecimal} or {@code long} arithmetic moved into range.
+     */
     private Object fold(Hir.Binary b) {
         Object l = raw(b.left(), Position.UNREAD);
         Object r = raw(b.right(), Position.UNREAD);
-        if (l instanceof Long x && r instanceof Long y) {
-            return switch (b.op()) {
-                case ADD -> x + y;
-                case SUB -> x - y;
-                case MUL -> x * y;
-                default -> throw new FixtureException("unsupported arithmetic in a fixture");
-            };
-        }
-        if (l instanceof BigDecimal x && r instanceof BigDecimal y) {
-            return switch (b.op()) {
-                case ADD -> x.add(y);
-                case SUB -> x.subtract(y);
-                case MUL -> x.multiply(y);
-                default -> throw new FixtureException("unsupported arithmetic in a fixture");
-            };
+        try {
+            if (l instanceof Long x && r instanceof Long y) {
+                return switch (b.op()) {
+                    case ADD -> Math.addExact(x, y);
+                    case SUB -> Math.subtractExact(x, y);
+                    case MUL -> Math.multiplyExact(x, y);
+                    default -> throw new FixtureException("unsupported arithmetic in a fixture");
+                };
+            }
+            if (l instanceof BigDecimal x && r instanceof BigDecimal y) {
+                return switch (b.op()) {
+                    case ADD -> DecimalMath.add(x, y);
+                    case SUB -> DecimalMath.subtract(x, y);
+                    case MUL -> DecimalMath.multiply(x, y);
+                    default -> throw new FixtureException("unsupported arithmetic in a fixture");
+                };
+            }
+        } catch (ArithmeticException | ConstraintViolation e) {
+            throw new FixtureException("arithmetic in a fixture has no value: " + e.getMessage());
         }
         throw new FixtureException("a fixture can only combine numbers of the same kind");
     }

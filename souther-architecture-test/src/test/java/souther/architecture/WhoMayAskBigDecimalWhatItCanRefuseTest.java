@@ -59,7 +59,8 @@ class WhoMayAskBigDecimalWhatItCanRefuseTest {
      * The call sites that ask for something that can be refused.
      *
      * <p>Every {@code DecimalMath} row catches the refusal and reports it as the abort the operation
-     * states, or — {@code plainText}, {@code leastDigits} — works out before the call that it cannot
+     * states, or — {@code plainText}, {@code ExactDecimals.leastDigits} — works out before the call
+     * that it cannot
      * be refused: the text's length against what a {@code String} holds, and the zeros that can be
      * taken off before the scale reaches its floor. {@code multiply} also works out the product's
      * scale before the call, because {@code BigDecimal} answers some products whose scale is out of
@@ -69,10 +70,10 @@ class WhoMayAskBigDecimalWhatItCanRefuseTest {
      * counting the digits that asks for and finding them few.
      */
     private static final List<String> MAY_BE_REFUSED = List.of(
+            "souther/exact/ExactDecimals#leastDigits stripTrailingZeros()Ljava/math/BigDecimal;",
             "souther/runtime/DecimalMath#add add(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
             "souther/runtime/DecimalMath#divide"
                     + " divide(Ljava/math/BigDecimal;ILjava/math/RoundingMode;)Ljava/math/BigDecimal;",
-            "souther/runtime/DecimalMath#leastDigits stripTrailingZeros()Ljava/math/BigDecimal;",
             "souther/runtime/DecimalMath#multiply multiply(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
             "souther/runtime/DecimalMath#ofDecimalText <init>(Ljava/lang/String;)V",
             "souther/runtime/DecimalMath#plainText toPlainString()Ljava/lang/String;",
