@@ -1,6 +1,7 @@
 package souther.compiler.program;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.DefinitionRole;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.BehaviorBodies;
@@ -20,7 +21,6 @@ import souther.compiler.check.Sig;
 import souther.compiler.check.SpecImplementation;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
-import souther.compiler.check.ValueEntries;
 import souther.compiler.derive.CodecShape;
 import souther.compiler.derive.Deriver;
 import souther.compiler.abort.AbortSites;
@@ -567,11 +567,15 @@ final class CheckedProgramAssembler {
             throw new IllegalStateException("`" + module + "` was taken as checked and what it"
                     + " publishes was not read");
         }
-        // Off the settled tree, where a value's declaration is still there whether or not lowering
-        // left a method for it: a constant folds into whatever reads it and has no method.
+        // Which definitions this module wrote is the settled tree's to say, and what each of them
+        // runs as is what lowering answered for it. A constant folds into whatever reads it and has
+        // no method, so what the emitted definitions hold is not where its declaration is read.
         Set<ValueName.Helper> valuesDeclared = new LinkedHashSet<>();
-        for (String value : ValueEntries.declaredValues(declarations)) {
-            valuesDeclared.add(new ValueName.Helper(module, value));
+        for (Hir.FnDef fn : declarations.fns()) {
+            if (fn.role() instanceof DefinitionRole.Ordinary
+                    && lowering.roles().get(fn.name()) instanceof LoweringRole.ValueHome home) {
+                valuesDeclared.add(home.value());
+            }
         }
         return new ModuleReading(module, bodies, checked, signatures, declaredSignatures,
                 implementations,
