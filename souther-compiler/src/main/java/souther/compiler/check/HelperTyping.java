@@ -203,11 +203,11 @@ public final class HelperTyping {
             // it escapes — skipped, the claim would go unheld and the backend would be left a
             // method to emit with no elaborated body to emit it from.
             //
-            // Skipped only where nothing is emitted for it. Such a definition is typed in each copy
-            // expanded into what reads it; one the backend emits is typed nowhere but here, and a
-            // top-level definition is not typed from what applies it elsewhere. A value of that kind
-            // is refused at itself. Anything else emitted goes on to the elaboration below, which
-            // refuses a block no position types.
+            // Skipped only where nothing is emitted for it: such a definition is typed in each copy
+            // expanded into what reads it. What the backend emits as a method is typed nowhere but
+            // here, and a top-level definition is not typed from what applies it elsewhere, so a
+            // value that is emitted is refused at itself. Any other emitted definition goes on to
+            // the elaboration below, which refuses a block that no position types.
             if (declaredReturn == null && Elaborator.producesFunction(body)) {
                 if (emitted == null) {
                     continue;

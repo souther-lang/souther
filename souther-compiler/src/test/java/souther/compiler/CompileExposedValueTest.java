@@ -219,6 +219,26 @@ class CompileExposedValueTest {
                 e.diagnostic().said(), e.getMessage());
     }
 
+    /** What decides it is that the value has to stand as a value of its own, not that it is
+     *  published: one kept in a list is asked for its type too. */
+    @Test
+    void anUnpublishedValueKeptInAListWritesItsTypeAsWell() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module shop exposing ( use )
+
+                let adder (n: Int) = (x) -> x + n
+
+                let inc = adder(1)
+
+                behavior use : (n: Int) -> Int
+                let use (n) = List.fold((acc, f) -> f(acc), n, [inc, inc])
+                """));
+
+        assertTrue(e.diagnostics().stream().anyMatch(d ->
+                        d.said() instanceof HelperMessage.TheValuesFunctionTypeIsNotWritten),
+                e.getMessage());
+    }
+
     /** Kept to its module, the same value is substituted where it is applied and typed there. */
     @Test
     void aValueHoldingAFunctionKeptToItsModuleIsTypedWhereItIsApplied() throws Exception {
