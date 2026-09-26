@@ -29,6 +29,9 @@ final class Counts {
         return switch (written) {
             case Hir.IntLit i -> Count.of(i.value());
             case Hir.DecimalLit d -> Count.of(d.value());
+            // The smallest Int has no positive counterpart: its negation is the run time's abort and
+            // settles no count.
+            case Hir.Neg n when n.operand() instanceof Hir.IntLit i && i.value() == Long.MIN_VALUE -> null;
             case Hir.Neg n -> {
                 Place inner = writtenIn(n.operand());
                 yield inner == null ? null : Count.number(inner).negate();

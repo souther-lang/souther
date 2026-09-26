@@ -61,6 +61,9 @@ public final class AstBuilder {
      *  admitted is read into a {@code long} and nothing past here carries a wider number. */
     private static final BigInteger GREATEST_INT = BigInteger.valueOf(Long.MAX_VALUE);
 
+    /** The magnitude of the least {@code Int}, one past the greatest: written only under a minus. */
+    private static final BigInteger LEAST_INT_MAGNITUDE = GREATEST_INT.add(BigInteger.ONE);
+
     /** What this text is made of and where each of it sits — the one place a place is made from a
      *  text, so nothing below here counts its tokens again. */
     private final SourceLayout layout;
@@ -984,7 +987,7 @@ public final class AstBuilder {
         if (operand.kind() == SyntaxKind.LITERAL_EXPR) {
             SyntaxToken t = firstMeaningfulToken(operand);
             if (t.kind() == SyntaxKind.INT_LIT
-                    && new BigInteger(t.text()).equals(GREATEST_INT.add(BigInteger.ONE))) {
+                    && new BigInteger(t.text()).equals(LEAST_INT_MAGNITUDE)) {
                 return new Ast.IntLit(Long.MIN_VALUE, pos(n), region(n));
             }
         }

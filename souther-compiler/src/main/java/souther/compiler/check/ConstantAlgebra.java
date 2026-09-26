@@ -51,7 +51,9 @@ final class ConstantAlgebra {
      */
     static Optional<Object> negate(Object o) {
         if (o instanceof Long x) {
-            return Optional.of(-x);
+            // The smallest Int has no positive counterpart, so its negation is the run time's abort
+            // and no constant, as a sum outside the range is.
+            return x == Long.MIN_VALUE ? Optional.empty() : Optional.of(-x);
         }
         if (o instanceof BigDecimal d) {
             return Optional.of(d.negate());

@@ -1519,6 +1519,9 @@ public final class FixtureReader {
 
     private static Object negate(Object v) {
         if (v instanceof Long l) {
+            if (l == Long.MIN_VALUE) {
+                throw new FixtureException("arithmetic in a fixture has no value: -(" + l + ")");
+            }
             return -l;
         }
         if (v instanceof BigDecimal d) {
