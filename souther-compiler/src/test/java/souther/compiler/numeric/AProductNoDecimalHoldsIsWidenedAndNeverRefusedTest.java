@@ -8,6 +8,7 @@ import java.math.BigInteger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A product of two counts is a number whether or not a {@code BigDecimal} holds it, and the analysis
@@ -25,6 +26,48 @@ class AProductNoDecimalHoldsIsWidenedAndNeverRefusedTest {
     @Test
     void aProductWhoseScaleLeavesTheRangeIsNoCount() {
         assertNull(TINY.timesWhereHeld(TINY.at()));
+    }
+
+    @Test
+    void aProductHeldAtAnotherScaleIsStillACount() {
+        // BigDecimal.multiply asks for the sum of the scales and refuses; the number is one of the
+        // type's own, 10^-(2^31 - 1), at a scale one less than the sum.
+        Count a = new Count(new BigDecimal(BigInteger.TEN, Integer.MAX_VALUE));
+        BigDecimal b = new BigDecimal(BigInteger.ONE, 1);
+
+        Count product = a.timesWhereHeld(b);
+
+        assertNotNull(product);
+        assertEquals(0, product.compareTo(FAR_FROM_NOUGHT));
+    }
+
+    @Test
+    void aProductThatCarriesTheZerosTheScaleSumAsksForIsHeld() {
+        // 2 * 5 is 10, so the digits give up the zero the scale sum is one over the range by.
+        Count a = new Count(new BigDecimal(BigInteger.TWO, Integer.MAX_VALUE));
+        BigDecimal b = new BigDecimal(BigInteger.valueOf(5), 1);
+
+        Count product = a.timesWhereHeld(b);
+
+        assertNotNull(product);
+        assertEquals(0, product.compareTo(FAR_FROM_NOUGHT));
+    }
+
+    @Test
+    void aProductBelowTheFloorOfTheScaleRangeIsNoCount() {
+        Count a = new Count(new BigDecimal(BigInteger.ONE, Integer.MIN_VALUE));
+
+        assertNull(a.timesWhereHeld(new BigDecimal(BigInteger.ONE, -1)));
+    }
+
+    @Test
+    void aCountAtTheFloorOfTheScaleRangeIsNamedByItsNumber() {
+        Count tens = new Count(new BigDecimal(BigInteger.TEN, Integer.MIN_VALUE));
+        Count hundreds = new Count(new BigDecimal(BigInteger.valueOf(100), Integer.MIN_VALUE + 1));
+
+        assertEquals(tens.key(), hundreds.key());
+        assertEquals(tens.canonical().at().scale(), hundreds.canonical().at().scale());
+        assertTrue(tens.whole());
     }
 
     @Test

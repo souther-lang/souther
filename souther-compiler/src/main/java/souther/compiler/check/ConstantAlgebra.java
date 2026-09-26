@@ -293,8 +293,11 @@ final class ConstantAlgebra {
             // factors' and is refused whatever the product's value is, so it is checked before
             // BigDecimal is asked; BigDecimal answers some products past the range instead of
             // refusing them.
-            if (op == BinOp.MUL && (long) x.scale() + y.scale() != x.scale() + y.scale()) {
-                return Optional.empty();
+            if (op == BinOp.MUL) {
+                long scale = (long) x.scale() + y.scale();
+                if (scale != (int) scale) {
+                    return Optional.empty();
+                }
             }
             try {
                 return Optional.of(switch (op) {

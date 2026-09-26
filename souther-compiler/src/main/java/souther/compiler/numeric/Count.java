@@ -1,5 +1,7 @@
 package souther.compiler.numeric;
 
+import souther.exact.ExactDecimals;
+
 import java.math.BigDecimal;
 
 /**
@@ -159,24 +161,16 @@ public record Count(BigDecimal at) implements Place {
      * <p>For a reader whose factors are ends of ranges and so of any scale. {@link #times} is for a
      * step counted out, which is a whole number of steps and cannot leave the scale range.
      *
-     * <p>A count is the number and not the places it was written to, so the product is the same
-     * number whatever scale it is held at, and what has none is a nonzero product whose scale — the
-     * sum of the factors' — leaves 32 bits. That is a fact about how a count is held and says nothing
-     * about the number, so it is null and never an exception for the caller to meet: the number
-     * exists, and what a caller does without a count to hold it is the caller's to say.
-     *
-     * <p>A nought is nought at every scale, so a factor of nought answers before any scale is
-     * summed.
+     * <p>A count is the number and not the places it was written to, so the product is asked of the
+     * number: null is where no scale a {@link BigDecimal} has holds it, and never where
+     * {@code BigDecimal.multiply} could not build it at the sum of the factors' scales.
+     * {@link ExactDecimals#product} says which. That the number cannot be held says nothing about
+     * the number, so it is null and never an exception for the caller to meet: what a caller does
+     * without a count to hold it is the caller's to say.
      */
     public Count timesWhereHeld(BigDecimal factor) {
-        if (at.signum() == 0 || factor.signum() == 0) {
-            return ZERO;
-        }
-        try {
-            return new Count(at.multiply(factor));
-        } catch (ArithmeticException _) {
-            return null;
-        }
+        BigDecimal held = ExactDecimals.product(at, factor);
+        return held == null ? null : new Count(held);
     }
 
     public Count negate() {
@@ -206,7 +200,7 @@ public record Count(BigDecimal at) implements Place {
     /** Whether this counts to a place on an order that steps: a count with a fraction in it is
      * between two of a discrete carrier's values and is none of them. */
     public boolean whole() {
-        return at.stripTrailingZeros().scale() <= 0;
+        return ExactDecimals.leastDigits(at).scale() <= 0;
     }
 
     public int signum() {
@@ -245,7 +239,7 @@ public record Count(BigDecimal at) implements Place {
      */
     @Override
     public String key() {
-        BigDecimal canonical = at.stripTrailingZeros();
+        BigDecimal canonical = ExactDecimals.leastDigits(at);
         return canonical.unscaledValue() + ";" + canonical.scale();
     }
 
@@ -253,13 +247,13 @@ public record Count(BigDecimal at) implements Place {
      *  are written one way — the same number {@link #key()} names, said in digits. */
     @Override
     public String spelled() {
-        return at.stripTrailingZeros().toPlainString();
+        return ExactDecimals.leastDigits(at).toPlainString();
     }
 
     /** The same count with the trailing zeros gone, which is the number {@link #key()} names. */
     @Override
     public Count canonical() {
-        return new Count(at.stripTrailingZeros());
+        return new Count(ExactDecimals.leastDigits(at));
     }
 
     @Override
