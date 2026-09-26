@@ -71,7 +71,7 @@ Three separate mechanisms make what is written follow the history of the collect
 collection:
 
 - **A hash-collision bucket holds its members in the order they were put.** `HashCollisionNode`
-  appends on insert and the iterator walks that array. `ValueClassGen` folds `hashCode` over the
+  appends on insert and the iterator walks the bucket in that order. `ValueClassGen` folds `hashCode` over the
   fields from `1`, and a unit data has no fields, so *every* unit data in a program hashes to `1` —
   which puts every `Set` of two or more enumeration cases in one bucket.
 - **A decoded `Map` was never a trie.** The decoders leave the map the decode produced, and only
