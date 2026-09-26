@@ -7,6 +7,7 @@ import souther.compiler.meta.ModulePath;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -123,6 +124,47 @@ class CompileExposedValueTest {
 
                 let raise = (a) -> a + 1
                 """));
+    }
+
+    private static final String BUMP = """
+            module lib.f exposing ( bump )
+            let bump: (Int) -> Int = (n) -> n + 1
+            """;
+
+    /** A value whose written type is a function is a value holding one, and publishing it publishes
+     *  an entry that answers with that function. */
+    @Test
+    void aValueHoldingAFunctionIsPublished() {
+        assertDoesNotThrow(() -> Compiler.compile(BUMP));
+    }
+
+    /** A reader across a jar applies the published function, which copies its block, and holds it,
+     *  which reads it off the entry; both run to what the block computes. */
+    @Test
+    void aPublishedFunctionIsAppliedAndHeldAcrossAJarBoundary() throws Exception {
+        Map<String, ClassFileImage> jar = Compiler.compile(BUMP);
+        Map<String, ClassFileImage> reader = Compiler.compileModules(List.of("""
+                module app exposing ( applied, held )
+                import lib.f ( bump )
+
+                behavior applied : (n: Int) -> Int
+                let applied (n) = bump(n)
+
+                behavior held : (n: Int) -> Int
+                let held (n) = {
+                    let fs = [bump, bump]
+                    List.fold((acc, f) -> f(acc), n, fs)
+                }
+                """), ModulePath.of(jar));
+        Map<String, ClassFileImage> both = new LinkedHashMap<>(jar);
+        both.putAll(reader);
+        BytesClassLoader loader = new BytesClassLoader(both, getClass().getClassLoader());
+
+        Object applied = Emitted.behavior(loader, "app", "applied").getConstructor().newInstance();
+        Object held = Emitted.behavior(loader, "app", "held").getConstructor().newInstance();
+
+        assertEquals(11L, Codecs.apply(applied, 10L));
+        assertEquals(12L, Codecs.apply(held, 10L));
     }
 
     /** A value crosses a project boundary too: what is published is the declaration, read back from
