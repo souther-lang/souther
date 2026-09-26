@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The language declares vocabulary of its own — what a division by zero answers with, what a rounding
- * takes, the reserved `Raw` — and each says what one of its operations can answer or take. A named
+ * takes — and each says what one of its operations can answer or take. A named
  * type that crosses is one a model declares (spec {@code [#a-boundary-carries-the-models-own-vocabulary]}),
  * so none of those may stand where an external representation crosses. Before this they were written
  * freely: a parameter compiled and failed at run with a reflection exception, and an output union
@@ -66,21 +66,6 @@ class ABoundaryCarriesTheModelsOwnVocabularyTest {
         // arm for a name no module declares and raised an `IllegalStateException`.
         refuses("behavior f : (n: Int) -> Int | DivisionByZero", "let f (n) = Int.truncatingDivide(10, n)",
                 "DivisionByZero");
-    }
-
-    @Test
-    void theReservedTypeIsAskedLikeAnyOtherName() {
-        // `Raw` is spelled like a primitive and is not one: no stage produces it, and the module that
-        // compiled published `Behavior<souther.Raw, Long>` for a class that does not exist.
-        refuses("behavior f : (x: Raw) -> Int", "let f (x) = 1", "Raw");
-    }
-
-    @Test
-    void aUnionMemberSpelledLikeAPrimitiveIsHeldToTheScalarRule() {
-        // The one position a name may be a scalar's. `Int | DivisionByZero` is a primitive beside a
-        // case, so a member is asked which of the two it is; `Raw` is spelled like a primitive and
-        // stands for no scalar, which is the language's word rather than a model's either way.
-        refuses("behavior f : (n: Int) -> Int | Raw", "let f (n) = n", "Raw");
     }
 
     @Test
@@ -180,11 +165,6 @@ class ABoundaryCarriesTheModelsOwnVocabularyTest {
     void theBaseANewtypeIsWrittenFromIsAskedToo() {
         // a newtype delegates the whole input to its base's decoder, so the base is what crosses
         refusesDeclaring("data Wrapped = RoundingMode", "RoundingMode");
-    }
-
-    @Test
-    void theReservedTypeIsAskedInAFieldToo() {
-        refusesDeclaring("data X = { r: Raw }", "Raw");
     }
 
     @Test

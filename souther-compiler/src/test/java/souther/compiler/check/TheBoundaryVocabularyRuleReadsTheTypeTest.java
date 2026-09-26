@@ -14,11 +14,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
- * The rule is asked of the type, not of the name a source spelling happened to resolve to. Written
- * `Raw` currently denotes a reference rather than the primitive, and asking the reference is what
- * refuses it in a compiled module — but the primitive is the same type, so correcting that
- * representation must not be what decides whether the boundary admits it. Both readings refuse it:
- * no name of the language's namespace is a model's declaration, and `Raw` is no scalar the boundary
+ * The rule is asked of the type, not of the name a source spelling happened to resolve to. No name of
+ * the language's namespace is a model's declaration, and a `Rational` is no scalar the boundary
  * writes.
  *
  * <p>A primitive is classified without asking the model anything, which is why these pass no symbols:
@@ -26,18 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
  */
 class TheBoundaryVocabularyRuleReadsTheTypeTest {
 
-    @Test
-    void theReservedPrimitiveIsNoScalarTheBoundaryWrites() {
-        assertNull(LeafScalar.of(Type.Prim.RAW));
-    }
-
     /**
-     * A Rational is no scalar the boundary writes, and the capability is why.
-     *
-     * <p>Asserted beside the absence rather than left to the sweep below: `Raw` is absent from the
-     * leaves because its spelling is reserved while it still answers yes to having an external form,
-     * and a Rational is absent because it answers no (ADR-0116). Two primitives outside one set for
-     * two reasons, and reading only the set they are both outside of would not say which.
+     * A Rational is no scalar the boundary writes, and the capability is why: it has no leaf codec
+     * and it answers no to having an external form (ADR-0116).
      */
     @Test
     void anExactQuotientIsNoScalarTheBoundaryWrites() {
@@ -48,13 +36,16 @@ class TheBoundaryVocabularyRuleReadsTheTypeTest {
     /** The primitives no boundary writes, which is what the sweep below is about. Closed here and
      *  read from both sides, so a primitive added to the language is either given a leaf codec or
      *  named here, and one of these growing a codec fails as well. */
-    private static final Set<Type.Prim> WRITTEN_BY_NO_BOUNDARY =
-            Set.of(Type.Prim.RAW, Type.Prim.RATIONAL);
+    private static final Set<Type.Prim> WRITTEN_BY_NO_BOUNDARY = Set.of(Type.Prim.RATIONAL);
 
+    /** A primitive has an external form exactly when a leaf codec exists for it, so the two answers
+     *  are one fact read twice. */
     @Test
     void theScalarsTheBoundaryWritesAreNamedByALeaf() {
         for (Type.Prim prim : Type.Prim.values()) {
             assertEquals(!WRITTEN_BY_NO_BOUNDARY.contains(prim), LeafScalar.of(prim) != null,
+                    prim.toString());
+            assertEquals(LeafScalar.of(prim) != null, TypeOps.hasExternalForm(prim, null),
                     prim.toString());
         }
     }

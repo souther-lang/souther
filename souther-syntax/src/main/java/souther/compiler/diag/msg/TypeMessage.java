@@ -205,4 +205,13 @@ public sealed interface TypeMessage extends Message {
 
     @Code(DiagnosticCode.E1325)
     record AnOutputIsATypeTheLanguageDeclares(String behavior, String type) implements TypeMessage, Reported {}
+
+    /** A parameter is, or holds at some depth, a primitive that has no external representation.
+     *  {@code type} is that primitive, which is not always the whole of the parameter's type. */
+    @Code(DiagnosticCode.E1311)
+    record AParameterCarriesAPrimitiveWithNoExternalForm(String parameter, String type) implements TypeMessage, Reported {}
+
+    /** The same of a behavior's answer. */
+    @Code(DiagnosticCode.E1311)
+    record AnOutputCarriesAPrimitiveWithNoExternalForm(String behavior, String type) implements TypeMessage, Reported {}
 }

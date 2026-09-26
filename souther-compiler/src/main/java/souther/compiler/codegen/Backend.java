@@ -1267,7 +1267,7 @@ public final class Backend {
      *
      * <p>Version 8 narrows it again: a named type standing in a behavior's boundary is one a model
      * declares, so the vocabulary the language keeps for its own operations — what a division by zero
-     * answers with, what a rounding takes, the reserved {@code Raw} — is not carried across one. A
+     * answers with, what a rounding takes — is not carried across one. A
      * module written without an {@code exposing} line publishes every behavior it declares, so a jar
      * built before this carries a public {@code Behavior<souther.runtime.DivisionByZero, …>} that this
      * compiler refuses to write.

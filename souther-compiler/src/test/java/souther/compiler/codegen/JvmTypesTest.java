@@ -5,7 +5,6 @@ import souther.compiler.types.Type;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
@@ -24,14 +23,5 @@ class JvmTypesTest {
                 assertThrows(IllegalStateException.class,
                         () -> JvmTypes.jvmType(Type.ERRONEOUS, (CodegenContext) null));
         assertEquals("no JVM carrier for ?", erroneous.getMessage());
-        IllegalStateException raw =
-                assertThrows(IllegalStateException.class,
-                        () -> JvmTypes.jvmType(Type.RAW, (CodegenContext) null));
-        assertEquals("no JVM carrier for Raw", raw.getMessage());
-    }
-
-    @Test
-    void rawHasNoBoxedForm() {
-        assertNull(JvmTypes.boxedPrim(Type.RAW));
     }
 }

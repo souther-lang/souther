@@ -1,6 +1,15 @@
 # ADR-0100: Making a behavior's signature is what admits what crosses it
 
-Status: Accepted
+Status: Accepted. Revised 2026-09-27 — see *Revision*.
+
+## Revision (2026-09-27)
+
+`Raw` is not a value of the language and is not a reserved name: `Type.Prim.RAW` is removed, and
+`Raw` is an ordinary name a model may declare. Every `Type.Prim` denotes a value, and a primitive
+crosses exactly when a leaf codec exists for it. `Rational` is the one primitive for which none does
+(ADR-0116), and it is refused for that, as a primitive with no external representation (E1311) and
+not as a name the language declares (E1325). The mentions of `Raw` below describe the decision as it
+was made.
 
 ## Context
 

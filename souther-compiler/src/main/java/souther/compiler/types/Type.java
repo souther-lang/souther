@@ -50,7 +50,7 @@ public sealed interface Type extends SettledAnswer permits Type.Leaf, Type.Compo
 
     enum Prim implements Leaf, DelegatedEqualityIsTheCrossingAnswer,
             ObjectEqualityIsTheCrossingAnswer {
-        INT, STRING, BOOL, DECIMAL, RATIONAL, DATE, TIME, DATETIME, INSTANT, RAW;
+        INT, STRING, BOOL, DECIMAL, RATIONAL, DATE, TIME, DATETIME, INSTANT;
 
         /** How this primitive is written. One table, read forwards by everything that shows a type
          *  and backwards by {@link TypeSymbol#primitiveKind()} — a primitive case name is minted from
@@ -66,7 +66,6 @@ public sealed interface Type extends SettledAnswer permits Type.Leaf, Type.Compo
                 case TIME -> "Time";
                 case DATETIME -> "DateTime";
                 case INSTANT -> "Instant";
-                case RAW -> "Raw";
             };
         }
 
@@ -82,27 +81,13 @@ public sealed interface Type extends SettledAnswer permits Type.Leaf, Type.Compo
             return null;
         }
 
-        /**
-         * Whether writing this spelling as a type denotes the primitive.
-         *
-         * <p>{@code Raw} is the one that does not. It is spelled like a primitive and a written
-         * {@code Raw} denotes a reference, which is what refuses it in a compiled module; the
-         * primitive is the same type and is reached another way.
-         */
-        public boolean denotedByItsSpelling() {
-            return switch (this) {
-                case INT, STRING, BOOL, DECIMAL, RATIONAL, DATE, TIME, DATETIME, INSTANT -> true;
-                case RAW -> false;
-            };
-        }
-
         /** Whether this is one of the temporals — the primitives a written form spells as ISO 8601
          *  text and a boundary carries as that text. Asked here so that adding a primitive is where
          *  the question gets answered, rather than at each reader that compares against a few names. */
         public boolean temporal() {
             return switch (this) {
                 case DATE, TIME, DATETIME, INSTANT -> true;
-                case INT, STRING, BOOL, DECIMAL, RATIONAL, RAW -> false;
+                case INT, STRING, BOOL, DECIMAL, RATIONAL -> false;
             };
         }
     }
@@ -322,10 +307,6 @@ public sealed interface Type extends SettledAnswer permits Type.Leaf, Type.Compo
      * zone (spec §primitives). A model compares two, keys by one, and hands one to a behavior with
      * no implementation to get a {@code DateTime} back (spec §injected-behavior). */
     Type INSTANT = Prim.INSTANT;
-    /** The external (encoded) representation type: an encoder's raw output at a railway's edge,
-     * unioned with propagated error cases as the case {@code "Raw"} (spec §case-propagation). Reserved — no stage
-     * produces it yet; {@code >->} composes behaviors, not codecs (spec §sequential-composition). */
-    Type RAW = Prim.RAW;
     /** The bottom element type of the empty-list literal (see {@link Nothing}). */
     Type NOTHING = new Nothing();
     /** The type of the empty-list literal {@code []}: a list whose element type is not yet fixed. */
