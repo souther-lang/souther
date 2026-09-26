@@ -31,12 +31,27 @@ public final class CheckedModule {
     private final List<CheckedData> data;
     private final Set<TypeSymbol.AtModule> declaredData;
     private final Set<String> published;
+    private final Set<ValueName.Helper> declaredValues;
 
+    /**
+     * @param declaredValues every value this module declares, published or kept, including one that
+     *             folds to a constant and so has no {@link CheckedValue}: a constant has no
+     *             execution to place (ADR-0074), which is a fact about what became of the
+     *             declaration and not about whether the module declares it
+     */
     CheckedModule(String name, List<CheckedBehavior> behaviors, List<CheckedHelper> helpers,
                   List<CheckedValue> values, List<CheckedValueEntry> valueEntries,
-                  List<CheckedData> data, Set<String> published) {
+                  List<CheckedData> data, Set<String> published,
+                  Set<ValueName.Helper> declaredValues) {
         this.name = name;
         this.published = Set.copyOf(published);
+        this.declaredValues = Set.copyOf(declaredValues);
+        for (ValueName.Helper declared : this.declaredValues) {
+            if (!declared.module().equals(name)) {
+                throw new IllegalStateException("`" + name + "` declares the value `" + declared
+                        + "`, which another module declares");
+            }
+        }
         this.behaviors = List.copyOf(behaviors);
         this.helpers = List.copyOf(helpers);
         this.values = List.copyOf(values);
@@ -76,6 +91,10 @@ public final class CheckedModule {
                 throw new IllegalStateException("`" + name + "` holds `" + value.name()
                         + "` twice");
             }
+            if (!this.declaredValues.contains(value.name())) {
+                throw new IllegalStateException("`" + name + "` builds the value `" + value.name()
+                        + "`, which it does not declare");
+            }
             if (byDeclaration.containsKey(value.name())) {
                 throw new IllegalStateException("`" + name + "` holds `" + value.name()
                         + "` as a value and carries a method for it as a helper");
@@ -84,12 +103,12 @@ public final class CheckedModule {
         this.valueByName = Map.copyOf(byName);
         Map<ValueName.Helper, CheckedValueEntry> byEntry = new LinkedHashMap<>();
         for (CheckedValueEntry entry : this.valueEntries) {
-            if (!byName.containsKey(entry.value())) {
-                // ADR-0074: the entry is for a value this module builds. One that named a value
-                // nowhere in `values()` would be an entry with nothing for a call through it to
-                // reach.
+            if (!this.declaredValues.contains(entry.value())) {
+                // ADR-0074: the entry is for a value this module declares. It is not for a value
+                // this module builds: a constant is declared and folds into what reads it, and its
+                // entry answers with the literal.
                 throw new IllegalStateException("`" + name + "` holds an entry for `" + entry.value()
-                        + "`, which it builds no value for");
+                        + "`, which it does not declare");
             }
             if (byEntry.put(entry.value(), entry) != null) {
                 throw new IllegalStateException("`" + name + "` holds an entry for `" + entry.value()
@@ -102,7 +121,7 @@ public final class CheckedModule {
         // does not depend on whether a value happens to fold, and never a value this module keeps,
         // which nothing outside it can call through.
         Set<ValueName.Helper> publishedValues = new LinkedHashSet<>();
-        for (ValueName.Helper value : byName.keySet()) {
+        for (ValueName.Helper value : this.declaredValues) {
             if (published.contains(value.name())) {
                 publishedValues.add(value);
             }
@@ -171,14 +190,17 @@ public final class CheckedModule {
      * question a reader may one day want answered by the same identity type — an overload taken by
      * this one now would leave that question nowhere to go.
      *
-     * @throws IllegalArgumentException where this module builds no value {@code value}
+     * <p>Answered for every value this module declares, a constant included: what a module publishes
+     * is a fact about its declarations and does not wait on whether one has a place to run.
+     *
+     * @throws IllegalArgumentException where this module declares no value {@code value}
      */
     public Publication publicationOfValue(ValueName.Helper value) {
         if (value == null) {
             throw new IllegalArgumentException("a value is asked about by its identity");
         }
-        if (!valueByName.containsKey(value)) {
-            throw new IllegalArgumentException("`" + this.name + "` builds no value `" + value
+        if (!declaredValues.contains(value)) {
+            throw new IllegalArgumentException("`" + this.name + "` declares no value `" + value
                     + "`, and what another module publishes is that module's answer");
         }
         return publicationOfBaseName(value.name());
@@ -233,7 +255,12 @@ public final class CheckedModule {
         return helpers;
     }
 
-    /** The values this module builds, each in the one place it runs. */
+    /**
+     * The values this module builds, each in the one place it runs.
+     *
+     * <p>Not every value it declares: a constant is known where it is read and has no place to run
+     * (ADR-0074), so it is declared, and published if it is listed, and is not here.
+     */
     public List<CheckedValue> values() {
         return values;
     }
