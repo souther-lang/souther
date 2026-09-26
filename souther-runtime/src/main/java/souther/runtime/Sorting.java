@@ -81,7 +81,7 @@ final class Sorting {
         int left = lo;
         int right = mid;
         for (int out = lo; out < hi; out++) {
-            if (right >= hi || left < mid && order.compare(from.get(left), from.get(right)) <= 0) {
+            if (right >= hi || (left < mid && order.compare(from.get(left), from.get(right)) <= 0)) {
                 to.set(out, from.get(left++));
             } else {
                 to.set(out, from.get(right++));
