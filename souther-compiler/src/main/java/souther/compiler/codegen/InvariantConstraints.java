@@ -49,7 +49,18 @@ public final class InvariantConstraints {
 
     public record FixedLength(int n) implements OfString {}
 
-    public record Pattern(String regex) implements OfString {}
+    /**
+     * A format a decoded string is held to.
+     *
+     * <p>Two texts, because they answer two questions. {@code regex} is what the JVM's matcher runs,
+     * written from what the pattern means ({@link JavaPatterns}); {@code written} is the pattern the
+     * author's call was given, which is what a failure says the value was held to. A failure that
+     * quoted the first would be quoting this backend's lowering to whoever reads the issue.
+     *
+     * @param regex   the pattern the matcher runs
+     * @param written the pattern the call was given, as it composed at compile time
+     */
+    public record Pattern(String regex, String written) implements OfString {}
 
     /** A {@code LongDecoder} constraint — Souther's {@code Int} is carried as a long. */
     public sealed interface OfInt extends Constraint {}
@@ -357,7 +368,7 @@ public final class InvariantConstraints {
             throw new IllegalStateException(
                     "a String.matches call carries the pattern the checker read: " + call);
         }
-        return new Pattern(JavaPatterns.of(settled.meaning()));
+        return new Pattern(JavaPatterns.of(settled.meaning()), settled.written());
     }
 
     /**

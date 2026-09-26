@@ -65,9 +65,9 @@ class CompileComposedPatternTest {
 
     private static final String MATCHING = "123-4567";
     private static final String NOT_MATCHING = "12-345";
-    /** The composed pattern as the boundary carries it: what it means, written by the compiler, and
-     *  not the text of either part. */
-    private static final String COMPOSED = "[0-9]{3}\\-[0-9]{4}";
+    /** The composed pattern as a failure quotes it: the pattern the call was given, as it composed at
+     *  compile time — not the text of either part, and not what the JVM's matcher runs. */
+    private static final String COMPOSED = "[0-9]{3}-[0-9]{4}";
 
     /** The check's reading: the composed pattern is a compile-time string, so the module compiles and
      *  the regex that runs is the composed one. */
@@ -110,6 +110,11 @@ class CompileComposedPatternTest {
         assertEquals(1, issues.size(), "one broken rule, one issue");
         assertEquals("invalid_format", issues.get(0).code(), "the format constraint, not a fallback");
         assertEquals(COMPOSED, issues.get(0).meta().get("pattern"), "composed, not left as written");
+        // Raoh's own format failure in every other respect: the same key, and a message a
+        // resolver may replace rather than one the model wrote.
+        assertEquals("invalid_format", issues.get(0).messageKey());
+        assertEquals("invalid format", issues.get(0).message());
+        assertEquals(false, issues.get(0).customMessage(), "a default message, not a custom one");
     }
 
     /** A composition that is malformed as a whole is a compile error, reported as the regex it

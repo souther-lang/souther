@@ -435,7 +435,14 @@ final class Descriptors {
     static final ClassDesc CD_Pattern = ClassDesc.of("java.util.regex.Pattern");
     static final MethodTypeDesc MTD_patternCompile = MethodTypeDesc.of(CD_Pattern, CD_String);
     static final MethodTypeDesc MTD_strLengthBound = MethodTypeDesc.of(CD_StringDecoder, ConstantDescs.CD_int);
-    static final MethodTypeDesc MTD_strPattern = MethodTypeDesc.of(CD_StringDecoder, CD_Pattern);
+    /** {@code Pattern.asMatchPredicate()}: whether the whole of a string matches. */
+    static final MethodTypeDesc MTD_asMatchPredicate = MethodTypeDesc.of(CD_Predicate);
+    /** {@code StringDecoder.refine(Predicate, BiFunction)}: the failure built by the caller, and the
+     *  string decoder itself back so the chain of string constraints goes on. */
+    static final MethodTypeDesc MTD_refineStringFailing =
+            MethodTypeDesc.of(CD_StringDecoder, CD_Predicate, CD_BiFunction);
+    /** {@code Map.of(key, value)}: the metadata of one entry. */
+    static final MethodTypeDesc MTD_mapOfOne = MethodTypeDesc.of(CD_Map, CD_Object, CD_Object);
     static final MethodTypeDesc MTD_longBound = MethodTypeDesc.of(CD_LongDecoder, ConstantDescs.CD_long);
     static final MethodTypeDesc MTD_longSign = MethodTypeDesc.of(CD_LongDecoder);
     static final MethodTypeDesc MTD_decBound = MethodTypeDesc.of(CD_DecimalDecoder, CD_BigDecimal);
