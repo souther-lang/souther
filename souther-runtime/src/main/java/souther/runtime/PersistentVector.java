@@ -223,6 +223,7 @@ public final class PersistentVector<E> extends AbstractList<E>
     /** This vector with {@code val} appended (Clojure {@code conj}); O(1) amortized, sharing the
      *  unchanged structure with {@code this}. */
     public PersistentVector<E> append(E val) {
+        Capacity.oneMore(cnt, "List");
         int used = cnt - tailoff();
         if (used == WIDTH) {
             return appendSpilling(val);
@@ -437,6 +438,7 @@ public final class PersistentVector<E> extends AbstractList<E>
             if (built) {
                 throw new IllegalStateException("this builder has already been built");
             }
+            Capacity.oneMore(cnt, "List");
             modCount++;
             if (tailLen == WIDTH) {
                 spillTail();

@@ -24,6 +24,7 @@ import org.junit.jupiter.api.function.Executable;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.LocalDate;
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -136,6 +137,35 @@ class JvmAbortMappingTest {
                 () -> Strings.padRight("x", Integer.MAX_VALUE + 2L, "y"));
     }
 
+    /**
+     * What a {@code String} holds is measured in the units a text is kept in, not in the count or the
+     * width asked for, and each of these asks for more from inputs a few kilobytes wide: two units
+     * repeated more times than half of what a length counts, a pad of one code point and two units,
+     * one string listed many times over, a short target replaced by a long text. Each is past what
+     * a length counts, so a build that were not measured first would be refused by the host with
+     * {@code OutOfMemoryError} at once, rather than built and then found too long.
+     */
+    @Test
+    void aTextNoStringHoldsAbortsWhereverItIsBuilt() {
+        String kilo = "x".repeat(40_000);
+        List<String> many = Collections.nCopies(60_000, kilo);
+        assertKernelAborts(Kernel.STRING_REPEAT, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+                () -> Strings.repeat("ab", 1_200_000_000L));
+        assertKernelAborts(Kernel.STRING_PAD_LEFT, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+                () -> Strings.padLeft("x", 1_200_000_000L, "𠮷"));
+        // a width at the top of Int, where working out the copies from it would overflow
+        assertKernelAborts(Kernel.STRING_PAD_LEFT, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+                () -> Strings.padLeft("x", Long.MAX_VALUE, "abc"));
+        assertKernelAborts(Kernel.STRING_PAD_RIGHT, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+                () -> Strings.padRight("x", Long.MAX_VALUE, "abc"));
+        assertKernelAborts(Kernel.STRING_JOIN, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+                () -> Strings.join(many, ","));
+        assertKernelAborts(Kernel.STRING_CONCAT, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+                () -> Strings.concat(many));
+        assertKernelAborts(Kernel.STRING_REPLACE, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+                () -> Strings.replace(kilo, "x", kilo + kilo));
+    }
+
     /** {@code String.slice}'s bounds may name nothing to slice at all — a different reason than an
      *  answer with no place. */
     @Test
@@ -162,6 +192,29 @@ class JvmAbortMappingTest {
                 () -> Lists.sumInt(List.of(Long.MAX_VALUE, 1L)));
         assertKernelAborts(Kernel.LIST_PRODUCT, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
                 () -> Lists.productInt(List.of(Long.MAX_VALUE, 2L)));
+    }
+
+    /** And through their {@code Decimal} instantiation, which one kernel names as well: the same
+     *  pairs {@code +} and {@code *} are pushed past the scale range with above. */
+    @Test
+    void listSumAndProductRunOffTheScaleRangeThroughTheirDecimalInstantiation() {
+        BigDecimal huge = new BigDecimal(BigDecimal.ONE.unscaledValue(), Integer.MIN_VALUE + 1);
+        assertKernelAborts(Kernel.LIST_SUM, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+                () -> Lists.sumDecimal(List.of(huge, BigDecimal.valueOf(0.1))));
+        assertKernelAborts(Kernel.LIST_PRODUCT, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+                () -> Lists.productDecimal(List.of(huge, huge)));
+    }
+
+    /** {@code fromDecimal}: a value a few bytes wide whose plain notation no {@code String} holds —
+     *  at the floor of the scale range, where {@code toPlainString} overflows, and one step above
+     *  it and at the ceiling, where it runs out of room. */
+    @Test
+    void fromDecimalAbortsWhereTheTextHasNoPlace() {
+        for (int scale : new int[] {Integer.MIN_VALUE, Integer.MIN_VALUE + 1, Integer.MAX_VALUE}) {
+            BigDecimal d = new BigDecimal(BigInteger.ONE, scale);
+            assertKernelAborts(Kernel.STRING_FROM_DECIMAL, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+                    () -> Strings.fromDecimal(d));
+        }
     }
 
     /** Every calendar shift, run off the end of what its temporal holds. */

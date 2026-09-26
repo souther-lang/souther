@@ -2,6 +2,7 @@ package souther.unicode;
 
 import java.util.Arrays;
 import java.util.TreeMap;
+import java.util.stream.IntStream;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -31,14 +32,186 @@ public final class Normalization {
      *  whether text from outside is one is asked by {@code Strings.admitted} before this, and this
      *  asks nothing. Half a surrogate pair handed in comes back out where it was. */
     public static String nfc(String s) {
-        int[] decomposed = canonicalDecompose(s.codePoints().toArray());
-        canonicalOrder(decomposed);
-        int[] composed = canonicalCompose(decomposed);
-        StringBuilder out = new StringBuilder(composed.length);
-        for (int cp : composed) {
-            out.appendCodePoint(cp);
+        String canonical = nfcWithin(s, Long.MAX_VALUE);
+        if (canonical == null) {
+            throw new IllegalStateException("no text is longer than Long.MAX_VALUE UTF-16 units");
         }
-        return out.toString();
+        return canonical;
+    }
+
+    /**
+     * {@link #nfc}, or null where the answer is longer than {@code longest} UTF-16 units — which is
+     * found out before that much is built, so a caller whose carrier has a bound on a text's length
+     * can ask for the answer without asking for more than the bound.
+     *
+     * <p>The three steps are taken one combining run at a time, as the text is read: each code point
+     * is decomposed as it arrives, the marks after a starter are held until the next starter, and
+     * then they are put in canonical order and composed into it. Canonical ordering never moves a
+     * mark past a starter, and composition joins a starter only to the marks after it or, where
+     * nothing is between them, to the starter after it, so a run settled when the next starter
+     * arrives is settled as the whole text's algorithm would settle it. What is held at once is one
+     * run's marks, never the decomposition of the whole text, which is longer than the text and
+     * longer than the answer.
+     */
+    public static @Nullable String nfcWithin(String s, long longest) {
+        Composing composing = new Composing(longest, (int) Math.min(s.length(), longest));
+        for (int at = 0; at < s.length(); ) {
+            int cp = s.codePointAt(at);
+            at += Character.charCount(cp);
+            int[] decomposed = decomposeOne(cp);
+            if (decomposed == null) {
+                if (!composing.take(cp)) {
+                    return null;
+                }
+            } else {
+                for (int part : decomposed) {
+                    if (!composing.take(part)) {
+                        return null;
+                    }
+                }
+            }
+        }
+        return composing.finish();
+    }
+
+    /** The largest array this asks for; the JDK's portable bound on one. */
+    private static final int LONGEST_ARRAY = Integer.MAX_VALUE - 8;
+
+    /** How many marks a run may hold before they are put in order by counting rather than by
+     *  insertion, which is quadratic in the run. */
+    private static final int FEW_MARKS = 32;
+
+    /**
+     * One pass of canonical ordering and composition over code points already decomposed, holding
+     * the starter of the run it is in and the marks after it, and writing what is settled.
+     */
+    private static final class Composing {
+
+        private final long longest;
+        private final StringBuilder out;
+        private int starter = -1;
+        private int[] marks = new int[8];
+        private int markCount;
+
+        Composing(long longest, int expected) {
+            this.longest = longest;
+            this.out = new StringBuilder(expected);
+        }
+
+        /** Takes the next decomposed code point; false where what is written has passed
+         *  {@code longest}. */
+        boolean take(int cp) {
+            if (combiningClass(cp) != 0) {
+                holdMark(cp);
+                return true;
+            }
+            int kept = settle();
+            if (starter >= 0 && kept == 0) {
+                Integer composed = compose(starter, cp);
+                if (composed != null) {
+                    starter = composed;
+                    return true;
+                }
+            }
+            if (!write(kept)) {
+                return false;
+            }
+            starter = cp;
+            return true;
+        }
+
+        /** What is left, once the text has been read; null where it passes {@code longest}. */
+        @Nullable String finish() {
+            return write(settle()) ? out.toString() : null;
+        }
+
+        private void holdMark(int cp) {
+            if (markCount == marks.length) {
+                if (markCount == LONGEST_ARRAY) {
+                    throw new IllegalStateException("a combining run of more marks than an array holds");
+                }
+                marks = Arrays.copyOf(marks, (int) Math.min(2L * marks.length, LONGEST_ARRAY));
+            }
+            marks[markCount++] = cp;
+        }
+
+        /** Puts the held marks in canonical order and composes into the starter each one nothing
+         *  blocks; answers how many marks are left after the starter. */
+        private int settle() {
+            if (markCount > 1) {
+                order();
+            }
+            if (starter < 0) {
+                return markCount;
+            }
+            int kept = 0;
+            int lastClass = -1;
+            for (int i = 0; i < markCount; i++) {
+                int mark = marks[i];
+                int markClass = combiningClass(mark);
+                Integer composed = lastClass < markClass ? compose(starter, mark) : null;
+                if (composed != null) {
+                    starter = composed;
+                } else {
+                    marks[kept++] = mark;
+                    lastClass = markClass;
+                }
+            }
+            markCount = kept;
+            return kept;
+        }
+
+        /** Canonical ordering of the held marks: stable, by combining class. */
+        private void order() {
+            if (markCount <= FEW_MARKS) {
+                for (int i = 1; i < markCount; i++) {
+                    int mark = marks[i];
+                    int markClass = combiningClass(mark);
+                    int j = i;
+                    while (j > 0 && combiningClass(marks[j - 1]) > markClass) {
+                        marks[j] = marks[j - 1];
+                        j--;
+                    }
+                    marks[j] = mark;
+                }
+                return;
+            }
+            int[] starts = new int[257];
+            for (int i = 0; i < markCount; i++) {
+                starts[combiningClass(marks[i]) + 1]++;
+            }
+            for (int c = 1; c < starts.length; c++) {
+                starts[c] += starts[c - 1];
+            }
+            int[] ordered = new int[markCount];
+            for (int i = 0; i < markCount; i++) {
+                ordered[starts[combiningClass(marks[i])]++] = marks[i];
+            }
+            marks = ordered;
+        }
+
+        /** Writes the starter and the {@code kept} marks after it, and empties the run. */
+        private boolean write(int kept) {
+            if (starter >= 0 && !writeOne(starter)) {
+                return false;
+            }
+            for (int i = 0; i < kept; i++) {
+                if (!writeOne(marks[i])) {
+                    return false;
+                }
+            }
+            starter = -1;
+            markCount = 0;
+            return true;
+        }
+
+        private boolean writeOne(int cp) {
+            if (out.length() + Character.charCount(cp) > longest) {
+                return false;
+            }
+            out.appendCodePoint(cp);
+            return true;
+        }
     }
 
     // ---- Hangul algorithmic decomposition/composition (UAX #15, the Hangul section) ----
@@ -69,37 +242,10 @@ public final class Normalization {
 
     // ---- Canonical decomposition ----
 
-    /** Every code point's canonical decomposition, applied recursively (a decomposition may map to
-     *  code points that themselves decompose) until every element is either a Hangul syllable's
-     *  own algorithmic split or has no canonical decomposition at all. */
-    private static int[] canonicalDecompose(int[] codePoints) {
-        StringBuilder out = null;
-        int[] result = codePoints;
-        for (int i = 0; i < codePoints.length; i++) {
-            int[] d = decomposeOne(codePoints[i]);
-            if (d != null) {
-                if (out == null) {
-                    out = new StringBuilder();
-                    for (int j = 0; j < i; j++) {
-                        out.appendCodePoint(codePoints[j]);
-                    }
-                }
-                for (int cp : d) {
-                    out.appendCodePoint(cp);
-                }
-            } else if (out != null) {
-                out.appendCodePoint(codePoints[i]);
-            }
-        }
-        if (out != null) {
-            result = out.codePoints().toArray();
-        }
-        return result;
-    }
-
-    /** {@code cp}'s decomposition — Hangul's algorithmic split, or a table lookup expanded fully —
-     *  or {@code null} if it has none, meaning it is already its own decomposition. */
-    private static int @Nullable [] decomposeOne(int cp) {
+    /** {@code cp}'s decomposition — Hangul's algorithmic split, or a table lookup expanded fully,
+     *  since a decomposition may map to code points that themselves decompose — or {@code null} if
+     *  it has none, meaning it is already its own decomposition. */
+    static int @Nullable [] decomposeOne(int cp) {
         if (isHangulSyllable(cp)) {
             return decomposeHangul(cp);
         }
@@ -107,7 +253,18 @@ public final class Normalization {
         if (mapped == null) {
             return null;
         }
-        return canonicalDecompose(mapped);
+        IntStream.Builder full = IntStream.builder();
+        for (int part : mapped) {
+            int[] further = decomposeOne(part);
+            if (further == null) {
+                full.add(part);
+            } else {
+                for (int each : further) {
+                    full.add(each);
+                }
+            }
+        }
+        return full.build().toArray();
     }
 
     private static int @Nullable [] lookupDecomp(int cp) {
@@ -115,67 +272,22 @@ public final class Normalization {
         return index >= 0 ? NormalizationTables.DECOMP.mapped()[index] : null;
     }
 
-    // ---- Canonical ordering ----
-
-    /** Unicode's canonical ordering algorithm (UAX #15's Canonical Ordering Behavior section): a stable
-     *  insertion sort that only ever moves a combining mark earlier past marks of a strictly
-     *  higher combining class, never past a starter (combining class 0) or past one of equal
-     *  class — which is what keeps two canonically-equivalent orderings converging on one. */
-    private static void canonicalOrder(int[] codePoints) {
-        for (int i = 1; i < codePoints.length; i++) {
-            int cpCcc = combiningClass(codePoints[i]);
-            if (cpCcc == 0) {
-                continue;
-            }
-            int j = i;
-            while (j > 0 && combiningClass(codePoints[j - 1]) > cpCcc) {
-                int t = codePoints[j - 1];
-                codePoints[j - 1] = codePoints[j];
-                codePoints[j] = t;
-                j--;
-            }
-        }
-    }
-
-    /** {@code CCC_KEYS} holds only non-zero entries (spec of the generator that wrote it), and no
+    /** Unicode's canonical combining class of {@code cp}: 0 for a starter, and for a mark the class
+     *  canonical ordering sorts it by (UAX #15's Canonical Ordering Behavior section: stable, a mark
+     *  moving earlier only past marks of a strictly higher class and never past a starter).
+     *  {@code CCC_KEYS} holds only non-zero entries (spec of the generator that wrote it), and no
      *  Hangul jamo or syllable is one of them — every one of them is 0 in {@code UnicodeData.txt}
      *  — so a plain table lookup already answers 0 for them without a special case. */
-    private static int combiningClass(int cp) {
+    public static int combiningClass(int cp) {
         int index = Arrays.binarySearch(NormalizationTables.CCC_KEYS, cp);
         return index >= 0 ? NormalizationTables.CCC_VALUES[index] : 0;
     }
 
     // ---- Canonical composition ----
-
-    /** Unicode's canonical composition algorithm (UAX #15's Canonical Composition Algorithm section): scan
-     *  left to right, tracking the most recent starter and the combining class of the last
-     *  character folded into the run since it. A character composes with the starter only if
-     *  nothing between them blocks it — a combining class it is not strictly greater than, or
-     *  another starter, resets the block for the run that follows. */
-    private static int[] canonicalCompose(int[] codePoints) {
-        int[] result = new int[codePoints.length];
-        int length = 0;
-        int starterAt = -1;
-        int lastClass = -1;
-        for (int cp : codePoints) {
-            int cpCcc = combiningClass(cp);
-            Integer composed = starterAt >= 0 && (lastClass < 0 || lastClass < cpCcc)
-                    ? compose(result[starterAt], cp)
-                    : null;
-            if (composed != null) {
-                result[starterAt] = composed;
-                continue;
-            }
-            result[length++] = cp;
-            if (cpCcc == 0) {
-                starterAt = length - 1;
-                lastClass = -1;
-            } else {
-                lastClass = cpCcc;
-            }
-        }
-        return Arrays.copyOf(result, length);
-    }
+    // Unicode's canonical composition algorithm (UAX #15's Canonical Composition Algorithm section):
+    // left to right, a code point composes with the most recent starter where nothing between them
+    // blocks it — a mark of a class it is not strictly greater than, or anything at all for a
+    // starter. {@link Composing#settle} and {@link Composing#take} are the two halves of it.
 
     /** The pair-composition table, inverted once from {@link NormalizationTables#DECOMP} rather
      *  than kept as a fourth generated table: every two-member canonical decomposition whose first
@@ -208,7 +320,7 @@ public final class Normalization {
 
     /** The primary composite of {@code starter} followed by {@code cp}, or {@code null} if the pair
      *  does not compose — Hangul's algorithmic L+V and LV+T composition, or {@link #COMPOSE_KEYS}. */
-    private static @Nullable Integer compose(int starter, int cp) {
+    static @Nullable Integer compose(int starter, int cp) {
         Integer hangul = composeHangul(starter, cp);
         if (hangul != null) {
             return hangul;

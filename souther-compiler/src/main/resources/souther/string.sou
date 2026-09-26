@@ -68,8 +68,9 @@ let concat (xs: List<String>): String = intrinsic "string.concat"
 
 // `reverse` / `repeat` / `lines`, the rest of Elm's String module that Souther's types allow.
 // `reverse` turns the code points around, so a character outside the basic plane survives it.
-// `repeat(n, s)` joins `n` copies (nothing for `n` of 0 or less; a count no string could hold aborts
-// rather than quietly giving fewer, as an Int overflow does). `lines` breaks on newlines and
+// `repeat(n, s)` joins `n` copies (nothing for `n` of 0 or less; copies no string could hold abort
+// rather than quietly giving fewer, as an Int overflow does — spec §what-a-string-holds, which every
+// operation here that builds a string answers to). `lines` breaks on newlines and
 // accepts both `\n` and `\r\n` (Elm `String.lines`); empty pieces are kept, so a trailing newline
 // leaves an empty last line.
 let reverse (s: String): String = intrinsic "string.reverse"
@@ -91,13 +92,16 @@ let lines (s: String): List<String> = intrinsic "string.lines"
 let padLeft (width: Int, pad: String, s: String): String = intrinsic "string.padLeft"
 let padRight (width: Int, pad: String, s: String): String = intrinsic "string.padRight"
 
-// `fromDecimal` renders a `Decimal` in plain notation, never in exponent form, keeping the scale the
-// value carries — `1000.00m` is `"1000.00"`, not `"1000"` or `"1.0E+3"`. Scale is incidental to the
-// number (spec §primitives) but not to how it is written, so a caller that wants a fixed number of
-// places sets it first with `Decimal.round(scale, mode, d)` and names the rounding there. Grouping
-// separators and a currency symbol are presentation and stay outside the domain. The parse in the
-// other direction, `toDecimal`, returns `Decimal | NotANumber` and is a compiler built-in for the
-// same reason `toInt` is.
+// `fromDecimal` renders a `Decimal` in plain notation, never in exponent form. A scale of zero or
+// more is written as that many digits after the point — `1000.00m` is `"1000.00"`, not `"1000"` or
+// `"1.0E+3"` — and a negative scale as the integer zeros it stands for, so
+// `Decimal.round(-2, HALF_UP, 1234m)` is `"1200"`. A value whose text no string could hold, one
+// near either end of the scale range, aborts. Scale is incidental to the number (spec
+// §primitives) but not to how it is written, so a caller that wants a fixed number of places sets it
+// first with `Decimal.round(scale, mode, d)` and names the rounding there. Grouping separators and a
+// currency symbol are presentation and stay outside the domain. The parse in the other direction,
+// `toDecimal`, reads decimal text (spec §string-decimal-text), returns `Decimal | NotANumber` and is
+// a compiler built-in for the same reason `toInt` is.
 let fromDecimal (d: Decimal): String = intrinsic "string.fromDecimal"
 
 // Taking a string apart into the units it is made of, without a `Char` type: `characters` gives one

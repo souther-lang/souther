@@ -3,10 +3,8 @@ package souther.runtime;
 import org.jspecify.annotations.Nullable;
 
 import java.util.AbstractSet;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Set;
 
 /**
@@ -79,7 +77,12 @@ public final class PersistentHashSet<E> extends AbstractSet<E> implements ValueS
         while (elements.hasNext()) {
             b.set(elements.next(), PRESENT);
         }
-        PersistentHashMap<E, Object> m = b.build();
+        return sealed(b);
+    }
+
+    /** The set a builder was filled with, the shared empty set when it holds nothing. */
+    private static <E> PersistentHashSet<E> sealed(PersistentHashMap.Builder<E, Object> filled) {
+        PersistentHashMap<E, Object> m = filled.build();
         return m.isEmpty() ? empty() : new PersistentHashSet<>(m);
     }
 
@@ -175,21 +178,20 @@ public final class PersistentHashSet<E> extends AbstractSet<E> implements ValueS
         for (E e : smaller) {
             out.set(e, PRESENT);
         }
-        PersistentHashMap<E, Object> m = out.build();
-        return m.isEmpty() ? empty() : new PersistentHashSet<>(m);
+        return sealed(out);
     }
 
     /** The elements in both {@code a} and {@code b} (scans the smaller). */
     public static <E> PersistentHashSet<E> intersect(Set<? extends E> a, Set<? extends E> b) {
         Set<?> larger = a.size() >= b.size() ? a : b;
         Set<? extends E> smaller = a.size() >= b.size() ? b : a;
-        List<E> kept = new ArrayList<>();
+        PersistentHashMap.Builder<E, Object> kept = new PersistentHashMap.Builder<>();
         for (E e : smaller) {
             if (larger.contains(e)) {
-                kept.add(e);
+                kept.set(e, PRESENT);
             }
         }
-        return kept.isEmpty() ? empty() : build(kept.iterator());
+        return sealed(kept);
     }
 
     /** The elements of {@code a} that are not in {@code b}. */
@@ -197,12 +199,12 @@ public final class PersistentHashSet<E> extends AbstractSet<E> implements ValueS
         if (b.isEmpty()) {
             return from(a);
         }
-        List<E> kept = new ArrayList<>();
+        PersistentHashMap.Builder<E, Object> kept = new PersistentHashMap.Builder<>();
         for (E e : a) {
             if (!b.contains(e)) {
-                kept.add(e);
+                kept.set(e, PRESENT);
             }
         }
-        return kept.isEmpty() ? empty() : build(kept.iterator());
+        return sealed(kept);
     }
 }

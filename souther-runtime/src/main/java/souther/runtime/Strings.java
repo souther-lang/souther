@@ -1,6 +1,5 @@
 package souther.runtime;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
@@ -28,7 +27,56 @@ import souther.unicode.ScalarValues;
  */
 public final class Strings {
 
+    /**
+     * The longest text, in UTF-16 units, every {@code java.lang.String} on this run time holds,
+     * whatever its characters are.
+     *
+     * <p>Not {@code Integer.MAX_VALUE}, which is only what a length is counted in. A {@code String}
+     * keeps its text in one array, a VM refuses an array a few elements short of that with "Requested
+     * array size exceeds VM limit" however much heap it has, and a text with any character outside
+     * Latin-1 — or any text at all where compact strings are off — takes two bytes a unit, which
+     * halves it again. This is the JDK's own portable bound on an array
+     * ({@code ArraysSupport.SOFT_MAX_ARRAY_LENGTH}) halved, so what has a place does not depend on
+     * which characters a text holds or on how the VM was started. A text within it is an ordinary
+     * allocation, which the heap may still refuse, as it may any other.
+     */
+    static final long LONGEST_TEXT = (Integer.MAX_VALUE - 8) / 2;
+
     private Strings() {}
+
+    /**
+     * Aborts where a text {@code units} long has no place — asked of the text an operation is
+     * defined as canonicalizing (two strings joined, {@code n} copies, the pieces and separators of
+     * a join) before it is built, so the host is never asked to build what no {@code String} holds
+     * (spec §an-operation-refuses-only-what-its-own-answer-has-no-place-for: a form the operation is
+     * defined as). In {@code long}, because the sum of two lengths is not always an {@code int}.
+     */
+    private static void holds(long units, String what) {
+        if (units > LONGEST_TEXT) {
+            throw new ConstraintViolation(
+                    what + " is " + units + " UTF-16 units, longer than a String holds");
+        }
+    }
+
+    /** {@link #holds} of {@code copies} copies of a text {@code units} long, asked by division so that
+     *  a count near the top of {@code Int} is not multiplied past what a {@code long} counts. */
+    private static void holdsCopies(long copies, int units, String what) {
+        if (copies > LONGEST_TEXT / units) {
+            throw new ConstraintViolation(what + ", " + copies + " copies of " + units
+                    + " UTF-16 units, is longer than a String holds");
+        }
+    }
+
+    /** {@code joined} canonicalized to NFC, aborting where the answer has no place — canonicalizing
+     *  can lengthen a text at a seam as well as shorten it, so the answer is measured as it is
+     *  built and not taken to be as long as what it was built from. */
+    private static String canonical(String joined, String what) {
+        String canonical = Normalization.nfcWithin(joined, LONGEST_TEXT);
+        if (canonical == null) {
+            throw new ConstraintViolation(what + " is longer than a String holds once canonicalized");
+        }
+        return canonical;
+    }
 
     /**
      * Text arriving from outside, as the {@code String} it is: canonicalized to NFC, or null where it
@@ -144,7 +192,7 @@ public final class Strings {
         if (sep.isEmpty()) {
             return List.of(s);
         }
-        List<String> out = new ArrayList<>();
+        PersistentVector.Builder<String> out = new PersistentVector.Builder<>();
         int from = 0;
         while (true) {
             int at = s.indexOf(sep, from);
@@ -155,7 +203,7 @@ public final class Strings {
             out.add(s.substring(from, at));
             from = at + sep.length();
         }
-        return List.copyOf(out);
+        return out.build();
     }
 
     /** Joins two strings in their written order (Elm {@code String.append}; the {@code ++} operator
@@ -163,14 +211,21 @@ public final class Strings {
      *  closed under concatenation — a base letter followed by a combining mark composes into one
      *  code point, not two — so the join has to canonicalize again at the seam. */
     public static String append(String a, String b) {
-        return Normalization.nfc(a + b);
+        holds((long) a.length() + b.length(), "String.append");
+        return canonical(a + b, "String.append");
     }
 
     /** Joins with a separator ({@code join(["a", "b"], "-") == "a-b"}). Canonicalized for the same
      *  reason {@link #append} is: a seam {@code sep} introduces is exactly as capable of leaving NFC
-     *  as one {@code append} makes. */
+     *  as one {@code append} makes. A list can hold the same string many times over, so a short list
+     *  of short strings can join to more than a {@code String} holds; that is measured first. */
     public static String join(List<String> xs, String sep) {
-        return Normalization.nfc(String.join(sep, xs));
+        long units = xs.isEmpty() ? 0 : (long) sep.length() * (xs.size() - 1);
+        for (String x : xs) {
+            units += x.length();
+        }
+        holds(units, "String.join");
+        return canonical(String.join(sep, xs), "String.join");
     }
 
     /** Joins a list of strings with no separator (Elm {@code String.concat}):
@@ -181,12 +236,19 @@ public final class Strings {
 
     /** Replaces every literal occurrence of {@code target} (Elm {@code String.replace}). An empty
      *  {@code target} leaves the string unchanged rather than splicing between every character.
-     *  Canonicalized: a {@code replacement} introduces the same seam {@link #append} does. */
+     *  Canonicalized: a {@code replacement} introduces the same seam {@link #append} does. A long
+     *  {@code replacement} for a short {@code target} lengthens the text once per occurrence, so the
+     *  occurrences are counted and the length measured first. */
     public static String replace(String s, String target, String replacement) {
         if (target.isEmpty()) {
             return s;
         }
-        return Normalization.nfc(s.replace(target, replacement));
+        long occurrences = 0;
+        for (int at = s.indexOf(target); at >= 0; at = s.indexOf(target, at + target.length())) {
+            occurrences++;
+        }
+        holds(s.length() + occurrences * (replacement.length() - target.length()), "String.replace");
+        return canonical(s.replace(target, replacement), "String.replace");
     }
 
     /** Renders an integer as its decimal string ({@code fromInt(42) == "42"}). */
@@ -223,7 +285,7 @@ public final class Strings {
      *  {@link #trim} uses, scanned by code point rather than by a regex class, so a run of
      *  whitespace this splits on is a run {@link #trim} would remove at either end. */
     public static List<String> words(String s) {
-        List<String> out = new ArrayList<>();
+        PersistentVector.Builder<String> out = new PersistentVector.Builder<>();
         StringBuilder word = new StringBuilder();
         PrimitiveIterator.OfInt it = s.codePoints().iterator();
         while (it.hasNext()) {
@@ -240,7 +302,7 @@ public final class Strings {
         if (!word.isEmpty()) {
             out.add(word.toString());
         }
-        return List.copyOf(out);
+        return out.build();
     }
 
     /** Compiled patterns, cached by text so {@link #matches} does not recompile per call. Every
@@ -264,18 +326,18 @@ public final class Strings {
      *  ({@code characters("a12") == ["a", "1", "2"]}). Souther has no {@code Char}, so a character is
      *  a one-code-point {@code String}; this is what a {@code List.fold} over characters iterates. */
     public static List<String> characters(String s) {
-        List<String> out = new ArrayList<>();
+        PersistentVector.Builder<String> out = new PersistentVector.Builder<>();
         s.codePoints().forEach(cp -> out.add(new String(Character.toChars(cp))));
-        return List.copyOf(out);
+        return out.build();
     }
 
     /** The same split as {@link #characters}, as the code points themselves. Total: the empty string
      *  gives the empty list, so a caller wanting the first one takes it through {@code List.get} and
      *  reads the absence there rather than from a sentinel. */
     public static List<Long> codePoints(String s) {
-        List<Long> out = new ArrayList<>();
+        PersistentVector.Builder<Long> out = new PersistentVector.Builder<>();
         s.codePoints().forEach(cp -> out.add((long) cp));
-        return List.copyOf(out);
+        return out.build();
     }
 
     /** Parses {@code s} as integer text (spec §string-integer-text), or {@link NotANumber#INSTANCE}
@@ -320,22 +382,22 @@ public final class Strings {
      *  writes {@code String.codePoints(s) |> List.reverse} instead — a {@code List<Int>}, not a
      *  {@code String}, is under no canonical-form obligation. */
     public static String reverse(String s) {
-        return Normalization.nfc(new StringBuilder(s).reverse().toString());
+        return canonical(new StringBuilder(s).reverse().toString(), "String.reverse");
     }
 
     /** {@code n} copies of {@code s} joined (Elm {@code String.repeat}); {@code n} of 0 or less gives
-     *  the empty string. A count no JVM string could hold aborts rather than quietly producing fewer
-     *  copies than were asked for — an out-of-range count is a model bug, not a business result, and
-     *  gets the same treatment {@link IntMath} gives an overflow. Canonicalized: the seam between one
-     *  copy and the next is exactly {@link #append}'s seam, repeated. */
+     *  the empty string. Copies no {@code String} could hold abort rather than quietly giving fewer
+     *  copies than were asked for — a model bug, not a business result, and the same treatment
+     *  {@link IntMath} gives an overflow. What is measured is the copies' length, not the count: two
+     *  units repeated a billion times are past what a {@code String} holds though a billion is not.
+     *  Canonicalized: the seam between one copy and the next is exactly {@link #append}'s seam,
+     *  repeated. */
     public static String repeat(String s, long n) {
         if (n <= 0 || s.isEmpty()) {
             return "";
         }
-        if (n > Integer.MAX_VALUE) {
-            throw new ConstraintViolation("String.repeat count out of range: " + n);
-        }
-        return Normalization.nfc(s.repeat((int) n));
+        holdsCopies(n, s.length(), "String.repeat");
+        return canonical(s.repeat((int) n), "String.repeat");
     }
 
     /** Breaks {@code s} into lines (Elm {@code String.lines}): {@code \r\n} is normalised to
@@ -371,21 +433,28 @@ public final class Strings {
      * into {@code s}'s first character. So on the rare occasion the join comes up short, one more
      * code point is asked for and the whole fill is rebuilt — never grown one copy of {@code pad} at
      * a time with a fresh canonicalization each time, which would canonicalize the same leading code
-     * points as many times as there are copies of {@code pad} still to add. */
+     * points as many times as there are copies of {@code pad} still to add.
+     *
+     * <p>The width is asked first, before anything is worked out from it: the answer is {@code width}
+     * code points and every code point is at least one unit, so a width past what a {@code String}
+     * holds is an answer with no place, and what is worked out from a width within it stays within
+     * what a {@code long} counts. The copies of {@code pad} that cover what is needed are a form
+     * padding is defined as ("{@code pad} is repeated and cut", spec §stdlib-string), so they are
+     * measured before they are built, as the fill and {@code s} joined are. */
     private static String pad(String s, long width, String pad, boolean atStart) {
         if (pad.isEmpty() || length(s) >= width) {
             return s;
         }
-        if (width > Integer.MAX_VALUE) {
-            throw new ConstraintViolation("String.pad width out of range: " + width);
-        }
+        holds(width, "String.pad");
         long padLength = length(pad);
         long need = width - length(s);
         while (true) {
-            long copies = (need + padLength - 1) / padLength;
-            String fill = Normalization.nfc(pad.repeat((int) copies));
+            long copies = 1 + (need - 1) / padLength;
+            holdsCopies(copies, pad.length(), "String.pad's fill");
+            String fill = canonical(pad.repeat((int) copies), "String.pad's fill");
             String trimmedFill = length(fill) > need ? slice(fill, 0, need) : fill;
-            String joined = Normalization.nfc(atStart ? trimmedFill + s : s + trimmedFill);
+            holds((long) trimmedFill.length() + s.length(), "String.pad");
+            String joined = canonical(atStart ? trimmedFill + s : s + trimmedFill, "String.pad");
             if (length(joined) >= width) {
                 return joined;
             }
@@ -393,20 +462,56 @@ public final class Strings {
         }
     }
 
-    /** Renders a {@code Decimal} in plain notation, never in exponent form, keeping the scale the
-     *  value carries ({@code fromDecimal(new BigDecimal("1000.00")) == "1000.00"}). */
+    /** Renders a {@code Decimal} in plain notation, never in exponent form (spec §stdlib-string). A
+     *  scale of zero or more is written as that many fractional digits
+     *  ({@code fromDecimal(new BigDecimal("1000.00")) == "1000.00"}); a negative scale is written as
+     *  the integer zeros it stands for, with no point ({@code 12E+2} is {@code "1200"}). A text no
+     *  {@code String} holds aborts ({@link DecimalMath#plainText}). */
     public static String fromDecimal(java.math.BigDecimal d) {
-        return d.toPlainString();
+        return DecimalMath.plainText(d);
     }
 
-    /** Parses {@code s} as a {@code Decimal}, or {@link NotANumber#INSTANCE} when it is not one — the
-     *  sibling of {@link #toInt}, returning the {@code Decimal | NotANumber} union. */
+    /** Parses {@code s} as decimal text (spec §string-decimal-text), or {@link NotANumber#INSTANCE}
+     *  when it is not decimal text — the sibling of {@link #toInt}, returning the
+     *  {@code Decimal | NotANumber} union. Which text is accepted is decided by
+     *  {@link #isDecimalText}; {@code BigDecimal} only converts text already accepted
+     *  ({@link DecimalMath#ofDecimalText}), because on its own it also reads exponent notation, a
+     *  point with no digit on one side, and every Unicode decimal digit its JDK knows
+     *  ({@code "１２３.４５"}). The scale of what it answers is the number of digits written after the
+     *  point, which is also what {@code BigDecimal(String)} gives text with no exponent. */
     public static Object toDecimal(String s) {
-        try {
-            return new java.math.BigDecimal(s);
-        } catch (NumberFormatException _) {
+        if (!isDecimalText(s)) {
             return NotANumber.INSTANCE;
         }
+        return DecimalMath.ofDecimalText(s);
+    }
+
+    /** Decimal text (spec §string-decimal-text): an optional ASCII {@code +} or {@code -}, one or
+     *  more ASCII digits, and optionally a {@code .} followed by one or more ASCII digits, and
+     *  nothing else. Checked by char for the same reason as {@link #isIntegerText}. */
+    private static boolean isDecimalText(String s) {
+        int i = !s.isEmpty() && (s.charAt(0) == '+' || s.charAt(0) == '-') ? 1 : 0;
+        int whole = digitsFrom(s, i);
+        if (whole == i) {
+            return false;
+        }
+        if (whole == s.length()) {
+            return true;
+        }
+        if (s.charAt(whole) != '.') {
+            return false;
+        }
+        int fraction = digitsFrom(s, whole + 1);
+        return fraction > whole + 1 && fraction == s.length();
+    }
+
+    /** The index just past the run of ASCII digits in {@code s} starting at {@code from}. */
+    private static int digitsFrom(String s, int from) {
+        int i = from;
+        while (i < s.length() && s.charAt(i) >= '0' && s.charAt(i) <= '9') {
+            i++;
+        }
+        return i;
     }
 
     /** Unicode 18.0.0 default case conversion (spec §stdlib-string, ADR-0119), lowercased, with no
@@ -416,40 +521,51 @@ public final class Strings {
      *  condition Unicode's default algorithm carries that is context rather than locale.
      *  Canonicalized: case mapping is not closed under NFC either. */
     public static String lowercase(String s) {
-        return Normalization.nfc(mapCase(s, true));
+        return canonical(mapCase(s, true), "String.lowercase");
     }
 
     /** The uppercase half of {@link #lowercase}: the same untailored Unicode 18.0.0 full mapping, so
      *  one code point can widen to several ({@code uppercase("straße") == "STRASSE"}), and no locale
      *  narrows it back — Turkish {@code i} still becomes {@code I}, never {@code İ}. */
     public static String uppercase(String s) {
-        return Normalization.nfc(mapCase(s, false));
+        return canonical(mapCase(s, false), "String.uppercase");
     }
 
+    /** The case-mapped text, before it is canonicalized. A code point can map to several, so the text
+     *  can be longer than {@code s}; it is measured as it is built and aborts where it would have no
+     *  place, the mapped text being the form the conversion is defined as. */
     private static String mapCase(String s, boolean lower) {
         int[] cps = s.codePoints().toArray();
         StringBuilder out = new StringBuilder(cps.length);
         for (int i = 0; i < cps.length; i++) {
             int cp = cps[i];
+            int[] mapped = null;
             if (lower) {
                 int[] finalSigmaMapped = lookup(CaseTables.FINAL_SIGMA, cp);
                 if (finalSigmaMapped != null && isFinalSigmaContext(cps, i)) {
-                    for (int m : finalSigmaMapped) {
-                        out.appendCodePoint(m);
-                    }
-                    continue;
+                    mapped = finalSigmaMapped;
                 }
             }
-            int[] mapped = lookup(lower ? CaseTables.LOWER : CaseTables.UPPER, cp);
             if (mapped == null) {
-                out.appendCodePoint(cp);
+                mapped = lookup(lower ? CaseTables.LOWER : CaseTables.UPPER, cp);
+            }
+            if (mapped == null) {
+                putMapped(out, cp, lower);
             } else {
                 for (int m : mapped) {
-                    out.appendCodePoint(m);
+                    putMapped(out, m, lower);
                 }
             }
         }
         return out.toString();
+    }
+
+    private static void putMapped(StringBuilder out, int cp, boolean lower) {
+        if (out.length() + Character.charCount(cp) > LONGEST_TEXT) {
+            throw new ConstraintViolation((lower ? "String.lowercase" : "String.uppercase")
+                    + " maps to more UTF-16 units than a String holds");
+        }
+        out.appendCodePoint(cp);
     }
 
     /** Unicode's {@code Final_Sigma} condition: immediately preceded, skipping {@code Case_Ignorable}

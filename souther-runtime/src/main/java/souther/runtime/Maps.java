@@ -2,7 +2,6 @@ package souther.runtime;
 
 import org.jspecify.annotations.Nullable;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -100,11 +99,11 @@ public final class Maps {
     /** The entries as a list of {@code (key, value)} tuples (ADR-0036), in the map's iteration
      *  order. */
     public static <K, V> List<Tuple> toList(Map<K, V> m) {
-        List<Tuple> out = new ArrayList<>(m.size());
+        PersistentVector.Builder<Tuple> out = new PersistentVector.Builder<>();
         for (Map.Entry<K, V> e : m.entrySet()) {
             out.add(Tuple.of(e.getKey(), e.getValue()));
         }
-        return PersistentVector.from(out);
+        return out.build();
     }
 
     /** A map from a list of {@code (key, value)} tuples; a later entry overwrites an earlier one

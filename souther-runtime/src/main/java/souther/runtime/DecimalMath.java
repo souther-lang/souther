@@ -1,6 +1,7 @@
 package souther.runtime;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 
 /**
  * Every Decimal operation the language has (spec §stdlib-decimal), and the one place
@@ -221,5 +222,83 @@ public final class DecimalMath {
         } catch (ArithmeticException _) {
             throw outOfRange(describe(d) + " rounded to scale " + scale);
         }
+    }
+
+    /**
+     * {@code String.fromDecimal(d)}: {@code d} in plain notation (spec §stdlib-string).
+     *
+     * <p>Plain notation is as long as the scale is far from nought, whichever way — a scale of
+     * {@code -2000000000} is two billion integer zeros, and one of {@code 2000000000} is two billion
+     * fractional digits — so a {@code Decimal} a few bytes wide can have a text no {@code String}
+     * holds ({@link Strings#LONGEST_TEXT}). That text is an answer with no place, the same abort a
+     * {@code String.repeat} count no {@code String} could hold is. The length is worked out before
+     * the text is, because {@code toPlainString} answers such a value with
+     * {@code ArithmeticException} at the floor of the scale range and with {@code OutOfMemoryError}
+     * everywhere else past it.
+     */
+    public static String plainText(BigDecimal d) {
+        if (plainTextLength(d) > Strings.LONGEST_TEXT) {
+            throw new ConstraintViolation(
+                    "the plain notation of " + describe(d) + " is longer than a String holds");
+        }
+        return d.toPlainString();
+    }
+
+    /**
+     * How many chars {@code d.toPlainString()} is, in {@code long} because the answer can be past
+     * what an {@code int} counts: a sign, the digits, and either the integer zeros a negative scale
+     * stands for or a point with the leading fractional zeros a scale above the precision asks for.
+     * Nought is {@code "0"} at every scale up to zero, whatever the scale says.
+     */
+    static long plainTextLength(BigDecimal d) {
+        long sign = d.signum() < 0 ? 1 : 0;
+        long precision = d.precision();
+        long scale = d.scale();
+        if (scale <= 0) {
+            return d.signum() == 0 ? 1 : sign + precision - scale;
+        }
+        return precision > scale ? sign + precision + 1 : sign + 2 + scale;
+    }
+
+    /**
+     * {@code text} as a {@code Decimal}, at the scale its fractional digits give it. {@code text} is
+     * decimal text (spec §string-decimal-text), which {@link Strings#toDecimal} has already decided;
+     * {@code BigDecimal(String)} on such text answers without an exponent to overflow and with a
+     * scale no longer than a {@code String} is, so it never refuses it.
+     */
+    static BigDecimal ofDecimalText(String text) {
+        return new BigDecimal(text);
+    }
+
+    /**
+     * The amount {@code d} is, carried by as few digits as a {@code BigDecimal} can carry it: one
+     * form for every value the language calls equal (spec §primitives), which is what a hash of an
+     * amount and a boundary's canonical number are both taken from.
+     *
+     * <p>{@code stripTrailingZeros} is that, until the scale it would need is one the type cannot
+     * say: a scale is an {@code int}, and taking the zero off {@code (10, MIN_VALUE)} asks for
+     * {@code MIN_VALUE - 1}, which it answers by throwing. Stopping at the floor instead still leaves
+     * one form per amount — {@code (10, MIN_VALUE)} and {@code (100, MIN_VALUE + 1)} are one amount
+     * and both stop at {@code (10, MIN_VALUE)} — because fixing the scale fixes the digits.
+     */
+    static BigDecimal leastDigits(BigDecimal d) {
+        if (d.signum() == 0) {
+            return BigDecimal.ZERO;                  // every way of writing nothing is one amount
+        }
+        long room = (long) d.scale() - Integer.MIN_VALUE;
+        if (room >= d.precision()) {
+            return d.stripTrailingZeros();           // fewer zeros than digits: it cannot fall out
+        }
+        BigInteger digits = d.unscaledValue();
+        int scale = d.scale();
+        for (long left = room; left > 0; left--) {
+            BigInteger[] divided = digits.divideAndRemainder(BigInteger.TEN);
+            if (divided[1].signum() != 0) {
+                break;
+            }
+            digits = divided[0];
+            scale--;
+        }
+        return new BigDecimal(digits, scale);
     }
 }

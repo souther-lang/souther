@@ -106,6 +106,15 @@ final class CompiledOutputs {
         return repository.modules();
     }
 
+    /** The module of this repository named {@code name}, for a rule about that one module — the run
+     *  time a compiled program links against, say. A name no module has fails the reading. */
+    Path module(String name) {
+        return modules().stream()
+                .filter(module -> module.getFileName().toString().equals(name))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("this repository has no module " + name));
+    }
+
     /** What {@code module} compiled its main sources to, where it has any to compile. */
     Optional<CompiledClasses> mainOutputOf(Path module) {
         return outputOf(module, "main");

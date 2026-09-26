@@ -59,17 +59,19 @@ public final class KernelContracts {
      */
     private static AbortSet abortsOf(Kernel kernel) {
         return switch (kernel) {
-            // Every read, search, and case-answering operation the library states no abort for.
-            case STRING_LENGTH, STRING_TO_INT, STRING_TO_DECIMAL, STRING_TRIM, STRING_LOWERCASE,
-                    STRING_UPPERCASE, STRING_CONTAINS, STRING_STARTS_WITH, STRING_ENDS_WITH,
-                    STRING_MATCHES, STRING_APPEND, STRING_SPLIT, STRING_JOIN, STRING_REPLACE,
-                    STRING_WORDS, STRING_FROM_INT, STRING_CONCAT, STRING_REVERSE, STRING_LINES,
-                    STRING_FROM_DECIMAL, STRING_CHARACTERS, STRING_CODE_POINTS,
+            // Every read, search, and case-answering operation the library states no abort for, and
+            // every one whose text or collection is no longer than one it was taken from, which has
+            // a place wherever that one did.
+            case STRING_LENGTH, STRING_TO_INT, STRING_TO_DECIMAL, STRING_TRIM,
+                    STRING_CONTAINS, STRING_STARTS_WITH, STRING_ENDS_WITH,
+                    STRING_MATCHES, STRING_SPLIT,
+                    STRING_WORDS, STRING_FROM_INT, STRING_LINES,
+                    STRING_CHARACTERS, STRING_CODE_POINTS,
                     MAP_EMPTY, MAP_GET, MAP_CONTAINS_KEY, MAP_KEYS, MAP_VALUES, MAP_SINGLETON,
-                    MAP_INSERT, MAP_REMOVE, MAP_IS_EMPTY, MAP_SIZE, MAP_TO_LIST, MAP_FROM_LIST,
+                    MAP_REMOVE, MAP_IS_EMPTY, MAP_SIZE, MAP_TO_LIST, MAP_FROM_LIST,
                     LIST_LENGTH, LIST_FIND, LIST_SORT_BY, LIST_MAX, LIST_MIN, LIST_GET, LIST_REVERSE,
                     LIST_SORT,
-                    SET_EMPTY, SET_SINGLETON, SET_INSERT, SET_REMOVE, SET_CONTAINS, SET_UNION,
+                    SET_EMPTY, SET_SINGLETON, SET_REMOVE, SET_CONTAINS,
                     SET_INTERSECTION, SET_DIFFERENCE, SET_IS_EMPTY, SET_SIZE, SET_TO_LIST,
                     SET_FROM_LIST,
                     DATE_DAYS_BETWEEN, DATE_YEAR, DATE_MONTH, DATE_DAY, DATE_FROM_PARTS,
@@ -89,8 +91,10 @@ public final class KernelContracts {
             case STRING_SLICE -> AbortSet.of(AbortKind.INVALID_BOUNDS);
 
             // The law `an-operation-refuses-only-what-its-own-answer-has-no-place-for`: "its own
-            // answer, or a form the operation is defined as, has no representation". A `repeat` or
-            // `pad` count no `String` could hold, a calendar shift off the end of what a temporal
+            // answer, or a form the operation is defined as, has no representation". A text longer
+            // than a `String` holds — built by joining, repeating, padding, replacing, case mapping
+            // or rendering a `Decimal`, or by canonicalizing any of those — a `Map` or `Set` one
+            // entry past what its size counts, a calendar shift off the end of what a temporal
             // holds, a `List.rangeInclusive` span longer than a `List` can hold, and an `Int` or
             // `Decimal` arithmetic result outside what its type holds are the first half — the
             // answer itself has no place. `Rational.toWholeNumber`/`toInt`/`toFiniteDecimal`/
@@ -101,7 +105,10 @@ public final class KernelContracts {
             // remaining distance built in full (`Rational#plus`/`#minus`) — and that required form
             // can ask for an exponent past what `Rational` holds even where the mathematical answer
             // would fit.
-            case STRING_REPEAT, STRING_PAD_LEFT, STRING_PAD_RIGHT,
+            case STRING_APPEND, STRING_JOIN, STRING_CONCAT, STRING_REPLACE, STRING_REVERSE,
+                    STRING_LOWERCASE, STRING_UPPERCASE,
+                    STRING_REPEAT, STRING_PAD_LEFT, STRING_PAD_RIGHT, STRING_FROM_DECIMAL,
+                    MAP_INSERT, SET_INSERT, SET_UNION,
                     LIST_SUM, LIST_PRODUCT, LIST_RANGE_INCLUSIVE,
                     DATE_ADD_DAYS, DATE_ADD_MONTHS, DATE_ADD_YEARS,
                     DATETIME_ADD_MINUTES, DATETIME_ADD_HOURS, DATETIME_ADD_DAYS,

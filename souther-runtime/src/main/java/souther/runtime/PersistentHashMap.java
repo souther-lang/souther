@@ -5,7 +5,6 @@ import org.jspecify.annotations.Nullable;
 import java.util.AbstractMap;
 import java.util.AbstractSet;
 import java.util.ArrayDeque;
-import java.util.Arrays;
 import java.util.Deque;
 import java.util.Iterator;
 import java.util.Map;
@@ -198,6 +197,9 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
         if (newRoot == root) {
             return this;   // key present with an equal value: unchanged
         }
+        if (added.value) {
+            Capacity.oneMore(size, "Map or Set");
+        }
         return new PersistentHashMap<>(newRoot, added.value ? size + 1 : size);
     }
 
@@ -293,7 +295,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
     private static Node mergeTwoPairs(Object k0, int h0, Object v0,
                                       Object k1, int h1, Object v1, int shift) {
         if (h0 == h1) {
-            return new HashCollisionNode(h0, new Object[]{k0, v0, k1, v1});
+            return HashCollisionNode.of(h0, k0, v0, k1, v1);
         }
         int mask0 = (h0 >>> shift) & MASK;
         int mask1 = (h1 >>> shift) & MASK;
@@ -551,14 +553,66 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
         }
     }
 
-    /** A bucket of entries whose full hashes collide (distinct keys, same {@code hash}). */
+    /**
+     * A bucket of entries whose full hashes collide (distinct keys, same {@code hash}), in the order
+     * they were put.
+     *
+     * <p>Keys and values are each held in a {@link PersistentVector}, not in one array. A hash is 32
+     * bits, so distinct keys sharing one are certain in a map large enough, and which keys share one
+     * is the data's to decide; a bucket has to hold as many entries as the map it is in does
+     * ({@link Capacity}), and a VM refuses an array a few elements short of that. Two vectors rather
+     * than one holding both alternately, because a vector holds as many elements as a size counts,
+     * and a bucket holding that many entries holds twice as many keys and values.
+     */
     private static final class HashCollisionNode implements Node {
         final int hash;
-        final Object[] pairs;   // [k0,v0,k1,v1,...], length >= 4
+        final PersistentVector<Object> keys;
+        final PersistentVector<Object> values;
 
-        HashCollisionNode(int hash, Object[] pairs) {
+        /**
+         * What the bucket holds in place of {@code null}. A map built from a foreign one can hold a
+         * {@code null} key or value, and a {@link PersistentVector} is a {@code List} of the
+         * language, which holds none; the bucket keeps its own stand-in for it, and nothing but the
+         * bucket ever sees the stand-in.
+         */
+        private static final Object NULL_HELD = new Object();
+
+        private HashCollisionNode(int hash, PersistentVector<Object> keys, PersistentVector<Object> values) {
             this.hash = hash;
-            this.pairs = pairs;
+            this.keys = keys;
+            this.values = values;
+        }
+
+        /** The bucket of two entries whose keys share {@code hash}. */
+        static HashCollisionNode of(int hash, @Nullable Object k0, @Nullable Object v0,
+                                    @Nullable Object k1, @Nullable Object v1) {
+            return new HashCollisionNode(hash,
+                    PersistentVector.empty().append(held(k0)).append(held(k1)),
+                    PersistentVector.empty().append(held(v0)).append(held(v1)));
+        }
+
+        private static Object held(@Nullable Object given) {
+            return given == null ? NULL_HELD : given;
+        }
+
+        /** What {@code held} was given. The node API carries a foreign map's {@code null} under the
+         *  {@code Object} it is typed with, as {@link BitmapIndexedNode}'s arrays hold one, so the
+         *  bucket gives back what it was handed on the same terms. */
+        @SuppressWarnings("NullAway")
+        private static Object given(Object held) {
+            return held == NULL_HELD ? null : held;
+        }
+
+        /** Where {@code key} is in the bucket, or -1 where it is not. */
+        private int indexOf(@Nullable Object key) {
+            int at = 0;
+            for (Object k : keys) {
+                if (Values.equal(given(k), key)) {
+                    return at;
+                }
+                at++;
+            }
+            return -1;
         }
 
         @Override
@@ -566,12 +620,8 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
             if (keyHash != hash) {
                 return NOT_FOUND;
             }
-            for (int i = 0; i < pairs.length; i += 2) {
-                if (Values.equal(pairs[i], key)) {
-                    return pairs[i + 1];
-                }
-            }
-            return NOT_FOUND;
+            int at = indexOf(key);
+            return at < 0 ? NOT_FOUND : given(values.get(at));
         }
 
         @Override
@@ -588,21 +638,15 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
                         new Object[]{this});
                 return wrapper.put(key, keyHash, val, shift, addedLeaf, owned);
             }
-            for (int i = 0; i < pairs.length; i += 2) {
-                if (Values.equal(pairs[i], key)) {
-                    if (Values.equal(pairs[i + 1], val)) {
-                        return this;
-                    }
-                    Object[] p = pairs.clone();
-                    p[i + 1] = val;
-                    return new HashCollisionNode(hash, p);
+            int at = indexOf(key);
+            if (at >= 0) {
+                if (Values.equal(given(values.get(at)), val)) {
+                    return this;
                 }
+                return new HashCollisionNode(hash, keys, replaced(values, at, held(val)));
             }
             addedLeaf.value = true;
-            Object[] p = Arrays.copyOf(pairs, pairs.length + 2);
-            p[pairs.length] = key;
-            p[pairs.length + 1] = val;
-            return new HashCollisionNode(hash, p);
+            return new HashCollisionNode(hash, keys.append(held(key)), values.append(held(val)));
         }
 
         @Override
@@ -610,36 +654,54 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
             if (keyHash != hash) {
                 return this;
             }
-            for (int i = 0; i < pairs.length; i += 2) {
-                if (Values.equal(pairs[i], key)) {
-                    if (pairs.length == 4) {
-                        int other = i == 0 ? 2 : 0;
-                        // Fall back to a one-entry bitmap node at this level for the surviving key.
-                        return new BitmapIndexedNode(1 << ((hash >>> shift) & MASK), 0,
-                                new Object[]{pairs[other], pairs[other + 1]});
-                    }
-                    Object[] p = new Object[pairs.length - 2];
-                    System.arraycopy(pairs, 0, p, 0, i);
-                    System.arraycopy(pairs, i + 2, p, i, pairs.length - i - 2);
-                    return new HashCollisionNode(hash, p);
+            int at = indexOf(key);
+            if (at < 0) {
+                return this;
+            }
+            if (keys.size() == 2) {
+                int other = at == 0 ? 1 : 0;
+                // Fall back to a one-entry bitmap node at this level for the surviving key.
+                return new BitmapIndexedNode(1 << ((hash >>> shift) & MASK), 0,
+                        new Object[]{given(keys.get(other)), given(values.get(other))});
+            }
+            return new HashCollisionNode(hash, without(keys, at), without(values, at));
+        }
+
+        /** {@code xs} with the element at {@code at} replaced by {@code value}. */
+        private static PersistentVector<Object> replaced(PersistentVector<Object> xs, int at, Object value) {
+            PersistentVector.Builder<Object> out = new PersistentVector.Builder<>();
+            int i = 0;
+            for (Object x : xs) {
+                out.add(i++ == at ? value : x);
+            }
+            return out.build();
+        }
+
+        /** {@code xs} without the element at {@code at}. */
+        private static PersistentVector<Object> without(PersistentVector<Object> xs, int at) {
+            PersistentVector.Builder<Object> out = new PersistentVector.Builder<>();
+            int i = 0;
+            for (Object x : xs) {
+                if (i++ != at) {
+                    out.add(x);
                 }
             }
-            return this;
+            return out.build();
         }
 
         @Override
         public int payloadArity() {
-            return pairs.length / 2;
+            return keys.size();
         }
 
         @Override
         public Object keyAt(int i) {
-            return pairs[2 * i];
+            return given(keys.get(i));
         }
 
         @Override
         public Object valAt(int i) {
-            return pairs[2 * i + 1];
+            return given(values.get(i));
         }
 
         @Override
@@ -770,6 +832,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
             added.value = false;
             root = root.put(key, hashOf(key), val, 0, added, true);
             if (added.value) {
+                Capacity.oneMore(size, "Map or Set");
                 size++;
             }
         }

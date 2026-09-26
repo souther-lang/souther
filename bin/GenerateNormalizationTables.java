@@ -21,7 +21,7 @@ import java.util.TreeSet;
  *
  * <p>Composition is not a fourth table. Two of the three ways a code point is excluded from
  * composing — its canonical decomposition has one member (a singleton), or the first member is
- * not a starter (non-zero combining class) — are exactly what {@link #canonicalCompose} reads off
+ * not a starter (non-zero combining class) — are exactly what {@code Normalization.compose} reads off
  * {@code DECOMP} and {@code CCC} already; storing a derived composition table beside the
  * decomposition table it was derived from would let a hand slip and the two disagree. Composing
  * from decomposition, at the one place that reads both, is what keeps that impossible.
@@ -159,7 +159,7 @@ public final class GenerateNormalizationTables {
      *  decomposition's first member is not a starter (spec: {@code CompositionExclusions.txt}'s
      *  own header, "Generated from: Composition Exclusions + Singletons + Non-Starter
      *  Decompositions"). Recomputing the last two here rather than reading them off
-     *  {@code DerivedNormalizationProps.txt} is the point: {@link #canonicalCompose} derives
+     *  {@code DerivedNormalizationProps.txt} is the point: {@code Normalization.compose} derives
      *  composition eligibility from {@code DECOMP}/{@code CCC} the same way at run time, so the
      *  two cannot disagree — this method is what proves the derivation rule itself is right,
      *  against Unicode's own published answer. */
@@ -271,7 +271,7 @@ public final class GenerateNormalizationTables {
         out.append("    /** {@code CompositionExclusions.txt}'s script-specific exclusions (")
                 .append(scriptSpecificExclusions.size()).append(" code points) — the composition")
                 .append(" eligibility {@code UnicodeData.txt} alone does not decide.")
-                .append(" {@link Normalization#canonicalCompose} folds the other two")
+                .append(" {@link Normalization#compose} folds the other two")
                 .append(" {@code Full_Composition_Exclusion} categories (singleton and non-starter")
                 .append(" decompositions) in from {@link #DECOMP}/{@link #CCC_KEYS} directly. */\n");
         out.append("    static final int[] SCRIPT_SPECIFIC_EXCLUSIONS = decodeSortedInts(\"")
