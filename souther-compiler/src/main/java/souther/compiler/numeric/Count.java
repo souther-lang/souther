@@ -1,6 +1,7 @@
 package souther.compiler.numeric;
 
 import souther.exact.ExactDecimals;
+import souther.exact.ExactFailure;
 
 import java.math.BigDecimal;
 
@@ -162,15 +163,22 @@ public record Count(BigDecimal at) implements Place {
      * step counted out, which is a whole number of steps and cannot leave the scale range.
      *
      * <p>A count is the number and not the places it was written to, so the product is asked of the
-     * number: null is where no scale a {@link BigDecimal} has holds it, and never where
-     * {@code BigDecimal.multiply} could not build it at the sum of the factors' scales.
-     * {@link ExactDecimals#product} says which. That the number cannot be held says nothing about
-     * the number, so it is null and never an exception for the caller to meet: what a caller does
-     * without a count to hold it is the caller's to say.
+     * number ({@link ExactDecimals#product}) and never of the scale {@code BigDecimal.multiply}
+     * would build it at.
+     *
+     * <p>Null is no count to hold it, for either of the two reasons that has: no decimal is the
+     * number, or this host has no room for its digits. They are different answers about a number and
+     * the same one for a reader that claims less where it has no count, which is what this is for;
+     * a reader that must tell them apart asks {@code ExactDecimals} and gets the failure for the
+     * second.
      */
     public Count timesWhereHeld(BigDecimal factor) {
-        BigDecimal held = ExactDecimals.product(at, factor);
-        return held == null ? null : new Count(held);
+        try {
+            BigDecimal held = ExactDecimals.product(at, factor);
+            return held == null ? null : new Count(held);
+        } catch (ExactFailure _) {
+            return null;
+        }
     }
 
     public Count negate() {

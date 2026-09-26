@@ -1,6 +1,8 @@
 package souther.compiler.numeric;
 
 import org.junit.jupiter.api.Test;
+import souther.exact.ExactDecimals;
+import souther.exact.ExactFailure;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -8,6 +10,7 @@ import java.math.BigInteger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -54,10 +57,29 @@ class AProductNoDecimalHoldsIsWidenedAndNeverRefusedTest {
     }
 
     @Test
-    void aProductBelowTheFloorOfTheScaleRangeIsNoCount() {
+    void aProductBelowTheFloorOfTheScaleRangeIsHeldWithTheZerosItIsShortBy() {
         Count a = new Count(new BigDecimal(BigInteger.ONE, Integer.MIN_VALUE));
 
-        assertNull(a.timesWhereHeld(new BigDecimal(BigInteger.ONE, -1)));
+        Count product = a.timesWhereHeld(new BigDecimal(BigInteger.ONE, -1));
+
+        assertNotNull(product);
+        assertEquals(0, product.compareTo(
+                new Count(new BigDecimal(BigInteger.TEN, Integer.MIN_VALUE))));
+    }
+
+    @Test
+    void noDecimalIsANumberWhoseDigitsHaveNoZerosToBringItBackIntoTheRange() {
+        assertNull(ExactDecimals.product(
+                new BigDecimal(BigInteger.ONE, Integer.MAX_VALUE), new BigDecimal(BigInteger.ONE, 1)));
+    }
+
+    @Test
+    void aHostWithNoRoomForTheZerosIsAFailureAndNotAnAnswerAboutTheNumber() {
+        BigDecimal floor = new BigDecimal(BigInteger.ONE, Integer.MIN_VALUE);
+
+        assertThrows(ExactFailure.class, () -> ExactDecimals.product(floor, floor));
+        assertNull(new Count(floor).timesWhereHeld(floor),
+                "a reader that claims less reads both refusals as no count");
     }
 
     @Test

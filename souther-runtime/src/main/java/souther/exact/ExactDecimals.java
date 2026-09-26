@@ -52,16 +52,25 @@ public final class ExactDecimals {
     }
 
     /**
-     * The number {@code a} times {@code b}, at whatever scale holds it, or null where no scale does.
+     * The number {@code a} times {@code b}, at whatever scale holds it, or null where no decimal is
+     * that number.
      *
      * <p>The scale of the product is the sum of the factors', and {@code BigDecimal.multiply} refuses
      * a nonzero product whose sum leaves the range even where the number is held at another scale:
-     * {@code 10 × 10^-2147483647} times {@code 10^-1} is {@code 10^-2147483647}, which the type
-     * holds. So the digits are multiplied here and the zeros a sum above the range asks for are
-     * taken off them, and a number is refused only where none can be: its digits have no zero left
-     * to give, or its scale is below the floor.
+     * {@code 10 × 10^-2147483647} times {@code 10^-1} is {@code 10^-2147483647}, and a factor at the
+     * floor of the range times {@code 10^1} is {@code 10} at the floor. So the digits are multiplied
+     * here and moved to the scale the type has: a sum above the range gives up the zeros it is over
+     * by, and a sum below it takes the zeros it is short by.
+     *
+     * <p>Two questions, kept apart as {@code ExactRatio} keeps them. Whether the number is a decimal
+     * is the language's, settled by the scale alone: null is a sum above the range that the digits
+     * have no zeros to bring back. Whether the host has room for the digits is not about the number,
+     * so it is never null: a sum below the range asks for zeros no whole number here holds, and that
+     * is an {@link ExactFailure}, which a run with more room does not raise.
      *
      * <p>Nought is nought at every scale, so it answers before any scale is summed.
+     *
+     * @throws ExactFailure where the zeros a sum below the range asks for are more than the host holds
      */
     public static BigDecimal product(BigDecimal a, BigDecimal b) {
         BigInteger digits = a.unscaledValue().multiply(b.unscaledValue());
@@ -77,6 +86,10 @@ public final class ExactDecimals {
             digits = divided[0];
             scale--;
         }
-        return scale < Integer.MIN_VALUE ? null : new BigDecimal(digits, (int) scale);
+        if (scale < Integer.MIN_VALUE) {
+            BigInteger zeros = BigInteger.valueOf(Integer.MIN_VALUE - scale);
+            return new BigDecimal(ExactArithmetic.written(digits, zeros, zeros), Integer.MIN_VALUE);
+        }
+        return new BigDecimal(digits, (int) scale);
     }
 }
