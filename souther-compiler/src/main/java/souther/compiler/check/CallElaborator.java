@@ -285,7 +285,7 @@ public final class CallElaborator {
         for (int i = 0; i < params.size(); i++) {
             if (params.get(i) instanceof Type.FnOf declared) {
                 Type.FnOf at = (Type.FnOf) TypeOps.substitute(declared, bind);
-                Type answered = ca.block(i, call.written(), at.params());
+                Type answered = ca.block(i, call.written(), at.params(), at.result());
                 // What the function answers settles the rest: this is an application of a declared
                 // signature and nothing more. The fold rule that reads a step's result as an
                 // accumulator to grow is one operation's meaning, and an operation kept standing is
@@ -423,9 +423,10 @@ public final class CallElaborator {
         }
 
         /** Argument {@code i} as a block (or a function value standing in for one), returning the
-         * result type the block yields at {@code paramTypes}. */
-        Type block(int i, String fnName, List<Type> paramTypes) {
-            Core c = Elaborator.elaborateBlockArg(fnName, args.get(i), paramTypes, env, ctx);
+         * result type the block yields at {@code paramTypes}. {@code result} is what the signature
+         * says it answers, which a body that is itself a function is read against. */
+        Type block(int i, String fnName, List<Type> paramTypes, Type result) {
+            Core c = Elaborator.elaborateBlockArg(fnName, args.get(i), paramTypes, result, env, ctx);
             cores[i] = c;
             return ((Type.FnOf) c.type()).result();
         }
@@ -454,7 +455,8 @@ public final class CallElaborator {
         void settledAs(int i, String fnName, Type.FnOf takes, String what) {
             Core read = cores[i];
             if (!((Type.FnOf) read.type()).params().equals(takes.params())) {
-                read = Elaborator.elaborateBlockArg(fnName, args.get(i), takes.params(), env, ctx);
+                read = Elaborator.elaborateBlockArg(fnName, args.get(i), takes.params(),
+                        takes.result(), env, ctx);
             }
             if (takes.result() instanceof Type.Var) {
                 cores[i] = read;

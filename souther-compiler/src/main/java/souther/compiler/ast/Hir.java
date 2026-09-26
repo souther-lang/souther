@@ -1614,9 +1614,10 @@ public interface Hir {
     /**
      * {@code x -> expr}, or {@code (acc, x) -> expr} — a block (spec §blocks).
      *
-     * <p>Second-class: it may only be an argument, never a value that is returned, stored in a
-     * field, or bound by {@code let}. The parser only accepts one in an argument position, and
-     * because it cannot escape, the backend inlines it rather than building a closure.
+     * <p>Where a position or a declaration says what the block takes, it is a function value like
+     * any other: it may be returned, held in a collection or bound by {@code let}, and the backend
+     * builds a closure for it where it is kept rather than applied. Where nothing says, it is
+     * refused where it is written.
      *
      * <p>{@code rule} is which block of the source this is, minted where the syntax is read and
      * carried by every copy. A block handed to a function parameter is the rule the fork that
