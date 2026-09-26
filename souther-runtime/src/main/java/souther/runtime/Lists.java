@@ -1,9 +1,9 @@
 package souther.runtime;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.ListIterator;
 
 import org.jspecify.annotations.Nullable;
 
@@ -118,25 +118,24 @@ public final class Lists {
      *  ({@code CanonicalizeAtCrossing}): a plain {@link java.util.function.Function} the compiler
      *  builds and binds at the crossing, not a value the domain can construct. */
     public static <T> List<Object> map(java.util.function.Function<? super T, Object> f, List<T> xs) {
-        List<Object> out = new ArrayList<>(xs.size());
+        PersistentVector.Builder<Object> out = new PersistentVector.Builder<>();
         for (T x : xs) {
             out.add(f.apply(x));
         }
-        return List.copyOf(out);
+        return out.build();
     }
 
     /** The list in reverse order (Elm {@code List.reverse}). A native primitive rather than a fold:
      *  a left fold can only prepend to build a reversed list, and prepending to an array-backed
-     *  vector is O(n) per step (O(n²) overall), so reversing walks the input from the end in O(n). */
+     *  vector is O(n) per step (O(n²) overall), so reversing walks the input from the end in O(n).
+     *  Walked in place, from its end, and not copied into an array first: a list holds more than an
+     *  array does ({@link Capacity}). */
     public static <T> List<T> reverse(List<? extends T> xs) {
-        Object[] a = xs.toArray();
-        PersistentVector<T> out = PersistentVector.empty();
-        for (int i = a.length - 1; i >= 0; i--) {
-            @SuppressWarnings("unchecked")
-            T e = (T) a[i];
-            out = out.append(e);
+        PersistentVector.Builder<T> out = new PersistentVector.Builder<>();
+        for (ListIterator<? extends T> back = xs.listIterator(xs.size()); back.hasPrevious(); ) {
+            out.add(back.previous());
         }
-        return out;
+        return out.build();
     }
 
     /** The consecutive integers from {@code from} to {@code to}, both ends included (Elm
@@ -228,12 +227,11 @@ public final class Lists {
 
     /** Sorts by the elements' natural order (Elm {@code List.sort}). The element type is a
      *  {@link Comparable} whose {@code compareTo} is the language's order — the {@code Int} and
-     *  {@code Decimal} carriers are — and the input is left untouched. */
+     *  {@code Decimal} carriers are — and the input is left untouched. Stable, through
+     *  {@link Sorting}, which holds as many elements as a list does. */
     @SuppressWarnings({"unchecked", "rawtypes"})
     public static <T> List<T> sort(List<? extends T> xs) {
-        List<T> out = new ArrayList<>(xs);
-        out.sort((a, b) -> ((Comparable) a).compareTo(b));
-        return PersistentVector.from(out);
+        return Sorting.stably(xs, (a, b) -> ((Comparable) a).compareTo(b));
     }
 
     /** As {@link #sort(List)}, ordering by {@code by} rather than by the element's natural order.
@@ -241,9 +239,7 @@ public final class Lists {
      *  listed by two sums in different positions — so it arrives as a comparator. So does the order
      *  of text ({@link Strings#ordering}), which is not what {@link String#compareTo} answers. */
     public static <T> List<T> sort(Comparator<Object> by, List<? extends T> xs) {
-        List<T> out = new ArrayList<>(xs);
-        out.sort((a, b) -> by.compare(a, b));
-        return PersistentVector.from(out);
+        return Sorting.stably(xs, by);
     }
 
     /** The greatest element by natural order, {@code None} for an empty list (Elm {@code List.maximum}).
@@ -288,18 +284,18 @@ public final class Lists {
     /** As {@link #sortBy(Fn, List)}, ordering the keys by {@code by} rather than naturally. */
     @SuppressWarnings({"unchecked", "rawtypes"})
     public static <T> List<T> sortBy(@Nullable Comparator<Object> by, Fn key, List<? extends T> xs) {
-        List<Object[]> decorated = new ArrayList<>(xs.size());
+        PersistentVector.Builder<Object[]> decorated = new PersistentVector.Builder<>();
         for (T x : xs) {
             decorated.add(new Object[] {x, key.apply(new Object[] {x})});
         }
-        decorated.sort(by == null
+        List<Object[]> sorted = Sorting.stably(decorated.build(), by == null
                 ? (a, b) -> ((Comparable) a[1]).compareTo(b[1])
                 : (a, b) -> by.compare(a[1], b[1]));
-        List<T> out = new ArrayList<>(decorated.size());
-        for (Object[] pair : decorated) {
+        PersistentVector.Builder<T> out = new PersistentVector.Builder<>();
+        for (Object[] pair : sorted) {
             out.add((T) pair[0]);
         }
-        return PersistentVector.from(out);
+        return out.build();
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})

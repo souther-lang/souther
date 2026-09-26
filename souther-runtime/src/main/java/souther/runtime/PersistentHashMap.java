@@ -557,7 +557,10 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
     /** A bucket of entries whose full hashes collide (distinct keys, same {@code hash}). */
     private static final class HashCollisionNode implements Node {
         final int hash;
-        final Object[] pairs;   // [k0,v0,k1,v1,...], length >= 4
+        // [k0,v0,k1,v1,...], length >= 4. One array, because only keys sharing one hash are here, and
+        // a node is copied whole for each key added, so one long enough to reach an array's bound
+        // costs more than a run gets to spend building it.
+        final Object[] pairs;
 
         HashCollisionNode(int hash, Object[] pairs) {
             this.hash = hash;

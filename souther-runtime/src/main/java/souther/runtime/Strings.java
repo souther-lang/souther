@@ -1,6 +1,5 @@
 package souther.runtime;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
@@ -193,7 +192,7 @@ public final class Strings {
         if (sep.isEmpty()) {
             return List.of(s);
         }
-        List<String> out = new ArrayList<>();
+        PersistentVector.Builder<String> out = new PersistentVector.Builder<>();
         int from = 0;
         while (true) {
             int at = s.indexOf(sep, from);
@@ -204,7 +203,7 @@ public final class Strings {
             out.add(s.substring(from, at));
             from = at + sep.length();
         }
-        return List.copyOf(out);
+        return out.build();
     }
 
     /** Joins two strings in their written order (Elm {@code String.append}; the {@code ++} operator
@@ -286,7 +285,7 @@ public final class Strings {
      *  {@link #trim} uses, scanned by code point rather than by a regex class, so a run of
      *  whitespace this splits on is a run {@link #trim} would remove at either end. */
     public static List<String> words(String s) {
-        List<String> out = new ArrayList<>();
+        PersistentVector.Builder<String> out = new PersistentVector.Builder<>();
         StringBuilder word = new StringBuilder();
         PrimitiveIterator.OfInt it = s.codePoints().iterator();
         while (it.hasNext()) {
@@ -303,7 +302,7 @@ public final class Strings {
         if (!word.isEmpty()) {
             out.add(word.toString());
         }
-        return List.copyOf(out);
+        return out.build();
     }
 
     /** Compiled patterns, cached by text so {@link #matches} does not recompile per call. Every
@@ -327,18 +326,18 @@ public final class Strings {
      *  ({@code characters("a12") == ["a", "1", "2"]}). Souther has no {@code Char}, so a character is
      *  a one-code-point {@code String}; this is what a {@code List.fold} over characters iterates. */
     public static List<String> characters(String s) {
-        List<String> out = new ArrayList<>();
+        PersistentVector.Builder<String> out = new PersistentVector.Builder<>();
         s.codePoints().forEach(cp -> out.add(new String(Character.toChars(cp))));
-        return List.copyOf(out);
+        return out.build();
     }
 
     /** The same split as {@link #characters}, as the code points themselves. Total: the empty string
      *  gives the empty list, so a caller wanting the first one takes it through {@code List.get} and
      *  reads the absence there rather than from a sentinel. */
     public static List<Long> codePoints(String s) {
-        List<Long> out = new ArrayList<>();
+        PersistentVector.Builder<Long> out = new PersistentVector.Builder<>();
         s.codePoints().forEach(cp -> out.add((long) cp));
-        return List.copyOf(out);
+        return out.build();
     }
 
     /** Parses {@code s} as integer text (spec §string-integer-text), or {@link NotANumber#INSTANCE}

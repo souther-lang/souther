@@ -269,6 +269,9 @@ public final class Representations {
         return true;
     }
 
+    /** The members in order, in a host list: an external form can hold {@code null}, which a
+     *  {@code List} of the language cannot, and the members arrived as one host list already, so a
+     *  copy as long as it has a place wherever it did. */
     private static List<Object> sortedMembers(List<?> members) {
         List<Object> out = new ArrayList<>(members);
         KeyOrders orders = new KeyOrders();
@@ -314,12 +317,11 @@ public final class Representations {
     }
 
     private static List<String> sortedKeys(Map<?, ?> members) {
-        List<String> keys = new ArrayList<>(members.size());
+        PersistentVector.Builder<String> keys = new PersistentVector.Builder<>();
         for (Object key : members.keySet()) {
             keys.add(requireKey(key));
         }
-        keys.sort(Strings::compare);
-        return keys;
+        return Sorting.stably(keys.build(), Strings::compare);
     }
 
     /** A boundary object is keyed by strings, so a key that is not one means the codec broke. */
