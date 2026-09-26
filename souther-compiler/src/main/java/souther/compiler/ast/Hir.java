@@ -1666,9 +1666,10 @@ public interface Hir {
      * is read: a binding holds its own, a behavior is typed by the requirements the body was
      * checked under, and every other declaration says it in its parameters.
      *
-     * <p>{@code declaredTakes} is what those parameters were written as, resolved: null where the
-     * declaration is one of the first two, where a parameter has no written type, and where one of
-     * them is not a type until something instantiates it. It is read off the declaration when the
+     * <p>{@code declaredTakes} is what the declaration has settled for those parameters, resolved:
+     * the type its author wrote, or the one reading its body gave a parameter left unwritten. Null
+     * where the declaration is one of the first two, where a parameter has no type settled, and
+     * where one of them is not a type until something instantiates it. It is read off the declaration when the
      * name is written out, the one place the declaration is at hand for every kind of function —
      * whether the body is later expanded, left standing or bound is decided after, and none of the
      * three changes what the function takes.

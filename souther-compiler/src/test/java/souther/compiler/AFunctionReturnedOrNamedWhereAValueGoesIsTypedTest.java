@@ -184,6 +184,26 @@ class AFunctionReturnedOrNamedWhereAValueGoesIsTypedTest {
         assertEquals(List.of(" a "), out.get("ts"));
     }
 
+    /** A parameter its author left unwritten takes the type its body settles, and the name of the
+     *  helper is the function at that type. */
+    @Test
+    void aHelperWhoseParameterTypeItsBodySettlesIsAnElementOfAList() throws Exception {
+        Map<?, ?> out = run("""
+                module demo
+
+                data In = { n: Int }
+                data Out = { ms: List<Int> }
+
+                let twice (n) = n * 2
+
+                behavior go : (i: In) -> Out constructs Out
+
+                let go (i) = Out { ms = List.map((f) -> f(i.n), [twice]) }
+                """, Map.of("n", 4L));
+
+        assertEquals(List.of(8L), out.get("ms"));
+    }
+
     /** A function handed to a helper's parameter is read against the whole function type declared. */
     @Test
     void aLambdaAnsweringAFunctionIsHandedToAFunctionParameter() throws Exception {

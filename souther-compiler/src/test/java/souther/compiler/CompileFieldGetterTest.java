@@ -14,7 +14,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A bare field access {@code .field} in an expression is sugar for the getter {@code (x) -> x.field}
  * (Elm-style), so a field can be projected point-free: {@code List.map(.value, xs)}. It desugars to an
- * ordinary second-class block, so it flows through the combinator machinery like any lambda.
+ * ordinary lambda, so it flows through the combinator machinery like any other and takes its
+ * parameter type from the position it stands in.
  */
 class CompileFieldGetterTest {
 

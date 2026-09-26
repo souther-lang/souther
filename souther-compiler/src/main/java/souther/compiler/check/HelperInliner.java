@@ -2269,8 +2269,8 @@ public final class HelperInliner {
         return new Hir.NamedFunction(named.denotes(), declaredTakes(named));
     }
 
-    /** What the declaration {@code v} reaches wrote for its parameters, or null where it is a kind
-     *  whose type is asked of something else or where it wrote one of them no type. */
+    /** What the declaration {@code v} reaches has settled for its parameters, or null where it is a
+     *  kind whose type is asked of something else or where one of them has none. */
     private List<Type> declaredTakes(Hir.Var.Denoting v) {
         return switch (v.denotes()) {
             case ValueName.Stdlib.Operation lib -> {
@@ -2280,13 +2280,13 @@ public final class HelperInliner {
             case ValueName.Helper _ -> {
                 ReachName.Declaration reaches = v.reachesADeclaration();
                 Hir.FnDef declared = reaches == null ? null : table.reached(reaches);
-                yield declared == null ? null : writtenTakes(declared);
+                yield declared == null ? null : settledTakes(declared);
             }
             default -> null;
         };
     }
 
-    private static List<Type> writtenTakes(Hir.FnDef declared) {
+    private static List<Type> settledTakes(Hir.FnDef declared) {
         List<Type> takes = new ArrayList<>();
         for (Hir.FnParam param : declared.params()) {
             if (param.type() == null) {
