@@ -2,11 +2,12 @@ package souther.unicode;
 
 /**
  * The Unicode 18.0.0 canonical decomposition, combining class and script-specific composition
- * exclusion data {@link Normalization#nfc} reads.
+ * exclusion data {@link Normalization#nfc} reads, and the bound below which text is its own NFC.
  *
- * <p>Generated from Unicode 18.0.0's {@code UnicodeData.txt} and {@code CompositionExclusions.txt}
- * ({@code https://www.unicode.org/Public/18.0.0/ucd/}) by {@code bin/GenerateNormalizationTables.java},
- * checked against {@code DerivedNormalizationProps.txt}'s {@code Full_Composition_Exclusion} at generation time.
+ * <p>Generated from Unicode 18.0.0's {@code UnicodeData.txt}, {@code CompositionExclusions.txt}
+ * and {@code DerivedNormalizationProps.txt}'s {@code NFC_Quick_Check} ({@code https://www.unicode.org/Public/18.0.0/ucd/})
+ * by {@code bin/GenerateNormalizationTables.java}, checked against {@code DerivedNormalizationProps.txt}'s
+ * {@code Full_Composition_Exclusion} at generation time.
  * DO NOT EDIT — regenerate on a Unicode version bump with {@code java bin/GenerateNormalizationTables.java <ucd-directory>},
  * which this file's source checksums let a reviewer confirm ran against the version it claims.
  *
@@ -76,4 +77,7 @@ final class NormalizationTables {
 
     /** {@code CompositionExclusions.txt}'s script-specific exclusions (81 code points) — the composition eligibility {@code UnicodeData.txt} alone does not decide. {@link Normalization#compose} folds the other two {@code Full_Composition_Exclusion} categories (singleton and non-starter decompositions) in from {@link #DECOMP}/{@link #CCC_KEYS} directly. */
     static final int[] SCRIPT_SPECIFIC_EXCLUSIONS = decodeSortedInts("958 959 95A 95B 95C 95D 95E 95F 9DC 9DD 9DF A33 A36 A59 A5A A5B A5E B5C B5D F43 F4D F52 F57 F5C F69 F76 F78 F93 F9D FA2 FA7 FAC FB9 2ADC FB1D FB1F FB2A FB2B FB2C FB2D FB2E FB2F FB30 FB31 FB32 FB33 FB34 FB35 FB36 FB38 FB39 FB3A FB3B FB3C FB3E FB40 FB41 FB43 FB44 FB46 FB47 FB48 FB49 FB4A FB4B FB4C FB4D FB4E 1D15E 1D15F 1D160 1D161 1D162 1D163 1D164 1D1BB 1D1BC 1D1BD 1D1BE 1D1BF 1D1C0");
+
+    /** The least code point that is not a starter or whose {@code NFC_Quick_Check} is not Yes. Text made only of code points below it is its own NFC (UAX #15, the Detecting Normalization Forms section). */
+    static final int NFC_TRIVIAL_LIMIT = 0x300;
 }

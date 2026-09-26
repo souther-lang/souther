@@ -4,6 +4,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -17,7 +21,10 @@ import java.util.TreeSet;
  * version and emits three tables: the one-step canonical decomposition mapping (a compatibility
  * decomposition — one with a {@code <tag>} — is not this), the non-zero canonical combining
  * classes, and the composition exclusions {@code CompositionExclusions.txt} states outright (the
- * ones "script specific" enough that nothing in {@code UnicodeData.txt} implies them).
+ * ones "script specific" enough that nothing in {@code UnicodeData.txt} implies them). Beside them
+ * it emits one bound, {@code NFC_TRIVIAL_LIMIT}: every code point below it is a starter whose
+ * {@code NFC_Quick_Check} is Yes, which is UAX #15's condition for text made of such code points to
+ * be its own NFC.
  *
  * <p>Composition is not a fourth table. Two of the three ways a code point is excluded from
  * composing — its canonical decomposition has one member (a singleton), or the first member is
@@ -26,15 +33,19 @@ import java.util.TreeSet;
  * decomposition table it was derived from would let a hand slip and the two disagree. Composing
  * from decomposition, at the one place that reads both, is what keeps that impossible.
  *
- * <p>Reads {@code DerivedNormalizationProps.txt} only to check this generator's own derivation —
- * script-specific exclusions plus singleton and non-starter decompositions, recomputed here —
- * against the {@code Full_Composition_Exclusion} property Unicode publishes for the same version.
- * It is an oracle for this file's correctness, not a fourth runtime input; nothing it says reaches
- * {@code NormalizationTables.java}.
+ * <p>Reads two properties of {@code DerivedNormalizationProps.txt}, for two different things.
+ * {@code Full_Composition_Exclusion} checks this generator's own derivation — script-specific
+ * exclusions plus singleton and non-starter decompositions, recomputed here — against what Unicode
+ * publishes for the same version; nothing it says reaches {@code NormalizationTables.java}.
+ * {@code NFC_Quick_Check} is read rather than derived from the tables here, since it is Unicode's own
+ * answer to the question the bound asks; its first code point that is not Yes bounds
+ * {@code NFC_TRIVIAL_LIMIT}.
  *
- * <p>Fails closed: a version header that does not read Unicode {@link #UNICODE_VERSION}, or a
- * derived exclusion set that does not exactly match {@code Full_Composition_Exclusion}, stops the
- * run rather than emitting a plausible-looking wrong table.
+ * <p>Fails closed: a version header that does not read Unicode {@link #UNICODE_VERSION}, a
+ * derived exclusion set that does not exactly match {@code Full_Composition_Exclusion}, a value
+ * given to that binary property, an {@code NFC_QC} value that is not Yes, No or Maybe, or an
+ * {@code NFC_QC} {@code @missing} line that does not give every code point Yes stops the run rather
+ * than emitting a plausible-looking wrong table.
  *
  * <p>Not part of the Maven build, for the reason {@code GenerateCaseTables.java} gives: a Unicode
  * version bump is a specification change, not a dependency bump. Run from the repository root:
@@ -72,7 +83,9 @@ public final class GenerateNormalizationTables {
 
         Set<Integer> scriptSpecific = parseCompositionExclusions(compositionExclusions);
         Set<Integer> derivedFull = deriveFullExclusion(decomp, ccc, scriptSpecific);
-        Set<Integer> published = parseFullCompositionExclusion(derivedNormalizationProps);
+        List<String> normalizationProps = Files.readAllLines(derivedNormalizationProps, StandardCharsets.UTF_8);
+        List<PropertyLine> propertyLines = PropertyLine.read(normalizationProps, false);
+        Set<Integer> published = fullCompositionExclusion(propertyLines);
         if (!derivedFull.equals(published)) {
             Set<Integer> missing = new TreeSet<>(published);
             missing.removeAll(derivedFull);
@@ -85,12 +98,16 @@ public final class GenerateNormalizationTables {
                             + " published property");
         }
 
-        String source = render(decomp, ccc, scriptSpecific,
+        int trivialLimit = Math.min(Collections.min(ccc.keySet()),
+                firstNotNfcQuickCheckYes(propertyLines, PropertyLine.read(normalizationProps, true)));
+
+        String source = render(decomp, ccc, scriptSpecific, trivialLimit,
                 checksum(unicodeData), checksum(compositionExclusions), checksum(derivedNormalizationProps));
         Files.writeString(OUTPUT, source, StandardCharsets.UTF_8);
         System.out.println("wrote " + OUTPUT + " (" + decomp.size() + " decompositions, " + ccc.size()
                 + " non-zero combining classes, " + scriptSpecific.size() + " script-specific exclusions,"
-                + " verified against " + published.size() + " published Full_Composition_Exclusion entries)");
+                + " verified against " + published.size() + " published Full_Composition_Exclusion entries,"
+                + " NFC_TRIVIAL_LIMIT " + hex(trivialLimit) + ")");
     }
 
     /** Neither file states its own version in {@code UnicodeData.txt}'s bare-line format, but both
@@ -175,33 +192,99 @@ public final class GenerateNormalizationTables {
         return full;
     }
 
-    /** {@code <range-or-code-point> ; Full_Composition_Exclusion # <comment>}, expanded to every
-     *  code point in range. This file states many derived properties; every line for a different
-     *  one is skipped. */
-    private static Set<Integer> parseFullCompositionExclusion(Path path) throws IOException {
-        Set<Integer> published = new TreeSet<>();
-        for (String rawLine : Files.readAllLines(path, StandardCharsets.UTF_8)) {
-            String line = rawLine.replaceFirst("#.*", "").trim();
-            if (line.isEmpty()) {
-                continue;
-            }
-            String[] f = line.split(";", -1);
-            if (f.length < 2 || !f[1].trim().equals("Full_Composition_Exclusion")) {
-                continue;
-            }
-            String range = f[0].trim();
-            int dots = range.indexOf("..");
-            if (dots >= 0) {
-                int start = Integer.parseInt(range.substring(0, dots), 16);
-                int end = Integer.parseInt(range.substring(dots + 2), 16);
-                for (int cp = start; cp <= end; cp++) {
-                    published.add(cp);
+    /**
+     * One line of a UCD property file (UAX #44, the File Format Conventions section):
+     * {@code <range-or-code-point> ; <property> [; <value>]}. A binary property has no value field,
+     * and a line names a code point only where the property is true of it. Any other property has a
+     * value field, and a code point no line names has the value its {@code @missing} line states.
+     */
+    private record PropertyLine(int start, int end, String property, String value) {
+
+        private static final String MISSING = "# @missing:";
+
+        /** The data lines of {@code lines}; {@code missing} true reads the {@code @missing} lines
+         *  instead, which are comments to everything else. */
+        static List<PropertyLine> read(List<String> lines, boolean missing) {
+            List<PropertyLine> read = new ArrayList<>();
+            for (String rawLine : lines) {
+                if (missing != rawLine.startsWith(MISSING)) {
+                    continue;
                 }
-            } else {
-                published.add(Integer.parseInt(range, 16));
+                String line = (missing ? rawLine.substring(MISSING.length()) : rawLine).replaceFirst("#.*", "").trim();
+                if (line.isEmpty()) {
+                    continue;
+                }
+                String[] f = line.split(";", -1);
+                if (f.length != 2 && f.length != 3) {
+                    throw new IllegalStateException("not a property line: \"" + rawLine + "\"");
+                }
+                String range = f[0].trim();
+                int dots = range.indexOf("..");
+                int start = Integer.parseInt(dots >= 0 ? range.substring(0, dots) : range, 16);
+                int end = dots >= 0 ? Integer.parseInt(range.substring(dots + 2), 16) : start;
+                read.add(new PropertyLine(start, end, f[1].trim(), f.length == 3 ? f[2].trim() : ""));
+            }
+            return read;
+        }
+    }
+
+    /** The code points {@code Full_Composition_Exclusion}, a binary property, is true of. This file
+     *  states many derived properties; every line for a different one is skipped. */
+    private static Set<Integer> fullCompositionExclusion(List<PropertyLine> lines) {
+        Set<Integer> published = new TreeSet<>();
+        for (PropertyLine line : lines) {
+            if (!line.property().equals("Full_Composition_Exclusion")) {
+                continue;
+            }
+            if (!line.value().isEmpty()) {
+                throw new IllegalStateException("Full_Composition_Exclusion is binary, but a line gives it"
+                        + " the value \"" + line.value() + "\"");
+            }
+            for (int cp = line.start(); cp <= line.end(); cp++) {
+                published.add(cp);
             }
         }
         return published;
+    }
+
+    /** {@code NFC_Quick_Check}'s values, by their short and long names in
+     *  {@code PropertyValueAliases.txt}. */
+    private enum QuickCheck {
+        YES, NO, MAYBE;
+
+        static QuickCheck of(String value) {
+            return switch (value) {
+                case "Y", "Yes" -> YES;
+                case "N", "No" -> NO;
+                case "M", "Maybe" -> MAYBE;
+                default -> throw new IllegalStateException(
+                        "NFC_QC value \"" + value + "\" is none of Yes, No and Maybe");
+            };
+        }
+    }
+
+    /** The least code point whose {@code NFC_Quick_Check} is not Yes. That is the least one a line
+     *  gives No or Maybe only where every code point no line names is Yes, so the {@code @missing}
+     *  line has to say so over the whole code space. */
+    private static int firstNotNfcQuickCheckYes(List<PropertyLine> lines, List<PropertyLine> missing) {
+        List<PropertyLine> defaults = missing.stream().filter(line -> line.property().equals("NFC_QC")).toList();
+        if (defaults.size() != 1 || defaults.get(0).start() != 0 || defaults.get(0).end() != Character.MAX_CODE_POINT
+                || QuickCheck.of(defaults.get(0).value()) != QuickCheck.YES) {
+            throw new IllegalStateException("NFC_QC's @missing lines are " + defaults + ", not one line giving"
+                    + " every code point Yes — the least code point that is not Yes is then not read off"
+                    + " the lines that name one");
+        }
+        int first = Integer.MAX_VALUE;
+        for (PropertyLine line : lines) {
+            if (line.property().equals("NFC_QC") && QuickCheck.of(line.value()) != QuickCheck.YES) {
+                first = Math.min(first, line.start());
+            }
+        }
+        if (first == Integer.MAX_VALUE) {
+            throw new IllegalStateException("no NFC_QC line gives No or Maybe — not the file this generator"
+                    + " reads");
+        }
+        return first;
     }
 
     private static String hexSet(Set<Integer> cps) {
@@ -226,21 +309,22 @@ public final class GenerateNormalizationTables {
     }
 
     private static String render(Map<Integer, int[]> decomp, Map<Integer, Integer> ccc,
-            Set<Integer> scriptSpecificExclusions, String unicodeDataSha256,
+            Set<Integer> scriptSpecificExclusions, int trivialLimit, String unicodeDataSha256,
             String compositionExclusionsSha256, String derivedNormalizationPropsSha256) {
         StringBuilder out = new StringBuilder();
         out.append("package souther.unicode;\n\n");
         out.append("/**\n");
         out.append(" * The Unicode ").append(UNICODE_VERSION)
                 .append(" canonical decomposition, combining class and script-specific composition\n");
-        out.append(" * exclusion data {@link Normalization#nfc} reads.\n");
+        out.append(" * exclusion data {@link Normalization#nfc} reads, and the bound below which text is its own NFC.\n");
         out.append(" *\n");
-        out.append(" * <p>Generated from Unicode ").append(UNICODE_VERSION).append("'s {@code UnicodeData.txt}")
-                .append(" and {@code CompositionExclusions.txt}\n")
-                .append(" * ({@code https://www.unicode.org/Public/").append(UNICODE_VERSION).append("/ucd/})")
-                .append(" by {@code bin/GenerateNormalizationTables.java},\n")
-                .append(" * checked against {@code DerivedNormalizationProps.txt}'s")
-                .append(" {@code Full_Composition_Exclusion} at generation time.\n");
+        out.append(" * <p>Generated from Unicode ").append(UNICODE_VERSION).append("'s {@code UnicodeData.txt},")
+                .append(" {@code CompositionExclusions.txt}\n")
+                .append(" * and {@code DerivedNormalizationProps.txt}'s {@code NFC_Quick_Check}")
+                .append(" ({@code https://www.unicode.org/Public/").append(UNICODE_VERSION).append("/ucd/})\n")
+                .append(" * by {@code bin/GenerateNormalizationTables.java},")
+                .append(" checked against {@code DerivedNormalizationProps.txt}'s\n")
+                .append(" * {@code Full_Composition_Exclusion} at generation time.\n");
         out.append(" * DO NOT EDIT — regenerate on a Unicode version bump with")
                 .append(" {@code java bin/GenerateNormalizationTables.java <ucd-directory>},\n");
         out.append(" * which this file's source checksums let a reviewer confirm ran against the version it claims.\n");
@@ -275,7 +359,12 @@ public final class GenerateNormalizationTables {
                 .append(" {@code Full_Composition_Exclusion} categories (singleton and non-starter")
                 .append(" decompositions) in from {@link #DECOMP}/{@link #CCC_KEYS} directly. */\n");
         out.append("    static final int[] SCRIPT_SPECIFIC_EXCLUSIONS = decodeSortedInts(\"")
-                .append(encodeSortedInts(scriptSpecificExclusions)).append("\");\n");
+                .append(encodeSortedInts(scriptSpecificExclusions)).append("\");\n\n");
+
+        out.append("    /** The least code point that is not a starter or whose {@code NFC_Quick_Check} is not Yes.")
+                .append(" Text made only of code points below it is its own NFC (UAX #15, the Detecting")
+                .append(" Normalization Forms section). */\n");
+        out.append("    static final int NFC_TRIVIAL_LIMIT = 0x").append(hex(trivialLimit)).append(";\n");
 
         out.append("}\n");
         return out.toString();
@@ -379,7 +468,7 @@ public final class GenerateNormalizationTables {
     }
 
     private static String hex(int v) {
-        return Integer.toHexString(v).toUpperCase(java.util.Locale.ROOT);
+        return Integer.toHexString(v).toUpperCase(Locale.ROOT);
     }
 
     private static String joinHex(int[] values, String sep) {

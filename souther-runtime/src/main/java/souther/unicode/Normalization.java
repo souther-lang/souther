@@ -44,6 +44,38 @@ public final class Normalization {
      * found out before that much is built, so a caller whose carrier has a bound on a text's length
      * can ask for the answer without asking for more than the bound.
      *
+     * <p>Text made only of code points below {@link NormalizationTables#NFC_TRIVIAL_LIMIT} is its own
+     * NFC, so it is answered with itself, as long as it is. Other text is normalized from the last
+     * code point below the limit before the first one that is not, and what comes before that is
+     * kept as it is. It is its own NFC, and nothing from there on reaches back into it: the code point
+     * there is a starter that composes with nothing before it, and a starter blocks every mark after
+     * it from composing with a starter before it. That code point itself is normalized with the rest,
+     * since what follows it may compose with it.
+     */
+    public static @Nullable String nfcWithin(String s, long longest) {
+        int unsettled = firstAtTrivialLimit(s);
+        if (unsettled == s.length()) {
+            return s.length() <= longest ? s : null;
+        }
+        return normalizeFrom(s, unsettled == 0 ? 0 : s.offsetByCodePoints(unsettled, -1), longest);
+    }
+
+    /** Where the first code point at or above {@link NormalizationTables#NFC_TRIVIAL_LIMIT} begins,
+     *  or the text's length where there is none. */
+    private static int firstAtTrivialLimit(String s) {
+        for (int at = 0; at < s.length(); ) {
+            int cp = s.codePointAt(at);
+            if (cp >= NormalizationTables.NFC_TRIVIAL_LIMIT) {
+                return at;
+            }
+            at += Character.charCount(cp);
+        }
+        return s.length();
+    }
+
+    /**
+     * {@link #nfcWithin} worked out by the algorithm from the text's start, whatever the text.
+     *
      * <p>The three steps are taken one combining run at a time, as the text is read: each code point
      * is decomposed as it arrives, the marks after a starter are held until the next starter, and
      * then they are put in canonical order and composed into it. Canonical ordering never moves a
@@ -53,9 +85,19 @@ public final class Normalization {
      * run's marks, never the decomposition of the whole text, which is longer than the text and
      * longer than the answer.
      */
-    public static @Nullable String nfcWithin(String s, long longest) {
+    static @Nullable String normalizeWithin(String s, long longest) {
+        return normalizeFrom(s, 0, longest);
+    }
+
+    /** {@link #normalizeWithin}, taking the text before {@code from} as it is: the caller knows it
+     *  is its own NFC and that nothing from {@code from} on composes into it. */
+    private static @Nullable String normalizeFrom(String s, int from, long longest) {
+        if (from > longest) {
+            return null;
+        }
         Composing composing = new Composing(longest, (int) Math.min(s.length(), longest));
-        for (int at = 0; at < s.length(); ) {
+        composing.keep(s, from);
+        for (int at = from; at < s.length(); ) {
             int cp = s.codePointAt(at);
             at += Character.charCount(cp);
             int[] decomposed = decomposeOne(cp);
@@ -96,6 +138,12 @@ public final class Normalization {
         Composing(long longest, int expected) {
             this.longest = longest;
             this.out = new StringBuilder(expected);
+        }
+
+        /** Writes the text before {@code end} as it is: asked before anything is taken, of text no
+         *  longer than {@code longest}. */
+        void keep(String s, int end) {
+            out.append(s, 0, end);
         }
 
         /** Takes the next decomposed code point; false where what is written has passed
