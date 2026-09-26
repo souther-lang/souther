@@ -748,7 +748,7 @@ Instant      // a moment on the timeline, to the nanosecond. ISO 8601 in UTC. ja
 [#numeric-literal]
 ==== Numeric literals
 
-An integer literal is written as `+500+` and is `+Int+`. A `+Decimal+` literal takes an `+m+` suffix — `+500m+`, `+1.5m+`, `+0.5m+`. A fractional literal without `+m+`, such as `+1.5+`, is an error. Souther has no binary floating-point type and defaults fractions to `+Decimal+` (exact decimal), so `+Int+` and `+Decimal+` MUST be made explicit at the literal.
+An integer literal is written as `+500+` and is `+Int+`. Its value is at most `+9223372036854775807+`, the greatest `+Int+`; a literal past that is refused (<<e2305>>). The least `+Int+` is written `+-9223372036854775808+`: a minus before that magnitude, with or without parentheses around it, is that `+Int+`, and it is the only magnitude that has no literal of its own. A `+Decimal+` literal takes an `+m+` suffix — `+500m+`, `+1.5m+`, `+0.5m+`. A fractional literal without `+m+`, such as `+1.5+`, is an error. Souther has no binary floating-point type and defaults fractions to `+Decimal+` (exact decimal), so `+Int+` and `+Decimal+` MUST be made explicit at the literal.
 
 There is no `+Rational+` literal and no contextual rule that would make one: what a literal means does not depend on the position it is written in. A model reaches an exact value by dividing or by writing the widening (<<stdlib-rational>>).
 
@@ -7599,7 +7599,7 @@ A fractional literal is a Decimal and needs the `m` suffix (write `1.5m`); South
 floating-point type.
 ----
 
-Reported where a literal is not written in the form its type takes (<<literal-syntax>>). Most of it is answered while the text is read into tokens, before anything is parsed: a string not closed before the end of the line, a backslash written before something that is not an escape (<<string-literal>>), a fractional literal with no `+m+`. Two are answered after: where a literal was expected and what stands there cannot be one, and where a string literal's text holds half of a surrogate pair, which no escape writes and whatever handed the compiler its text put there (<<a-string-holds-no-half-of-a-surrogate-pair>>).
+Reported where a literal is not written in the form its type takes (<<literal-syntax>>). Most of it is answered while the text is read into tokens, before anything is parsed: a string not closed before the end of the line, a backslash written before something that is not an escape (<<string-literal>>), a fractional literal with no `+m+`. Three are answered after: where a literal was expected and what stands there cannot be one, where an integer literal is past what an `+Int+` holds (<<numeric-literal>>), and where a string literal's text holds half of a surrogate pair, which no escape writes and whatever handed the compiler its text put there (<<a-string-holds-no-half-of-a-surrogate-pair>>).
 
 [#e2306]
 === The text is not made of tokens
