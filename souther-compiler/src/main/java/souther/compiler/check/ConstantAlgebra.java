@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.core.IntNegation;
 import souther.compiler.core.Kernel;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Rel;
@@ -51,7 +52,8 @@ final class ConstantAlgebra {
      */
     static Optional<Object> negate(Object o) {
         if (o instanceof Long x) {
-            return Optional.of(-x);
+            // No constant where the run time aborts, as a sum outside the range is none.
+            return IntNegation.hasValue(x) ? Optional.of(-x) : Optional.empty();
         }
         if (o instanceof BigDecimal d) {
             return Optional.of(d.negate());

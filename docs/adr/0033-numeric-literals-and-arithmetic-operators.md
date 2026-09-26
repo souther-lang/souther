@@ -21,7 +21,9 @@ integer digits are `Int`, a fractional literal was `Decimal`. Two gaps showed up
 ## Decision
 
 **Numeric literals.** A `Decimal` literal carries an `m` suffix, as in F# / C#: `500m`,
-`1.5m`, `0.5m`. Bare digits are `Int` (`500`). A fractional literal without `m` (`1.5`) is a
+`1.5m`, `0.5m`. Bare digits are `Int` (`500`) up to the greatest `Int`; the least `Int` is written
+`-9223372036854775808`, a minus before the one magnitude that has no literal of its own, and any
+other literal past the range is refused. A fractional literal without `m` (`1.5`) is a
 compile error — Souther has no floating-point type, so `Decimal` is stated at the literal
 rather than defaulted into. This makes the `Int`/`Decimal` choice explicit in the source.
 

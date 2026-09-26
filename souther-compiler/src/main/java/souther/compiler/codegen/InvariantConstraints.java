@@ -6,6 +6,7 @@ import souther.compiler.check.InvariantStatement;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
+import souther.compiler.core.IntNegation;
 import souther.compiler.core.Kernel;
 import souther.compiler.numeric.EndSide;
 import souther.compiler.types.Type;
@@ -414,7 +415,7 @@ public final class InvariantConstraints {
             return lit.value();
         }
         if (e instanceof Core.Neg neg && Core.withoutStanding(neg.operand()) instanceof Core.Int lit
-                && lit.value() != Long.MIN_VALUE) {
+                && IntNegation.hasValue(lit.value())) {
             return -lit.value();
         }
         return null;
