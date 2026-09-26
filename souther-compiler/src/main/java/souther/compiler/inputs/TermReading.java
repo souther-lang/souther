@@ -13,6 +13,7 @@ import java.math.BigDecimal;
 import java.util.Objects;
 
 import souther.compiler.inputs.NumericTerm.Reading;
+import souther.unicode.ScalarValues;
 
 /**
  * The number a term names at an observation of its position, or why there is none.
@@ -175,14 +176,12 @@ final class TermReading {
      *
      * <p>Read off the observation under the premise {@link NumericTerm.TakenOf} states: the
      * operation and what it is applied to agree, so counting what is there counts what was asked
-     * for. A string counts in code points, as {@code Strings.length} does — counting UTF-16 units
-     * here would put a boundary one place away from the rule that drew it for every string outside
-     * the basic plane.
+     * for. A string counts in scalar values, by the count the run time's {@code String.length}
+     * answers with ({@link ScalarValues#count}).
      */
     private static Reading howMany(ObservedValue at) {
         return switch (at) {
-            case ObservedValue.Text t -> new Reading.Number(
-                    Count.of(t.value().codePointCount(0, t.value().length())));
+            case ObservedValue.Text t -> new Reading.Number(Count.of(ScalarValues.count(t.value())));
             case ObservedValue.Sequence s -> new Reading.Number(Count.of(s.elements().size()));
             case ObservedValue.Mapping m -> new Reading.Number(Count.of(m.entries().size()));
             case null, default -> new Reading.NotNumber();

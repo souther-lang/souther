@@ -1,16 +1,26 @@
 package souther.unicode;
 
 /**
- * The lexicographic order of two texts over their Unicode scalar values: the order the language
- * puts {@code String}s in (spec §equality), and the order the compiler reasons about text in.
+ * Text measured and ordered in the unit a {@code String} is made of: Unicode scalar values (spec
+ * §string-code-points, §equality).
  *
- * <p>Here rather than in the runtime's support classes for the reason {@link Normalization} is:
- * it is a fact about Unicode text that the compiler reasons with and a program runs, and the layers
- * of the compiler that reason about declarations name no backend's package.
+ * <p>The one statement of both, for everything that measures or orders a {@code String} — the
+ * runtime a program runs on and the compiler that folds and reasons about the same values before it
+ * runs. Here rather than in the runtime's support classes for the reason {@link Normalization} is:
+ * the layers of the compiler that reason about declarations name no backend's package. A reader
+ * that measured or ordered text with {@link String#length} or {@link String#compareTo} would be
+ * counting UTF-16 code units, which is what a JVM string holds and not what a {@code String} is.
+ *
+ * <p>Of text that is a sequence of scalar values, which every {@code String} is; nothing here asks.
  */
-public final class ScalarOrder {
+public final class ScalarValues {
 
-    private ScalarOrder() {}
+    private ScalarValues() {}
+
+    /** How many scalar values {@code text} is made of: the length the language gives it. */
+    public static long count(String text) {
+        return text.codePointCount(0, text.length());
+    }
 
     /**
      * Where {@code a} stands against {@code b}: the first scalar value where they differ decides,
@@ -22,9 +32,6 @@ public final class ScalarOrder {
      * units are compared as they are, with that one range moved: a surrogate goes above every other
      * unit. Both sides share every unit before the first one apart, so where one of them is the
      * second half of a pair so is the other, and two second halves keep their order under the move.
-     *
-     * <p>Of text that is a sequence of scalar values, which every {@code String} is; nothing here
-     * asks.
      */
     public static int compare(String a, String b) {
         int shared = Math.min(a.length(), b.length());

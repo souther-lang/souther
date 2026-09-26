@@ -101,11 +101,25 @@ public record CodePoints(List<Range> ranges) {
 
     /** Every symbol below {@code symbol}, which is the order symbols are compared in. */
     public static CodePoints below(int symbol) {
+        if (symbol < 0 || symbol > LAST) {
+            throw new IllegalArgumentException("no symbol is " + symbol);
+        }
         return symbol > 0 ? new CodePoints(scalarsIn(0, symbol - 1)) : NONE;
     }
 
-    /** The runs the scalar values in {@code from..to} make, one or two of them or none. */
+    /**
+     * The runs the scalar values in {@code from..to} make, one or two of them or none.
+     *
+     * <p>None only where the interval lies within the surrogates. An interval running backwards is
+     * no interval at all, and is refused here rather than read as holding nothing: every way a run
+     * is made comes through this, so a caller that got its ends the wrong way round is told so
+     * whichever way it came.
+     */
     private static List<Range> scalarsIn(int from, int to) {
+        if (from > to) {
+            throw new IllegalArgumentException("a run of symbols runs from low to high: "
+                    + from + ".." + to);
+        }
         List<Range> out = new ArrayList<>();
         if (from < SURROGATES_FROM) {
             out.add(new Range(from, Math.min(to, SURROGATES_FROM - 1)));

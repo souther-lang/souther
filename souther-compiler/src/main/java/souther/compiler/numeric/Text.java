@@ -1,6 +1,6 @@
 package souther.compiler.numeric;
 
-import souther.unicode.ScalarOrder;
+import souther.unicode.ScalarValues;
 
 /**
  * Where a string sits on its carrier's order, which is the string.
@@ -30,7 +30,7 @@ public record Text(String at) implements Place {
     /**
      * The order, which is the language's order on text.
      *
-     * <p>{@link ScalarOrder#compare} and not a collator: the same comparison the runtime makes, so a
+     * <p>{@link ScalarValues#compare} and not a collator: the same comparison the runtime makes, so a
      * line drawn here and the branch a row takes cannot disagree about which side of it a value is
      * on. A locale-aware order would put a line somewhere the model did not. And not
      * {@link String#compareTo}, which orders UTF-16 code units and would put a line between a
@@ -42,7 +42,7 @@ public record Text(String at) implements Place {
         if (!(other instanceof Text text)) {
             throw Place.notOneOrder(this, other);
         }
-        return ScalarOrder.compare(at, text.at);
+        return ScalarValues.compare(at, text.at);
     }
 
     /**

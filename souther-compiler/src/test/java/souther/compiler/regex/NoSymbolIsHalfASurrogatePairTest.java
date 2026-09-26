@@ -50,6 +50,16 @@ class NoSymbolIsHalfASurrogatePairTest {
         assertThrows(IllegalArgumentException.class, () -> CodePoints.between(0xD7FF, 0xDFFF));
     }
 
+    /**
+     * A run written backwards is refused, and not read as holding nothing — including one whose
+     * ends lie either side of the surrogates, which no range of scalar values contains.
+     */
+    @Test
+    void aRunWrittenBackwardsIsRefused() {
+        assertThrows(IllegalArgumentException.class, () -> CodePoints.between(0xE000, 0xD7FF));
+        assertThrows(IllegalArgumentException.class, () -> CodePoints.between('b', 'a'));
+    }
+
     /** A run written across the surrogates holds the scalar values either side and no others. */
     @Test
     void aRunAcrossTheSurrogatesLeavesThemOut() {
