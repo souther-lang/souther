@@ -1506,12 +1506,11 @@ public final class HelperInliner {
             case Hir.Expansion ex -> {
                 List<Hir.Bound> bound = new ArrayList<>();
                 for (Hir.Bound b : ex.bound()) {
-                    bound.add(new Hir.Bound(b.binder(), b.declaredType(), inline(b.value())));
+                    bound.add(b.with(inline(b.value())));
                 }
                 List<Hir.Given> given = new ArrayList<>();
                 for (Hir.Given g : ex.given()) {
-                    given.add(new Hir.Given(g.declaredType(), inline(g.value()), g.applied(),
-                            g.arrivesAs()));
+                    given.add(g.with(inline(g.value())));
                 }
                 // Walked with this expansion as the copy being written: a call the body still holds
                 // is one this expansion made, not one the body around it made.
@@ -2040,7 +2039,7 @@ public final class HelperInliner {
                 // function parameter is what removes it, because the application β-reduces
                 // to the lambda's body, so the expansion holds no reference either way.
                 given.add(new Hir.Given(instantiated(p.type(), applied), arg,
-                        references(helper.writtenBody(), p.binder().id()), arrivesAs(arg)));
+                        references(helper.writtenBody(), p.binder().id()), arrivesAs(arg), i));
                 Hir.FnType declares = declaredFn(p.type(), applied);
                 // Which rule this call handed to this parameter, said where the call site is
                 // still here to say it. What the expansion holds afterwards is the rule's own body
@@ -2107,7 +2106,7 @@ public final class HelperInliner {
                     handedHere.put(f.id(), crossedInto(null, crossingInto, i));
                     stands(f.id(), ruleOf(lambda));
                     unreduced.put(f.id(),
-                            new Hir.Bound(f, instantiated(p.type(), applied), lambda));
+                            new Hir.Bound(f, instantiated(p.type(), applied), lambda, i));
                     // Only where the lambda takes the one value an element arrives as. A closure
                     // given more — an index beside the element — answers about a pair, and one
                     // answer per element says nothing about which of the two a projection is of.
@@ -2126,7 +2125,7 @@ public final class HelperInliner {
                 // carry the parameter's declared type onto the binding, so a value known to
                 // be a sum (an annotated `s: S`) is not narrowed to the argument's specific
                 // case when the body is re-checked inline — a `match s` inside still sees S.
-                bound.add(new Hir.Bound(f, instantiated(p.type(), applied), arg));
+                bound.add(new Hir.Bound(f, instantiated(p.type(), applied), arg, i));
                 // Where the argument is itself the expansion of an operation over a collection,
                 // what this binding holds came from that operation's own container — and by the
                 // time anything reads the tree, the operation is gone. Recorded here, which is the
@@ -2980,12 +2979,11 @@ public final class HelperInliner {
             case Hir.Expansion ex -> {
                 List<Hir.Bound> bound = new ArrayList<>();
                 for (Hir.Bound b : ex.bound()) {
-                    bound.add(new Hir.Bound(b.binder(), b.declaredType(), read(b.value())));
+                    bound.add(b.with(read(b.value())));
                 }
                 List<Hir.Given> given = new ArrayList<>();
                 for (Hir.Given g : ex.given()) {
-                    given.add(new Hir.Given(g.declaredType(), read(g.value()), g.applied(),
-                            g.arrivesAs()));
+                    given.add(g.with(read(g.value())));
                 }
                 yield new Hir.Expansion(ex.callee(), ex.application(), ex.at(), bound, given,
                         ex.declaredReturn(), insideThisExpansion(ex, () -> read(ex.body())),
@@ -3070,8 +3068,8 @@ public final class HelperInliner {
             // closed leaves the values it names as names, and a spread is one of the places it
             // names them.
             Hir.FnDef value = reading == ValueAtAReference.SHARED_PER_REGION
-                    || spread instanceof Hir.Var.Denoting named
-                    && leftNamed(named.reachesADeclaration())
+                    || (spread instanceof Hir.Var.Denoting named
+                            && leftNamed(named.reachesADeclaration()))
                     ? null : valueSpread(spread);
             if (value == null) {
                 spreads.add(spread);
@@ -3466,14 +3464,11 @@ public final class HelperInliner {
             case Hir.Expansion ex -> {
                 List<Hir.Bound> bound = new ArrayList<>();
                 for (Hir.Bound b : ex.bound()) {
-                    bound.add(new Hir.Bound(renaming.copy().of(b.binder()), b.declaredType(),
-                            rename(b.value(), renaming)));
+                    bound.add(b.with(renaming.copy().of(b.binder()), rename(b.value(), renaming)));
                 }
                 List<Hir.Given> given = new ArrayList<>();
                 for (Hir.Given g : ex.given()) {
-                    given.add(new Hir.Given(g.declaredType(),
-                            rename(g.value(), renaming), g.applied(),
-                            g.arrivesAs()));
+                    given.add(g.with(rename(g.value(), renaming)));
                 }
                 // What this copy of the expansion wrote, from the one place an owner is moved. Kept
                 // as it was, the two copies of one already-expanded body would say they wrote into

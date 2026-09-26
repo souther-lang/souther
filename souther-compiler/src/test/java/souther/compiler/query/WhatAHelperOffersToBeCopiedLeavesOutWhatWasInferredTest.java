@@ -67,7 +67,8 @@ class WhatAHelperOffersToBeCopiedLeavesOutWhatWasInferredTest {
         Hir.FnDef has = closed("has");
         Hir.Expansion inner = assertInstanceOfExpansion(has.writtenBody());
         List<Hir.Bound> retyped = new ArrayList<>();
-        inner.bound().forEach(b -> retyped.add(new Hir.Bound(b.binder(), A_STRING, b.value())));
+        inner.bound().forEach(b -> retyped.add(
+                new Hir.Bound(b.binder(), A_STRING, b.value(), b.argument())));
         Hir.Expansion otherwise = new Hir.Expansion(inner.callee(), inner.application(), inner.at(),
                 retyped, inner.given(), A_STRING, inner.body(), inner.pos(), inner.region());
 

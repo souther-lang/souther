@@ -130,7 +130,7 @@ public final class NewtypeDesugar {
             case Hir.Expansion ex -> {
                 List<Hir.Bound> bound = new ArrayList<>();
                 for (Hir.Bound b : ex.bound()) {
-                    bound.add(new Hir.Bound(b.binder(), b.declaredType(), go(b.value(), newtypes)));
+                    bound.add(b.with(go(b.value(), newtypes)));
                 }
                 yield new Hir.Expansion(ex.callee(), ex.application(), ex.at(), bound, ex.given(),
                         ex.declaredReturn(), go(ex.body(), newtypes), ex.pos(), ex.region());

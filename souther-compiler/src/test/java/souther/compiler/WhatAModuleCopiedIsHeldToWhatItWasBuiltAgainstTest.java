@@ -336,6 +336,63 @@ class WhatAModuleCopiedIsHeldToWhatItWasBuiltAgainstTest {
                 refusal(path, readerOf("app.n")));
     }
 
+    /**
+     * What a module offers is what it wrote, and a call to another module's helper is written as
+     * the helper and the arguments the call wrote. Whether that helper's body still applies the
+     * function it was handed is the helper's: `lib.c` stops applying it, `lib.b` stays as it was
+     * and is accepted, and `app.a`, which carries `h`'s body through `use`, is the one said.
+     */
+    @Test
+    void whatAnotherModulesHelperMakesOfACallIsNotPartOfTheCaller() {
+        String b = """
+                module lib.b exposing ( use )
+                import lib.c ( h )
+                let inc (n: Int) = n + 1
+                let use (n: Int) = h(inc, n)
+                """;
+        Map<String, ClassFileImage> built = new HashMap<>(Compiler.compile("""
+                module lib.c exposing ( h )
+                let h (f: (Int) -> Int, n: Int): Int = f(n)
+                """));
+        Map<String, ClassFileImage> bClasses = Compiler.compileModules(List.of(b),
+                ModulePath.of(built));
+        built.putAll(bClasses);
+        Map<String, ClassFileImage> path = new HashMap<>(Compiler.compileModules(List.of("""
+                module app.a exposing ( go )
+                import lib.b ( use )
+                behavior go : (n: Int) -> Int
+                let go (n) = use(n)
+                """), ModulePath.of(built)));
+        path.putAll(bClasses);
+        path.putAll(Compiler.compile("""
+                module lib.c exposing ( h )
+                let h (f: (Int) -> Int, n: Int): Int = n
+                """));
+
+        assertAccepted(path, """
+                module main.b
+                import lib.b ( use )
+                behavior run : (n: Int) -> Int
+                let run (n) = n
+                """);
+        // Copied here, `use` is what `lib.b` offers worked out again against the `lib.c` this
+        // compilation has, which is held against what `lib.b`'s classes record it offers.
+        assertAccepted(path, """
+                module main.c
+                import lib.b ( use )
+                behavior run : (n: Int) -> Int
+                let run (n) = use(n)
+                """);
+        assertEquals(new ModuleMessage.ItCopiedAnotherVersion("app.a", "helper", "h", "lib.c",
+                        "closed helper"),
+                refusal(path, """
+                        module main.a
+                        import app.a ( go )
+                        behavior run : (n: Int) -> Int
+                        let run (n) = go(n)
+                        """));
+    }
+
     /** Importing a constant and never reading it copies nothing of it. */
     @Test
     void aModuleThatCopiedNothingOfWhatMovedIsAccepted() {

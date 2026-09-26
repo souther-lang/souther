@@ -1853,8 +1853,20 @@ public interface Hir {
     }
 
     /** A value argument. It becomes a binding, so the body reads a name rather than the argument's
-     * text, and the callee's declared type for it comes along. */
-    record Bound(Binder binder, RetType declaredType, Expr value) {}
+     * text, and the callee's declared type for it comes along. {@code argument} is which argument
+     * of the call it is, counted in the order the call writes them. */
+    record Bound(Binder binder, RetType declaredType, Expr value, int argument) {
+
+        /** The same argument, holding {@code rewritten}. */
+        public Bound with(Expr rewritten) {
+            return new Bound(binder, declaredType, rewritten, argument);
+        }
+
+        /** The same argument, bound as {@code renamed} and holding {@code rewritten}. */
+        public Bound with(Binder renamed, Expr rewritten) {
+            return new Bound(renamed, declaredType, rewritten, argument);
+        }
+    }
 
     /**
      * A function argument. It leaves no binding, so what the signature said about it reaches a
@@ -1870,8 +1882,19 @@ public interface Hir {
      * is for a function written in place. Where it does not — the callee named a function parameter
      * and never used it — the body says nothing about it at all, and this is the only place it can
      * be held to the type the callee declared for it.
+     *
+     * <p>{@code argument} is which argument of the call it is, counted in the order the call writes
+     * them. Which arguments are functions and which are values is the callee's to say, so what the
+     * call wrote, and in what order, is read off this and {@link Bound#argument} together.
      */
-    record Given(RetType declaredType, Expr value, boolean applied, RetType arrivesAs) {}
+    record Given(RetType declaredType, Expr value, boolean applied, RetType arrivesAs,
+                 int argument) {
+
+        /** The same argument, holding {@code rewritten}. */
+        public Given with(Expr rewritten) {
+            return new Given(declaredType, rewritten, applied, arrivesAs, argument);
+        }
+    }
 
     /** A list literal {@code [e1, e2, ...]} (one or more elements of the same type).
      *
@@ -2951,8 +2974,7 @@ public interface Hir {
             case Expansion ex -> {
                 List<Bound> bound = each(ex.bound(), b -> {
                     Expr value = atExpr.apply(b.value());
-                    return value == b.value() ? b
-                            : new Bound(b.binder(), b.declaredType(), value);
+                    return value == b.value() ? b : b.with(value);
                 });
                 Expr body = atExpr.apply(ex.body());
                 yield bound == ex.bound() && body == ex.body() ? ex

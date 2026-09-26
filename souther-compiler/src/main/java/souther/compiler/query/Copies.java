@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.CarriedDefinitions;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.InliningPolicy;
@@ -160,9 +161,13 @@ public final class Copies {
                 return Answer.absent();
             }
             Hir.Module from = settled.value();
+            // Everything the module hands another module's readers, and not only what it
+            // publishes: a helper its invariant calls is read, and a recursive one taken on, by a
+            // module whose type includes that invariant.
+            Set<String> handedOver = CarriedDefinitions.of(resolved.value(), from.published());
             List<Hir.FnDef> roots = new ArrayList<>();
             for (Hir.FnDef fn : HelperInliner.helpersOf(from).values()) {
-                if (fn.body() instanceof Hir.FnBody.Written && from.published().contains(fn.name())) {
+                if (fn.body() instanceof Hir.FnBody.Written && handedOver.contains(fn.name())) {
                     roots.add(fn);
                 }
             }

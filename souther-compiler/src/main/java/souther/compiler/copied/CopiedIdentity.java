@@ -15,6 +15,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.function.Function;
 
 /**
@@ -247,8 +248,11 @@ public final class CopiedIdentity {
             // and with what the checker worked out written in beside what the author wrote, so
             // they are not read here. What the callee's author wrote is read off the callee.
             case Hir.Expansion it -> {
-                word(isElsewhere(it.callee()) ? "expansion elsewhere" : "expansion")
-                        .reference(it.callee()).count(it.bound().size());
+                if (isElsewhere(it.callee())) {
+                    callElsewhere(it);
+                    return;
+                }
+                word("expansion").reference(it.callee()).count(it.bound().size());
                 for (Hir.Bound bound : it.bound()) {
                     expr(bound.value());
                     bind(bound.binder());
@@ -258,12 +262,8 @@ public final class CopiedIdentity {
                     word(String.valueOf(given.applied()));
                     expr(given.value());
                 }
-                // What the expansion copied of another module's helper is that helper's, and is
-                // held as that helper.
-                if (!isElsewhere(it.callee())) {
-                    signatureOf(it.callee());
-                    expr(it.body());
-                }
+                signatureOf(it.callee());
+                expr(it.body());
             }
             case Hir.Block it -> {
                 word("block").count(it.params().size());
@@ -321,6 +321,25 @@ public final class CopiedIdentity {
                     word("library").word(operation.alias()).word(operation.name());
             case ValueName.Stdlib.Namespace namespace -> word("namespace").word(namespace.alias());
         }
+    }
+
+    /**
+     * An expansion of another module's helper, as the call that made it was written: which helper,
+     * and the arguments in the order the call wrote them.
+     *
+     * <p>Nothing the callee decided. Which arguments became bindings and which were handed on as
+     * functions, whether its body still applies one, what it declares of them and what its body
+     * is, are all that helper's, held as that helper by whoever copies this. Read here as well, what
+     * this declaration is would move with a module it does not own.
+     */
+    private void callElsewhere(Hir.Expansion it) {
+        Map<Integer, Hir.Expr> byArgument = new TreeMap<>();
+        it.bound().forEach(bound -> byArgument.putIfAbsent(bound.argument(), bound.value()));
+        // A lambda handed to a function parameter can be bound as well, where the callee passes it
+        // on rather than applying it; what the call handed over is the one written, either way.
+        it.given().forEach(given -> byArgument.put(given.argument(), given.value()));
+        word("call elsewhere").reference(it.callee()).count(byArgument.size());
+        byArgument.values().forEach(this::expr);
     }
 
     /**
