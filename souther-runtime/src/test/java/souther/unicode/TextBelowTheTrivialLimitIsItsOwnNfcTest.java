@@ -54,6 +54,17 @@ class TextBelowTheTrivialLimitIsItsOwnNfcTest {
         assertEquals("À", Normalization.nfcWithin("À", Long.MAX_VALUE));
     }
 
+    /** Text before the last code point below the limit is kept, and that code point is normalized
+     *  with what follows it, since a mark after it may compose into it. */
+    @Test
+    void theTextBeforeTheLastCodePointBelowTheLimitIsKept() {
+        assertEquals("abcÀ", Normalization.nfcWithin("abcÀ", Long.MAX_VALUE));
+        assertEquals("abcÀ東", Normalization.nfcWithin("abcÀ東", Long.MAX_VALUE));
+        assertEquals("Àbc", Normalization.nfcWithin("Àbc", Long.MAX_VALUE));
+        assertNull(Normalization.nfcWithin("abcÀ", 3));
+        assertNull(Normalization.nfcWithin("abcÀ", 2));
+    }
+
     /** Text answered with itself is exactly as long as the answer, so its own length decides. */
     @Test
     void theBoundIsOnTheTextAnsweredWithItself() {
