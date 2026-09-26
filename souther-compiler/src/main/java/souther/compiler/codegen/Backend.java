@@ -1443,6 +1443,13 @@ public final class Backend {
      * such text in, and a reader built under it admits a carried body writing such a literal or
      * pattern, which this reader refuses.
      *
+     * <p>Version 33 changes which text a {@code String.matches} pattern is and what it means. The
+     * pattern language is the specification's, read by the compiler, and no longer whatever
+     * {@code java.util.regex} compiles; a class runs the pattern the compiler wrote from what the
+     * pattern means rather than the author's text. A reader built under version 32 admits a carried
+     * body whose pattern uses a lookaround, a back reference or a property, which this reader
+     * refuses, and a class emitted under it hands the author's text to the JVM's engine.
+     *
      * <p>That is also where this number stops. It says whether a jar and this compiler agree on
      * what the metadata says and on the rules a declaration is turned into JVM facts by — a
      * behavior's class and methods, how one is held and built, a type's layout and codecs. It does
@@ -1453,7 +1460,7 @@ public final class Backend {
      * {@code [#a-published-module-agrees-with-what-it-copied]}). An edit to a declaration moves
      * that and not this; an edit to a rule moves this.
      */
-    public static final int BOUNDARY_VERSION = 32;
+    public static final int BOUNDARY_VERSION = 33;
 
     /** Emits the class a module's own declarations are published on, carrying {@code declarations}.
      * What it says is the caller's; that it is built like every other generated class — the same Java

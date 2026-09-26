@@ -37,32 +37,13 @@ public final class InvariantStatements {
     private final Map<TypeSymbol.AtModule, Map<PartId<RuleRef.Invariant>, List<InvariantStatement>>>
             read = new LinkedHashMap<>();
 
-    private final Symbols symbols;
-
-    private InvariantStatements(Clauses clauses, Symbols symbols) {
+    private InvariantStatements(Clauses clauses) {
         this.clauses = clauses;
-        this.symbols = symbols;
-    }
-
-    /**
-     * The text {@code expression} stands for, or null where nothing works one out.
-     *
-     * <p>Asked here because it is a reading of a term and not a question about whatever the caller
-     * is mapping onto: a rule whose text is composed of what a module's own {@code let} holds says
-     * the same thing as one written out, and a caller that folded only the literals it could see
-     * for itself would read the second and decline the first.
-     *
-     * <p>Over the term alone, which is what a statement from here is. The bindings a reading crossed
-     * to reach it are already spent, so there is no environment left for this to be asked in.
-     */
-    public String textOf(Core expression) {
-        return Terms.folded(expression, symbols, Denotations.none()) instanceof String text
-                ? text : null;
     }
 
     /** The statements of the declarations {@code source} reads. */
     public static InvariantStatements of(RuleReadingSource source) {
-        return new InvariantStatements(new Clauses(source), source.symbols());
+        return new InvariantStatements(new Clauses(source));
     }
 
     /**

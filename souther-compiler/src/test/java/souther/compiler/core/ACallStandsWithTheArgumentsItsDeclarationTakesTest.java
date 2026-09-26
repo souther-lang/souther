@@ -65,7 +65,7 @@ class ACallStandsWithTheArgumentsItsDeclarationTakesTest {
     void aCallOfFewerIsRefused() {
         IllegalStateException e = assertThrows(IllegalStateException.class,
                 () -> new Core.PreservedCall(KeptCalls.declared(LENGTH), List.of(),
-                        COMPOSED_PLACE, Type.INT, POS));
+                        COMPOSED_PLACE, Core.KernelFact.None.INSTANCE, Type.INT, POS));
 
         assertTrue(e.getMessage().contains("List.length"), e.getMessage());
     }
@@ -77,7 +77,7 @@ class ACallStandsWithTheArgumentsItsDeclarationTakesTest {
 
         assertThrows(IllegalStateException.class,
                 () -> new Core.PreservedCall(KeptCalls.declared(LENGTH), two,
-                        COMPOSED_PLACE, Type.INT, POS));
+                        COMPOSED_PLACE, Core.KernelFact.None.INSTANCE, Type.INT, POS));
     }
 
     /**
@@ -91,7 +91,7 @@ class ACallStandsWithTheArgumentsItsDeclarationTakesTest {
     void andGoesOnStandingWithThemAfterTheCallerHasMovedOn() {
         List<Core> handed = new ArrayList<>(KeptCalls.to(LENGTH, POS).args());
         Core.PreservedCall call = new Core.PreservedCall(KeptCalls.declared(LENGTH), handed,
-                COMPOSED_PLACE, Type.INT, POS);
+                COMPOSED_PLACE, Core.KernelFact.None.INSTANCE, Type.INT, POS);
 
         handed.add(new Core.Int(0, Type.INT, POS));
 
@@ -110,11 +110,11 @@ class ACallStandsWithTheArgumentsItsDeclarationTakesTest {
         ValueName value = new ValueName.Helper("demo", "half");
 
         assertEquals(0, new Core.PreservedCall(KeptCalls.settledValue(value, Type.INT), List.of(),
-                COMPOSED_PLACE, Type.INT, POS).args().size());
+                COMPOSED_PLACE, Core.KernelFact.None.INSTANCE, Type.INT, POS).args().size());
         assertThrows(IllegalStateException.class,
                 () -> new Core.PreservedCall(KeptCalls.settledValue(value, Type.INT),
                         List.of(new Core.Int(0, Type.INT, POS)), COMPOSED_PLACE,
-                        Type.INT, POS));
+                        Core.KernelFact.None.INSTANCE, Type.INT, POS));
     }
 
     /**

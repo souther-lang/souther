@@ -470,7 +470,6 @@ final class Intrinsics {
         // on the runtime rather than the JDK's own `trim`, whose whitespace set does not agree.
         t.put(Kernel.STRING_TRIM, rt(CD_Strings, "trim", order(0)));
         t.put(Kernel.STRING_WORDS, rt(CD_Strings, "words", order(0)));
-        t.put(Kernel.STRING_MATCHES, rt(CD_Strings, "matches", order(1, 0)));
         t.put(Kernel.STRING_CHARACTERS, rt(CD_Strings, "characters", order(0)));
         t.put(Kernel.STRING_CODE_POINTS, rt(CD_Strings, "codePoints", order(0)));
         t.put(Kernel.STRING_FROM_INT, rt(CD_Strings, "fromInt", order(0)));

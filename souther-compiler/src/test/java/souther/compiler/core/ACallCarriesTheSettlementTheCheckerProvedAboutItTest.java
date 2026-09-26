@@ -5,6 +5,7 @@ import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.regex.PatternMeaning;
 
 import org.junit.jupiter.api.Test;
 
@@ -20,8 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>A kernel's application settles what it takes each argument as, and the call holds each
  * argument at exactly that. {@code String.matches}'s pattern is a fact settled beside it: the
- * checker folds its first argument under the bindings in force and asks {@code
- * java.util.regex.Pattern} whether the composed text is accepted, which settles one string. Both
+ * checker folds its first argument under the bindings in force and reads the composed text as a
+ * pattern of the language, which settles what the pattern means. Both
  * belong on the call they were settled for — not folded into {@code args}, which is what the body
  * evaluates at run time and a different question — and not left for a reader below to derive a
  * second time.
@@ -57,7 +58,7 @@ class ACallCarriesTheSettlementTheCheckerProvedAboutItTest {
     }
 
     private static Core.CallSettlement.AtKernel matching(String pattern) {
-        return at(TWO_STRINGS, new Core.KernelFact.StringMatches(pattern));
+        return at(TWO_STRINGS, new Core.KernelFact.StringMatches(pattern, PatternMeaning.text(pattern)));
     }
 
     @Test
@@ -74,7 +75,8 @@ class ACallCarriesTheSettlementTheCheckerProvedAboutItTest {
     void aCallToAnyOtherKernelIsRefusedAPattern() {
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> new Core.Call(TRIM, List.of(str("  x  ")), UNWRITTEN,
-                        at(List.of(Type.STRING), new Core.KernelFact.StringMatches("x")),
+                        at(List.of(Type.STRING), new Core.KernelFact.StringMatches("x",
+                                PatternMeaning.text("x"))),
                         Type.STRING, POS));
 
         assertTrue(e.getMessage().contains("String.trim"), e.getMessage());

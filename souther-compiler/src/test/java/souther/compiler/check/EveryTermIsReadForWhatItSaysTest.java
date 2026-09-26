@@ -209,6 +209,6 @@ class EveryTermIsReadForWhatItSaysTest {
                 List.of(new Core.Str("", Type.STRING, POS)), Type.BOOL, POS);
         return new Core.PreservedCall(call.declared(), call.args(),
                 new Core.KeptCallPlace(reference, application, OccurrenceLineage.ORIGINAL),
-                call.type(), POS);
+                call.settled(), call.type(), POS);
     }
 }

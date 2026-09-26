@@ -5,7 +5,7 @@ import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
 import souther.compiler.regex.PatternParser;
 import souther.compiler.regex.PatternRead;
-import souther.compiler.regex.PatternSyntax;
+import souther.compiler.regex.PatternMeaning;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
@@ -63,20 +63,20 @@ public enum StringPredicates {
     MATCHES(Kernel.STRING_MATCHES, null),
 
     /** The strings that hold the written one somewhere. */
-    CONTAINS(Kernel.STRING_CONTAINS, written -> new PatternSyntax.InTurn(List.of(
-            PatternSyntax.anything(), PatternSyntax.text(written), PatternSyntax.anything()))),
+    CONTAINS(Kernel.STRING_CONTAINS, written -> new PatternMeaning.InTurn(List.of(
+            PatternMeaning.anything(), PatternMeaning.text(written), PatternMeaning.anything()))),
 
     /** The strings that begin with it. */
-    STARTS_WITH(Kernel.STRING_STARTS_WITH, written -> new PatternSyntax.InTurn(List.of(
-            PatternSyntax.text(written), PatternSyntax.anything()))),
+    STARTS_WITH(Kernel.STRING_STARTS_WITH, written -> new PatternMeaning.InTurn(List.of(
+            PatternMeaning.text(written), PatternMeaning.anything()))),
 
     /** The strings that end with it. */
-    ENDS_WITH(Kernel.STRING_ENDS_WITH, written -> new PatternSyntax.InTurn(List.of(
-            PatternSyntax.anything(), PatternSyntax.text(written))));
+    ENDS_WITH(Kernel.STRING_ENDS_WITH, written -> new PatternMeaning.InTurn(List.of(
+            PatternMeaning.anything(), PatternMeaning.text(written))));
 
     /** What the strings around the written text may be, or null where the text is a pattern. */
     private interface Around {
-        PatternSyntax accepting(String written);
+        PatternMeaning accepting(String written);
     }
 
     private final Kernel kernel;
@@ -124,7 +124,7 @@ public enum StringPredicates {
      * <p>Never asked of {@link #MATCHES}: what a pattern accepts is what reading the pattern comes
      * to, and a caller holding one has already read it.
      */
-    public PatternSyntax accepting(String written) {
+    public PatternMeaning accepting(String written) {
         if (around == null) {
             throw new IllegalStateException(
                     this + " states a pattern, and what it accepts is the pattern's");
@@ -154,7 +154,7 @@ public enum StringPredicates {
     public sealed interface Reading {
 
         /** The strings the predicate admits at the position it is about. */
-        record Accepting(PatternSyntax accepts) implements Reading {
+        record Accepting(PatternMeaning accepts) implements Reading {
 
             public Accepting {
                 if (accepts == null) {
@@ -165,17 +165,21 @@ public enum StringPredicates {
         }
 
         /**
-         * A pattern it states that this reads no further into, and what stopped the reading.
+         * A pattern it states that is not read, and what the reader said instead.
          *
-         * <p>Only an entry whose text is a pattern arrives here. One that composes what it accepts
-         * out of text has nothing in that to be stopped by.
+         * <p>Only in a program the checker refuses. A pattern that is no pattern of the language, or
+         * one deeper than this compiler reads, is a compile error where the call is checked — but a
+         * reading of the rules goes on over a module with errors in it, and what it meets there is
+         * this rather than an answer nobody could give. Only an entry whose text is a pattern
+         * arrives here. One that composes what it accepts out of text has nothing in that to be
+         * stopped by.
          */
-        record PatternNotRead(PatternRead.Unsupported why) implements Reading {
+        record PatternNotRead(PatternRead why) implements Reading {
 
             public PatternNotRead {
-                if (why == null) {
+                if (why == null || why instanceof PatternRead.Read) {
                     throw new IllegalArgumentException(
-                            "a pattern nothing read was stopped by something");
+                            "a pattern nothing read was stopped by something: " + why);
                 }
             }
         }
@@ -246,18 +250,20 @@ public enum StringPredicates {
     /**
      * What this predicate says, given the text written in it.
      *
-     * <p>The whole of the reading, and the one copy of it. What each tree does for itself is reach
-     * the call and work out the text — {@code ConstEval} on one side, {@link Terms#folded} on the
-     * other — and from that text onwards there is a single answer, so a construct the subset learns
-     * is learned by both at once.
+     * <p>The one copy of the reading for the written tree and for the predicates that look for text
+     * on a checked one. A pattern on a checked tree is not read here: the checker read it and the
+     * call carries what it means ({@link #statedBy}). The written tree is walked before any call is
+     * settled, so its patterns are read here by the language's one reader, {@link PatternParser} —
+     * the same reader the checker uses, so the two answers are one.
      */
     private Reading readingOf(String written) {
         if (!takesAPattern()) {
             return new Reading.Accepting(accepting(written));
         }
         return switch (PatternParser.read(written)) {
-            case PatternRead.Read read -> new Reading.Accepting(read.syntax());
-            case PatternRead.NotRead not -> new Reading.PatternNotRead(not.why());
+            case PatternRead.Read read -> new Reading.Accepting(read.meaning());
+            case PatternRead.Refused refused -> new Reading.PatternNotRead(refused);
+            case PatternRead.TooDeep deep -> new Reading.PatternNotRead(deep);
         };
     }
 
@@ -313,7 +319,7 @@ public enum StringPredicates {
      * one entry point per tree, a reader whose fold was the weaker of them would report a rule as
      * one whose argument nothing worked out while holding the answer, and the same rule would mean
      * two things depending on which tree it was read off. Everything past the text is
-     * {@link #readingOf} and is one.
+     * {@link #readingOf} and is one, except a pattern, whose meaning the call carries.
      *
      * <p>The positions below are read off the call without being checked against it, and two things
      * hold that up between them. A {@link Core.PreservedCall} has the arguments its declaration
@@ -342,6 +348,11 @@ public enum StringPredicates {
      * predicate was read and the text the author wrote was not worked out, which is a fact about
      * the rule; a caller resolving the argument with less than it holds would be putting a fact
      * about itself under that word.
+     *
+     * <p><b>A pattern is not read here.</b> The checker read it where it settled the call, and what
+     * it means is on the call ({@link Core.PreservedCall#settled}); this takes it from there, so a
+     * checked tree has one reading of its patterns and it is the checker's. The text that was
+     * handed in is for the predicates that look for text, which is theirs to be read as.
      */
     public static Stated statedBy(Core clause, Symbols symbols, WrittenText text) {
         if (!(Core.withoutStanding(clause) instanceof Core.PreservedCall call)
@@ -353,6 +364,16 @@ public enum StringPredicates {
             return null;
         }
         Core subject = call.args().get(predicate.subject());
+        if (predicate.takesAPattern()) {
+            // A kept `String.matches` exists only where its pattern was read, so one without its
+            // meaning is the checker's contract broken rather than a rule this could not read.
+            if (!(call.settled() instanceof Core.KernelFact.StringMatches settled)) {
+                throw new IllegalStateException(
+                        "a String.matches call carries the pattern the checker read: " + call);
+            }
+            return new Stated(subject, new Reading.Accepting(settled.meaning()),
+                    new PredicateStatement.Applying(operation.qualified(), settled.written()));
+        }
         String written = text.of(call.args().get(predicate.written()));
         // What the model calls the operation, taken off the name the call resolved to rather than
         // from the table. The table is keyed by what an operation means, and what a document calls

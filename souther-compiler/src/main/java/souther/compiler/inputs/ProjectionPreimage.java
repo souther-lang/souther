@@ -6,7 +6,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.regex.CodePoints;
 import souther.compiler.regex.PatternPlan;
-import souther.compiler.regex.PatternSyntax;
+import souther.compiler.regex.PatternMeaning;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
@@ -73,9 +73,9 @@ final class ProjectionPreimage {
         // Every symbol, repeated within the run. What the rule is about is how many code points
         // stand there, which is what a repetition counts — a plan over what a string is stored as
         // would admit a character written as a pair where the rule asks for one.
-        return new AdmittedPlan.Pattern(PatternPlan.of(new PatternSyntax.Repeated(
-                new PatternSyntax.Symbols(CodePoints.EVERYTHING),
-                least, most == null ? PatternSyntax.Repeated.NO_CEILING : most)));
+        return new AdmittedPlan.Pattern(PatternPlan.of(new PatternMeaning.Repeated(
+                new PatternMeaning.Symbols(CodePoints.EVERYTHING),
+                least, most == null ? PatternMeaning.Repeated.NO_CEILING : most)));
     }
 
     /** The least the low end admits, or null where it is not a count this can read. */

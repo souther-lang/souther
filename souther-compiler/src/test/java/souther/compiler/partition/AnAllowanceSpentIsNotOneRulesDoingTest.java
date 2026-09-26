@@ -10,7 +10,7 @@ import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.regex.Meter;
 import souther.compiler.regex.PatternPlan;
-import souther.compiler.regex.PatternSyntax;
+import souther.compiler.regex.PatternMeaning;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
@@ -44,7 +44,7 @@ class AnAllowanceSpentIsNotOneRulesDoingTest {
         // Nothing left to build with, so the first state asked for is refused by the whole
         // allowance; and a machine larger than one may be is refused by the other limit first.
         Meter meter = which == Meter.Stopped.THE_ANSWER ? new Meter(50_000, 1) : new Meter(1, 1);
-        PatternPlan.of(PatternSyntax.ofAnySymbols(2, 2)).compile(meter);
+        PatternPlan.of(PatternMeaning.ofAnySymbols(2, 2)).compile(meter);
         assertEquals(which, meter.stoppedBy(), "the fixture reaches the limit it names");
         return meter;
     }

@@ -1,8 +1,11 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.codegen.JavaPatterns;
 import souther.compiler.core.Kernel;
 import souther.compiler.numeric.Rel;
+import souther.compiler.regex.PatternParser;
+import souther.compiler.regex.PatternRead;
 import souther.compiler.types.BinOp;
 import souther.runtime.Strings;
 
@@ -44,13 +47,15 @@ class AFoldOfTextAnswersWhatTheRunTimeAnswersTest {
     /**
      * What the run time computes for each kernel the algebra folds, over the arguments in the order
      * the kernel takes them. {@code contains} is answered by the JDK's own method at run time, which
-     * is why it is the witness there.
+     * is why it is the witness there; {@code matches} is handed what the pattern means written for
+     * the JVM's engine, which is what a compiled call hands it.
      */
     private static final Map<Kernel, Function<List<Object>, Object>> RUN_TIME = Map.of(
             Kernel.STRING_LENGTH, args -> Strings.length((String) args.get(0)),
             Kernel.STRING_CONTAINS, args -> ((String) args.get(1)).contains((String) args.get(0)),
             Kernel.STRING_MATCHES, args -> Strings.matches((String) args.get(1),
-                    (String) args.get(0)));
+                    JavaPatterns.of(((PatternRead.Read) PatternParser.read((String) args.get(0)))
+                            .meaning())));
 
     @Test
     void eachFoldAnswersWhatTheRunTimeAnswers() {

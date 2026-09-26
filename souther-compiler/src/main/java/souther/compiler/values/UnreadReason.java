@@ -46,16 +46,6 @@ public enum UnreadReason {
     ALTERNATIVE_NOT_READ,
 
     /**
-     * A rule about this position is written more deeply nested than this compiler reads.
-     *
-     * <p>Not a form it has no word for: every part of it is one this reads, and what stopped is how
-     * far in the reading goes. Not the machine being too large either — it never got as far as
-     * making one. Its own arm because what an author does about it is write the same pattern with
-     * fewer brackets, which neither of the others would tell them.
-     */
-    PATTERN_TOO_DEEPLY_NESTED,
-
-    /**
      * One rule about this position names a set of strings, and making the machine for it is more
      * than this compiler will do.
      *
@@ -163,7 +153,7 @@ public enum UnreadReason {
     public About about() {
         return switch (this) {
             case RELATES_TWO_POSITIONS, FORM_NOT_READ, ALTERNATIVE_NOT_READ,
-                 PATTERN_TOO_DEEPLY_NESTED, PATTERN_TOO_COSTLY -> About.A_RULE;
+                 PATTERN_TOO_COSTLY -> About.A_RULE;
             case EXACT_VALUES_TOO_COSTLY -> About.THE_ANSWER;
             case NOT_REACHED, NOT_REACHED_PAST_DEPTH_LIMIT -> About.NEITHER;
         };

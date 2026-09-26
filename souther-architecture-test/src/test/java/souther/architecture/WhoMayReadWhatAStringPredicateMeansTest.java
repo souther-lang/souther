@@ -159,9 +159,8 @@ class WhoMayReadWhatAStringPredicateMeansTest {
                     + "Lsouther/compiler/check/Denotations;)L" + OWNER + "$Stated;",
             READS + "$Reading",
             READS + "$Reading$Accepting",
-            READS + "$Reading$Accepting#accepts()Lsouther/compiler/regex/PatternSyntax;",
+            READS + "$Reading$Accepting#accepts()Lsouther/compiler/regex/PatternMeaning;",
             READS + "$Reading$PatternNotRead",
-            READS + "$Reading$PatternNotRead#why()Lsouther/compiler/regex/PatternRead$Unsupported;",
             READS + "$Reading$WrittenArgumentNotKnown",
             READS + "$Stated",
             READS + "$Stated#reading()L" + OWNER + "$Reading;",
@@ -171,10 +170,8 @@ class WhoMayReadWhatAStringPredicateMeansTest {
             WHAT_A_RULE_STATES + "$Reading",
             WHAT_A_RULE_STATES + "$Reading$Accepting",
             WHAT_A_RULE_STATES
-                    + "$Reading$Accepting#accepts()Lsouther/compiler/regex/PatternSyntax;",
+                    + "$Reading$Accepting#accepts()Lsouther/compiler/regex/PatternMeaning;",
             WHAT_A_RULE_STATES + "$Reading$PatternNotRead",
-            WHAT_A_RULE_STATES
-                    + "$Reading$PatternNotRead#why()Lsouther/compiler/regex/PatternRead$Unsupported;",
             WHAT_A_RULE_STATES + "$Reading$WrittenArgumentNotKnown",
             WHAT_A_CLAUSE_STATES,
             WHAT_A_CLAUSE_STATES + IN_A_DESCRIPTOR,
@@ -192,7 +189,7 @@ class WhoMayReadWhatAStringPredicateMeansTest {
                     + "Lsouther/compiler/check/Symbols;)L" + OWNER + "$Reading;",
             WITNESS + "$Reading",
             WITNESS + "$Reading$Accepting",
-            WITNESS + "$Reading$Accepting#accepts()Lsouther/compiler/regex/PatternSyntax;",
+            WITNESS + "$Reading$Accepting#accepts()Lsouther/compiler/regex/PatternMeaning;",
             // And the outcomes a witness was not composed from, which is not a second answer about
             // the position. What is taken here is that this reading yielded no pattern to compose
             // out of — so the value offered came from the rules beside it, and a search that had
@@ -200,7 +197,6 @@ class WhoMayReadWhatAStringPredicateMeansTest {
             // The strings such a rule admits stay unasked: nothing here reads one, and what the
             // position is left admitting is settled where the row above says it is.
             WITNESS + "$Reading$PatternNotRead",
-            WITNESS + "$Reading$PatternNotRead#why()Lsouther/compiler/regex/PatternRead$Unsupported;",
             WITNESS + "$Reading$WrittenArgumentNotKnown",
             A_BODYS_RULES,
             A_BODYS_RULES + IN_A_DESCRIPTOR,

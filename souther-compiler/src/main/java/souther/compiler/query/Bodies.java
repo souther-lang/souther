@@ -2418,14 +2418,16 @@ public final class Bodies {
             Answer<Expanding.Of> against = db.ask(new Expanding(module, InliningPolicy.DISCHARGE));
             Answer<Map<ValueName.Behavior, Integer>> behaviors =
                     db.ask(new BehaviorAritiesForBody(module, fn, InliningPolicy.DISCHARGE));
-            if (!def.present() || !role.present() || !against.present() || !behaviors.present()) {
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, module);
+            if (!def.present() || !role.present() || !against.present() || !behaviors.present()
+                    || !scope.present()) {
                 return Answer.absent();
             }
             // Whether this body is a recursion, asked of the graph of the representation it is being
             // read in. A recursion is a cycle among the declarations in reach, and which
             // declarations those are is what the policy decides.
             HelperInliner inliner = HelperInliner.over(against.value().table(),
-                    against.value().graph()).buildingValuesAsTemplatesWhereAnalysed();
+                    against.value().graph()).buildingValuesAsTemplatesWhereAnalysed(scope.value());
             HelperEntry held = against.value().table().at(new DefinitionName(fn));
             boolean recursive = held != null
                     && against.value().graph().recurses(held.reachedAs());

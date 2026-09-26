@@ -13,6 +13,7 @@ import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
+import souther.compiler.diag.msg.Reported;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.Localizable;
 import souther.compiler.diag.SourcePos;
@@ -22,7 +23,8 @@ import souther.compiler.types.ReachName;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
-import souther.compiler.regex.PatternEscapes;
+import souther.compiler.regex.PatternParser;
+import souther.compiler.regex.PatternRead;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -315,7 +317,24 @@ public final class CallElaborator {
         return new Core.PreservedCall(kept.declaring(), placed,
                 new Core.KeptCallPlace(call.answered().origin(), call.application(),
                         ctx.lineage()),
-                applied.result(), call.pos());
+                settledWhereKept(call, env, ctx), applied.result(), call.pos());
+    }
+
+    /**
+     * What the checker settles about a kept application, which is what only it can settle.
+     *
+     * <p>The pattern of {@code String.matches}, read by {@link #settledPattern} as it is for an
+     * emitted call, so a reader of the kept call takes the meaning from the call and no reader works
+     * it out from the text again. Nothing else: what a kept operation means beyond that is left to
+     * whoever reads it, which is why it was kept.
+     */
+    private static Core.KernelFact settledWhereKept(Hir.Apply call, Scope env, CheckContext ctx) {
+        if (call.answered().denotes() instanceof ValueName.Stdlib.Operation operation
+                && ctx.symbols().library().intrinsicOf(operation) instanceof Stdlib.Intrinsic kernel
+                && kernel.kernel() == Kernel.STRING_MATCHES) {
+            return settledPattern(new BoundExpr(call.args().get(0), env.values()), ctx.symbols());
+        }
+        return Core.KernelFact.None.INSTANCE;
     }
 
     /**
@@ -765,8 +784,7 @@ public final class CallElaborator {
             }
             Core.KernelFact fact;
             if (kernel == Kernel.STRING_MATCHES) {
-                fact = new Core.KernelFact.StringMatches(validatedRegexPattern(
-                        new BoundExpr(args.get(0), env.values()), ctx.symbols()));
+                fact = settledPattern(new BoundExpr(args.get(0), env.values()), ctx.symbols());
             } else if (orderingSubject != null) {
                 fact = new Core.KernelFact.OrderingSubject(orderingSubject);
             } else {
@@ -872,41 +890,53 @@ public final class CallElaborator {
         return Optional.empty();
     }
 
-    /** The pattern of {@code String.matches} must evaluate to a string at compile time, so it is
-     * validated (and can be compiled) there: a malformed regex is a compile error, not a runtime
-     * exception, and the value it constrains is proven at construction (spec §stdlib-string). A
-     * literal is one such expression and so is a {@code ++} of literals and of a module's values,
-     * which is what lets several formats share a part (issue #208). What is validated is the string
-     * the whole expression composes to, not the pieces it was written in.
+    /**
+     * What the pattern of {@code String.matches} means, which is settled here or the call is
+     * refused.
      *
-     * <p>The settled text is returned rather than discarded: it is what {@link Core.CallSettlement
-     * .StringMatches} carries onto the call, so a reader below asks the checker's answer instead of
-     * folding the argument a second time. */
-    static String validatedRegexPattern(BoundExpr e, Symbols symbols) {
+     * <p>The pattern must evaluate to a string at compile time, so it is read there: text that is
+     * no pattern of the language is a compile error, not a runtime exception, and the value it
+     * constrains is proven at construction (spec §stdlib-string). A literal is one such expression
+     * and so is a {@code ++} of literals and of a module's values, which is what lets several
+     * formats share a part. What is read is the string the whole expression composes to, not the
+     * pieces it was written in.
+     *
+     * <p>Read by {@link PatternParser}, which is the language's reader, and by nothing a host
+     * supplies: which text is a pattern and which strings it accepts is what the specification
+     * states, and a host engine accepting more would make a pattern valid because of the compiler
+     * it was checked with. What the reading comes to is carried onto the call, so every output
+     * lowers the meaning read here and none of them reads the text.
+     */
+    static Core.KernelFact.StringMatches settledPattern(BoundExpr e, Symbols symbols) {
         String pattern = ConstEval.against(symbols).evalString(e).orElse(null);
         if (pattern == null) {
-            throw CompileException.of(Diagnostic
-                            .at(e.expr().pos())
-                            .say(new TypeMessage.ThePatternMustBeWrittenOut()).build());
+            throw refusedAt(e, new TypeMessage.ThePatternMustBeWrittenOut());
         }
-        try {
-            java.util.regex.Pattern.compile(pattern);
-        } catch (java.util.regex.PatternSyntaxException ex) {
-            // getDescription() is the one-line reason ("Unclosed character class near index 3");
-            // getMessage() would also dump the pattern and a caret, which the source region already shows.
-            throw CompileException.of(Diagnostic
-                            .at(e.expr().pos())
-                            .say(new TypeMessage.ThePatternIsNotARegularExpression(ex.getDescription())).build());
-        }
-        // A character the engine would read and no String holds: whatever the pattern says about
-        // it is about text that never arrives, so writing one is a mistake about the text.
-        String surrogate = PatternEscapes.firstWrittenSurrogate(pattern);
-        if (surrogate != null) {
-            throw CompileException.of(Diagnostic
-                            .at(e.expr().pos())
-                            .say(new TypeMessage.ThePatternWritesHalfASurrogatePair(surrogate)).build());
-        }
-        return pattern;
+        return switch (PatternParser.read(pattern)) {
+            case PatternRead.Read read -> new Core.KernelFact.StringMatches(pattern, read.meaning());
+            case PatternRead.Refused refused -> throw refusedAt(e, switch (refused.why()) {
+                case SOMETHING_UNCLOSED, A_COUNT_THIS_CANNOT_READ, AN_ESCAPE_THIS_DOES_NOT_READ ->
+                        refused.construct().isEmpty()
+                                ? new TypeMessage.ThePatternEndsBeforeItIsWhole()
+                                : new TypeMessage.ThePatternIsNotAPatternAt(refused.construct());
+                // Whatever the pattern says about it is about text that never arrives, so writing
+                // one is a mistake about the text.
+                case A_CHARACTER_NO_STRING_HOLDS ->
+                        new TypeMessage.ThePatternWritesHalfASurrogatePair(refused.construct());
+                case AN_ANCHOR_THIS_CANNOT_PLACE ->
+                        new TypeMessage.ThePatternPlacesAnAnchorTheStringDecides();
+                case A_GROUP_THE_GRAMMAR_DOES_NOT_HAVE, A_BACK_REFERENCE, A_CHARACTER_PROPERTY, A_BOUNDARY,
+                     A_QUOTATION, A_CLASS_OF_CLASSES, A_POSSESSIVE_REPETITION ->
+                        new TypeMessage.ThePatternWritesWhatNoPatternHas(refused.construct());
+            });
+            case PatternRead.TooDeep deep ->
+                    throw refusedAt(e, new TypeMessage.ThePatternNestsDeeperThanIsRead(deep.deepest()));
+        };
+    }
+
+    private static <M extends TypeMessage & Reported> CompileException refusedAt(BoundExpr e,
+                                                                                M message) {
+        return CompileException.of(Diagnostic.at(e.expr().pos()).say(message).build());
     }
 
     /**

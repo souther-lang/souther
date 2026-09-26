@@ -228,11 +228,6 @@ public final class ReportedReason {
             case BlockReason.PatternTooCostly _, BlockReason.ExactValuesTooCostly _,
                  BlockReason.OrderedExtentTooCostly _, BlockReason.RulesNotHandedOnAsSets _ ->
                     UndividedPosition.Reason.EXACT_VALUES_TOO_COSTLY;
-            // And its own word again, because this one never reached the values at all. A reader
-            // told the values were too much would go looking for what makes them so, and what is
-            // the matter is how far in the rule goes.
-            case BlockReason.PatternTooDeeplyNested _ ->
-                    UndividedPosition.Reason.PATTERN_TOO_DEEPLY_NESTED;
             // Its own word, and not the one above. Both are rules this reading did not turn into a
             // line, and a reader acting on them is doing different work: one wants a reader for a
             // form that was seen, and one wants the gathering to reach the rules at all. Collapsed

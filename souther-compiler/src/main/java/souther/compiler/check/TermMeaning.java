@@ -278,6 +278,7 @@ public final class TermMeaning {
             case Core.PreservedCall x -> {
                 out.add(Core.PreservedCall.class);
                 out.add(x.declared());
+                out.add(x.settled());
                 out.add(x.type());
                 projectAll(x.args(), out);
             }

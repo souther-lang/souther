@@ -378,7 +378,9 @@ final class Conditions {
                             ReferenceOrigin.composedOutOf(call.reference(), 0,
                                     ReferenceDerivationCause.SizeMeaningOfReference::new),
                             application, call.place().lineage()),
-                    Type.INT, call.pos());
+                    // A size is settled by nothing but what it is applied to, and no checker saw
+                    // this application to settle anything about it.
+                    Core.KernelFact.None.INSTANCE, Type.INT, call.pos());
             return new Core.Binary(BinOp.EQ, size, new Core.Int(0, Type.INT, call.pos()),
                     Core.BinaryReading.AS_THEY_STAND, ConstructOccurrence.unwritten(), Type.BOOL,
                     call.pos());

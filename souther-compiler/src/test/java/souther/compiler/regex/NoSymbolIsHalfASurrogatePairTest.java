@@ -3,11 +3,11 @@ package souther.compiler.regex;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
@@ -86,7 +86,7 @@ class NoSymbolIsHalfASurrogatePairTest {
         String low = String.valueOf((char) 0xDC00);
         for (String pattern : List.of(".", "[\\s\\S]*", "[^a]*", ".{1,2}")) {
             Language language = PatternPlan.of(assertInstanceOf(PatternRead.Read.class,
-                    PatternParser.read(pattern)).syntax())
+                    PatternParser.read(pattern)).meaning())
                     .compile(PatternPlan.Budget.OF_ADMITTED_VALUES.meter());
             for (String text : List.of(high, low, low + high, "a" + high)) {
                 assertFalse(language.has(text), pattern);
@@ -98,43 +98,36 @@ class NoSymbolIsHalfASurrogatePairTest {
     }
 
     /**
-     * Which escapes write half of a pair, read the way the engine reads them.
+     * An escape writing half of a pair is refused, and the escape is what is quoted.
      *
-     * <p>A pair written as two escapes is one character, and text that is quoted or whose backslash
-     * is itself escaped writes the six characters and not a surrogate.
+     * <p>The reader refuses it rather than naming a symbol that is not one. A pair written as two
+     * escapes is one character, and a backslash that is itself escaped writes the characters after
+     * it and not an escape.
      */
     @Test
-    void anEscapeWritingHalfAPairIsFoundWhereverItIsWritten() {
-        assertEquals("\\uD800", PatternEscapes.firstWrittenSurrogate("\\uD800"));
-        assertEquals("\\uDC00", PatternEscapes.firstWrittenSurrogate("a\\uDC00"));
-        assertEquals("\\x{D800}", PatternEscapes.firstWrittenSurrogate("\\x{D800}"));
-        assertEquals("\\uD800", PatternEscapes.firstWrittenSurrogate("[\\uD800-\\uDFFF]"));
-        assertEquals("\\uD83D", PatternEscapes.firstWrittenSurrogate("\\uD83D\\x{DE00}"));
-        assertEquals("\\N{HIGH SURROGATES D800}",
-                PatternEscapes.firstWrittenSurrogate("\\N{HIGH SURROGATES D800}"));
-        assertEquals("\\uDE00", PatternEscapes.firstWrittenSurrogate("(?=a)b\\uDE00"),
-                "past a construct the subset does not read");
+    void anEscapeWritingHalfAPairIsRefusedAsItIsWritten() {
+        Map<String, String> quoted = Map.of(
+                "\\uD800", "\\uD800",
+                "a\\uDC00", "\\uDC00",
+                "\\x{D800}", "\\x{D800}",
+                "[\\uD800-\\uDFFF]", "\\uD800",
+                "\\uD83D\\x{DE00}", "\\uD83D");
+        quoted.forEach((pattern, escape) -> {
+            PatternRead.Refused refused =
+                    assertInstanceOf(PatternRead.Refused.class, PatternParser.read(pattern), pattern);
+            assertEquals(PatternRead.Refusal.A_CHARACTER_NO_STRING_HOLDS, refused.why(), pattern);
+            assertEquals(escape, refused.construct(), pattern);
+        });
 
-        assertNull(PatternEscapes.firstWrittenSurrogate("\\uD83D\\uDE00"));
-        assertNull(PatternEscapes.firstWrittenSurrogate("\\Q\\uD800\\E"));
-        assertNull(PatternEscapes.firstWrittenSurrogate("\\\\uD800"));
-        assertNull(PatternEscapes.firstWrittenSurrogate("[\\uD7FF-\\uE000]"));
-        assertNull(PatternEscapes.firstWrittenSurrogate("\\x{1F600}\\N{LATIN SMALL LETTER A}"));
-    }
-
-    /** The subset reader stops at one rather than naming a symbol that is not one. */
-    @Test
-    void theReaderStopsAtHalfAPair() {
-        for (String pattern : List.of("\\uD800", "\\x{DC00}", "[\\uD800-\\uDFFF]")) {
-            assertEquals(PatternRead.Unsupported.A_CHARACTER_NO_STRING_HOLDS,
-                    assertInstanceOf(PatternRead.NotRead.class, PatternParser.read(pattern)).why(),
-                    pattern);
-        }
+        assertEquals(CodePoints.of(0x1F600), heldBy("\\uD83D\\uDE00"));
+        assertEquals(PatternMeaning.text("\\uD800"),
+                assertInstanceOf(PatternRead.Read.class, PatternParser.read("\\\\uD800")).meaning());
+        assertEquals(CodePoints.between(0xD7FF, 0xE000), heldBy("[\\uD7FF-\\uE000]"));
     }
 
     private static CodePoints heldBy(String pattern) {
-        return assertInstanceOf(PatternSyntax.Symbols.class,
-                assertInstanceOf(PatternRead.Read.class, PatternParser.read(pattern)).syntax())
+        return assertInstanceOf(PatternMeaning.Symbols.class,
+                assertInstanceOf(PatternRead.Read.class, PatternParser.read(pattern)).meaning())
                 .held();
     }
 }

@@ -635,6 +635,10 @@ final class CodecGen {
             if (invariants.hasRefined()) {
                 emitInvariantFailureHelper(cb, data.name());
             }
+            if (invariants.constraints().stream()
+                    .anyMatch(InvariantConstraints.Pattern.class::isInstance)) {
+                emitPatternFailureHelper(cb);
+            }
         });
     }
 
@@ -740,7 +744,7 @@ final class CodecGen {
             return null;
         }
         InvariantConstraints mapping =
-                InvariantConstraints.against(symbols, ctx.invariantStatements());
+                InvariantConstraints.against(symbols);
         List<InvariantConstraints.Constraint> out = new ArrayList<>();
         for (InvariantStatement each : statements) {
             Optional<InvariantConstraints.Constraint> c = mapping.of(each, base);
@@ -1453,9 +1457,14 @@ final class CodecGen {
                 code.invokevirtual(CD_StringDecoder, "fixedLength", MTD_strLengthBound);
             }
             case InvariantConstraints.Pattern p -> {
-                // compiled once into a static field, not on every decode
+                // Compiled once into a static field, not on every decode. Run as a predicate rather
+                // than handed to `pattern`, which would quote the pattern the matcher runs: what a
+                // failure quotes is the pattern the call was given, built by `__patternFailure`.
                 code.getstatic(decoderClass, patternField(p.regex()), CD_Pattern);
-                code.invokevirtual(CD_StringDecoder, "pattern", MTD_strPattern);
+                code.invokevirtual(CD_Pattern, "asMatchPredicate", MTD_asMatchPredicate);
+                code.loadConstant(p.written());
+                code.invokedynamic(patternFailureCallSite());
+                code.invokevirtual(CD_StringDecoder, "refine", MTD_refineStringFailing);
             }
             case InvariantConstraints.Min m -> {
                 code.loadConstant(m.n());
@@ -1544,6 +1553,42 @@ final class CodecGen {
                 MTD_invariantFailureNamed);
         return Lambdas.callSite(Lambdas.Sam.BI_FUNCTION, impl, MTD_invariantFailure,
                 CD_String);                                                      // captures the clause
+    }
+
+    /**
+     * {@code invokedynamic} producing the {@code BiFunction} that builds a pattern's failure, with
+     * the pattern the call was given captured.
+     */
+    private DynamicCallSiteDesc patternFailureCallSite() {
+        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
+                DirectMethodHandleDesc.Kind.STATIC, decoderClass, "__patternFailure",
+                MTD_invariantFailureNamed);
+        return Lambdas.callSite(Lambdas.Sam.BI_FUNCTION, impl, MTD_invariantFailure,
+                CD_String);                                                      // captures the pattern
+    }
+
+    /**
+     * {@code static Result __patternFailure(String written, Object value, Path path)}: the issue a
+     * value that does not match its format reports.
+     *
+     * <p>What Raoh's own {@code pattern} constraint reports — the code and message key
+     * {@code invalid_format} and a default message a {@code MessageResolver} may replace — with the
+     * pattern in the metadata being the one the author's call was given rather than the one the
+     * matcher runs. Which text a matcher runs is this backend's; which pattern a value was held to
+     * is the model's, and is what a carrier other than the JVM reports too.
+     */
+    private void emitPatternFailureHelper(ClassBuilder cb) {
+        cb.withMethodBody("__patternFailure", MTD_invariantFailureNamed,
+                ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC, code -> {
+            code.aload(2);                                            // path
+            code.loadConstant("invalid_format");
+            code.loadConstant("invalid format");
+            code.loadConstant("pattern");
+            code.aload(0);                                            // the pattern as written
+            code.invokestatic(CD_Map, "of", MTD_mapOfOne, true);
+            code.invokestatic(CD_RResult, "fail", MTD_Rfail4, true);
+            code.areturn();
+        });
     }
 
     /**

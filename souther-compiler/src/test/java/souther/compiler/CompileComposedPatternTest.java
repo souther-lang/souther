@@ -7,6 +7,7 @@ import net.unit8.raoh.Path;
 import net.unit8.raoh.Result;
 import net.unit8.raoh.decode.Decoder;
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
 
@@ -20,6 +21,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -33,10 +35,10 @@ import java.util.stream.Stream;
  *
  * <p>What the pattern must be is that it evaluates to a string at compile time, which a literal does
  * and so does a {@code ++} of literals and of named string values. Two readers ask for that string —
- * the check, which compiles the regex to prove it well-formed, and the codec derivation, which
- * carries it to the boundary as Raoh's {@code pattern} constraint — and they must not disagree about
- * which patterns are compile-time strings or about what string one composes to. So each expression
- * here is run through both.
+ * the check, which reads it as a pattern of the language, and the codec derivation, which carries
+ * what it means to the boundary as a decoder refinement and quotes the composed pattern when a value
+ * fails it — and they must not disagree about which patterns are compile-time strings or about what
+ * string one composes to. So each expression here is run through both.
  */
 class CompileComposedPatternTest {
 
@@ -63,6 +65,8 @@ class CompileComposedPatternTest {
 
     private static final String MATCHING = "123-4567";
     private static final String NOT_MATCHING = "12-345";
+    /** The composed pattern as a failure quotes it: the pattern the call was given, as it composed at
+     *  compile time — not the text of either part, and not what the JVM's matcher runs. */
     private static final String COMPOSED = "[0-9]{3}-[0-9]{4}";
 
     /** The check's reading: the composed pattern is a compile-time string, so the module compiles and
@@ -86,7 +90,7 @@ class CompileComposedPatternTest {
     }
 
     /** The codec derivation's reading of the same expression: the invariant reaches the boundary as
-     *  Raoh's format constraint, carrying the fully composed pattern. */
+     *  a format failure, quoting the fully composed pattern. */
     @ParameterizedTest(name = "{0}")
     @MethodSource("patterns")
     void aComposedPatternReachesTheBoundaryAsTheFormat(String name, String decls, String pattern)
@@ -106,6 +110,11 @@ class CompileComposedPatternTest {
         assertEquals(1, issues.size(), "one broken rule, one issue");
         assertEquals("invalid_format", issues.get(0).code(), "the format constraint, not a fallback");
         assertEquals(COMPOSED, issues.get(0).meta().get("pattern"), "composed, not left as written");
+        // Raoh's own format failure in every other respect: the same key, and a message a
+        // resolver may replace rather than one the model wrote.
+        assertEquals("invalid_format", issues.get(0).messageKey());
+        assertEquals("invalid format", issues.get(0).message());
+        assertEquals(false, issues.get(0).customMessage(), "a default message, not a custom one");
     }
 
     /** A composition that is malformed as a whole is a compile error, reported as the regex it
@@ -118,8 +127,8 @@ class CompileComposedPatternTest {
                     invariant String.matches("[0-9]{3}" ++ "[", value)
                 """;
         CompileException ex = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertTrue(ex.getMessage().contains("not a valid regular expression"),
-                "the composed regex is what is compiled: " + ex.getMessage());
+        assertInstanceOf(TypeMessage.ThePatternEndsBeforeItIsWhole.class, ex.diagnostic().said(),
+                "the composed pattern is what is read: " + ex.getMessage());
     }
 
     /** The part held once may be held by another module: what a value denotes is settled where it is
@@ -172,7 +181,8 @@ class CompileComposedPatternTest {
                 behavior check : (i: In) -> Out constructs Out
                 let check (i) = Out(true)
                 """));
-        assertTrue(ex.getMessage().contains("not a valid regular expression"), ex.getMessage());
+        assertInstanceOf(TypeMessage.ThePatternEndsBeforeItIsWhole.class, ex.diagnostic().said(),
+                ex.getMessage());
     }
 
     /** A pattern only run time can produce is still refused: the composition rule extends what counts

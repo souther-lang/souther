@@ -108,7 +108,7 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
                 invariant value >= 0
 
             data Code = String
-                invariant String.matches("(?=.*a).*b", value)
+                invariant UNREAD
 
             data Ok
 
@@ -117,8 +117,9 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
             let place (amount, code) = Ok
 
             example place
-                | "some" : (Amount(7), Code("ab")) -> Ok
-            """;
+                | "some" : (Amount(7), Code(ADMITTED)) -> Ok
+            """.replace("UNREAD", ARuleNoReadingTakesIn.narrowly("value"))
+            .replace("ADMITTED", ARuleNoReadingTakesIn.A_VALUE_THE_NARROW_ONE_ADMITS);
 
     @Test
     void anEdgeTheProjectionProvesCanStillBeOneNoSearchReached() {
@@ -157,7 +158,8 @@ at.coverage().made().orElseThrow());
         // reserved for the sentence a walk over every reading licenses (issue #1076).
         assertTrue(block.contains("no row for `amount = 0` in `place`"), block);
         // And what the search came to, which is not that the refusals were of everything there was:
-        // the rule on `code` is a lookahead, so no value of that position was composed from it and
+        // the rule on `code` is one no reading takes in, so no value of that position was composed
+        // from it and
         // the ones tried came from the rest. The point of this test is that the block says
         // something at all, and what it says is the sentence the search can stand behind.
         assertTrue(block.contains("invariant Code #1 at `code` gave none of them"), block);

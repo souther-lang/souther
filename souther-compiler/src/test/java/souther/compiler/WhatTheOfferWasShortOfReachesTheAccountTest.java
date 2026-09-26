@@ -39,8 +39,8 @@ class WhatTheOfferWasShortOfReachesTheAccountTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
-    /** A rule about the strings written in a construct this compiler's reader does not enter. */
-    private static final String OUTSIDE_THE_SUBSET = "String.matches(\"(a+)\\\\1\", value)";
+    /** A rule about the strings no reading of this compiler's takes in. */
+    private static final String NOTHING_READS_IT = ARuleNoReadingTakesIn.narrowly("value");
 
     /** One it reads and will not build a machine for, which is the other way to be short. */
     private static final String MORE_THAN_A_WITNESS_MAY_SPEND =
@@ -94,7 +94,7 @@ class WhatTheOfferWasShortOfReachesTheAccountTest {
      */
     @Test
     void theDecisionSentenceNamesTheRuleThatGaveTheOfferNoValue() {
-        String line = whereNothingCouldShowARow(human(model(OUTSIDE_THE_SUBSET)));
+        String line = whereNothingCouldShowARow(human(model(NOTHING_READS_IT)));
 
         assertTrue(line.contains("every value tried at a rule of the decision was refused, and what"
                         + " was tried was not everything the rules leave"),
@@ -110,7 +110,7 @@ class WhatTheOfferWasShortOfReachesTheAccountTest {
      */
     @Test
     void aRuleReadToTheEndIsNotSaidAsOneThisCompilerCannotRead() {
-        String unread = whereNothingCouldShowARow(human(model(OUTSIDE_THE_SUBSET)));
+        String unread = whereNothingCouldShowARow(human(model(NOTHING_READS_IT)));
         String costly = whereNothingCouldShowARow(human(model(MORE_THAN_A_WITNESS_MAY_SPEND)));
 
         assertNotEquals(unread, costly,
@@ -132,11 +132,11 @@ class WhatTheOfferWasShortOfReachesTheAccountTest {
      */
     @Test
     void theDocumentCarriesTheAttributionBesideTheCategory() {
-        JsonNode unread = onlyCause(json(model(OUTSIDE_THE_SUBSET)));
+        JsonNode unread = onlyCause(json(model(NOTHING_READS_IT)));
         JsonNode costly = onlyCause(json(model(MORE_THAN_A_WITNESS_MAY_SPEND)));
 
         assertEquals("not_all_candidates_could_be_offered",
-                shortfallWord(json(model(OUTSIDE_THE_SUBSET))));
+                shortfallWord(json(model(NOTHING_READS_IT))));
         assertEquals("not_all_candidates_could_be_offered",
                 shortfallWord(json(model(MORE_THAN_A_WITNESS_MAY_SPEND))));
 
@@ -189,7 +189,7 @@ class WhatTheOfferWasShortOfReachesTheAccountTest {
     @Test
     void everyCauseIsShapedTheWayTheDocumentSaysTheyAre() {
         List<JsonNode> seen = new ArrayList<>();
-        for (String document : List.of(json(model(OUTSIDE_THE_SUBSET)),
+        for (String document : List.of(json(model(NOTHING_READS_IT)),
                 json(model(MORE_THAN_A_WITNESS_MAY_SPEND)), json(NOTHING_WAS_SHORT))) {
             for (JsonNode owed : withAShortfall(document)) {
                 JsonNode causes = owed.get("synthesisShortfallCauses");

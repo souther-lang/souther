@@ -40,9 +40,11 @@ let endsWith (suffix: String, s: String): Bool = intrinsic "string.endsWith"
 // `invariant_violation` (§decoder-error).
 let isEmpty (s: String): Bool = String.length(s) == 0
 
-// Whole-string regex match (Java Pattern flavour, anchored), for format-constrained values in an
-// invariant — `invariant String.matches("[0-9]{3}-[0-9]{4}", value)`. The pattern must be a string
-// literal, so a malformed regex is a compile error and the whole thing reads as a plain Bool.
+// Whether the whole of `s` is one of the strings `pattern` denotes, in Souther's pattern language
+// (§string-patterns), for format-constrained values in an invariant —
+// `invariant String.matches("[0-9]{3}-[0-9]{4}", value)`. The pattern must evaluate to a String at
+// compile time — a literal, or a `++` of literals and top-level values — and text outside the
+// pattern language is a compile error, so the whole thing reads as a plain Bool.
 let matches (pattern: String, s: String): Bool = intrinsic "string.matches"
 
 // `slice` takes the code points from `fromInclusive` up to but not including `toExclusive`. Half-open

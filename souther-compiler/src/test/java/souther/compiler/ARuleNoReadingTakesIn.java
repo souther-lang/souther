@@ -35,4 +35,20 @@ public final class ARuleNoReadingTakesIn {
 
     /** A value it admits, where a row has to carry one. */
     public static final String A_VALUE_IT_ADMITS = "\"x\"";
+
+    /**
+     * A clause no reading takes in that holds of few strings, about whatever {@code subject} names.
+     *
+     * <p>The other thing a test may need. {@link #about} keeps rows by holding of nearly everything;
+     * this is for a test about what happens where nothing the compiler derives from the rules it
+     * can read clears the one it cannot — a search that came back empty, an offer short of a rule.
+     * What it looks for is text made of the value itself, so the text is not one the compiler works
+     * out, and the plain values a reading proposes do not begin with their own length.
+     */
+    public static String narrowly(String subject) {
+        return "String.startsWith(String.fromInt(String.length(" + subject + ")), " + subject + ")";
+    }
+
+    /** A value {@link #narrowly} admits, where a row has to carry one. */
+    public static final String A_VALUE_THE_NARROW_ONE_ADMITS = "\"2a\"";
 }

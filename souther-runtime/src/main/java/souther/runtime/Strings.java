@@ -243,15 +243,19 @@ public final class Strings {
         return List.copyOf(out);
     }
 
-    /** Compiled patterns, cached by source so {@link #matches} does not recompile per call. The
-     *  compiler requires {@code String.matches}'s pattern to be a literal, so the keys are the pattern
-     *  literals of the programs loaded here — bounded by source, not by runtime input, and never
-     *  evicted. */
+    /** Compiled patterns, cached by text so {@link #matches} does not recompile per call. Every
+     *  pattern is one a compiler wrote into a program loaded here, so the keys are bounded by the
+     *  programs, not by runtime input, and never evicted. */
     private static final ConcurrentHashMap<String, Pattern> PATTERNS = new ConcurrentHashMap<>();
 
-    /** Whether the whole string matches the regex (anchored, like {@code Pattern.matches}). Backs
-     *  {@code String.matches} for format-constrained values. The pattern is a compile-time-validated
-     *  literal, so {@link Pattern#compile} here cannot fail. */
+    /**
+     * Whether the whole of {@code s} matches {@code pattern}. Backs {@code String.matches}.
+     *
+     * <p>The pattern is not the one an author wrote. The compiler read that as a pattern of the
+     * language and wrote what it means in {@code java.util.regex}'s constructs whose meaning no
+     * flag or class reading changes, so {@link Pattern#compile} here cannot fail and what the
+     * engine accepts is what the language says.
+     */
     public static boolean matches(String s, String pattern) {
         return PATTERNS.computeIfAbsent(pattern, Pattern::compile).matcher(s).matches();
     }

@@ -38,7 +38,7 @@ class WhatSeveralReadingsCostDoesNotTurnOnWhichArrivedFirstTest {
     private static AdmissibleValues<String> matching(String regex) {
         PatternRead said = PatternParser.read(regex);
         return built(PlannedValues.at("value", AdmittedPlan.of(ValueSet.matching(
-                PatternPlan.of(assertInstanceOf(PatternRead.Read.class, said).syntax())
+                PatternPlan.of(assertInstanceOf(PatternRead.Read.class, said).meaning())
                         .compile(PatternPlan.Budget.OF_ADMITTED_VALUES.meter())))));
     }
 

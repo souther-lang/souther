@@ -16,6 +16,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.regex.PatternMeaning;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -683,14 +684,23 @@ public sealed interface Core {
             INSTANCE
         }
 
-        /** The pattern text {@code String.matches}'s first argument folds to, proven acceptable to
-         * {@code java.util.regex.Pattern} where the call was checked: the checker folds the argument
-         * under the bindings in force, so an output reads the answer instead of evaluating the
-         * argument a second time. */
-        record StringMatches(String pattern) implements KernelFact {
+        /**
+         * What the pattern of {@code String.matches} means, read where the call was checked.
+         *
+         * <p>The checker folds the first argument under the bindings in force and reads the text it
+         * comes to as a pattern of the language (spec §string-patterns); the call exists only where
+         * that reading is a pattern. What an output lowers is {@code meaning}, so no output reads
+         * pattern text, and every output answers for the strings the checker read the pattern as.
+         *
+         * @param written the text the argument folds to, as the author wrote it. Provenance only: an
+         *                output may quote it and never reads it as a pattern
+         * @param meaning which strings the pattern accepts
+         */
+        record StringMatches(String written, PatternMeaning meaning) implements KernelFact {
 
             public StringMatches {
-                Objects.requireNonNull(pattern, "a settled pattern is settled to some text");
+                Objects.requireNonNull(written, "a settled pattern is settled from some text");
+                Objects.requireNonNull(meaning, "a settled pattern means some set of strings");
             }
         }
 
@@ -912,9 +922,17 @@ public sealed interface Core {
      * and the arguments are one component and a list beside it, so that the two cannot be paired
      * from different declarations — what may say that a name has been read against a declaration is
      * {@link CompleteSignature} and nothing else.
+     *
+     * <p><b>And what the checker settled about the application travels with it.</b> A kept call is
+     * typed from what its declaration states and its meaning is left to whoever reads it, but a fact
+     * only the checker can settle — what a {@code String.matches} pattern means — is settled here as
+     * it is for an emitted call, and a reader takes it from {@code settled} rather than working it
+     * out from the arguments a second time. What the application takes its arguments as is not
+     * carried: a reader replaces an argument by another reading of the same value, and a list of
+     * what each was taken as would stop being true of the call the moment it did.
      */
     record PreservedCall(DeclaredOperation declared, List<Core> args, KeptCallPlace place,
-                         Type type, SourcePos pos) implements Core {
+                         KernelFact settled, Type type, SourcePos pos) implements Core {
 
         // Not a construct of the source. A call kept for a reader to quote is not always one an
         // author wrote: a library operation used as a value is expanded into a block, and the
@@ -954,6 +972,10 @@ public sealed interface Core {
             if (place == null) {
                 throw new IllegalArgumentException("a call kept standing stands somewhere: it"
                         + " applies some occurrence of a name, for some reason: " + declared);
+            }
+            if (settled == null) {
+                throw new IllegalArgumentException("a call kept standing carries what the checker"
+                        + " settled about it, `None` where that is nothing: " + declared);
             }
             // Taken over rather than borrowed. Checking a list the caller goes on holding says what
             // was true when the call was built, and every reader below reads the call afterwards —
@@ -1547,7 +1569,8 @@ public sealed interface Core {
             case PreservedCall p -> {
                 List<Core> args = each(p.args(), atExpr);
                 yield args == p.args() ? p
-                        : new PreservedCall(p.declared(), args, p.place(), p.type(), p.pos());
+                        : new PreservedCall(p.declared(), args, p.place(), p.settled(), p.type(),
+                                p.pos());
             }
             // what is applied is a binding holding a function, which the backend loads: a name slot
             case Apply a -> {

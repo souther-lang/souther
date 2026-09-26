@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ARuleNoReadingTakesIn;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
@@ -149,7 +150,7 @@ class ARunOfTheStringsIsABoundAndIsOwedItsEdgeTest {
                 module branches
 
                 data Code = String
-                    invariant (value < "" && String.matches("%s", value))
+                    invariant (value < "" && %s)
                         || String.startsWith("JP", value)
 
                 data Ok = { size: Int }
@@ -157,7 +158,7 @@ class ARunOfTheStringsIsABoundAndIsOwedItsEdgeTest {
                 behavior onCode : (v: Code) -> Ok
                     constructs Ok
                 let onCode (v) = Ok { size = String.length(v.value) }
-                """.formatted(NESTED_PAST_WHAT_IS_READ));
+                """.formatted(ARuleNoReadingTakesIn.narrowly("value")));
 
         assertTrue(report.contains(
                 "undecided whether a row is at the ON point value = JP (invariant Code #1)"),
@@ -177,24 +178,19 @@ class ARunOfTheStringsIsABoundAndIsOwedItsEdgeTest {
         String report = report("""
                 module unread
 
-                data Code = String invariant String.matches("%s", value)
+                data Code = String invariant %s
 
                 data Ok = { size: Int }
 
                 behavior onCode : (v: Code) -> Ok
                     constructs Ok
                 let onCode (v) = Ok { size = String.length(v.value) }
-                """.formatted(NESTED_PAST_WHAT_IS_READ));
+                """.formatted(ARuleNoReadingTakesIn.narrowly("value")));
 
         assertTrue(report.contains("not accounted for: invariant Code #1 — whether the values stop"
-                        + " on v: written more deeply nested than this compiler reads"),
+                        + " on v: written in a form this compiler does not read"),
                 "the question stands and says what stopped it:\n" + report);
     }
-
-    /** A pattern written more deeply than the subset reads, which is a rule this reads no further
-     *  into and no error. */
-    private static final String NESTED_PAST_WHAT_IS_READ =
-            "(".repeat(201) + "a" + ")".repeat(201);
 
     /**
      * A reading that ran out of what it may build says so, and is not read as a rule that draws no

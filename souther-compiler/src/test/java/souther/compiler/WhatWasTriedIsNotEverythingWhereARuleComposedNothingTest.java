@@ -29,8 +29,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhatWasTriedIsNotEverythingWhereARuleComposedNothingTest {
 
-    /** A rule about the strings written in a construct this compiler's reader does not enter. */
-    private static final String OUTSIDE_THE_SUBSET = "String.matches(\"(a+)\\\\1\", value)";
+    /** A rule about the strings no reading of this compiler's takes in. */
+    private static final String NOTHING_READS_IT = ARuleNoReadingTakesIn.narrowly("value");
 
     /**
      * One it enters and cannot build a machine for within what composing a value may spend.
@@ -68,12 +68,12 @@ class WhatWasTriedIsNotEverythingWhereARuleComposedNothingTest {
     }
 
     /**
-     * A rule outside the subset leaves a search that tried less than the rules leave, and the block
+     * A rule nothing reads leaves a search that tried less than the rules leave, and the block
      * says so rather than saying the refusals were of everything.
      */
     @Test
     void aRuleThisCompilerCannotReadIsNotEveryValueRefused() {
-        String block = blockFor(OUTSIDE_THE_SUBSET);
+        String block = blockFor(NOTHING_READS_IT);
 
         // The rule by the name a report calls rules by, and the reason in the words the document
         // already has for it. An author holding two rules about one position and told only that
@@ -162,7 +162,7 @@ class WhatWasTriedIsNotEverythingWhereARuleComposedNothingTest {
                 behavior look : (t: T) -> Ok
 
                 let look (t) = Ok
-                """.formatted(OUTSIDE_THE_SUBSET);
+                """.formatted(NOTHING_READS_IT);
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -207,7 +207,7 @@ class WhatWasTriedIsNotEverythingWhereARuleComposedNothingTest {
                 behavior look : (t: T) -> Ok
 
                 let look (t) = Ok
-                """.formatted(OUTSIDE_THE_SUBSET);
+                """.formatted(NOTHING_READS_IT);
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -242,7 +242,7 @@ class WhatWasTriedIsNotEverythingWhereARuleComposedNothingTest {
                 behavior place : (p: P) -> Ok
 
                 let place (p) = Ok
-                """.formatted(OUTSIDE_THE_SUBSET);
+                """.formatted(NOTHING_READS_IT);
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -262,7 +262,8 @@ class WhatWasTriedIsNotEverythingWhereARuleComposedNothingTest {
      */
     @Test
     void aRuleThatComposedNothingIsNotSaidWhereARowWasWritten() {
-        String block = blockFor(OUTSIDE_THE_SUBSET + " && String.matches(\"aaaa\", value)");
+        String block = blockFor(ARuleNoReadingTakesIn.about("value")
+                + " && String.matches(\"aaaa\", value)");
 
         assertTrue(block.contains("Code(\"aaaa\")"),
                 () -> "the readable rule still composes, and `aaaa` clears the unreadable one"

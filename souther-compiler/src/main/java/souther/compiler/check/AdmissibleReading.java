@@ -3,7 +3,6 @@ package souther.compiler.check;
 import souther.compiler.core.Core;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.inputs.BlockReason;
-import souther.compiler.regex.PatternRead;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.Type;
 import souther.compiler.values.AdmittedPlan;
@@ -197,50 +196,13 @@ final class AdmissibleReading {
             case StringPredicates.Reading.Accepting it -> asking(part, position,
                     new AdmittedPlan.Pattern(states ? PatternPlan.of(it.accepts())
                             : PatternPlan.notMatching(it.accepts())));
-            case StringPredicates.Reading.PatternNotRead it -> stoppedBy(part, it.why(), position);
-            // A rule whose text this could not work out is a rule this did not read, and what that
-            // costs is the leaf's to say — over every position the clause names, which is more than
-            // this one wherever the text is written out of another.
-            case StringPredicates.Reading.WrittenArgumentNotKnown _ -> null;
-        };
-    }
-
-    /**
-     * What a pattern this reading stopped short of costs, or nothing where the leaf says it.
-     *
-     * <p>Only the one this reading is itself the limit of. A pattern written more deeply than this
-     * reads is a limit of the reading and not a shape it has no word for, so it is said as itself —
-     * left to fall through, it would go out as a form nothing here takes apart, and an author would
-     * go looking for the construct that was the trouble when every construct in it is one this
-     * reads. Every other construct is one the subset does not hold, which is a rule this could not
-     * read like any other, and what that costs is worked out once at the leaf over every position
-     * the clause names.
-     *
-     * <p>No {@code default}: a construct the subset learns to stop at is one somebody decides about
-     * here, rather than one that quietly takes the answer its neighbours were given.
-     */
-    private PlannedValues<FactSubject> stoppedBy(ClauseExpr.Part part, PatternRead.Unsupported why,
-                                                 FactSubject position) {
-        return switch (why) {
-            // The clause as well as the position. What a rule is answerable for is about the
-            // pattern somebody wrote, and the position is where the reading was left short — read
-            // back off the second, this would be every rule that named the place.
-            case NESTED_TOO_DEEPLY -> shortOf(part, Set.of(position),
-                    UnreadReason.PATTERN_TOO_DEEPLY_NESTED);
-            case A_GROUP_ABOUT_THE_MATCH,
-                 A_BACK_REFERENCE,
-                 A_CHARACTER_PROPERTY,
-                 A_BOUNDARY,
-                 A_QUOTATION,
-                 A_CLASS_OF_CLASSES,
-                 A_COUNT_THIS_CANNOT_READ,
-                 SOMETHING_UNCLOSED,
-                 AN_ESCAPE_THIS_DOES_NOT_READ,
-                 AN_ANCHOR_THIS_CANNOT_PLACE,
-                 A_POSSESSIVE_REPETITION -> null;
-            // Refused where the pattern is checked; until then a rule this could not read, like
-            // the ones above.
-            case A_CHARACTER_NO_STRING_HOLDS -> null;
+            // A rule whose text this could not work out, or whose text is no pattern the compiler
+            // reads, is a rule this did not read, and what that costs is the leaf's to say — over
+            // every position the clause names, which is more than this one wherever the text is
+            // written out of another. The second is a compile error where the call is checked, and
+            // this is what a reading of a module with that error in it says.
+            case StringPredicates.Reading.PatternNotRead _,
+                 StringPredicates.Reading.WrittenArgumentNotKnown _ -> null;
         };
     }
 
@@ -502,8 +464,8 @@ final class AdmissibleReading {
         return Map.of(position, switch (stated.reading()) {
             case StringPredicates.Reading.Accepting _ ->
                     new StringRestriction.Admitting(said.at(position));
-            case StringPredicates.Reading.PatternNotRead it ->
-                    new StringRestriction.NotKnown(BlockReason.forAPatternNotRead(it.why()));
+            case StringPredicates.Reading.PatternNotRead _ ->
+                    new StringRestriction.NotKnown(BlockReason.forAPatternNotRead());
             case StringPredicates.Reading.WrittenArgumentNotKnown _ ->
                     new StringRestriction.NotKnown(new BlockReason.UnreadValueRule());
         });

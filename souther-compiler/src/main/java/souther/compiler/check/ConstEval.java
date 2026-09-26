@@ -26,14 +26,16 @@ import java.util.function.Function;
  * behavior's tail) because CTFE either passes it or rejects it as a compile error.
  *
  * <p>The supported fragment covers constant arguments and simple sub-expressions: literals,
- * arithmetic, negation, comparison, logic, string concatenation, and {@code String.length} /
- * {@code contains}. Anything outside it folds to empty, which the caller treats as "not a
+ * arithmetic, negation, comparison, logic, string concatenation, {@code String.length} /
+ * {@code contains}, a helper applied to what folds, and a build of a value that carries the
+ * constant it is. Anything outside it folds to empty, which the caller treats as "not a
  * compile-time constant".
  *
  * <p>This is where "known at compile time" is decided, for every position that demands it — a
- * {@code String.matches} pattern is one, and both the check that compiles the regex and the codec
- * derivation that carries it to the boundary ask here rather than each recognising its own set of
- * expressions (issue #208).
+ * {@code String.matches} pattern is one. The checker asks here whether the pattern is a String at
+ * compile time where it settles the call, in every representation it elaborates, rather than each
+ * recognising its own set of expressions; what the pattern means then travels with the call, and
+ * nothing downstream asks for its text again.
  *
  * <p><b>It folds an expression under the bindings in force.</b> It resolves no module name: what a
  * module's value stands for is settled before a body is read here. A {@code let} is a different
@@ -145,6 +147,22 @@ public final class ConstEval {
             case Hir.Var.Denoting v when v.denotes() instanceof ValueName.Local local ->
                     given(local.id(), env);
             case Hir.Var.Denoting v when v.denotes() instanceof ValueName.Helper -> values.apply(v);
+            // A build of a value holds no body, and carries the literal its value folds to where
+            // there is one: what it is known to be at compile time is that.
+            case Hir.ValueBuild build when build.constant() != null -> eval(build.constant(), env);
+            // A build that carries its body is that body.
+            case Hir.Materialised build -> eval(build.body(), env);
+            // A helper applied is its body with each parameter bound to what the call gave it, and
+            // what it gave is read where the call was written, which is the same reading a `let`
+            // gets. A representation that keeps the expansion as one node asks the same question
+            // of it as one that wrote the bindings out.
+            case Hir.Expansion expansion -> {
+                BoundValues inside = env;
+                for (Hir.Bound each : expansion.bound()) {
+                    inside = inside.binding(each.binder(), each.value(), env);
+                }
+                yield eval(expansion.body(), inside);
+            }
             default -> Optional.empty();
         };
     }

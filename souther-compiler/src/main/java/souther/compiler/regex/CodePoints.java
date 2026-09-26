@@ -68,21 +68,38 @@ public record CodePoints(List<Range> ranges) {
         return codePoint >= SURROGATES_FROM && codePoint <= SURROGATES_TO;
     }
 
-    /**
-     * What the five line terminators are.
-     *
-     * <p>Java's own list, and it is longer than the two a reader expects: a line feed, a carriage
-     * return, the next-line character, and the two separators. {@code .} is the universe less these
-     * — and a negated class is not, which is why neither is written as a rule and both are written
-     * as a difference.
-     */
-    public static final CodePoints LINE_TERMINATORS = of('\n').or(of('\r'))
-            .or(of(0x85)).or(of(0x2028)).or(of(0x2029));
-
     /** Just this one, which is a scalar value: a surrogate handed here is a symbol nothing reads. */
     public static CodePoints of(int symbol) {
         return new CodePoints(List.of(new Range(symbol, symbol)));
     }
+
+    /**
+     * What the five line terminators are, which is what a pattern's {@code .} leaves out
+     * (spec §string-patterns).
+     *
+     * <p>Longer than the two a reader expects: a line feed, a carriage return, the next-line
+     * character, and the two separators. {@code .} is the universe less these — and a negated class
+     * is not, which is why neither is written as a rule and both are written as a difference.
+     */
+    public static final CodePoints LINE_TERMINATORS = of('\n').or(of('\r'))
+            .or(of(0x85)).or(of(0x2028)).or(of(0x2029));
+
+    /** What a pattern's {@code \d} holds: the ten ASCII digits and no other. */
+    public static final CodePoints DIGITS = between('0', '9');
+
+    /** What a pattern's {@code \w} holds: the ASCII letters, the ASCII digits and the underscore. */
+    public static final CodePoints WORD = between('a', 'z').or(between('A', 'Z'))
+            .or(DIGITS).or(of('_'));
+
+    /**
+     * What a pattern's {@code \s} holds: a space, a tab, a line feed, a vertical tab, a form feed
+     * and a carriage return.
+     *
+     * <p>Not String whitespace (spec §string-whitespace), which is what {@code trim} and
+     * {@code words} read. The two are separate sets the specification states separately, and a
+     * pattern's shorthand is this one.
+     */
+    public static final CodePoints SPACES = of(' ').or(between('\t', '\r'));
 
     /**
      * Every symbol from one to another, both ends in it: the scalar values between them, so a run

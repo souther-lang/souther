@@ -43,7 +43,7 @@ import souther.compiler.numeric.PlacesApart;
 import souther.compiler.regex.Language;
 import souther.compiler.regex.Meter;
 import souther.compiler.regex.PatternPlan;
-import souther.compiler.regex.PatternSyntax;
+import souther.compiler.regex.PatternMeaning;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
@@ -1591,9 +1591,9 @@ public final class Partitions {
      * own rules were written closest to. It is {@link #patternsStatedOn}'s order, read once for
      * every reader of it here.
      */
-    private static List<FixtureTemplate> whatAFormatAsksFor(List<PatternSyntax> stated) {
+    private static List<FixtureTemplate> whatAFormatAsksFor(List<PatternMeaning> stated) {
         List<FixtureTemplate> out = new ArrayList<>();
-        for (PatternSyntax each : stated) {
+        for (PatternMeaning each : stated) {
             String text = writtenFor(each);
             if (text != null) {
                 out.add(FixtureTemplate.string(text));
@@ -2093,21 +2093,21 @@ public final class Partitions {
      * <p>Null two ways, and they are one answer here: a pattern whose machine costs more than
      * writing a value is allowed, and one every string of which is something nobody can paste. What
      * a caller does with each of them is offer no candidate, so they are not told apart — a row is
-     * offered or it is not. A pattern outside the subset this compiler reads never reaches here:
-     * the reading says so, and the caller offers no candidate for the same reason.
+     * offered or it is not. Text that is no pattern of the language never reaches here: the
+     * reading says so, and the caller offers no candidate for the same reason.
      *
      * <p>Read by the one thing here that reads patterns. What this used to have was a reader of its
      * own, which meant two answers to "what does this pattern accept" and one model where they
      * could differ.
      */
-    private static String writtenFor(PatternSyntax syntax) {
+    private static String writtenFor(PatternMeaning syntax) {
         Language language = languageOf(syntax, PatternPlan.Budget.OF_A_WITNESS.meter());
         return language == null ? null : language.someWritten();
     }
 
     /** The strings {@code syntax} accepts, or null where making the machine costs more than
      *  {@code meter} allows. */
-    private static Language languageOf(PatternSyntax syntax, Meter meter) {
+    private static Language languageOf(PatternMeaning syntax, Meter meter) {
         return PatternPlan.of(syntax).compile(meter);
     }
 
@@ -2171,7 +2171,7 @@ public final class Partitions {
         Meter meter = PatternPlan.Budget.OF_A_WITNESS.meter();
         Language admits = stringsTheRulesReadAdmit(view, reading, meter).language();
         Language counted = admits == null ? null
-                : languageOf(PatternSyntax.ofAnySymbols(size, size), meter);
+                : languageOf(PatternMeaning.ofAnySymbols(size, size), meter);
         Language both = counted == null ? null : admits.and(counted, meter);
         String some = both == null ? null : both.someWritten();
         return some == null ? List.of() : List.of(FixtureTemplate.string(some));
@@ -2323,11 +2323,11 @@ public final class Partitions {
                 switch (StringPredicates.statedByWritten(each.expr(), ruleSource.symbols())) {
                     case StringPredicates.Reading.Accepting it ->
                             read.add(new Stated(each.part(), it.accepts()));
-                    case StringPredicates.Reading.PatternNotRead it ->
+                    case StringPredicates.Reading.PatternNotRead _ ->
                             unread.add(StringOfferShortfall.NotOffered.ofARuleNotRead(
-                                    each.part(), BlockReason.forAPatternNotRead(it.why())));
+                                    each.part(), BlockReason.forAPatternNotRead()));
                     // A rule whose text this compiler did not work out is a rule it did not read,
-                    // the same as one written in a construct the subset does not hold.
+                    // the same as one whose text is no pattern.
                     case StringPredicates.Reading.WrittenArgumentNotKnown _ ->
                             unread.add(StringOfferShortfall.NotOffered.ofARuleNotRead(
                                     each.part(), new BlockReason.UnreadValueRule()));
@@ -2363,7 +2363,7 @@ public final class Partitions {
         }
 
         /** Just the patterns, for a caller that offers a value per rule and names none of them. */
-        private List<PatternSyntax> patterns() {
+        private List<PatternMeaning> patterns() {
             return read.stream().map(Stated::accepts).toList();
         }
     }
@@ -2375,7 +2375,7 @@ public final class Partitions {
      * the rule and not by the pattern: two rules of one declaration state two patterns, and a
      * sentence about "the pattern here" leaves them to guess which.
      */
-    private record Stated(PartId<RuleRef.Invariant> part, PatternSyntax accepts) {}
+    private record Stated(PartId<RuleRef.Invariant> part, PatternMeaning accepts) {}
 
     /** Whether a rule counts the characters, which leaves out every string of another length and
      *  is a thing to be met with the patterns like any other. */
@@ -2445,9 +2445,9 @@ public final class Partitions {
         if (!countsTheCharacters(characters)) {
             return new CandidateStrings(strings, shortfall);  // every count, nothing to take away
         }
-        Language counted = languageOf(PatternSyntax.ofAnySymbols(characters.least(),
+        Language counted = languageOf(PatternMeaning.ofAnySymbols(characters.least(),
                 characters.most() == Integer.MAX_VALUE
-                        ? PatternSyntax.Repeated.NO_CEILING : characters.most()), meter);
+                        ? PatternMeaning.Repeated.NO_CEILING : characters.most()), meter);
         Language within = counted == null ? null : strings.and(counted, meter);
         // The count met with the strings, which is again nobody's one rule.
         return within == null

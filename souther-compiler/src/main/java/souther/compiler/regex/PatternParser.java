@@ -4,18 +4,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The subset of Java's pattern language this compiler reads, as what it accepts.
+ * The reader of Souther's pattern language (spec §string-patterns), and the only one.
  *
- * <p>The one place the subset is decided. What this reads is what is supported and what it refuses
- * is what is not — a second reader answering the same question is a second boundary, and the day one
- * of them widens, a pattern is supported by whichever was asked.
- *
- * <p><b>Exactly what Java accepts, for what it reads at all.</b> Where a construct is in the subset,
- * the strings this says the pattern accepts are the strings {@code java.util.regex} accepts: `.`
- * leaves out the five line terminators and nothing else, a negated class leaves out only what is
- * written in it, and the shorthands hold what they hold without a flag to widen them. A subset that
- * narrowed a construct it claimed would be worse than refusing it, since a narrower set still holds
- * the values somebody wrote and nothing would say the answer had shrunk.
+ * <p>What this reads is a pattern and what it refuses is not one. The checker asks this whether a
+ * {@code String.matches} pattern is one, and what it hands on is the {@link PatternMeaning}; the
+ * analysis, the compiler's folds and every output lower that. None of them reads the text, so a
+ * construct this learns is learned by all of them at once, and there is no second reader whose
+ * answer could differ.
  *
  * <p>Nothing here chooses a value. What one string of the language would be is a question for
  * whatever holds the language; a reader that answered it while parsing is the arrangement that lost
@@ -26,98 +21,109 @@ public final class PatternParser {
     /**
      * How deep a pattern may be written.
      *
-     * <p>The reading is recursive, so what bounds it is the stack. Past this the answer is that the
-     * pattern is not read rather than a stack overflow somewhere inside a compile — the two are the
-     * same fact about this reader and only one of them is something a caller can act on.
+     * <p>A limit of this compiler and not of the language. The reading is recursive, and so is every
+     * walk over what it reads — the machines built from it and what an output lowers it to — so what
+     * bounds them is the stack. Past this the answer is {@link PatternRead.TooDeep} rather than a
+     * stack overflow somewhere later in a compile.
      */
-    private static final int DEEPEST = 200;
+    public static final int DEEPEST = 200;
 
     private final String regex;
     private int at;
     private int depth;
+    /** Where the construct being read begins, which is what a refusal quotes. */
+    private int construct;
 
     private PatternParser(String regex) {
         this.regex = regex;
         this.at = 0;
         this.depth = 0;
+        this.construct = 0;
     }
 
-    /** What {@code regex} accepts, or which construct in it this does not read. */
+    /** What {@code regex} means, or what makes it no pattern, or that it is deeper than this reads. */
     public static PatternRead read(String regex) {
         if (regex == null) {
             throw new IllegalArgumentException("a pattern is some string");
         }
         PatternParser reader = new PatternParser(regex);
         try {
-            PatternSyntax syntax = reader.alternation();
+            WrittenPattern written = reader.alternation();
             if (!reader.done()) {
                 // A bracket closing nothing, which is what is left when the reading of a choice
                 // stops before the end.
-                return new PatternRead.NotRead(PatternRead.Unsupported.SOMETHING_UNCLOSED);
+                return new PatternRead.Refused(PatternRead.Refusal.SOMETHING_UNCLOSED, reader.at,
+                        regex.substring(reader.at, reader.at + 1));
             }
             // Every anchor has to come to something, and what it comes to is settled by where it
-            // stands rather than by how it is written. Asked here so that a pattern this cannot
-            // settle is one it says it did not read: the tree is kept as the author wrote it, and
-            // what the anchors come to is worked out again by whoever builds the machine.
-            if (PatternSyntax.withoutAnchors(syntax) == null) {
-                return new PatternRead.NotRead(PatternRead.Unsupported.AN_ANCHOR_THIS_CANNOT_PLACE);
+            // stands rather than by how it is written — which is known now that the whole of the
+            // pattern is.
+            PatternMeaning meaning = Anchors.placed(written);
+            if (meaning == null) {
+                return new PatternRead.Refused(PatternRead.Refusal.AN_ANCHOR_THIS_CANNOT_PLACE, 0,
+                        regex);
             }
-            return new PatternRead.Read(syntax);
+            return new PatternRead.Read(meaning);
         } catch (Refused refused) {
-            return new PatternRead.NotRead(refused.why);
+            int to = Math.min(regex.length(), Math.max(refused.to, refused.from));
+            return new PatternRead.Refused(refused.why, refused.from,
+                    regex.substring(refused.from, to));
+        } catch (TooDeep _) {
+            return new PatternRead.TooDeep(DEEPEST);
         }
     }
 
     // --- the grammar ------------------------------------------------------------------------------
 
-    private PatternSyntax alternation() {
-        List<PatternSyntax> arms = new ArrayList<>();
+    private WrittenPattern alternation() {
+        List<WrittenPattern> arms = new ArrayList<>();
         arms.add(sequence());
         while (peek() == '|') {
             take();
             arms.add(sequence());
         }
-        return arms.size() == 1 ? arms.get(0) : new PatternSyntax.EitherOf(arms);
+        return arms.size() == 1 ? arms.get(0) : new WrittenPattern.EitherOf(arms);
     }
 
-    private PatternSyntax sequence() {
-        List<PatternSyntax> parts = new ArrayList<>();
+    private WrittenPattern sequence() {
+        List<WrittenPattern> parts = new ArrayList<>();
         while (!done() && peek() != '|' && peek() != ')') {
-            PatternSyntax one = quantified();
+            WrittenPattern one = quantified();
             // A group of nothing is nothing, and is left out so that one written pattern has one
             // tree. An anchor is not one of those: where it stands is what decides what it comes
             // to, so dropping it here would be answering that question with the one place that
             // cannot see the answer.
-            if (!(one instanceof PatternSyntax.Nothing)) {
+            if (!(one instanceof WrittenPattern.Meant(PatternMeaning.Nothing _))) {
                 parts.add(one);
             }
         }
         return switch (parts.size()) {
-            case 0 -> new PatternSyntax.Nothing();
+            case 0 -> new WrittenPattern.Meant(new PatternMeaning.Nothing());
             case 1 -> parts.get(0);
-            default -> new PatternSyntax.InTurn(parts);
+            default -> new WrittenPattern.InTurn(parts);
         };
     }
 
-    private PatternSyntax quantified() {
-        PatternSyntax one = atom();
+    private WrittenPattern quantified() {
+        WrittenPattern one = atom();
         int least;
         int most;
+        construct = at;
         switch (peek()) {
             case '?' -> { take(); least = 0; most = 1; }
-            case '*' -> { take(); least = 0; most = PatternSyntax.Repeated.NO_CEILING; }
-            case '+' -> { take(); least = 1; most = PatternSyntax.Repeated.NO_CEILING; }
+            case '*' -> { take(); least = 0; most = PatternMeaning.Repeated.NO_CEILING; }
+            case '+' -> { take(); least = 1; most = PatternMeaning.Repeated.NO_CEILING; }
             case '{' -> {
                 take();
                 least = count();
                 most = least;
                 if (peek() == ',') {
                     take();
-                    most = peek() == '}' ? PatternSyntax.Repeated.NO_CEILING : count();
+                    most = peek() == '}' ? PatternMeaning.Repeated.NO_CEILING : count();
                 }
                 expect('}');
-                if (most != PatternSyntax.Repeated.NO_CEILING && most < least) {
-                    throw new Refused(PatternRead.Unsupported.A_COUNT_THIS_CANNOT_READ);
+                if (most != PatternMeaning.Repeated.NO_CEILING && most < least) {
+                    throw refused(PatternRead.Refusal.A_COUNT_THIS_CANNOT_READ);
                 }
             }
             default -> {
@@ -133,62 +139,73 @@ public final class PatternParser {
             // Possessive is not one of those. It takes what it can and gives none of it back, so a
             // body that accepts the empty string takes it once and refuses to try again:
             // {@code (?:|a)++} matches nothing that {@code (?:|a)+} matches beyond the empty
-            // string. Read as the plain one, this compiler answered for a wider language than the
-            // author wrote.
-            throw new Refused(PatternRead.Unsupported.A_POSSESSIVE_REPETITION);
+            // string. Which strings it accepts follows from how a matcher walks, which the language
+            // does not describe.
+            take();
+            throw refused(PatternRead.Refusal.A_POSSESSIVE_REPETITION);
         }
-        return new PatternSyntax.Repeated(one, least, most);
+        return new WrittenPattern.Repeated(one, least, most);
     }
 
-    private PatternSyntax atom() {
+    private WrittenPattern atom() {
+        construct = at;
         char c = peek();
         return switch (c) {
             case '(' -> group();
             case '[' -> {
                 take();
-                yield new PatternSyntax.Symbols(characterClass());
+                yield symbols(characterClass());
             }
             case '\\' -> {
                 take();
-                yield new PatternSyntax.Symbols(escaped());
+                yield symbols(escaped());
             }
             case '.' -> {
                 take();
-                // Every symbol but the five Java calls line terminators. Written as a difference
-                // rather than as a rule of its own, so that a negated class beside it — which does
-                // not leave them out — is the same algebra with a different set taken away.
-                yield new PatternSyntax.Symbols(CodePoints.EVERYTHING
-                        .less(CodePoints.LINE_TERMINATORS));
+                // Every symbol but the line terminators. Written as a difference rather than as a
+                // rule of its own, so that a negated class beside it — which does not leave them
+                // out — is the same algebra with a different set taken away.
+                yield symbols(CodePoints.EVERYTHING.less(CodePoints.LINE_TERMINATORS));
             }
             case '^', '$' -> {
                 boolean end = peek() == '$';
                 take();
-                yield new PatternSyntax.Anchor(end);
+                yield new WrittenPattern.Anchor(end);
             }
-            // A brace that begins no count. Java refuses it, so a pattern holding one names no
-            // language at all — read as an ordinary character it would be this compiler answering
-            // for a pattern the author cannot run.
-            case '{' -> throw new Refused(PatternRead.Unsupported.A_COUNT_THIS_CANNOT_READ);
-            case '*', '+', '?' -> throw new Refused(PatternRead.Unsupported.SOMETHING_UNCLOSED);
-            case 0 -> throw new Refused(PatternRead.Unsupported.SOMETHING_UNCLOSED);
-            default -> new PatternSyntax.Symbols(CodePoints.of(literal()));
+            // A brace that begins no count. Read as an ordinary character it would be a pattern
+            // meaning one thing here and a count wherever a digit followed it.
+            case '{' -> {
+                take();
+                throw refused(PatternRead.Refusal.A_COUNT_THIS_CANNOT_READ);
+            }
+            case '*', '+', '?' -> {
+                take();
+                throw refused(PatternRead.Refusal.SOMETHING_UNCLOSED);
+            }
+            case 0 -> throw refused(PatternRead.Refusal.SOMETHING_UNCLOSED);
+            default -> symbols(CodePoints.of(literal()));
         };
     }
 
-    /** A group, which this reads only where it says nothing about the match. */
-    private PatternSyntax group() {
+    private static WrittenPattern symbols(CodePoints held) {
+        return new WrittenPattern.Meant(new PatternMeaning.Symbols(held));
+    }
+
+    /** A group, plain or {@code (?:}, which are the two the grammar has. */
+    private WrittenPattern group() {
         expect('(');
         if (peek() == '?') {
             take();
-            // `(?:` and nothing else. A lookaround, a named group and a flag group each say
-            // something about where a match sits or how it is walked, which no set of strings holds.
+            // `(?:` and nothing else. A lookaround and a named group have no spelling in the
+            // grammar, and a flag group would change what a class means for the rest of the pattern.
             if (peek() != ':') {
-                throw new Refused(PatternRead.Unsupported.A_GROUP_ABOUT_THE_MATCH);
+                take();
+                throw refused(PatternRead.Refusal.A_GROUP_THE_GRAMMAR_DOES_NOT_HAVE);
             }
             take();
         }
         deeper();
-        PatternSyntax inside = alternation();
+        WrittenPattern inside = alternation();
         shallower();
         expect(')');
         return inside;
@@ -206,19 +223,20 @@ public final class PatternParser {
         boolean first = true;
         while (!done() && (peek() != ']' || first)) {
             first = false;
+            construct = at;
             if (peek() == '[') {
-                // A class inside a class, which Java reads as a union or an intersection depending
-                // on the `&&` beside it. Neither is read here.
-                throw new Refused(PatternRead.Unsupported.A_CLASS_OF_CLASSES);
+                take();
+                throw refused(PatternRead.Refusal.A_CLASS_OF_CLASSES);
             }
             if (peek() == '&' && at + 1 < regex.length() && regex.charAt(at + 1) == '&') {
-                throw new Refused(PatternRead.Unsupported.A_CLASS_OF_CLASSES);
+                at += 2;
+                throw refused(PatternRead.Refusal.A_CLASS_OF_CLASSES);
             }
             held = held.or(classMember());
         }
         expect(']');
         if (held.isEmpty()) {
-            throw new Refused(PatternRead.Unsupported.SOMETHING_UNCLOSED);
+            throw refused(PatternRead.Refusal.SOMETHING_UNCLOSED);
         }
         // The universe less what is written, and not a set of what a reader thought was left. A
         // negated class does not leave out the line terminators, which is the whole reason `.` is
@@ -240,10 +258,10 @@ public final class PatternParser {
             take();
             CodePoints upper = classAtom();
             if (upper.size() != 1) {
-                throw new Refused(PatternRead.Unsupported.AN_ESCAPE_THIS_DOES_NOT_READ);
+                throw refused(PatternRead.Refusal.AN_ESCAPE_THIS_DOES_NOT_READ);
             }
             if (upper.least() < member.least()) {
-                throw new Refused(PatternRead.Unsupported.A_COUNT_THIS_CANNOT_READ);
+                throw refused(PatternRead.Refusal.A_COUNT_THIS_CANNOT_READ);
             }
             return CodePoints.between(member.least(), upper.least());
         }
@@ -263,19 +281,18 @@ public final class PatternParser {
     /** What an escape stands for, as symbols. The backslash is already taken. */
     private CodePoints escaped() {
         if (done()) {
-            throw new Refused(PatternRead.Unsupported.AN_ESCAPE_THIS_DOES_NOT_READ);
+            throw refused(PatternRead.Refusal.AN_ESCAPE_THIS_DOES_NOT_READ);
         }
         char kind = peek();
         return switch (kind) {
-            // The shorthands, as Java holds them without a flag to widen them: the digits are the
-            // ten ASCII ones, a word character is ASCII with the underscore, and the whitespace is
-            // the six Java names.
-            case 'd' -> { take(); yield digits(); }
-            case 'D' -> { take(); yield digits().not(); }
-            case 'w' -> { take(); yield word(); }
-            case 'W' -> { take(); yield word().not(); }
-            case 's' -> { take(); yield whitespace(); }
-            case 'S' -> { take(); yield whitespace().not(); }
+            // The shorthands, as the language defines them: the digits are the ten ASCII ones, a
+            // word character is ASCII with the underscore, and the whitespace is six characters.
+            case 'd' -> { take(); yield CodePoints.DIGITS; }
+            case 'D' -> { take(); yield CodePoints.DIGITS.not(); }
+            case 'w' -> { take(); yield CodePoints.WORD; }
+            case 'W' -> { take(); yield CodePoints.WORD.not(); }
+            case 's' -> { take(); yield CodePoints.SPACES; }
+            case 'S' -> { take(); yield CodePoints.SPACES.not(); }
             case 'n' -> { take(); yield CodePoints.of('\n'); }
             case 't' -> { take(); yield CodePoints.of('\t'); }
             case 'r' -> { take(); yield CodePoints.of('\r'); }
@@ -285,39 +302,27 @@ public final class PatternParser {
             case '0' -> { take(); yield CodePoints.of(octal()); }
             case 'x' -> { take(); yield CodePoints.of(spelled(PatternEscapes.hex(regex, at))); }
             case 'u' -> { take(); yield CodePoints.of(spelled(PatternEscapes.unicode(regex, at))); }
-            case 'p', 'P' -> throw new Refused(PatternRead.Unsupported.A_CHARACTER_PROPERTY);
-            case 'b', 'B', 'A', 'z', 'Z', 'G', 'R' ->
-                    throw new Refused(PatternRead.Unsupported.A_BOUNDARY);
-            case 'Q', 'E' -> throw new Refused(PatternRead.Unsupported.A_QUOTATION);
-            case 'k' -> throw new Refused(PatternRead.Unsupported.A_BACK_REFERENCE);
-            case 'c' -> throw new Refused(PatternRead.Unsupported.AN_ESCAPE_THIS_DOES_NOT_READ);
-            case '1', '2', '3', '4', '5', '6', '7', '8', '9' ->
-                    throw new Refused(PatternRead.Unsupported.A_BACK_REFERENCE);
+            case 'p', 'P' -> throw refusedAfter(PatternRead.Refusal.A_CHARACTER_PROPERTY);
+            case 'b', 'B', 'A', 'z', 'Z', 'G', 'R' -> throw refusedAfter(PatternRead.Refusal.A_BOUNDARY);
+            case 'Q', 'E' -> throw refusedAfter(PatternRead.Refusal.A_QUOTATION);
+            case 'k', '1', '2', '3', '4', '5', '6', '7', '8', '9' ->
+                    throw refusedAfter(PatternRead.Refusal.A_BACK_REFERENCE);
             default -> {
                 // An escaped literal — `\.`, `\+`, `\\`, `\-`. A letter with no meaning is refused
-                // rather than read as itself, since Java refuses it too and reading it would accept
-                // a pattern the engine does not.
+                // rather than read as itself: read as itself, a letter one day given a meaning
+                // would change which strings an old pattern accepts.
                 if (Character.isLetter(kind)) {
-                    throw new Refused(PatternRead.Unsupported.AN_ESCAPE_THIS_DOES_NOT_READ);
+                    throw refusedAfter(PatternRead.Refusal.AN_ESCAPE_THIS_DOES_NOT_READ);
                 }
                 yield CodePoints.of(literal());
             }
         };
     }
 
-    private static CodePoints digits() {
-        return CodePoints.between('0', '9');
-    }
-
-    private static CodePoints word() {
-        return CodePoints.between('a', 'z').or(CodePoints.between('A', 'Z'))
-                .or(digits()).or(CodePoints.of('_'));
-    }
-
-    /** What Java calls whitespace without a flag: a space, a tab, a line feed, a vertical tab, a
-     *  form feed and a carriage return. */
-    private static CodePoints whitespace() {
-        return CodePoints.of(' ').or(CodePoints.between('\t', '\r'));
+    /** The refusal of the escape whose kind is the unit here, quoting it with that unit. */
+    private Refused refusedAfter(PatternRead.Refusal why) {
+        take();
+        return refused(why);
     }
 
     // --- numbers and symbols -----------------------------------------------------------------------
@@ -326,23 +331,19 @@ public final class PatternParser {
      * The symbol a {@code \x} or {@code \\u} escape spells ({@link PatternEscapes}), the reading
      * moved past it.
      *
-     * <p>A {@code \\u} pair is the one character it encodes, as the engine reads it: read as two
-     * symbols, {@code \\uD800\\uDC00} would name the two halves and not U+10000, a different set of
-     * strings under the same spelling.
-     *
-     * <p>A surrogate on its own is no symbol. No {@code String} holds one, and the checker refuses a
-     * pattern writing one ({@code PatternEscapes.firstWrittenSurrogate}); this is reached before
-     * that where a declaration's rules are read off the written tree, and stops rather than naming
-     * a symbol that is not one.
+     * <p>A {@code \\u} pair is the one character it encodes: read as two symbols,
+     * {@code \\uD800\\uDC00} would name the two halves and not U+10000, a different set of strings
+     * under the same spelling. A surrogate on its own is no symbol, since no {@code String} holds
+     * one, and is refused.
      */
     private int spelled(PatternEscapes.Spelled escape) {
         if (escape == null) {
-            throw new Refused(PatternRead.Unsupported.AN_ESCAPE_THIS_DOES_NOT_READ);
-        }
-        if (CodePoints.isSurrogate(escape.symbol())) {
-            throw new Refused(PatternRead.Unsupported.A_CHARACTER_NO_STRING_HOLDS);
+            throw refused(PatternRead.Refusal.AN_ESCAPE_THIS_DOES_NOT_READ);
         }
         at = escape.end();
+        if (CodePoints.isSurrogate(escape.symbol())) {
+            throw refused(PatternRead.Refusal.A_CHARACTER_NO_STRING_HOLDS);
+        }
         return escape.symbol();
     }
 
@@ -355,7 +356,7 @@ public final class PatternParser {
             digits++;
         }
         if (digits == 0 || value > 0xFF) {
-            throw new Refused(PatternRead.Unsupported.AN_ESCAPE_THIS_DOES_NOT_READ);
+            throw refused(PatternRead.Refusal.AN_ESCAPE_THIS_DOES_NOT_READ);
         }
         return value;
     }
@@ -369,7 +370,7 @@ public final class PatternParser {
      */
     private int literal() {
         if (done()) {
-            throw new Refused(PatternRead.Unsupported.SOMETHING_UNCLOSED);
+            throw refused(PatternRead.Refusal.SOMETHING_UNCLOSED);
         }
         int symbol = regex.codePointAt(at);
         at += Character.charCount(symbol);
@@ -384,11 +385,11 @@ public final class PatternParser {
             value = value * 10 + (take() - '0');
             digits++;
             if (value > Integer.MAX_VALUE / 16) {
-                throw new Refused(PatternRead.Unsupported.A_COUNT_THIS_CANNOT_READ);
+                throw refused(PatternRead.Refusal.A_COUNT_THIS_CANNOT_READ);
             }
         }
         if (digits == 0) {
-            throw new Refused(PatternRead.Unsupported.A_COUNT_THIS_CANNOT_READ);
+            throw refused(PatternRead.Refusal.A_COUNT_THIS_CANNOT_READ);
         }
         return value;
     }
@@ -397,7 +398,7 @@ public final class PatternParser {
 
     private void deeper() {
         if (++depth > DEEPEST) {
-            throw new Refused(PatternRead.Unsupported.NESTED_TOO_DEEPLY);
+            throw new TooDeep();
         }
     }
 
@@ -417,28 +418,51 @@ public final class PatternParser {
 
     private char take() {
         if (done()) {
-            throw new Refused(PatternRead.Unsupported.SOMETHING_UNCLOSED);
+            throw refused(PatternRead.Refusal.SOMETHING_UNCLOSED);
         }
         return regex.charAt(at++);
     }
 
     private void expect(char c) {
         if (peek() != c) {
-            throw new Refused(PatternRead.Unsupported.SOMETHING_UNCLOSED);
+            // What is missing is a closing, and where it was looked for is what an author is sent
+            // to — not the construct it would have closed, which may be far behind.
+            construct = at;
+            throw refused(PatternRead.Refusal.SOMETHING_UNCLOSED);
         }
         take();
     }
 
-    /** What a construct outside the subset raises, carried to the one place that answers. */
+    /** The refusal of the construct being read, quoting it from where it began to where the reading
+     *  stopped. */
+    private Refused refused(PatternRead.Refusal why) {
+        return new Refused(why, construct, at);
+    }
+
+    /** What a pattern that is no pattern raises, carried to the one place that answers. */
     private static final class Refused extends RuntimeException {
 
         private static final long serialVersionUID = 1L;
 
-        private final transient PatternRead.Unsupported why;
+        private final transient PatternRead.Refusal why;
+        private final int from;
+        private final int to;
 
-        Refused(PatternRead.Unsupported why) {
+        Refused(PatternRead.Refusal why, int from, int to) {
             super(null, null, false, false);
             this.why = why;
+            this.from = from;
+            this.to = to;
+        }
+    }
+
+    /** What a pattern written past {@link #DEEPEST} raises. */
+    private static final class TooDeep extends RuntimeException {
+
+        private static final long serialVersionUID = 1L;
+
+        TooDeep() {
+            super(null, null, false, false);
         }
     }
 }

@@ -3,7 +3,6 @@ package souther.compiler.codegen;
 import souther.compiler.types.ValueName;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.InvariantStatement;
-import souther.compiler.check.InvariantStatements;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
@@ -50,7 +49,18 @@ public final class InvariantConstraints {
 
     public record FixedLength(int n) implements OfString {}
 
-    public record Pattern(String regex) implements OfString {}
+    /**
+     * A format a decoded string is held to.
+     *
+     * <p>Two texts, because they answer two questions. {@code regex} is what the JVM's matcher runs,
+     * written from what the pattern means ({@link JavaPatterns}); {@code written} is the pattern the
+     * author's call was given, which is what a failure says the value was held to. A failure that
+     * quoted the first would be quoting this backend's lowering to whoever reads the issue.
+     *
+     * @param regex   the pattern the matcher runs
+     * @param written the pattern the call was given, as it composed at compile time
+     */
+    public record Pattern(String regex, String written) implements OfString {}
 
     /** A {@code LongDecoder} constraint — Souther's {@code Int} is carried as a long. */
     public sealed interface OfInt extends Constraint {}
@@ -103,19 +113,14 @@ public final class InvariantConstraints {
      *  the library the clause was resolved against, so it is held here rather than asked at each
      *  call. */
     private final Symbols symbols;
-    /** Where a term's text is worked out, which is the reading that made these statements. Asked of
-     *  it rather than folded here, so a pattern composed of what a module's own value holds is read
-     *  as the pattern it is. */
-    private final InvariantStatements read;
 
-    private InvariantConstraints(Symbols symbols, InvariantStatements read) {
+    private InvariantConstraints(Symbols symbols) {
         this.symbols = symbols;
-        this.read = read;
     }
 
-    /** Reading statements the reading {@code read} made, against the library {@code symbols} names. */
-    public static InvariantConstraints against(Symbols symbols, InvariantStatements read) {
-        return new InvariantConstraints(symbols, read);
+    /** Reading statements against the library {@code symbols} names. */
+    public static InvariantConstraints against(Symbols symbols) {
+        return new InvariantConstraints(symbols);
     }
 
     /**
@@ -275,14 +280,14 @@ public final class InvariantConstraints {
     }
 
     private Optional<Constraint> ofCall(Core.PreservedCall call, Type base) {
-        // `String.matches(p, value)` is whole-string anchored (Strings.matches), and so is Raoh's
-        // pattern (Matcher.matches), so the two accept the same strings. The regex is asked for the
-        // same way the check asks — one reading of which expressions are compile-time strings and of
-        // what one composes to, so a pattern the check accepted cannot arrive here unrecognised and
-        // lose its constraint. It has been compiled once at check time, so it is known well-formed.
+        // The generated boundary constraint runs what the pattern means, written for the JVM's
+        // engine (JavaPatterns), as a whole-string predicate — the same text the run time's check
+        // runs, so the two accept the same strings — and quotes the pattern the call was given when
+        // a value fails it. The meaning is the one the checker settled on the call: this reads no
+        // pattern text.
         if (base == Type.STRING && applies(call, Kernel.STRING_MATCHES) && call.args().size() == 2
                 && isValue(call.args().get(1))) {
-            return Optional.ofNullable(read.textOf(call.args().get(0))).map(Pattern::new);
+            return Optional.of(matching(call));
         }
         // `List.allDistinctBy(x -> x, value)` says of the elements what Raoh's `unique()` says of them:
         // no two are equal, by the same value equality (spec §collections, ADR-0009). A projection that
@@ -354,6 +359,17 @@ public final class InvariantConstraints {
 
     private static boolean isValue(Core e) {
         return Core.withoutStanding(e) instanceof Core.Read read && read.name().equals(VALUE);
+    }
+
+    /** The constraint for the pattern the checker settled on {@code call}. A kept
+     *  {@code String.matches} exists only where its pattern was read, so a call without one is the
+     *  checker's contract broken. */
+    private static Pattern matching(Core.PreservedCall call) {
+        if (!(call.settled() instanceof Core.KernelFact.StringMatches settled)) {
+            throw new IllegalStateException(
+                    "a String.matches call carries the pattern the checker read: " + call);
+        }
+        return new Pattern(JavaPatterns.of(settled.meaning()), settled.written());
     }
 
     /**

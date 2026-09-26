@@ -50,7 +50,7 @@ class APreservedCallIsRefusedByWhatItIsNotByWhatItNamesTest {
         assertRefused(helper, new Core.PreservedCall(KeptCalls.settledValue(helper, Type.INT),
                 List.of(), new Core.KeptCallPlace(new FixtureReferenceOrigin(0),
                         new ApplicationOrigin.ComposedFixture(), OccurrenceLineage.ORIGINAL),
-                Type.INT, POS));
+                Core.KernelFact.None.INSTANCE, Type.INT, POS));
     }
 
     private static void assertRefused(ValueName.Stdlib.Operation operation) {

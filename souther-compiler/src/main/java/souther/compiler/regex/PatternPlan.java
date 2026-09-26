@@ -166,13 +166,25 @@ public final class PatternPlan {
          * <p>The same numbers as the others today, and a coincidence rather than a fact.
          */
         public static final Budget OF_BEHAVIOR_DISTINCTIONS = new Budget(50_000, 200_000);
+
+        /**
+         * What the machine a compile-time fold of {@code String.matches} walks is allowed to cost.
+         *
+         * <p>Its own, because what it decides is only whether the compiler answers a match or leaves
+         * it to the run time. Spent from what a reading of the rules is allowed, a fold would change
+         * what the model is read to admit; from nothing, a pattern whose machine is large would hold
+         * up a compile of a program nothing is wrong with.
+         *
+         * <p>The same numbers as the others today, and a coincidence rather than a fact.
+         */
+        public static final Budget OF_A_FOLD = new Budget(50_000, 200_000);
     }
 
     /** What one step of a plan does. */
     private sealed interface Step {
 
         /** A pattern, as the strings it accepts. */
-        record Of(PatternSyntax syntax) implements Step {}
+        record Of(PatternMeaning meaning) implements Step {}
 
         /** The strings two steps both hold. */
         record Both(Step one, Step other) implements Step {}
@@ -191,15 +203,15 @@ public final class PatternPlan {
     }
 
     /** The plan that is one pattern. */
-    public static PatternPlan of(PatternSyntax syntax) {
-        if (syntax == null) {
+    public static PatternPlan of(PatternMeaning meaning) {
+        if (meaning == null) {
             throw new IllegalArgumentException("a plan is of some pattern");
         }
-        return new PatternPlan(new Step.Of(syntax));
+        return new PatternPlan(new Step.Of(meaning));
     }
 
     /**
-     * The plan for every string {@code syntax} does not accept.
+     * The plan for every string {@code meaning} does not accept.
      *
      * <p>Said as a plan rather than worked out by complementing a language afterwards, because the
      * complement is the expensive operation — a machine has to be made deterministic before a walk
@@ -209,10 +221,10 @@ public final class PatternPlan {
      * terminators: a denial that admitted every string but those would refuse values a model may
      * hold.
      */
-    public static PatternPlan notMatching(PatternSyntax syntax) {
-        return of(new PatternSyntax.Repeated(
-                new PatternSyntax.Symbols(CodePoints.EVERYTHING),
-                0, PatternSyntax.Repeated.NO_CEILING)).less(of(syntax));
+    public static PatternPlan notMatching(PatternMeaning meaning) {
+        return of(new PatternMeaning.Repeated(
+                new PatternMeaning.Symbols(CodePoints.EVERYTHING),
+                0, PatternMeaning.Repeated.NO_CEILING)).less(of(meaning));
     }
 
     /** The plan for what both hold. */
@@ -269,7 +281,7 @@ public final class PatternPlan {
 
     private static long states(Step step) {
         return switch (step) {
-            case Step.Of it -> states(it.syntax());
+            case Step.Of it -> states(it.meaning());
             case Step.Both it -> both(states(it.one()), states(it.other()));
             case Step.Either it -> Math.min(ENOUGH, states(it.one()) + states(it.other()) + 2);
             // The complement has to make the machine deterministic first, which is the one step
@@ -282,26 +294,26 @@ public final class PatternPlan {
         return one > ENOUGH / Math.max(1, other) ? ENOUGH : one * other;
     }
 
-    private static long states(PatternSyntax syntax) {
-        return switch (syntax) {
-            case PatternSyntax.Nothing _, PatternSyntax.Never _, PatternSyntax.Anchor _ -> 0;
-            case PatternSyntax.Symbols _ -> 1;
-            case PatternSyntax.InTurn it -> {
+    private static long states(PatternMeaning meaning) {
+        return switch (meaning) {
+            case PatternMeaning.Nothing _, PatternMeaning.Never _ -> 0;
+            case PatternMeaning.Symbols _ -> 1;
+            case PatternMeaning.InTurn it -> {
                 long out = 0;
-                for (PatternSyntax each : it.parts()) {
+                for (PatternMeaning each : it.parts()) {
                     out = Math.min(ENOUGH, out + states(each));
                 }
                 yield out;
             }
-            case PatternSyntax.EitherOf it -> {
+            case PatternMeaning.EitherOf it -> {
                 long out = 1;
-                for (PatternSyntax each : it.arms()) {
+                for (PatternMeaning each : it.arms()) {
                     out = Math.min(ENOUGH, out + states(each) + 1);
                 }
                 yield out;
             }
             // The copies it is written out as: the floor, and one more where the ceiling is open.
-            case PatternSyntax.Repeated it -> {
+            case PatternMeaning.Repeated it -> {
                 long once = states(it.what());
                 long many = it.unbounded() ? it.least() + 1L : it.most();
                 yield once > ENOUGH / Math.max(1, many) ? ENOUGH : once * many + 1;
@@ -324,7 +336,7 @@ public final class PatternPlan {
         switch (step) {
             case Step.Of it -> {
                 out.append("0;");
-                written(it.syntax(), out);
+                written(it.meaning(), out);
             }
             case Step.Both it -> {
                 out.append("1;");
@@ -344,29 +356,27 @@ public final class PatternPlan {
         }
     }
 
-    private static void written(PatternSyntax syntax, StringBuilder out) {
-        switch (syntax) {
-            case PatternSyntax.Nothing _ -> out.append("0;");
-            case PatternSyntax.Never _ -> out.append("1;");
-            case PatternSyntax.Anchor it -> out.append("2;").append(it.end() ? '$' : '^')
-                    .append(';');
-            case PatternSyntax.Symbols it -> {
+    private static void written(PatternMeaning meaning, StringBuilder out) {
+        switch (meaning) {
+            case PatternMeaning.Nothing _ -> out.append("0;");
+            case PatternMeaning.Never _ -> out.append("1;");
+            case PatternMeaning.Symbols it -> {
                 out.append("3;").append(it.held().ranges().size()).append(';');
                 it.held().ranges().forEach(each ->
                         out.append(each.from()).append('-').append(each.to()).append(','));
                 out.append(';');
             }
-            case PatternSyntax.InTurn it -> {
+            case PatternMeaning.InTurn it -> {
                 out.append("4;").append(it.parts().size()).append(';');
                 it.parts().forEach(each -> written(each, out));
             }
             // The arms as they are written. A choice accepts what its arms accept in any order, and
             // which order that is cannot be asked without building them.
-            case PatternSyntax.EitherOf it -> {
+            case PatternMeaning.EitherOf it -> {
                 out.append("5;").append(it.arms().size()).append(';');
                 it.arms().forEach(each -> written(each, out));
             }
-            case PatternSyntax.Repeated it -> {
+            case PatternMeaning.Repeated it -> {
                 out.append("6;").append(it.least()).append(',').append(it.most()).append(';');
                 written(it.what(), out);
             }
@@ -420,7 +430,7 @@ public final class PatternPlan {
      */
     private static Automaton built(Step step, Meter meter) {
         return switch (step) {
-            case Step.Of it -> Automaton.of(it.syntax(), meter);
+            case Step.Of it -> Automaton.of(it.meaning(), meter);
             case Step.Both it -> {
                 Automaton one = built(it.one(), meter);
                 Automaton other = one == null ? null : built(it.other(), meter);

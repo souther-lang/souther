@@ -1706,7 +1706,8 @@ public final class Elaborator {
                 new Core.KeptCallPlace(reference, new ApplicationOrigin.Derived(
                         new ApplicationDerivationCause.NameReadAsAValue(reference), 0),
                         OccurrenceLineage.ORIGINAL),
-                settled.result(), pos);
+                // A value's name takes nothing, so there is nothing about its application to settle.
+                Core.KernelFact.None.INSTANCE, settled.result(), pos);
     }
 
     /**

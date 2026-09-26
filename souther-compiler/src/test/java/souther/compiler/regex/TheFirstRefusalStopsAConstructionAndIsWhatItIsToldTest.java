@@ -24,8 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class TheFirstRefusalStopsAConstructionAndIsWhatItIsToldTest {
 
-    private static PatternSyntax read(String regex) {
-        return assertInstanceOf(PatternRead.Read.class, PatternParser.read(regex), regex).syntax();
+    private static PatternMeaning read(String regex) {
+        return assertInstanceOf(PatternRead.Read.class, PatternParser.read(regex), regex).meaning();
     }
 
     private static PatternPlan of(String regex) {

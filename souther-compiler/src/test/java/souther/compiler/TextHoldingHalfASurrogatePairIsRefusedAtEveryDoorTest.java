@@ -163,8 +163,8 @@ class TextHoldingHalfASurrogatePairIsRefusedAtEveryDoorTest {
     }
 
     /**
-     * A pattern writing one is refused, wherever in the pattern it is written; one quoting the six
-     * characters, or writing the pair as two escapes, is not.
+     * A pattern writing one is refused, wherever in the pattern it is written; one writing the pair
+     * as two escapes, or a backslash before the six characters, is not.
      */
     @Test
     void aPatternWritingItIsRefused() throws Exception {
@@ -175,7 +175,7 @@ class TextHoldingHalfASurrogatePairIsRefusedAtEveryDoorTest {
                     invariant String.matches("%s", value)
                 """;
         for (String pattern : List.of("\\\\uD800", "a\\\\x{DC00}", "[\\\\uD800-\\\\uDFFF]",
-                "(?=a)a\\\\uDC00", "\\\\N{HIGH SURROGATES D800}")) {
+                "(a|b)\\\\uDC00")) {
             CompileException refused = assertThrows(CompileException.class,
                     () -> Compiler.compile(written.formatted(pattern)), pattern);
             assertInstanceOf(TypeMessage.ThePatternWritesHalfASurrogatePair.class,
@@ -187,8 +187,6 @@ class TextHoldingHalfASurrogatePairIsRefusedAtEveryDoorTest {
 
                 data Pair = String
                     invariant String.matches("\\\\uD800\\\\uDC00", value)
-                data Quoted = String
-                    invariant String.matches("\\\\Q\\\\uD800\\\\E", value)
                 data EscapedBackslash = String
                     invariant String.matches("\\\\\\\\uD800", value)
                 data AcrossTheSurrogates = String
