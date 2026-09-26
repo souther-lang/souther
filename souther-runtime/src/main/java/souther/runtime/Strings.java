@@ -436,18 +436,21 @@ public final class Strings {
      * a time with a fresh canonicalization each time, which would canonicalize the same leading code
      * points as many times as there are copies of {@code pad} still to add.
      *
-     * <p>The copies of {@code pad} that cover what is needed are a form padding is defined as
-     * ("{@code pad} is repeated and cut", spec §stdlib-string), so they are measured before they are
-     * built, as the fill and {@code s} joined are; a width past what a {@code String} holds is past
-     * what the copies hold too, since every code point is at least one unit. */
+     * <p>The width is asked first, before anything is worked out from it: the answer is {@code width}
+     * code points and every code point is at least one unit, so a width past what a {@code String}
+     * holds is an answer with no place, and what is worked out from a width within it stays within
+     * what a {@code long} counts. The copies of {@code pad} that cover what is needed are a form
+     * padding is defined as ("{@code pad} is repeated and cut", spec §stdlib-string), so they are
+     * measured before they are built, as the fill and {@code s} joined are. */
     private static String pad(String s, long width, String pad, boolean atStart) {
         if (pad.isEmpty() || length(s) >= width) {
             return s;
         }
+        holds(width, "String.pad");
         long padLength = length(pad);
         long need = width - length(s);
         while (true) {
-            long copies = (need + padLength - 1) / padLength;
+            long copies = 1 + (need - 1) / padLength;
             holdsCopies(copies, pad.length(), "String.pad's fill");
             String fill = canonical(pad.repeat((int) copies), "String.pad's fill");
             String trimmedFill = length(fill) > need ? slice(fill, 0, need) : fill;

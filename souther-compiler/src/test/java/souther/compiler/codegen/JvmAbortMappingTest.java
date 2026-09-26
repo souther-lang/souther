@@ -153,6 +153,11 @@ class JvmAbortMappingTest {
                 () -> Strings.repeat("ab", 1_200_000_000L));
         assertKernelAborts(Kernel.STRING_PAD_LEFT, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
                 () -> Strings.padLeft("x", 1_200_000_000L, "𠮷"));
+        // a width at the top of Int, where working out the copies from it would overflow
+        assertKernelAborts(Kernel.STRING_PAD_LEFT, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+                () -> Strings.padLeft("x", Long.MAX_VALUE, "abc"));
+        assertKernelAborts(Kernel.STRING_PAD_RIGHT, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+                () -> Strings.padRight("x", Long.MAX_VALUE, "abc"));
         assertKernelAborts(Kernel.STRING_JOIN, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
                 () -> Strings.join(many, ","));
         assertKernelAborts(Kernel.STRING_CONCAT, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
