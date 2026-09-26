@@ -1346,35 +1346,17 @@ public final class TypeOps {
     public static List<InvariantHeader> invariantHeadersGoverning(
             TypeSymbol.AtModule named, Symbols symbols) {
         List<InvariantHeader> headers = new ArrayList<>();
-        for (Hir.InvariantClause clause : settledClauses(named, symbols, new LinkedHashSet<>())) {
+        for (Hir.InvariantClause clause : clausesGoverning(named, symbols, new LinkedHashSet<>())) {
             headers.add(new InvariantHeader(clause.name(), clause.pos()));
         }
         return headers;
     }
 
     /**
-     * The rules that govern {@code named}, as they were settled: what the declaring module made of
-     * each clause once the helpers it names were expanded into it.
-     *
-     * <p>Not public, and there is one reader. What a clause states is owned by the representation it
-     * is read in — the settled form by the derived world, the expanded one by
-     * {@link ExpandedClauseLookup} — so a way of asking for it that anyone could reach is a way of
-     * asking for one representation and being answered in whichever the caller's world happened to
-     * be at.
-     *
-     * <p>Every declaration is read from {@code symbols}: the one asked about and every one a spread
-     * reaches. Handed a node beside the world, the declaration asked about would be at whichever
-     * stage the caller was holding and the ones under it at whichever stage the world reads.
-     */
-    static List<Hir.InvariantClause> settledClausesGoverning(
-            TypeSymbol.AtModule named, DerivedSymbols symbols) {
-        return settledClauses(named, symbols, new LinkedHashSet<>());
-    }
-
-    /**
-     * The same for a reader that wants only what every representation agrees on, which is why this
-     * takes any world. Private, so the world a clause's body is read from stays said by the method
-     * a caller names.
+     * The clauses that govern {@code named}, for a reader that wants only what every representation
+     * agrees on, which is why this takes any world. Private, and what a clause states is not read
+     * off it: the settled form a module runs is {@code Shapes.SettledInvariantsGoverning}, and the
+     * expanded one is {@link #expandedInvariants}.
      *
      * <p>A spread onto the path contributes nothing and there is nowhere here to say it was cut:
      * what this hands back is the clauses and nothing beside them. That is left as it is rather than
@@ -1382,7 +1364,7 @@ public final class TypeOps {
      * {@link ExpandedRules}'s to say and is said there, and a graph that makes this short is one the
      * language refuses before either of them is read.
      */
-    private static List<Hir.InvariantClause> settledClauses(
+    private static List<Hir.InvariantClause> clausesGoverning(
             TypeSymbol.AtModule named, Symbols symbols, Set<TypeSymbol.AtModule> onThePath) {
         List<Hir.InvariantClause> invs = new ArrayList<>();
         for (Hir.Data data : governing(named, symbols, onThePath)) {
@@ -1392,8 +1374,8 @@ public final class TypeOps {
     }
 
     /**
-     * Every declaration whose clauses govern {@code named}, as {@link #settledClausesGoverning} reads
-     * them: what its spreads take in, first and in turn, and then itself.
+     * Every declaration whose clauses govern {@code named}: what its spreads take in, first and in
+     * turn, and then itself.
      *
      * <p>What a construction of {@code named} checks is these declarations' clauses, so a spread of a
      * declaration another module declares is a copy of that declaration's invariant in the classes

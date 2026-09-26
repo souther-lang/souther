@@ -28,11 +28,11 @@ import java.util.Map;
  * clause was written on: an answer keyed by where a clause was written would be short exactly the
  * clauses a construction has to satisfy.
  *
- * <p>And every one of them comes out of one derived world. What a clause states depends on the
- * representation its declaration is read in — a helper the declaring module expanded is still a
- * call in the form resolution left, under a name that means nothing where this stands — while what
- * a clause is called and where it was written do not. This is the reading that runs, so it is the
- * settled form it wants, and the world it asks is the one that has it.
+ * <p>And every one of them is the settled form. What a clause states depends on the representation
+ * its declaration is read in — a helper the declaring module expanded is still a call in the form
+ * resolution left, under a name that means nothing where this stands — while what a clause is called
+ * and where it was written do not. This is the reading that runs, so it is handed the clauses as they
+ * were settled, reaching what they name as the module building the value reaches it.
  */
 public final class ExecutableInvariants {
 
@@ -42,17 +42,18 @@ public final class ExecutableInvariants {
      * {@code data} as it is built and checked.
      *
      * <p>{@code data} says which declaration values are being built of, and decides nothing about
-     * how any declaration is read: the rules that govern it — its own and every one a spread brings
-     * in — are read through {@code symbols}, this one included. A node is what a caller of this
-     * already holds, and what would go wrong if it decided the reading is that the declaration
-     * asked about would be at whichever stage the caller was at and the ones under it at whichever
-     * the world reads.
+     * how any clause reads: the rules that govern it — its own and every one a spread brings in —
+     * are {@code governing}, answered for the module building it. The node is where the fields are
+     * read from and nothing more.
      *
+     * @param governing the settled clauses that govern {@code data}, as the module building it
+     *     reaches what they name — the answer the module's emitted methods are read off too
      * @param helpers the signatures of the recursive helpers a clause may reach — the same table the
      *     body check reads, because a clause naming a total helper names the same one a body does
      * @throws CompileException where a clause is not a condition
      */
-    public static ValueShape of(Hir.Data data, DerivedSymbols symbols,
+    public static ValueShape of(Hir.Data data, List<SettledInvariant> governing,
+                                DerivedSymbols symbols,
                                 PublishedDeclarations published, DeclarationKinds kinds,
                                 NewtypeInners inners, EffectiveFieldTypes fieldTypes,
                                 Map<String, Type> helpers) {
@@ -74,7 +75,8 @@ public final class ExecutableInvariants {
                 CheckContext.executableInvariant(symbols, new DeclarationAccess(published, kinds,
                         inners, fieldTypes, FieldLayout.asWritten(symbols)), data);
         List<ValueShape.Invariant> invariants = new ArrayList<>();
-        for (Hir.InvariantClause clause : TypeOps.settledClausesGoverning(data.declares(), symbols)) {
+        for (SettledInvariant settled : governing) {
+            Hir.InvariantClause clause = settled.clause();
             // Desugared first, the way a body is: a clause writing a comprehension states the same
             // condition as the `if` it is derived from, and one of the two reaching the check and
             // the other reaching what runs is the shape this exists to stop.

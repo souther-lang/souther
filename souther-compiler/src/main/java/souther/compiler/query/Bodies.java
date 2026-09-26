@@ -17,6 +17,7 @@ import souther.compiler.check.SpecChecker;
 import souther.compiler.check.SpecImplementation;
 import souther.compiler.check.CheckSurface;
 import souther.compiler.check.InvariantSettled;
+import souther.compiler.check.SettledInvariant;
 import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.CheckedEnsures;
 import souther.compiler.core.EnsuresEnforcement;
@@ -1829,9 +1830,30 @@ public final class Bodies {
             Map<String, List<PublishedHelper>> byModule = new LinkedHashMap<>();
             leaves(db, name).values().forEach(leave -> byModule
                     .computeIfAbsent(leave.module(), k -> new ArrayList<>()).add(leave));
+            // And what a clause a spread takes in left standing, which this module runs and so
+            // emits. No import line names it — the clause's module may keep it to itself — and it
+            // is handed over all the same, the way a helper a published body reaches is.
+            Answer<Map<TypeSymbol.AtModule, List<SettledInvariant>>> takenIn =
+                    db.ask(new Shapes.ClausesTakenIn(name));
+            if (!takenIn.present()) {
+                return Answer.absent();
+            }
+            Map<String, Set<String>> standingIn = new LinkedHashMap<>();
+            for (List<SettledInvariant> clauses : takenIn.value().values()) {
+                for (SettledInvariant clause : clauses) {
+                    for (ReachName.Declaration standing : clause.callsLeftStanding()) {
+                        if (standing.denotes() instanceof ValueName.Helper helper) {
+                            standingIn.computeIfAbsent(helper.module(),
+                                    k -> new LinkedHashSet<>()).add(helper.name());
+                        }
+                    }
+                }
+            }
+            Set<String> modules = new LinkedHashSet<>(byModule.keySet());
+            modules.addAll(standingIn.keySet());
             Map<String, Hir.FnDef> out = new LinkedHashMap<>();
-            for (Map.Entry<String, List<PublishedHelper>> allowed : byModule.entrySet()) {
-                Answer<Hir.Module> from = db.ask(new Settled(allowed.getKey()));
+            for (String module : modules) {
+                Answer<Hir.Module> from = db.ask(new Settled(module));
                 // Closed against the table that module's own bodies are expanded against, which is
                 // everything it can name and not only what it declares: a published body may call a
                 // helper that module imported in turn, and a chain of three is where a table of its
@@ -1842,15 +1864,18 @@ public final class Bodies {
                 // over the question of what it means — and the answer taken here would be this
                 // module's guess about another module's declarations.
                 Answer<Expanding.Of> against =
-                        db.ask(new Expanding(allowed.getKey(), InliningPolicy.FULL));
+                        db.ask(new Expanding(module, InliningPolicy.FULL));
                 if (!from.present() || !against.present()) {
                     continue;
                 }
+                List<Hir.FnDef> roots = new ArrayList<>(
+                        bodiesOf(from.value(), byModule.getOrDefault(module, List.of())));
+                roots.addAll(standingBodies(from.value(),
+                        standingIn.getOrDefault(module, Set.of()), roots));
                 // Two imports reaching one definition reach one definition: the name it is keyed by
                 // is the module that declares it and its own name, so the second arrival is the same
                 // entry rather than a second copy of the method.
-                publishedClosure(from.value(), allowed.getValue(), against.value())
-                        .forEach(out::putIfAbsent);
+                carriedClosure(from.value(), roots, against.value()).forEach(out::putIfAbsent);
             }
             return Answer.of(out);
         }
@@ -2005,6 +2030,34 @@ public final class Bodies {
         for (String declared : helpers.keySet()) {
             Hir.FnDef fn = found.get(declared);
             if (fn != null) {
+                out.add(fn);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The definitions of {@code from} named {@code standing}, which a clause of {@code from} left a
+     * call to, other than those among {@code already}.
+     *
+     * <p>A call left standing is to a definition the module that settled the clause has, so one it
+     * has not got is two of this compiler's answers disagreeing, as a leave to nothing is.
+     */
+    private static List<Hir.FnDef> standingBodies(Hir.Module from, Set<String> standing,
+                                                  List<Hir.FnDef> already) {
+        Map<String, Hir.FnDef> helpers = HelperInliner.helpersOf(from);
+        Set<String> taken = new HashSet<>();
+        for (Hir.FnDef fn : already) {
+            taken.add(fn.name());
+        }
+        List<Hir.FnDef> out = new ArrayList<>();
+        for (String each : standing) {
+            Hir.FnDef fn = helpers.get(each);
+            if (fn == null) {
+                throw new IllegalStateException("a clause of `" + from.name()
+                        + "` left a call to `" + each + "` standing, which it does not define");
+            }
+            if (taken.add(each)) {
                 out.add(fn);
             }
         }
@@ -2721,7 +2774,10 @@ public final class Bodies {
      * <p>The seeds are the trees, and there are two kinds. A definition's body is expanded by {@link
      * LoweredBody}, which answers with what it left standing. A clause — a data's {@code invariant},
      * a behavior's {@code ensures} — is not a definition and is in no table, so what it reaches is
-     * known only to the expansion that read it, and it travels out of {@link Shapes.Settling}. The
+     * known only to the expansion that read it, and it travels with the clause: a data's clauses out
+     * of {@link Shapes.SettledInvariantsGoverning}, which is what a construction of the data checks
+     * and which holds the clauses a spread brings in from another module, and a behavior's out of
+     * {@link Shapes.Settling}. The
      * walk that was here instead listed the places a module writes expressions and did not list
      * {@code ensures}, so a rule reaching a fold asked for no fold.
      *
@@ -2752,9 +2808,11 @@ public final class Bodies {
             Answer<Expanding.Of> against = db.ask(new Expanding(name, InliningPolicy.FULL));
             Answer<Hir.Module> settled = db.ask(new Settled(name));
             Answer<InvariantSettled> settling = db.ask(new Shapes.Settling(name));
+            Answer<Map<TypeSymbol.AtModule, List<SettledInvariant>>> governing =
+                    db.ask(new Shapes.SettledInvariantsGoverning(name));
             Answer<Set<String>> rows = db.ask(new RowMethods(name));
             if (!against.present() || !settled.present() || !settling.present()
-                    || !rows.present()) {
+                    || !governing.present() || !rows.present()) {
                 return Answer.absent();
             }
             HelperGraph graph = against.value().graph();
@@ -2776,7 +2834,19 @@ public final class Bodies {
             // whatever reaches it, so what it leaves standing is answered by that expansion — and a
             // helper nothing reaches leaves nothing standing anywhere, which is why one that folds
             // and is never called asks for no fold.
-            for (ReachName.Declaration standing :settling.value().standingRecursiveCalls()) {
+            //
+            // A data's clauses are read off the answer its constructions are checked against, and
+            // not off this module's settling: a clause a spread brings in was settled by the module
+            // that wrote it, and what it left standing is run here, under the route this module has
+            // to it.
+            for (List<SettledInvariant> clauses : governing.value().values()) {
+                for (SettledInvariant clause : clauses) {
+                    for (ReachName.Declaration standing : clause.callsLeftStanding()) {
+                        require(db, name, graph, required, pending, standing);
+                    }
+                }
+            }
+            for (ReachName.Declaration standing : settling.value().standingInEnsures()) {
                 require(db, name, graph, required, pending, standing);
             }
             Set<String> behaviors = Names.behaviorNames(settled.value());

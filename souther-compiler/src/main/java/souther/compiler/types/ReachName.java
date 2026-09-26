@@ -53,7 +53,25 @@ public sealed interface ReachName extends SettledAnswer {
      * a name added to the language would arrive at that consumer as something to throw on, in
      * whatever program first wrote one.
      */
-    sealed interface Declaration extends ReachName permits Own, OfModule, OfLibrary { }
+    sealed interface Declaration extends ReachName permits Own, OfModule, OfLibrary {
+
+        /**
+         * The same declaration, reached from {@code reader}.
+         *
+         * <p>For a tree one module settled and another reads: the route was worked out for the
+         * module that wrote it, and a module's own helper is reached bare there and under that
+         * module everywhere else. Nothing of this route is kept but what it reaches — the answer is
+         * the one {@link ReachName#of} gives that declaration read from {@code reader}, and not a
+         * rewrite of this route's spelling.
+         */
+        default Declaration reachedFrom(String reader) {
+            return switch (this) {
+                case Own own -> reached(own.denotes(), reader);
+                case OfModule other -> reached(other.denotes(), reader);
+                case OfLibrary library -> library;
+            };
+        }
+    }
 
     /** The spelling this route reaches it by — what a report quotes, and what a name built for a
      * machine is built from. Never what a source wrote: the source may write a module's own
@@ -226,8 +244,7 @@ public sealed interface ReachName extends SettledAnswer {
             // module's own behavior may be written through its own module, and another's may be
             // written bare where an import brought it in — and neither spelling says which module
             // declares what it reaches.
-            case ValueName.OfAModule declared -> declared.module().equals(self)
-                    ? new Own(declared) : new OfModule(declared);
+            case ValueName.OfAModule declared -> reached(declared, self);
             // The library's two shapes are two references. Which of them a name is, the library
             // said when it published it; this is the one place that is turned into a route, and
             // everything after it holds the route and asks nothing.
@@ -238,6 +255,12 @@ public sealed interface ReachName extends SettledAnswer {
             // value by what this module calls it.
             case ValueName.InScope here -> new InScope(here);
         };
+    }
+
+    /** How a declaration of a module is reached from {@code self}: bare from the module that declares
+     *  it, and under that module from any other. */
+    private static Declaration reached(ValueName.OfAModule declared, String self) {
+        return declared.module().equals(self) ? new Own(declared) : new OfModule(declared);
     }
 
 }
