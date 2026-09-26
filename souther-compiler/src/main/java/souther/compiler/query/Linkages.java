@@ -13,12 +13,15 @@ import souther.compiler.check.ValueEntries;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.codegen.LinkageProjections;
 import souther.compiler.codegen.LinkageReader;
+import souther.compiler.copied.CopyRecord;
+import souther.compiler.copied.CopyTarget;
 import souther.compiler.core.CompleteSignature;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.jvm.LinkageProjection;
 import souther.compiler.jvm.LinkageRecord;
 import souther.compiler.jvm.LinkageTarget;
+import souther.compiler.meta.CopyAgreement;
 import souther.compiler.meta.LinkageAgreement;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
@@ -421,12 +424,42 @@ public final class Linkages {
                 };
                 reports.add(Report.raised(said));
             }
+            // What its classes copied is the other half of what they were built against, held the
+            // same way (spec [#a-published-module-agrees-with-what-it-copied]).
+            Map<String, Map<CopyTarget, CopyRecord>> copiesOfferedBy = new HashMap<>();
+            CopyAgreement.Held copies = CopyAgreement.of(onThePath.requiredCopies(),
+                    module -> copiesOfferedBy.computeIfAbsent(module,
+                            m -> Copies.offered(db, m)));
+            for (CopyAgreement.Disagreement disagreement : copies.disagreements()) {
+                CopyTarget target = disagreement.target();
+                Diagnostic said = switch (disagreement) {
+                    case CopyAgreement.Disagreement.NotProvided _ ->
+                            Bodies.BuiltAgainst.builtAgainstAnother(
+                                    new ModuleMessage.ItCopiedWhatTheModuleDoesNotProvide(name,
+                                            target.kind(), target.name(), target.module()),
+                                    name, target.module());
+                    case CopyAgreement.Disagreement.AnotherConstant moved ->
+                            Bodies.BuiltAgainst.builtAgainstAnother(
+                                    new ModuleMessage.ItCopiedAnotherConstant(name,
+                                            target.name(), target.module(), moved.was(),
+                                            moved.now()),
+                                    name, target.module());
+                    case CopyAgreement.Disagreement.Moved moved ->
+                            Bodies.BuiltAgainst.builtAgainstAnother(
+                                    new ModuleMessage.ItCopiedAnotherVersion(name,
+                                            target.kind(), target.name(), target.module(),
+                                            moved.was().form().written()),
+                                    name, target.module());
+                };
+                reports.add(Report.raised(said));
+            }
             if (!reports.isEmpty()) {
                 return Answer.absent(reports);
             }
             // A module not in this compilation, or one that did not come out, or a behavior said
             // missing as a requirement: said where it is found, and not held here.
-            return held.complete() && !saidElsewhere ? Answer.of(Boolean.TRUE) : Answer.absent();
+            return held.complete() && copies.complete() && !saidElsewhere
+                    ? Answer.of(Boolean.TRUE) : Answer.absent();
         }
     }
 

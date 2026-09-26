@@ -236,6 +236,10 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " thing: two bodies alike but for which way they compare are two"
                             + " bodies, and a run recorded against one says nothing about the"
                             + " other"),
+            new Held("souther.compiler.copied.CopiedIdentity.expr",
+                    "what a comparison or an arithmetic does, written into what a reader copied of"
+                            + " another module's definition: a copy that computes another way is"
+                            + " another copy, and a reader built from the first answers otherwise"),
             new Held("souther.compiler.report.ArmVocabulary.label",
                     "writes the operator into the words a report shows for an arm"),
             new Held("souther.compiler.reading.Meetings.run",

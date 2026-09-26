@@ -30,6 +30,7 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.check.BehaviorBodies;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Requirements;
+import souther.compiler.check.ConstEval;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.Lower;
 import souther.compiler.check.Sig;
@@ -41,6 +42,9 @@ import souther.compiler.codegen.Backend;
 import souther.compiler.codegen.Emissions;
 import souther.compiler.codegen.Instrumentation;
 import souther.compiler.codegen.LinkageReader;
+import souther.compiler.copied.CopyContract;
+import souther.compiler.copied.CopyRecord;
+import souther.compiler.copied.CopyTarget;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.Diagnostic;
@@ -64,6 +68,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.SortedMap;
 
 /**
  * The bytecode a module comes to, and the two things that can only be asked once it exists: whether
@@ -113,6 +118,13 @@ public final class Output {
                     return Answer.absent();
                 }
             }
+            // What these classes offer another module to copy, and what they copied: worked out where
+            // the bodies were expanded, and stamped with the declarations.
+            Answer<Copies.Of> offers = db.ask(new Copies.Provided(name));
+            Answer<SortedMap<CopyTarget, CopyRecord>> copied = db.ask(new Copies.Required(name));
+            if (!offers.present() || !copied.present()) {
+                return Answer.absent();
+            }
             try {
                 Emissions emitted = Backend.generate(
                         shipped(in), in.scope(), in.published(), in.kinds(),
@@ -121,6 +133,7 @@ public final class Output {
                         in.requirements(), in.checked(), in.compositions(),
                         in.dischargeClauses(), in.invariantStatements(), in.shapes(), in.checks(),
                         in.standingCalls(), new TheTextsThisCompileHolds(db), in.linkage());
+                emitted.copied(new CopyContract(offers.value().provides(), copied.value()));
                 publishDeclarations(db, emitted);
                 return Answer.of(emitted.seal());
             } catch (CompileException e) {
@@ -743,6 +756,21 @@ public final class Output {
                     writtenValue(check.value()), clausesOf(db, check), check.pos());
         }
 
+        /**
+         * The constant in the four a source can write it as. A construction's argument is one a
+         * source wrote, so anything else is this compiler having folded to something no source
+         * states, which is not a fact about the program being compiled.
+         */
+        private static WrittenValue writtenValue(Object value) {
+            WrittenValue written = ConstEval.asWritten(value);
+            if (written == null) {
+                throw new IllegalStateException("a constant folded to "
+                        + value.getClass().getName()
+                        + ", which is not one of the four a source can write");
+            }
+            return written;
+        }
+
         /** What the type is declared to hold of its values, in declaration order — the names, which
          *  are what a report of a constant that broke one quotes, and which every representation of
          *  the declaration agrees on. None where the declaring module has no scope here, which is a
@@ -759,25 +787,6 @@ public final class Output {
                 named.add(new ConstantConstruction.Clause(clause.name()));
             }
             return named;
-        }
-
-        /**
-         * The constant in the four a source can write it as.
-         *
-         * <p>A fold answers with the object it happened to make, and which of them it is is what
-         * the language wrote. Anything else is this compiler having folded to something no source
-         * states, which is not a fact about the program being compiled.
-         */
-        private static WrittenValue writtenValue(Object value) {
-            return switch (value) {
-                case Long whole -> new WrittenValue.Whole(whole);
-                case Boolean truth -> new WrittenValue.Truth(truth);
-                case String text -> new WrittenValue.Text(text);
-                case java.math.BigDecimal decimal -> new WrittenValue.Decimal(decimal);
-                default -> throw new IllegalStateException("a constant folded to "
-                        + value.getClass().getName()
-                        + ", which is not one of the four a source can write");
-            };
         }
 
         /** The construction as the source wrote it, for the message that quotes it. */

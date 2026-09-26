@@ -947,13 +947,23 @@ public interface Hir {
 
     /** A {@code fn} parameter: a name, and a type only when the {@code fn} is a helper (spec §fn-declaration).
      * A helper's parameter type may be a function type {@link FnType}; a behavior fn's parameter
-     * carries no type ({@code type} is null). {@code typeFromPattern} marks a type read off a
-     * constructor pattern in parameter position rather than written beside the name — a behavior's
-     * implementation may write the pattern, and its type still comes from the behavior. */
-    record FnParam(Binder binder, RetType type, boolean typeFromPattern) implements Hir {
+     * carries no type ({@code type} is null). {@code typeFrom} says where the type came from. */
+    record FnParam(Binder binder, RetType type, ParameterTypeFrom typeFrom) implements Hir {
+
+        public FnParam {
+            Objects.requireNonNull(typeFrom, "a parameter says where its type came from");
+        }
+
         /** A parameter whose type, if any, the author wrote (the common case). */
         public FnParam(Binder binder, RetType type) {
-            this(binder, type, false);
+            this(binder, type, ParameterTypeFrom.WRITTEN);
+        }
+
+        /** Whether the type was read off a constructor pattern in parameter position rather than
+         *  written beside the name — a behavior's implementation may write the pattern, and its
+         *  type still comes from the behavior. */
+        public boolean typeFromPattern() {
+            return typeFrom == ParameterTypeFrom.A_PATTERN;
         }
 
         public String name() {
@@ -969,6 +979,24 @@ public interface Hir {
         public SourcePos pos() {
             return binder.pos();
         }
+    }
+
+    /**
+     * Where a parameter's type came from.
+     *
+     * <p>Kept on the parameter because the settling that infers a type writes it where a written one
+     * stands, and afterwards the two read alike. What the author said of a helper is part of what
+     * the helper is; what the checker worked out from its body follows from the body and from the
+     * rules it was worked out by, and a reader that holds the helper to what it is holds the first
+     * and not the second.
+     */
+    enum ParameterTypeFrom implements DelegatedEqualityIsTheCrossingAnswer {
+        /** Written beside the name, or not written and not yet worked out. */
+        WRITTEN,
+        /** Read off a constructor pattern in parameter position. */
+        A_PATTERN,
+        /** Worked out from the body where the author wrote none. */
+        INFERRED
     }
 
     /**
@@ -1825,8 +1853,20 @@ public interface Hir {
     }
 
     /** A value argument. It becomes a binding, so the body reads a name rather than the argument's
-     * text, and the callee's declared type for it comes along. */
-    record Bound(Binder binder, RetType declaredType, Expr value) {}
+     * text, and the callee's declared type for it comes along. {@code argument} is which argument
+     * of the call it is, counted in the order the call writes them. */
+    record Bound(Binder binder, RetType declaredType, Expr value, int argument) {
+
+        /** The same argument, holding {@code rewritten}. */
+        public Bound with(Expr rewritten) {
+            return new Bound(binder, declaredType, rewritten, argument);
+        }
+
+        /** The same argument, bound as {@code renamed} and holding {@code rewritten}. */
+        public Bound with(Binder renamed, Expr rewritten) {
+            return new Bound(renamed, declaredType, rewritten, argument);
+        }
+    }
 
     /**
      * A function argument. It leaves no binding, so what the signature said about it reaches a
@@ -1842,8 +1882,19 @@ public interface Hir {
      * is for a function written in place. Where it does not — the callee named a function parameter
      * and never used it — the body says nothing about it at all, and this is the only place it can
      * be held to the type the callee declared for it.
+     *
+     * <p>{@code argument} is which argument of the call it is, counted in the order the call writes
+     * them. Which arguments are functions and which are values is the callee's to say, so what the
+     * call wrote, and in what order, is read off this and {@link Bound#argument} together.
      */
-    record Given(RetType declaredType, Expr value, boolean applied, RetType arrivesAs) {}
+    record Given(RetType declaredType, Expr value, boolean applied, RetType arrivesAs,
+                 int argument) {
+
+        /** The same argument, holding {@code rewritten}. */
+        public Given with(Expr rewritten) {
+            return new Given(declaredType, rewritten, applied, arrivesAs, argument);
+        }
+    }
 
     /** A list literal {@code [e1, e2, ...]} (one or more elements of the same type).
      *
@@ -2923,8 +2974,7 @@ public interface Hir {
             case Expansion ex -> {
                 List<Bound> bound = each(ex.bound(), b -> {
                     Expr value = atExpr.apply(b.value());
-                    return value == b.value() ? b
-                            : new Bound(b.binder(), b.declaredType(), value);
+                    return value == b.value() ? b : b.with(value);
                 });
                 Expr body = atExpr.apply(ex.body());
                 yield bound == ex.bound() && body == ex.body() ? ex

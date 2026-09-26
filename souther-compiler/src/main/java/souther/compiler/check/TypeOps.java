@@ -1384,21 +1384,48 @@ public final class TypeOps {
      */
     private static List<Hir.InvariantClause> settledClauses(
             TypeSymbol.AtModule named, Symbols symbols, Set<TypeSymbol.AtModule> onThePath) {
+        List<Hir.InvariantClause> invs = new ArrayList<>();
+        for (Hir.Data data : governing(named, symbols, onThePath)) {
+            invs.addAll(data.invariants());
+        }
+        return invs;
+    }
+
+    /**
+     * Every declaration whose clauses govern {@code named}, as {@link #settledClausesGoverning} reads
+     * them: what its spreads take in, first and in turn, and then itself.
+     *
+     * <p>What a construction of {@code named} checks is these declarations' clauses, so a spread of a
+     * declaration another module declares is a copy of that declaration's invariant in the classes
+     * that construct this one. The same walk as the clauses, so the two cannot come to disagree about
+     * which declarations are taken in.
+     */
+    public static List<TypeSymbol.AtModule> declarationsGoverning(TypeSymbol.AtModule named,
+                                                                  Symbols symbols) {
+        List<TypeSymbol.AtModule> out = new ArrayList<>();
+        for (Hir.Data data : governing(named, symbols, new LinkedHashSet<>())) {
+            out.add(data.declares());
+        }
+        return out;
+    }
+
+    private static List<Hir.Data> governing(TypeSymbol.AtModule named, Symbols symbols,
+                                            Set<TypeSymbol.AtModule> onThePath) {
         if (!(symbols.declaredNode(named) instanceof Hir.Data data)) {
             return List.of();
         }
         onThePath.add(named);
-        List<Hir.InvariantClause> invs = new ArrayList<>();
+        List<Hir.Data> out = new ArrayList<>();
         for (Hir.Name inc : data.includes()) {
             if (inc.answered() instanceof Hir.Name.Denoting denoting
                     && denoting.type() instanceof TypeSymbol.AtModule spread
                     && !onThePath.contains(spread)) {
-                invs.addAll(settledClauses(spread, symbols, onThePath));
+                out.addAll(governing(spread, symbols, onThePath));
             }
         }
         onThePath.remove(named);
-        invs.addAll(data.invariants());
-        return invs;
+        out.add(data);
+        return out;
     }
 
     /**

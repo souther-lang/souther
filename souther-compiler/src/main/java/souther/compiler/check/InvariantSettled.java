@@ -1,12 +1,14 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.copied.CopyTarget;
 import souther.compiler.diag.CompileException;
 import souther.compiler.types.TypeKey;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedSet;
 
 /**
  * An expandable module whose invariants say what they say — every clause is the rule it states,
@@ -52,10 +54,14 @@ public final class InvariantSettled {
 
     private final Hir.Module module;
     private final java.util.SequencedSet<souther.compiler.types.ReachName.Declaration> standing;
+    private final SequencedSet<CopyTarget> copied;
+    private final Map<TypeKey, SequencedSet<CopyTarget>> copiedBy;
 
-    private InvariantSettled(Expansion<Hir.Module> expanded) {
-        this.module = expanded.value();
-        this.standing = expanded.standing();
+    private InvariantSettled(ClauseHelpers.SettledClauses settled) {
+        this.module = settled.expanded().value();
+        this.standing = settled.expanded().standing();
+        this.copied = settled.expanded().copied();
+        this.copiedBy = Map.copyOf(settled.copiedBy());
     }
 
     /**
@@ -83,6 +89,31 @@ public final class InvariantSettled {
      */
     public java.util.SequencedSet<souther.compiler.types.ReachName.Declaration> standingRecursiveCalls() {
         return standing;
+    }
+
+    /**
+     * Every declaration of another module the clauses of this module copied: a helper or a value a
+     * clause names, expanded into it.
+     *
+     * <p>Here for the reason {@link #standingRecursiveCalls} is. The clauses are what this module's
+     * constructions and decoders check, so what they copied is part of what its classes are built
+     * against, and only the expansion that read them knows it.
+     */
+    public SequencedSet<CopyTarget> copiedFromElsewhere() {
+        return copied;
+    }
+
+    /**
+     * What settling the clauses of {@code declaration} copied of other modules' declarations.
+     *
+     * <p>Asked by a reader that checks those clauses because a type of its own includes the
+     * declaration: the clauses it checks hold what those declarations said, so it copies them along
+     * with the clauses. None where the clauses copied nothing, or the declaration is not this
+     * module's.
+     */
+    public SequencedSet<CopyTarget> copiedBy(TypeKey declaration) {
+        SequencedSet<CopyTarget> found = copiedBy.get(declaration);
+        return found == null ? java.util.Collections.emptySortedSet() : found;
     }
 
 
@@ -183,21 +214,23 @@ public final class InvariantSettled {
     }
 
     /**
-     * Both of what this answers with. The standing set is not derived from the tree by anything that
-     * reads this — it is what the expansion that produced the tree met on the way — so a state
-     * carrying a different one is a different answer, whatever the trees compare as. Left out, the
-     * store would find a recomputed answer equal to the one it held and leave everything that reads
-     * the standing set on the old one.
+     * All of what this answers with. The standing set and what was copied are not derived from the
+     * tree by anything that reads this — they are what the expansion that produced the tree met on
+     * the way — so a state carrying a different one is a different answer, whatever the trees
+     * compare as. Left out, the store would find a recomputed answer equal to the one it held and
+     * leave everything that reads them on the old one.
      */
     @Override
     public boolean equals(Object o) {
         return o instanceof InvariantSettled other && module.equals(other.module)
-                && standing.equals(other.standing);
+                && standing.equals(other.standing) && copied.equals(other.copied)
+                && copiedBy.equals(other.copiedBy);
     }
 
     @Override
     public int hashCode() {
-        return module.hashCode() * 31 + standing.hashCode();
+        return ((module.hashCode() * 31 + standing.hashCode()) * 31 + copied.hashCode()) * 31
+                + copiedBy.hashCode();
     }
 
     @Override

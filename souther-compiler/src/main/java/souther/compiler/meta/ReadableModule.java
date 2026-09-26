@@ -4,6 +4,8 @@ import souther.compiler.ast.Ast;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.Preserved;
 import souther.compiler.check.Scoping;
+import souther.compiler.copied.CopyRecord;
+import souther.compiler.copied.CopyTarget;
 import souther.compiler.cst.SourceLayout;
 import souther.compiler.jvm.LinkageRecord;
 import souther.compiler.jvm.LinkageTarget;
@@ -99,6 +101,20 @@ public sealed interface ReadableModule permits ModuleReadback.AsRead {
      * holds each of those declarations, as it has them, to what is recorded here.
      */
     Map<LinkageTarget, LinkageRecord> requires();
+
+    /**
+     * What each of its declarations offers another module to copy into its classes, as its classes
+     * offered it where they were built — not worked out again, for the reason {@link #provides} is
+     * not.
+     */
+    Map<CopyTarget, CopyRecord> providedCopies();
+
+    /**
+     * What its classes copied of each declaration of another module, as it was when they copied it.
+     * A compilation reading it holds each of those declarations, as it has them, to what is recorded
+     * here.
+     */
+    Map<CopyTarget, CopyRecord> requiredCopies();
 
     /** What its library import lines brought in, which the module itself no longer says. */
     List<Scoping.Claim> libraryClaims();

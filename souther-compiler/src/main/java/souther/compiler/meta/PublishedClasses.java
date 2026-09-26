@@ -85,16 +85,17 @@ public interface PublishedClasses {
                              List<String> imports, List<String> types,
                              List<String> behaviors, List<String> invariantHelpers,
                              List<String> valueAnswers, List<String> providedLinkages,
-                             List<String> requiredLinkages) {
+                             List<String> requiredLinkages, List<String> providedCopies,
+                             List<String> requiredCopies) {
 
         /** A module that records no answers for its values, offers nothing another module's classes
-         *  link by and whose classes link against nothing of another module, which is what a writer
-         *  that has none of these to record wrote. */
+         *  link by or copy, and whose classes link against and copy nothing of another module, which
+         *  is what a writer that has none of these to record wrote. */
         public SoutherModuleView(int compat, String compiler, String header, List<String> imports,
                                  List<String> types, List<String> behaviors,
                                  List<String> invariantHelpers) {
             this(compat, compiler, header, imports, types, behaviors, invariantHelpers, List.of(),
-                    List.of(), List.of());
+                    List.of(), List.of(), List.of(), List.of());
         }
     }
 }

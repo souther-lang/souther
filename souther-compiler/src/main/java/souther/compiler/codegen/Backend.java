@@ -1428,16 +1428,23 @@ public final class Backend {
      * list of nothing, which fits wherever it is used, so it would admit a carried body that uses
      * an element of the accumulator as something the element is not, which this reader refuses.
      *
+     * <p>Version 31 changes what a module's metadata carries: the module annotation records what
+     * each of its declarations offers another module to copy into its classes and what its own
+     * classes copied of each declaration of another module, and the reading asks for both. A jar
+     * written before it says nothing of what it copied, and would be admitted beside a dependency
+     * whose helper or constant it carries a stale copy of.
+     *
      * <p>That is also where this number stops. It says whether a jar and this compiler agree on
      * what the metadata says and on the rules a declaration is turned into JVM facts by — a
      * behavior's class and methods, how one is held and built, a type's layout and codecs. It does
      * not say whether a jar agrees with the jars beside it: a module built against one version of a
      * dependency and read beside another is held, declaration by declaration, to what each
-     * declaration it links against offers now (spec
-     * {@code [#a-published-module-agrees-with-what-it-was-built-against]}). An edit to a
-     * declaration moves that and not this; an edit to a rule moves this.
+     * declaration it links against or copies offers now (spec
+     * {@code [#a-published-module-agrees-with-what-it-was-built-against]},
+     * {@code [#a-published-module-agrees-with-what-it-copied]}). An edit to a declaration moves
+     * that and not this; an edit to a rule moves this.
      */
-    public static final int BOUNDARY_VERSION = 30;
+    public static final int BOUNDARY_VERSION = 31;
 
     /** Emits the class a module's own declarations are published on, carrying {@code declarations}.
      * What it says is the caller's; that it is built like every other generated class — the same Java

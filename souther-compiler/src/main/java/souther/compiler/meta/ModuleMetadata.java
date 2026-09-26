@@ -3,7 +3,7 @@ package souther.compiler.meta;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
-import souther.compiler.check.HelperInliner;
+import souther.compiler.check.CarriedDefinitions;
 import souther.compiler.check.Preserved;
 import souther.compiler.check.ValueEntries;
 import souther.compiler.check.Sig;
@@ -27,11 +27,8 @@ import java.lang.classfile.ClassTransform;
 import java.lang.classfile.attribute.RuntimeInvisibleAnnotationsAttribute;
 import java.lang.constant.ClassDesc;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Writes a module's declarations into the classes it generated, so another project can import the
@@ -139,7 +136,9 @@ public final class ModuleMetadata {
                         behaviors, ValueAnswers.written(module.name(),
                                 ValueEntries.publishedValues(resolved), settledValues),
                         PublishedLinkages.written(out.provides()),
-                        PublishedLinkages.written(out.requires()))));
+                        PublishedLinkages.written(out.requires()),
+                        PublishedCopies.written(out.copies().provides()),
+                        PublishedCopies.written(out.copies().requires()))));
     }
 
     /**
@@ -223,7 +222,9 @@ public final class ModuleMetadata {
                                                List<String> types, List<String> behaviors,
                                                List<String> valueAnswers,
                                                List<String> providedLinkages,
-                                               List<String> requiredLinkages) {
+                                               List<String> requiredLinkages,
+                                               List<String> providedCopies,
+                                               List<String> requiredCopies) {
         return Annotation.of(MODULE_ANN,
                 AnnotationElement.ofInt("compat", Backend.BOUNDARY_VERSION),
                 AnnotationElement.ofString("compiler", compilerVersion()),
@@ -235,7 +236,9 @@ public final class ModuleMetadata {
                 strings("invariantHelpers", invariantHelpers(module, resolved, slices)),
                 strings("valueAnswers", valueAnswers),
                 strings("providedLinkages", providedLinkages),
-                strings("requiredLinkages", requiredLinkages));
+                strings("requiredLinkages", requiredLinkages),
+                strings("providedCopies", providedCopies),
+                strings("requiredCopies", requiredCopies));
     }
 
     private static AnnotationElement strings(String name, List<String> values) {
@@ -247,16 +250,9 @@ public final class ModuleMetadata {
     }
 
     /**
-     * The {@code let}s a reader of this module's declarations needs, as they were written: the
-     * helpers its invariants call, and the definitions it publishes.
-     *
-     * <p>An invariant is part of what a type is, so it has to be readable where the type is imported,
-     * and it cannot be read without the helpers it names. A published value or helper is the same: a
-     * value's body is read by the analyses of the reader and a helper is expanded where it is called
-     * (ADR-0072), so a reader needs the body, and the body's own workings with it. A value runs
-     * where it is declared and is not executed from what is carried here. A {@code let} neither
-     * reaches is not carried — this publishes what the declarations need, not the module's
-     * implementation.
+     * The {@code let}s a reader of this module's declarations needs, as they were written: what the
+     * module hands over ({@link CarriedDefinitions}). A value runs where it is declared and is not
+     * executed from what is carried here.
      *
      * <p>What travels is the source as written, which the reader's compiler reads back. That makes
      * the meaning of a carried body part of what a jar promises, and it is {@link
@@ -264,76 +260,11 @@ public final class ModuleMetadata {
      */
     private static List<String> invariantHelpers(Ast.Module module, Hir.Module resolved,
                                                  CstFrontend.Slices slices) {
-        // A behavior's body is not published — a reader has its signature and calls it — so a
-        // behavior's own `let` is not among what may be carried, whatever reaches its spelling.
-        Set<String> behaviorNames = new LinkedHashSet<>();
-        for (Hir.BehaviorDef b : resolved.behaviors()) {
-            behaviorNames.add(b.name());
-        }
-        // What may be carried is what the model declares. The resolved module is wider than that:
-        // an attached file's values join the module its rows join, and an attached file does not
-        // add to what the model compiles to — so a `let` only it declares has no source here to
-        // carry. Asked of the definition, which is where that is recorded: whether a slice of its
-        // text was kept is how the jar is written, and would answer this by accident.
-        Map<String, Hir.FnDef> own = new LinkedHashMap<>();
-        for (Hir.FnDef fn : resolved.fns()) {
-            if (HelperInliner.isHelperName(behaviorNames, fn.name()) && fn.role().isTheModels()) {
-                own.put(fn.name(), fn);
-            }
-        }
-
-        Set<String> reached = new LinkedHashSet<>();
-        for (Hir.Def def : resolved.defs()) {
-            if (def instanceof Hir.Data d) {
-                for (Hir.InvariantClause clause : d.invariants()) {
-                    reach(clause.expr(), own, reached);
-                }
-            }
-        }
-        for (Hir.BehaviorDef behavior : resolved.behaviors()) {
-            if (behavior instanceof Hir.SpecBehavior spec) {
-                for (Hir.EnsuresClause clause : spec.ensures()) {
-                    for (Hir.EnsuresArm arm : clause.arms()) {
-                        reach(arm.expr(), own, reached);
-                    }
-                }
-            }
-        }
-        Set<String> exposed = module.published();
-        for (Hir.FnDef fn : own.values()) {
-            if (exposed.contains(fn.name()) && fn.body() instanceof Hir.FnBody.Written w) {
-                reached.add(fn.name());
-                reach(w.expr(), own, reached);
-            }
-        }
         List<String> texts = new ArrayList<>();
-        for (String name : reached) {
+        for (String name : CarriedDefinitions.of(resolved, module.published())) {
             texts.add(slices.fns().get(name));
         }
         return texts;
     }
 
-    /**
-     * A helper is reached by being called and by being named — handing one to a combinator, as in
-     * {@code all(positive, items)}, needs it just as much as calling it does.
-     *
-     * <p>One set does for both visited and reached: a helper is added the first time it is seen, and
-     * nothing is ever taken out, so a second sighting stops the walk by itself.
-     */
-    private static void reach(Hir.Expr e, Map<String, Hir.FnDef> own, Set<String> reached) {
-        // What a name reaches, read off the name rather than off its spelling. A clause is written
-        // among bindings — a data's fields, a behavior's parameters, `value` — and one of those
-        // spelled like a helper is not a use of that helper. Answered by spelling, a parameter
-        // called `positive` carried the module's `positive` across the boundary, and one called
-        // like a behavior carried that behavior's implementation.
-        String named = e instanceof Hir.Var.Denoting var
-                && var.denotes() instanceof ValueName.Helper helper ? helper.name() : null;
-        if (named != null && own.containsKey(named) && reached.add(named)) {
-            // an `intrinsic` helper is a name with nothing to walk into
-            if (own.get(named).body() instanceof Hir.FnBody.Written w) {
-                reach(w.expr(), own, reached);
-            }
-        }
-        Hir.forEachChild(e, c -> reach(c, own, reached));
-    }
 }

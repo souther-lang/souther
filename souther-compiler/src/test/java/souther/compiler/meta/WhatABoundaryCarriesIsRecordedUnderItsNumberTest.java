@@ -40,12 +40,14 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  */
 class WhatABoundaryCarriesIsRecordedUnderItsNumberTest {
 
-    /** A module whose behavior {@link #MODULE} builds, so what a module's classes build of another
-     *  one is written with something in it. */
+    /** A module whose behavior {@link #MODULE} builds and whose constant it copies, so what a
+     *  module's classes build of another one and what they copy of it are written with something in
+     *  them. */
     private static final String RATES = """
-            module shared.rates exposing ( half )
+            module shared.rates exposing ( half, offset )
             behavior half : (n: Int) -> Int
             let half (n) = n - 1
+            let offset = 1
             """;
 
     /**
@@ -60,7 +62,7 @@ class WhatABoundaryCarriesIsRecordedUnderItsNumberTest {
     private static final String MODULE = """
             module shared.money exposing ( Amount, Receipt, ceiling, charge, quote, settle, halve )
             import String ( length )
-            import shared.rates ( half )
+            import shared.rates ( half, offset )
 
             data Amount = Int
                 invariant value >= 0 && withinCap(value)
@@ -81,7 +83,7 @@ class WhatABoundaryCarriesIsRecordedUnderItsNumberTest {
             let settle (a, quote) = quote(a)
 
             behavior halve : (n: Int) -> Int
-            let halve (n) = half(n)
+            let halve (n) = half(n) + offset
             """;
 
     /** Both modules, compiled together. */

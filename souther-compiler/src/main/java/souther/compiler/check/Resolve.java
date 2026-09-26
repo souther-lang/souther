@@ -873,7 +873,8 @@ public final class Resolve {
         InForce bound = InForce.of(Reading.THE_MODELS_OWN);
         for (Ast.FnParam p : f.params()) {
             Answered a = bind(bound, p.binder());
-            params.add(new Hir.FnParam(a.binder(), paramType(p.type()), p.typeFromPattern()));
+            params.add(new Hir.FnParam(a.binder(), paramType(p.type()), p.typeFromPattern()
+                    ? Hir.ParameterTypeFrom.A_PATTERN : Hir.ParameterTypeFrom.WRITTEN));
             bound = a.bound();
         }
         Hir.FnBody body = switch (f.body()) {

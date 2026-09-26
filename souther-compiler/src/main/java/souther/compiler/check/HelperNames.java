@@ -215,8 +215,7 @@ public final class HelperNames {
         for (Hir.Given g : ex.given()) {
             Hir.Expr value = rewrite.apply(g.value());
             any |= value != g.value();
-            given.add(value == g.value() ? g
-                    : new Hir.Given(g.declaredType(), value, g.applied(), g.arrivesAs()));
+            given.add(value == g.value() ? g : g.with(value));
         }
         return any ? new Hir.Expansion(ex.callee(), ex.application(), ex.at(), ex.bound(), given,
                 ex.declaredReturn(), ex.body(), ex.pos(), ex.region()) : e;

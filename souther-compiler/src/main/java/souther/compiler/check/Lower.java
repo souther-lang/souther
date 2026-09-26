@@ -1,14 +1,18 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.copied.CopyTarget;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.ValueName;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 
 /**
  * The Lower stage (ADR-0021): rewrites the surface AST toward the form the backend emits, so the
@@ -44,14 +48,20 @@ public final class Lower {
      * sites and never are, so a definition here having a role says nothing about whether {@code
      * lowered} carries a method for it — {@link LoweringRole#emitted} is asked at the boundary that
      * decides that, not here.
+     *
+     * <p>{@code copied} is every declaration of another module a method of {@code lowered} carries a
+     * copy of: what the expansions of those methods copied, and each method that is itself another
+     * module's recursive helper taken on here.
      */
     public record Lowered(Hir.Module settled, Hir.Module lowered,
                           Map<BindingId, ValueName.Helper> carried,
-                          Map<String, LoweringRole> roles) {
+                          Map<String, LoweringRole> roles,
+                          SortedSet<CopyTarget> copied) {
 
         public Lowered {
             carried = Map.copyOf(carried);
             roles = Map.copyOf(roles);
+            copied = Collections.unmodifiableSortedSet(new TreeSet<>(copied));
         }
     }
 
@@ -98,7 +108,8 @@ public final class Lower {
         // What this expansion could not remove travels with what it produced. The inliner was made
         // for this body, so what it left standing is this body's and nothing else's.
         return new Expansion<>(fn.withBody(new Hir.FnBody.Written(desugar(expanded))),
-                inliner.leftStanding(), inliner.provenance(), inliner.suppliedRules());
+                inliner.leftStanding(), inliner.copiedFromElsewhere(), inliner.provenance(),
+                inliner.suppliedRules());
     }
 
     /**
@@ -111,13 +122,14 @@ public final class Lower {
         Hir.FnDef desugared = method.definition().withBody(
                 new Hir.FnBody.Written(desugar(method.definition().writtenBody())));
         return new Expansion<>(new LoweredDefinition(desugared, method.carried()),
-                inliner.leftStanding(), inliner.provenance(), inliner.suppliedRules());
+                inliner.leftStanding(), inliner.copiedFromElsewhere(), inliner.provenance(),
+                inliner.suppliedRules());
     }
 
     /** {@code expansion} of a definition that runs as the body it was written with. */
     public static Expansion<LoweredDefinition> asWritten(Expansion<Hir.FnDef> expansion) {
         return new Expansion<>(LoweredDefinition.asWritten(expansion.value()), expansion.standing(),
-                expansion.provenance(), expansion.supplied());
+                expansion.copied(), expansion.provenance(), expansion.supplied());
     }
 
     /**
@@ -129,7 +141,8 @@ public final class Lower {
         Hir.FnDef template = inliner.valueTemplate(fn);
         return new Expansion<>(
                 template.withBody(new Hir.FnBody.Written(desugar(template.writtenBody()))),
-                inliner.leftStanding(), inliner.provenance(), inliner.suppliedRules());
+                inliner.leftStanding(), inliner.copiedFromElsewhere(), inliner.provenance(),
+                inliner.suppliedRules());
     }
 
     /** Which bindings the {@code depends on} names are: the trailing parameters that carry them. A

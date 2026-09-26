@@ -35,6 +35,8 @@ final class HowAnAnswerHoldsThings {
                         new LinkedHashMap<>(Map.of(new String("a"), new String("b")))),
                 () -> java.util.Collections.unmodifiableSequencedMap(
                         new LinkedHashMap<>(Map.of(new String("a"), new String("b")))),
+                () -> java.util.Collections.unmodifiableSortedMap(
+                        new java.util.TreeMap<>(Map.of(new String("a"), new String("b")))),
                 () -> List.of(new String("a")),
                 () -> List.of(new String("a"), new String("b"), new String("c")),
                 () -> new java.util.ArrayList<>(List.of(new String("a"))),
@@ -48,6 +50,8 @@ final class HowAnAnswerHoldsThings {
                         new java.util.LinkedHashSet<>(Set.of(new String("a")))),
                 () -> java.util.Collections.unmodifiableSequencedSet(
                         new java.util.LinkedHashSet<>(Set.of(new String("a")))),
+                () -> java.util.Collections.unmodifiableSortedSet(
+                        new java.util.TreeSet<>(Set.of(new String("a")))),
                 () -> Optional.of(new String("a")),
                 // And the one the language ships that says it keeps none of the contract, so that
                 // a line above going quiet is not the whole of what is asked.

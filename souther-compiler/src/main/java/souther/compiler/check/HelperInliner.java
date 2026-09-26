@@ -7,6 +7,7 @@ import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.StructuralCost;
 import souther.compiler.ast.WrittenName;
+import souther.compiler.copied.CopyTarget;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ApplicationOrigin;
@@ -512,6 +513,20 @@ public final class HelperInliner {
     private final java.util.SequencedSet<ReachName.Declaration> leftStanding = new java.util.LinkedHashSet<>();
 
     /**
+     * Every declaration of another module this expansion put a copy of into what it wrote: a helper
+     * it expanded, a value whose body or constant it wrote where the value was named.
+     *
+     * <p>Written where the copy is made, for the reason {@link #leftStanding} is. Afterwards the tree
+     * holds what the declaration said and nothing that names it, so a reader asking which
+     * declarations the tree was built from can no longer find out from the tree.
+     */
+    private final SequencedSet<CopyTarget> copied = new LinkedHashSet<>();
+
+    /** What each expansion being asked about has copied, innermost last — for the reason
+     *  {@link #standingHere} is kept beside {@link #leftStanding}. */
+    private final java.util.List<SequencedSet<CopyTarget>> copiedHere = new java.util.ArrayList<>();
+
+    /**
      * What each expansion being asked about has left standing, innermost last.
      *
      * <p>Beside {@link #leftStanding} and not read off it. That set answers for every tree this
@@ -617,6 +632,44 @@ public final class HelperInliner {
      */
     public java.util.SequencedSet<ReachName.Declaration> leftStanding() {
         return java.util.Collections.unmodifiableSequencedSet(leftStanding);
+    }
+
+    /**
+     * What this expansion copied of other modules' declarations, in the order it copied them.
+     *
+     * <p>Read off the expansion that made the copies, as {@link #leftStanding} is, and for every tree
+     * this inliner was driven over: what a module's classes are built from is a question about the
+     * module, and a caller that drove it over one tree is the one that knows which tree that was.
+     */
+    public SequencedSet<CopyTarget> copiedFromElsewhere() {
+        return java.util.Collections.unmodifiableSequencedSet(copied);
+    }
+
+    /** That the helper {@code reaches} declares was copied here, where it is one this module copies
+     *  ({@link CopyTarget#declaredElsewhere}). */
+    private void copiesHelper(ReachName.Declaration reaches) {
+        ValueName.Helper declared = CopyTarget.declaredElsewhere(reaches, moduleName());
+        if (declared != null) {
+            copies(new CopyTarget.Helper(declared));
+        }
+    }
+
+    /** That the value {@code reaches} declares was copied here, its body or its constant, where it is
+     *  one this module copies. */
+    private void copiesValue(ReachName.Declaration reaches) {
+        ValueName.Helper declared = CopyTarget.declaredElsewhere(reaches, moduleName());
+        if (declared != null) {
+            copies(new CopyTarget.Value(declared));
+        }
+    }
+
+    /** {@code target}, copied: into what this inliner answers for and into every expansion being
+     *  asked about, which holds this one. */
+    private void copies(CopyTarget target) {
+        copied.add(target);
+        for (SequencedSet<CopyTarget> asked : copiedHere) {
+            asked.add(target);
+        }
     }
 
     /**
@@ -759,6 +812,40 @@ public final class HelperInliner {
         return fn.reachedAs(new ReachName.OfModule(new ValueName.Helper(module, fn.name())))
                 .withBody(new Hir.FnBody.Written(
                         HelperNames.publishedBy(HelperNames.qualifyHelpersOf(closed, module), module)));
+    }
+
+    /**
+     * {@link #closeAcross}, with what closing it copied of other modules' declarations.
+     *
+     * <p>A reader handed the closed definition copies those along with it, since the closing wrote
+     * them into what it is handed and nothing there names them any more.
+     */
+    public Expansion<Hir.FnDef> closedAcross(Hir.FnDef fn, String module) {
+        return expanding(() -> closeAcross(fn, module));
+    }
+
+    /**
+     * The clauses of {@code data}, a declaration of {@code module}, closed over that module and no
+     * other: its own helpers and values expanded, and every definition of another module left as
+     * what names it — a value as its name, a helper as an expansion whose callee says which one.
+     *
+     * <p>What a declaration's invariant is, said in terms of its own module. The clauses a reader
+     * checks have the other modules' definitions written into them as well, and those are copies of
+     * those definitions, held to what they offer and not to what this declaration does.
+     */
+    public List<Hir.InvariantClause> closeClausesAcross(Hir.Data data, String module) {
+        if (!module.equals(table.module())) {
+            throw new IllegalArgumentException("`" + module + "` is not the module this expands"
+                    + " into, which is `" + table.module() + "`");
+        }
+        ValuesLeftNamed namedBefore = valuesStayNamed;
+        valuesStayNamed = ValuesLeftNamed.OF_OTHER_MODULES;
+        try {
+            BindingOwner declared = new BindingOwner.OfData(data.declares());
+            return Hir.mapClauses(data.invariants(), clause -> inline(clause, declared));
+        } finally {
+            valuesStayNamed = namedBefore;
+        }
     }
 
     /** The module these helpers belong to — the one whose bodies this expands into. */
@@ -1280,17 +1367,22 @@ public final class HelperInliner {
     }
 
     /**
-     * What one run of {@code expansion} left standing, for a driver expanding something this class
-     * has no single entry point for — the several clauses of one declaration, expanded one after
-     * another into the tree the declaration becomes.
+     * What one run of {@code expansion} left standing and what it copied of other modules'
+     * declarations, for a driver expanding something this class has no single entry point for — the
+     * several clauses of one declaration, expanded one after another into the tree the declaration
+     * becomes, or the definitions of a module closed one after another.
      */
     <T> Expansion<T> expanding(java.util.function.Supplier<T> expansion) {
         java.util.SequencedSet<ReachName.Declaration> asked = new java.util.LinkedHashSet<>();
+        SequencedSet<CopyTarget> copiedByIt = new LinkedHashSet<>();
         standingHere.add(asked);
+        copiedHere.add(copiedByIt);
         try {
-            return new Expansion<>(expansion.get(), asked);
+            return new Expansion<>(expansion.get(), asked, copiedByIt, ElementProvenance.NONE,
+                    souther.compiler.coverage.SuppliedRules.NONE);
         } finally {
             standingHere.remove(standingHere.size() - 1);
+            copiedHere.remove(copiedHere.size() - 1);
         }
     }
 
@@ -1414,12 +1506,11 @@ public final class HelperInliner {
             case Hir.Expansion ex -> {
                 List<Hir.Bound> bound = new ArrayList<>();
                 for (Hir.Bound b : ex.bound()) {
-                    bound.add(new Hir.Bound(b.binder(), b.declaredType(), inline(b.value())));
+                    bound.add(b.with(inline(b.value())));
                 }
                 List<Hir.Given> given = new ArrayList<>();
                 for (Hir.Given g : ex.given()) {
-                    given.add(new Hir.Given(g.declaredType(), inline(g.value()), g.applied(),
-                            g.arrivesAs()));
+                    given.add(g.with(inline(g.value())));
                 }
                 // Walked with this expansion as the copy being written: a call the body still holds
                 // is one this expansion made, not one the body around it made.
@@ -1588,12 +1679,24 @@ public final class HelperInliner {
         // takes nothing. The value is substituted and the arguments are applied to it.
         if (helper.params().isEmpty() && !args.isEmpty()
                 && call.function() instanceof Hir.Var named) {
+            // A body being closed leaves another module's value as its name, applied or not: the
+            // reader decides what stands for it, as it does wherever the value is named.
+            if (reaches != null && leftNamed(reaches)) {
+                return call.withArgs(args);
+            }
             Hir.FnDef applied = appliedValue(named);
             return inline(call.replacedBy(applied == null ? valueOf(named)
                     : appliedValueBody((Hir.Var.Denoting) named, applied), args));
         }
         if (args.size() != helper.params().size()) {
             throw wrongArity(call, helper, args.size());
+        }
+        // The body is copied here and the call is gone, so this is the last place that knows which
+        // declaration the copy is of — followed through the names that hold it, since a helper
+        // handed over and applied under a parameter's name is copied all the same.
+        ReachName.Declaration copiedFrom = callee == null ? null : reaches(callee);
+        if (copiedFrom != null) {
+            copiesHelper(copiedFrom);
         }
         // Everything this expansion writes belongs to it: the bindings its arguments become,
         // the one a lambda given to a function parameter is registered under, the one its
@@ -1936,7 +2039,7 @@ public final class HelperInliner {
                 // function parameter is what removes it, because the application β-reduces
                 // to the lambda's body, so the expansion holds no reference either way.
                 given.add(new Hir.Given(instantiated(p.type(), applied), arg,
-                        references(helper.writtenBody(), p.binder().id()), arrivesAs(arg)));
+                        references(helper.writtenBody(), p.binder().id()), arrivesAs(arg), i));
                 Hir.FnType declares = declaredFn(p.type(), applied);
                 // Which rule this call handed to this parameter, said where the call site is
                 // still here to say it. What the expansion holds afterwards is the rule's own body
@@ -2003,7 +2106,7 @@ public final class HelperInliner {
                     handedHere.put(f.id(), crossedInto(null, crossingInto, i));
                     stands(f.id(), ruleOf(lambda));
                     unreduced.put(f.id(),
-                            new Hir.Bound(f, instantiated(p.type(), applied), lambda));
+                            new Hir.Bound(f, instantiated(p.type(), applied), lambda, i));
                     // Only where the lambda takes the one value an element arrives as. A closure
                     // given more — an index beside the element — answers about a pair, and one
                     // answer per element says nothing about which of the two a projection is of.
@@ -2022,7 +2125,7 @@ public final class HelperInliner {
                 // carry the parameter's declared type onto the binding, so a value known to
                 // be a sum (an annotated `s: S`) is not narrowed to the argument's specific
                 // case when the body is re-checked inline — a `match s` inside still sees S.
-                bound.add(new Hir.Bound(f, instantiated(p.type(), applied), arg));
+                bound.add(new Hir.Bound(f, instantiated(p.type(), applied), arg, i));
                 // Where the argument is itself the expansion of an operation over a collection,
                 // what this binding holds came from that operation's own container — and by the
                 // time anything reads the tree, the operation is gone. Recorded here, which is the
@@ -2229,6 +2332,9 @@ public final class HelperInliner {
             return v;
         }
         Hir.Expr settled = settled(named);
+        if (settled != named) {
+            copiesValue(reaches);
+        }
         return settled != null ? settled : substituted(named.reaches(), value.writtenBody());
     }
 
@@ -2245,6 +2351,7 @@ public final class HelperInliner {
      * position, and each is answered by what its position needs.
      */
     private Hir.Expr appliedValueBody(Hir.Var.Denoting named, Hir.FnDef value) {
+        copiesValue(named.reachesADeclaration());
         Hir.Expr settled = settled(named);
         return settled != null && settled != named
                 ? settled : substituted(named.reaches(), value.writtenBody());
@@ -2416,6 +2523,8 @@ public final class HelperInliner {
         if (body == null) {
             return;
         }
+        // Built here from its body rather than called where it is declared.
+        copiesValue(named.reachesADeclaration());
         MaterialisationSite where = site.get();
         Hir.Expr calls = insideThisBuild(named.denotes(), where, () -> inline(body));
         for (Hir.Var.Denoting each : List.copyOf(demandedHere(calls).values())) {
@@ -2614,7 +2723,26 @@ public final class HelperInliner {
      * of them once per path through it.
      */
     private Optional<Object> constantOf(Hir.Var.Denoting named) {
-        ReachName.Declaration reaches = named.reachesADeclaration();
+        return constantOf(named.reachesADeclaration());
+    }
+
+    /**
+     * What {@code value}, a value of this module, folds to, or empty where it is not a constant.
+     *
+     * <p>The same fold a reader in another module reaches the value through, so what the declaring
+     * module says its value is copied as is what a reader copies. Asked of an inliner the tree that
+     * runs is built with ({@link #callingValuesAsMethodsWhereEmitted}), which is the one that has
+     * the fold.
+     */
+    public Optional<Object> constantOfOwn(String value) {
+        if (constEval == null) {
+            throw new IllegalStateException("what a value folds to is asked of the fold a tree that"
+                    + " runs is built with, and this inliner builds no such tree");
+        }
+        return constantOf(new ReachName.Own(new ValueName.Helper(moduleName(), value)));
+    }
+
+    private Optional<Object> constantOf(ReachName.Declaration reaches) {
         Hir.FnDef value = reaches == null ? null : table.reached(reaches);
         if (value == null || !value.params().isEmpty() || value.body() == null
                 || graph.recurses(reaches)) {
@@ -2626,6 +2754,11 @@ public final class HelperInliner {
             constantOfValues.put(reaches, Optional.empty());
             known = constEval.eval(value.writtenBody());
             constantOfValues.put(reaches, known);
+        }
+        // A constant stands where it is named and is folded into whatever reads it, so another
+        // module's constant found here is one this tree carries.
+        if (known.isPresent()) {
+            copiesValue(reaches);
         }
         return known;
     }
@@ -2846,12 +2979,11 @@ public final class HelperInliner {
             case Hir.Expansion ex -> {
                 List<Hir.Bound> bound = new ArrayList<>();
                 for (Hir.Bound b : ex.bound()) {
-                    bound.add(new Hir.Bound(b.binder(), b.declaredType(), read(b.value())));
+                    bound.add(b.with(read(b.value())));
                 }
                 List<Hir.Given> given = new ArrayList<>();
                 for (Hir.Given g : ex.given()) {
-                    given.add(new Hir.Given(g.declaredType(), read(g.value()), g.applied(),
-                            g.arrivesAs()));
+                    given.add(g.with(read(g.value())));
                 }
                 yield new Hir.Expansion(ex.callee(), ex.application(), ex.at(), bound, given,
                         ex.declaredReturn(), insideThisExpansion(ex, () -> read(ex.body())),
@@ -2932,13 +3064,18 @@ public final class HelperInliner {
         for (Hir.Var spread : nd.spreads()) {
             // A spread is a reference (ADR-0072), so where references are materialised once in the
             // region that demands them, this is one of them and is left for that walk. Bound here
-            // as well, a value spread and named in one region would be built twice.
+            // as well, a value spread and named in one region would be built twice. A body being
+            // closed leaves the values it names as names, and a spread is one of the places it
+            // names them.
             Hir.FnDef value = reading == ValueAtAReference.SHARED_PER_REGION
+                    || (spread instanceof Hir.Var.Denoting named
+                            && leftNamed(named.reachesADeclaration()))
                     ? null : valueSpread(spread);
             if (value == null) {
                 spreads.add(spread);
                 continue;
             }
+            copiesValue(spread.answered().reachesADeclaration());
             Hir.Binder name = writing.binders().binder(
                     "$s" + next() + "_" + spread.answered().denotes().name(), spread.pos());
             bound.add(name);
@@ -3327,14 +3464,11 @@ public final class HelperInliner {
             case Hir.Expansion ex -> {
                 List<Hir.Bound> bound = new ArrayList<>();
                 for (Hir.Bound b : ex.bound()) {
-                    bound.add(new Hir.Bound(renaming.copy().of(b.binder()), b.declaredType(),
-                            rename(b.value(), renaming)));
+                    bound.add(b.with(renaming.copy().of(b.binder()), rename(b.value(), renaming)));
                 }
                 List<Hir.Given> given = new ArrayList<>();
                 for (Hir.Given g : ex.given()) {
-                    given.add(new Hir.Given(g.declaredType(),
-                            rename(g.value(), renaming), g.applied(),
-                            g.arrivesAs()));
+                    given.add(g.with(rename(g.value(), renaming)));
                 }
                 // What this copy of the expansion wrote, from the one place an owner is moved. Kept
                 // as it was, the two copies of one already-expanded body would say they wrote into

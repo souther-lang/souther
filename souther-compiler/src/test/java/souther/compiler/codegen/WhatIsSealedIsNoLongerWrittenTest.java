@@ -2,6 +2,7 @@ package souther.compiler.codegen;
 
 import souther.compiler.Emitted;
 import souther.compiler.EmittedBytes;
+import souther.compiler.copied.CopyContract;
 import souther.compiler.generated.ProbeImage;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.GeneratedClass;
@@ -82,6 +83,9 @@ class WhatIsSealedIsNoLongerWrittenTest {
         // What the classes offer and what they were built against is published with them, so it is
         // said before they are handed over or not at all.
         ways.put("linked", out -> out.linked(new TreeMap<>(), new TreeMap<>()));
+        // What they offer to be copied and what they copied is published with them for the same
+        // reason.
+        ways.put("copied", out -> out.copied(new CopyContract(new TreeMap<>(), new TreeMap<>())));
         return ways;
     }
 
@@ -94,7 +98,7 @@ class WhatIsSealedIsNoLongerWrittenTest {
      * sealing to refuse, and no order of calls under which two readers are told different things.
      */
     private static final Set<String> WHICH_DO_NOT_WRITE =
-            Set.of("implemented", "probes", "provides", "requires", "seal");
+            Set.of("implemented", "probes", "provides", "requires", "copies", "seal");
 
     @TestFactory
     Stream<DynamicTest> everyWayOfWritingIsRefusedAfterwards() {

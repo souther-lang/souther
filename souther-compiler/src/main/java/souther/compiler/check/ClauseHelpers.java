@@ -2,6 +2,8 @@ package souther.compiler.check;
 
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.ast.Hir;
+import souther.compiler.copied.CopyTarget;
+import souther.compiler.coverage.SuppliedRules;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.TypeKey;
@@ -10,6 +12,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedSet;
 import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 
@@ -54,20 +57,36 @@ public final class ClauseHelpers {
      * the spelling the table is keyed by — {@link HelperNames#qualifyImportsIn} does it again for the
      * bodies below, and says the same thing both times.
      */
-    static Expansion<Hir.Module> withSettledInvariants(Hir.Module m, Symbols symbols,
-                                                       DeclarationKinds kinds,
-                                                       Map<String, Hir.FnDef> published) {
+    static SettledClauses withSettledInvariants(Hir.Module m, Symbols symbols,
+                                                DeclarationKinds kinds,
+                                                Map<String, Hir.FnDef> published) {
         // Settling runs while what these declarations say is still being worked out, so what is read
         // here is which form each one is — settled when the module was indexed — and asking what one
         // says is refused rather than answered with nothing.
         Hir.Module settled = settled(m, symbols, PublishedDeclarations.THE_ONE_THAT_MAKES_THEM,
                 kinds);
         HelperInliner inliner = HelperInliner.forModule(settled, published, symbols.library());
+        Map<TypeKey, SequencedSet<CopyTarget>> copiedBy = new LinkedHashMap<>();
+        Hir.Module inlined = withInlinedInvariants(inliner, settled, copiedBy);
         // What these expansions could not remove comes back with what they produced. A clause is the
         // one place a module writes an expression that is not a definition, so a recursion reached
         // from one is reached from nowhere a reader of the module's declarations would look.
-        return new Expansion<>(withInlinedInvariants(inliner, settled), inliner.leftStanding());
+        return new SettledClauses(new Expansion<>(inlined, inliner.leftStanding(),
+                inliner.copiedFromElsewhere(), ElementProvenance.NONE, SuppliedRules.NONE),
+                copiedBy);
     }
+
+    /**
+     * A module with its clauses settled, and what settling each declaration's clauses copied of
+     * other modules' declarations.
+     *
+     * @param expanded what the settling produced, with what it left standing and copied over the
+     *                 whole module
+     * @param copiedBy by each declaration whose clauses copied anything, what they copied — which a
+     *                 type including that declaration checks, and so copies, along with them
+     */
+    record SettledClauses(Expansion<Hir.Module> expanded,
+                          Map<TypeKey, SequencedSet<CopyTarget>> copiedBy) {}
 
     /**
      * Every declaration {@code m} makes, with its clauses expanded to what a reading of them takes:
@@ -167,10 +186,16 @@ public final class ClauseHelpers {
      * (e.g. {@code invariant 正の数(value)}) expands to its body before the invariant is type-checked
      * or emitted — the same lowering a behavior body gets (spec §blocks, §invariant-expressions).
      */
-    private static Hir.Module withInlinedInvariants(HelperInliner inliner, Hir.Module m) {
+    private static Hir.Module withInlinedInvariants(HelperInliner inliner, Hir.Module m,
+                                                    Map<TypeKey, SequencedSet<CopyTarget>> copiedBy) {
         List<Hir.Def> defs = new ArrayList<>();
         for (Hir.Def def : m.defs()) {
-            defs.add(withInlinedInvariants(inliner, def, _ -> { }));
+            Expansion<Hir.Def> one =
+                    inliner.expanding(() -> withInlinedInvariants(inliner, def, _ -> { }));
+            defs.add(one.value());
+            if (!one.copied().isEmpty()) {
+                copiedBy.put(def.declares().key(), one.copied());
+            }
         }
         List<Hir.BehaviorDef> behaviors = new ArrayList<>();
         for (Hir.BehaviorDef behavior : m.behaviors()) {

@@ -2,10 +2,12 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Kernel;
+import souther.compiler.execute.WrittenValue;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ValueName;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -64,6 +66,24 @@ public final class ConstEval {
     private ConstEval(Symbols symbols, Function<Hir.Var.Denoting, Optional<Object>> values) {
         this.symbols = symbols;
         this.values = values;
+    }
+
+    /**
+     * What a fold answered, in the four a source can write it as — or null where it is a value no
+     * source writes.
+     *
+     * <p>A fold answers with the object it happened to make, and which of the four it is is what
+     * the language wrote. The one it makes that none of them is is the exact ratio a division
+     * leaves, which is known at compile time and has no literal.
+     */
+    public static WrittenValue asWritten(Object folded) {
+        return switch (folded) {
+            case Long whole -> new WrittenValue.Whole(whole);
+            case Boolean truth -> new WrittenValue.Truth(truth);
+            case String text -> new WrittenValue.Text(text);
+            case BigDecimal decimal -> new WrittenValue.Decimal(decimal);
+            default -> null;
+        };
     }
 
     /** Folding against the library {@code symbols} names. */
