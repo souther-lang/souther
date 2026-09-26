@@ -1,5 +1,7 @@
 package souther.compiler.codegen;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import souther.compiler.regex.CodePoints;
 import souther.compiler.regex.PatternMeaning;
@@ -117,15 +119,54 @@ public final class JavaPatterns {
             symbol(held.least(), out);
             return;
         }
-        out.append('[');
-        for (CodePoints.Range each : held.ranges()) {
-            symbol(each.from(), out);
-            if (each.to() != each.from()) {
-                out.append('-');
-                symbol(each.to(), out);
-            }
+        // The shorter of the set and what it leaves out. The engine tries a class a range at a
+        // time, so `.` written as its eight ranges is eight tries a symbol, and written as the five
+        // symbols it leaves out it is one class of five. What it leaves out is taken over every
+        // code point, the surrogates among them: no string holds one, so no string can tell the two
+        // apart.
+        List<int[]> left = leftOut(held);
+        if (left.isEmpty()) {
+            // Every symbol. A class leaving out nothing is no class to the engine.
+            out.append("[\\x{0}-\\x{10FFFF}]");
+            return;
+        }
+        if (left.size() < held.ranges().size()) {
+            out.append("[^");
+            left.forEach(each -> range(each[0], each[1], out));
+        } else {
+            out.append('[');
+            held.ranges().forEach(each -> range(each.from(), each.to(), out));
         }
         out.append(']');
+    }
+
+    /** The runs of code points {@code held} leaves out, the surrogates included. */
+    private static List<int[]> leftOut(CodePoints held) {
+        List<int[]> out = new ArrayList<>();
+        int next = 0;
+        for (CodePoints.Range each : held.ranges()) {
+            // A gap that is only the surrogates is no gap to a string, and leaving it out keeps a
+            // set that runs across them one range.
+            if (each.from() > next && !(next == SURROGATES_FROM && each.from() == SURROGATES_TO + 1)) {
+                out.add(new int[] {next, each.from() - 1});
+            }
+            next = each.to() + 1;
+        }
+        if (next <= CodePoints.LAST) {
+            out.add(new int[] {next, CodePoints.LAST});
+        }
+        return out;
+    }
+
+    private static final int SURROGATES_FROM = 0xD800;
+    private static final int SURROGATES_TO = 0xDFFF;
+
+    private static void range(int from, int to, StringBuilder out) {
+        symbol(from, out);
+        if (to != from) {
+            out.append('-');
+            symbol(to, out);
+        }
     }
 
     private static void symbol(int point, StringBuilder out) {

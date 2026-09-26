@@ -73,11 +73,31 @@ final class Anchors {
     }
 
     private static PatternMeaning inTurn(WrittenPattern.InTurn it, Where atStart, Where atEnd) {
+        int count = it.parts().size();
+        // What stands before each part and after it, gathered once from each end. Asked afresh of
+        // every part, the sides are read again for each of them, and a literal written out a
+        // symbol at a time costs its length squared.
+        boolean[] mayBefore = new boolean[count + 1];
+        boolean[] mustBefore = new boolean[count + 1];
+        mustBefore[0] = true;
+        for (int at = 0; at < count; at++) {
+            WrittenPattern part = it.parts().get(at);
+            mayBefore[at + 1] = mayBefore[at] || mayTake(part);
+            mustBefore[at + 1] = mustBefore[at] && mustTake(part);
+        }
+        boolean[] mayAfter = new boolean[count + 1];
+        boolean[] mustAfter = new boolean[count + 1];
+        mustAfter[count] = true;
+        for (int at = count - 1; at >= 0; at--) {
+            WrittenPattern part = it.parts().get(at);
+            mayAfter[at] = mayAfter[at + 1] || mayTake(part);
+            mustAfter[at] = mustAfter[at + 1] && mustTake(part);
+        }
         List<PatternMeaning> parts = new ArrayList<>();
-        for (int at = 0; at < it.parts().size(); at++) {
+        for (int at = 0; at < count; at++) {
             PatternMeaning made = in(it.parts().get(at),
-                    beyond(it.parts().subList(0, at), atStart),
-                    beyond(it.parts().subList(at + 1, it.parts().size()), atEnd));
+                    beyond(mayBefore[at], mustBefore[at], atStart),
+                    beyond(mayAfter[at + 1], mustAfter[at + 1], atEnd));
             if (made == null) {
                 return null;
             }
@@ -100,14 +120,11 @@ final class Anchors {
      * <p>Nothing on that side takes a symbol, so the part stands where they all do. Everything on
      * that side must take one, so it does not. Anything in between and the answer belongs to a
      * string rather than to the pattern.
+     *
+     * @param anyTakes whether something on that side may take a symbol
+     * @param allTake  whether everything on that side must take one
      */
-    private static Where beyond(List<WrittenPattern> side, Where outer) {
-        boolean anyTakes = false;
-        boolean allTake = true;
-        for (WrittenPattern each : side) {
-            anyTakes = anyTakes || mayTake(each);
-            allTake = allTake && mustTake(each);
-        }
+    private static Where beyond(boolean anyTakes, boolean allTake, Where outer) {
         if (!anyTakes) {
             return outer;
         }

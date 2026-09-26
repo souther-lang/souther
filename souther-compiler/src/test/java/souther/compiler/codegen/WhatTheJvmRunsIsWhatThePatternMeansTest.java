@@ -2,12 +2,11 @@ package souther.compiler.codegen;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.regex.Language;
 import souther.compiler.regex.Meter;
 import souther.compiler.regex.PatternMeaning;
 import souther.compiler.regex.PatternParser;
-import souther.compiler.regex.PatternPlan;
 import souther.compiler.regex.PatternRead;
+import souther.compiler.regex.Recognizer;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -60,6 +59,9 @@ class WhatTheJvmRunsIsWhatThePatternMeansTest {
         return List.copyOf(out);
     }
 
+    /** Made once: both checks below ask about the same shapes. */
+    private static final Set<String> WRITTEN = written();
+
     private static Set<String> written() {
         Set<String> out = new LinkedHashSet<>(LEAVES);
         for (String one : LEAVES) {
@@ -84,11 +86,11 @@ class WhatTheJvmRunsIsWhatThePatternMeansTest {
     void theEngineAcceptsWhatTheMeaningAccepts() {
         List<String> apart = new ArrayList<>();
         int asked = 0;
-        for (String regex : written()) {
+        for (String regex : WRITTEN) {
             if (!(PatternParser.read(regex) instanceof PatternRead.Read read)) {
                 continue;
             }
-            Language meant = PatternPlan.of(read.meaning()).compile(plenty());
+            Recognizer meant = Recognizer.of(read.meaning(), plenty());
             String lowered = JavaPatterns.of(read.meaning());
             Pattern engine;
             try {
@@ -100,7 +102,7 @@ class WhatTheJvmRunsIsWhatThePatternMeansTest {
             }
             asked++;
             for (String value : STRINGS) {
-                boolean mine = meant.has(value);
+                boolean mine = meant.accepts(value);
                 boolean theirs = engine.matcher(value).matches();
                 if (mine != theirs) {
                     apart.add(regex + " written as " + lowered + " over " + shown(value)
@@ -124,7 +126,7 @@ class WhatTheJvmRunsIsWhatThePatternMeansTest {
     @Test
     void whatIsWrittenLeavesNothingToTheEngine() {
         List<String> engines = new ArrayList<>();
-        for (String regex : written()) {
+        for (String regex : WRITTEN) {
             if (PatternParser.read(regex) instanceof PatternRead.Read read) {
                 String lowered = JavaPatterns.of(read.meaning());
                 if (!onlyNumbersCountsAndGroups(lowered)) {
@@ -142,6 +144,8 @@ class WhatTheJvmRunsIsWhatThePatternMeansTest {
         assertEquals("[0-9]{3}\\-[0-9]{4}", lowered("[0-9]{3}-[0-9]{4}"));
         assertEquals("T[0-9]{13}", lowered("^T\\d{13}$"));
         assertEquals("(?:ab|c)d", lowered("(ab|c)d"));
+        assertEquals("[^\\x{A}\\x{D}\\x{85}\\x{2028}-\\x{2029}]", lowered("."),
+                "a set is written as what it leaves out where that is fewer ranges to try");
     }
 
     private static String lowered(String regex) {
