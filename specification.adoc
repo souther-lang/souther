@@ -2837,9 +2837,9 @@ What holds wherever something is applied:
 * [[an-application-gives-the-arguments-it-takes]]an application MUST give as many arguments as the thing takes. A newtype wraps one value, a block takes what it was written with, a helper takes its parameters;
 * [[an-argument-has-the-type-its-parameter-takes]]an argument MUST have the type its parameter takes.
 
-A block is written where a function is taken, and that position is part of what the standard library states:
+Where an application takes a function, that position states the function type of the value written there, and it is part of what the standard library states:
 
-* [[a-function-goes-where-a-function-is-taken]]a block or a function name goes in the argument that takes a function, and only there. Which argument that is belongs to the function being called (<<stdlib>>);
+* [[a-function-goes-where-a-function-is-taken]]a block or a function name written at an argument that takes a function is read at the function type that argument states. Which argument that is belongs to the function being called (<<stdlib>>), and one written at an argument that takes no function has no such type to be read at;
 * [[a-block-answers-the-type-its-position-takes]]a block MUST answer with what its position takes — the accumulator of a `+fold+`, `+Bool+` for a predicate, the element type of what is being grown.
 
 [[a-function-value-has-a-type-where-it-is-written]]A function value has a type where it is written. A position that takes a function gives the lambda written there what it takes and what it answers, so a lambda answering a lambda is read against the function type its outer position gives, and a name gives the type its declaration states (<<blocks>>). A lambda written where neither does — returned, held in a collection, chosen between — and that nothing applies has no type to stand at, and MUST be written where one is given. A function still has no external representation (<<external-representation>>), so it MUST NOT be stored in a field or cross a behavior's input or output.

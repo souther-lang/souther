@@ -2049,7 +2049,7 @@ public final class HelperInliner {
             Hir.FnParam p = helper.params().get(i);
             Hir.Expr arg = args.get(i);
             if (p.type() != null && p.type().asFn() != null) {
-                // a function argument is not a value, so it cannot be bound to a let. A named
+                // a function argument is held as given rather than bound to a let. A named
                 // function is substituted directly (f(x) becomes inc(x)); a lambda is
                 // registered under a fresh name as a scoped helper, so each application of the
                 // parameter β-reduces to the lambda's body, as a let-bound lambda does (spec §blocks).
