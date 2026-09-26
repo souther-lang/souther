@@ -73,6 +73,11 @@ public sealed interface TypeMessage extends Message {
     @Code(DiagnosticCode.E1323)
     record ThePatternIsNotARegularExpression(String why) implements TypeMessage, Reported {}
 
+    /** A pattern escape spelling a surrogate on its own, which the engine would read as a character
+     *  and no {@code String} holds. */
+    @Code(DiagnosticCode.E1323)
+    record ThePatternWritesHalfASurrogatePair(String escape) implements TypeMessage, Reported {}
+
     @Code(DiagnosticCode.E1815)
     record OverTheEmptyListTheSeedDecides(String call) implements TypeMessage, Reported {}
 

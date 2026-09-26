@@ -1434,6 +1434,15 @@ public final class Backend {
      * written before it says nothing of what it copied, and would be admitted beside a dependency
      * whose helper or constant it carries a stale copy of.
      *
+     * <p>Version 32 changes what a {@code String} is and how it is ordered. A {@code String} is a
+     * sequence of Unicode scalar values, so every door text crosses in by refuses text holding half
+     * of a surrogate pair — a generated decoder, a crossing from Java, a source literal, a pattern
+     * that writes one — and {@code <} on text, a newtype's {@code compareTo} over it, the sort family
+     * and the order a boundary writes in all compare scalar values rather than UTF-16 code units. A
+     * class emitted under version 31 compares a text newtype by {@code String.compareTo} and lets
+     * such text in, and a reader built under it admits a carried body writing such a literal or
+     * pattern, which this reader refuses.
+     *
      * <p>That is also where this number stops. It says whether a jar and this compiler agree on
      * what the metadata says and on the rules a declaration is turned into JVM facts by — a
      * behavior's class and methods, how one is held and built, a type's layout and codecs. It does
@@ -1444,7 +1453,7 @@ public final class Backend {
      * {@code [#a-published-module-agrees-with-what-it-copied]}). An edit to a declaration moves
      * that and not this; an edit to a rule moves this.
      */
-    public static final int BOUNDARY_VERSION = 31;
+    public static final int BOUNDARY_VERSION = 32;
 
     /** Emits the class a module's own declarations are published on, carrying {@code declarations}.
      * What it says is the caller's; that it is built like every other generated class — the same Java

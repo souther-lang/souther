@@ -7,14 +7,17 @@ import java.lang.classfile.CodeBuilder;
 import java.lang.classfile.Label;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.DirectMethodHandleDesc;
+import java.lang.constant.DynamicCallSiteDesc;
 import java.lang.constant.MethodHandleDesc;
 import java.lang.constant.MethodTypeDesc;
 
 import static souther.compiler.codegen.Descriptors.*;
 
 /**
- * Canonicalizes a value of a declared {@code Type}, wherever it just crossed from outside the
- * compiler's own reach into a Souther value: an injected behavior's answer
+ * Lets in the text a value of a declared {@code Type} holds, wherever it just crossed from outside
+ * the compiler's own reach into a Souther value: each {@code String} goes through
+ * {@code Strings.admit}, which refuses text holding half of a surrogate pair by aborting and
+ * canonicalizes the rest. The crossings are an injected behavior's answer
  * ({@code BodyGen.requiredCall}), the argument a Java caller hands a generated behavior's public
  * {@code apply} ({@code Backend.generateSpecFn}), a composition's own arguments and each stage's
  * answer ({@code Backend.generatePipe}), the field a Java-supplied factory
@@ -43,6 +46,13 @@ import static souther.compiler.codegen.Descriptors.*;
 final class CanonicalizeAtCrossing {
 
     private CanonicalizeAtCrossing() {}
+
+    /** {@code Strings::admit} as a {@code Function}, for a container's element. */
+    private static final DynamicCallSiteDesc STRINGS_ADMIT = Lambdas.callSite(
+            Lambdas.Sam.FUNCTION,
+            MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, CD_Strings, "admit",
+                    MTD_admit),
+            MTD_admit);
 
     /** Whether {@code type} is {@code String}, reaches one through a container this recurses into,
      *  or is a union naming {@code String} as a bare member — the same structural test the
@@ -76,7 +86,7 @@ final class CanonicalizeAtCrossing {
         switch (type) {
             case Type.Prim p when p == Type.STRING -> {
                 code.checkcast(CD_String);
-                code.invokestatic(CD_Normalization, "nfc", MTD_nfc);
+                code.invokestatic(CD_Strings, "admit", MTD_admit);
             }
             case Type.ListOf t when reachesString(t.element()) -> {
                 code.checkcast(CD_List);
@@ -113,7 +123,7 @@ final class CanonicalizeAtCrossing {
                 code.instanceOf(CD_String);
                 code.ifeq(notString);
                 code.checkcast(CD_String);
-                code.invokestatic(CD_Normalization, "nfc", MTD_nfc);
+                code.invokestatic(CD_Strings, "admit", MTD_admit);
                 code.goto_(end);
                 code.labelBinding(notString);
                 code.labelBinding(end);
@@ -135,7 +145,7 @@ final class CanonicalizeAtCrossing {
 
     /** Pushes a {@code Function<Object, Object>} implementing {@link #emit} for {@code type}, for a
      *  container's element canonicalization to compose recursively. A leaf {@code String} is the
-     *  one no-capture case ({@code Normalization::nfc} directly); a compound case first recurses to
+     *  one no-capture case ({@code Strings::admit} directly); a compound case first recurses to
      *  push the function(s) it composes into, then captures them in an {@code invokedynamic} — the
      *  same capturing technique {@code CodecGen}'s {@code mapKeysCallSite} already uses for the
      *  encoder side, generalized to any one of
@@ -145,7 +155,7 @@ final class CanonicalizeAtCrossing {
      *  gap than {@code List<String>} for that reason. */
     private static void emitAsFunction(CodeBuilder code, Type type) {
         if (type instanceof Type.Prim p && p == Type.STRING) {
-            code.invokedynamic(CodecGen.normalizationNfcCallSite());
+            code.invokedynamic(STRINGS_ADMIT);
             return;
         }
         if (type instanceof Type.MapOf t) {

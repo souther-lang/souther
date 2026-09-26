@@ -1,6 +1,20 @@
 # ADR-0096: A string is measured in Unicode code points, and arrives canonical
 
-Status: Accepted
+Status: Accepted. Revised 2026-09-26 — see *Revision*.
+
+## Revision (2026-09-26)
+
+The Decision below says counting in code points makes a broken string unreachable, and that holds
+only of what a `String` was to begin with. `slice` and the rest cannot cut a pair in two, but a
+`java.lang.String` can hold half of one before any operation touches it, and this ADR let such text
+in wherever text arrived: `Normalization.nfc` passes a lone surrogate through as it is. So an
+operation over code points was answering about a value that was not text.
+
+A `String` is now a sequence of Unicode scalar values (`[#a-string-is-a-sequence-of-scalar-values]`),
+and the doors this ADR canonicalizes at are the doors that refuse text holding half a pair
+(`[#a-string-holds-no-half-of-a-surrogate-pair]`). That is what makes the laws below hold of every
+`String`: none holds half a pair, so no operation over code points answers with one. `<` now counts
+in the same unit as the operations here (`[#a-string-is-ordered-by-scalar-value]`).
 
 ## Context
 

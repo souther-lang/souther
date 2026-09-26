@@ -211,7 +211,6 @@ final class Descriptors {
     static final ClassDesc CD_Sets = ClassDesc.of("souther.runtime.Sets");
     static final ClassDesc CD_Representations = ClassDesc.of("souther.runtime.Representations");
     static final ClassDesc CD_Temporals = ClassDesc.of("souther.runtime.Temporals");
-    static final ClassDesc CD_Normalization = ClassDesc.of("souther.unicode.Normalization");
     static final ClassDesc CD_Option = ClassDesc.of("souther.runtime.Option");
     static final ClassDesc CD_Options = ClassDesc.of("souther.runtime.Options");
     static final ClassDesc CD_OptionSome = CD_Option.nested("Some");
@@ -247,6 +246,9 @@ final class Descriptors {
     static final MethodTypeDesc MTD_Strings_fromInt = MethodTypeDesc.of(CD_String, ConstantDescs.CD_long);
     static final ClassDesc CD_Comparable = ClassDesc.of("java.lang.Comparable");
     static final MethodTypeDesc MTD_compareTo_Object = MethodTypeDesc.of(ConstantDescs.CD_int, CD_Object);
+    /** {@code Strings.compare(String, String)}: the language's order on text. */
+    static final MethodTypeDesc MTD_Strings_compare =
+            MethodTypeDesc.of(ConstantDescs.CD_int, CD_String, CD_String);
 
     /** {@code Integer.compare(int, int)}: the sign of two places in an enumeration's declaration,
      *  which is what a {@code compareTo} over a newtype wrapping one answers with. */
@@ -320,12 +322,13 @@ final class Descriptors {
     static final MethodTypeDesc MTD_Rdecoder = MethodTypeDesc.of(CD_RDecoder);
     static final MethodTypeDesc MTD_Rencoder = MethodTypeDesc.of(CD_REncoder);
     static final MethodTypeDesc MTD_leafString = MethodTypeDesc.of(CD_StringDecoder);
-    /** {@code Normalization.nfc(String):String}, lifted into a {@code Function} at the call site
-     *  that reaches for it. */
-    static final MethodTypeDesc MTD_nfc = MethodTypeDesc.of(CD_String, CD_String);
+    /** {@code Strings.admit(String):String} and {@code Strings.admitted(String):String}, text let
+     *  into the domain, lifted into a {@code Function} at the call site that reaches for one. */
+    static final MethodTypeDesc MTD_admit = MethodTypeDesc.of(CD_String, CD_String);
+    static final ClassDesc CD_Objects = ClassDesc.of("java.util.Objects");
     /** {@code StringDecoder.from(Decoder<I,String>)} — wraps a plain string-producing decoder back
      *  into a {@link CD_StringDecoder} so the fluent constraint methods after it (following
-     *  {@code Normalization.nfc}, not {@code StringDecoder.normalize()}) still resolve. */
+     *  {@code Strings.admitted}, not {@code StringDecoder.normalize()}) still resolve. */
     static final MethodTypeDesc MTD_stringDecoderFrom = MethodTypeDesc.of(CD_StringDecoder, CD_RDecoder);
     static final MethodTypeDesc MTD_leafLong = MethodTypeDesc.of(CD_LongDecoder);
     static final MethodTypeDesc MTD_leafBool = MethodTypeDesc.of(CD_BoolDecoder);
@@ -444,6 +447,9 @@ final class Descriptors {
     /** {@code Decoder.refine(Predicate, BiFunction)}: the failure is built by the caller, so it is a
      *  {@code Result.fail} (resolvable) rather than the {@code failCustom} the message overload makes. */
     static final MethodTypeDesc MTD_Rrefine = MethodTypeDesc.of(CD_RDecoder, CD_Predicate, CD_BiFunction);
+    /** {@code Decoder.refine(Predicate, code, message)}, on a decoder that is no longer a typed one. */
+    static final MethodTypeDesc MTD_Rrefine_message =
+            MethodTypeDesc.of(CD_RDecoder, CD_Predicate, CD_String, CD_String);
     static final MethodTypeDesc MTD_invariantFailure = MethodTypeDesc.of(CD_RResult, CD_Object, CD_RPath);
     /** The same helper with the failing clause's name captured ahead of the two SAM arguments. */
     static final MethodTypeDesc MTD_invariantFailureNamed =

@@ -13,6 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import souther.unicode.Normalization;
+import souther.unicode.ScalarOrder;
 
 /**
  * What an expression comes to where the values under it are already known.
@@ -146,7 +147,7 @@ final class ConstantAlgebra {
             return rel.holds(x.compareTo(y));
         }
         if (a instanceof String x && b instanceof String y) {
-            return rel.holds(x.compareTo(y));
+            return rel.holds(ScalarOrder.compare(x, y));
         }
         return switch (rel) {
             case EQ -> equal(a, b);

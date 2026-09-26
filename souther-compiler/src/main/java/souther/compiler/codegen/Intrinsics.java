@@ -378,8 +378,9 @@ final class Intrinsics {
             Kernel.LIST_SORT, Kernel.LIST_MAX, Kernel.LIST_MIN, Kernel.LIST_SORT_BY);
 
     /**
-     * A kernel of the ordered family, over an element whose order lives on its sum: the runtime call
-     * this table already holds for it, taking a comparator ahead of what it was already taking.
+     * A kernel of the ordered family, over an element whose order its own {@code compareTo} does not
+     * answer — an enumeration's case, whose order lives on its sum, or text: the runtime call this
+     * table already holds for it, taking a comparator ahead of what it was already taking.
      *
      * <p>The one place a runtime method takes an argument the declaration does not name. Everything
      * else is the same walk every kernel goes through — the arguments go on the stack where the row
@@ -391,7 +392,7 @@ final class Intrinsics {
      */
     static void emitWithComparator(BodyGen g, Kernel kernel, Core.Call call) {
         if (!COMPARATOR_OVERLOADS.contains(kernel)) {
-            // The caller read an OrderingSubject settlement and an enumeration off it, which only
+            // The caller read an OrderingSubject settlement and a comparator off it, which only
             // means the checker requires order of some Type for this call — never that this
             // runtime has a comparator overload to reach for it. That is this set's fact, asked
             // here rather than trusted, so a kernel gaining the settlement without gaining the

@@ -153,8 +153,9 @@ public final class Representations {
     /**
      * Where {@code a} is written relative to {@code b}: {@code null} first, then {@code false},
      * {@code true}, numbers, strings, arrays and objects. Numbers compare as amounts and then by the
-     * form they are written in; strings by UTF-16 code unit; arrays element by element with the
-     * shorter one first; objects as their members read in key order.
+     * form they are written in; strings by scalar value, the language's own order on them
+     * ({@link Strings#compare}); arrays element by element with the shorter one first; objects as
+     * their members read in key order.
      */
     public static int compareExternalForms(@Nullable Object a, @Nullable Object b) {
         return compare(a, b, null);
@@ -173,7 +174,7 @@ public final class Representations {
         return switch (form) {
             case NULL, FALSE, TRUE -> 0;
             case NUMBER -> compareNumbers(a, b);
-            case STRING -> ((String) a).compareTo((String) b);
+            case STRING -> Strings.compare((String) a, (String) b);
             case ARRAY -> compareArrays((List<?>) a, (List<?>) b, orders);
             default -> compareObjects((Map<?, ?>) a, (Map<?, ?>) b, orders);
         };
@@ -258,7 +259,7 @@ public final class Representations {
         List<String> xs = keysOf(a, orders);
         List<String> ys = keysOf(b, orders);
         for (int i = 0; i < Math.min(xs.size(), ys.size()); i++) {
-            int byKey = xs.get(i).compareTo(ys.get(i));
+            int byKey = Strings.compare(xs.get(i), ys.get(i));
             if (byKey != 0) {
                 return byKey;
             }
@@ -348,7 +349,7 @@ public final class Representations {
         for (Object key : members.keySet()) {
             keys.add(requireKey(key));
         }
-        keys.sort(null);
+        keys.sort(Strings::compare);
         return keys;
     }
 

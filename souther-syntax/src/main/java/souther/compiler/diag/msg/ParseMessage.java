@@ -137,6 +137,15 @@ public sealed interface ParseMessage extends Message {
     record AStringLiteralIsNotClosed() implements ParseMessage, Reported {}
 
     /**
+     * A literal whose text holds a surrogate that is not half of a pair beside the other half.
+     *
+     * <p>No escape writes one, so what put it there is whatever handed the compiler its source text.
+     * A {@code String} is a sequence of scalar values, and this is not one.
+     */
+    @Code(DiagnosticCode.E2305)
+    record AStringLiteralHoldsHalfASurrogatePair() implements ParseMessage, Reported {}
+
+    /**
      * A backslash written before something the language does not read as an escape.
      *
      * <p>Refused rather than read as the character alone: dropping the backslash would take a

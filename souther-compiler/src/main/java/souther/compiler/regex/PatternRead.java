@@ -77,6 +77,15 @@ public sealed interface PatternRead {
         AN_ESCAPE_THIS_DOES_NOT_READ,
 
         /**
+         * An escape writing half of a surrogate pair — {@code \\uD800} on its own, {@code \x{DC00}}.
+         *
+         * <p>Not a construct outside the subset: no {@code String} holds such a character, and a
+         * pattern writing one is refused where it is checked. Stopped at here for a reader that
+         * meets the pattern before the check does.
+         */
+        A_CHARACTER_NO_STRING_HOLDS,
+
+        /**
          * An anchor whose answer is not a property of the pattern.
          *
          * <p>{@code ^} and {@code $} are read where the shape says whether everything on that side

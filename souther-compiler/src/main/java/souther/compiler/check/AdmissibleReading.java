@@ -238,6 +238,9 @@ final class AdmissibleReading {
                  AN_ESCAPE_THIS_DOES_NOT_READ,
                  AN_ANCHOR_THIS_CANNOT_PLACE,
                  A_POSSESSIVE_REPETITION -> null;
+            // Refused where the pattern is checked; until then a rule this could not read, like
+            // the ones above.
+            case A_CHARACTER_NO_STRING_HOLDS -> null;
         };
     }
 

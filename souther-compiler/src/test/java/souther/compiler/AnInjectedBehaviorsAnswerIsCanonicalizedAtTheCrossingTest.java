@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.jvm.ClassFileImage;
+import souther.runtime.ConstraintViolation;
 
 import org.junit.jupiter.api.Test;
 
@@ -12,6 +13,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -394,6 +396,35 @@ class AnInjectedBehaviorsAnswerIsCanonicalizedAtTheCrossingTest {
         org.junit.jupiter.api.function.Executable call = () -> Codecs.apply(run, true);
         org.junit.jupiter.api.Assertions.assertThrows(
                 souther.runtime.ConstraintViolation.class, call);
+    }
+
+    private static final String HALF_A_PAIR_IMPL_SRC = """
+            package demo;
+            public final class SourceImpl extends Source {
+                public String apply() {
+                    // Half of a surrogate pair, which a java.lang.String holds and a Souther
+                    // String does not.
+                    return String.valueOf((char) 0xD800);
+                }
+            }
+            """;
+
+    /**
+     * An injected behavior answering text that holds half of a surrogate pair has handed over no
+     * {@code String} at all, and the crossing aborts rather than letting it in. Refused and not
+     * repaired: replacing the half with U+FFFD would make it one value with U+FFFD itself.
+     */
+    @Test
+    void anAnswerHoldingHalfASurrogatePairAborts() throws Exception {
+        Map<String, ClassFileImage> classes = new HashMap<>(Compiler.compile(MODULE));
+        classes.put("demo.SourceImpl", compileSubclass(classes, "demo.SourceImpl", HALF_A_PAIR_IMPL_SRC));
+
+        BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
+        Class<?> source = loader.loadClass("demo.Source");
+        Object impl = loader.loadClass("demo.SourceImpl").getConstructor().newInstance();
+        Object run = loader.loadClass("demo.Run").getMethod("bind", source).invoke(null, impl);
+
+        assertThrows(ConstraintViolation.class, () -> Codecs.apply(run, true));
     }
 
     private static final String RAW_CONSTRUCTION_MODULE = """

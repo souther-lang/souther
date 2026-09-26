@@ -25,7 +25,7 @@ import souther.compiler.types.TypeSymbol;
  * asks a second time whether something was a newtype.
  *
  * <p><b>Sealed, so an order added is one every reader has to answer for.</b> The switches over these
- * four are what makes a fifth a build failure rather than a comparison emitted as an equality test.
+ * are what makes one more a build failure rather than a comparison emitted as an equality test.
  *
  * <p>The rules are ADR-0047 (a single-value newtype is compared by the value it wraps) and ADR-0069
  * (an enumeration is ordered by the order its cases are declared in, and that order lives on the sum
@@ -39,12 +39,23 @@ public sealed interface Ordering {
     record Longs() implements Ordering {}
 
     /**
-     * The JVM value is {@link Comparable} and its {@code compareTo} is the order: a {@code String},
-     * a {@code BigDecimal}, a {@code LocalDate}, a {@code LocalTime}, a {@code LocalDateTime} or an
-     * {@code Instant} — and a single-value newtype as it is held, which carries a {@code compareTo}
-     * of its own (ADR-0047).
+     * The JVM value is {@link Comparable} and its {@code compareTo} is exactly the language's order:
+     * a {@code BigDecimal}, a {@code Rational}, a {@code LocalDate}, a {@code LocalTime}, a
+     * {@code LocalDateTime} or an {@code Instant} — and a single-value newtype as it is held, which
+     * carries a {@code compareTo} of its own (ADR-0047).
+     *
+     * <p>Which way round that is matters. The language says what the order is and a carrier's
+     * {@code compareTo} is used where it answers the same; being {@code Comparable} is not a reason
+     * for a type to be here, which is why {@link Strings} is not.
      */
     record Natural() implements Ordering {}
+
+    /**
+     * Text, ordered by scalar value ({@code Strings.compare}). A {@code java.lang.String} is
+     * {@link Comparable}, and its {@code compareTo} orders UTF-16 code units, which is another order
+     * wherever a character past the basic plane meets one in {@code U+E000..U+FFFF}.
+     */
+    record Strings() implements Ordering {}
 
     /**
      * A value of an enumeration: the sum answers where a case stands in its declaration, through the
@@ -75,34 +86,34 @@ public sealed interface Ordering {
 
     Ordering LONGS = new Longs();
     Ordering NATURAL = new Natural();
+    Ordering STRINGS = new Strings();
 
     /**
-     * The sum that answers for values of {@code type}, or null where the value carries its own order.
+     * The sum that answers for values of {@code type}, or null where no generated sum does: the
+     * class a sort over them names, for whatever asks which classes an emitted call names.
      *
-     * <p>Asked of the value as the runtime is handed it, so a newtype over an enumeration answers null
-     * and sorts by the {@code compareTo} its own class carries — the sum's {@code __order} would be
-     * handed the wrapper and not the case. The one answer to the question, read by the emitter and by
-     * whatever asks which classes an emitted call names: written out in each, the two would agree only
-     * until one of them moved.
-     *
-     * <p>Every order is answered for rather than "everything but a {@code Places} sorts by natural
-     * order", so an order added has to say which of the two it is.
+     * <p>Read off {@link #held}, which the emitter switches over, so the two cannot disagree about
+     * which sort takes its comparator from a sum. A newtype over an enumeration answers null and
+     * sorts by the {@code compareTo} its own class carries — the sum's {@code __order} would be
+     * handed the wrapper and not the case.
      */
     static TypeSymbol enumerationOfHeld(Type type, NewtypeInners inners, Symbols symbols,
                                         DeclarationKinds kinds, PublishedDeclarations published) {
+        return held(type, inners, symbols, kinds, published) instanceof Places places
+                ? places.enumeration() : null;
+    }
+
+    /**
+     * How a value of {@code type} is ordered as the runtime is handed it — the newtype by the
+     * {@code compareTo} its own class carries — or null where it has no order. What the sort family
+     * reads, since it hands each value over as it stands.
+     *
+     * <p>Never {@link Wrapped}: {@link #asHeld} answers for the value as its own type holds it.
+     */
+    static Ordering held(Type type, NewtypeInners inners, Symbols symbols, DeclarationKinds kinds,
+                         PublishedDeclarations published) {
         Ordering how = of(type, inners, symbols, kinds, published);
-        if (how == null) {
-            return null;
-        }
-        return switch (how.asHeld()) {
-            // A long boxes to a Comparable and a newtype's own class carries a compareTo, so for both
-            // of these the runtime's natural order is the order.
-            case Places places -> places.enumeration();
-            case Longs _, Natural _ -> null;
-            // `asHeld` answers for the value as its own type holds it, which is never wrapped.
-            case Wrapped _ ->
-                    throw new IllegalStateException("a held order is never a wrapped one: " + type);
-        };
+        return how == null ? null : how.asHeld();
     }
 
     /**
@@ -163,9 +174,10 @@ public sealed interface Ordering {
         return switch (terminal) {
             case Type.Prim p -> switch (p) {
                 case INT -> LONGS;
-                // The JVM carries each of these as Comparable, which is why they are the ordered
-                // ones (spec §primitives).
-                case STRING, DECIMAL, DATE, TIME, DATETIME, INSTANT -> NATURAL;
+                case STRING -> STRINGS;
+                // Each of these is carried by a Comparable whose compareTo is the order the
+                // language gives it (spec §equality).
+                case DECIMAL, DATE, TIME, DATETIME, INSTANT -> NATURAL;
                 // A Rational is ordered by its exact mathematical value (ADR-0116), and the runtime
                 // value that carries one compares by exactly that — one representation per value, so
                 // the order it carries and the equality it answers are the same reading of it.

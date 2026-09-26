@@ -224,8 +224,8 @@ public final class Lists {
     }
 
     /** Sorts by the elements' natural order (Elm {@code List.sort}). The element type is a
-     *  {@link Comparable} — {@code String} and the {@code Int}/{@code Decimal} carriers all are —
-     *  and the input is left untouched. */
+     *  {@link Comparable} whose {@code compareTo} is the language's order — the {@code Int} and
+     *  {@code Decimal} carriers are — and the input is left untouched. */
     @SuppressWarnings({"unchecked", "rawtypes"})
     public static <T> List<T> sort(List<? extends T> xs) {
         List<T> out = new ArrayList<>(xs);
@@ -235,7 +235,8 @@ public final class Lists {
 
     /** As {@link #sort(List)}, ordering by {@code by} rather than by the element's natural order.
      *  An enumeration's order belongs to the sum, not to the case value — the same case may be
-     *  listed by two sums in different positions — so it arrives as a comparator. */
+     *  listed by two sums in different positions — so it arrives as a comparator. So does the order
+     *  of text ({@link Strings#ordering}), which is not what {@link String#compareTo} answers. */
     public static <T> List<T> sort(Comparator<Object> by, List<? extends T> xs) {
         List<T> out = new ArrayList<>(xs);
         out.sort((a, b) -> by.compare(a, b));

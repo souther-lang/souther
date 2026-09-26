@@ -4,13 +4,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * A set of the symbols a Java pattern reads a string as.
+ * A set of the characters a string is made of: Unicode scalar values, every code point but the
+ * surrogates.
  *
- * <p><b>Not Unicode scalar values.</b> What a matcher advances over is a code point where the string
- * holds a well-formed surrogate pair, and the code unit itself where it holds half of one — a lone
- * high surrogate is one symbol to a pattern, and {@code .} accepts it. So the universe is
- * {@code 0..0x10FFFF} with the surrogate range in it, and a reading that took those out would refuse
- * strings the engine accepts.
+ * <p>The universe is what a {@code String} can hold (spec §string-code-points), and not what a Java
+ * matcher could be handed. A matcher reads half of a surrogate pair as a symbol of its own, but no
+ * {@code String} holds one — text is let in only once it is a sequence of scalar values — so a
+ * surrogate is no symbol here, and nothing made of these can name one: a range is never allowed to
+ * hold one, and the complement is taken within the scalar values. That is what lets every sequence
+ * of symbols a machine here reads be a string.
  *
  * <p>Held as ranges, sorted and disjoint and never touching. Two spellings of one set would make
  * equal sets unequal, and what is written out of a reading has to come out the same on two compiles
@@ -26,13 +28,26 @@ public record CodePoints(List<Range> ranges) {
     /** The greatest symbol there is. */
     public static final int LAST = 0x10FFFF;
 
-    /** One run of symbols, both ends in it. */
+    /** The first and the last surrogate, which are not symbols: the hole in the scalar values. */
+    private static final int SURROGATES_FROM = 0xD800;
+    private static final int SURROGATES_TO = 0xDFFF;
+
+    /**
+     * One run of symbols, both ends in it.
+     *
+     * <p>Never over a surrogate. A run that would span the hole is two runs, which is what
+     * {@link #between} makes of it.
+     */
     public record Range(int from, int to) {
 
         public Range {
             if (from < 0 || to > LAST || from > to) {
                 throw new IllegalArgumentException("a run of symbols runs from low to high inside"
                         + " the universe: " + from + ".." + to);
+            }
+            if (from <= SURROGATES_TO && to >= SURROGATES_FROM) {
+                throw new IllegalArgumentException("a surrogate is half of a pair and not a"
+                        + " character, so no run of symbols holds one: " + from + ".." + to);
             }
         }
     }
@@ -44,8 +59,14 @@ public record CodePoints(List<Range> ranges) {
     /** Nothing at all. */
     public static final CodePoints NONE = new CodePoints(List.of());
 
-    /** Every symbol a pattern can read, the surrogate range among them. */
-    public static final CodePoints EVERYTHING = new CodePoints(List.of(new Range(0, LAST)));
+    /** Every symbol there is: the scalar values, the surrogates not among them. */
+    public static final CodePoints EVERYTHING = new CodePoints(List.of(
+            new Range(0, SURROGATES_FROM - 1), new Range(SURROGATES_TO + 1, LAST)));
+
+    /** Whether {@code codePoint} is a surrogate, which is no symbol. */
+    public static boolean isSurrogate(int codePoint) {
+        return codePoint >= SURROGATES_FROM && codePoint <= SURROGATES_TO;
+    }
 
     /**
      * What the five line terminators are.
@@ -58,14 +79,41 @@ public record CodePoints(List<Range> ranges) {
     public static final CodePoints LINE_TERMINATORS = of('\n').or(of('\r'))
             .or(of(0x85)).or(of(0x2028)).or(of(0x2029));
 
-    /** Just this one. */
+    /** Just this one, which is a scalar value: a surrogate handed here is a symbol nothing reads. */
     public static CodePoints of(int symbol) {
         return new CodePoints(List.of(new Range(symbol, symbol)));
     }
 
-    /** Every symbol from one to another, both ends in it. */
+    /**
+     * Every symbol from one to another, both ends in it: the scalar values between them, so a run
+     * across the surrogates leaves them out.
+     *
+     * <p>Both ends are symbols. A range whose end is a surrogate names a character that is not
+     * one, and whoever read the pattern refuses it before this is asked.
+     */
     public static CodePoints between(int from, int to) {
-        return new CodePoints(List.of(new Range(from, to)));
+        if (isSurrogate(from) || isSurrogate(to)) {
+            throw new IllegalArgumentException("a surrogate is half of a pair and not a character,"
+                    + " so it ends no run of symbols: " + from + ".." + to);
+        }
+        return new CodePoints(scalarsIn(from, to));
+    }
+
+    /** Every symbol below {@code symbol}, which is the order symbols are compared in. */
+    public static CodePoints below(int symbol) {
+        return symbol > 0 ? new CodePoints(scalarsIn(0, symbol - 1)) : NONE;
+    }
+
+    /** The runs the scalar values in {@code from..to} make, one or two of them or none. */
+    private static List<Range> scalarsIn(int from, int to) {
+        List<Range> out = new ArrayList<>();
+        if (from < SURROGATES_FROM) {
+            out.add(new Range(from, Math.min(to, SURROGATES_FROM - 1)));
+        }
+        if (to > SURROGATES_TO) {
+            out.add(new Range(Math.max(from, SURROGATES_TO + 1), to));
+        }
+        return out;
     }
 
     /** Whether {@code symbol} is one of these. */
@@ -87,7 +135,7 @@ public record CodePoints(List<Range> ranges) {
 
     /** Whether these are every symbol there is. */
     public boolean isEverything() {
-        return ranges.size() == 1 && ranges.get(0).from() == 0 && ranges.get(0).to() == LAST;
+        return ranges.equals(EVERYTHING.ranges);
     }
 
     /** Either of them. */
@@ -107,18 +155,18 @@ public record CodePoints(List<Range> ranges) {
         return and(other.not());
     }
 
-    /** Everything these are not. */
+    /** Every symbol these are not, which is a set of scalar values like any other. */
     public CodePoints not() {
         List<Range> out = new ArrayList<>();
         int next = 0;
         for (Range each : ranges) {
             if (each.from() > next) {
-                out.add(new Range(next, each.from() - 1));
+                out.addAll(scalarsIn(next, each.from() - 1));
             }
             next = each.to() + 1;
         }
         if (next <= LAST) {
-            out.add(new Range(next, LAST));
+            out.addAll(scalarsIn(next, LAST));
         }
         return new CodePoints(out);
     }

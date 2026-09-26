@@ -1,6 +1,7 @@
 package souther.compiler.regex;
 
 import org.junit.jupiter.api.Test;
+import souther.runtime.Strings;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -12,19 +13,13 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The order these machines are built and walked on is {@link String#compareTo} and nothing else.
+ * The order these machines are built and walked on is {@link Strings#compare} and nothing else.
  *
  * <p>Held to the comparison itself rather than to a table of written answers, because what this is
- * here to catch is a second definition of the order. The symbols a machine steps over are what a
- * matcher reads — a code point where a string holds a well-formed pair — and the runtime compares
- * UTF-16 code units, so the two disagree wherever a pair is involved. A reading that ordered the
- * symbols instead passes every test written over letters and digits.
- *
- * <p>Every string here is written in units, because units are what the question is about.
- * {@code \uD800￿} against {@code 𐀀} is the one that catches the near miss: the two
- * begin with the same unit and spend a different number of them on their first symbol, so no
- * relabelling of the alphabet puts them in the runtime's order — a repair that sorted the symbols by
- * unit rather than by code point would still get it wrong.
+ * here to catch is a second definition of the order. {@link String#compareTo} is the one a
+ * reader reaches for first, and it passes every test written over letters and digits: it parts
+ * from the language's order only where a character past the basic plane meets one in
+ * {@code U+E000..U+FFFF}, which is where the corpus below is dense.
  */
 class TheRuntimesOrderIsWhatTheseMachinesAnswerAboutTest {
 
@@ -33,16 +28,20 @@ class TheRuntimesOrderIsWhatTheseMachinesAnswerAboutTest {
         return new Meter(20000, 200000);
     }
 
+    /** The text of these code points. */
+    private static String text(int... codePoints) {
+        return new String(codePoints, 0, codePoints.length);
+    }
+
     /**
-     * Strings crossing every boundary the two orders differ at: the basic plane either side of the
-     * surrogates, halves of a pair standing alone, and pairs.
+     * Strings crossing every place the two orders differ at: the basic plane either side of the
+     * surrogates, the top of the basic plane, and characters past it.
      */
     private static final List<String> STRINGS = List.of(
             "", " ", "a", "ab", "b", "JP", "JPa", "JQ", "J",
-            "퟿", "\uD800", "𐀀", "𐏿",
-            "\uD800￿", "\uD800\uD800", "􏿿", "\uDC00", "\uDFFF",
-            "", " ", "￿", "￿￿",
-            "𐀀𐀀", "𐀁", "𐐀");
+            text(0xD7FF), text(0xE000), text(0xFFE5), text(0xFFFF), text(0xFFFF, 0xFFFF),
+            text(0x10000), text(0x103FF), text(0x10FFFF), text(0x10000, 0x10000),
+            text(0x10001), text(0x10400), text(0x20BB7), text(0x20BB7, 'a'), text(0xE000, 0x10000));
 
     /**
      * The machine for what comes before a string accepts exactly the strings that do.
@@ -56,7 +55,7 @@ class TheRuntimesOrderIsWhatTheseMachinesAnswerAboutTest {
             Language before = Language.before(than, allowing());
             assertNotNull(before, "the machine for what comes before " + shown(than));
             for (String value : STRINGS) {
-                assertEquals(value.compareTo(than) < 0, before.has(value),
+                assertEquals(Strings.compare(value, than) < 0, before.has(value),
                         shown(value) + " against " + shown(than));
             }
         }
@@ -64,11 +63,11 @@ class TheRuntimesOrderIsWhatTheseMachinesAnswerAboutTest {
 
     /**
      * And the strings around one it does not hold, so that the edge is where the comparison puts it
-     * and not one unit either side.
+     * and not one character either side.
      *
-     * <p>Every prefix of every string of the corpus, each with one more unit and each with one more
-     * unit and the rest. A prefix is below and a string that goes on is above, which is where an
-     * off-by-one in the unit walk shows.
+     * <p>Every prefix of every string of the corpus, each with one more character and each with one
+     * more character and the rest. A prefix is below and a string that goes on is above, which is
+     * where an off-by-one in the walk shows.
      */
     @Test
     void theEdgeIsWhereTheComparisonPutsIt() {
@@ -76,25 +75,26 @@ class TheRuntimesOrderIsWhatTheseMachinesAnswerAboutTest {
             Language before = Language.before(than, allowing());
             assertNotNull(before, shown(than));
             for (String value : around(than)) {
-                assertEquals(value.compareTo(than) < 0, before.has(value),
+                assertEquals(Strings.compare(value, than) < 0, before.has(value),
                         shown(value) + " against " + shown(than));
             }
         }
     }
 
-    /** The units a prefix is extended by, which are the ones the two orders part over. */
-    private static final char[] UNITS =
-            {' ', 'a', '퟿', '\uD800', '\uDBFF', '\uDC00', '\uDFFF', '', '￿'};
+    /** The characters a prefix is extended by, which are the ones the two orders part over. */
+    private static final int[] CHARACTERS =
+            {0, ' ', 'a', 0xD7FF, 0xE000, 0xFFE5, 0xFFFF, 0x10000, 0x20BB7, 0x10FFFF};
 
-    /** A string's prefixes, each on its own and each with one more unit before the rest. */
+    /** A string's prefixes, each on its own and each with one more character before the rest. */
     private static List<String> around(String than) {
         List<String> out = new ArrayList<>();
-        for (int at = 0; at <= than.length(); at++) {
+        for (int at = 0; at <= than.length(); at = at + (at < than.length()
+                ? Character.charCount(than.codePointAt(at)) : 1)) {
             String prefix = than.substring(0, at);
             out.add(prefix);
-            for (char unit : UNITS) {
-                out.add(prefix + unit);
-                out.add(prefix + unit + than.substring(at));
+            for (int character : CHARACTERS) {
+                out.add(prefix + text(character));
+                out.add(prefix + text(character) + than.substring(at));
             }
         }
         return out;
@@ -110,7 +110,8 @@ class TheRuntimesOrderIsWhatTheseMachinesAnswerAboutTest {
     void theLeastStringIsTheOneTheComparisonPutsFirst() {
         for (int held = 1; held <= STRINGS.size(); held++) {
             List<String> words = STRINGS.subList(0, held);
-            assertEquals(words.stream().sorted().findFirst().orElseThrow(), wordsOf(words).least(),
+            assertEquals(words.stream().sorted(Strings::compare).findFirst().orElseThrow(),
+                    wordsOf(words).least(),
                     "the least of " + words.stream().map(
                             TheRuntimesOrderIsWhatTheseMachinesAnswerAboutTest::shown).toList());
         }
@@ -119,20 +120,14 @@ class TheRuntimesOrderIsWhatTheseMachinesAnswerAboutTest {
     /**
      * The least string a language holds is a string it holds.
      *
-     * <p>The law the walk is held to, beside the one about the order. A machine steps over what a
-     * matcher reads, so a high surrogate and a low one standing next to each other are the pair and
-     * not two symbols — and a walk that took them as two answers with a sequence of symbols no
-     * string is written as. Asked whether it holds that, the language says no, and the two answers
-     * are about the same string.
-     *
-     * <p>Over languages built by taking one away from another, which is where such a sequence turns
-     * up: the strings above a pair that a prefix of it does not admit begin with the same two units
-     * as the prefix does, and only the reading of those units tells them apart.
+     * <p>Over languages built by taking one away from another as well as over patterns, which is
+     * where a walk that chose a symbol leading nowhere would answer with something the language
+     * turns away.
      */
     @Test
     void theLeastStringALanguageHoldsIsOneItHolds() {
-        for (String pattern : List.of("JP[\\s\\S]*", "a*b", "𐀀[\\s\\S]*",
-                "[\\s\\S]*", "\uD800[\\s\\S]*", "(JP|US)[\\s\\S]*")) {
+        for (String pattern : List.of("JP[\\s\\S]*", "a*b", text(0x10000) + "[\\s\\S]*",
+                "[\\s\\S]*", text(0xFFE5) + "[\\s\\S]*", "(JP|US)[\\s\\S]*")) {
             for (Language each : List.of(of(pattern), leftOver(of(pattern)))) {
                 String least = each.least();
                 if (least != null) {
@@ -144,18 +139,11 @@ class TheRuntimesOrderIsWhatTheseMachinesAnswerAboutTest {
         }
     }
 
-    /**
-     * What a language does not hold is what every string it does not hold is.
-     *
-     * <p>The complement is over the strings and not over the sequences a machine steps between:
-     * there are sequences of symbols no string is read as, and a machine's complement holds them
-     * like anything else. Read against every string of the corpus, so a complement that kept them
-     * would still answer this — what such a complement gets wrong is the next question asked of it,
-     * which is the one below.
-     */
+    /** What a language does not hold is what every string it does not hold is. */
     @Test
     void whatALanguageDoesNotHoldIsEveryStringItDoesNotHold() {
-        for (String pattern : List.of("JP[\\s\\S]*", "a*b", "𐀀[\\s\\S]*", "\uD800[\\s\\S]*")) {
+        for (String pattern : List.of("JP[\\s\\S]*", "a*b", text(0x10000) + "[\\s\\S]*",
+                text(0xE000) + "[\\s\\S]*")) {
             Language one = of(pattern);
             Language rest = one.not(allowing());
             assertNotNull(rest, pattern);
@@ -166,68 +154,7 @@ class TheRuntimesOrderIsWhatTheseMachinesAnswerAboutTest {
         }
     }
 
-    /**
-     * Two languages holding the same strings are one language.
-     *
-     * <p>The law a machine can pass every membership question and still break. Here are two
-     * machines that stop on exactly the same strings and differ over a sequence of symbols no
-     * string is read as — a high surrogate standing alone with a low one after it, which a matcher
-     * reads as the pair. Held apart, the two are one set said two ways: a reader comparing them is
-     * told the model states two things, and one asking whether either holds nothing is told it holds
-     * something no string is.
-     */
-    @Test
-    void twoLanguagesHoldingTheSameStringsAreOne() {
-        // The pair as one symbol, which is what a string of it is read as.
-        Language pair = languageOf(new int[] {0x10000});
-        // And the same, with a high surrogate and a low one in turn beside it — two symbols no
-        // string is read as, so the two machines stop on exactly the same strings.
-        Language andTheSequence = languageOf(new int[] {0x10000}, new int[] {0xD800, 0xDC00});
-
-        for (String value : STRINGS) {
-            assertEquals(pair.has(value), andTheSequence.has(value), shown(value));
-        }
-        assertEquals(pair, andTheSequence,
-                "two machines stopping on the same strings are one language");
-    }
-
-    /** And a machine stopping on nothing but such a sequence is a language holding nothing. */
-    @Test
-    void aMachineStoppingOnNoStringHoldsNothing() {
-        Language none = languageOf(new int[] {0xD800, 0xDC00});
-        assertTrue(none.isEmpty(),
-                "a high surrogate beside a low one is the pair, so no string is read as the two");
-        assertNull(none.least());
-    }
-
-    /** The language of exactly these sequences of symbols, put through the way in that every
-     *  language takes. */
-    private static Language languageOf(int[]... sequences) {
-        Meter meter = allowing();
-        java.util.List<java.util.List<Automaton.Step>> steps = new ArrayList<>();
-        steps.add(new ArrayList<>());
-        java.util.BitSet accepting = new java.util.BitSet();
-        for (int[] each : sequences) {
-            int at = Automaton.START;
-            for (int symbol : each) {
-                steps.add(new ArrayList<>());
-                int made = steps.size() - 1;
-                steps.get(at).add(new Automaton.Step(CodePoints.of(symbol), made));
-                at = made;
-            }
-            accepting.set(at);
-        }
-        Language made = Language.canonical(Automaton.madeOf(steps, accepting), meter);
-        assertNotNull(made);
-        return made;
-    }
-
-    /**
-     * And a language holding every string says so, however it was arrived at.
-     *
-     * <p>Not the one state every symbol stops at: the sequences no string is read as are in no
-     * language here, so the machine for every string turns those away and stops on the rest.
-     */
+    /** And a language holding every string says so, however it was arrived at. */
     @Test
     void aLanguageHoldingEveryStringSaysSo() {
         assertTrue(of("[\\s\\S]*").isEverything());
@@ -238,8 +165,7 @@ class TheRuntimesOrderIsWhatTheseMachinesAnswerAboutTest {
         assertFalse(of("a*b").isEverything());
     }
 
-    /** What a language leaves out from its least string upwards, which is where the two readings of
-     *  a pair's units part. */
+    /** What a language leaves out from its least string upwards. */
     private static Language leftOver(Language language) {
         Meter meter = allowing();
         String least = language.least();
@@ -282,49 +208,25 @@ class TheRuntimesOrderIsWhatTheseMachinesAnswerAboutTest {
     }
 
     /**
-     * The one that tells the two orders apart.
+     * The pair that tells the two orders apart.
      *
-     * <p>The runtime puts the pair first and the symbols put the lone surrogate first, because the
-     * pair's first symbol is above every unit. A reading over symbols answers with the wrong one of
-     * them whichever way its alphabet is sorted, since the two agree on their first unit and part on
-     * how many units that first symbol was.
+     * <p>{@code ￥} is U+FFE5 and {@code 𠮷} is U+20BB7, so the language puts {@code ￥} first; the
+     * first unit of {@code 𠮷} is D842, below FFE5, so a comparison of units puts it second. A reading
+     * that took its order from {@link String#compareTo} answers with the other one.
      */
     @Test
-    void aPairAndALoneSurrogateAreOrderedAsTheRuntimeOrdersThem() {
-        String pair = "𐀀";
-        String lone = "\uD800￿";
-        assertTrue(pair.compareTo(lone) < 0, "the runtime puts the pair first");
-        assertTrue(pair.codePointAt(0) > lone.codePointAt(0),
-                "and the symbols put it second, which is what this is about");
+    void aCharacterPastTheBasicPlaneIsAboveEveryCharacterInIt() {
+        String yen = text(0xFFE5);
+        String yoshi = text(0x20BB7);
+        assertTrue(Strings.compare(yen, yoshi) < 0, "the language puts U+FFE5 first");
+        assertTrue(yen.compareTo(yoshi) > 0, "and the units put it second, which is what this is about");
 
-        assertEquals(pair, wordsOf(List.of(pair, lone)).least());
+        assertEquals(yen, wordsOf(List.of(yoshi, yen)).least());
 
-        Language before = Language.before(lone, allowing());
-        assertNotNull(before);
-        assertTrue(before.has(pair), "the pair comes before the lone surrogate");
-        assertFalse(before.has(lone));
-    }
-
-    /**
-     * The same across the surrogates: a pair is below every string beginning past them.
-     *
-     * <p>Beside the one above and not a second spelling of it. There, the two strings begin with the
-     * same unit, and a walk that took the units to try from the steps as they are written finds that
-     * unit anyway — the lone surrogate's own step supplies it, and the pair is reached by accident.
-     * Here nothing supplies it: the first units are a high surrogate and one past the surrogates,
-     * and a walk that did not take a pair's step apart into the units it spends never offers the
-     * first of them. So this is the one place where reading a pair as a unit at a time is what
-     * answers, and it is why the walk is written that way.
-     */
-    @Test
-    void aPairIsBelowTheFirstStringPastTheSurrogates() {
-        String pair = "𐀀";
-        String past = "";
-        assertTrue(pair.compareTo(past) < 0);
-        assertTrue(pair.codePointAt(0) > past.codePointAt(0));
-
-        assertEquals(pair, wordsOf(List.of(pair, past)).least());
-        assertTrue(Language.before(past, allowing()).has(pair));
+        Language beforeYoshi = Language.before(yoshi, allowing());
+        assertNotNull(beforeYoshi);
+        assertTrue(beforeYoshi.has(yen), "U+FFE5 comes before U+20BB7");
+        assertFalse(Language.before(yen, allowing()).has(yoshi));
     }
 
     /** The language holding exactly {@code words}. */
@@ -347,12 +249,10 @@ class TheRuntimesOrderIsWhatTheseMachinesAnswerAboutTest {
         return made;
     }
 
-    /** A string with its units written out, so that a failure names what it was about. */
+    /** A string with its code points written out, so that a failure names what it was about. */
     private static String shown(String value) {
         StringBuilder out = new StringBuilder("\"");
-        for (int at = 0; at < value.length(); at++) {
-            out.append(String.format("\\u%04X", (int) value.charAt(at)));
-        }
+        value.codePoints().forEach(each -> out.append(String.format("U+%04X ", each)));
         return out.append('"').toString();
     }
 }

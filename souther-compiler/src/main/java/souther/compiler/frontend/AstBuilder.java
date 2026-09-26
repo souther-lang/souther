@@ -44,7 +44,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import souther.unicode.Normalization;
+import souther.runtime.Strings;
 
 /**
  * Builds the compiler's {@link Ast} from a concrete syntax tree. This is where the surface forms the
@@ -856,7 +856,7 @@ public final class AstBuilder {
             if (!isReservedNamespace(moduleName)) {
                 throw error(pos, new ParseMessage.IntrinsicIsACorePrivilege());
             }
-            String key = stringValue(intrinsic.get().token(SyntaxKind.STRING_LIT).orElseThrow().text());
+            String key = stringValue(intrinsic.get().token(SyntaxKind.STRING_LIT).orElseThrow());
             return new Ast.FnDef(declared, moduleName, params, declaredReturn,
                     new Ast.FnBody.Intrinsic(key), modifiers, pos);
         }
@@ -980,7 +980,7 @@ public final class AstBuilder {
             case INT_LIT -> new Ast.IntLit(Long.parseLong(t.text()), pos, region);
             case DECIMAL_LIT ->
                     new Ast.DecimalLit(new BigDecimal(stripDecimalSuffix(t.text())), pos, region);
-            case STRING_LIT -> new Ast.StringLit(stringValue(t.text()), pos, region);
+            case STRING_LIT -> new Ast.StringLit(stringValue(t), pos, region);
             case TRUE_KW -> new Ast.BoolLit(true, pos, region);
             case FALSE_KW -> new Ast.BoolLit(false, pos, region);
             default -> throw error(pos, new ParseMessage.ALiteralWasExpected());
@@ -1725,7 +1725,7 @@ public final class AstBuilder {
      * nothing is not one, and is refused where it is written (E2304), so a row written with one is
      * read here as the row without a name it turned out to be. */
     private Ast.ExampleRow exampleRow(SyntaxNode n) {
-        String written = n.token(SyntaxKind.STRING_LIT).map(t -> stringValue(t.text())).orElse(null);
+        String written = n.token(SyntaxKind.STRING_LIT).map(t -> stringValue(t)).orElse(null);
         RowIdentity identity = RowIdentity.of(written, ++rowCounter);
         List<Ast.Expr> inputs = new ArrayList<>();
         n.child(SyntaxKind.ARG_LIST).ifPresent(list -> {
@@ -2123,24 +2123,32 @@ public final class AstBuilder {
     }
 
     /**
-     * Decodes a raw string-literal slice (quotes and escapes included) to its value, canonicalized
-     * to NFC.
+     * Decodes a string-literal token (quotes and escapes included) to its value, let in the way text
+     * from outside is: canonicalized to NFC, and refused where it holds half of a surrogate pair.
      *
      * <p>A source file is bytes from an editor, which is the other place text arrives from outside —
-     * the first being a decoder, which canonicalizes for the same reason. Two forms that are
-     * canonically equivalent are the same text by Unicode's definition and different values to a
-     * comparison by code units, so a literal left as written would compare unequal to the same text
-     * that came in through a boundary, and a pattern written in one form would not match a value in
-     * the other. Which form an editor writes is not something the author chose.
+     * the first being a decoder, which lets it in for the same reason. The text a compiler is handed
+     * is a {@code java.lang.String}, which an editor or a caller of the compiler can fill with half
+     * a pair, and a literal holding one would be a {@code String} value that is not text.
+     *
+     * <p>Two forms that are canonically equivalent are the same text by Unicode's definition and
+     * different values to a comparison by code points, so a literal left as written would compare
+     * unequal to the same text that came in through a boundary, and a pattern written in one form
+     * would not match a value in the other. Which form an editor writes is not something the author
+     * chose.
      *
      * <p>NFC and not NFKC: compatibility folding turns ① into 1 and a half-width kana into a
      * full-width one, which is a different claim about the text than "these are the same characters".
      *
-     * <p>{@link Normalization#nfc}, not {@code java.text.Normalizer}: the one Unicode 18.0.0 NFC
+     * <p>{@link Strings#admitted}, not {@code java.text.Normalizer}: the one Unicode 18.0.0 NFC
      * this language runs everywhere, not whatever Unicode version this JDK shipped with.
      */
-    private static String stringValue(String raw) {
-        return Normalization.nfc(CstLexer.textOf(raw));
+    private String stringValue(SyntaxToken literal) {
+        String admitted = Strings.admitted(CstLexer.textOf(literal.text()));
+        if (admitted == null) {
+            throw error(posOf(literal), new ParseMessage.AStringLiteralHoldsHalfASurrogatePair());
+        }
+        return admitted;
     }
 
     private <M extends Message & Reported> CompileException error(SourcePos pos, M said) {
