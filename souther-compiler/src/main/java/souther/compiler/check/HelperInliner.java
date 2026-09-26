@@ -1688,27 +1688,18 @@ public final class HelperInliner {
         // takes nothing. The value is substituted and the arguments are applied to it.
         if (helper.params().isEmpty() && !args.isEmpty()
                 && call.function() instanceof Hir.Var named) {
+            AppliedValue value = appliedValue(named);
             // A body being closed leaves another module's value as its name, applied or not: the
             // reader decides what stands for it, as it does wherever the value is named.
-            if (reaches != null && leftNamed(reaches)) {
+            ReachName.Declaration valueReach = value == null ? reaches : value.reached();
+            if (value == null || (valueReach != null && leftNamed(valueReach))) {
+                // No body to put in the callee's place. Reading the callee as a value written
+                // where a value goes would answer with the callee itself, and the call rebuilt
+                // from it would be this same call.
                 return call.withArgs(args);
             }
-            // A binding that names the value is the same value applied, so the body it stands for is
-            // the one substituted. Read as a value written where a value goes, the binding is only
-            // itself, and applying it would ask this same question of the same call.
-            if (named instanceof Hir.Var.Denoting bound
-                    && bound.denotes() instanceof ValueName.Local) {
-                ReachName.Declaration held = reaches(bound);
-                if (held == null || graph.recurses(held) || leftNamed(held)) {
-                    return call.withArgs(args);
-                }
-                copiesValue(held);
-                return inline(call.replacedBy(substituted(held.rendered(), helper.writtenBody()),
-                        args));
-            }
-            Hir.FnDef applied = appliedValue(named);
-            return inline(call.replacedBy(applied == null ? valueOf(named)
-                    : appliedValueBody((Hir.Var.Denoting) named, applied), args));
+            return inline(call.replacedBy(
+                    appliedValueBody((Hir.Var.Denoting) named, value), args));
         }
         if (args.size() != helper.params().size()) {
             throw wrongArity(call, helper, args.size());
@@ -2372,23 +2363,36 @@ public final class HelperInliner {
      * A reference in a callee position is a different use of the name from a reference in a value
      * position, and each is answered by what its position needs.
      */
-    private Hir.Expr appliedValueBody(Hir.Var.Denoting named, Hir.FnDef value) {
-        copiesValue(named.reachesADeclaration());
-        Hir.Expr settled = settled(named);
+    private Hir.Expr appliedValueBody(Hir.Var.Denoting named, AppliedValue value) {
+        copiesValue(value.reached());
+        // What a value's own answer was told for is the declaration, and a binding is not one.
+        Hir.Expr settled = named.denotes() instanceof ValueName.Local ? null : settled(named);
         return settled != null && settled != named
-                ? settled : substituted(named.reaches(), value.writtenBody());
+                ? settled : substituted(value.reached().rendered(), value.definition().writtenBody());
     }
 
-    /** The value {@code v} names where applying it applies that value's own body, or null where
-     *  the name reaches no such value. */
-    private Hir.FnDef appliedValue(Hir.Var v) {
+    /** A value applying which applies its own body: the declaration, and the definition that
+     *  declaration has, asked together so that no caller pairs one with the other's answer. */
+    private record AppliedValue(ReachName.Declaration reached, Hir.FnDef definition) {
+    }
+
+    /**
+     * The value {@code v} names where applying it applies that value's own body, or null where the
+     * name reaches no such value.
+     *
+     * <p>A binding is followed to what it was bound to: {@code let g = inc} makes {@code g} a second
+     * name for {@code inc}, so applying either applies the same value and is asked the same way.
+     */
+    private AppliedValue appliedValue(Hir.Var v) {
         if (!(v instanceof Hir.Var.Denoting named)
-                || !(named.denotes() instanceof ValueName.Helper)) {
+                || !(named.denotes() instanceof ValueName.Helper
+                        || named.denotes() instanceof ValueName.Local)) {
             return null;
         }
-        ReachName.Declaration reaches = named.reachesADeclaration();
+        ReachName.Declaration reaches = reaches(named);
         Hir.FnDef value = reaches == null ? null : table.reached(reaches);
-        return value == null || value.body() == null || graph.recurses(reaches) ? null : value;
+        return value == null || value.body() == null || graph.recurses(reaches) ? null
+                : new AppliedValue(reaches, value);
     }
 
     /**

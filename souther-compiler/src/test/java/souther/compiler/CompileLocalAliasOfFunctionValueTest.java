@@ -46,22 +46,24 @@ class CompileLocalAliasOfFunctionValueTest {
     }
 
     @Test
-    void aNameForTheNameIsApplied() {
-        assertDoesNotThrow(() -> Compiler.compile("""
-                module shop exposing ( use )
-
-                %s
-                behavior use : (n: Int) -> Int
-                let use (n) = {
-                    let g = inc
-                    let h = g
-                    h(n)
-                }
-                """.formatted(ADDER)));
+    void theNameAnswersWhatTheValueAnswers() throws Exception {
+        assertEquals(42L, answered("""
+                let g = inc
+                Count(g(c.value))
+                """, 41L));
     }
 
     @Test
-    void theNameAnswersWhatTheValueAnswers() throws Exception {
+    void aNameForTheNameAnswersWhatTheValueAnswers() throws Exception {
+        assertEquals(42L, answered("""
+                let g = inc
+                let h = g
+                Count(h(c.value))
+                """, 41L));
+    }
+
+    /** What `use` answers for {@code input}, with {@code body} as what it does. */
+    private long answered(String body, long input) throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
                 module shop exposing ( Count, use )
 
@@ -70,13 +72,11 @@ class CompileLocalAliasOfFunctionValueTest {
                 %s
                 behavior use : (c: Count) -> Count constructs Count
                 let use (c) = {
-                    let g = inc
-                    Count(g(c.value))
-                }
-                """.formatted(ADDER)), getClass().getClassLoader());
+                %s}
+                """.formatted(ADDER, body.indent(4))), getClass().getClassLoader());
         Object behavior = Emitted.behavior(loader, "shop", "use").getDeclaredConstructor().newInstance();
-        Object in = Codecs.decoded(loader, "shop.Count", 41L);
+        Object in = Codecs.decoded(loader, "shop.Count", input);
 
-        assertEquals(42L, Codecs.encode(loader, "shop.Count", Codecs.apply(behavior, in)));
+        return (long) Codecs.encode(loader, "shop.Count", Codecs.apply(behavior, in));
     }
 }
