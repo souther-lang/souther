@@ -59,23 +59,39 @@ public final class ValueEntries {
      * (spec §an-attached-files-values-are-for-its-rows), and only the module's own may be listed.
      */
     public static Set<String> publishedValues(Hir.Module module) {
+        Set<String> listed = module.published();
+        Set<String> published = new LinkedHashSet<>();
+        for (String value : declaredValues(module)) {
+            if (listed.contains(value)) {
+                published.add(value);
+            }
+        }
+        return published;
+    }
+
+    /**
+     * The values {@code module} declares, published or kept, whether each runs as a method or folds
+     * to a constant that nothing runs.
+     *
+     * <p>A declaration's shape and not what became of it once it was lowered, so that a value which
+     * folds is in it as much as one that does not.
+     */
+    public static Set<String> declaredValues(Hir.Module module) {
         Set<String> behaviors = new HashSet<>();
         for (Hir.BehaviorDef behavior : module.behaviors()) {
             behaviors.add(behavior.name());
         }
-        Set<String> listed = module.published();
-        Set<String> published = new LinkedHashSet<>();
+        Set<String> declared = new LinkedHashSet<>();
         for (Hir.FnDef fn : module.fns()) {
             boolean implementsBehavior = behaviors.contains(fn.name());
             if (fn.body() != null
                     && fn.role() instanceof DefinitionRole.Ordinary
                     && LoweringRole.of(fn, module.name(), implementsBehavior)
-                            instanceof LoweringRole.ValueHome
-                    && listed.contains(fn.name())) {
-                published.add(fn.name());
+                            instanceof LoweringRole.ValueHome) {
+                declared.add(fn.name());
             }
         }
-        return published;
+        return declared;
     }
 
     /** The entry of every value {@code surface}'s module publishes, by the name each is emitted

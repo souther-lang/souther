@@ -20,6 +20,7 @@ import souther.compiler.check.Sig;
 import souther.compiler.check.SpecImplementation;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
+import souther.compiler.check.ValueEntries;
 import souther.compiler.derive.CodecShape;
 import souther.compiler.derive.Deriver;
 import souther.compiler.abort.AbortSites;
@@ -56,6 +57,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -480,7 +482,8 @@ final class CheckedProgramAssembler {
                                  List<CheckedData> data,
                                  Map<String, List<Output.RowsRead.ReadRow>> rowsByBehavior,
                                  Map<String, List<ValueName.Behavior>> requirements,
-                                 Set<String> published) {}
+                                 Set<String> published,
+                                 Set<ValueName.Helper> valuesDeclared) {}
 
     /**
      * The rows this compile read for {@code module}, by the behavior each is a row of.
@@ -564,11 +567,17 @@ final class CheckedProgramAssembler {
             throw new IllegalStateException("`" + module + "` was taken as checked and what it"
                     + " publishes was not read");
         }
+        // Off the settled tree, where a value's declaration is still there whether or not lowering
+        // left a method for it: a constant folds into whatever reads it and has no method.
+        Set<ValueName.Helper> valuesDeclared = new LinkedHashSet<>();
+        for (String value : ValueEntries.declaredValues(declarations)) {
+            valuesDeclared.add(new ValueName.Helper(module, value));
+        }
         return new ModuleReading(module, bodies, checked, signatures, declaredSignatures,
                 implementations,
                 compositions, checks,
                 dataOf(declarations, db, shapes, codecDefs),
-                rowsOf(db, module), requirementsOf(requirements), published);
+                rowsOf(db, module), requirementsOf(requirements), published, valuesDeclared);
     }
 
     /**
@@ -604,7 +613,7 @@ final class CheckedProgramAssembler {
                         rowsOf(read.rowsByBehavior().getOrDefault(named.name(), List.of()), types,
                                 target.signature(), targets, emitted.rowValues()))));
         return new CheckedModule(read.name(), behaviors, emitted.helpers(), emitted.values(),
-                emitted.valueEntries(), read.data(), read.published());
+                emitted.valueEntries(), read.data(), read.published(), read.valuesDeclared());
     }
 
     /**
