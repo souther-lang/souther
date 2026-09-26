@@ -1627,7 +1627,7 @@ public final class HelperInliner {
             case Hir.ListComp comp -> new Hir.ListComp(inline(comp.element()), inlineList(comp.guards()),
                     comp.origin(), comp.pos(), comp.region());
             case Hir.Block block -> new Hir.Block(block.params(), inline(block.body()), block.rule(),
-                    block.expandedFrom(),
+                    block.expandedFrom(), block.named(),
                     block.pos(),
                     block.region());
             case Hir.IntLit _ -> e;
@@ -2250,7 +2250,51 @@ public final class HelperInliner {
                 Hir.Apply.synthetic(function, args, new ApplicationOrigin.Eta(etaOf(function)),
                         function.pos(), null),
                 souther.compiler.types.RuleOrigin.unwritten(), writtenReference(function),
-                function.pos(), null);
+                namedFunction(function), function.pos(), null);
+    }
+
+    /**
+     * The function {@code function} names, with what its declaration says it takes.
+     *
+     * <p>Read here because this is where the declaration is in hand for every kind of function a
+     * name may reach, as {@link #declarationArity} reads how many it takes. What the block holds
+     * is asked of the declaration and not of what the body comes to: the call inside is expanded,
+     * left standing or bound according to what the function is, and none of the three is what the
+     * function takes.
+     */
+    private Hir.NamedFunction namedFunction(Hir.Var function) {
+        if (!(function instanceof Hir.Var.Denoting named)) {
+            return null;
+        }
+        return new Hir.NamedFunction(named.denotes(), declaredTakes(named));
+    }
+
+    /** What the declaration {@code v} reaches wrote for its parameters, or null where it is a kind
+     *  whose type is asked of something else or where it wrote one of them no type. */
+    private List<Type> declaredTakes(Hir.Var.Denoting v) {
+        return switch (v.denotes()) {
+            case ValueName.Stdlib.Operation lib -> {
+                Stdlib.Entry entry = table.library().entry(lib);
+                yield entry == null ? null : entry.signature().params();
+            }
+            case ValueName.Helper _ -> {
+                ReachName.Declaration reaches = v.reachesADeclaration();
+                Hir.FnDef declared = reaches == null ? null : table.reached(reaches);
+                yield declared == null ? null : writtenTakes(declared);
+            }
+            default -> null;
+        };
+    }
+
+    private static List<Type> writtenTakes(Hir.FnDef declared) {
+        List<Type> takes = new ArrayList<>();
+        for (Hir.FnParam param : declared.params()) {
+            if (param.type() == null) {
+                return null;
+            }
+            takes.add(TypeOps.resolveParamType(param.type()));
+        }
+        return takes;
     }
 
     /**
@@ -3056,7 +3100,7 @@ public final class HelperInliner {
                     region(b.right(), slot(b.origin(), new RegionSlot.ShortCircuitRight())),
                     b.origin(), b.pos(), b.region());
             case Hir.Block bl -> new Hir.Block(bl.params(), region(bl.body(), siteOfBlock(bl)),
-                    bl.rule(), bl.expandedFrom(), bl.pos(), bl.region());
+                    bl.rule(), bl.expandedFrom(), bl.named(), bl.pos(), bl.region());
             case Hir.ListComp comp -> {
                 List<Hir.Expr> guards = new ArrayList<>();
                 for (int at = 0; at < comp.guards().size(); at++) {
@@ -3610,7 +3654,7 @@ public final class HelperInliner {
                 // is sent, and which block this is has to be the same in every copy.
                 yield new Hir.Block(params,
                         rename(block.body(), renaming), block.rule(), block.expandedFrom(),
-                        renaming.at(block.pos()), renaming.over(block.region()));
+                        block.named(), renaming.at(block.pos()), renaming.over(block.region()));
             }
             case Hir.IntLit lit -> renaming.stamps()
                     ? new Hir.IntLit(lit.value(), renaming.at(lit.pos()), renaming.over(lit.region()))

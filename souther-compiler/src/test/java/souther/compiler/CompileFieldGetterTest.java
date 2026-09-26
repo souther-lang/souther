@@ -59,10 +59,10 @@ class CompileFieldGetterTest {
 
     @Test
     void aGetterInValuePositionIsRejected() {
-        // a getter is a second-class block, so storing it (not applying) is `block is not a value`
+        // a getter names no parameter type, so where no position gives one there is none to read
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compile(NEWTYPE.formatted(".value")));
-        assertTrue(e.getMessage().contains("not a value"), e.getMessage());
+        assertTrue(e.getMessage().contains("Nothing says what this function takes"), e.getMessage());
     }
 
     @Test
