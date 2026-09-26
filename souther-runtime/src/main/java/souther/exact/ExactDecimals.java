@@ -62,11 +62,12 @@ public final class ExactDecimals {
      * here and moved to the scale the type has: a sum above the range gives up the zeros it is over
      * by, and a sum below it takes the zeros it is short by.
      *
-     * <p>Two questions, kept apart as {@code ExactRatio} keeps them. Whether the number is a decimal
-     * is the language's, settled by the scale alone: null is a sum above the range that the digits
-     * have no zeros to bring back. Whether the host has room for the digits is not about the number,
-     * so it is never null: a sum below the range asks for zeros no whole number here holds, and that
-     * is an {@link ExactFailure}, which a run with more room does not raise.
+     * <p>Two questions, kept apart as {@code ExactRatio} keeps them. Whether the number has a decimal
+     * representation is the language's, and is independent of whether this host has room for its
+     * digits: null is a sum above the range that the digits have no zeros to bring back. Whether the
+     * host has room is not about the number, so it is never null: a sum below the range asks for
+     * zeros no whole number here holds, and that is an {@link ExactFailure}, which a run with more
+     * room does not raise.
      *
      * <p>Nought is nought at every scale, so it answers before any scale is summed.
      *
