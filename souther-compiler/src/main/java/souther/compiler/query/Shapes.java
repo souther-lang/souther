@@ -28,6 +28,8 @@ import souther.compiler.check.ExpandedClauses;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.InvariantSettled;
+import souther.compiler.check.SettledInvariant;
+import souther.compiler.check.TypeOps;
 import souther.compiler.check.Cardinality;
 import souther.compiler.check.CardinalityPremise;
 import souther.compiler.check.TypeCardinality;
@@ -1630,6 +1632,128 @@ public final class Shapes {
     }
 
     /**
+     * The settled clauses that govern each data this module declares, as this module reaches what
+     * they name: the clauses of every declaration its spreads take in, first and in turn, and then
+     * its own.
+     *
+     * <p>What runs here, and one answer for both of the things that need it. A construction of a
+     * data checks these trees, and the calls the settling left standing in them are to helpers this
+     * module emits as methods — a helper another module declared among them, where a spread brought
+     * in a clause of that module's. The two are read off one value ({@link SettledInvariant}), so
+     * the tree a check types and the calls the module emits come from the same expansion.
+     *
+     * <p>A clause another module wrote is the one {@link ClausesTakenIn} hands over, which is the
+     * clause that module settled reaching what it names as this module does.
+     *
+     * <p>Every data, whether or not a meaning was settled for it: what a module has to emit does not
+     * turn on whether one of its declarations came out. Absent where a declaration a spread takes
+     * in has no normalized form, which is a module whose settling failed and said so.
+     */
+    public record SettledInvariantsGoverning(String name)
+            implements Key<Map<TypeSymbol.AtModule, List<SettledInvariant>>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<TypeSymbol.AtModule, List<SettledInvariant>>> compute(Db db) {
+            Answer<InvariantSettled> settling = db.ask(new Settling(name));
+            Answer<ResolvedSymbols> scope = Names.resolvedSymbols(db, name);
+            Answer<Map<TypeSymbol.AtModule, List<SettledInvariant>>> takenIn =
+                    db.ask(new ClausesTakenIn(name));
+            if (!settling.present() || !scope.present() || !takenIn.present()) {
+                return Answer.absent();
+            }
+            Map<TypeSymbol.AtModule, List<SettledInvariant>> out = new LinkedHashMap<>();
+            // In the order the module writes its declarations, which is the order the table of
+            // normalized ones does not keep.
+            for (InvariantSettled.Def def : settling.value().defs()) {
+                if (!(db.ask(new NormalizedDef(def.declaredKey())).value()
+                        instanceof Normalized.Data data)) {
+                    continue;
+                }
+                List<SettledInvariant> governing = new ArrayList<>();
+                for (TypeSymbol.AtModule declaration
+                        : TypeOps.declarationsGoverning(data.node().declares(), scope.value())) {
+                    List<SettledInvariant> clauses = declaration.module().equals(name)
+                            ? ownClauses(db, declaration) : takenIn.value().get(declaration);
+                    if (clauses == null) {
+                        return Answer.absent();
+                    }
+                    governing.addAll(clauses);
+                }
+                out.put(data.node().declares(), List.copyOf(governing));
+            }
+            return Answer.of(Ordered.map(out));
+        }
+
+        private static List<SettledInvariant> ownClauses(Db db, TypeSymbol.AtModule declaration) {
+            return db.ask(new NormalizedDef(declaration.key())).value() instanceof Normalized.Data d
+                    ? d.settledInvariants() : null;
+        }
+    }
+
+    /**
+     * The settled clauses of every declaration of another module that governs a data this module
+     * declares, as this module reaches what they name.
+     *
+     * <p>A clause is the declaring module's, settled there, and it is read here. What it names it
+     * names by the routes that module has, and a module's own helper is another module's once the
+     * clause is read by a module that includes it. So each is handed over as this module reaches
+     * what it names ({@link SettledInvariant#reachedFrom}); what it denotes, and what it says, is
+     * what the declaring module settled.
+     *
+     * <p>Its own question, apart from {@link SettledInvariantsGoverning}, because it is asked from
+     * below this module's settling. A helper the calls left standing is one this module emits, so its
+     * body is among the definitions this module is handed ({@code Bodies.ImportedDefinitions}) — and
+     * those are what this module's own clauses are settled against. Nothing here reads that
+     * settling: the declarations are what a spread takes in, and their clauses are their own
+     * modules'.
+     *
+     * <p>Absent where one of those declarations has no normalized form, which is a module whose
+     * settling failed and said so.
+     */
+    public record ClausesTakenIn(String name)
+            implements Key<Map<TypeSymbol.AtModule, List<SettledInvariant>>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<TypeSymbol.AtModule, List<SettledInvariant>>> compute(Db db) {
+            Answer<Hir.Module> resolved = db.ask(new Names.Resolved(name));
+            Answer<ResolvedSymbols> scope = Names.resolvedSymbols(db, name);
+            if (!resolved.present() || !scope.present()) {
+                return Answer.absent();
+            }
+            Map<TypeSymbol.AtModule, List<SettledInvariant>> out = new LinkedHashMap<>();
+            for (Hir.Def def : resolved.value().defs()) {
+                if (!(def instanceof Hir.Data data)) {
+                    continue;
+                }
+                for (TypeSymbol.AtModule declaration
+                        : TypeOps.declarationsGoverning(data.declares(), scope.value())) {
+                    if (declaration.module().equals(name) || out.containsKey(declaration)) {
+                        continue;
+                    }
+                    if (!(db.ask(new NormalizedDef(declaration.key())).value()
+                            instanceof Normalized.Data wrote)) {
+                        return Answer.absent();
+                    }
+                    List<SettledInvariant> clauses = new ArrayList<>();
+                    for (SettledInvariant clause : wrote.settledInvariants()) {
+                        clauses.add(clause.reachedFrom(name));
+                    }
+                    out.put(declaration, List.copyOf(clauses));
+                }
+            }
+            return Answer.of(Ordered.map(out));
+        }
+    }
+
+    /**
      * What a value of each of this module's declared data is made of, and what must hold of one.
      *
      * <p>The reading that runs, made where the check is. A clause is elaborated once here and read
@@ -1667,6 +1791,11 @@ public final class Shapes {
                     || !spreads.present()) {
                 return Answer.absent();
             }
+            Answer<Map<TypeSymbol.AtModule, List<SettledInvariant>>> governing =
+                    db.ask(new SettledInvariantsGoverning(name));
+            if (!governing.present()) {
+                return Answer.absent();
+            }
             Map<TypeSymbol.AtModule, ValueShape> shapes = new LinkedHashMap<>();
             List<Report> reports = new ArrayList<>();
             for (Hir.Def def : settled.value().defs()) {
@@ -1676,8 +1805,8 @@ public final class Shapes {
                 }
                 try {
                     shapes.put(data.declares(),
-                            ExecutableInvariants.of(data, scope.value(),
-                                    publishedDeclarations(db), declarationKinds(db),
+                            ExecutableInvariants.of(data, governing.value().get(data.declares()),
+                                    scope.value(), publishedDeclarations(db), declarationKinds(db),
                                     newtypeInners(db), effectiveFieldTypes(db),
                                     helpers.value()));
                 } catch (Unanswerable _) {

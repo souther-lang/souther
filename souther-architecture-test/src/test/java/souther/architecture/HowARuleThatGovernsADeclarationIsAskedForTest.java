@@ -2,7 +2,6 @@ package souther.architecture;
 
 import souther.architecture.WhatASignatureReaches.Scope;
 import souther.compiler.ast.Hir;
-import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.ExpandedClauseLookup;
 import souther.compiler.check.Symbols;
 import souther.test.Signatures;
@@ -37,12 +36,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * about while the world decided the ones under it, and nothing either of them held would say the
  * two were the same reading.
  *
- * <p><b>What a clause states is read from whatever owns that representation.</b> The settled form is
- * the derived world's, so a walk that answers with one takes {@link DerivedSymbols} and not the
- * reader that does not name a stage. The expanded form is
- * {@code ExpandedClauseLookup}'s — one question, one input, no node to fall back on — and that
- * interface holds its own answer; a rule here that demanded the derived world of it as well would
- * be reporting a walk that is already closed, by a stronger arrangement than this one.
+ * <p><b>What a clause states is read from whatever owns that representation.</b> The expanded form
+ * is {@code ExpandedClauseLookup}'s — one question, one input, no node to fall back on — so a walk
+ * here that answers with clauses takes the lookup. The settled form is not composed here at all: the
+ * clauses a module runs are composed once, by the query its checks and its emitted methods both read
+ * ({@code Shapes.SettledInvariantsGoverning}), each paired with what its expansion left standing. A
+ * walk here answering with settled clauses would be a second composition, handing over the trees
+ * without what their expansions left standing.
  *
  * <p>Both are read through {@link WhatASignatureReaches}, so that what a walk is handed is read for
  * what the declaration guarantees rather than for how it was written. A world wrapped in a record,
@@ -60,7 +60,6 @@ class HowARuleThatGovernsADeclarationIsAskedForTest {
 
     private static final String A_CLAUSE = internal(Hir.InvariantClause.class);
     private static final String A_DECLARATION = internal(Hir.Def.class);
-    private static final String THE_DERIVED_WORLD = internal(DerivedSymbols.class);
     private static final String THE_LOOKUP = internal(ExpandedClauseLookup.class);
 
     /** The declaration worlds, read off the sealed interface rather than listed: a world added to it
@@ -132,9 +131,8 @@ class HowARuleThatGovernsADeclarationIsAskedForTest {
      * The methods another class can ask this one for.
      *
      * <p>Not the public ones. What these rules are about is what a caller elsewhere may reach, and a
-     * package-private method is reachable by every class beside it — the walk that answers with the
-     * settled form is one of those, so a reading of the public surface alone would be a rule about a
-     * set its own subject is not in. A private method is the class's own business and is held by
+     * package-private method is reachable by every class beside it, so a reading of the public
+     * surface alone would leave out a walk those classes can ask for. A private method is the class's own business and is held by
      * what its neighbours here do with it, which is a thing to read rather than to check.
      */
     private static List<Read> reachableMethods() {
@@ -187,45 +185,28 @@ class HowARuleThatGovernsADeclarationIsAskedForTest {
     }
 
     @Test
-    void aWalkThatAnswersWithTheSettledFormTakesTheDerivedWorld() {
-        List<String> loose = new ArrayList<>();
+    void aWalkHereAnswersWithTheFormTheLookupHolds() {
+        List<String> composingTheSettledForm = new ArrayList<>();
         for (Read walk : walksOverWhatGoverns()) {
-            // What the expanded form states is the lookup's to answer, and it holds that itself.
-            if (walk.takesOneOf(Set.of(THE_LOOKUP))) {
-                continue;
-            }
-            if (!walk.takesOneOf(Set.of(THE_DERIVED_WORLD))) {
-                loose.add(walk.shown());
+            if (!walk.takesOneOf(Set.of(THE_LOOKUP))) {
+                composingTheSettledForm.add(walk.shown());
             }
         }
 
-        assertEquals(List.of(), loose,
-                "the settled form of a clause is the derived world's, so a walk that answers with"
-                        + " one says which world it read");
+        assertEquals(List.of(), composingTheSettledForm,
+                "the settled clauses that govern a declaration are composed once, beside what each"
+                        + " left standing, so a walk here answers with the expanded form the lookup"
+                        + " holds");
     }
 
     /**
-     * And each rule above is about something.
-     *
-     * <p>Held for the two representations apart, because the rules are. The settled walk is the one
-     * the derived world's rule is about and the expanded walks are the ones it passes over, so a
-     * count of both together is a count that stays right while either goes to nothing — which is how
-     * a rule comes to hold of an empty set and say so to nobody.
+     * And the rules above are about something: a walk here that answers with clauses, so that they
+     * do not hold of an empty set and say so to nobody.
      */
     @Test
-    void thereAreWalksOfEachKind() {
-        List<String> settled = new ArrayList<>();
-        List<String> expanded = new ArrayList<>();
-        for (Read walk : walksOverWhatGoverns()) {
-            (walk.takesOneOf(Set.of(THE_LOOKUP)) ? expanded : settled).add(walk.shown());
-        }
-
-        assertFalse(settled.isEmpty(),
-                "a walk here answers with the settled form, which is what the derived world's rule"
-                        + " is about");
-        assertFalse(expanded.isEmpty(),
-                "a walk here answers with the expanded form, which that rule passes over because"
-                        + " the lookup holds it");
+    void thereAreWalksForTheseRulesToHoldOf() {
+        assertFalse(walksOverWhatGoverns().isEmpty(),
+                "a walk here answers with the expanded form, which is what these rules are about");
     }
 
     /**
@@ -233,7 +214,7 @@ class HowARuleThatGovernsADeclarationIsAskedForTest {
      *
      * <p>The walks here answer with a value that names no clause: what a caller gets the clauses out
      * of is a record the answer holds. A reading that took the types written in the signature would
-     * find none of them, and {@link #thereAreWalksOfEachKind} would be failing for that reason
+     * find none of them, and {@link #thereAreWalksForTheseRulesToHoldOf} would be failing for that reason
      * rather than saying there is no walk — so this is held on its own.
      */
     @Test

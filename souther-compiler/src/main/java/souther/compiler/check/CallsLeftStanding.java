@@ -2,9 +2,9 @@ package souther.compiler.check;
 
 import souther.compiler.types.ReachName;
 
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.SequencedSet;
-import java.util.Set;
 
 /**
  * The calls one expansion left standing, travelling with the tree that expansion produced.
@@ -28,17 +28,38 @@ import java.util.Set;
 final class CallsLeftStanding {
 
     /** An expansion that left nothing standing. */
-    static final CallsLeftStanding NONE = new CallsLeftStanding(Set.of());
+    static final CallsLeftStanding NONE = new CallsLeftStanding(new LinkedHashSet<>());
 
-    private final Set<ReachName.Declaration> standing;
+    private final SequencedSet<ReachName.Declaration> standing;
 
-    private CallsLeftStanding(Set<ReachName.Declaration> standing) {
-        this.standing = Set.copyOf(standing);
+    private CallsLeftStanding(SequencedSet<ReachName.Declaration> standing) {
+        this.standing = Collections.unmodifiableSequencedSet(standing);
     }
 
     /** What one run of an expansion left standing, taken where that run ends. */
     static CallsLeftStanding of(SequencedSet<ReachName.Declaration> met) {
         return met.isEmpty() ? NONE : new CallsLeftStanding(new LinkedHashSet<>(met));
+    }
+
+    /** The calls, in the order the expansion met them. */
+    SequencedSet<ReachName.Declaration> calls() {
+        return standing;
+    }
+
+    /**
+     * The same calls, each reached from {@code reader}.
+     *
+     * <p>Asked where the tree these calls stand in is read by a module other than the one that
+     * expanded it, and asked together with that tree ({@link SettledInvariant#reachedFrom}): a tree
+     * that reaches a helper one way beside a set that names it another is a call this says nothing
+     * about.
+     */
+    CallsLeftStanding reachedFrom(String reader) {
+        SequencedSet<ReachName.Declaration> reached = new LinkedHashSet<>();
+        for (ReachName.Declaration each : standing) {
+            reached.add(each.reachedFrom(reader));
+        }
+        return of(reached);
     }
 
     /** Whether this expansion left {@code reaches} standing, which is what says a call to it is the

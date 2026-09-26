@@ -148,6 +148,57 @@ public final class HelperNames {
         return qualifyHelpers(e, helper -> !helper.module().equals(self));
     }
 
+    /**
+     * {@code e}, which one module settled, as {@code reader} reaches what it names.
+     *
+     * <p>A settled tree names a helper by the route the module that settled it has to it: its own
+     * bare, another's under that module. A type including a declaration of another module checks
+     * that declaration's clauses, so the tree is read where those routes are not the reader's — the
+     * declaring module's own helper is another module's there. Each name is given the route
+     * {@code reader} has to what it denotes ({@link ReachName.Declaration#reachedFrom}); what it
+     * denotes does not move.
+     */
+    static Hir.Expr reachedFrom(Hir.Expr e, String reader) {
+        Hir.Expr rebuilt = alsoInGiven(Hir.mapChildren(e, c -> reachedFrom(c, reader),
+                s -> reachedFrom(s, reader)), c -> reachedFrom(c, reader));
+        return switch (rebuilt) {
+            // Where the name stands is the callee's, as it is where a name is written qualified.
+            case Hir.Apply call when call.answered() != null
+                    && rerouted(call.answered(), reader) instanceof ReachName.Declaration to ->
+                    call.replacedBy(Hir.Var.respelled(to.rendered(), to,
+                            call.answered().origin(), call.function().pos(),
+                            call.function().region()));
+            // A value built by calling the method it is emitted as reaches that method the way a
+            // call reaches a helper.
+            case Hir.ValueInvocation invocation
+                    when !invocation.target().reachedFrom(reader).equals(invocation.target()) ->
+                    new Hir.ValueInvocation(invocation.target().reachedFrom(reader),
+                            invocation.site(), invocation.arguments(), invocation.pos(),
+                            invocation.region());
+            case Hir.Var v -> reachedFrom(v, reader);
+            default -> rebuilt;
+        };
+    }
+
+    /** {@code name} as {@code reader} reaches it, where it denotes a helper. */
+    private static Hir.Var reachedFrom(Hir.Var name, String reader) {
+        return name instanceof Hir.Var.Denoting named
+                && rerouted(named, reader) instanceof ReachName.Declaration to
+                ? name.respelledAs(to.rendered(), to)
+                : name;
+    }
+
+    /** The route {@code reader} has to what {@code named} denotes, or null where it denotes no
+     *  helper or {@code reader} reaches it the way {@code named} already does. */
+    private static ReachName.Declaration rerouted(Hir.Var.Denoting named, String reader) {
+        if (!(named.denotes() instanceof ValueName.Helper)
+                || !(named.reachedAs() instanceof ReachName.Declaration reached)) {
+            return null;
+        }
+        ReachName.Declaration to = reached.reachedFrom(reader);
+        return to.equals(reached) ? null : to;
+    }
+
     /** {@code e} with every name still denoting a helper of {@code module} written qualified. Only a
      * recursive helper survives closing, so this is what those calls become. */
     static Hir.Expr qualifyHelpersOf(Hir.Expr e, String module) {

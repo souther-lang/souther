@@ -336,6 +336,76 @@ class WhatAModuleCopiedIsHeldToWhatItWasBuiltAgainstTest {
                 refusal(path, readerOf("app.n")));
     }
 
+    private static final String INCLUDES_A_RECURSIVE_RULE = """
+            module app.v exposing ( Wrapped, wrap )
+            import lib.v ( Base, Chain )
+            data Wrapped = { ...Base, w: Int }
+            behavior wrap : (c: Chain) -> Wrapped
+            let wrap (c) = Wrapped { chain = c, w = 1 }
+            """;
+
+    private static final String READS_THE_WRAPPER = """
+            module main.m
+            import app.v ( wrap, Wrapped )
+            import lib.v ( Chain )
+            behavior go : (c: Chain) -> Wrapped
+            let go (c) = wrap(c)
+            """;
+
+    /** A recursive helper an included type's clause calls is taken on as a method of the module that
+     *  includes it, so that module carries its body — though the module declaring it keeps it to
+     *  itself. */
+    @Test
+    void aRecursiveHelperAnIncludedClauseCallsIsHeldWhereTheClauseIsChecked() {
+        Map<String, ClassFileImage> path = builtAgainst("""
+                module lib.v exposing ( Base, Chain )
+                data Chain = { k: Int, next: Chain? }
+                let valid (c: Chain): Bool = match c.next with
+                    | Some rest -> c.k >= 0 && valid(rest)
+                    | None -> c.k >= 0
+                data Base = { chain: Chain }
+                    invariant ok = valid(chain)
+                """, INCLUDES_A_RECURSIVE_RULE, """
+                module lib.v exposing ( Base, Chain )
+                data Chain = { k: Int, next: Chain? }
+                let valid (c: Chain): Bool = match c.next with
+                    | Some rest -> c.k >= 1 && valid(rest)
+                    | None -> c.k >= 1
+                data Base = { chain: Chain }
+                    invariant ok = valid(chain)
+                """);
+
+        assertEquals(new ModuleMessage.ItCopiedAnotherVersion("app.v", "helper", "valid", "lib.v",
+                        "closed helper"),
+                refusal(path, READS_THE_WRAPPER));
+    }
+
+    /** And held to nothing more: the module declaring it built again with the helper as it was is
+     *  one the including module agrees with. */
+    @Test
+    void aRecursiveHelperAnIncludedClauseCallsThatDidNotMoveLeavesTheReaderAsItWas() {
+        Map<String, ClassFileImage> path = builtAgainst("""
+                module lib.v exposing ( Base, Chain )
+                data Chain = { k: Int, next: Chain? }
+                let valid (c: Chain): Bool = match c.next with
+                    | Some rest -> c.k >= 0 && valid(rest)
+                    | None -> c.k >= 0
+                data Base = { chain: Chain }
+                    invariant ok = valid(chain)
+                """, INCLUDES_A_RECURSIVE_RULE, """
+                module lib.v exposing ( Base, Chain, Other )
+                data Chain = { k: Int, next: Chain? }
+                let valid (c: Chain): Bool = match c.next with
+                    | Some rest -> c.k >= 0 && valid(rest)
+                    | None -> c.k >= 0
+                data Base = { chain: Chain }
+                    invariant ok = valid(chain)
+                data Other = { o: Int }
+                """);
+
+        assertAccepted(path, READS_THE_WRAPPER);
+    }
+
     /**
      * What a module offers is what it wrote, and a call to another module's helper is written as
      * the helper and the arguments the call wrote. Whether that helper's body still applies the

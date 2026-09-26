@@ -2,7 +2,6 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
@@ -42,7 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * of one is owed is the refusal, and that is somewhere else.
  *
  * <p><b>Walks of three lineages.</b> What the declarations publish, what a world's expansion states,
- * and the trees a world holds. The second was the next to run out of stack when the first was made
+ * and the declarations whose trees a module runs. The second was the next to run out of stack when the first was made
  * finite, which is why none of them is taken as standing for the others. Each is paired with a chain
  * it does reach through, because a walk that answered without crossing a spread would come back on a
  * ring for the wrong reason.
@@ -98,18 +97,19 @@ class AWalkOverSpreadsComesBackOnAGraphTheLanguageRefusesTest {
     }
 
     /**
-     * And the trees, which carry the clauses and nothing beside them.
+     * And the declarations whose trees a module runs, which is the walk the settled clauses are
+     * gathered by.
      *
      * <p>Only that it comes back, because there is nothing here to say it is short with: what this
-     * hands over is the clauses it reached, and a reader wanting to know whether that was all of
-     * them asks the reading above, which says.
+     * hands over is the declarations it reached, and a reader wanting to know whether that was all
+     * of them asks the reading above, which says.
      */
     @Test
-    void theClausesAWorldHoldsAreWalkedThroughASpreadAndComeBackOnARing() {
-        assertEquals(1, settledClausesFor(A_CHAIN, "Left").size(),
-                "the clause written on what `Left` spreads is reached through the spread");
+    void theDeclarationsAWorldHoldsAreWalkedThroughASpreadAndComeBackOnARing() {
+        assertEquals(List.of(named("Held"), named("Left")), declarationsGoverning(A_CHAIN, "Left"),
+                "the declaration `Left` spreads is reached through the spread, and then `Left`");
 
-        assertNotNull(settledClausesFor(A_RING, "Pair"),
+        assertNotNull(declarationsGoverning(A_RING, "Pair"),
                 "a ring is walked round once rather than for ever");
     }
 
@@ -125,9 +125,9 @@ class AWalkOverSpreadsComesBackOnAGraphTheLanguageRefusesTest {
                 RuleReadings.declaredBy(db, "demo"));
     }
 
-    /** The clauses the derived world holds for {@code declared} and for what it spreads. */
-    private static List<Hir.InvariantClause> settledClausesFor(String source, String declared) {
-        return TypeOps.settledClausesGoverning(named(declared), derivedWorldOf(compiled(source)));
+    /** The declarations whose clauses govern {@code declared}, as the derived world holds them. */
+    private static List<TypeSymbol.AtModule> declarationsGoverning(String source, String declared) {
+        return TypeOps.declarationsGoverning(named(declared), derivedWorldOf(compiled(source)));
     }
 
     private static DerivedSymbols derivedWorldOf(Db db) {
