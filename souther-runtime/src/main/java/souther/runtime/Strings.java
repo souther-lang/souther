@@ -46,6 +46,40 @@ public final class Strings {
     private Strings() {}
 
     /**
+     * Aborts where a text {@code units} long has no place — asked of the text an operation is
+     * defined as canonicalizing (two strings joined, {@code n} copies, the pieces and separators of
+     * a join) before it is built, so the host is never asked to build what no {@code String} holds
+     * (spec §an-operation-refuses-only-what-its-own-answer-has-no-place-for: a form the operation is
+     * defined as). In {@code long}, because the sum of two lengths is not always an {@code int}.
+     */
+    private static void holds(long units, String what) {
+        if (units > LONGEST_TEXT) {
+            throw new ConstraintViolation(
+                    what + " is " + units + " UTF-16 units, longer than a String holds");
+        }
+    }
+
+    /** {@link #holds} of {@code copies} copies of a text {@code units} long, asked by division so that
+     *  a count near the top of {@code Int} is not multiplied past what a {@code long} counts. */
+    private static void holdsCopies(long copies, int units, String what) {
+        if (copies > LONGEST_TEXT / units) {
+            throw new ConstraintViolation(what + ", " + copies + " copies of " + units
+                    + " UTF-16 units, is longer than a String holds");
+        }
+    }
+
+    /** {@code joined} canonicalized to NFC, aborting where the answer has no place — canonicalizing
+     *  can lengthen a text at a seam as well as shorten it, so the answer is measured as it is
+     *  built and not taken to be as long as what it was built from. */
+    private static String canonical(String joined, String what) {
+        String canonical = Normalization.nfcWithin(joined, LONGEST_TEXT);
+        if (canonical == null) {
+            throw new ConstraintViolation(what + " is longer than a String holds once canonicalized");
+        }
+        return canonical;
+    }
+
+    /**
      * Text arriving from outside, as the {@code String} it is: canonicalized to NFC, or null where it
      * is not a sequence of scalar values at all.
      *
@@ -178,14 +212,21 @@ public final class Strings {
      *  closed under concatenation — a base letter followed by a combining mark composes into one
      *  code point, not two — so the join has to canonicalize again at the seam. */
     public static String append(String a, String b) {
-        return Normalization.nfc(a + b);
+        holds((long) a.length() + b.length(), "String.append");
+        return canonical(a + b, "String.append");
     }
 
     /** Joins with a separator ({@code join(["a", "b"], "-") == "a-b"}). Canonicalized for the same
      *  reason {@link #append} is: a seam {@code sep} introduces is exactly as capable of leaving NFC
-     *  as one {@code append} makes. */
+     *  as one {@code append} makes. A list can hold the same string many times over, so a short list
+     *  of short strings can join to more than a {@code String} holds; that is measured first. */
     public static String join(List<String> xs, String sep) {
-        return Normalization.nfc(String.join(sep, xs));
+        long units = xs.isEmpty() ? 0 : (long) sep.length() * (xs.size() - 1);
+        for (String x : xs) {
+            units += x.length();
+        }
+        holds(units, "String.join");
+        return canonical(String.join(sep, xs), "String.join");
     }
 
     /** Joins a list of strings with no separator (Elm {@code String.concat}):
@@ -196,12 +237,19 @@ public final class Strings {
 
     /** Replaces every literal occurrence of {@code target} (Elm {@code String.replace}). An empty
      *  {@code target} leaves the string unchanged rather than splicing between every character.
-     *  Canonicalized: a {@code replacement} introduces the same seam {@link #append} does. */
+     *  Canonicalized: a {@code replacement} introduces the same seam {@link #append} does. A long
+     *  {@code replacement} for a short {@code target} lengthens the text once per occurrence, so the
+     *  occurrences are counted and the length measured first. */
     public static String replace(String s, String target, String replacement) {
         if (target.isEmpty()) {
             return s;
         }
-        return Normalization.nfc(s.replace(target, replacement));
+        long occurrences = 0;
+        for (int at = s.indexOf(target); at >= 0; at = s.indexOf(target, at + target.length())) {
+            occurrences++;
+        }
+        holds(s.length() + occurrences * (replacement.length() - target.length()), "String.replace");
+        return canonical(s.replace(target, replacement), "String.replace");
     }
 
     /** Renders an integer as its decimal string ({@code fromInt(42) == "42"}). */
@@ -335,22 +383,22 @@ public final class Strings {
      *  writes {@code String.codePoints(s) |> List.reverse} instead — a {@code List<Int>}, not a
      *  {@code String}, is under no canonical-form obligation. */
     public static String reverse(String s) {
-        return Normalization.nfc(new StringBuilder(s).reverse().toString());
+        return canonical(new StringBuilder(s).reverse().toString(), "String.reverse");
     }
 
     /** {@code n} copies of {@code s} joined (Elm {@code String.repeat}); {@code n} of 0 or less gives
-     *  the empty string. A count no JVM string could hold aborts rather than quietly producing fewer
-     *  copies than were asked for — an out-of-range count is a model bug, not a business result, and
-     *  gets the same treatment {@link IntMath} gives an overflow. Canonicalized: the seam between one
-     *  copy and the next is exactly {@link #append}'s seam, repeated. */
+     *  the empty string. Copies no {@code String} could hold abort rather than quietly giving fewer
+     *  copies than were asked for — a model bug, not a business result, and the same treatment
+     *  {@link IntMath} gives an overflow. What is measured is the copies' length, not the count: two
+     *  units repeated a billion times are past what a {@code String} holds though a billion is not.
+     *  Canonicalized: the seam between one copy and the next is exactly {@link #append}'s seam,
+     *  repeated. */
     public static String repeat(String s, long n) {
         if (n <= 0 || s.isEmpty()) {
             return "";
         }
-        if (n > Integer.MAX_VALUE) {
-            throw new ConstraintViolation("String.repeat count out of range: " + n);
-        }
-        return Normalization.nfc(s.repeat((int) n));
+        holdsCopies(n, s.length(), "String.repeat");
+        return canonical(s.repeat((int) n), "String.repeat");
     }
 
     /** Breaks {@code s} into lines (Elm {@code String.lines}): {@code \r\n} is normalised to
@@ -386,21 +434,25 @@ public final class Strings {
      * into {@code s}'s first character. So on the rare occasion the join comes up short, one more
      * code point is asked for and the whole fill is rebuilt — never grown one copy of {@code pad} at
      * a time with a fresh canonicalization each time, which would canonicalize the same leading code
-     * points as many times as there are copies of {@code pad} still to add. */
+     * points as many times as there are copies of {@code pad} still to add.
+     *
+     * <p>The copies of {@code pad} that cover what is needed are a form padding is defined as
+     * ("{@code pad} is repeated and cut", spec §stdlib-string), so they are measured before they are
+     * built, as the fill and {@code s} joined are; a width past what a {@code String} holds is past
+     * what the copies hold too, since every code point is at least one unit. */
     private static String pad(String s, long width, String pad, boolean atStart) {
         if (pad.isEmpty() || length(s) >= width) {
             return s;
-        }
-        if (width > Integer.MAX_VALUE) {
-            throw new ConstraintViolation("String.pad width out of range: " + width);
         }
         long padLength = length(pad);
         long need = width - length(s);
         while (true) {
             long copies = (need + padLength - 1) / padLength;
-            String fill = Normalization.nfc(pad.repeat((int) copies));
+            holdsCopies(copies, pad.length(), "String.pad's fill");
+            String fill = canonical(pad.repeat((int) copies), "String.pad's fill");
             String trimmedFill = length(fill) > need ? slice(fill, 0, need) : fill;
-            String joined = Normalization.nfc(atStart ? trimmedFill + s : s + trimmedFill);
+            holds((long) trimmedFill.length() + s.length(), "String.pad");
+            String joined = canonical(atStart ? trimmedFill + s : s + trimmedFill, "String.pad");
             if (length(joined) >= width) {
                 return joined;
             }
@@ -467,40 +519,51 @@ public final class Strings {
      *  condition Unicode's default algorithm carries that is context rather than locale.
      *  Canonicalized: case mapping is not closed under NFC either. */
     public static String lowercase(String s) {
-        return Normalization.nfc(mapCase(s, true));
+        return canonical(mapCase(s, true), "String.lowercase");
     }
 
     /** The uppercase half of {@link #lowercase}: the same untailored Unicode 18.0.0 full mapping, so
      *  one code point can widen to several ({@code uppercase("straße") == "STRASSE"}), and no locale
      *  narrows it back — Turkish {@code i} still becomes {@code I}, never {@code İ}. */
     public static String uppercase(String s) {
-        return Normalization.nfc(mapCase(s, false));
+        return canonical(mapCase(s, false), "String.uppercase");
     }
 
+    /** The case-mapped text, before it is canonicalized. A code point can map to several, so the text
+     *  can be longer than {@code s}; it is measured as it is built and aborts where it would have no
+     *  place, the mapped text being the form the conversion is defined as. */
     private static String mapCase(String s, boolean lower) {
         int[] cps = s.codePoints().toArray();
         StringBuilder out = new StringBuilder(cps.length);
         for (int i = 0; i < cps.length; i++) {
             int cp = cps[i];
+            int[] mapped = null;
             if (lower) {
                 int[] finalSigmaMapped = lookup(CaseTables.FINAL_SIGMA, cp);
                 if (finalSigmaMapped != null && isFinalSigmaContext(cps, i)) {
-                    for (int m : finalSigmaMapped) {
-                        out.appendCodePoint(m);
-                    }
-                    continue;
+                    mapped = finalSigmaMapped;
                 }
             }
-            int[] mapped = lookup(lower ? CaseTables.LOWER : CaseTables.UPPER, cp);
             if (mapped == null) {
-                out.appendCodePoint(cp);
+                mapped = lookup(lower ? CaseTables.LOWER : CaseTables.UPPER, cp);
+            }
+            if (mapped == null) {
+                putMapped(out, cp, lower);
             } else {
                 for (int m : mapped) {
-                    out.appendCodePoint(m);
+                    putMapped(out, m, lower);
                 }
             }
         }
         return out.toString();
+    }
+
+    private static void putMapped(StringBuilder out, int cp, boolean lower) {
+        if (out.length() + Character.charCount(cp) > LONGEST_TEXT) {
+            throw new ConstraintViolation((lower ? "String.lowercase" : "String.uppercase")
+                    + " maps to more UTF-16 units than a String holds");
+        }
+        out.appendCodePoint(cp);
     }
 
     /** Unicode's {@code Final_Sigma} condition: immediately preceded, skipping {@code Case_Ignorable}

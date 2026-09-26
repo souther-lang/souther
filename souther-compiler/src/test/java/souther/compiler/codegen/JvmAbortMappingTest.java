@@ -24,6 +24,7 @@ import org.junit.jupiter.api.function.Executable;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.LocalDate;
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -134,6 +135,30 @@ class JvmAbortMappingTest {
                 () -> Strings.padLeft("x", Integer.MAX_VALUE + 2L, "y"));
         assertKernelAborts(Kernel.STRING_PAD_RIGHT, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
                 () -> Strings.padRight("x", Integer.MAX_VALUE + 2L, "y"));
+    }
+
+    /**
+     * What a {@code String} holds is measured in the units a text is kept in, not in the count or the
+     * width asked for, and each of these asks for more from inputs a few kilobytes wide: two units
+     * repeated more times than half of what a length counts, a pad of one code point and two units,
+     * one string listed many times over, a short target replaced by a long text. Each is past what
+     * a length counts, so a build that were not measured first would be refused by the host with
+     * {@code OutOfMemoryError} at once, rather than built and then found too long.
+     */
+    @Test
+    void aTextNoStringHoldsAbortsWhereverItIsBuilt() {
+        String kilo = "x".repeat(40_000);
+        List<String> many = Collections.nCopies(60_000, kilo);
+        assertKernelAborts(Kernel.STRING_REPEAT, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+                () -> Strings.repeat("ab", 1_200_000_000L));
+        assertKernelAborts(Kernel.STRING_PAD_LEFT, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+                () -> Strings.padLeft("x", 1_200_000_000L, "𠮷"));
+        assertKernelAborts(Kernel.STRING_JOIN, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+                () -> Strings.join(many, ","));
+        assertKernelAborts(Kernel.STRING_CONCAT, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+                () -> Strings.concat(many));
+        assertKernelAborts(Kernel.STRING_REPLACE, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+                () -> Strings.replace(kilo, "x", kilo + kilo));
     }
 
     /** {@code String.slice}'s bounds may name nothing to slice at all — a different reason than an

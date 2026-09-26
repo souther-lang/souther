@@ -198,6 +198,9 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
         if (newRoot == root) {
             return this;   // key present with an equal value: unchanged
         }
+        if (added.value) {
+            Capacity.oneMore(size, "Map or Set");
+        }
         return new PersistentHashMap<>(newRoot, added.value ? size + 1 : size);
     }
 
@@ -770,6 +773,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
             added.value = false;
             root = root.put(key, hashOf(key), val, 0, added, true);
             if (added.value) {
+                Capacity.oneMore(size, "Map or Set");
                 size++;
             }
         }

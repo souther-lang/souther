@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 import java.lang.classfile.ClassModel;
 import java.lang.classfile.constantpool.MethodRefEntry;
 import java.lang.classfile.constantpool.PoolEntry;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -78,7 +77,7 @@ class WhoMayAskBigDecimalWhatItCanRefuseTest {
 
     private static List<String> askingWhatCanBeRefused() {
         Set<String> out = new TreeSet<>();
-        for (ClassModel each : COMPILED.classesOf(theRunTime())) {
+        for (ClassModel each : COMPILED.classesOf(COMPILED.module("souther-runtime"))) {
             for (PoolEntry entry : each.constantPool()) {
                 if (entry instanceof MethodRefEntry method
                         && method.owner().name().stringValue().equals(BIG_DECIMAL)
@@ -89,12 +88,5 @@ class WhoMayAskBigDecimalWhatItCanRefuseTest {
             }
         }
         return new ArrayList<>(out);
-    }
-
-    private static Path theRunTime() {
-        return COMPILED.modules().stream()
-                .filter(module -> module.getFileName().toString().equals("souther-runtime"))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("no souther-runtime module to read"));
     }
 }

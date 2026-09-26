@@ -257,10 +257,14 @@ public final class AbortSites {
             case Core.Reached.OfDeclaration _ -> AbortSet.NONE;
             case Core.Reached.OfValue _ -> AbortSet.NONE;
             case Core.Reached.OfPublishedValue _ -> AbortSet.NONE;
-            // Minted by a Core-to-Core pass for a fold the backend lowers as a whole ($build,
-            // $grow for a List or a Map); traced against souther-runtime's collection builders,
-            // which raise nothing a Souther program can be given to overflow.
-            case Core.Emitted _ -> AbortSet.NONE;
+            // Minted by a Core-to-Core pass for a fold the backend lowers as a whole. The walk
+            // itself ends with nothing of its own; the write its step makes into the builder is
+            // where a collection grows, and a fold can write more than one element per step, so
+            // that write can reach the most elements a collection holds (`Capacity`).
+            case Core.Emitted emitted -> switch (emitted) {
+                case BUILD_LIST, BUILD_MAP -> AbortSet.NONE;
+                case GROW_LIST, PUT_MAP -> AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
+            };
         };
     }
 
@@ -287,8 +291,10 @@ public final class AbortSites {
         return switch (binary.op()) {
             case BinOp.ADD, BinOp.SUB, BinOp.MUL -> arithmeticType(binary);
             case BinOp.DIV -> divide(binary);
-            case BinOp.EQ, BinOp.NE, BinOp.LT, BinOp.LE, BinOp.GT, BinOp.GE, BinOp.AND, BinOp.OR,
-                    BinOp.CONCAT ->
+            // `++` joins two strings or two lists, and the join can be longer than a `String` or a
+            // `List` holds though neither side is (`Strings.append`, `Capacity`).
+            case BinOp.CONCAT -> AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
+            case BinOp.EQ, BinOp.NE, BinOp.LT, BinOp.LE, BinOp.GT, BinOp.GE, BinOp.AND, BinOp.OR ->
                     AbortSet.NONE;
         };
     }

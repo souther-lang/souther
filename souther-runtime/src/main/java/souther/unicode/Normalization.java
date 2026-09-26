@@ -2,6 +2,7 @@ package souther.unicode;
 
 import java.util.Arrays;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -31,14 +32,78 @@ public final class Normalization {
      *  whether text from outside is one is asked by {@code Strings.admitted} before this, and this
      *  asks nothing. Half a surrogate pair handed in comes back out where it was. */
     public static String nfc(String s) {
-        int[] decomposed = canonicalDecompose(s.codePoints().toArray());
-        canonicalOrder(decomposed);
-        int[] composed = canonicalCompose(decomposed);
-        StringBuilder out = new StringBuilder(composed.length);
-        for (int cp : composed) {
-            out.appendCodePoint(cp);
+        String canonical = nfcWithin(s, Long.MAX_VALUE);
+        if (canonical == null) {
+            throw new IllegalStateException("no text is longer than Long.MAX_VALUE UTF-16 units");
+        }
+        return canonical;
+    }
+
+    /**
+     * {@link #nfc}, or null where the answer is longer than {@code longest} UTF-16 units — which is
+     * found out before that much is built, so a caller whose carrier has a bound on a text's length
+     * can ask for the answer without asking for more than the bound.
+     *
+     * <p>The work is done a stretch at a time, cut before a code point nothing before it can reach:
+     * one whose decomposition begins with a starter that is not the second of any composition.
+     * Canonical ordering never moves a mark past a starter, and composition never joins a starter to
+     * anything before a starter that cannot be a second, so the NFC of the whole is the NFC of each
+     * stretch laid end to end. What a stretch is worked on in is as long as the stretch; the full
+     * decomposition of the whole text, which is longer than the text and longer than the answer, is
+     * never held at once.
+     */
+    public static @Nullable String nfcWithin(String s, long longest) {
+        return nfcWithin(s, longest, STRETCH);
+    }
+
+    /** How many UTF-16 units a stretch runs to before it looks for the next place to cut. */
+    private static final int STRETCH = 4096;
+
+    /** {@link #nfcWithin(String, long)} with the stretch it cuts at given, so that the cut can be
+     *  held against the text taken whole. */
+    static @Nullable String nfcWithin(String s, long longest, int stretch) {
+        StringBuilder out = new StringBuilder((int) Math.min(s.length(), longest));
+        int from = 0;
+        while (from < s.length()) {
+            int to = stretchEnd(s, from, stretch);
+            int[] decomposed = canonicalDecompose(s.substring(from, to).codePoints().toArray());
+            canonicalOrder(decomposed);
+            for (int cp : canonicalCompose(decomposed)) {
+                if (out.length() + Character.charCount(cp) > longest) {
+                    return null;
+                }
+                out.appendCodePoint(cp);
+            }
+            from = to;
         }
         return out.toString();
+    }
+
+    /** Where the stretch starting at {@code from} ends: the first place at least {@code stretch}
+     *  units on that nothing before it can reach, or the end of the text. Never {@code from} itself,
+     *  so every stretch holds at least one code point. */
+    private static int stretchEnd(String s, int from, int stretch) {
+        int at = from + Math.min(stretch, s.length() - from);
+        if (at < s.length() && at > from
+                && Character.isLowSurrogate(s.charAt(at)) && Character.isHighSurrogate(s.charAt(at - 1))) {
+            at++;
+        }
+        while (at < s.length()) {
+            int cp = s.codePointAt(at);
+            if (at > from && nothingBeforeReaches(cp)) {
+                return at;
+            }
+            at += Character.charCount(cp);
+        }
+        return s.length();
+    }
+
+    /** Whether no code point before {@code cp} can be reordered past it or composed with it: its
+     *  decomposition begins with a starter, and that starter is not the second of a composition. */
+    private static boolean nothingBeforeReaches(int cp) {
+        int[] decomposed = decomposeOne(cp);
+        int first = decomposed == null ? cp : decomposed[0];
+        return combiningClass(first) == 0 && Arrays.binarySearch(SECONDS, first) < 0;
     }
 
     // ---- Hangul algorithmic decomposition/composition (UAX #15, the Hangul section) ----
@@ -187,6 +252,11 @@ public final class Normalization {
     private static final long[] COMPOSE_KEYS;
     private static final int[] COMPOSE_VALUES;
 
+    /** Every code point that composes with a starter before it, sorted: the second of each pair in
+     *  {@link #COMPOSE_KEYS}, and Hangul's vowel and trailing consonant jamo, which compose by
+     *  formula rather than by table. */
+    private static final int[] SECONDS;
+
     static {
         int[] keys = NormalizationTables.DECOMP.codePoints();
         int[][] mapped = NormalizationTables.DECOMP.mapped();
@@ -200,6 +270,17 @@ public final class Normalization {
         }
         COMPOSE_KEYS = pairs.keySet().stream().mapToLong(Long::longValue).toArray();
         COMPOSE_VALUES = pairs.values().stream().mapToInt(Integer::intValue).toArray();
+        TreeSet<Integer> seconds = new TreeSet<>();
+        for (long key : COMPOSE_KEYS) {
+            seconds.add((int) key);
+        }
+        for (int cp = V_BASE; cp < V_BASE + V_COUNT; cp++) {
+            seconds.add(cp);
+        }
+        for (int cp = T_BASE + 1; cp < T_BASE + T_COUNT; cp++) {
+            seconds.add(cp);
+        }
+        SECONDS = seconds.stream().mapToInt(Integer::intValue).toArray();
     }
 
     private static long pairKey(int starter, int cp) {
