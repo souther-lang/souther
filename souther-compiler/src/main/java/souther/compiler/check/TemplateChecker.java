@@ -25,13 +25,15 @@ public final class TemplateChecker {
      * The template {@code body} is, typed.
      *
      * @param body               the value's body as the analysis expands it
+     * @param declared           the type the value declares, which its body is typed against as
+     *                           the value's own check types it, or null where it declares none
      * @param elements           what its expansion said of the elements of the bindings it writes
      * @param recursiveHelperFns the recursive helpers the value calls, by their signatures
      * @param settledValues      what each value of the module was settled as, which is what a build
      *                           of one inside this value is typed by
      */
     public static InvariantChecker.Template check(
-            Hir.Expr body, ElementProvenance elements, Symbols symbols,
+            Hir.Expr body, Type declared, ElementProvenance elements, Symbols symbols,
             DeclarationAccess declarations,
             Map<ValueName.Behavior, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns,
             Preserved.SettledValues settledValues) {
@@ -39,7 +41,7 @@ public final class TemplateChecker {
                 new CheckContext(symbols, declarations, null, reqSigs)
                         .forDischarge(settledValues);
         Core typed = Elaborator.elaborate(body, Scope.NONE.reaching(recursiveHelperFns), context,
-                null);
+                declared);
         return new InvariantChecker.Template(typed, elements);
     }
 }
