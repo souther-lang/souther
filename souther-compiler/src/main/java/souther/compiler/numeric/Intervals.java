@@ -246,7 +246,11 @@ public final class Intervals {
                 }
                 return new Corner(null, false, past.beyond * finite.at.signum());
             }
-            return new Corner(at.times(other.at.at()), reached && other.reached, 0);
+            Count product = at.timesWhereHeld(other.at.at());
+            if (product == null) {
+                return Corner.unheld(at.signum() * other.at.signum());
+            }
+            return new Corner(product, reached && other.reached, 0);
         }
 
         /**
@@ -306,8 +310,22 @@ public final class Intervals {
     /**
      * One corner of the box two ranges make: what the two ends multiply to, whether the product has
      * a value there, and which side it is past every value on.
+     *
+     * <p>{@code unheld} is the sign of a corner whose product no count holds, and zero for every
+     * other. Such a corner is a number of a sign and no size a bound can be read off: it may be as
+     * near zero as it is far from it, so it says nothing about where the product ends on the side
+     * its sign points to, and on the other it says only that the product does not cross zero.
      */
-    private record Corner(Count at, boolean reached, int beyond) {}
+    private record Corner(Count at, boolean reached, int beyond, int unheld) {
+
+        Corner(Count at, boolean reached, int beyond) {
+            this(at, reached, beyond, 0);
+        }
+
+        static Corner unheld(int sign) {
+            return new Corner(null, false, 0, sign);
+        }
+    }
 
     /**
      * The corner furthest along {@code direction}, or null where the product runs past every value
@@ -322,15 +340,16 @@ public final class Intervals {
         Count best = null;
         boolean reached = false;
         for (Corner corner : corners) {
-            if (corner.beyond() == direction) {
+            if (corner.beyond() == direction || corner.unheld() == direction) {
                 return null;
             }
-            if (corner.at() == null) {
+            Count at = corner.unheld() == 0 ? corner.at() : Count.ZERO;
+            if (at == null) {
                 continue;   // past every value the other way, which bounds nothing on this side
             }
-            int order = best == null ? 1 : corner.at().compareTo(best) * direction;
+            int order = best == null ? 1 : at.compareTo(best) * direction;
             if (order > 0) {
-                best = corner.at();
+                best = at;
                 reached = corner.reached();
             } else if (order == 0) {
                 reached |= corner.reached();

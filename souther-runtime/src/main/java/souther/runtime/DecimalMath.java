@@ -1,7 +1,8 @@
 package souther.runtime;
 
+import souther.exact.ExactDecimals;
+
 import java.math.BigDecimal;
-import java.math.BigInteger;
 
 /**
  * Every Decimal operation the language has (spec §stdlib-decimal), and the one place
@@ -293,32 +294,10 @@ public final class DecimalMath {
     /**
      * The amount {@code d} is, carried by as few digits as a {@code BigDecimal} can carry it: one
      * form for every value the language calls equal (spec §primitives), which is what a hash of an
-     * amount and a boundary's canonical number are both taken from.
-     *
-     * <p>{@code stripTrailingZeros} is that, until the scale it would need is one the type cannot
-     * say: a scale is an {@code int}, and taking the zero off {@code (10, MIN_VALUE)} asks for
-     * {@code MIN_VALUE - 1}, which it answers by throwing. Stopping at the floor instead still leaves
-     * one form per amount — {@code (10, MIN_VALUE)} and {@code (100, MIN_VALUE + 1)} are one amount
-     * and both stop at {@code (10, MIN_VALUE)} — because fixing the scale fixes the digits.
+     * amount and a boundary's canonical number are both taken from. The form is
+     * {@link souther.exact.ExactDecimals#leastDigits}, which the compiler reads a number by as well.
      */
     static BigDecimal leastDigits(BigDecimal d) {
-        if (d.signum() == 0) {
-            return BigDecimal.ZERO;                  // every way of writing nothing is one amount
-        }
-        long room = (long) d.scale() - Integer.MIN_VALUE;
-        if (room >= d.precision()) {
-            return d.stripTrailingZeros();           // fewer zeros than digits: it cannot fall out
-        }
-        BigInteger digits = d.unscaledValue();
-        int scale = d.scale();
-        for (long left = room; left > 0; left--) {
-            BigInteger[] divided = digits.divideAndRemainder(BigInteger.TEN);
-            if (divided[1].signum() != 0) {
-                break;
-            }
-            digits = divided[0];
-            scale--;
-        }
-        return new BigDecimal(digits, scale);
+        return ExactDecimals.leastDigits(d);
     }
 }
