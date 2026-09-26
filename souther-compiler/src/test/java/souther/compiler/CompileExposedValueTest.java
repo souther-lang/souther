@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Primary;
 import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
@@ -191,13 +192,43 @@ class CompileExposedValueTest {
 
                 let inc = String.trim
                 """;
+        // A module writing no clause publishes everything it declares, so the value is published
+        // without being named.
+        String publishedByWritingNoClause = """
+                module shop
 
-        for (String source : List.of(fromAHelper, fromAFork, fromAName)) {
+                let adder (n: Int) = (x) -> x + n
+
+                let inc = adder(1)
+                """;
+
+        for (String source : List.of(fromAHelper, fromAFork, fromAName, publishedByWritingNoClause)) {
             CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(source));
             assertInstanceOf(HelperMessage.TheValuesFunctionTypeIsNotWritten.class,
                     e.diagnostic().said(), e.getMessage());
             assertTrue(e.getMessage().contains("`inc`"), e.getMessage());
         }
+    }
+
+    /** It is said at the value, where its type is to be written, and not at a body that applies it
+     *  or at the entry the module publishes it by. */
+    @Test
+    void theRefusalIsAtTheValue() {
+        String source = """
+                module shop exposing ( inc, use )
+
+                let adder (n: Int) = (x) -> x + n
+
+                let inc = adder(1)
+
+                behavior use : (n: Int) -> Int
+                let use (n) = inc(n)
+                """;
+
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(source));
+
+        assertEquals(5, WhereItSits.in(source,
+                ((Primary.InSource) e.diagnostic().primary()).place().region()).start().line());
     }
 
     /** A top-level definition is not typed from what applies it: `use` applying `inc` types the copy
@@ -219,24 +250,41 @@ class CompileExposedValueTest {
                 e.diagnostic().said(), e.getMessage());
     }
 
-    /** What decides it is that the value has to stand as a value of its own, not that it is
-     *  published: one kept in a list is asked for its type too. */
+    /**
+     * Asking for a type is decided by whether the module publishes the value, and not by what
+     * lowering goes on to do with it. A value read where an expression's answer is kept, such as an
+     * element of a list or a branch of an `if`, is run as a method of its own, and a value handed to
+     * a function stays a copy; neither is the language's to be asked about.
+     */
     @Test
-    void anUnpublishedValueKeptInAListWritesItsTypeAsWell() {
-        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+    void anUnpublishedValueIsNotAskedForItsTypeWhateverItIsRunAs() throws Exception {
+        String head = """
                 module shop exposing ( use )
 
                 let adder (n: Int) = (x) -> x + n
 
                 let inc = adder(1)
 
-                behavior use : (n: Int) -> Int
-                let use (n) = List.fold((acc, f) -> f(acc), n, [inc, inc])
-                """));
+                let applyTo (f: (Int) -> Int, x: Int) = f(x)
 
-        assertTrue(e.diagnostics().stream().anyMatch(d ->
-                        d.said() instanceof HelperMessage.TheValuesFunctionTypeIsNotWritten),
-                e.getMessage());
+                behavior use : (n: Int) -> Int
+                """;
+
+        for (String kept : List.of(
+                "let use (n) = List.fold((acc, f) -> f(acc), n, [inc, inc])",
+                "let use (n) = (if n > 0 then inc else inc)(n)")) {
+            CompileException e = assertThrows(CompileException.class,
+                    () -> Compiler.compile(head + kept));
+            assertTrue(e.diagnostics().stream().noneMatch(d ->
+                            d.said() instanceof HelperMessage.TheValuesFunctionTypeIsNotWritten),
+                    e.getMessage());
+        }
+
+        BytesClassLoader loader = new BytesClassLoader(
+                Compiler.compile(head + "let use (n) = applyTo(inc, n)"),
+                getClass().getClassLoader());
+        Object use = Emitted.behavior(loader, "shop", "use").getConstructor().newInstance();
+        assertEquals(11L, Codecs.apply(use, 10L));
     }
 
     /** Kept to its module, the same value is substituted where it is applied and typed there. */

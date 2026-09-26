@@ -121,8 +121,8 @@ public sealed interface HelperMessage extends Message {
     @Code(DiagnosticCode.E1808)
     record TheFunctionsTypeCannotBeRead(String name) implements HelperMessage, Reported {}
 
-    /** A top-level value holding a function has no written type, and something needs that type on
-     *  its own. What reads the value does not give it one. */
+    /** A published value holding a function has no written type. A reader is handed the value as it
+     *  stands, and nothing that applies it elsewhere gives it one. */
     @Code(DiagnosticCode.E1808)
     record TheValuesFunctionTypeIsNotWritten(String name) implements HelperMessage, Reported {}
 
