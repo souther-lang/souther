@@ -499,7 +499,7 @@ final class BodyGen {
                 params.add(locals.get(p.binding()));
             }
             for (int i = 0; i < call.args().size(); i++) {
-                standAs(genExpr(call.args().get(i)), params.get(i).type());
+                standAs(emitArgument(call, i), params.get(i).type());
             }
             for (int i = call.args().size() - 1; i >= 0; i--) {
                 store(code, params.get(i).slot(), params.get(i).type());
@@ -799,7 +799,8 @@ final class BodyGen {
                     emitLine(li);   // re-pin: a bound value may have moved the line off the call
                     genExpr(li.body(), expected);
                 }
-                // a block has no value of its own; it is inlined by the call it is passed to
+                // A block is expanded where it is applied, and a position that keeps one asks for it
+                // through emitValue; one reaching here was handed to a position that does neither.
                 case Core.Block _ -> throw new IllegalStateException("a block is not a value");
             }
             // `unreachable` is typed Never, and what is on the stack is the shape the position asked
@@ -1352,22 +1353,35 @@ final class BodyGen {
             // fold's step runs at, the result the caller casts to — and left the decision on the
             // nodes, so nothing is resolved a second time here (issue #81).
             for (int i = 0; i < call.args().size(); i++) {
-                Core arg = call.args().get(i);
-                if (arg.type() instanceof Type.FnOf fn) {
-                    switch (call.functionArgument(i, ctx.symbols.theWalk())) {
-                        case NEVER_APPLIED -> code.getstatic(CD_Fn, "NEVER", CD_Fn);
-                        case HANDED_OVER -> emitValue(arg, fn);
-                        // Run where it stands, the call is not emitted as a call at all.
-                        case RUNS_WHERE_IT_STANDS -> throw new IllegalStateException(
-                                "the step of `" + call.name() + "` runs where it stands and is not"
-                                        + " handed over");
-                    }
-                } else {
-                    box(code, genExpr(arg));
-                }
+                box(code, emitArgument(call, i));
             }
             invokeRecursiveHelper(call);
             castFromObject(code, call.type());
+        }
+
+        /**
+         * Emits what {@code call} hands over at {@code index}, and answers what is on the stack.
+         *
+         * <p>A function is handed over as {@link Core.Call#functionArgument} says: {@code Fn.NEVER}
+         * where it is never applied, and a value of its own otherwise. Asked here for every call a
+         * helper is entered by, whether it runs as a method call or, in tail position, as the jump
+         * back to the helper's own entry, so which of the two emits a call does not change what it
+         * hands over.
+         */
+        private Type emitArgument(Core.Call call, int index) {
+            Core arg = call.args().get(index);
+            if (!(arg.type() instanceof Type.FnOf)) {
+                return genExpr(arg);
+            }
+            switch (call.functionArgument(index, ctx.symbols.theWalk())) {
+                case NEVER_APPLIED -> code.getstatic(CD_Fn, "NEVER", CD_Fn);
+                case HANDED_OVER -> emitValue(arg, null);
+                // Run where it stands, the call is not emitted as a call at all.
+                case RUNS_WHERE_IT_STANDS -> throw new IllegalStateException(
+                        "the step of `" + call.name() + "` runs where it stands and is not"
+                                + " handed over");
+            }
+            return arg.type();
         }
 
         /**
@@ -1526,15 +1540,7 @@ final class BodyGen {
         /** The step of a build, as the fold it was rewritten from would have materialised it — an
          *  empty list still hands over {@code Fn.NEVER}. */
         private void emitStep(Core.Call build) {
-            Core step = build.args().get(0);
-            switch (build.functionArgument(0, ctx.symbols.theWalk())) {
-                case NEVER_APPLIED -> code.getstatic(CD_Fn, "NEVER", CD_Fn);
-                case HANDED_OVER -> emitValue(step, null);
-                // Run where it stands, `walked` has emitted it and the build is not emitted.
-                case RUNS_WHERE_IT_STANDS -> throw new IllegalStateException(
-                        "the step of `" + build.name() + "` runs where it stands and is not"
-                                + " handed over");
-            }
+            emitArgument(build, 0);
         }
 
         private void invokeRecursiveHelper(Core.Call call) {

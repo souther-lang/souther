@@ -176,6 +176,17 @@ class AFunctionAnswerIsMadeAValueWhereverItIsKeptTest {
     }
 
     @Test
+    void aBlockARecursionHandsItselfInTailPositionIsApplied() throws Exception {
+        // The function the last step hands over closed over the `n` of that step.
+        assertEquals(1L, answer("""
+                partial let loop (f: (Int) -> Int, n: Int): Int =
+                    if n == 0 then f(0) else loop((x) -> x + n, n - 1)
+                behavior use : (n: Int) -> Int
+                let use (n) = loop((x) -> x, n)
+                """, 10L));
+    }
+
+    @Test
     void aBlockHandedToAKernelThatKeepsItIsApplied() throws Exception {
         assertEquals(11L, answer(ADDER + """
                 behavior use : (n: Int) -> Int

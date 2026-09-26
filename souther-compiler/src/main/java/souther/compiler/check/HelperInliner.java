@@ -2351,8 +2351,8 @@ public final class HelperInliner {
      * What applying {@code v} applies: the body of the value it names, copied here.
      *
      * <p>A different question from {@link #valueOf}, which answers what stands where a value goes.
-     * A value whose body is a block is applied rather than held — the block is second-class and
-     * may not be bound by a {@code let} (spec §blocks) — so what the call needs is the body, and a
+     * A value whose body is a block is applied by expanding the block where it is applied, as any
+     * block applied where it stands is (spec §blocks), so what the call needs is the body, and a
      * name standing for a binding would be a call applying a binding no reader can emit.
      *
      * <p>Not a kind of value, either: whether a body produces a block is not what decides this.
