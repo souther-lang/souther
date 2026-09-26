@@ -9,6 +9,7 @@ import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.Symbols;
 import souther.compiler.cst.SyntaxKind;
+import souther.compiler.core.IntNegation;
 import souther.compiler.core.Kernel;
 import souther.compiler.observe.Asserted;
 import souther.compiler.observe.Expectation;
@@ -1519,7 +1520,7 @@ public final class FixtureReader {
 
     private static Object negate(Object v) {
         if (v instanceof Long l) {
-            if (l == Long.MIN_VALUE) {
+            if (!IntNegation.hasValue(l)) {
                 throw new FixtureException("arithmetic in a fixture has no value: -(" + l + ")");
             }
             return -l;

@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
+import souther.compiler.core.IntNegation;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Place;
@@ -555,6 +556,7 @@ public sealed interface Carrier extends ValueOrder {
                 case Core.Decimal d -> onTheGrid(Count.of(d.value()));
                 // A minus in front of a value is part of the value written down, and these are the
                 // only carriers with one to write: nothing negates a date, a case or a string.
+                case Core.Neg n when IntNegation.isTheLeastInt(n.operand()) -> null;
                 case Core.Neg n -> {
                     Place inner = literalOf(n.operand(), symbols);
                     yield inner == null ? null : Count.number(inner).negate();
