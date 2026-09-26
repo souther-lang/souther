@@ -1699,7 +1699,7 @@ public final class HelperInliner {
                 return call.withArgs(args);
             }
             return inline(call.replacedBy(
-                    appliedValueBody((Hir.Var.Denoting) named, value), args));
+                    appliedValueBody(call, (Hir.Var.Denoting) named, value), args));
         }
         if (args.size() != helper.params().size()) {
             throw wrongArity(call, helper, args.size());
@@ -2363,12 +2363,41 @@ public final class HelperInliner {
      * A reference in a callee position is a different use of the name from a reference in a value
      * position, and each is answered by what its position needs.
      */
-    private Hir.Expr appliedValueBody(Hir.Var.Denoting named, AppliedValue value) {
+    private Hir.Expr appliedValueBody(Hir.Apply call, Hir.Var.Denoting named, AppliedValue value) {
         copiesValue(value.reached());
         // What a value's own answer was told for is the declaration, and a binding is not one.
         Hir.Expr settled = named.denotes() instanceof ValueName.Local ? null : settled(named);
-        return settled != null && settled != named
-                ? settled : substituted(value.reached().rendered(), value.definition().writtenBody());
+        if (settled != null && settled != named) {
+            return settled;
+        }
+        return insideThisApplication(call, named.denotes(),
+                () -> substituted(value.reached().rendered(), value.definition().writtenBody()));
+    }
+
+    /**
+     * {@code work} done over a copy of a value's body made by applying it at {@code call}, with
+     * what it writes belonging to that application.
+     *
+     * <p>Applying a value copies its body once per application, as expanding a helper copies its
+     * body once per call, so two applications of one value are two copies and a call written in the
+     * body is one site and two expansions. What tells them apart is the application, and it is
+     * said twice: in the owner of what the copy binds while it is written, and by an
+     * {@link Hir.Expansion} around it, which is what every later walk and the elaborator's
+     * occurrences read the copy off. A value takes no arguments of its own, so the expansion binds
+     * nothing and declares no result.
+     */
+    private Hir.Expr insideThisApplication(Hir.Apply call, ValueName applied,
+                                           Supplier<Hir.Expr> work) {
+        if (!(call.application() instanceof ApplicationOrigin.Identified at)) {
+            throw new IllegalStateException(
+                    "a value applied at an application that says only why it is here: " + call);
+        }
+        ExpansionSite site = siteOf(at, call);
+        BindingOwner mine = new BindingOwner.Expansion(writing.enclosing(), applied, at);
+        Hir.Expr body = insideThisCopy(mine,
+                writing.lineage().copiedInto(applied, site), Map.of(), work);
+        return new Hir.Expansion(applied, mine, site, List.of(), List.of(), null, body, call.pos(),
+                call.region());
     }
 
     /** A value applying which applies its own body: the declaration, and the definition that
