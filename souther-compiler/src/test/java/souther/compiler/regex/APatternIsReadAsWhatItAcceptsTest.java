@@ -198,19 +198,18 @@ class APatternIsReadAsWhatItAcceptsTest {
                 "what is before it sometimes takes a symbol and sometimes does not");
         assertEquals(PatternRead.Refusal.AN_ANCHOR_THIS_CANNOT_PLACE, refused("(^a)*"),
                 "how many copies come before it is the string's answer and not the pattern's");
-        // And `$` away from the end is not the mirror of `^` away from the start. It is satisfied
-        // just before a line terminator that ends the string as well as at the end itself, so
-        // `a$b` is not a pattern nothing satisfies — it is one the language has no shape for.
+        // And `$` away from the end is refused where `^` away from the start is read as no string:
+        // the language states that shape as refused.
         assertEquals(PatternRead.Refusal.AN_ANCHOR_THIS_CANNOT_PLACE, refused("a$b"),
-                "the end of a string is not the only place a `$` is satisfied");
+                "a `$` before something that must take a symbol is not in the language");
     }
 
     /** Every construct the language does not have is refused, and says which it was. */
     @Test
     void whatTheLanguageDoesNotHaveIsRefusedAndNamed() {
-        assertEquals(PatternRead.Refusal.A_GROUP_ABOUT_THE_MATCH, refused("(?=a)b"));
-        assertEquals(PatternRead.Refusal.A_GROUP_ABOUT_THE_MATCH, refused("(?<name>a)"));
-        assertEquals(PatternRead.Refusal.A_GROUP_ABOUT_THE_MATCH, refused("(?i)a"));
+        assertEquals(PatternRead.Refusal.A_GROUP_THE_GRAMMAR_DOES_NOT_HAVE, refused("(?=a)b"));
+        assertEquals(PatternRead.Refusal.A_GROUP_THE_GRAMMAR_DOES_NOT_HAVE, refused("(?<name>a)"));
+        assertEquals(PatternRead.Refusal.A_GROUP_THE_GRAMMAR_DOES_NOT_HAVE, refused("(?i)a"));
         assertEquals(PatternRead.Refusal.A_BACK_REFERENCE, refused("(a)\\1"));
         assertEquals(PatternRead.Refusal.A_BACK_REFERENCE, refused("\\k<a>"));
         assertEquals(PatternRead.Refusal.A_CHARACTER_PROPERTY, refused("\\p{Alpha}"));

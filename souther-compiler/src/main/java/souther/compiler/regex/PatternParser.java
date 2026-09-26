@@ -139,7 +139,8 @@ public final class PatternParser {
             // Possessive is not one of those. It takes what it can and gives none of it back, so a
             // body that accepts the empty string takes it once and refuses to try again:
             // {@code (?:|a)++} matches nothing that {@code (?:|a)+} matches beyond the empty
-            // string. Which strings it accepts is a fact about a matcher, and the language has none.
+            // string. Which strings it accepts follows from how a matcher walks, which the language
+            // does not describe.
             take();
             throw refused(PatternRead.Refusal.A_POSSESSIVE_REPETITION);
         }
@@ -190,16 +191,16 @@ public final class PatternParser {
         return new WrittenPattern.Meant(new PatternMeaning.Symbols(held));
     }
 
-    /** A group, which this reads only where it says nothing about the match. */
+    /** A group, plain or {@code (?:}, which are the two the grammar has. */
     private WrittenPattern group() {
         expect('(');
         if (peek() == '?') {
             take();
-            // `(?:` and nothing else. A lookaround, a named group and a flag group each say
-            // something about where a match sits or how it is walked, which no set of strings holds.
+            // `(?:` and nothing else. A lookaround and a named group have no spelling in the
+            // grammar, and a flag group would change what a class means for the rest of the pattern.
             if (peek() != ':') {
                 take();
-                throw refused(PatternRead.Refusal.A_GROUP_ABOUT_THE_MATCH);
+                throw refused(PatternRead.Refusal.A_GROUP_THE_GRAMMAR_DOES_NOT_HAVE);
             }
             take();
         }

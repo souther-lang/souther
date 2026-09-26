@@ -128,6 +128,10 @@ public final class HelperInliner {
     private final Map<ReachName.Declaration, Handover> handovers = new HashMap<>();
     /** The fold that says which values are constants, the one every reader of a constant asks. */
     private ConstEval constEval = null;
+    /** What each value folds to, asked by a build that carries its constant ({@link #foldedValue}). */
+    private final Map<ReachName.Declaration, Optional<Object>> foldedValues = new HashMap<>();
+    /** The same fold, reading each value it names by {@link #foldedValue}, so it copies nothing. */
+    private ConstEval foldingValues = null;
     /**
      * Where a value materialised in each region this expansion is inside is read, outermost first.
      *
@@ -442,9 +446,14 @@ public final class HelperInliner {
      * <p>The other half of {@link #callingValuesAsMethodsWhereEmitted}: the tree that runs has a
      * method to call and the tree an analysis reads has a meaning to refer to. What each of them
      * builds where is {@link ValuePlan}'s, so the two cannot disagree about it.
+     *
+     * <p>Told the library {@code symbols} names, because a build carries what its value folds to
+     * ({@link Hir.ValueBuild#constant}) and a fold is against a library.
      */
-    public HelperInliner buildingValuesAsTemplatesWhereAnalysed() {
+    public HelperInliner buildingValuesAsTemplatesWhereAnalysed(Symbols symbols) {
         this.valuesAreTemplates = table.policy() == InliningPolicy.DISCHARGE;
+        this.foldingValues = ConstEval.against(symbols,
+                named -> foldedValue(named.reachesADeclaration()));
         return this;
     }
 
@@ -2594,6 +2603,8 @@ public final class HelperInliner {
         here.put(named.reaches(), built);
         order.add(built);
         values.add(new Hir.ValueBuild(named.denotes(), named.reachesADeclaration(), site.get(),
+                foldedValue(named.reachesADeclaration())
+                        .map(constant -> literal(constant, named.pos())).orElse(null),
                 named.pos(), named.region()));
     }
 
@@ -2743,22 +2754,46 @@ public final class HelperInliner {
     }
 
     private Optional<Object> constantOf(ReachName.Declaration reaches) {
+        Optional<Object> known = folded(reaches, constantOfValues, constEval);
+        // A constant stands where it is named and is folded into whatever reads it, so another
+        // module's constant found here is one this tree carries.
+        if (known.isPresent()) {
+            copiesValue(reaches);
+        }
+        return known;
+    }
+
+    /**
+     * What the value {@code reaches} names folds to, or empty where it folds to nothing — asked
+     * without this tree taking anything from it.
+     *
+     * <p>The same answer as {@link #constantOf}, for a build that carries its value's constant
+     * beside the reference: that writes nothing of the value into the tree, so neither the value
+     * nor any value its body names is copied. Folded under a reading of its own, so that nothing
+     * this asks leaves a copy behind for the other to skip.
+     */
+    private Optional<Object> foldedValue(ReachName.Declaration reaches) {
+        if (foldingValues == null) {
+            throw new IllegalStateException("a build carries its value's constant, and this"
+                    + " inliner was not told the library a constant is folded against");
+        }
+        return folded(reaches, foldedValues, foldingValues);
+    }
+
+    private Optional<Object> folded(ReachName.Declaration reaches,
+                                    Map<ReachName.Declaration, Optional<Object>> memo,
+                                    ConstEval folding) {
         Hir.FnDef value = reaches == null ? null : table.reached(reaches);
         if (value == null || !value.params().isEmpty() || value.body() == null
                 || graph.recurses(reaches)) {
             return Optional.empty();
         }
-        Optional<Object> known = constantOfValues.get(reaches);
+        Optional<Object> known = memo.get(reaches);
         if (known == null) {
             // Put before the fold as "not a constant", so a value that reaches itself answers.
-            constantOfValues.put(reaches, Optional.empty());
-            known = constEval.eval(value.writtenBody());
-            constantOfValues.put(reaches, known);
-        }
-        // A constant stands where it is named and is folded into whatever reads it, so another
-        // module's constant found here is one this tree carries.
-        if (known.isPresent()) {
-            copiesValue(reaches);
+            memo.put(reaches, Optional.empty());
+            known = folding.eval(value.writtenBody());
+            memo.put(reaches, known);
         }
         return known;
     }
@@ -3493,7 +3528,8 @@ public final class HelperInliner {
             }
             // Nothing in it to rename: it names no binding, only a value.
             case Hir.ValueBuild build -> new Hir.ValueBuild(build.value(), build.reaches(),
-                    build.site(), renaming.at(build.pos()), renaming.over(build.region()));
+                    build.site(), build.constant(), renaming.at(build.pos()),
+                    renaming.over(build.region()));
             case Hir.ListLit lit -> new Hir.ListLit(renameList(lit.elements(), renaming),
                     lit.origin(), renaming.at(lit.pos()), renaming.over(lit.region()));
             case Hir.RowCollection row -> new Hir.RowCollection(renameList(row.elements(), renaming),

@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import souther.compiler.regex.PatternMeaning;
 import souther.compiler.regex.PatternParser;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.regex.PatternRead;
@@ -305,26 +306,36 @@ final class ConstantAlgebra {
      * a machine reads each symbol once, so what could be expensive is building the machine, and
      * that is what the allowance bounds.
      *
-     * <p>Empty for text that is no pattern of the language, for a pattern deeper than the compiler
-     * reads, and for a machine past the allowance. The first two are refused where the call is
-     * checked, and a fold reached before that check has nothing to answer with; the third leaves
-     * the match to the run time. None of them is an answer about the program.
+     * <p>Reached from the written tree, where no call has been settled yet, so the text is read here
+     * by the language's reader. A checked tree carries the meaning on the call and folds through
+     * {@link #matching} without reading any text.
+     *
+     * <p>Empty for text that is no pattern of the language and for a pattern deeper than the
+     * compiler reads: both are refused where the call is checked, and a fold reached before that
+     * check has nothing to answer with. None of them is an answer about the program.
      */
     private static Optional<Object> matches(String pattern, String s) {
-        return RECOGNIZERS.computeIfAbsent(pattern, ConstantAlgebra::recognizerOf)
+        return PatternParser.read(pattern) instanceof PatternRead.Read read
+                ? matching(read.meaning(), s) : Optional.empty();
+    }
+
+    /**
+     * Whether {@code s} is one of the strings {@code meaning} denotes, or empty where the machine for
+     * it is more than a fold may build — which leaves the match to the run time.
+     */
+    static Optional<Object> matching(PatternMeaning meaning, String s) {
+        return RECOGNIZERS.computeIfAbsent(meaning, ConstantAlgebra::recognizerOf)
                 .map(recognizer -> recognizer.accepts(s));
     }
 
-    private static Optional<Recognizer> recognizerOf(String pattern) {
-        if (!(PatternParser.read(pattern) instanceof PatternRead.Read read)) {
-            return Optional.empty();
-        }
-        return Optional.ofNullable(Recognizer.of(read.meaning(),
-                PatternPlan.Budget.OF_A_FOLD.meter()));
+    private static Optional<Recognizer> recognizerOf(PatternMeaning meaning) {
+        return Optional.ofNullable(Recognizer.of(meaning, PatternPlan.Budget.OF_A_FOLD.meter()));
     }
 
     /** What each pattern means, as the machine a fold walks. A declaration's pattern is asked about
      * once per construction from it and once per reading of a branch, and building the machine is
-     * the only expensive thing here. */
-    private static final Map<String, Optional<Recognizer>> RECOGNIZERS = new ConcurrentHashMap<>();
+     * the only expensive thing here. Keyed by the meaning, so two spellings of one pattern are one
+     * machine. */
+    private static final Map<PatternMeaning, Optional<Recognizer>> RECOGNIZERS =
+            new ConcurrentHashMap<>();
 }

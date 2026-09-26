@@ -58,9 +58,11 @@ public sealed interface PatternRead {
      *
      * <p>Told apart by what an author wrote. The first group is text that is no pattern at all —
      * something left open, a count or an escape with no meaning. The rest is text that would be a
-     * pattern in some other language and is not one in this: each is a construct that says something
-     * about how a match is found or where it sits, which no set of strings states, or a way of
-     * naming symbols this language does not have.
+     * pattern in some other language and is not one in this, each for a reason of its own (spec
+     * §string-patterns): a back reference can denote a set no regular language is, a possessive
+     * count's strings follow from how a matcher walks, a flag would change what a class means for
+     * the rest of the pattern, and the others have no spelling in the grammar. Not "denotes no set
+     * of strings": a lookahead often denotes one, and a regular one at that.
      */
     enum Refusal {
 
@@ -84,20 +86,22 @@ public sealed interface PatternRead {
          */
         A_CHARACTER_NO_STRING_HOLDS,
 
-        /** A group that says something about the match rather than about the strings — a lookahead,
-         *  a lookbehind, a named group, a flag group. */
-        A_GROUP_ABOUT_THE_MATCH,
+        /** A group beginning {@code (?} other than {@code (?:} — a lookahead, a lookbehind, a named
+         *  group, a flag group. None has a spelling in the grammar, and a flag would change what a
+         *  class means for the rest of the pattern. */
+        A_GROUP_THE_GRAMMAR_DOES_NOT_HAVE,
 
-        /** A reference back to what another part of the pattern matched, which no set of strings
-         *  states. */
+        /** A reference back to what another part of the pattern matched, which can denote a set no
+         *  regular language is. */
         A_BACK_REFERENCE,
 
         /** A property of a character — {@code \p{Alpha}}, {@code \P{...}}. The language names
          *  symbols by their numbers and has nothing to ask a property with. */
         A_CHARACTER_PROPERTY,
 
-        /** A boundary — {@code \b}, {@code \B}, {@code \A}, {@code \z}, {@code \Z}, {@code \G}. It
-         *  is about where a match sits in the input, and the whole of the input is what is matched. */
+        /** A boundary — {@code \b}, {@code \B}, {@code \A}, {@code \z}, {@code \Z}, {@code \G},
+         *  {@code \R}. The grammar has {@code ^} and {@code $} for the ends and nothing else that
+         *  stands between characters. */
         A_BOUNDARY,
 
         /** A quotation — {@code \Q ... \E} — which turns off the reading of what is inside it. */
@@ -112,7 +116,8 @@ public sealed interface PatternRead {
          * <p>{@code ++}, {@code *+} and the rest. Unlike a reluctant marker, which changes the
          * order a matcher tries things and not which strings come out, a possessive one takes what
          * it can and never tries again — so a body that accepts the empty string takes it once and
-         * stops, and which strings it accepts depends on how a matcher walks.
+         * stops. Which strings it accepts follows from that walk, which the language does not
+         * describe.
          */
         A_POSSESSIVE_REPETITION,
 

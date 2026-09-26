@@ -51,7 +51,7 @@ class ASizeComparisonIsDerivedFromTheCallItIsReadOffTest {
                         new ApplicationOrigin.Written(SourceConstructOrigin.written(
                                 new WrittenOwner.Body("demo", "b"), 0, SourceConstruct.CALL)),
                         OccurrenceLineage.ORIGINAL),
-                kept.type(), kept.pos());
+                kept.settled(), kept.type(), kept.pos());
     }
 
     /** Read off a term that carries its places, the size is an occurrence of its own. */

@@ -317,7 +317,24 @@ public final class CallElaborator {
         return new Core.PreservedCall(kept.declaring(), placed,
                 new Core.KeptCallPlace(call.answered().origin(), call.application(),
                         ctx.lineage()),
-                applied.result(), call.pos());
+                settledWhereKept(call, env, ctx), applied.result(), call.pos());
+    }
+
+    /**
+     * What the checker settles about a kept application, which is what only it can settle.
+     *
+     * <p>The pattern of {@code String.matches}, read by {@link #settledPattern} as it is for an
+     * emitted call, so a reader of the kept call takes the meaning from the call and no reader works
+     * it out from the text again. Nothing else: what a kept operation means beyond that is left to
+     * whoever reads it, which is why it was kept.
+     */
+    private static Core.KernelFact settledWhereKept(Hir.Apply call, Scope env, CheckContext ctx) {
+        if (call.answered().denotes() instanceof ValueName.Stdlib.Operation operation
+                && ctx.symbols().library().intrinsicOf(operation) instanceof Stdlib.Intrinsic kernel
+                && kernel.kernel() == Kernel.STRING_MATCHES) {
+            return settledPattern(new BoundExpr(call.args().get(0), env.values()), ctx.symbols());
+        }
+        return Core.KernelFact.None.INSTANCE;
     }
 
     /**
@@ -908,7 +925,7 @@ public final class CallElaborator {
                         new TypeMessage.ThePatternWritesHalfASurrogatePair(refused.construct());
                 case AN_ANCHOR_THIS_CANNOT_PLACE ->
                         new TypeMessage.ThePatternPlacesAnAnchorTheStringDecides();
-                case A_GROUP_ABOUT_THE_MATCH, A_BACK_REFERENCE, A_CHARACTER_PROPERTY, A_BOUNDARY,
+                case A_GROUP_THE_GRAMMAR_DOES_NOT_HAVE, A_BACK_REFERENCE, A_CHARACTER_PROPERTY, A_BOUNDARY,
                      A_QUOTATION, A_CLASS_OF_CLASSES, A_POSSESSIVE_REPETITION ->
                         new TypeMessage.ThePatternWritesWhatNoPatternHas(refused.construct());
             });

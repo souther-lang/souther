@@ -250,10 +250,11 @@ public enum StringPredicates {
     /**
      * What this predicate says, given the text written in it.
      *
-     * <p>The whole of the reading, and the one copy of it. What each tree does for itself is reach
-     * the call and work out the text — {@code ConstEval} on one side, {@link Terms#folded} on the
-     * other — and from that text onwards there is a single answer, so a construct the language gains
-     * is learned by both at once.
+     * <p>The one copy of the reading for the written tree and for the predicates that look for text
+     * on a checked one. A pattern on a checked tree is not read here: the checker read it and the
+     * call carries what it means ({@link #statedBy}). The written tree is walked before any call is
+     * settled, so its patterns are read here by the language's one reader, {@link PatternParser} —
+     * the same reader the checker uses, so the two answers are one.
      */
     private Reading readingOf(String written) {
         if (!takesAPattern()) {
@@ -318,7 +319,7 @@ public enum StringPredicates {
      * one entry point per tree, a reader whose fold was the weaker of them would report a rule as
      * one whose argument nothing worked out while holding the answer, and the same rule would mean
      * two things depending on which tree it was read off. Everything past the text is
-     * {@link #readingOf} and is one.
+     * {@link #readingOf} and is one, except a pattern, whose meaning the call carries.
      *
      * <p>The positions below are read off the call without being checked against it, and two things
      * hold that up between them. A {@link Core.PreservedCall} has the arguments its declaration
@@ -347,6 +348,11 @@ public enum StringPredicates {
      * predicate was read and the text the author wrote was not worked out, which is a fact about
      * the rule; a caller resolving the argument with less than it holds would be putting a fact
      * about itself under that word.
+     *
+     * <p><b>A pattern is not read here.</b> The checker read it where it settled the call, and what
+     * it means is on the call ({@link Core.PreservedCall#settled}); this takes it from there, so a
+     * checked tree has one reading of its patterns and it is the checker's. The text that was
+     * handed in is for the predicates that look for text, which is theirs to be read as.
      */
     public static Stated statedBy(Core clause, Symbols symbols, WrittenText text) {
         if (!(Core.withoutStanding(clause) instanceof Core.PreservedCall call)
@@ -358,6 +364,16 @@ public enum StringPredicates {
             return null;
         }
         Core subject = call.args().get(predicate.subject());
+        if (predicate.takesAPattern()) {
+            // A kept `String.matches` exists only where its pattern was read, so one without its
+            // meaning is the checker's contract broken rather than a rule this could not read.
+            if (!(call.settled() instanceof Core.KernelFact.StringMatches settled)) {
+                throw new IllegalStateException(
+                        "a String.matches call carries the pattern the checker read: " + call);
+            }
+            return new Stated(subject, new Reading.Accepting(settled.meaning()),
+                    new PredicateStatement.Applying(operation.qualified(), settled.written()));
+        }
         String written = text.of(call.args().get(predicate.written()));
         // What the model calls the operation, taken off the name the call resolved to rather than
         // from the table. The table is keyed by what an operation means, and what a document calls

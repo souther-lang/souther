@@ -145,6 +145,22 @@ public final class ConstEval {
             case Hir.Var.Denoting v when v.denotes() instanceof ValueName.Local local ->
                     given(local.id(), env);
             case Hir.Var.Denoting v when v.denotes() instanceof ValueName.Helper -> values.apply(v);
+            // A build of a value holds no body, and carries the literal its value folds to where
+            // there is one: what it is known to be at compile time is that.
+            case Hir.ValueBuild build when build.constant() != null -> eval(build.constant(), env);
+            // A build that carries its body is that body.
+            case Hir.Materialised build -> eval(build.body(), env);
+            // A helper applied is its body with each parameter bound to what the call gave it, and
+            // what it gave is read where the call was written, which is the same reading a `let`
+            // gets. A representation that keeps the expansion as one node asks the same question
+            // of it as one that wrote the bindings out.
+            case Hir.Expansion expansion -> {
+                BoundValues inside = env;
+                for (Hir.Bound each : expansion.bound()) {
+                    inside = inside.binding(each.binder(), each.value(), env);
+                }
+                yield eval(expansion.body(), inside);
+            }
             default -> Optional.empty();
         };
     }

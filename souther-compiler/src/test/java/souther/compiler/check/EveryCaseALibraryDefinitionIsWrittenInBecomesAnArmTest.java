@@ -119,6 +119,6 @@ class EveryCaseALibraryDefinitionIsWrittenInBecomesAnArmTest {
                 KeptCalls.declared((ValueName.Stdlib.Operation) operation), args,
                 new Core.KeptCallPlace(new FixtureReferenceOrigin(0),
                         new ApplicationOrigin.ComposedFixture(), OccurrenceLineage.ORIGINAL),
-                entry.signature().result(), POS);
+                Core.KernelFact.None.INSTANCE, entry.signature().result(), POS);
     }
 }

@@ -3,14 +3,11 @@ package souther.compiler.codegen;
 import souther.compiler.types.ValueName;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.InvariantStatement;
-import souther.compiler.check.InvariantStatements;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
 import souther.compiler.numeric.EndSide;
-import souther.compiler.regex.PatternParser;
-import souther.compiler.regex.PatternRead;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
@@ -105,19 +102,14 @@ public final class InvariantConstraints {
      *  the library the clause was resolved against, so it is held here rather than asked at each
      *  call. */
     private final Symbols symbols;
-    /** Where a term's text is worked out, which is the reading that made these statements. Asked of
-     *  it rather than folded here, so a pattern composed of what a module's own value holds is read
-     *  as the pattern it is. */
-    private final InvariantStatements read;
 
-    private InvariantConstraints(Symbols symbols, InvariantStatements read) {
+    private InvariantConstraints(Symbols symbols) {
         this.symbols = symbols;
-        this.read = read;
     }
 
-    /** Reading statements the reading {@code read} made, against the library {@code symbols} names. */
-    public static InvariantConstraints against(Symbols symbols, InvariantStatements read) {
-        return new InvariantConstraints(symbols, read);
+    /** Reading statements against the library {@code symbols} names. */
+    public static InvariantConstraints against(Symbols symbols) {
+        return new InvariantConstraints(symbols);
     }
 
     /**
@@ -278,14 +270,12 @@ public final class InvariantConstraints {
 
     private Optional<Constraint> ofCall(Core.PreservedCall call, Type base) {
         // Raoh's pattern constraint is a whole-string match (Matcher.matches), and what it is handed
-        // is the pattern's meaning written for that engine (JavaPatterns) — the same text the run
-        // time's check runs, so the two accept the same strings. The text is asked for the same way
-        // the check asks — one reading of which expressions are compile-time strings and of what
-        // one composes to — and read by the language's one reader, so a pattern the check accepted
-        // cannot arrive here unrecognised and lose its constraint.
+        // is what the pattern means written for that engine (JavaPatterns) — the same text the run
+        // time's check runs, so the two accept the same strings. The meaning is the one the checker
+        // settled on the call: this reads no pattern text.
         if (base == Type.STRING && applies(call, Kernel.STRING_MATCHES) && call.args().size() == 2
                 && isValue(call.args().get(1))) {
-            return Optional.ofNullable(read.textOf(call.args().get(0))).map(InvariantConstraints::matching);
+            return Optional.of(matching(call));
         }
         // `List.allDistinctBy(x -> x, value)` says of the elements what Raoh's `unique()` says of them:
         // no two are equal, by the same value equality (spec §collections, ADR-0009). A projection that
@@ -359,14 +349,15 @@ public final class InvariantConstraints {
         return Core.withoutStanding(e) instanceof Core.Read read && read.name().equals(VALUE);
     }
 
-    /** The constraint for a pattern the check read. A codec is generated only for a module whose
-     *  check is sound, so text that is no pattern here is the check's contract broken. */
-    private static Pattern matching(String text) {
-        if (!(PatternParser.read(text) instanceof PatternRead.Read reading)) {
+    /** The constraint for the pattern the checker settled on {@code call}. A kept
+     *  {@code String.matches} exists only where its pattern was read, so a call without one is the
+     *  checker's contract broken. */
+    private static Pattern matching(Core.PreservedCall call) {
+        if (!(call.settled() instanceof Core.KernelFact.StringMatches settled)) {
             throw new IllegalStateException(
-                    "a codec is generated for a checked module, whose patterns were read: " + text);
+                    "a String.matches call carries the pattern the checker read: " + call);
         }
-        return new Pattern(JavaPatterns.of(reading.meaning()));
+        return new Pattern(JavaPatterns.of(settled.meaning()));
     }
 
     /**

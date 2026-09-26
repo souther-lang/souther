@@ -1730,12 +1730,21 @@ public interface Hir {
      * which value and for which region. It has no children, so a walk that goes into the parts of an
      * expression meets no body under it; the value is asked of the templates by what it reaches.
      *
-     * @param value   which value this is a build of
-     * @param reaches the name the module reaches it by, which is what the template is held under
-     * @param site    the region it was built for
+     * <p><b>What the value is a constant of travels with it.</b> A position that asks whether an
+     * expression is known at compile time — a {@code String.matches} pattern — folds the tree it is
+     * handed and resolves no name, and a build names a value without holding its body. So where the
+     * value folds to a constant, the literal that constant reads back as is carried here, as a
+     * substituted value is written out as one where it is named; the build is still what stands in
+     * the tree, and the literal is not a child of it.
+     *
+     * @param value    which value this is a build of
+     * @param reaches  the name the module reaches it by, which is what the template is held under
+     * @param site     the region it was built for
+     * @param constant the literal the value folds to, or null where it folds to none a literal
+     *                 spells
      */
     record ValueBuild(ValueName value, ReachName.Declaration reaches, MaterialisationSite site,
-                      SourcePos pos, Region region) implements Expr {
+                      Expr constant, SourcePos pos, Region region) implements Expr {
 
         public ValueBuild {
             if (value == null || reaches == null || site == null) {

@@ -159,6 +159,13 @@ final class CoreConstantEval {
         if (kernel == null) {
             return Optional.empty();
         }
+        // A pattern is not folded to text and read again: the checker read it where it settled the
+        // call, and what it means is on the call. Only the subject is folded, which is the last
+        // argument (spec §pipe).
+        if (call.settled() instanceof Core.KernelFact.StringMatches settled) {
+            return eval(call.args().getLast(), env).orElse(null) instanceof String subject
+                    ? ConstantAlgebra.matching(settled.meaning(), subject) : Optional.empty();
+        }
         List<Object> args = new ArrayList<>();
         for (Core arg : call.args()) {
             Object folds = eval(arg, env).orElse(null);

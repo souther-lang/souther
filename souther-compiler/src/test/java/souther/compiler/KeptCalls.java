@@ -4,6 +4,8 @@ import souther.compiler.core.CompleteSignature;
 import souther.compiler.core.Core;
 import souther.compiler.core.DeclaredOperation;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.regex.PatternParser;
+import souther.compiler.regex.PatternRead;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.BindingId;
@@ -52,7 +54,22 @@ public final class KeptCalls {
     public static Core.PreservedCall to(ValueName.Stdlib.Operation operation, List<Core> args,
                                         Type type, SourcePos pos) {
         return new Core.PreservedCall(declared(operation), args,
-                new Core.KeptCallPlace(NAME, COMPOSED, OccurrenceLineage.ORIGINAL), type, pos);
+                new Core.KeptCallPlace(NAME, COMPOSED, OccurrenceLineage.ORIGINAL),
+                settledFor(operation, args), type, pos);
+    }
+
+    /**
+     * What the checker would settle about this application: the meaning of a {@code String.matches}
+     * pattern written as a literal, read by the language's reader as the checker reads it, and
+     * nothing for any other.
+     */
+    private static Core.KernelFact settledFor(ValueName.Stdlib.Operation operation, List<Core> args) {
+        if (operation.equals(ValueName.Stdlib.operation("String", "matches"))
+                && args.get(0) instanceof Core.Str written
+                && PatternParser.read(written.value()) instanceof PatternRead.Read read) {
+            return new Core.KernelFact.StringMatches(written.value(), read.meaning());
+        }
+        return Core.KernelFact.None.INSTANCE;
     }
 
     /**
@@ -70,7 +87,7 @@ public final class KeptCalls {
         }
         return new Core.PreservedCall(signature.declaring(), args,
                 new Core.KeptCallPlace(NAME, COMPOSED, OccurrenceLineage.ORIGINAL),
-                signature.result(), pos);
+                settledFor(operation, args), signature.result(), pos);
     }
 
     /** What the library declares {@code operation} to be. */

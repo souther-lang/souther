@@ -40,11 +40,10 @@ final class Anchors {
             case WrittenPattern.Anchor it -> switch (it.end() ? atEnd : atStart) {
                 case YES -> new PatternMeaning.Nothing();
                 // {@code ^} asks to be at the start of the string and there is one such place, so
-                // anything that must take a symbol before it leaves no string at all. {@code $} is
-                // not the mirror of that: it is satisfied at the end and also just before a line
-                // terminator that ends the string, so {@code $[^a]} accepts the one string whose
-                // only symbol is that terminator. The language has no shape for a place defined by
-                // what comes after it, so the pattern is refused.
+                // anything that must take a symbol before it leaves no string at all. A {@code $}
+                // with something after it that must take a symbol is refused rather than read the
+                // same way: the language keeps the set of patterns it reads, and that set has no
+                // pattern of this shape (spec §string-patterns).
                 case NO -> it.end() ? null : new PatternMeaning.Never();
                 case UNSETTLED -> null;
             };

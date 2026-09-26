@@ -79,8 +79,7 @@ public sealed interface TypeMessage extends Message {
     @Code(DiagnosticCode.E1323)
     record ThePatternEndsBeforeItIsWhole() implements TypeMessage, Reported {}
 
-    /** A construct that says how a match is found or where it sits, or names characters in a way
-     *  the pattern language does not. */
+    /** A construct the pattern language's grammar does not have. */
     @Code(DiagnosticCode.E1323)
     record ThePatternWritesWhatNoPatternHas(String construct) implements TypeMessage, Reported {}
 
