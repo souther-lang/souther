@@ -21,8 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>A kernel's application settles what it takes each argument as, and the call holds each
  * argument at exactly that. {@code String.matches}'s pattern is a fact settled beside it: the
- * checker folds its first argument under the bindings in force and asks {@code
- * java.util.regex.Pattern} whether the composed text is accepted, which settles one string. Both
+ * checker folds its first argument under the bindings in force and reads the composed text as a
+ * pattern of the language, which settles what the pattern means. Both
  * belong on the call they were settled for — not folded into {@code args}, which is what the body
  * evaluates at run time and a different question — and not left for a reader below to derive a
  * second time.

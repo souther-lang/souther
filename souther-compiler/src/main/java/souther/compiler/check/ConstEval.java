@@ -26,14 +26,16 @@ import java.util.function.Function;
  * behavior's tail) because CTFE either passes it or rejects it as a compile error.
  *
  * <p>The supported fragment covers constant arguments and simple sub-expressions: literals,
- * arithmetic, negation, comparison, logic, string concatenation, and {@code String.length} /
- * {@code contains}. Anything outside it folds to empty, which the caller treats as "not a
+ * arithmetic, negation, comparison, logic, string concatenation, {@code String.length} /
+ * {@code contains}, a helper applied to what folds, and a build of a value that carries the
+ * constant it is. Anything outside it folds to empty, which the caller treats as "not a
  * compile-time constant".
  *
  * <p>This is where "known at compile time" is decided, for every position that demands it — a
- * {@code String.matches} pattern is one, and both the check that compiles the regex and the codec
- * derivation that carries it to the boundary ask here rather than each recognising its own set of
- * expressions (issue #208).
+ * {@code String.matches} pattern is one. The checker asks here whether the pattern is a String at
+ * compile time where it settles the call, in every representation it elaborates, rather than each
+ * recognising its own set of expressions; what the pattern means then travels with the call, and
+ * nothing downstream asks for its text again.
  *
  * <p><b>It folds an expression under the bindings in force.</b> It resolves no module name: what a
  * module's value stands for is settled before a body is read here. A {@code let} is a different

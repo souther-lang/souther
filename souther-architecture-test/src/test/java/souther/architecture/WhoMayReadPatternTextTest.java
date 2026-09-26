@@ -17,9 +17,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Pattern text is read by the compiler alone, and by the few places of it that hold no settled call.
  *
- * <p>What a pattern means is read once where a {@code String.matches} call is settled, and the call
- * carries it — the emitted one and the one kept standing for the readings alike. Anything holding a
- * checked call takes the meaning from there. A class that asks the reader again is working out from
+ * <p>Once a {@code String.matches} call is settled, what its pattern means travels with the call —
+ * the emitted one and the one kept standing for the readings alike — and anything holding a checked
+ * call takes the meaning from there. Before a call is settled the same text may be read by the same
+ * reader more than once; what is closed here is who may read it, not how often. A class that asks the reader again is working out from
  * the text what the call already says, and an output that does it is an output reading pattern text,
  * which is the one thing no carrier may do. Each row below is a place that holds text and no
  * settled call, and says why.
