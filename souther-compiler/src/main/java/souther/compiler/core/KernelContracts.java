@@ -64,7 +64,7 @@ public final class KernelContracts {
                     STRING_UPPERCASE, STRING_CONTAINS, STRING_STARTS_WITH, STRING_ENDS_WITH,
                     STRING_MATCHES, STRING_APPEND, STRING_SPLIT, STRING_JOIN, STRING_REPLACE,
                     STRING_WORDS, STRING_FROM_INT, STRING_CONCAT, STRING_REVERSE, STRING_LINES,
-                    STRING_FROM_DECIMAL, STRING_CHARACTERS, STRING_CODE_POINTS,
+                    STRING_CHARACTERS, STRING_CODE_POINTS,
                     MAP_EMPTY, MAP_GET, MAP_CONTAINS_KEY, MAP_KEYS, MAP_VALUES, MAP_SINGLETON,
                     MAP_INSERT, MAP_REMOVE, MAP_IS_EMPTY, MAP_SIZE, MAP_TO_LIST, MAP_FROM_LIST,
                     LIST_LENGTH, LIST_FIND, LIST_SORT_BY, LIST_MAX, LIST_MIN, LIST_GET, LIST_REVERSE,
@@ -90,7 +90,8 @@ public final class KernelContracts {
 
             // The law `an-operation-refuses-only-what-its-own-answer-has-no-place-for`: "its own
             // answer, or a form the operation is defined as, has no representation". A `repeat` or
-            // `pad` count no `String` could hold, a calendar shift off the end of what a temporal
+            // `pad` count no `String` could hold, a `fromDecimal` text no `String` could hold (a
+            // scale far enough from nought either way), a calendar shift off the end of what a temporal
             // holds, a `List.rangeInclusive` span longer than a `List` can hold, and an `Int` or
             // `Decimal` arithmetic result outside what its type holds are the first half — the
             // answer itself has no place. `Rational.toWholeNumber`/`toInt`/`toFiniteDecimal`/
@@ -101,7 +102,7 @@ public final class KernelContracts {
             // remaining distance built in full (`Rational#plus`/`#minus`) — and that required form
             // can ask for an exponent past what `Rational` holds even where the mathematical answer
             // would fit.
-            case STRING_REPEAT, STRING_PAD_LEFT, STRING_PAD_RIGHT,
+            case STRING_REPEAT, STRING_PAD_LEFT, STRING_PAD_RIGHT, STRING_FROM_DECIMAL,
                     LIST_SUM, LIST_PRODUCT, LIST_RANGE_INCLUSIVE,
                     DATE_ADD_DAYS, DATE_ADD_MONTHS, DATE_ADD_YEARS,
                     DATETIME_ADD_MINUTES, DATETIME_ADD_HOURS, DATETIME_ADD_DAYS,

@@ -396,24 +396,25 @@ public final class Strings {
     /** Renders a {@code Decimal} in plain notation, never in exponent form (spec §stdlib-string). A
      *  scale of zero or more is written as that many fractional digits
      *  ({@code fromDecimal(new BigDecimal("1000.00")) == "1000.00"}); a negative scale is written as
-     *  the integer zeros it stands for, with no point ({@code 12E+2} is {@code "1200"}). */
+     *  the integer zeros it stands for, with no point ({@code 12E+2} is {@code "1200"}). A text no
+     *  {@code String} holds aborts ({@link DecimalMath#plainText}). */
     public static String fromDecimal(java.math.BigDecimal d) {
-        return d.toPlainString();
+        return DecimalMath.plainText(d);
     }
 
     /** Parses {@code s} as decimal text (spec §string-decimal-text), or {@link NotANumber#INSTANCE}
      *  when it is not decimal text — the sibling of {@link #toInt}, returning the
      *  {@code Decimal | NotANumber} union. Which text is accepted is decided by
-     *  {@link #isDecimalText}; {@code BigDecimal} only converts text already accepted, because on its
-     *  own it also reads exponent notation, a point with no digit on one side, and every Unicode
-     *  decimal digit its JDK knows ({@code "１２３.４５"}). The scale of what it answers is the number
-     *  of digits written after the point, which is also what {@code BigDecimal(String)} gives text
-     *  with no exponent. */
+     *  {@link #isDecimalText}; {@code BigDecimal} only converts text already accepted
+     *  ({@link DecimalMath#ofDecimalText}), because on its own it also reads exponent notation, a
+     *  point with no digit on one side, and every Unicode decimal digit its JDK knows
+     *  ({@code "１２３.４５"}). The scale of what it answers is the number of digits written after the
+     *  point, which is also what {@code BigDecimal(String)} gives text with no exponent. */
     public static Object toDecimal(String s) {
         if (!isDecimalText(s)) {
             return NotANumber.INSTANCE;
         }
-        return new java.math.BigDecimal(s);
+        return DecimalMath.ofDecimalText(s);
     }
 
     /** Decimal text (spec §string-decimal-text): an optional ASCII {@code +} or {@code -}, one or

@@ -184,21 +184,24 @@ public final class Lists {
         return acc;
     }
 
-    /** The sum of a list of {@code Decimal}; the empty list is 0. {@code BigDecimal.add} keeps the
-     *  larger scale of its two operands, so the elements' own scales carry through the walk. */
+    /** The sum of a list of {@code Decimal}; the empty list is 0. Each step is {@code +}
+     *  ({@link DecimalMath#add}), which keeps the larger scale of its two operands, so the elements'
+     *  own scales carry through the walk and a sum past what a {@code Decimal} holds aborts as
+     *  {@code +} does. */
     public static BigDecimal sumDecimal(List<BigDecimal> xs) {
         BigDecimal acc = BigDecimal.ZERO;
         for (BigDecimal x : xs) {
-            acc = acc.add(x);
+            acc = DecimalMath.add(acc, x);
         }
         return acc;
     }
 
-    /** The product of a list of {@code Decimal}; the empty list is 1. */
+    /** The product of a list of {@code Decimal}; the empty list is 1. Each step is {@code *}
+     *  ({@link DecimalMath#multiply}), and aborts where {@code *} does. */
     public static BigDecimal productDecimal(List<BigDecimal> xs) {
         BigDecimal acc = BigDecimal.ONE;
         for (BigDecimal x : xs) {
-            acc = acc.multiply(x);
+            acc = DecimalMath.multiply(acc, x);
         }
         return acc;
     }

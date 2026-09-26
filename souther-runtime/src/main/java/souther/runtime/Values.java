@@ -95,9 +95,10 @@ public final class Values {
         };
     }
 
-    /** The hash of an amount, taken after dropping the scale its equality ignores. */
+    /** The hash of an amount, taken after dropping the scale its equality ignores — from
+     *  {@link DecimalMath#leastDigits}, the one form of an amount there is at every scale. */
     public static int hash(@Nullable BigDecimal v) {
-        return v == null ? 0 : v.stripTrailingZeros().hashCode();
+        return v == null ? 0 : DecimalMath.leastDigits(v).hashCode();
     }
 
     /**

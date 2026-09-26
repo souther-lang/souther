@@ -164,6 +164,29 @@ class JvmAbortMappingTest {
                 () -> Lists.productInt(List.of(Long.MAX_VALUE, 2L)));
     }
 
+    /** And through their {@code Decimal} instantiation, which one kernel names as well: the same
+     *  pairs {@code +} and {@code *} are pushed past the scale range with above. */
+    @Test
+    void listSumAndProductRunOffTheScaleRangeThroughTheirDecimalInstantiation() {
+        BigDecimal huge = new BigDecimal(BigDecimal.ONE.unscaledValue(), Integer.MIN_VALUE + 1);
+        assertKernelAborts(Kernel.LIST_SUM, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+                () -> Lists.sumDecimal(List.of(huge, BigDecimal.valueOf(0.1))));
+        assertKernelAborts(Kernel.LIST_PRODUCT, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+                () -> Lists.productDecimal(List.of(huge, huge)));
+    }
+
+    /** {@code fromDecimal}: a value a few bytes wide whose plain notation no {@code String} holds —
+     *  at the floor of the scale range, where {@code toPlainString} overflows, and one step above
+     *  it and at the ceiling, where it runs out of room. */
+    @Test
+    void fromDecimalAbortsWhereTheTextHasNoPlace() {
+        for (int scale : new int[] {Integer.MIN_VALUE, Integer.MIN_VALUE + 1, Integer.MAX_VALUE}) {
+            BigDecimal d = new BigDecimal(BigInteger.ONE, scale);
+            assertKernelAborts(Kernel.STRING_FROM_DECIMAL, AbortKind.REQUIRED_FORM_HAS_NO_PLACE,
+                    () -> Strings.fromDecimal(d));
+        }
+    }
+
     /** Every calendar shift, run off the end of what its temporal holds. */
     @Test
     void everyCalendarShiftAbortsWhereTheResultHasNoPlace() {
