@@ -304,7 +304,9 @@ final class Intrinsics {
             g.emitFn(argument, takes.paramTypes().apply(call.args().get(takes.container()).type()));
             return argument.type();
         }
-        return g.genExpr(argument);
+        // What a kernel is handed it may keep, as `Map.insert` keeps its value, so a function
+        // handed to a parameter that is not one it applies is a value of its own too.
+        return g.emitValue(argument, null);
     }
 
     private static int[] identity(int n) {

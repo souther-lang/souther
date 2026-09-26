@@ -426,6 +426,70 @@ class WhatAModuleCopiedIsHeldToWhatItWasBuiltAgainstTest {
         assertAccepted(path, readerOf("app.k"));
     }
 
+    private static final String APPLIES_THE_FUNCTION = """
+            module app.f exposing ( use )
+            import lib.f ( bump )
+            behavior use : (n: Int) -> Int
+            let use (n) = bump(n)
+            """;
+
+    /** A value whose body is a block is applied by that block, which is copied into the reader
+     *  where it is applied; so a reader built against `n + 1` adds 1. */
+    @Test
+    void aFunctionValuedValueWhoseBlockMovedIsSaid() {
+        Map<String, ClassFileImage> path = builtAgainst("""
+                module lib.f exposing ( bump )
+                let bump: (Int) -> Int = (n) -> n + 1
+                """, APPLIES_THE_FUNCTION, """
+                module lib.f exposing ( bump )
+                let bump: (Int) -> Int = (n) -> n + 2
+                """);
+
+        assertEquals(new ModuleMessage.ItCopiedAnotherVersion("app.f", "value", "bump", "lib.f",
+                        "closed body"),
+                refusal(path, readerOf("app.f")));
+    }
+
+    /** The block's copy holds what applying it turns on, and neither what its parameter is called
+     *  nor a comment beside it. */
+    @Test
+    void anEditTheBlocksCopyDoesNotSeeLeavesTheReaderAsItWas() {
+        Map<String, ClassFileImage> path = builtAgainst("""
+                module lib.f exposing ( bump )
+                let bump: (Int) -> Int = (n) -> n + 1
+                """, APPLIES_THE_FUNCTION, """
+                module lib.f exposing ( bump )
+
+                // one more than it is handed
+                let bump: (Int) -> Int = (value) -> value + 1
+                """);
+
+        assertAccepted(path, readerOf("app.f"));
+    }
+
+    /** A reader that holds the function rather than applying it reads it off the module that
+     *  declares it, so what the block computes is not part of the reader. */
+    @Test
+    void aFunctionValuedValueTheReaderHoldsIsNotHeldToItsBlock() {
+        Map<String, ClassFileImage> path = builtAgainst("""
+                module lib.f exposing ( bump )
+                let bump: (Int) -> Int = (n) -> n + 1
+                """, """
+                module app.f exposing ( use )
+                import lib.f ( bump )
+                behavior use : (n: Int) -> Int
+                let use (n) = {
+                    let fs = [bump]
+                    List.length(fs) + n
+                }
+                """, """
+                module lib.f exposing ( bump )
+                let bump: (Int) -> Int = (n) -> n + 2
+                """);
+
+        assertAccepted(path, readerOf("app.f"));
+    }
+
     /** An edit to a declaration the reader did not copy leaves it as it was, though the module it
      *  copied from moved. */
     @Test

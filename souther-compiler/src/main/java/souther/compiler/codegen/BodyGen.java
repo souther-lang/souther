@@ -378,8 +378,7 @@ final class BodyGen {
                         store(code, s, c.type());
                         g.bind(c.binding(), c.name(), s, c.type());
                     }
-                    Type rt = g.genExpr(body);
-                    box(code, rt);
+                    box(code, g.emitValue(body, null));
                     code.areturn();
                 });
             });
@@ -417,13 +416,7 @@ final class BodyGen {
                         storeLet(li, li.value().type());
                     } else {
                         Type vt = li.value().type();
-                        if (vt instanceof Type.FnOf fn) {
-                            // a lambda chosen at runtime (e.g. by an `if`) — a first-class Fn
-                            // (spec §blocks), at the parameter types the checker inferred for it
-                            emitFunctionValue(li.value(), fn.params());
-                        } else {
-                            genExpr(li.value(), vt);
-                        }
+                        emitValue(li.value(), vt);
                         storeLet(li, vt);
                     }
                     emitLine(li);   // re-pin: a bound value may have moved the line off the call
@@ -469,7 +462,7 @@ final class BodyGen {
                     returnValue();
                 }
                 default -> {
-                    Type rt = genExpr(e, expected);
+                    Type rt = emitValue(e, expected);
                     box(code, rt);
                     returnValue();
                 }
@@ -506,7 +499,7 @@ final class BodyGen {
                 params.add(locals.get(p.binding()));
             }
             for (int i = 0; i < call.args().size(); i++) {
-                standAs(genExpr(call.args().get(i)), params.get(i).type());
+                standAs(emitArgument(call, i), params.get(i).type());
             }
             for (int i = call.args().size() - 1; i >= 0; i--) {
                 store(code, params.get(i).slot(), params.get(i).type());
@@ -541,13 +534,7 @@ final class BodyGen {
             code.invokespecial(CD_ArrayList, "<init>", MTD_void);
             for (Core el : lit.elements()) {
                 code.dup();
-                if (el.type() instanceof Type.FnOf fn) {
-                    // a function held in a list is a value like any other, so it is materialised as
-                    // an Fn here rather than expanded into a call site it does not have
-                    emitFunctionValue(el, fn.params());
-                } else {
-                    box(code, genExpr(el));
-                }
+                box(code, emitValue(el, null));
                 code.invokevirtual(CD_ArrayList, "add", MTD_ArrayList_add);
                 code.pop();
             }
@@ -564,8 +551,8 @@ final class BodyGen {
                 // the arity every fold-carried tuple has: built outright, with no array between
                 code.new_(CD_TuplePair);
                 code.dup();
-                box(code, genExpr(t.elements().get(0)));
-                box(code, genExpr(t.elements().get(1)));
+                box(code, emitValue(t.elements().get(0), null));
+                box(code, emitValue(t.elements().get(1), null));
                 code.invokespecial(CD_TuplePair, "<init>", MTD_TuplePair_init);
                 return;
             }
@@ -574,7 +561,7 @@ final class BodyGen {
             for (int i = 0; i < t.elements().size(); i++) {
                 code.dup();
                 pushInt(code, i);
-                box(code, genExpr(t.elements().get(i)));
+                box(code, emitValue(t.elements().get(i), null));
                 code.aastore();
             }
             code.invokestatic(CD_Tuple, "ofOwned", MTD_Tuple_ofOwned, true);
@@ -762,30 +749,12 @@ final class BodyGen {
                     emitFieldRead(code, ((Type.Ref) targetType).name(), fa.field(), fa.type());
                 }
                 case Core.If iff -> {
-                    genExpr(iff.cond());
-                    Label elseL = code.newLabel();
-                    Label end = code.newLabel();
                     Type want = shapeOf(iff, expected);
-                    code.ifeq(elseL);
-                    probe(iff, 0);
-                    genExpr(iff.then(), want);
-                    code.goto_(end);
-                    code.labelBinding(elseL);
-                    probe(iff, 1);
-                    genExpr(iff.els(), want);
-                    code.labelBinding(end);
+                    fork(iff, arm -> genExpr(arm, want));
                 }
                 case Core.IfConstructed ic -> {
-                    Attempt a = emitAttempt(ic);
-                    Label end = code.newLabel();
-                    bind(ic.binder(), a.slot(), ic.construct().type());
-                    probe(ic, 0);
-                    genExpr(ic.then(), shapeOf(ic, expected));
-                    code.goto_(end);
-
-                    code.labelBinding(a.elseLabel());
-                    emitDepartures(ic, a, body -> genExpr(body, shapeOf(ic, expected)), end);
-                    code.labelBinding(end);
+                    Type want = shapeOf(ic, expected);
+                    attempt(ic, arm -> genExpr(arm, want));
                 }
                 case Core.OptionSome s -> {
                     // `Option.some` takes the value as an Object, so a primitive element boxes here
@@ -816,24 +785,22 @@ final class BodyGen {
                     }
                 }
                 case Core.Construct nd -> construct(nd);
-                case Core.Match m -> match(m, expected);
+                case Core.Match m -> {
+                    Type want = shapeOf(m, expected);
+                    match(m, arm -> genExpr(arm, want));
+                }
                 case Core.Call c -> call(c);
                 case Core.Apply a -> applyFn(a, (Type.FnOf) a.fn().type());
                 case Core.LetIn li -> {
                     // a `let` outside tail position: bind, then value the body
                     Type vt = li.value().type();
-                    if (vt instanceof Type.FnOf fn) {
-                        // a lambda chosen at runtime (e.g. by an `if`): a first-class Fn (spec §blocks),
-                        // at the parameter types the checker inferred from its applications
-                        emitFunctionValue(li.value(), fn.params());
-                    } else {
-                        genExpr(li.value(), vt);
-                    }
+                    emitValue(li.value(), vt);
                     storeLet(li, vt);
                     emitLine(li);   // re-pin: a bound value may have moved the line off the call
                     genExpr(li.body(), expected);
                 }
-                // a block has no value of its own; it is inlined by the call it is passed to
+                // A block is expanded where it is applied, and a position that keeps one asks for it
+                // through emitValue; one reaching here was handed to a position that does neither.
                 case Core.Block _ -> throw new IllegalStateException("a block is not a value");
             }
             // `unreachable` is typed Never, and what is on the stack is the shape the position asked
@@ -887,12 +854,45 @@ final class BodyGen {
             return sits == null ? u.reason() : u.reason() + " (" + sits + ")";
         }
 
-        private void match(Core.Match m, Type expected) {
+        /** An {@code if} outside tail position, each branch emitted by {@code arm}, the two joining
+         *  after the second. Which branch a row took is the plan's to be told about whatever the
+         *  branches answer with. */
+        private void fork(Core.If iff, Consumer<Core> arm) {
+            genExpr(iff.cond());
+            Label elseL = code.newLabel();
+            Label end = code.newLabel();
+            code.ifeq(elseL);
+            probe(iff, 0);
+            arm.accept(iff.then());
+            code.goto_(end);
+            code.labelBinding(elseL);
+            probe(iff, 1);
+            arm.accept(iff.els());
+            code.labelBinding(end);
+        }
+
+        /** An attempt outside tail position, what follows it and each departure emitted by
+         *  {@code arm}, all joining after the last. */
+        private void attempt(Core.IfConstructed ic, Consumer<Core> arm) {
+            Attempt a = emitAttempt(ic);
+            Label end = code.newLabel();
+            bind(ic.binder(), a.slot(), ic.construct().type());
+            probe(ic, 0);
+            arm.accept(ic.then());
+            code.goto_(end);
+
+            code.labelBinding(a.elseLabel());
+            emitDepartures(ic, a, arm, end);
+            code.labelBinding(end);
+        }
+
+        /** A {@code match} outside tail position, each arm's body emitted by {@code arm}, the arms
+         *  joining after the last. */
+        private void match(Core.Match m, Consumer<Core> arm) {
             Type st = genExpr(m.scrutinee());
             int sSlot = slot(st);
             store(code, sSlot, st);
             Label end = code.newLabel();
-            Type want = shapeOf(m, expected);
             for (int i = 0; i < m.cases().size(); i++) {
                 Core.Case c = m.cases().get(i);
                 Label nextCase = code.newLabel();
@@ -901,7 +901,7 @@ final class BodyGen {
 
                 emitCaseGuard(c, sSlot, st, nextCase);
                 probe(m, i);
-                genExpr(c.body(), want);
+                arm.accept(c.body());
                 if (c.binder() != null) {
                 }
                 code.goto_(end);
@@ -1353,22 +1353,35 @@ final class BodyGen {
             // fold's step runs at, the result the caller casts to — and left the decision on the
             // nodes, so nothing is resolved a second time here (issue #81).
             for (int i = 0; i < call.args().size(); i++) {
-                Core arg = call.args().get(i);
-                if (arg.type() instanceof Type.FnOf fn) {
-                    switch (call.functionArgument(i, ctx.symbols.theWalk())) {
-                        case NEVER_APPLIED -> code.getstatic(CD_Fn, "NEVER", CD_Fn);
-                        case HANDED_OVER -> emitFunctionValue(arg, fn.params());
-                        // Run where it stands, the call is not emitted as a call at all.
-                        case RUNS_WHERE_IT_STANDS -> throw new IllegalStateException(
-                                "the step of `" + call.name() + "` runs where it stands and is not"
-                                        + " handed over");
-                    }
-                } else {
-                    box(code, genExpr(arg));
-                }
+                box(code, emitArgument(call, i));
             }
             invokeRecursiveHelper(call);
             castFromObject(code, call.type());
+        }
+
+        /**
+         * Emits what {@code call} hands over at {@code index}, and answers what is on the stack.
+         *
+         * <p>A function is handed over as {@link Core.Call#functionArgument} says: {@code Fn.NEVER}
+         * where it is never applied, and a value of its own otherwise. Asked here for every call a
+         * helper is entered by, whether it runs as a method call or, in tail position, as the jump
+         * back to the helper's own entry, so which of the two emits a call does not change what it
+         * hands over.
+         */
+        private Type emitArgument(Core.Call call, int index) {
+            Core arg = call.args().get(index);
+            if (!(arg.type() instanceof Type.FnOf)) {
+                return genExpr(arg);
+            }
+            switch (call.functionArgument(index, ctx.symbols.theWalk())) {
+                case NEVER_APPLIED -> code.getstatic(CD_Fn, "NEVER", CD_Fn);
+                case HANDED_OVER -> emitValue(arg, null);
+                // Run where it stands, the call is not emitted as a call at all.
+                case RUNS_WHERE_IT_STANDS -> throw new IllegalStateException(
+                        "the step of `" + call.name() + "` runs where it stands and is not"
+                                + " handed over");
+            }
+            return arg.type();
         }
 
         /**
@@ -1397,7 +1410,7 @@ final class BodyGen {
             Core added = call.args().get(1);
             if (Core.withoutStanding(added) instanceof Core.ListLit lit
                     && lit.elements().size() == 1) {
-                box(code, genExpr(lit.elements().get(0)));
+                box(code, emitValue(lit.elements().get(0), null));
                 code.invokestatic(CD_Lists, "grow", MTD_Lists_grow);
             } else {
                 genExpr(added);
@@ -1438,7 +1451,7 @@ final class BodyGen {
             }
             Core seed = call.args().get(1);
             return walked(call.args().get(0), call.args().get(2), () -> {
-                Type produced = genExpr(seed);
+                Type produced = emitValue(seed, null);
                 asAccumulator(produced, accumulatorOf(call.args().get(0)));
             }, () -> { });
         }
@@ -1502,7 +1515,7 @@ final class BodyGen {
             code.aload(iterator);
             code.invokeinterface(CD_Iterator, "next", MTD_next);
             unbox(code, elementType, element);
-            Type stepped = genExpr(step.body());   // the accumulator the step answers with
+            Type stepped = emitValue(step.body(), null);   // the accumulator the step answers with
             asAccumulator(stepped, accType);
             store(code, acc, accType);
             countOneStep();
@@ -1520,22 +1533,14 @@ final class BodyGen {
         private void putIntoMap(Core.Call call) {
             genExpr(call.args().get(0));
             box(code, genExpr(call.args().get(1)));
-            box(code, genExpr(call.args().get(2)));
+            box(code, emitValue(call.args().get(2), null));
             code.invokestatic(CD_Maps, "put", MTD_Maps_put);
         }
 
         /** The step of a build, as the fold it was rewritten from would have materialised it — an
          *  empty list still hands over {@code Fn.NEVER}. */
         private void emitStep(Core.Call build) {
-            Core step = build.args().get(0);
-            switch (build.functionArgument(0, ctx.symbols.theWalk())) {
-                case NEVER_APPLIED -> code.getstatic(CD_Fn, "NEVER", CD_Fn);
-                case HANDED_OVER -> emitFunctionValue(step, ((Type.FnOf) step.type()).params());
-                // Run where it stands, `walked` has emitted it and the build is not emitted.
-                case RUNS_WHERE_IT_STANDS -> throw new IllegalStateException(
-                        "the step of `" + build.name() + "` runs where it stands and is not"
-                                + " handed over");
-            }
+            emitArgument(build, 0);
         }
 
         private void invokeRecursiveHelper(Core.Call call) {
@@ -1799,7 +1804,7 @@ final class BodyGen {
                         // (souther.list's map/filter), so it runs once per element. Push the element
                         // itself: building a one-element list for `concat` to immediately take apart
                         // costs an ArrayList, a copyOf, and an iterator on the hot path.
-                        box(code, genExpr(lit.elements().get(0)));
+                        box(code, emitValue(lit.elements().get(0), null));
                         code.invokestatic(CD_Lists, "append", MTD_Lists_append);
                     } else {
                         genExpr(bin.right());
@@ -2136,30 +2141,39 @@ final class BodyGen {
             return bound().reaching(ctx.standingCalls);
         }
 
+        /**
+         * Emits {@code e} where the position keeps what it answers as a JVM value of its own: bound,
+         * returned, held in a list, a tuple or a map, or handed to a function value or to a kernel
+         * that may keep it.
+         *
+         * <p>A block is second-class and {@link #genExpr} refuses one, because an operand or a call
+         * it is expanded into never needs it as a value. A position that keeps the answer does, so a
+         * function answer is made an {@code Fn} here, and a block under it becomes a class of its
+         * own. The checker lets a block reach only a position whose type is a function, which is what
+         * decides it here too. Any other answer is what {@link #genExpr} leaves.
+         */
+        Type emitValue(Core e, Type expected) {
+            if (e.type() instanceof Type.FnOf fn) {
+                emitFunctionValue(e, fn.params());
+                return e.type();
+            }
+            return genExpr(e, expected);
+        }
+
         /** Emits a function value from its elaborated node: the parameter and result types are the
-         * ones the checker decided, so nothing is inferred here (issue #81). */
+         * ones the checker decided, so nothing is inferred here. A node that answers with one of its
+         * parts emits its own control flow and hands each part back here. */
         private void emitFunctionValue(Core value, List<Type> paramTypes) {
             switch (value) {
                 case Core.Block b -> emitLambda(b, paramTypes);
-                case Core.If iff -> {
-                    genExpr(iff.cond());
-                    Label elseL = code.newLabel();
-                    Label end = code.newLabel();
-                    code.ifeq(elseL);
-                    // A fork answering a function is a fork like any other: a row takes one of its
-                    // arms, and the arm it took is the plan's to be told about. What the arm answers
-                    // with is what differs here, and that is not something a count is about.
-                    probe(iff, 0);
-                    emitFunctionValue(iff.then(), paramTypes);
-                    code.goto_(end);
-                    code.labelBinding(elseL);
-                    probe(iff, 1);
-                    emitFunctionValue(iff.els(), paramTypes);
-                    code.labelBinding(end);
-                }
+                case Core.If iff -> fork(iff, arm -> emitFunctionValue(arm, paramTypes));
+                case Core.IfConstructed ic -> attempt(ic, arm -> emitFunctionValue(arm, paramTypes));
+                case Core.Match m -> match(m, arm -> emitFunctionValue(arm, paramTypes));
                 case Core.LetIn li -> {
                     // a capture binding around the function: bind it here so the lambda captures it
-                    storeLet(li, genExpr(li.value()));
+                    Type vt = li.value().type();
+                    emitValue(li.value(), vt);
+                    storeLet(li, vt);
                     emitFunctionValue(li.body(), paramTypes);
                 }
                 // A function standing as one that answers more, or takes less, is the function it
@@ -2223,8 +2237,7 @@ final class BodyGen {
             for (int i = 0; i < args.size(); i++) {
                 code.dup();
                 pushInt(code, i);
-                Type at = genExpr(args.get(i));
-                box(code, at);
+                box(code, emitValue(args.get(i), null));
                 code.aastore();
             }
             code.invokeinterface(CD_Fn, "apply", MTD_Fn_apply);

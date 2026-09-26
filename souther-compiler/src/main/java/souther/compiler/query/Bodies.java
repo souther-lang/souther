@@ -2471,9 +2471,12 @@ public final class Bodies {
                     || !valuesChecked.present()) {
                 return Answer.absent();
             }
+            Hir.FnDef template = lowered.value().value();
+            Type declared = template.declaredReturn() == null
+                    ? null : TypeOps.successType(template.declaredReturn());
             try {
                 return Answer.of(TemplateChecker.check(
-                        lowered.value().value().writtenBody(), lowered.value().provenance(),
+                        template.writtenBody(), declared, lowered.value().provenance(),
                         scope.value(), Shapes.declarationAccess(db),
                         reqSigs.value(), sigs.value(), valuesChecked.value().settledValues()));
             } catch (Unanswerable _) {

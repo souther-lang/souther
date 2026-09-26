@@ -257,8 +257,8 @@ public record DeclaredTypeReading(DeclarationFacts facts,
                 // A tuple carries several values through a computation and is written in no
                 // declaration (ADR-0036), so nothing states what one is.
                 case Hir.Tuple _, Hir.TupleGet _ -> null;
-                // A block is second-class: it is an argument and never a value, so no declaration
-                // states a type for one standing here.
+                // A block is the function the position it stands in expects, so its type is that
+                // position's and no declaration states one for it.
                 case Hir.Block _ -> null;
             };
         }

@@ -210,13 +210,13 @@ public final class Elaborator {
             case Hir.ValueInvocation call -> valueInvocation(call, env, ctx);
             case Hir.Materialised m ->
                     elaborate(m.body(), env, ctx.building(m.value(), m.site()), expected);
-            // reached only where a block escapes: it may be passed as an argument, or bound to a
-            // `let` and applied, but it is not a value that can be returned or stored, because that
-            // would need a runtime closure (spec §blocks)
-            // a lambda where a function is expected is that function: the context said what it takes,
-            // so nothing has to be read off its applications
+            // A block where a function is expected is that function: the context said what it
+            // takes, so nothing has to be read off its applications. Where the position keeps it
+            // rather than applies it, the emitter makes it a closure (spec §blocks).
             case Hir.Block block when expected instanceof Type.FnOf want ->
                     elaborateFunctionValue(block, want.params(), env, ctx);
+            // Anywhere else no position says what function it is, so there is nothing to type
+            // it as and it is refused where it is written.
             case Hir.Block block -> throw CompileException.of(Diagnostic
                             .at(block.pos()).say(new NameMessage.ABlockIsNotAValue()).build());
             // What the name is was answered when the module's names were resolved; what is left here
