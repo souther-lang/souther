@@ -393,20 +393,55 @@ public final class Strings {
         }
     }
 
-    /** Renders a {@code Decimal} in plain notation, never in exponent form, keeping the scale the
-     *  value carries ({@code fromDecimal(new BigDecimal("1000.00")) == "1000.00"}). */
+    /** Renders a {@code Decimal} in plain notation, never in exponent form (spec §stdlib-string). A
+     *  scale of zero or more is written as that many fractional digits
+     *  ({@code fromDecimal(new BigDecimal("1000.00")) == "1000.00"}); a negative scale is written as
+     *  the integer zeros it stands for, with no point ({@code 12E+2} is {@code "1200"}). */
     public static String fromDecimal(java.math.BigDecimal d) {
         return d.toPlainString();
     }
 
-    /** Parses {@code s} as a {@code Decimal}, or {@link NotANumber#INSTANCE} when it is not one — the
-     *  sibling of {@link #toInt}, returning the {@code Decimal | NotANumber} union. */
+    /** Parses {@code s} as decimal text (spec §string-decimal-text), or {@link NotANumber#INSTANCE}
+     *  when it is not decimal text — the sibling of {@link #toInt}, returning the
+     *  {@code Decimal | NotANumber} union. Which text is accepted is decided by
+     *  {@link #isDecimalText}; {@code BigDecimal} only converts text already accepted, because on its
+     *  own it also reads exponent notation, a point with no digit on one side, and every Unicode
+     *  decimal digit its JDK knows ({@code "１２３.４５"}). The scale of what it answers is the number
+     *  of digits written after the point, which is also what {@code BigDecimal(String)} gives text
+     *  with no exponent. */
     public static Object toDecimal(String s) {
-        try {
-            return new java.math.BigDecimal(s);
-        } catch (NumberFormatException _) {
+        if (!isDecimalText(s)) {
             return NotANumber.INSTANCE;
         }
+        return new java.math.BigDecimal(s);
+    }
+
+    /** Decimal text (spec §string-decimal-text): an optional ASCII {@code +} or {@code -}, one or
+     *  more ASCII digits, and optionally a {@code .} followed by one or more ASCII digits, and
+     *  nothing else. Checked by char for the same reason as {@link #isIntegerText}. */
+    private static boolean isDecimalText(String s) {
+        int i = !s.isEmpty() && (s.charAt(0) == '+' || s.charAt(0) == '-') ? 1 : 0;
+        int whole = digitsFrom(s, i);
+        if (whole == i) {
+            return false;
+        }
+        if (whole == s.length()) {
+            return true;
+        }
+        if (s.charAt(whole) != '.') {
+            return false;
+        }
+        int fraction = digitsFrom(s, whole + 1);
+        return fraction > whole + 1 && fraction == s.length();
+    }
+
+    /** The index just past the run of ASCII digits in {@code s} starting at {@code from}. */
+    private static int digitsFrom(String s, int from) {
+        int i = from;
+        while (i < s.length() && s.charAt(i) >= '0' && s.charAt(i) <= '9') {
+            i++;
+        }
+        return i;
     }
 
     /** Unicode 18.0.0 default case conversion (spec §stdlib-string, ADR-0119), lowercased, with no

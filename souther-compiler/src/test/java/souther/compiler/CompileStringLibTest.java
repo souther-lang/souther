@@ -405,4 +405,42 @@ class CompileStringLibTest {
         assertEquals("1000", bad.get("shown"), "a whole number carries no decimal point");
         assertEquals("-", bad.get("parsed"), "text that is not a number takes the NotANumber arm");
     }
+
+    /** Compiled code reads decimal text (spec §string-decimal-text) through the intrinsic: a few of
+     *  the texts {@code BigDecimal(String)} accepts and the grammar does not take the
+     *  {@code NotANumber} arm. The full list is the runtime's conformance test. A negative scale is
+     *  written as integer zeros, and reading that text back gives the same number at scale 0. */
+    @Test
+    void decimalTextAndANegativeScale() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                import String ( fromDecimal )
+
+                data In = { amount: Decimal, texts: List<String> }
+                data Out = { coarse: String, readBack: String, parsed: List<String> }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let readBack (s: String): String = match String.toDecimal(s) with
+                    | Decimal as d -> fromDecimal(d)
+                    | NotANumber -> "-"
+
+                let run (i) = Out {
+                    coarse = fromDecimal(Decimal.round(-2, HALF_UP, i.amount)),
+                    readBack = readBack(fromDecimal(Decimal.round(-2, HALF_UP, i.amount))),
+                    parsed = List.map(readBack, i.texts)
+                }
+                """), getClass().getClassLoader());
+
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
+        java.util.Map<?, ?> m = (java.util.Map<?, ?>) Codecs.encode(loader, "demo.Out",
+                Codecs.apply(behavior, Codecs.decoded(loader, "demo.In", java.util.Map.of(
+                        "amount", new java.math.BigDecimal("1234"),
+                        "texts", java.util.List.of("1.50", "-007.0", "1e3", "１２３.４５", ".5", "5.")))));
+
+        assertEquals("1200", m.get("coarse"), "a negative scale is written as integer zeros");
+        assertEquals("1200", m.get("readBack"));
+        assertEquals(java.util.List.of("1.50", "-7.0", "-", "-", "-", "-"), m.get("parsed"));
+    }
 }
