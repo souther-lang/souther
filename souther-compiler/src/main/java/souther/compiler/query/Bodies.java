@@ -2858,6 +2858,15 @@ public final class Bodies {
                 return Answer.absent();
             }
             roots.addAll(minted.value().keySet());
+            // The value itself is required as well. An entry whose value folds to a constant leaves
+            // nothing standing, and the module holds an entry for every value it publishes, so the
+            // value has to be built for the entry to have something to answer with.
+            for (String published : ValueEntries.publishedValues(settled.value())) {
+                HelperEntry held = table.at(new DefinitionName(published));
+                if (held != null) {
+                    require(db, name, graph, required, pending, held.reachedAs());
+                }
+            }
             for (Hir.FnDef fn : settled.value().fns()) {
                 if (behaviors.contains(fn.name())) {
                     roots.add(fn.name());
