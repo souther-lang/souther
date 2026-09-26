@@ -181,9 +181,18 @@ class TextHoldingHalfASurrogatePairIsRefusedAtEveryDoorTest {
             assertInstanceOf(TypeMessage.ThePatternWritesHalfASurrogatePair.class,
                     refused.diagnostic().said(), pattern);
         }
-        for (String pattern : List.of("\\\\uD800\\\\uDC00", "\\\\Q\\\\uD800\\\\E",
-                "\\\\\\\\uD800", "[\\\\uD7FF-\\\\uE000]")) {
-            loaded(written.formatted(pattern));
-        }
+        // One module for all of them: none is refused, so nothing is lost by compiling them together.
+        loaded("""
+                module demo
+
+                data Pair = String
+                    invariant String.matches("\\\\uD800\\\\uDC00", value)
+                data Quoted = String
+                    invariant String.matches("\\\\Q\\\\uD800\\\\E", value)
+                data EscapedBackslash = String
+                    invariant String.matches("\\\\\\\\uD800", value)
+                data AcrossTheSurrogates = String
+                    invariant String.matches("[\\\\uD7FF-\\\\uE000]", value)
+                """);
     }
 }

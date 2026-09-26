@@ -97,11 +97,21 @@ class TextIsOrderedByScalarValueWhereverItIsOrderedTest {
             }
             """;
 
+    /** {@link #MODULE}, compiled once for the two tests that ask it. */
+    private static BytesClassLoader compiled;
+
+    private static synchronized BytesClassLoader module() throws Exception {
+        if (compiled == null) {
+            compiled = new BytesClassLoader(Compiler.compile(MODULE),
+                    TextIsOrderedByScalarValueWhereverItIsOrderedTest.class.getClassLoader());
+        }
+        return compiled;
+    }
+
     /** What a model says of each pair, both ways round, is what the comparison says. */
     @Test
     void aModelOrdersTextAsTheComparisonDoes() throws Exception {
-        BytesClassLoader loader =
-                new BytesClassLoader(Compiler.compile(MODULE), getClass().getClassLoader());
+        BytesClassLoader loader = module();
         Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         for (List<String> pair : pairs()) {
             for (List<String> asked : List.of(pair, pair.reversed())) {
@@ -134,8 +144,7 @@ class TextIsOrderedByScalarValueWhereverItIsOrderedTest {
     /** What a newtype over text declares to a Java reader, {@code compareTo}, is the same order. */
     @Test
     void aNewtypeOverTextComparesAsTheComparisonDoes() throws Exception {
-        BytesClassLoader loader =
-                new BytesClassLoader(Compiler.compile(MODULE), getClass().getClassLoader());
+        BytesClassLoader loader = module();
         for (List<String> pair : pairs()) {
             @SuppressWarnings("unchecked")
             Comparable<Object> a = (Comparable<Object>) Codecs.decoded(loader, "demo.Code", pair.get(0));
