@@ -1,5 +1,7 @@
 package souther.compiler.numeric;
 
+import souther.unicode.ScalarValues;
+
 /**
  * Where a string sits on its carrier's order, which is the string.
  *
@@ -26,33 +28,30 @@ public record Text(String at) implements Place {
     }
 
     /**
-     * The order, which is the strings' own.
+     * The order, which is the language's order on text.
      *
-     * <p>{@link String#compareTo} and not a collator: the same comparison the runtime makes, so a
+     * <p>{@link ScalarValues#compare} and not a collator: the same comparison the runtime makes, so a
      * line drawn here and the branch a row takes cannot disagree about which side of it a value is
-     * on. A locale-aware order would put a line somewhere the model did not.
-     *
-     * <p>Which orders UTF-16 code units and not code points — Java's order, and so the runtime's.
-     * Said rather than left to be assumed, because the measure beside this one counts a string's
-     * length in code points, on purpose: two units in one measure is the kind of thing read as a
-     * mistake later if nothing wrote down that it is not one. What ties them is that each matches
-     * what it is a measure of — the length matches what the decoder admits, and the order matches
-     * the branch a row takes.
+     * on. A locale-aware order would put a line somewhere the model did not. And not
+     * {@link String#compareTo}, which orders UTF-16 code units and would put a line between a
+     * character past the basic plane and one in {@code U+E000..U+FFFF} on the other side of where
+     * the runtime puts it.
      */
     @Override
     public int compareTo(Place other) {
         if (!(other instanceof Text text)) {
             throw Place.notOneOrder(this, other);
         }
-        return at.compareTo(text.at);
+        return ScalarValues.compare(at, text.at);
     }
 
     /**
      * The least string above this one, which every string has.
      *
      * <p>The order has no predecessor and this is not one: a string above another either begins
-     * with it and goes on, or parts from it at a unit and is above every string that begins with
-     * it — so the least of them is this string and the smallest unit there is. What has no answer is
+     * with it and goes on, or parts from it at a character and is above every string that begins
+     * with it — so the least of them is this string and U+0000, the least character there is. What
+     * has no answer is
      * the other direction, which is why a row just below a line cannot be written
      * ({@link souther.compiler.check.Carrier.Text}).
      *

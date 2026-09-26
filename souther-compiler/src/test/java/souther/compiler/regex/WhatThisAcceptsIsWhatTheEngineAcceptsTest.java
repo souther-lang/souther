@@ -22,6 +22,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * side of the constructs the subset reads. Not a list of pairs somebody thought of: every pattern is
  * asked about every string, so a string that ought to be refused by one pattern and accepted by
  * another is asked of both.
+ *
+ * <p>Over {@code String}s, which hold no half of a surrogate pair. The engine can be handed text
+ * that does and would read the half as a symbol; no such text reaches a pattern here.
  */
 class WhatThisAcceptsIsWhatTheEngineAcceptsTest {
 
@@ -59,11 +62,9 @@ class WhatThisAcceptsIsWhatTheEngineAcceptsTest {
             "[^\\x{10330}]",
             "\\u00e9",
             // Two escapes spelling one symbol, which the engine reads as units before it reads
-            // symbols. Beside them the same character written whole and each half on its own, since
-            // what has to agree is which strings are in and a lone surrogate is a symbol.
+            // symbols. Beside them the same character written whole.
             "\\uD800\\uDC00",
             "[\\uD800\\uDC00]",
-            "\\uD800",
             "a\\uD800\\uDC00b",
             "(?:\\uD800\\uDC00)+",
             "[\\d-]{2}");
@@ -88,8 +89,8 @@ class WhatThisAcceptsIsWhatTheEngineAcceptsTest {
         out.add(new String(Character.toChars(0x10330)));
         out.add(new String(Character.toChars(0x10330)) + "a");
         out.add(new String(Character.toChars(0x10FFFF)));
-        out.add("\ud800");
-        out.add("\udc00");
+        out.add(String.valueOf((char) 0xE000));
+        out.add(String.valueOf((char) 0xD7FF));
         out.add("𐀀");
         out.add("a𐀀b");
         out.add("𐀀𐀀");

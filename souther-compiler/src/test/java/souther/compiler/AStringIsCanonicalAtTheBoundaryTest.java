@@ -23,14 +23,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Unicode calls two forms of the same characters canonically equivalent — {@code が} as one code
  * point and as か plus a combining mark are the same text. Souther compares strings by their code
- * units, so without canonicalizing, the same name typed on two machines is two values: two `Map`
+ * points, so without canonicalizing, the same name typed on two machines is two values: two `Map`
  * keys, two `Set` members, `==` false, and a length bound that depends on the sender's keyboard.
  * macOS filenames, some clipboard paths and some IMEs deliver the decomposed form.
  *
  * <p>The fix is that values are canonical, not that comparison ignores the difference. Ignoring it in
  * the comparison would leave `String.length` seeing something a comparison does not, which is a worse
  * incoherence than the one it closes. So the two places text arrives — a decoder, and a literal in a
- * source file — canonicalize, and everything downstream is ordinary code-unit comparison.
+ * source file — canonicalize, and everything downstream is ordinary comparison.
  *
  * <p>NFC and not NFKC: compatibility folding turns ① into 1 and a half-width kana into a full-width
  * one, which is a different claim than "these are the same characters".

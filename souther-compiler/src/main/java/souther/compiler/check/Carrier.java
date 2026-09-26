@@ -211,7 +211,7 @@ public sealed interface Carrier extends ValueOrder {
         return switch (how.opened()) {
             // Being ordered is not being counted: two dates order alike whatever a line on one is
             // counted in, and which count that is belongs here and is asked of the type.
-            case Ordering.Longs _, Ordering.Natural _ -> countOf(base);
+            case Ordering.Longs _, Ordering.Natural _, Ordering.Strings _ -> countOf(base);
             // What is left is the one thing a carrier asks that an order does not: whether the
             // position's values range over the whole of it. A case and a union of cases are
             // comparable on their sum's order without ranging over it, and a position declared as

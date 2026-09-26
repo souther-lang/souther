@@ -118,33 +118,18 @@ class WhereAStringRuleStopsIsReadOffTheLanguageItAdmitsTest {
     }
 
     /**
-     * A run whose ends are a pair and a lone surrogate is read on the runtime's order.
+     * A run whose prefix is a character past the basic plane is read on the language's order.
      *
-     * <p>The prefix is the one pair, so what it admits runs from that pair up to the pair after it.
-     * On the order the symbols of a machine are in, the string after would be somewhere else
-     * entirely — every pair is above every unit there, and the two disagree about which of two
-     * strings beginning with the same unit comes first.
+     * <p>The prefix is U+10000, so what it admits runs from that character up to U+10001: a
+     * character past the basic plane is one symbol, and the next string after the run is the next
+     * character, not the next unit.
      */
     @Test
-    void aRunAcrossThePairsIsReadOnTheRuntimesOrder() {
-        assertEquals(new TextExtent.One(Text.of("𐀀"), Text.of("𐀁")),
-                extentOf("𐀀[\\s\\S]*"));
-    }
-
-    /**
-     * And a lone surrogate beside a pair is read as the string it is.
-     *
-     * <p>A high surrogate and a low one standing next to each other are the pair, which is what a
-     * matcher reads and what a walk over a string takes in. Read as two symbols, the run of the pair
-     * would end at the pair itself — the walk would answer with a sequence of symbols no string is
-     * written as, and the language would be said to hold a string it does not.
-     */
-    @Test
-    void aHighSurrogateBesideALowOneIsThePairAndNotTwoSymbols() {
-        Language pair = languageOf("𐀀[\\s\\S]*");
-        String least = pair.least();
-        assertEquals("𐀀", least);
-        assertTrue(pair.has(least), "the least string it holds is one it holds");
+    void aRunPastTheBasicPlaneIsReadOnTheLanguagesOrder() {
+        String first = new String(Character.toChars(0x10000));
+        String next = new String(Character.toChars(0x10001));
+        assertEquals(new TextExtent.One(Text.of(first), Text.of(next)),
+                extentOf(first + "[\\s\\S]*"));
     }
 
     /**

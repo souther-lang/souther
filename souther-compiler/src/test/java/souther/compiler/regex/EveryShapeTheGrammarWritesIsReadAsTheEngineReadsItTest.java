@@ -62,7 +62,7 @@ class EveryShapeTheGrammarWritesIsReadAsTheEngineReadsItTest {
                 "", "a", "b", "aa", "ab", "ba", "bb", "aaa", "abc", "c", "1", "12", "a1",
                 "{", "{}", "a{", "*", "a*", "[", ".", "aab", "\n", " "));
         out.add(new String(Character.toChars(0x10330)));
-        out.add("\ud800");
+        out.add(String.valueOf((char) 0xE000));
         return List.copyOf(out);
     }
 
@@ -135,8 +135,7 @@ class EveryShapeTheGrammarWritesIsReadAsTheEngineReadsItTest {
     /**
      * And a string this hands back is one it holds.
      *
-     * <p>A language that names a string and refuses it is not a set — which is what a machine
-     * stepping over half a surrogate pair is, whatever spelling put it there.
+     * <p>A language that names a string and refuses it is not a set, whatever spelling put it there.
      */
     @Test
     void whatItHandsBackIsWhatItHolds() {

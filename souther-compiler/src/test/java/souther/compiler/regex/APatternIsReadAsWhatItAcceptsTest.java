@@ -110,7 +110,8 @@ class APatternIsReadAsWhatItAcceptsTest {
         assertTrue(left.has('d'));
         assertTrue(left.has(0x10330), "a symbol past the basic plane is one of them");
         assertTrue(left.has('\n'), "a negated class does not leave out the line terminators");
-        assertTrue(left.has(0xD800), "nor half of a pair, which the engine reads as one symbol");
+        assertFalse(left.has(0xD800), "half of a pair is no character, so no class holds one");
+        assertEquals(CodePoints.EVERYTHING.size() - 3, left.size());
     }
 
     /**
@@ -129,7 +130,7 @@ class APatternIsReadAsWhatItAcceptsTest {
         }
         assertTrue(left.has(' '));
         assertTrue(left.has(0x10330));
-        assertTrue(left.has(0xD800));
+        assertFalse(left.has(0xD800));
         assertEquals(CodePoints.EVERYTHING.size() - 5, left.size());
     }
 

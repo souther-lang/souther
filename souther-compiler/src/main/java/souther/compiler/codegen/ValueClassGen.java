@@ -569,9 +569,11 @@ final class ValueClassGen {
     /**
      * Emits {@code compareTo}, from the order the wrapped value has rather than from a guess at its
      * representation. An {@code Int} newtype compares its {@code long} carrier; a value the JVM
-     * carries as {@link Comparable} — a {@code String} / {@code BigDecimal} / {@code LocalDate} /
-     * {@code LocalTime} / {@code LocalDateTime} / {@code Instant}, or a newtype over one — compares
-     * itself; a value of an enumeration has no {@code compareTo} of its own, because the order lives
+     * carries as a {@link Comparable} whose order is the language's — a {@code BigDecimal} /
+     * {@code LocalDate} / {@code LocalTime} / {@code LocalDateTime} / {@code Instant}, or a newtype
+     * over one — compares itself; text compares by {@code Strings.compare}, since a
+     * {@code java.lang.String} orders UTF-16 code units; a value of an enumeration has no
+     * {@code compareTo} of its own, because the order lives
      * on the sum and one unit data may be a case of two (ADR-0069), so its place is read off the sum.
      *
      * <p>That last arm is the one that was missing. "Ordered and not an {@code Int}" was read as
@@ -596,6 +598,8 @@ final class ValueClassGen {
                                 code.lcmp();   // -1 / 0 / 1, which is compareTo's contract
                         case Ordering.Natural _ ->
                                 code.invokeinterface(CD_Comparable, "compareTo", MTD_compareTo_Object);
+                        case Ordering.Strings _ ->
+                                code.invokestatic(CD_Strings, "compare", MTD_Strings_compare);
                         case Ordering.Places places -> {
                             code.invokestatic(cd(places.enumeration()), ORDER_METHOD, MTD_order, true);
                             code.invokestatic(CD_Integer, "compare", MTD_Integer_compare, false);

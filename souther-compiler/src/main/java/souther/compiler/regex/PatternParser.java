@@ -283,8 +283,8 @@ public final class PatternParser {
             case 'a' -> { take(); yield CodePoints.of(0x07); }
             case 'e' -> { take(); yield CodePoints.of(0x1B); }
             case '0' -> { take(); yield CodePoints.of(octal()); }
-            case 'x' -> { take(); yield CodePoints.of(hex()); }
-            case 'u' -> { take(); yield CodePoints.of(unicodeEscape()); }
+            case 'x' -> { take(); yield CodePoints.of(spelled(PatternEscapes.hex(regex, at))); }
+            case 'u' -> { take(); yield CodePoints.of(spelled(PatternEscapes.unicode(regex, at))); }
             case 'p', 'P' -> throw new Refused(PatternRead.Unsupported.A_CHARACTER_PROPERTY);
             case 'b', 'B', 'A', 'z', 'Z', 'G', 'R' ->
                     throw new Refused(PatternRead.Unsupported.A_BOUNDARY);
@@ -322,82 +322,28 @@ public final class PatternParser {
 
     // --- numbers and symbols -----------------------------------------------------------------------
 
-    /** `\xHH`, or `\x{H...}` for a symbol past the basic plane. */
-    private int hex() {
-        if (peek() == '{') {
-            take();
-            int value = 0;
-            int digits = 0;
-            while (!done() && peek() != '}') {
-                int digit = Character.digit(take(), 16);
-                if (digit < 0) {
-                    throw new Refused(PatternRead.Unsupported.AN_ESCAPE_THIS_DOES_NOT_READ);
-                }
-                value = value * 16 + digit;
-                digits++;
-                if (value > CodePoints.LAST) {
-                    throw new Refused(PatternRead.Unsupported.AN_ESCAPE_THIS_DOES_NOT_READ);
-                }
-            }
-            expect('}');
-            if (digits == 0) {
-                throw new Refused(PatternRead.Unsupported.AN_ESCAPE_THIS_DOES_NOT_READ);
-            }
-            return value;
-        }
-        return fixedHex(2);
-    }
-
     /**
-     * The symbol a {@code \\u} escape spells, two of them making one where they pair.
+     * The symbol a {@code \x} or {@code \\u} escape spells ({@link PatternEscapes}), the reading
+     * moved past it.
      *
-     * <p>Java's engine reads a pattern as units before it reads it as symbols, so a high escape
-     * followed by a low one is the one supplementary symbol they encode — {@code \\uD800\\uDC00}
-     * accepts U+10000 and accepts neither half on its own. Read as two symbols, the same pattern
-     * would name the two halves and not the character, which is a different set of strings under
-     * the same spelling.
+     * <p>A {@code \\u} pair is the one character it encodes, as the engine reads it: read as two
+     * symbols, {@code \\uD800\\uDC00} would name the two halves and not U+10000, a different set of
+     * strings under the same spelling.
      *
-     * <p>And a set that no walk here could even ask about. What a machine is walked over is code
-     * points, so a step over half a pair is a step nothing takes: the language would hold a string
-     * its own membership test refuses, and the shortest string it could name would be one it does
-     * not have.
-     *
-     * <p>A high escape with nothing to pair with is the symbol it spells and stays one. That is
-     * what the engine does with it, and a lone surrogate is a symbol a machine may hold.
+     * <p>A surrogate on its own is no symbol. No {@code String} holds one, and the checker refuses a
+     * pattern writing one ({@code PatternEscapes.firstWrittenSurrogate}); this is reached before
+     * that where a declaration's rules are read off the written tree, and stops rather than naming
+     * a symbol that is not one.
      */
-    private int unicodeEscape() {
-        int first = fixedHex(4);
-        if (!Character.isHighSurrogate((char) first) || peek() != '\\') {
-            return first;
+    private int spelled(PatternEscapes.Spelled escape) {
+        if (escape == null) {
+            throw new Refused(PatternRead.Unsupported.AN_ESCAPE_THIS_DOES_NOT_READ);
         }
-        int mark = at;
-        take();
-        if (peek() != 'u') {
-            at = mark;
-            return first;
+        if (CodePoints.isSurrogate(escape.symbol())) {
+            throw new Refused(PatternRead.Unsupported.A_CHARACTER_NO_STRING_HOLDS);
         }
-        take();
-        int second = fixedHex(4);
-        if (!Character.isLowSurrogate((char) second)) {
-            at = mark;
-            return first;
-        }
-        return Character.toCodePoint((char) first, (char) second);
-    }
-
-    private int fixedHex(int digits) {
-        int value = 0;
-        for (int i = 0; i < digits; i++) {
-            if (done()) {
-                throw new Refused(PatternRead.Unsupported.AN_ESCAPE_THIS_DOES_NOT_READ);
-            }
-            int digit = Character.digit(take(), 16);
-            if (digit < 0) {
-                throw new Refused(PatternRead.Unsupported.AN_ESCAPE_THIS_DOES_NOT_READ);
-            }
-            value = value * 16 + digit;
-        }
-        return value;
+        at = escape.end();
+        return escape.symbol();
     }
 
     /** `\0n`, `\0nn` or `\0mnn` — up to three octal digits after the zero. */
@@ -418,8 +364,8 @@ public final class PatternParser {
      * The symbol written here, which is a whole code point where the source holds a pair.
      *
      * <p>A pattern written with a character past the basic plane holds it as two units, and a reader
-     * taking one unit at a time would build a language of halves. Where the source holds half a pair
-     * on its own, that half is the symbol — which is what the engine does with it.
+     * taking one unit at a time would build a language of halves. The pattern is a {@code String},
+     * so it holds no half of a pair on its own.
      */
     private int literal() {
         if (done()) {

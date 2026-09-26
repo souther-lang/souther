@@ -15,6 +15,7 @@ import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.CaseShape;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.TemporalRule;
+import souther.compiler.types.TextRule;
 import souther.compiler.types.Type;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.TypeSymbol;
@@ -128,20 +129,22 @@ final class CodecGen {
     }
 
     /**
-     * The only way this backend builds a decoder for text: Raoh's string leaf, canonicalized.
+     * The only way this backend builds a decoder for text: Raoh's string leaf, admitted.
      *
      * <p>Every string that reaches the domain from outside comes through here — a field, a newtype's
      * base, a map's key, a list or set element, a sum's discriminator, an enumeration's name, a
-     * temporal before it is parsed. It is one method rather than a `.normalize()` remembered at each
-     * of them because "text that arrives is canonical" (ADR-0096) is a property of the boundary and
-     * not of any one shape, and the first attempt at it — normalizing where each caller happened to
-     * build a leaf — left four paths behind, each found separately and after the fact.
+     * temporal before it is parsed. It is one method rather than a step remembered at each of them
+     * because "text that arrives is text, and canonical" is a property of the boundary and not of
+     * any one shape, and the first attempt at it — normalizing where each caller happened to build a
+     * leaf — left four paths behind, each found separately and after the fact.
      *
-     * <p>Not {@code StringDecoder.normalize()}: that is Raoh's own call into {@code java.text.Normalizer},
-     * which answers for whatever Unicode version this JDK shipped with, not Unicode 18.0.0.
-     * {@code Normalization::nfc} is lifted through {@code Decoder.map} instead, and
-     * {@code StringDecoder.from} wraps the result back into a {@link CD_StringDecoder} so a
-     * constraint chained after this (a length bound, {@code refine}) still resolves against one.
+     * <p>{@code Strings::admitted} is lifted through {@code Decoder.map}: it answers the NFC form, or
+     * null where the text holds half of a surrogate pair. The null is refused at the leaf's path
+     * ({@link TextRule}) rather than thrown, since a decoder reports what it could not read. Not
+     * {@code StringDecoder.normalize()}, which is Raoh's call into {@code java.text.Normalizer} and
+     * answers for whatever Unicode version this JDK shipped with. {@code StringDecoder.from} wraps
+     * the result back into a {@link CD_StringDecoder} so a constraint chained after this (a length
+     * bound, {@code refine}) still resolves against one.
      *
      * <p>{@code ADecoderCanonicalizesEveryShapeTest} is the check that goes with it: it walks the
      * decoder shapes rather than this file, so a path added later that does not come through here
@@ -149,10 +152,29 @@ final class CodecGen {
      */
     private void emitStringLeaf(CodeBuilder code, ClassDesc leafOwner) {
         code.invokestatic(leafOwner, "string", MTD_leafString);
-        code.invokedynamic(normalizationNfcCallSite());
+        code.invokedynamic(STRINGS_ADMITTED);
         code.invokeinterface(CD_RDecoder, "map", MTD_Rdecoder_map);
+        code.invokedynamic(NON_NULL);
+        code.loadConstant(TextRule.REFUSED);
+        code.loadConstant(TextRule.HALF_A_PAIR);
+        code.invokeinterface(CD_RDecoder, "refine", MTD_Rrefine_message);
         code.invokestatic(CD_StringDecoder, "from", MTD_stringDecoderFrom);
     }
+
+    /** {@code Strings::admitted} as a {@code Function}, for the string leaf above. */
+    private static final DynamicCallSiteDesc STRINGS_ADMITTED = Lambdas.callSite(
+            Lambdas.Sam.FUNCTION,
+            MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, CD_Strings,
+                    "admitted", MTD_admit),
+            MTD_admit);
+
+    /** {@code Objects::nonNull} as a {@code Predicate}: whether {@code Strings::admitted} let the
+     *  text in. */
+    private static final DynamicCallSiteDesc NON_NULL = Lambdas.callSite(
+            Lambdas.Sam.PREDICATE,
+            MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, CD_Objects,
+                    "nonNull", MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object)),
+            MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));
 
 
     /**
@@ -968,9 +990,10 @@ final class CodecGen {
     private void emitLeafDecoder(CodeBuilder code, LeafScalar kind, Src src) {
         ClassDesc owner = srcLeafOwner(src);
         switch (kind) {
-            // A string that came from outside is canonicalized to NFC before anything reads it.
+            // A string that came from outside is let in — refused where it holds half of a
+            // surrogate pair, canonicalized to NFC otherwise — before anything reads it.
             // Canonically equivalent forms are the same text by Unicode's own definition, and
-            // Souther compares strings by their code units, so without this the same name typed on
+            // Souther compares strings by their code points, so without this the same name typed on
             // two machines is two values: two Map keys, two Set members, and `==` false. It sits at
             // the leaf so every constraint chained after it — a length bound, a pattern — sees the
             // canonical form rather than whatever the sender's keyboard produced.
@@ -1878,18 +1901,6 @@ final class CodecGen {
                 DirectMethodHandleDesc.Kind.STATIC, CD_Representations, ordering,
                 MTD_Representations_sorted);
         return Lambdas.callSite(Lambdas.Sam.ENCODER, impl, MTD_Representations_sorted);
-    }
-
-    /** {@code Normalization::nfc} as a {@code Function}, for {@code Decoder.map} to canonicalize a
-     *  string leaf to Unicode 18.0.0 NFC — in place of {@code StringDecoder.normalize()}, which is
-     *  the JVM's own {@code java.text.Normalizer} and so a different, JDK-dependent NFC.
-     *
-     *  <p>And the function a crossing canonicalizes a string through ({@link CanonicalizeAtCrossing}),
-     *  which is the same NFC and so the same call site. */
-    static DynamicCallSiteDesc normalizationNfcCallSite() {
-        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
-                DirectMethodHandleDesc.Kind.STATIC, CD_Normalization, "nfc", MTD_nfc);
-        return Lambdas.callSite(Lambdas.Sam.FUNCTION, impl, MTD_nfc);
     }
 
     /** {@code Option::ofNullable} as a {@code Function}, for {@code Decoder.map} to lift a

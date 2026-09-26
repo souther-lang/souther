@@ -95,41 +95,6 @@ final class Automaton {
     }
 
     /**
-     * Whether a walk over this may stop having read a high surrogate and a low one in turn.
-     *
-     * <p>That pair of symbols is the one thing no string is read as, so a machine that stops on no
-     * sequence holding them already accepts nothing but strings and taking them out would change
-     * nothing.
-     *
-     * <p><b>Whether it stops, and not whether it has a step.</b> A canonical machine is complete —
-     * every symbol leads somewhere from every state — so every one of them has a step over a high
-     * surrogate and asking that says only that the machine is complete. Where such a step leads is
-     * the question: a pattern naming no surrogate leads to the state nothing stops at, and the
-     * sequence is refused there as it always was.
-     *
-     * <p>A walk over the states and nothing built. What it saves is a product every language would
-     * otherwise be put through.
-     */
-    boolean mayStopHavingReadALoneSurrogatePair() {
-        CodePoints high = CodePoints.between(0xD800, 0xDBFF);
-        CodePoints low = CodePoints.between(0xDC00, 0xDFFF);
-        boolean[] reaches = reachingSomewhereItStops();
-        for (int at = 0; at < steps.size(); at++) {
-            for (Step first : steps.get(at)) {
-                if (first.over().and(high).isEmpty()) {
-                    continue;
-                }
-                for (Step second : steps.get(first.to())) {
-                    if (!second.over().and(low).isEmpty() && reaches[second.to()]) {
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
-    }
-
-    /**
      * For each state, whether a walk from it may still reach one it stops at.
      *
      * <p>Here because it is a fact about the machine and about nothing else, and because more than
@@ -200,10 +165,10 @@ final class Automaton {
     /**
      * Whether the whole of {@code value} is accepted.
      *
-     * <p>Walked a symbol at a time, where a symbol is what the engine reads: a code point where the
-     * string holds a well-formed pair, and half of one where it holds half. Read a unit at a time,
-     * a pattern naming a character past the basic plane would want two steps for what the engine
-     * takes in one.
+     * <p>Walked a symbol at a time, where a symbol is a scalar value — a pair of units is one. Read
+     * a unit at a time, a pattern naming a character past the basic plane would want two steps for
+     * what the engine takes in one. Text holding half a pair is no {@code String} and is accepted by
+     * nothing: no step is over a surrogate.
      */
     boolean accepts(String value) {
         BitSet here = closure(only(START));
@@ -805,17 +770,15 @@ final class Automaton {
     /**
      * The symbols a value can be written out of and read back.
      *
-     * <p>A control character other than the three a literal spells reaches a source as itself, and
-     * half of a pair has nothing to be encoded as — so what a person pastes is not what was chosen.
-     * Nothing about the language: a rule admitting one of these admits it, and this is only which of
-     * them a value is preferably built from.
+     * <p>A control character other than the three a literal spells reaches a source as itself, so
+     * what a person pastes is not what was chosen. Nothing about the language: a rule admitting one
+     * of these admits it, and this is only which of them a value is preferably built from.
      */
     private static final CodePoints WRITABLE = CodePoints.EVERYTHING
             .less(CodePoints.between(0, 8))
             .less(CodePoints.between(0x0B, 0x0C))
             .less(CodePoints.between(0x0E, 0x1F))
-            .less(CodePoints.of(0x7F))
-            .less(CodePoints.between(0xD800, 0xDFFF));
+            .less(CodePoints.of(0x7F));
 
     /**
      * The shortest string it accepts out of {@code these} and no longer than {@code mostSymbols},
@@ -1039,26 +1002,32 @@ final class Automaton {
         /**
          * The runs of symbols no label of this machine tells apart.
          *
-         * <p>Cut at every place a label begins or ends. Inside a run every symbol is over exactly
-         * the same steps, so one of them answers for all of them — which is what makes a
-         * deterministic machine over the whole of Unicode a small thing.
+         * <p>Cut at every place a label begins or ends, and at each end of the universe's runs.
+         * Inside a run every symbol is over exactly the same steps, so one of them answers for all
+         * of them — which is what makes a deterministic machine over the whole of Unicode a small
+         * thing. What lies between the universe's runs is the surrogates, which are no symbol, and
+         * no run of the alphabet is cut there.
          */
         private void cutTheAlphabet() {
             java.util.TreeSet<Integer> cuts = new java.util.TreeSet<>();
-            cuts.add(0);
+            List<CodePoints.Range> labels = new ArrayList<>(CodePoints.EVERYTHING.ranges());
             for (List<Step> out : steps) {
                 for (Step each : out) {
-                    for (CodePoints.Range run : each.over().ranges()) {
-                        cuts.add(run.from());
-                        if (run.to() < CodePoints.LAST) {
-                            cuts.add(run.to() + 1);
-                        }
-                    }
+                    labels.addAll(each.over().ranges());
+                }
+            }
+            for (CodePoints.Range run : labels) {
+                cuts.add(run.from());
+                if (run.to() < CodePoints.LAST) {
+                    cuts.add(run.to() + 1);
                 }
             }
             List<Integer> starts = new ArrayList<>(cuts);
             for (int i = 0; i < starts.size(); i++) {
                 int from = starts.get(i);
+                if (CodePoints.isSurrogate(from)) {
+                    continue;
+                }
                 int to = i + 1 < starts.size() ? starts.get(i + 1) - 1 : CodePoints.LAST;
                 alphabet.add(CodePoints.between(from, to));
             }

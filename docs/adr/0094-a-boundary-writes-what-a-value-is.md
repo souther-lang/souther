@@ -1,6 +1,30 @@
 # ADR-0094: A boundary writes what a value is, not how it was built or written
 
-Status: Accepted. Revised 2026-09-24 — see *Revision*.
+Status: Accepted. Revised 2026-09-24 and 2026-09-26 — see *Revision*.
+
+## Revision (2026-09-26)
+
+Strings are ordered by Unicode scalar value, not by UTF-16 code unit. The Decision below took the
+string order from the language's own `<`, which then compared `java.lang.String`s, and that is
+still the reason: the order a boundary writes in is the language's order on text. What changed is
+that order. A `String` is now a sequence of scalar values (`[#a-string-is-a-sequence-of-scalar-values]`),
+and `<` compares those (`[#a-string-is-ordered-by-scalar-value]`), so the table's `string` row
+follows it.
+
+What moves in the representation is a `Set`'s array, and not only a `Set` of strings. The order
+compares representations recursively, so a `Set` of lists, of data, or of maps moves too wherever
+the first string two members differ at is a character past the basic plane against one in
+U+E000–U+FFFF. An object's member order is not part of its representation (the revision below), so
+no `Map` moves in the language's sense. The bytes the JVM writes do: its encoders write an object's
+members in ascending key order, and that order is now the scalar-value one, so a `Map<String, V>`
+with such keys is written in another member order than before. The representation is the same one;
+the bytes are not, and nothing here promised they would be across compiler versions.
+
+The Decision's other reason, RFC 8785, no longer holds. JCS sorts an object's members by UTF-16
+code unit, so neither a `Set`'s array nor the member order the JVM writes is in JCS order for such
+text. Souther does not promise JCS output, so this is not a breach of anything; it is a reason the
+Decision gave that is gone. A canonical byte form shared with JCS would be the separate decision the
+revision below already names.
 
 ## Revision (2026-09-24)
 

@@ -10,9 +10,10 @@ import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.TemporalRule;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
-import souther.unicode.Normalization;
+import souther.compiler.types.TextRule;
 import souther.runtime.Representations;
 import souther.runtime.Sets;
+import souther.runtime.Strings;
 import souther.runtime.Temporals;
 
 import net.unit8.raoh.Err;
@@ -33,6 +34,7 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * A value crossing between JSON and the classes this compilation generated.
@@ -133,14 +135,24 @@ public final class JsonBoundary {
         };
     }
 
-    /** The string leaf a key is read through. Text arriving from outside is canonical, which is what
-     *  the leaf makes it — Unicode 18.0.0's NFC, not whatever Unicode version this JDK's own
-     *  {@code java.text.Normalizer} carries, which is why this wraps {@link Normalization#nfc}
-     *  rather than calling {@code StringDecoder.normalize()}. {@link StringDecoder#from} keeps the
-     *  result a {@link StringDecoder}, so {@link #temporal} can still chain {@code .date()} etc. on
-     *  it. */
+    /** The string leaf a key is read through. */
     private static StringDecoder<Object> text() {
-        return StringDecoder.from(ObjectDecoders.string().map(Normalization::nfc));
+        return admitted(ObjectDecoders.string());
+    }
+
+    /**
+     * Text as it arrives, let in: what the generated string leaf does, in Java.
+     *
+     * <p>{@link Strings#admitted} decides it — Unicode 18.0.0's NFC, or null where the text holds
+     * half of a surrogate pair — and the null is refused at the path the way the generated leaf
+     * refuses it ({@link TextRule}). Not {@code StringDecoder.normalize()}, which answers for
+     * whatever Unicode version this JDK's own {@code java.text.Normalizer} carries.
+     * {@link StringDecoder#from} keeps the result a {@link StringDecoder}, so {@link #temporal} can
+     * still chain {@code .date()} etc. on it.
+     */
+    private static <I> StringDecoder<I> admitted(StringDecoder<I> text) {
+        return StringDecoder.from(text.map(Strings::admitted)
+                .refine(Objects::nonNull, TextRule.REFUSED, TextRule.HALF_A_PAIR));
     }
 
     /**
@@ -206,16 +218,17 @@ public final class JsonBoundary {
         }
     }
 
-    /** A scalar over the JSON source. {@code JsonDecoders} has no temporal factory — in JSON a
-     *  temporal is a string that is then parsed — so a date reads as {@code string().date()}, the
-     *  same two steps the generated JSON decoder takes, and through the same rules. */
+    /** A scalar over the JSON source. Text is the string leaf let in, as the generated JSON decoder
+     *  has it. {@code JsonDecoders} has no temporal factory — in JSON a temporal is a string that is
+     *  then parsed — so a date reads as that leaf and then {@code .date()}, the same two steps the
+     *  generated JSON decoder takes, and through the same rules. */
     private static Decoder<JsonNode, ?> leafDecoder(LeafScalar scalar) {
         return switch (scalar) {
-            case STRING -> JsonDecoders.string();
+            case STRING -> admitted(JsonDecoders.string());
             case INT -> JsonDecoders.long_();
             case BOOL -> JsonDecoders.bool();
             case DECIMAL -> JsonDecoders.decimal();
-            case DATE, TIME, DATETIME, INSTANT -> temporal(JsonDecoders.string(), scalar);
+            case DATE, TIME, DATETIME, INSTANT -> temporal(admitted(JsonDecoders.string()), scalar);
         };
     }
 

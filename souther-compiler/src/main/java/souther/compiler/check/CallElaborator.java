@@ -22,6 +22,7 @@ import souther.compiler.types.ReachName;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
+import souther.compiler.regex.PatternEscapes;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -896,6 +897,14 @@ public final class CallElaborator {
             throw CompileException.of(Diagnostic
                             .at(e.expr().pos())
                             .say(new TypeMessage.ThePatternIsNotARegularExpression(ex.getDescription())).build());
+        }
+        // A character the engine would read and no String holds: whatever the pattern says about
+        // it is about text that never arrives, so writing one is a mistake about the text.
+        String surrogate = PatternEscapes.firstWrittenSurrogate(pattern);
+        if (surrogate != null) {
+            throw CompileException.of(Diagnostic
+                            .at(e.expr().pos())
+                            .say(new TypeMessage.ThePatternWritesHalfASurrogatePair(surrogate)).build());
         }
         return pattern;
     }

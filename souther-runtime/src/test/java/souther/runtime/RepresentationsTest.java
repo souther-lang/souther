@@ -214,10 +214,12 @@ class RepresentationsTest {
     // === strings ===
 
     @Test
-    void stringsOrderByUtf16CodeUnit() {
-        // U+1F600 is the larger code point, and its leading surrogate D83D is the smaller code unit.
-        // The boundary order is the code unit one, so the emoji comes first.
-        assertTrue(Representations.compareExternalForms("😀", "") < 0);
+    void stringsOrderByScalarValue() {
+        // U+1F600 is the larger scalar value, and its leading surrogate D83D is the smaller code
+        // unit. The boundary order is the scalar value one, so U+E000 comes first.
+        String emoji = new String(Character.toChars(0x1F600));
+        String privateUse = String.valueOf((char) 0xE000);
+        assertTrue(Representations.compareExternalForms(privateUse, emoji) < 0);
         assertTrue(Representations.compareExternalForms("Aa", "BB") < 0);
         assertTrue(Representations.compareExternalForms("a", "aa") < 0);
     }

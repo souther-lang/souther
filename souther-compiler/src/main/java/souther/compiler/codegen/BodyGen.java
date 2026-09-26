@@ -1192,9 +1192,10 @@ final class BodyGen {
          * Emits a call to a kernel.
          *
          * <p>What is written here is what a table row cannot say, and it is of two kinds. An
-         * enumeration's order lives on its sum, so the ordered family is handed a comparator rather
-         * than reading a {@code Comparable} off the value (issue #161) — the arm puts the comparator
-         * on the stack and the row still says what is called with it. A partial Int division answers
+         * enumeration's order lives on its sum, and text's is not what a {@code java.lang.String}
+         * compares by, so for those the ordered family is handed a comparator rather than reading a
+         * {@code Comparable} off the value — the arm puts the comparator on the stack and the row
+         * still says what is called with it. A partial Int division answers
          * a case rather than a number when its divisor is zero, so it emits a branch, which the row
          * shape of one call with one result has nowhere to put; those two are the whole of what this
          * emits itself, and {@code WRITTEN_OUT} is where they are named. {@code Decimal.divide} was
@@ -1209,11 +1210,8 @@ final class BodyGen {
         private void kernel(Kernel kernel, Core.Call call) {
             if (call.settlement() instanceof Core.CallSettlement.AtKernel(
                     _, Core.KernelFact.OrderingSubject ordered)) {
-                TypeSymbol ordering = sumOrdering(ordered.type());
-                // No sum to take an ordering off: an element the JVM already compares. That goes to
-                // the table row, which is the same runtime method without the comparator.
-                if (ordering != null) {
-                    code.invokestatic(cd(ordering), ORDERING_METHOD, MTD_ordering, true);
+                boolean pushed = comparatorFor(ordered.type());
+                if (pushed) {
                     Intrinsics.emitWithComparator(this, kernel, call);
                     return;
                 }
@@ -1931,12 +1929,23 @@ final class BodyGen {
                     unwrapNewtypeValue(genExpr(comparison.right()));
                     comparisonMaterialize(cut.statedRelation(), true);
                 }
+                case Ordering.Strings _ -> {
+                    // Text's own compareTo orders UTF-16 code units, which is not the language's
+                    // order on it (spec §equality).
+                    unwrapNewtypeValue(genExpr(comparison.left()));
+                    code.checkcast(CD_String);
+                    unwrapNewtypeValue(genExpr(comparison.right()));
+                    code.checkcast(CD_String);
+                    code.invokestatic(CD_Strings, "compare", MTD_Strings_compare);
+                    code.iconst_0();
+                    comparisonMaterialize(cut.statedRelation(), false);
+                }
                 case Ordering.Natural _ -> {
-                    // These all carry as Comparable — String, BigDecimal, Rational, LocalDate,
-                    // LocalTime, LocalDateTime, Instant — so one compareTo reduces the order to its
-                    // sign against 0. BigDecimal.compareTo ignores scale, which matches Decimal
-                    // equality (spec §equality); a Rational compares by exact value; the others
-                    // order lexicographically / in time.
+                    // These all carry as a Comparable whose compareTo is the order — BigDecimal,
+                    // Rational, LocalDate, LocalTime, LocalDateTime, Instant — so one compareTo
+                    // reduces the order to its sign against 0. BigDecimal.compareTo ignores scale,
+                    // which matches Decimal equality (spec §equality); a Rational compares by exact
+                    // value; the others order in time.
                     if (comparison.reading() instanceof Core.BinaryReading.ExactNumbers) {
                         pushExact(comparison.left());
                         pushExact(comparison.right());
@@ -2010,10 +2019,32 @@ final class BodyGen {
             }
         }
 
-        /** The sum that answers for values of {@code t}, or null where the value carries its own
-         * order. */
-        private TypeSymbol sumOrdering(Type t) {
-            return Ordering.enumerationOfHeld(t, ctx.inners, symbols, ctx.kinds, ctx.published);
+        /**
+         * Pushes the comparator values of {@code t} are sorted by, where the value's own
+         * {@code compareTo} is not the order, and answers whether it pushed one.
+         *
+         * <p>An enumeration's order is on its sum, and text's is {@code Strings.ordering()}. Where
+         * the JVM value's own {@code compareTo} is the order nothing is pushed, and the call goes to
+         * the table row, which is the same runtime method without the comparator.
+         */
+        private boolean comparatorFor(Type t) {
+            Ordering held = Ordering.held(t, ctx.inners, symbols, ctx.kinds, ctx.published);
+            if (held == null) {
+                return false;
+            }
+            return switch (held) {
+                case Ordering.Places places -> {
+                    code.invokestatic(cd(places.enumeration()), ORDERING_METHOD, MTD_ordering, true);
+                    yield true;
+                }
+                case Ordering.Strings _ -> {
+                    code.invokestatic(CD_Strings, "ordering", MTD_ordering);
+                    yield true;
+                }
+                case Ordering.Longs _, Ordering.Natural _ -> false;
+                case Ordering.Wrapped _ ->
+                        throw new IllegalStateException("a held order is never a wrapped one: " + t);
+            };
         }
 
         /**
