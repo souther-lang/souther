@@ -288,12 +288,24 @@ final class ConstantAlgebra {
             }
         }
         if (a instanceof BigDecimal x && b instanceof BigDecimal y) {
-            return Optional.of(switch (op) {
-                case ADD -> x.add(y);
-                case SUB -> x.subtract(y);
-                case MUL -> x.multiply(y);
-                default -> throw new IllegalStateException();
-            });
+            // A result the run time has no Decimal for is one it aborts on, and the fold answers
+            // nothing, as the Int fold does on overflow. A product's scale is the sum of its
+            // factors' and is refused whatever the product's value is, so it is checked before
+            // BigDecimal is asked; BigDecimal answers some products past the range instead of
+            // refusing them.
+            if (op == BinOp.MUL && (long) x.scale() + y.scale() != x.scale() + y.scale()) {
+                return Optional.empty();
+            }
+            try {
+                return Optional.of(switch (op) {
+                    case ADD -> x.add(y);
+                    case SUB -> x.subtract(y);
+                    case MUL -> x.multiply(y);
+                    default -> throw new IllegalStateException();
+                });
+            } catch (ArithmeticException _) {
+                return Optional.empty();
+            }
         }
         return Optional.empty();
     }

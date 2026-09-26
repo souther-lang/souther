@@ -152,6 +152,33 @@ public record Count(BigDecimal at) implements Place {
         return new Count(at.multiply(factor));
     }
 
+    /**
+     * The count this comes to {@code factor} times over, or null where no {@link BigDecimal} holds
+     * the product.
+     *
+     * <p>For a reader whose factors are ends of ranges and so of any scale. {@link #times} is for a
+     * step counted out, which is a whole number of steps and cannot leave the scale range.
+     *
+     * <p>A count is the number and not the places it was written to, so the product is the same
+     * number whatever scale it is held at, and what has none is a nonzero product whose scale — the
+     * sum of the factors' — leaves 32 bits. That is a fact about how a count is held and says nothing
+     * about the number, so it is null and never an exception for the caller to meet: the number
+     * exists, and what a caller does without a count to hold it is the caller's to say.
+     *
+     * <p>A nought is nought at every scale, so a factor of nought answers before any scale is
+     * summed.
+     */
+    public Count timesWhereHeld(BigDecimal factor) {
+        if (at.signum() == 0 || factor.signum() == 0) {
+            return ZERO;
+        }
+        try {
+            return new Count(at.multiply(factor));
+        } catch (ArithmeticException _) {
+            return null;
+        }
+    }
+
     public Count negate() {
         return new Count(at.negate());
     }
