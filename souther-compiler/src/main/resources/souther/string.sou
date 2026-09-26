@@ -94,7 +94,8 @@ let padRight (width: Int, pad: String, s: String): String = intrinsic "string.pa
 // `fromDecimal` renders a `Decimal` in plain notation, never in exponent form. A scale of zero or
 // more is written as that many digits after the point — `1000.00m` is `"1000.00"`, not `"1000"` or
 // `"1.0E+3"` — and a negative scale as the integer zeros it stands for, so
-// `Decimal.round(-2, HALF_UP, 1234m)` is `"1200"`. Scale is incidental to the number (spec
+// `Decimal.round(-2, HALF_UP, 1234m)` is `"1200"`. A value whose text no string could hold, one
+// near either end of the scale range, aborts. Scale is incidental to the number (spec
 // §primitives) but not to how it is written, so a caller that wants a fixed number of places sets it
 // first with `Decimal.round(scale, mode, d)` and names the rounding there. Grouping separators and a
 // currency symbol are presentation and stay outside the domain. The parse in the other direction,
