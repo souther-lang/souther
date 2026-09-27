@@ -9,13 +9,22 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
- * Every nullary value this module reaches whose body states a type, keyed by that type — the
- * candidates a class-partitioning search may offer as a baseline for a parameter of that type,
- * before any row or fake ever names one.
+ * Every nullary value this module declares whose body states some behavior's own declared input or
+ * output type, keyed by that type — the candidates a class-partitioning search may offer as a
+ * baseline for a parameter of that type, before any row or fake ever names one.
+ *
+ * <p>Narrowed to those types and not every type a nullary value happens to build: a candidate this
+ * finds is minted a {@link FixtureValueEntries.Emitted fixture entry} whether or not a search ever
+ * reaches for it, and {@link LoweringRole#valuesWithAnEntry} reads that entry as a reason to type the
+ * value at the entry rather than at each place it is copied in — a value of a type nothing here
+ * takes or answers has no reason to trade the wider typing for that, and offering it as a candidate
+ * that answers no parameter would be exactly that trade for nothing.
  *
  * <p>Read over {@link HelperTable#reachable} and not {@link Bodies.ModuleDefinitions}: that answer
  * is downstream of this module's own {@code CheckSurface} and asking it here would be the cycle
@@ -44,6 +53,12 @@ import java.util.Map;
  * interchangeable ({@link HelperEntry}'s own doc): an imported value's address and the name a call
  * reaches it by are different strings, and asking one for what the other answers is the rediscovery
  * this exists to stop.
+ *
+ * <p>{@link FieldRead.Unreadable#MAKES_NOTHING_READABLE} and not {@code REFUSED}: this runs inside
+ * {@link CheckSurface#assemble}, which is best-effort over a module that need not have checked yet
+ * ({@code ResolvedFieldTypes} is the same choice, for the same reason). A candidate whose field is
+ * not yet readable states nothing rather than raising — raising here would make discovering a
+ * baseline nothing asked for the reason a whole module's surface goes missing.
  */
 public final class TypedFixtureValues {
 
@@ -52,12 +67,27 @@ public final class TypedFixtureValues {
 
     /**
      * The candidates {@code module} states, keyed by the type each is declared to build, in the
-     * order {@link HelperTable#reachable} reaches them.
+     * order {@link HelperTable#reachable} reaches them — one of {@code behaviors}' own declared
+     * input or output types, and no other.
      */
     public static Map<TypeSymbol, List<ReachName.Declaration>> of(Hir.Module module,
             Map<String, Hir.FnDef> importedDefinitions, Stdlib stdlib, Symbols symbols,
             PublishedDeclarations published, DeclarationKinds kinds, NewtypeInners fieldWraps,
             Map<ValueName.Behavior, Sig> behaviors) {
+        Set<TypeSymbol> relevant = new LinkedHashSet<>();
+        for (Sig sig : behaviors.values()) {
+            for (Type type : sig.inputTypes()) {
+                if (type instanceof Type.Ref(TypeSymbol of)) {
+                    relevant.add(of);
+                }
+            }
+            if (sig.outputType() instanceof Type.Ref(TypeSymbol of)) {
+                relevant.add(of);
+            }
+        }
+        if (relevant.isEmpty()) {
+            return Map.of();
+        }
         HelperTable table = HelperTable.of(module, importedDefinitions, InliningPolicy.DISCHARGE,
                 stdlib);
         Map<String, Hir.FnDef> readableBySpelling = new LinkedHashMap<>();
@@ -68,7 +98,7 @@ public final class TypedFixtureValues {
                 new DeclarationFacts(
                         new FieldRead(symbols, published, kinds,
                                 new ResolvedFieldTypes(symbols, fieldWraps),
-                                FieldRead.Unreadable.REFUSED),
+                                FieldRead.Unreadable.MAKES_NOTHING_READABLE),
                         DeclarationNewtypes.asWritten(symbols)),
                 readableBySpelling, behaviors);
         Map<TypeSymbol, List<ReachName.Declaration>> out = new LinkedHashMap<>();
@@ -76,7 +106,8 @@ public final class TypedFixtureValues {
             Hir.FnDef definition = entry.definition();
             if (!definition.params().isEmpty()
                     || !(definition.body() instanceof Hir.FnBody.Written written)
-                    || !(evidence.declaredTypeOf(written.expr()) instanceof Type.Ref(TypeSymbol of))) {
+                    || !(evidence.declaredTypeOf(written.expr()) instanceof Type.Ref(TypeSymbol of))
+                    || !relevant.contains(of)) {
                 continue;
             }
             out.computeIfAbsent(of, _ -> new ArrayList<>()).add(entry.reachedAs());

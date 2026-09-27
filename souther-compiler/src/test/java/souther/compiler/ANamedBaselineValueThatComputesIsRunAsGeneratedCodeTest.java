@@ -116,4 +116,60 @@ class ANamedBaselineValueThatComputesIsRunAsGeneratedCodeTest {
                                 row.inputs().stream().map(i -> i.text()).toList()))
                         .toList());
     }
+
+    /** The same model, with no row ever naming {@code baseline}: the search reaches it only
+     *  through its declared type, and it holds the same computed field {@code raw}'s interpreter
+     *  has no case for. */
+    private static final String A_BASELINE_NO_ROW_NAMES = """
+            module demo
+
+            data C
+            data B
+            data F = C | B
+
+            data Amount = Decimal
+            data Cond = { f: F, amount: Amount }
+            data Out = { n: Int }
+
+            let bump (x: Decimal) = x + 1.0m
+            let baseline = Cond { f = B, amount = Amount(bump(3.0m)) }
+
+            behavior calc : (c: Cond) -> Out
+                constructs Out
+
+            let calc (c) = Out { n = 0 }
+            """;
+
+    /**
+     * A value no row ever names, discovered only because it is a value of a parameter's own type,
+     * is a baseline the search may spread a further row over the same way a row-named one is.
+     *
+     * <p>{@code Adequacy.Generated.named} now only looks {@code baseline} up on {@code
+     * CheckSurface.typedFixtureValues()} rather than searching for it itself, so a model with the
+     * same shape and no {@code TypedFixtureValues} entry for it composes rows off the classes'
+     * defaults instead — {@code Cond { f = C, amount = Amount(0m) }}, never spread over
+     * {@code baseline} at all. Its body applies {@code bump}, which {@code FixtureReader.raw}'s
+     * interpreter has no case for at all, so once {@code baseline} is offered as an origin again a
+     * fixture reading the generated row has to run it as generated code and not by interpreting it
+     * a second time.
+     */
+    @Test
+    void theSearchSpreadsAGeneratedRowOverAComputedBaselineNoRowEverNames() {
+        Compilation compilation = Compilation.ofSource(A_BASELINE_NO_ROW_NAMES, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        Map<String, Adequacy.Filling> all =
+                Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
+        assertNotNull(all, "the model under test compiles");
+
+        // No written row consumes baseline's own class here, so the search offers it whole as well
+        // as spread with its class moved — unlike A_BASELINE_A_ROW_NAMES, where the written row
+        // already covers baseline's own class and leaves the search only the moved one to fill.
+        List<Generator.GeneratedRow> rows = all.get("calc").composed().rows();
+        assertEquals(List.of("Cond { ...baseline, f = C }", "baseline"),
+                rows.stream()
+                        .map(row -> String.join(", ",
+                                row.inputs().stream().map(i -> i.text()).toList()))
+                        .toList());
+    }
 }

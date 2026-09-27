@@ -124,6 +124,67 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
         assertEquals(List.of(), surface.typedFixtureValues().getOrDefault(customer, List.of()));
     }
 
+    /**
+     * A nullary value whose body builds a type nothing here takes or answers is not a candidate,
+     * even though its type reads fine on its own — {@code #of}'s own narrowing and not a side
+     * effect of anything failing to read.
+     */
+    @Test
+    void aValueOfATypeNoBehaviorTakesOrAnswersIsNotACandidate() {
+        String source = model("""
+                data Irrelevant = { x: Int }
+
+                let vip = Customer { grade = Gold }
+                let junk = Irrelevant { x = 1 }
+                """);
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        CheckSurface surface = compilation.db()
+                .ask(new Shapes.CheckSurface("example.member")).value();
+        assertNotNull(surface, "the module under test does not get as far as being assembled");
+
+        for (List<ReachName.Declaration> candidates : surface.typedFixtureValues().values()) {
+            for (ReachName.Declaration candidate : candidates) {
+                assertNotNull(candidate.denotes());
+                assertEquals(new ValueName.Helper("example.member", "vip"), candidate.denotes(),
+                        "`junk` builds a type no behavior here takes or answers, so it is not"
+                                + " among the candidates however cleanly its own type reads");
+            }
+        }
+    }
+
+    /**
+     * A declaration elsewhere that does not read does not stop the search from finding a candidate
+     * whose own type reads fine — {@link FieldRead.Unreadable#MAKES_NOTHING_READABLE} answers
+     * nothing for the one that fails rather than raising and losing every other candidate with it.
+     *
+     * <p>{@code stray}'s body reads a field of {@code A}, whose two same-named fields are exactly
+     * the declaration {@code WhatADotMayNameIsOneAnswerForEveryReaderOfItTest} holds to answering
+     * nothing for a text still being typed. Nullary and reached the same way {@code vip} is, it is
+     * walked by the same {@code DeclaredTypeReading} — the read the old {@code REFUSED} wiring would
+     * have raised over, taking {@code vip} down with it.
+     */
+    @Test
+    void aDeclarationElsewhereThatDoesNotReadDoesNotLoseAGoodCandidate() {
+        String source = model("""
+                data A = { x: Int, x: String }
+
+                let vip = Customer { grade = Gold }
+                let stray = A { x = 1 }.x
+                """);
+        // Asked directly and not through Compilation.answerEverything(): the full pipeline reaches
+        // A's declaration too, at a rung that does refuse a field declared twice, and this test is
+        // about CheckSurface's own tolerance and not about whether the module as a whole checks.
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        CheckSurface surface = compilation.db()
+                .ask(new Shapes.CheckSurface("example.member")).value();
+        assertNotNull(surface, "a declaration elsewhere that does not read still lets the module"
+                + " assemble");
+        assertEquals(List.of(new ReachName.Own(new ValueName.Helper("example.member", "vip"))),
+                surface.typedFixtureValues().getOrDefault(customerType(compilation,
+                        "example.member"), List.of()));
+    }
+
     private static List<ReachName.Declaration> candidatesOf(String source, String module) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
