@@ -3,7 +3,6 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.query.EstablishmentGap;
-import souther.exact.ExactFailure;
 import souther.exact.ExactFailures;
 
 import java.util.List;
@@ -24,23 +23,20 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class ANumberNotHeldSaysWhetherAWiderRunHoldsItTest {
 
-    private static final ExactFailure ROOM = ExactFailures.room();
-
-    private static final ExactFailure RANGE = ExactFailures.range();
-
     @Test
     void theTwoFailuresAreTwoAnswers() {
-        assertEquals(UnheldNumber.MORE_ROOM_COULD_ANSWER, UnheldNumber.of(ROOM));
-        assertEquals(UnheldNumber.NO_REPRESENTATION_EXISTS, UnheldNumber.of(RANGE));
+        assertEquals(UnheldNumber.MORE_ROOM_COULD_ANSWER, UnheldNumber.of(ExactFailures.room()));
+        assertEquals(UnheldNumber.NO_REPRESENTATION_EXISTS,
+                UnheldNumber.of(ExactFailures.range()));
     }
 
     /** At a border, where the values were read and their number was not worked out. */
     @Test
     void aReadingOfABorderSaysWhetherAWiderRunWorksItOut() {
         assertEquals(RunSensitivity.MAY_CHANGE,
-                ReadingGap.of(UnheldNumber.of(ROOM)).runSensitivity());
+                ReadingGap.of(UnheldNumber.of(ExactFailures.room())).runSensitivity());
         assertEquals(RunSensitivity.UNAFFECTED,
-                ReadingGap.of(UnheldNumber.of(RANGE)).runSensitivity());
+                ReadingGap.of(UnheldNumber.of(ExactFailures.range())).runSensitivity());
     }
 
     /**
@@ -51,9 +47,11 @@ class ANumberNotHeldSaysWhetherAWiderRunHoldsItTest {
     @Test
     void aGapHoldingANumberNoRunHoldsIsNotClosedByAWiderRun() {
         CompositionCapacity room = new CompositionCapacity(
-                CompositionCapacity.Where.PLACES_A_PAIR_IS_WALKED_TO, UnheldNumber.of(ROOM));
+                CompositionCapacity.Where.PLACES_A_PAIR_IS_WALKED_TO,
+                UnheldNumber.of(ExactFailures.room()));
         CompositionCapacity range = new CompositionCapacity(
-                CompositionCapacity.Where.PLACES_A_PAIR_IS_WALKED_TO, UnheldNumber.of(RANGE));
+                CompositionCapacity.Where.PLACES_A_PAIR_IS_WALKED_TO,
+                UnheldNumber.of(ExactFailures.range()));
         Set<CompositionBudget> figure = Set.of(CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT);
 
         assertEquals(RunSensitivity.MAY_CHANGE,
