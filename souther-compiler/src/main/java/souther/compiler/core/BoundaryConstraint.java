@@ -6,7 +6,8 @@ import java.math.BigDecimal;
 
 /**
  * A rule the boundary can state as one of the constraints a decoder names, because the part of a
- * clause it stands for says exactly that of a newtype's value.
+ * clause it stands for says exactly that of the value of a data made of one field — the value a
+ * newtype crosses as.
  *
  * <p>Exactly. A constraint weaker than the part would let through what the clause refuses, and one
  * stronger would refuse at the boundary a value the domain accepts, where it reads as bad input. So
@@ -17,7 +18,7 @@ import java.math.BigDecimal;
  * <p>Which code, message and metadata a failure of each is reported with are not here. They are the
  * decoder library's, and each backend reaches them through its own.
  *
- * <p>Grouped by the base a newtype is declared over, since a constraint is about a value of one:
+ * <p>Grouped by the type of that field, since a constraint is about a value of one:
  * a {@code String}'s length and format, an {@code Int}'s and a {@code Decimal}'s bounds, a
  * {@code List}'s size and distinctness, a {@code Map}'s size.
  */

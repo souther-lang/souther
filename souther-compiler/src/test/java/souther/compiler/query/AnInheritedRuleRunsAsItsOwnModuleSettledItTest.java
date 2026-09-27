@@ -72,25 +72,33 @@ class AnInheritedRuleRunsAsItsOwnModuleSettledItTest {
         return c;
     }
 
-    /** What the reading that runs holds a value of {@code named} to. */
-    private static List<ValueShape.Invariant> runsAgainst(Compilation c,
-                                                          TypeSymbol.AtModule named) {
+    /**
+     * What the reading that runs holds a value of {@code named} to: each rule by its name and its
+     * condition.
+     *
+     * <p>Not how the boundary checks it, which is an answer about the data being built and not about
+     * the rule: {@code Base} is made of one field and {@code Wider} of two, so the same rule is a
+     * constraint of the one and the condition of the other.
+     */
+    private static List<String> runsAgainst(Compilation c, TypeSymbol.AtModule named) {
         Answer<Map<TypeSymbol.AtModule, ValueShape>> shapes =
                 c.db().ask(new Shapes.ValueShapes(named.module()));
         assertNotNull(shapes.value(), () -> named.module() + " has a reading that runs");
         ValueShape shape = shapes.value().get(named);
         assertNotNull(shape, () -> named + " is read there");
-        return shape.invariants();
+        return shape.invariants().stream()
+                .map(clause -> clause.name() + " " + clause.condition())
+                .toList();
     }
 
     @Test
     void aRuleTakenInFromAnotherModuleRunsAsThatModuleSettledIt() {
         Compilation c = compiled();
 
-        List<ValueShape.Invariant> wrote = runsAgainst(c, THE_SPREAD);
+        List<String> wrote = runsAgainst(c, THE_SPREAD);
         assertFalse(wrote.isEmpty(), "the declaration under test states a rule");
 
-        assertEquals(wrote.toString(), runsAgainst(c, THE_TAKER).toString(),
+        assertEquals(wrote, runsAgainst(c, THE_TAKER),
                 "the rule a spread brings in is the one its own module settled");
     }
 

@@ -12,8 +12,12 @@ import java.util.List;
  * clause either way, and one clause is what a failure names.
  *
  * <p>A clause no part of which is a constraint is the condition alone, and so is every clause of a
- * data the boundary does not decode as one value — a product, whose clauses are about fields, is
- * checked whole.
+ * data of more than one field, which has no one value for a constraint to be about.
+ *
+ * <p>An answer about the value and not about how it crosses. A newtype and a product of one field
+ * hold the same clauses of the same field and are answered alike; that a newtype crosses as the
+ * field's value, where these constraints are what its decoder checks, and a product crosses as an
+ * object, is decided by the form the data was declared in.
  *
  * @param constraints what parts of the clause are stated as, in the order they were written
  * @param checkCondition whether the constraints do not cover the clause, so that its condition has

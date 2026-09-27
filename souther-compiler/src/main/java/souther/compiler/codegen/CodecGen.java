@@ -762,8 +762,9 @@ final class CodecGen {
      * boundary checks it, which is the checker's answer and not this emitter's
      * ({@link ValueShape.Invariant#boundary()}).
      *
-     * <p>None for a product. Its clauses are about its fields, and it is checked whole where it is
-     * constructed.
+     * <p>None for a product, which crosses as an object: its fields are decoded one by one and its
+     * clauses are checked whole where it is constructed, one field or many. Which form a data was
+     * declared in is what decides that, and it is asked here rather than in the answer.
      */
     private List<ValueShape.Invariant> invariantsOf(Hir.Data data) {
         return data.newtype() ? ctx.shapeOf(data.declares()).invariants() : List.of();

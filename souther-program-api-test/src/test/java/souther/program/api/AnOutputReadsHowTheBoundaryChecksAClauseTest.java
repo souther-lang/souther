@@ -6,6 +6,9 @@ import souther.compiler.core.ValueShape;
 import souther.compiler.program.CheckedData;
 import souther.compiler.program.CheckedModule;
 import souther.compiler.program.CheckedProgram;
+import souther.compiler.regex.PatternMeaning;
+import souther.compiler.regex.PatternParser;
+import souther.compiler.regex.PatternRead;
 
 import org.junit.jupiter.api.Test;
 
@@ -46,6 +49,14 @@ class AnOutputReadsHowTheBoundaryChecksAClauseTest {
                 , to: Int
                 }
                 invariant ordered = from <= to
+
+            data Label = { value: String }
+                invariant digits = List.all(c -> c <= 57, String.codePoints(value))
+                invariant long = String.length(value) >= 3
+                invariant bounded = String.length(value) <= 8 && List.all(c -> c >= 48, String.codePoints(value))
+
+            data Handle = { id: String }
+                invariant String.length(id) >= 3
             """;
 
     /** Checked once: every test reads a different declaration of the same module. */
@@ -74,7 +85,14 @@ class AnOutputReadsHowTheBoundaryChecksAClauseTest {
                 boundaryOf("Code"));
     }
 
-    /** A pattern crosses as what it matches and as it was written, and not as any engine's text. */
+    /**
+     * A pattern crosses as what it matches and as it was written, and not as any engine's text.
+     *
+     * <p>What it matches is held to the language's own reading of the text, which is the meaning
+     * every output runs. Reaching {@link PatternMeaning} from a checked program says nothing here:
+     * a clause's condition reaches it too, so a constraint that carried an engine's regex beside it
+     * would still reach it.
+     */
     @Test
     void aPatternCrossesAsWhatItMeansAndHowItWasWritten() {
         List<BoundaryCheck> sku = boundaryOf("Sku");
@@ -84,6 +102,25 @@ class AnOutputReadsHowTheBoundaryChecksAClauseTest {
         BoundaryConstraint.Pattern pattern = assertInstanceOf(BoundaryConstraint.Pattern.class,
                 sku.get(0).constraints().get(0));
         assertEquals("[0-9]+", pattern.written());
+        PatternRead.Read read = assertInstanceOf(PatternRead.Read.class,
+                PatternParser.read("[0-9]+"));
+        assertEquals(read.meaning(), pattern.meaning());
+    }
+
+    /**
+     * What a clause is stated as is about the value and not about how it crosses: a product of one
+     * field holds the same clauses of the same field as a newtype does, and is answered alike.
+     */
+    @Test
+    void aProductOfOneFieldIsAnsweredAsTheNewtypeItIsMadeLike() {
+        assertEquals(boundaryOf("Code"), boundaryOf("Label"));
+    }
+
+    /** The field is read as the clause names it, whatever it is called. */
+    @Test
+    void aClauseIsReadOfTheOneFieldByItsName() {
+        assertEquals(List.of(new BoundaryCheck(List.of(new BoundaryConstraint.MinLength(3)), false)),
+                boundaryOf("Handle"));
     }
 
     @Test
@@ -92,9 +129,10 @@ class AnOutputReadsHowTheBoundaryChecksAClauseTest {
                 boundaryOf("Tally"));
     }
 
-    /** A product's clauses are about its fields, and the boundary checks each of them whole. */
+    /** A data of more than one field has no one value for a constraint to be about, and the
+     *  boundary checks each of its clauses whole. */
     @Test
-    void aProductsClauseIsItsCondition() {
+    void aClauseOfManyFieldsIsItsCondition() {
         assertEquals(List.of(BoundaryCheck.conditionOnly()), boundaryOf("Span"));
     }
 }

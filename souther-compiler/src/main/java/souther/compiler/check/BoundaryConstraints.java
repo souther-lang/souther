@@ -24,6 +24,7 @@ import souther.compiler.core.BoundaryConstraint.Unique;
 import souther.compiler.core.Core;
 import souther.compiler.core.IntNegation;
 import souther.compiler.core.Kernel;
+import souther.compiler.core.ValueShape;
 import souther.compiler.numeric.EndSide;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -37,9 +38,9 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Which of a newtype's clauses the boundary can state as the constraints a decoder names, so a
- * violation carries the rule it broke — a length short of its minimum, a string off its format —
- * instead of one {@code invariant_violation} for every invariant in the model.
+ * Which clauses of a data made of one field the boundary can state as the constraints a decoder
+ * names, so a violation carries the rule it broke — a length short of its minimum, a string off its
+ * format — instead of one {@code invariant_violation} for every invariant in the model.
  *
  * <p>Only exact equivalences are stated. A constraint weaker than the clause would let through what
  * the clause refuses; one stronger than it would refuse values the domain accepts, and would do so at
@@ -47,7 +48,7 @@ import java.util.Optional;
  * clause's own condition.
  *
  * <p>Answered here, once, and carried on each clause of the value's shape
- * ({@link souther.compiler.core.ValueShape.Invariant#boundary()}). A backend reads the answer and
+ * ({@link ValueShape.Invariant#boundary()}). A backend reads the answer and
  * decides only what its decoder calls each constraint.
  *
  * <p><b>Read off what a statement states, never off the tree it was written as.</b> One rule written
@@ -59,26 +60,28 @@ import java.util.Optional;
  */
 public final class BoundaryConstraints {
 
-    /** The name a newtype's single field carries, and so the name its invariant reads it by. */
-    private static final String VALUE = "value";
-
     /** The symbols this reads clauses against. Which operations state a constraint is a fact about
      *  the library the clause was resolved against, so it is held here rather than asked at each
      *  call. */
     private final Symbols symbols;
 
-    private BoundaryConstraints(Symbols symbols) {
-        this.symbols = symbols;
-    }
+    /** The name of the data's one field, which is how its clauses read it. */
+    private final String field;
 
-    /** Reading statements against the library {@code symbols} names. */
-    public static BoundaryConstraints against(Symbols symbols) {
-        return new BoundaryConstraints(symbols);
+    private BoundaryConstraints(Symbols symbols, String field) {
+        this.symbols = symbols;
+        this.field = field;
     }
 
     /**
-     * How the boundary checks each clause that governs the newtype {@code named}, whose value is a
-     * {@code base}, keyed by which clause it is.
+     * How the boundary checks each clause that governs {@code named}, a data made of the one field
+     * {@code sole}, keyed by which clause it is.
+     *
+     * <p>A data of one field and not a newtype. The constraints are what a clause says of that
+     * field's value, and a newtype and a product of one field hold the same clauses of the same
+     * field (spec §newtype), so they are answered alike. Which of the two crosses as the field's
+     * value, and so reads these, is decided by the form it was declared in, which this does not
+     * ask.
      *
      * <p>Read from the representation the constraints are written against
      * ({@link InliningPolicy#DISCHARGE}): this module's own helpers expanded, the language's own
@@ -95,9 +98,17 @@ public final class BoundaryConstraints {
      * constraint, so it is checked as its own condition — which holds a value to the whole rule
      * whatever is missing here, since the rules themselves come from the settled form.
      */
-    public Map<Clause.Id, BoundaryCheck> of(TypeSymbol.AtModule named, Type base,
-                                            ExpandedClauseLookup form,
-                                            InvariantStatements statements) {
+    public static Map<Clause.Id, BoundaryCheck> of(Symbols symbols, TypeSymbol.AtModule named,
+                                                   ValueShape.Field sole,
+                                                   ExpandedClauseLookup form,
+                                                   InvariantStatements statements) {
+        return new BoundaryConstraints(symbols, sole.name()).of(named, sole.type(), form,
+                statements);
+    }
+
+    private Map<Clause.Id, BoundaryCheck> of(TypeSymbol.AtModule named, Type base,
+                                             ExpandedClauseLookup form,
+                                             InvariantStatements statements) {
         Map<Clause.Id, BoundaryCheck> out = new LinkedHashMap<>();
         for (TypeOps.Declared declared
                 : TypeOps.expandedInvariants(named, symbols, form).reached()) {
@@ -177,7 +188,7 @@ public final class BoundaryConstraints {
     }
 
     /**
-     * The constraint equivalent to {@code statement} on a newtype whose value is {@code base}, or
+     * The constraint equivalent to {@code statement} on a field whose value is a {@code base}, or
      * empty when this cannot prove one.
      */
     private Optional<BoundaryConstraint> of(InvariantStatement statement, Type base) {
@@ -218,7 +229,7 @@ public final class BoundaryConstraints {
         return Optional.empty();
     }
 
-    /** What {@code e} is of the newtype's value, or null where it is about something else. */
+    /** What {@code e} is of the field's value, or null where it is about something else. */
     private Measured measured(Core e) {
         if (isValue(e)) {
             return Measured.VALUE;
@@ -387,8 +398,9 @@ public final class BoundaryConstraints {
                 : new DecimalMax(bound));
     }
 
-    private static boolean isValue(Core e) {
-        return Core.withoutStanding(e) instanceof Core.Read read && read.name().equals(VALUE);
+    /** Whether {@code e} reads the data's one field. */
+    private boolean isValue(Core e) {
+        return Core.withoutStanding(e) instanceof Core.Read read && read.name().equals(field);
     }
 
     /** The constraint for the pattern the checker settled on {@code call}. A kept

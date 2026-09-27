@@ -107,7 +107,15 @@ public sealed interface CheckedData {
          * <p>The clauses that apply and not the ones this declaration wrote: an include carries the
          * clauses of what it takes in, and a value of this is held to those as much as to its own.
          * Each is the condition as the checker elaborated it, over the bindings {@link #fields()}
-         * names — the same one the JVM's {@code __construct} refuses a value by.
+         * names — the same one the JVM's {@code __construct} refuses a value by — and how the
+         * boundary checks it ({@link ValueShape.Invariant#boundary()}): the constraints parts of it
+         * are stated as, which a decoder reports a broken part by, and whether the condition still
+         * has to run after them. That is the checker's answer too, so an output reports a broken
+         * clause without reading the condition to decide which constraint it is.
+         *
+         * <p>Answered alike for the two forms, as the rest of this is. A newtype crosses as its
+         * field's value and a product as an object, so a newtype's decoder is where the
+         * constraints are checked; which form this is, is the arm's to say.
          *
          * <p>Empty where nothing is stated, which is a data any value of its fields is one of.
          */

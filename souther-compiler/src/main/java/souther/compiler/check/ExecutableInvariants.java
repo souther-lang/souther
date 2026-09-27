@@ -78,11 +78,12 @@ public final class ExecutableInvariants {
         CheckContext ctx =
                 CheckContext.executableInvariant(symbols, new DeclarationAccess(published, kinds,
                         inners, fieldTypes, FieldLayout.asWritten(symbols)), data);
-        // A newtype's value is what the boundary decodes and what a constraint is about. A product's
-        // clauses are about its fields, and the boundary checks each of them whole.
-        Map<Clause.Id, BoundaryCheck> boundary = data.newtype()
-                ? BoundaryConstraints.against(symbols)
-                        .of(data.declares(), types.get("value"), form, statements)
+        // A constraint is about the value of a data made of one field, whichever form it was
+        // declared in: a newtype and a product of one field hold the same clauses of that field. A
+        // data of more fields has no one value for a constraint to be about, and the boundary
+        // checks each of its clauses whole.
+        Map<Clause.Id, BoundaryCheck> boundary = fields.size() == 1
+                ? BoundaryConstraints.of(symbols, data.declares(), fields.get(0), form, statements)
                 : Map.of();
         List<ValueShape.Invariant> invariants = new ArrayList<>();
         for (GoverningInvariant governed : governing) {
