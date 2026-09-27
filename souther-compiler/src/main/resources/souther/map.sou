@@ -26,7 +26,9 @@ let isEmpty (m: Map<'k, 'a>): Bool = intrinsic "map.isEmpty"
 let size (m: Map<'k, 'a>): Int = intrinsic "map.size"
 
 // Conversion to / from a list of (key, value) tuples. A tuple type is allowed in a stdlib
-// signature (ADR-0037) — it never crosses a codec boundary. `fromList` lets a later entry win.
+// signature (ADR-0037) — it never crosses a codec boundary. `fromList` lets a later entry's value
+// win when two entries have equal keys; which of the equal keys represents the entry is unspecified
+// ([#collections]).
 let toList (m: Map<'k, 'a>): List<('k, 'a)> = intrinsic "map.toList"
 let fromList (entries: List<('k, 'a)>): Map<'k, 'a> = intrinsic "map.fromList"
 
@@ -76,11 +78,13 @@ let filterEntries (keep: ('k, 'a) -> Bool, m: Map<'k, 'a>): Map<'k, 'a> =
     Map.fold((acc, k, v) -> if keep(k, v) then Map.insert(k, v, acc) else acc, Map.empty, m)
 
 // The key algebra, matching `Set`'s. All three are named as the set operations they are, so the two
-// modules read alike. Each answers with entries taken from `a`: `union` adds `b`'s entries under keys
-// `a` does not have, so `a` wins a collision (Elm is left-biased too); `intersection` keeps `a`'s
-// entries whose key is also in `b`; `difference` keeps `a`'s entries whose key is not. Values from
-// `b` are never merged — combining two values under one key is a domain decision, so it is written
-// with `fold` and `updateOrInsert` where the rule lives.
+// modules read alike. `union` takes `a`'s value for a key equality class `a` has and `b`'s value for
+// a class only `b` has, so `a` wins a collision (Elm is left-biased too); `intersection` keeps `a`'s
+// entries whose key equality class is also in `b`, with `a`'s value; `difference` keeps `a`'s entries
+// whose key equality class is not, again with `a`'s value. Values from `b` are never merged into
+// `a`'s — combining two values under one key is a domain decision, so it is written with `fold` and
+// `updateOrInsert` where the rule lives. Which of the two equal keys represents a shared class is
+// unspecified ([#collections]).
 //
 // These are binary operations, so they take their two operands in the order they are written and the
 // pipe's subject-last rule does not apply: `Set.difference(a, b)` is `a` minus `b`, and threading one
