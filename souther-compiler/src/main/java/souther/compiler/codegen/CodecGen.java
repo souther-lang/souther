@@ -15,6 +15,7 @@ import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.CaseShape;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.TemporalRule;
+import souther.temporal.TemporalText;
 import souther.compiler.types.Type;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.TypeSymbol;
@@ -37,11 +38,13 @@ import java.lang.constant.DynamicCallSiteDesc;
 import java.lang.constant.MethodHandleDesc;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.SequencedMap;
+import java.util.Set;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -70,18 +73,27 @@ final class CodecGen {
     /** Whether the decoder class being written reads a string, and so needs its {@code __text}. */
     private boolean usesTextLeaf;
 
+    /** The temporals the decoder class being written reads from a bare value, each of which needs
+     *  the helper that asks the language before Raoh parses. */
+    private final Set<Type.Prim> bareTemporals = EnumSet.noneOf(Type.Prim.class);
+
     /**
      * {@link Descriptors#build} of a class that is a decoder: one that reads a string carries the
-     * {@code __text} its string leaf calls, so a leaf is never emitted into a class that lacks one.
+     * {@code __text} its string leaf calls, and one that reads a temporal from a bare value carries
+     * the helper for it, so a leaf is never emitted into a class that lacks what it calls.
      */
     private byte[] buildDecoder(ClassDesc cdDec, Consumer<ClassBuilder> body) {
         textLeafOwner = cdDec;
         usesTextLeaf = false;
+        bareTemporals.clear();
         try {
             return build(cdDec, cb -> {
                 body.accept(cb);
                 if (usesTextLeaf) {
                     emitTextHelper(cb);
+                }
+                for (Type.Prim temporal : bareTemporals) {
+                    emitBareTemporalHelper(cb, temporal);
                 }
             });
         } finally {
@@ -1089,12 +1101,29 @@ final class CodecGen {
         }
     }
 
-    /** {@code Temporals::notALeapSecond} as a {@code Predicate}, for the text refinement below. */
-    private static final DynamicCallSiteDesc NOT_A_LEAP_SECOND = Lambdas.callSite(
-            Lambdas.Sam.PREDICATE,
-            MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, CD_Temporals,
-                    "notALeapSecond", MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object)),
-            MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));
+    /** A question {@link TemporalRule} asks of a text, as a {@code Predicate} for the text
+     *  refinements below. The method that answers it is the one {@code Temporals} names for it. */
+    private static DynamicCallSiteDesc textQuestion(TemporalRule.TextGate gate) {
+        String name = gate.only().isEmpty()
+                ? switch (gate.kind()) {
+                    case DATE -> "isDate";
+                    case TIME -> "isTime";
+                    case DATETIME -> "isDateTime";
+                    case INSTANT -> "isInstant";
+                }
+                : switch (gate.only().get()) {
+                    case SUB_SECOND -> gate.kind() == TemporalText.Kind.TIME
+                            ? "timeHasNoFraction" : "dateTimeHasNoFraction";
+                    case LEAP_SECOND -> "instantNamesNoLeapSecond";
+                    case MALFORMED, NOT_UTC -> throw new IllegalStateException(
+                            gate + " is no question a decoder asks");
+                };
+        return Lambdas.callSite(
+                Lambdas.Sam.PREDICATE,
+                MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, CD_Temporals,
+                        name, MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object)),
+                MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));
+    }
 
     /** {@code Temporals::toTheSecond} as a {@code Predicate}, for the leaf refinement below. */
     private static final DynamicCallSiteDesc TO_THE_SECOND = Lambdas.callSite(
@@ -1111,23 +1140,37 @@ final class CodecGen {
      * cannot hold, and the boundary reports that rather than dropping it: a value silently rounded
      * reads to everything downstream as the value that was sent.
      *
-     * <p>An {@code Instant}'s text is refused where it names a second that does not exist, and that
-     * has to happen <em>before</em> the parse. {@code Instant.parse} takes {@code 23:59:60} and
-     * answers {@code 23:59:59}, so afterwards the two are one value and the substitution is
-     * invisible. An offset is not refused here: it is the same moment spelled differently, and only the
-     * written form is held to UTC (spec §temporal-literal, §a-leap-second-is-no-moment).
+     * <p>Which text is a temporal is the language's and not the parser's (spec §temporal-text), so
+     * the text is put through the questions {@link TemporalRule} lists before Raoh's parse sees it,
+     * and the parse only builds the value. That also has to happen <em>before</em> the parse for an
+     * {@code Instant}'s leap second: the JDK takes {@code 23:59:60} and answers {@code 23:59:59}, so
+     * afterwards the two are one value and the substitution is invisible. An offset is not refused
+     * here: it is the same moment spelled differently, and only the written form is held to UTC
+     * (spec §temporal-literal, §a-leap-second-is-no-moment).
      */
     private void emitTemporalFromText(CodeBuilder code, ClassDesc leafOwner, Type.Prim temporal) {
         TemporalRule rule = TemporalRule.of(temporal);
         emitStringLeaf(code, leafOwner);
-        if (rule.guardsText()) {
-            code.invokedynamic(NOT_A_LEAP_SECOND);
+        for (TemporalRule.TextGate gate : rule.text()) {
+            code.invokedynamic(textQuestion(gate));
             code.loadConstant(TemporalRule.REFUSED);
-            code.loadConstant(TemporalRule.LEAP_SECOND);
+            code.loadConstant(gate.message());
             code.invokevirtual(CD_StringDecoder, "refine", MTD_refineString);
         }
-        code.invokevirtual(CD_StringDecoder, rule.factory(), MTD_leafTemporal);
+        code.invokevirtual(CD_StringDecoder, rawFactory(temporal), MTD_leafTemporal);
         emitToTheSecond(code, temporal);
+    }
+
+    /** Raoh's leaf that builds a temporal, once the text has been admitted. */
+    private static String rawFactory(Type.Prim temporal) {
+        return switch (temporal) {
+            case DATE -> "date";
+            case TIME -> "time";
+            case DATETIME -> "dateTime";
+            case INSTANT -> "iso8601";
+            case INT, STRING, BOOL, DECIMAL, RATIONAL ->
+                    throw new IllegalStateException(temporal + " is not a temporal");
+        };
     }
 
     /** Holds a {@code Time} and a {@code DateTime} to the second, after the parse that produced one. */
@@ -1145,19 +1188,82 @@ final class CodecGen {
      * a JSON temporal is a string that is then parsed — whereas the neutral/jOOQ source has a direct
      * static one, which takes the value as itself where the caller hands over a real temporal.
      *
-     * <p>Both go through the same refinements, so a rule about what a {@code Time} holds cannot be
-     * one thing at a field and another at a map key. The one text this does not see is text handed to
-     * the bare-value factory by a Java caller, which Raoh parses inside itself — so the pre-parse
-     * rule cannot be enforced there, and a leap second reaching it still becomes the second before.
-     * That is a violation of what the specification states and not a boundary being trusted; issue
-     * #639 tracks the Raoh-side fix. */
+     * <p>Both put the text to {@link TemporalText} before it is parsed, so a rule about what a
+     * {@code Time} holds cannot be one thing at a field and another at a map key. Raoh's bare-value
+     * factory parses a {@code String} inside itself, so a decoder that stands in front of it
+     * (the class's own {@code __date} and its siblings) asks first, and a real temporal a Java caller hands over goes
+     * through to Raoh as it was. */
     private void emitTemporalLeaf(CodeBuilder code, Src src, Type.Prim temporal) {
         if (src == Src.JSON) {
             emitTemporalFromText(code, CD_JsonDecoders, temporal);
             return;
         }
-        code.invokestatic(srcLeafOwner(src), TemporalRule.of(temporal).factory(), MTD_leafTemporal);
+        if (textLeafOwner == null) {
+            throw new IllegalStateException("a temporal leaf is emitted into a class that is not"
+                    + " written by buildDecoder, so it has no helper to call");
+        }
+        code.new_(CD_TemporalDecoder);
+        code.dup();
+        code.invokedynamic(Lambdas.callSite(Lambdas.Sam.DECODER,
+                MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, textLeafOwner,
+                        bareTemporalHelper(temporal), MTD_Rdecode),
+                MTD_Rdecode));
+        code.invokespecial(CD_TemporalDecoder, "<init>", MTD_temporalDecoderInit);
+        bareTemporals.add(temporal);
         emitToTheSecond(code, temporal);
+    }
+
+    private static String bareTemporalHelper(Type.Prim temporal) {
+        return "__" + rawFactory(temporal);
+    }
+
+    /**
+     * {@code static Result __date(Object in, Path path)} and its siblings: what a bare-value temporal
+     * leaf decodes with.
+     *
+     * <p>Raoh's {@code ObjectDecoders.date()} takes a real temporal as itself and parses a
+     * {@code String} inside itself, so which text it takes is whatever the Raoh it is built against
+     * takes. This asks the language first (spec §temporal-text): the runtime answers why a text is
+     * not one, or null, and a refusal is said here as a failure at the path, in Raoh's
+     * {@code invalid_format} as the JSON path says it. Anything that is not a {@code String} is not a
+     * text, and goes to Raoh as it was, so the type check, the {@code required} answer and the path
+     * stay Raoh's. Emitted into the class that reads the temporal, as {@code __text} is, so that the
+     * runtime, which does not know Raoh, stops at the fact.
+     */
+    private void emitBareTemporalHelper(ClassBuilder cb, Type.Prim temporal) {
+        cb.withMethodBody(bareTemporalHelper(temporal), MTD_Rdecode,
+                ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC, code -> {
+            Label admitted = code.newLabel();
+            code.aload(0);
+            code.invokestatic(CD_Temporals, bareRefusal(temporal), MTD_temporalRefusal);
+            code.astore(2);
+            code.aload(2);
+            code.ifnull(admitted);
+            code.aload(1);                                        // path
+            code.loadConstant(TemporalRule.REFUSED);
+            code.aload(2);
+            code.invokestatic(CD_Map, "of", MTD_mapOfNone, true);
+            code.invokestatic(CD_RResult, "failCustom", MTD_Rfail4, true);
+            code.areturn();
+            code.labelBinding(admitted);
+            code.invokestatic(CD_ObjectDecoders, rawFactory(temporal), MTD_leafTemporal);
+            code.aload(0);
+            code.aload(1);
+            code.invokeinterface(CD_RDecoder, "decode", MTD_Rdecode);
+            code.areturn();
+        });
+    }
+
+    /** The {@code Temporals} method that says why a text is not this temporal. */
+    private static String bareRefusal(Type.Prim temporal) {
+        return switch (temporal) {
+            case DATE -> "dateRefusal";
+            case TIME -> "timeRefusal";
+            case DATETIME -> "dateTimeRefusal";
+            case INSTANT -> "instantRefusal";
+            case INT, STRING, BOOL, DECIMAL, RATIONAL ->
+                    throw new IllegalStateException(temporal + " is not a temporal");
+        };
     }
 
     private void emitPrimDecode(CodeBuilder code, AstExpressions gen, Hir.PrimDecoder prim,

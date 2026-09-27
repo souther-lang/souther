@@ -257,9 +257,10 @@ public final class JsonBoundary {
      */
     private static <I> Decoder<I, ?> temporal(StringDecoder<I> text, LeafScalar scalar) {
         TemporalRule rule = TemporalRule.of(scalar);
-        StringDecoder<I> guarded = rule.guardsText()
-                ? text.refine(Temporals::notALeapSecond, TemporalRule.REFUSED, TemporalRule.LEAP_SECOND)
-                : text;
+        StringDecoder<I> guarded = text;
+        for (TemporalRule.TextGate gate : rule.text()) {
+            guarded = guarded.refine(gate::holds, TemporalRule.REFUSED, gate.message());
+        }
         TemporalDecoder<I, ?> parsed = switch (scalar) {
             case DATE -> guarded.date();
             case TIME -> guarded.time();

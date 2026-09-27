@@ -30,11 +30,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * every source, and the runner's own decoders, which read a top-level argument and were a third
  * copy of the policy until they were made to read the one table ({@code TemporalRule}).
  *
- * <p>One path is not covered and is not a decision: the bare-value factory is Raoh's own and parses
- * text inside itself, where nothing here can stand. A leap second handed to it as text still reaches
- * the moment before it, against the rule the specification states, so
- * {@link #aLeapSecondIsRefusedAtTheNeutralDecoderToo} is written as the rule and disabled rather
- * than written as the behaviour and passing.
+ * <p>The bare-value factory is Raoh's own and parses text inside itself, where nothing here can
+ * stand, so {@link #aLeapSecondIsRefusedAtTheNeutralDecoderToo} holds what the pinned Raoh does and
+ * the text it reads is checked against the language in
+ * {@link ATemporalTextIsTheLanguagesAndNotTheParsersTest}.
  */
 class ATemporalHoldsTheSameRuleAtEveryPathTest {
 
@@ -75,28 +74,19 @@ class ATemporalHoldsTheSameRuleAtEveryPathTest {
     }
 
     /**
-     * The one path where it is not refused, written as the rule says it should be and disabled.
+     * A leap second is refused at the bare-value decoder too.
      *
-     * <p>A leap second handed to the bare-value decoder as text still reaches the moment before it.
-     * The parse is inside {@code ObjectDecoders.iso8601()}, which takes a real {@code Instant} as
-     * itself and parses a {@code String} with {@code Instant::parse}; Raoh has no combinator that
-     * lets the text be refined before that, and nothing on this side can stand between them.
-     *
-     * <p>Written as an assertion of the rule rather than of the behaviour, and disabled against
-     * issue #639, because the rule is what the specification says
-     * (<<a-leap-second-is-no-moment>>: refused where it is written <em>and where it arrives</em>) and
-     * a test asserting the other thing would make a violation look like a decision. It turns green
-     * when Raoh refuses a leap second, which is where the fix belongs: an {@code iso8601()} that
-     * answers an {@code Instant} after losing the fact that the text named a second it does not have
-     * is answering about a different moment.
+     * <p>That decoder takes a real {@code Instant} as itself and parses a {@code String} inside
+     * Raoh, so nothing on this side stands between the text and the parse, and what it refuses is
+     * what the pinned Raoh refuses. The text is Raoh's own to say there ("invalid_format"), which is
+     * why this asserts the refusal and not its wording. That the pinned Raoh refuses the texts
+     * {@code TemporalText} refuses is held by
+     * {@link ATemporalTextIsTheLanguagesAndNotTheParsersTest}.
      */
     @Test
-    @org.junit.jupiter.api.Disabled("issue #639: needs a Raoh that refuses a leap second, or one "
-            + "that lets the text be refined before it parses")
     void aLeapSecondIsRefusedAtTheNeutralDecoderToo() throws Exception {
         net.unit8.raoh.Result<?> r = decoded(AT_A_FIELD, fieldsWith("at", "2026-06-30T23:59:60Z"));
         assertTrue(!r.isOk(), "a leap second must not be admitted at a bare-value field");
-        assertTrue(String.valueOf(r).contains("names a leap second"), String.valueOf(r));
     }
 
     /** And what each path still takes, so the refusals are not a boundary that stopped working. */

@@ -214,8 +214,7 @@ final class Descriptors {
     static final ClassDesc CD_Maps = ClassDesc.of("souther.runtime.Maps");
     static final ClassDesc CD_Sets = ClassDesc.of("souther.runtime.Sets");
     static final ClassDesc CD_Representations = ClassDesc.of("souther.runtime.Representations");
-    static final ClassDesc CD_Temporals = ClassDesc.of("souther.runtime.Temporals");
-    static final ClassDesc CD_Option = ClassDesc.of("souther.runtime.Option");
+    static final ClassDesc CD_Temporals = ClassDesc.of("souther.runtime.Temporals");    static final ClassDesc CD_Option = ClassDesc.of("souther.runtime.Option");
     static final ClassDesc CD_Options = ClassDesc.of("souther.runtime.Options");
     static final ClassDesc CD_OptionSome = CD_Option.nested("Some");
     static final ClassDesc CD_OptionNone = CD_Option.nested("None");
@@ -349,6 +348,11 @@ final class Descriptors {
     static final MethodTypeDesc MTD_leafBool = MethodTypeDesc.of(CD_BoolDecoder);
     static final MethodTypeDesc MTD_leafDecimal = MethodTypeDesc.of(CD_DecimalDecoder);
     static final MethodTypeDesc MTD_leafTemporal = MethodTypeDesc.of(CD_TemporalDecoder);
+    /** {@code new TemporalDecoder(Decoder)}, over a decoder that asks the language first. */
+    static final MethodTypeDesc MTD_temporalDecoderInit =
+            MethodTypeDesc.of(ConstantDescs.CD_void, CD_RDecoder);
+    /** {@code Temporals.dateRefusal(Object):String} and its siblings. */
+    static final MethodTypeDesc MTD_temporalRefusal = MethodTypeDesc.of(CD_String, CD_Object);
     static final MethodTypeDesc MTD_field = MethodTypeDesc.of(CD_CombinePart, CD_String, CD_RDecoder);
     static final MethodTypeDesc MTD_nullableField = MethodTypeDesc.of(CD_CombinePart, CD_String, CD_RDecoder);
     /** {@code CombinePart}'s own decode, and the conversion for a position that wants a decoder. */
