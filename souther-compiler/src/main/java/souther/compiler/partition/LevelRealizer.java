@@ -213,7 +213,7 @@ public final class LevelRealizer {
                         CompositionRepertoire.PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE);
                 // Neither a figure nor an order without a step: raising a figure reaches no place
                 // this could not hold, and the order has a next place. So it is the third
-                // vocabulary, with whether a wider run would hold the place.
+                // vocabulary, with which of the two ways the place went unheld.
                 case AT_A_PLACE_IT_COULD_NOT_HOLD -> unheld.add(new CompositionCapacity(
                         CompositionCapacity.Where.PLACES_A_PAIR_IS_WALKED_TO, walked.unheld()));
             }
@@ -258,7 +258,8 @@ public final class LevelRealizer {
         // what this has always said. What a walk left is said beside that answer rather than in
         // place of it, each in its own vocabulary: raising a figure goes past it, raising anything
         // reaches no second place on an order that has no step, and a place not held is reached by
-        // a wider run or by nothing. The two readings may leave different ones, and all of them go.
+        // a host with more room or by nothing. The two readings may leave different ones, and all
+        // of them go.
         // Which word they come back with is {@link Realization.Unknown#leftOpen}'s to say.
         return Realization.Unknown.leftOpen(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE,
                 stoppedBy, notAllOf, unheld);
@@ -845,7 +846,7 @@ public final class LevelRealizer {
                 case WITH_NO_STEP_TO_TAKE -> throw new IllegalStateException(
                         "a progression over an order with no step: " + carriers[i]);
                 // Stopped at a value this could not hold, which no figure reaches past: the third
-                // vocabulary, with whether a wider run would hold it.
+                // vocabulary, with which of the two ways it went unheld.
                 case AT_A_PLACE_IT_COULD_NOT_HOLD -> unheld.add(new CompositionCapacity(
                         CompositionCapacity.Where.VALUES_OF_A_PROGRESSION_WALKED_TO,
                         walked.unheld()));

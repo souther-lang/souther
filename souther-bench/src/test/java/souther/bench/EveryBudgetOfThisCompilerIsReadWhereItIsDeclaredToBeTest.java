@@ -253,7 +253,10 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // The order. It reaches every figure and hands none of them anywhere: what it decides
             // is which of them a reader is told about first, where two were reached.
             Map.entry("souther.compiler.publish.PublicationOrders#<clinit>()V",
-                    "the order the figures are said in, where a search met more than one")));
+                    "the order the figures are said in, where a search met more than one"),
+            Map.entry("souther.compiler.query.EstablishmentGap$Composition#runSensitivity()"
+                            + "Lsouther/compiler/observe/RunSensitivity;",
+                    "asks each figure of a gap whether a wider run goes past it")));
 
     /**
      * The places that read a figure are the places that say they do.

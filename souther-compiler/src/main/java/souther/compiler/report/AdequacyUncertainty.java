@@ -140,7 +140,7 @@ public sealed interface AdequacyUncertainty {
         public RunSensitivity runSensitivity() {
             return switch (by) {
                 // What this compiler declined to build, and what decided it: asked of the gap,
-                // since a number no run holds is among what it can hold.
+                // whose figures, populations and numbers not held each answer for themselves.
                 case EstablishmentGap.Composition it -> it.runSensitivity();
                 case EstablishmentGap.Observation it -> it.causes().written().stream()
                         .allMatch(code -> code.runSensitivity() == RunSensitivity.MAY_CHANGE)

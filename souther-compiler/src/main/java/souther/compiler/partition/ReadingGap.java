@@ -115,8 +115,8 @@ public sealed interface ReadingGap {
      * a reader the row is missing a value it has. And not a reason about the row at all — the
      * numbers are there, and what stopped is this compiler working out how far apart they stand.
      *
-     * <p>Which of the two ways the number went unheld travels with it, because a run with more room
-     * answers one of them and no run answers the other.
+     * <p>Which of the two ways the number went unheld travels with it, because a host with more
+     * room answers one of them and nothing answers the other, and a reader is told which.
      */
     record CouldNotWorkOut(UnheldNumber why) implements ReadingGap {
 
@@ -126,9 +126,11 @@ public sealed interface ReadingGap {
             }
         }
 
+        /** Unaffected either way: no allowance of this compiler's stopped the working out, and the
+         *  room that ran out, where it was room, is the host's. */
         @Override
         public RunSensitivity runSensitivity() {
-            return why.runSensitivity();
+            return RunSensitivity.UNAFFECTED;
         }
     }
 

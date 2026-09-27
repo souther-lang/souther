@@ -89,7 +89,7 @@ public sealed interface Realization {
      * differs.</b> {@code stoppedBy} is a figure somebody wrote down and raising it goes further;
      * {@code notAllOf} is a set this compiler has no way of producing the rest of, and raising
      * anything reaches none of it ({@link CompositionRepertoire}); {@code unheld} is a number the
-     * search worked out and could not hold, which a run with more room reaches or nothing does
+     * search worked out and could not hold, which a host with more room reaches or nothing does
      * ({@link CompositionCapacity}). Any of them may be empty and all of them may be there. Held as
      * one vocabulary, a reader is sent to raise a number that changes nothing — and held as none, a
      * search that could name one place and no second one came back saying what a search that had

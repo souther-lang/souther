@@ -195,10 +195,11 @@ final class Reasons {
 
     /**
      * What a number a search could not hold is called where a reader meets one: what it was working
-     * out, and whether a wider run would hold it.
+     * out, and whether a host with more room would hold it.
      *
-     * <p>Its own sentence and not a figure's or a population's. What a reader can do differs by the
-     * second half — run again allowing more, or nothing — so it is said with every one of them, and
+     * <p>Its own sentence and not a figure's or a population's. No wider run of this compiler holds
+     * either kind, since no figure stopped it; what a reader can still do differs by the second half
+     * — measure on a machine with more room, or nothing — so it is said with every one of them, and
      * a kind added arrives here as a compile error rather than as a name nobody wrote a sentence for.
      */
     static String unheld(CanonicalSelection<CompositionCapacity> capacities) {
@@ -213,8 +214,8 @@ final class Reasons {
                         "the next value of a position on the way";
             };
             out.add(what + switch (each.why()) {
-                case MORE_ROOM_COULD_ANSWER -> ", which a run with more room would hold";
-                case NO_REPRESENTATION_EXISTS -> ", which no run of this compiler holds";
+                case MORE_ROOM_COULD_ANSWER -> ", which this host had no room to work out";
+                case NO_REPRESENTATION_EXISTS -> ", which has no representation this compiler holds";
             });
         }
         return String.join("; ", out);

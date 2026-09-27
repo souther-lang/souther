@@ -6,16 +6,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * A number a search worked out and could not hold, named by what it was working out and by whether a
- * run with more room would have held it.
+ * A number a search worked out and could not hold, named by what it was working out and by which of
+ * the two ways it went unheld.
  *
  * <p><b>Apart from {@link CompositionBudget} and {@link CompositionRepertoire}, and the difference
  * is again what a reader can do.</b> A figure is raised and the search goes on; a population this
  * compiler writes some of is reached by somebody writing the rest. Neither reaches a number this
  * compiler could not hold: no figure stopped the search, and the next value it would have tried is
- * one it has a way of naming. What reaches it is either a run with more room or nothing at all,
- * which is the half of this that {@link UnheldNumber} says, and the two answer
- * {@link #runSensitivity} oppositely.
+ * one it has a way of naming. What reaches it is a host with more room or nothing at all, which is
+ * the half of this that {@link UnheldNumber} says.
  *
  * <p>So it travels as a third vocabulary beside the other two and is never folded into either.
  * Folded into a figure, a reader raises a number that reaches nothing; folded into a population,
@@ -47,9 +46,13 @@ public record CompositionCapacity(Where where, UnheldNumber why) {
         VALUES_A_POSITION_ON_THE_WAY_IS_WALKED_TO
     }
 
-    /** Whether measuring again, allowing more, could hold the number. */
+    /**
+     * Never: no allowance of this compiler's stopped the search, so a wider run, which is the same
+     * host with its allowances widened, meets the same number again. Of both kinds alike — the room
+     * that ran out is the host's, and a host is not an allowance.
+     */
     public RunSensitivity runSensitivity() {
-        return why.runSensitivity();
+        return RunSensitivity.UNAFFECTED;
     }
 
     /** Every one there is, which is what an order over them has to hold. */

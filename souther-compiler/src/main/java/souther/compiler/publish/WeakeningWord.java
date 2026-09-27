@@ -67,9 +67,9 @@ public enum WeakeningWord {
      *
      * <p>Apart from {@link #BORDER_OBSERVATION_UNAVAILABLE}, which says nothing was looked at: here
      * every value was read, and what a reader learns is that this compiler's arithmetic, not its
-     * reach into the row, is what left the point open. Whether a wider run would hold the number is
-     * a question each case answers differently, and it travels beside this word as the reason's own
-     * run sensitivity rather than as a word of its own.
+     * reach into the row, is what left the point open. No wider run holds the number, since no
+     * allowance stopped the working out; whether a host with more room would is said by the
+     * reason underneath.
      */
     BORDER_VALUE_NOT_WORKED_OUT,
 

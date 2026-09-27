@@ -3267,9 +3267,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case ReadingGap.CouldNotWalk _ -> "the walk to that position could not be taken";
             case ReadingGap.CouldNotReadRow _ -> "no row came back to read there";
             // The values were there, so nothing is said about the row: what stopped is the number
-            // they come to, and whether a wider run would hold it is said with it.
+            // they come to, and whether a host with more room would hold it is said with it.
             case ReadingGap.CouldNotWorkOut(UnheldNumber unheld) -> switch (unheld) {
-                case MORE_ROOM_COULD_ANSWER -> "the values there come to a number this run had no"
+                case MORE_ROOM_COULD_ANSWER -> "the values there come to a number this host had no"
                         + " room to work out";
                 case NO_REPRESENTATION_EXISTS -> "the values there come to a number this compiler"
                         + " has no way to hold";

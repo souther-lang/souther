@@ -8,6 +8,7 @@ import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
@@ -126,7 +127,7 @@ public sealed interface EstablishmentGap {
          * is why they are three fields and not a set. A figure is a number to raise and reaches what
          * the search was holding; a population is one this compiler writes some of, and what
          * reaches the rest is somebody writing the rest; a number the search could not hold is
-         * reached by a run with more room or by nothing, and each one says which.
+         * reached by a host with more room or by nothing, and each one says which.
          */
         public static Composition of(Collection<CompositionBudget> budgets,
                                      Collection<CompositionRepertoire> repertoires,
@@ -144,20 +145,26 @@ public sealed interface EstablishmentGap {
 
         /**
          * Whether measuring again, allowing more, could close the gap: every part of it has to
-         * say so, as with the codes of an observation.
+         * say so, as with the codes of an observation, and each part is asked rather than answered
+         * for.
          *
-         * <p>A figure is raised by a wider run, and so is a number a wider run has room for. A
-         * population this compiler writes some of is answered the way it always has been. A number
-         * with no representation is not reached by any run, and a gap holding one is not closed by
-         * widening the rest.
+         * <p>So a gap of figures alone is one a wider run may close. One holding a population this
+         * compiler writes some of, or a number it could not hold, is not: raising a figure reaches
+         * neither, and a gap is closed by nothing short of all of it.
          */
         public RunSensitivity runSensitivity() {
-            for (CompositionCapacity each : capacities.written()) {
-                if (each.runSensitivity() == RunSensitivity.UNAFFECTED) {
-                    return RunSensitivity.UNAFFECTED;
-                }
+            List<RunSensitivity> parts = new ArrayList<>();
+            for (CompositionBudget each : budgets.written()) {
+                parts.add(each.runSensitivity());
             }
-            return RunSensitivity.MAY_CHANGE;
+            for (CompositionRepertoire each : repertoires.written()) {
+                parts.add(each.runSensitivity());
+            }
+            for (CompositionCapacity each : capacities.written()) {
+                parts.add(each.runSensitivity());
+            }
+            return parts.contains(RunSensitivity.UNAFFECTED)
+                    ? RunSensitivity.UNAFFECTED : RunSensitivity.MAY_CHANGE;
         }
 
         /** The gap the budgets a search met are, where it met no population it writes some of. */

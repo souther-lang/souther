@@ -318,7 +318,7 @@ final class NumericWitness {
             // above being false, which is how the same fact was lost at the pair search.
             case WITH_NO_STEP_TO_TAKE -> { }
             // And a place further out this could not hold. No figure reaches past it, so it is not
-            // among the figures; it travels in its own vocabulary, with whether a wider run holds it.
+            // among the figures; it travels in its own vocabulary, with which way it went unheld.
             case AT_A_PLACE_IT_COULD_NOT_HOLD -> unheld.add(new CompositionCapacity(
                     CompositionCapacity.Where.VALUES_A_POSITION_ON_THE_WAY_IS_WALKED_TO,
                     walked.unheld()));
