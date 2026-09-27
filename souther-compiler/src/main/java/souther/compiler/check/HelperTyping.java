@@ -88,7 +88,8 @@ public final class HelperTyping {
             // what it settled if one of them turned up — the same disagreement LoweringRole#emitted
             // refuses below.
             Map<ValueName.Behavior, ReqSig> reachable = switch (role) {
-                case LoweringRole.RowValue _, LoweringRole.PublishedValueEntry _ -> Map.of();
+                case LoweringRole.RowValue _, LoweringRole.PublishedValueEntry _,
+                     LoweringRole.FixtureValueEntry _ -> Map.of();
                 case LoweringRole.ValueHome _, LoweringRole.Helper _ -> reqSigs;
                 case LoweringRole.Behavior _, LoweringRole.ValueDeclaredElsewhere _ ->
                         throw new IllegalStateException("`" + h.name() + "` is checked standalone as"

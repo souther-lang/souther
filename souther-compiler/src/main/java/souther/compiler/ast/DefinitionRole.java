@@ -127,6 +127,33 @@ public sealed interface DefinitionRole extends RecordOfTheBuilding {
     }
 
     /**
+     * The entry a fixture reads one of this module's values through, in place of interpreting the
+     * value's own body a second time.
+     *
+     * <p>Not {@link PublishedValueEntry}: publication answers what another module may call, and this
+     * answers what a fixture may call, and the two sets are not one — a value kept private to its
+     * module, or declared by an attached file, has no published entry and still needs this one. Not a
+     * row's value and not the module's own {@code let} either, for the same reasons
+     * {@code PublishedValueEntry} is neither.
+     *
+     * <p>{@code of} is the value it enters, carried here for the reason {@code PublishedValueEntry#of}
+     * is: the name an entry is emitted under says nothing a reader may rely on.
+     */
+    record FixtureValueEntry(souther.compiler.types.ValueName.Helper of) implements DefinitionRole {
+
+        public FixtureValueEntry {
+            if (of == null) {
+                throw new IllegalArgumentException("an entry is for a value");
+            }
+        }
+
+        @Override
+        public boolean isTheModels() {
+            return false;
+        }
+    }
+
+    /**
      * A definition another module declares, which this module emits as a method of its own because
      * a call to it was left standing.
      *

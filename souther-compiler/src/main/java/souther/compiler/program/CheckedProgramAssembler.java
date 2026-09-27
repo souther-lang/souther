@@ -1210,6 +1210,11 @@ final class CheckedProgramAssembler {
      * separate arms even though a row's harness value still comes out as a {@link CheckedHelper}: an
      * entry is not a helper — it is nullary by ADR-0074 and {@link CheckedModule} answers its
      * publication — and folding the two into one arm is the projection issue #1885 refused.
+     *
+     * <p>{@link LoweringRole.FixtureValueEntry} joins {@code RowValue}'s arm rather than
+     * {@code PublishedValueEntry}'s: {@link CheckedModule} holds its {@code valueEntries} to exactly
+     * the values this module publishes (ADR-0074), and a fixture entry exists for a value that is not
+     * one of those as often as it exists for one that is.
      */
     private static Emitted emittedBy(String module, Bodies.Elaborated checked) {
         List<CheckedHelper> helpers = new ArrayList<>();
@@ -1245,6 +1250,21 @@ final class CheckedProgramAssembler {
                                 + "0074 says it takes none");
                     }
                     valueEntries.add(new CheckedValueEntry(entry.value(), emitted.body()));
+                }
+                // A fixture calls the emitted method the same way a row calls its own operand's: by
+                // name, through the harness, with nothing a source declares to reach it by.
+                case LoweringRole.FixtureValueEntry entry -> {
+                    if (!emitted.parameters().isEmpty()) {
+                        // Not ADR-0074, which is silent about a fixture: `OperandRunner` is what
+                        // takes this method with no arguments, and a parameter here is this compiler
+                        // having minted something the fixture execution protocol cannot call.
+                        throw new IllegalStateException("`" + entry.value() + "`'s fixture entry"
+                                + " takes " + emitted.parameters().size() + " parameter(s), and a"
+                                + " fixture can only call one that takes none");
+                    }
+                    helpers.add(new CheckedHelper(
+                            new ReachName.Own(new ValueName.Helper(module, name)),
+                            parametersOf(emitted), emitted.body()));
                 }
             }
         });

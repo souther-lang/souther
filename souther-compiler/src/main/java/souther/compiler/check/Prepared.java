@@ -207,6 +207,12 @@ public final class Prepared {
         return surface.operandMethods();
     }
 
+    /** Which method every value a fixture may call by name runs as, by the value's own declaration —
+     *  {@link FixtureValueEntries#emitted}'s correspondence, mint and reuse alike. */
+    public Map<ValueName.Helper, String> fixtureValueMethods() {
+        return surface.fixtureValueMethods();
+    }
+
     /**
      * This module's artifact with all of its rows — what an example run over the module is given.
      */
@@ -403,6 +409,12 @@ public final class Prepared {
          * emission constructed rather than numbering its own subset from zero. */
         public Map<Hir.Expr, String> operandMethods() {
             return module.operandMethods();
+        }
+
+        /** Which method every value a fixture may call by name runs as, by the value's own
+         *  declaration, whole-module like {@link #operandMethods}. */
+        public Map<ValueName.Helper, String> fixtureValueMethods() {
+            return module.fixtureValueMethods();
         }
 
         /** The artifact the rows run in. */

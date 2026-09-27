@@ -2448,7 +2448,7 @@ public final class Bodies {
                             Lower.valueMethod(def.value(),
                                     inliner.namingBehaviors(behaviors.value()));
                     case LoweringRole.Behavior _, LoweringRole.Helper _, LoweringRole.RowValue _,
-                         LoweringRole.PublishedValueEntry _ ->
+                         LoweringRole.PublishedValueEntry _, LoweringRole.FixtureValueEntry _ ->
                             Lower.asWritten(Lower.body(def.value(),
                                     inliner.namingBehaviors(behaviors.value()),
                                     recursive, dependencyParams(db, module, fn.text())));
@@ -2500,7 +2500,7 @@ public final class Bodies {
                             Lower.valueTemplate(def.value(),
                                     inliner.namingBehaviors(behaviors.value()));
                     case LoweringRole.Behavior _, LoweringRole.Helper _, LoweringRole.RowValue _,
-                         LoweringRole.PublishedValueEntry _ ->
+                         LoweringRole.PublishedValueEntry _, LoweringRole.FixtureValueEntry _ ->
                             Lower.body(def.value(), inliner.namingBehaviors(behaviors.value()),
                                     recursive, dependencyParams(db, module, fn));
                 });
@@ -2940,7 +2940,7 @@ public final class Bodies {
             boolean aValue = role.present() && switch (role.value()) {
                 case LoweringRole.ValueHome _, LoweringRole.ValueDeclaredElsewhere _ -> true;
                 case LoweringRole.Behavior _, LoweringRole.Helper _, LoweringRole.RowValue _,
-                     LoweringRole.PublishedValueEntry _ -> false;
+                     LoweringRole.PublishedValueEntry _, LoweringRole.FixtureValueEntry _ -> false;
             };
             if (!graph.recurses(standing) && !aValue) {
                 // An expansion answers with what it left standing, and a call is left standing

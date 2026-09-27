@@ -40,6 +40,8 @@ public sealed interface LoweringRole
             case DefinitionRole.RowValue(RowPosition position) -> new RowValue(position);
             case DefinitionRole.PublishedValueEntry(ValueName.Helper value) ->
                     new PublishedValueEntry(value);
+            case DefinitionRole.FixtureValueEntry(ValueName.Helper value) ->
+                    new FixtureValueEntry(value);
             case DefinitionRole.TakenOn(ReachName.Declaration reachedAs) ->
                     definition.params().isEmpty() ? new ValueDeclaredElsewhere(reachedAs)
                             : new Helper(reachedAs);
@@ -88,7 +90,7 @@ public sealed interface LoweringRole
 
     /** What a module emits as a method of its own. */
     sealed interface Emitted extends LoweringRole
-            permits ValueHome, Helper, RowValue, PublishedValueEntry {}
+            permits ValueHome, Helper, RowValue, PublishedValueEntry, FixtureValueEntry {}
 
     /**
      * The one place {@code value} runs: the module that declares it builds it and hands it to what
@@ -107,4 +109,13 @@ public sealed interface LoweringRole
 
     /** The entry through which another module calls {@code value}. */
     record PublishedValueEntry(ValueName.Helper value) implements Emitted {}
+
+    /**
+     * The entry through which a fixture calls {@code value}, in place of interpreting its body a
+     * second time.
+     *
+     * <p>Not {@link PublishedValueEntry}: a value kept private to its module, or declared by an
+     * attached file, is never one of those and may still be one of these.
+     */
+    record FixtureValueEntry(ValueName.Helper value) implements Emitted {}
 }
