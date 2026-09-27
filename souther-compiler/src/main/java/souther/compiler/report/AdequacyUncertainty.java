@@ -139,8 +139,9 @@ public sealed interface AdequacyUncertainty {
         @Override
         public RunSensitivity runSensitivity() {
             return switch (by) {
-                // What this compiler declined to build, and the figures that decided it.
-                case EstablishmentGap.Composition _ -> RunSensitivity.MAY_CHANGE;
+                // What this compiler declined to build, and what decided it: asked of the gap,
+                // whose figures, populations and numbers not held each answer for themselves.
+                case EstablishmentGap.Composition it -> it.runSensitivity();
                 case EstablishmentGap.Observation it -> it.causes().written().stream()
                         .allMatch(code -> code.runSensitivity() == RunSensitivity.MAY_CHANGE)
                         ? RunSensitivity.MAY_CHANGE : RunSensitivity.UNAFFECTED;

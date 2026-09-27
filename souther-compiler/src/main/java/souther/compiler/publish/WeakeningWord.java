@@ -62,6 +62,18 @@ public enum WeakeningWord {
     BORDER_OBSERVATION_UNAVAILABLE,
 
     /**
+     * A row's values at one border were all looked at, and the number they come to was one this
+     * compiler could not hold.
+     *
+     * <p>Apart from {@link #BORDER_OBSERVATION_UNAVAILABLE}, which says nothing was looked at: here
+     * every value was read, and what a reader learns is that this compiler's arithmetic, not its
+     * reach into the row, is what left the point open. No wider run holds the number, since no
+     * allowance stopped the working out; whether a host with more room would is said by the
+     * reason underneath.
+     */
+    BORDER_VALUE_NOT_WORKED_OUT,
+
+    /**
      * A row held more readings at one border than a point is tried against, so the readings a point
      * was looked for in are not all the readings there are.
      *

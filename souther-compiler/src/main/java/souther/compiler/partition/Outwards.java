@@ -2,12 +2,13 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.values.ValueSet;
+import souther.exact.ExactFailure;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -38,20 +39,35 @@ final class Outwards {
      * The places walked, and how the walk came to end.
      *
      * <p>Two halves of one answer. A caller reading only the first cannot tell a run with nothing
-     * further in it from one this stopped walking, and the four mean different things about an
+     * further in it from one this stopped walking, and the endings mean different things about an
      * empty hand.
      *
      * <p><b>No word for "not all of them", which is what a caller has to be stopped from asking
-     * for.</b> Three of the endings answer that alike and are what a reader does different things
-     * about, so a caller handed the question in that shape names one of them for another: the
+     * for.</b> Every ending but the first answers that alike, and they are what a reader does
+     * different things about, so a caller handed the question in that shape names one of them for
+     * another: the
      * pair search took an order with no step and a figure met for one fact, and told a reader to
      * raise a number that reaches nothing. So what is offered is the ending itself, and every
      * caller says what it does with each.
      */
-    record Walked(List<Place> places, Ended ended) implements Iterable<Place> {
+    record Walked(List<Place> places, Ended ended, UnheldNumber unheld) implements Iterable<Place> {
 
+        /**
+         * {@code unheld} is why the place the walk stopped at could not be held, and there is one
+         * exactly where that is how it ended: the ending says it stopped there, and which of the two
+         * ways it stopped is what a reader is owed beside it.
+         */
         Walked {
             places = List.copyOf(places);
+            if ((ended == Ended.AT_A_PLACE_IT_COULD_NOT_HOLD) != (unheld != null)) {
+                throw new IllegalArgumentException(
+                        "a walk says why it could not hold a place exactly where it stopped at one: "
+                                + ended + ", " + unheld);
+            }
+        }
+
+        Walked(List<Place> places, Ended ended) {
+            this(places, ended, null);
         }
 
         /** The places, so that a caller wanting only those walks this. */
@@ -64,10 +80,11 @@ final class Outwards {
     /**
      * How a walk came to end.
      *
-     * <p><b>Four, because three of them are limits and no two are the same limit.</b> A figure is a
-     * number somebody wrote down and raising it walks further; an order with no step is one this has
-     * no way of naming another place on, and raising anything reaches none of them
-     * ({@link CompositionRepertoire}). Held as one boolean, the last was reported as a figure —
+     * <p><b>One for a walk that tried them all, and one for each limit, since no two are the same
+     * limit.</b> A figure is a number somebody wrote down and raising it walks further; an order
+     * with no step is one this has no way of naming another place on, and raising anything reaches
+     * none of them ({@link CompositionRepertoire}); a place this could not hold is one no figure
+     * reaches past either. Held as one boolean, the last was reported as a figure —
      * a reader told to raise a number that stopped nothing — or as neither, which is a walk of one
      * place claiming to have walked them all.
      *
@@ -91,7 +108,17 @@ final class Outwards {
 
         /** This order has no step to take, so what came back is the one place this could name and
          *  whether the run holds others is not something this walked. */
-        WITH_NO_STEP_TO_TAKE
+        WITH_NO_STEP_TO_TAKE,
+
+        /**
+         * The next place out is one this could not hold, so the walk stopped there.
+         *
+         * <p>Not {@link #WITH_NO_STEP_TO_TAKE}: the order has a next place, and this could not
+         * work out which number it is. Nor a figure, since raising one walks no further past it.
+         * Both directions stop together rather than one walking on alone, which would leave two
+         * reasons for one ending.
+         */
+        AT_A_PLACE_IT_COULD_NOT_HOLD
     }
 
     /**
@@ -165,12 +192,30 @@ final class Outwards {
         // place of the run was found and there is nothing left to examine it with — and never where
         // examining the last place of the run happened to take the count up to it.
         Ended ended = Ended.HAVING_TRIED_THEM_ALL;
+        UnheldNumber unheld = null;
+        // Each direction carried from the last place it reached, one step at a time: the place a
+        // step out is the one before it and a step more, and working it out that way is one sum per
+        // direction rather than a product and a sum from the start every time.
+        ExactRatio forward = by.exactly();
+        ExactRatio backward = forward.negated();
+        ExactRatio above = Count.number(first).exactly();
+        ExactRatio below = above;
         outward:
-        for (int step = 1; ; step++) {
-            BigDecimal away = BigDecimal.valueOf(step);
-            Place[] neighbours = {
-                    carrier.onTheGrid(Count.number(first).plus(by.times(away))),
-                    carrier.onTheGrid(Count.number(first).minus(by.times(away)))};
+        for (;;) {
+            // Worked out exactly and put on the carrier only once each is a number. Where this
+            // cannot hold one of them, the walk ends here: a run holding more places than this could
+            // work out is not a run walked to its end.
+            Place[] neighbours;
+            try {
+                above = above.plus(forward);
+                below = below.plus(backward);
+                neighbours = new Place[] {
+                        onTheCarrier(above, carrier), onTheCarrier(below, carrier)};
+            } catch (ExactFailure failure) {
+                ended = Ended.AT_A_PLACE_IT_COULD_NOT_HOLD;
+                unheld = UnheldNumber.of(failure);
+                break;
+            }
             boolean took = false;
             for (Place next : neighbours) {
                 if (next == null || !within.admits(next)) {
@@ -206,7 +251,13 @@ final class Outwards {
                 break;   // neither direction has a place left, so this walked the whole of it
             }
         }
-        return new Walked(out, ended);
+        return new Walked(out, ended, unheld);
+    }
+
+    /** The place a number is on the carrier, or null where the carrier holds none there. */
+    private static Place onTheCarrier(ExactRatio at, Carrier carrier) {
+        Count count = Count.at(at);
+        return count == null ? null : carrier.onTheGrid(count);
     }
 
     /**

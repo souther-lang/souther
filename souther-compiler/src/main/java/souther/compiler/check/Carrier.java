@@ -5,6 +5,7 @@ import souther.compiler.core.Core;
 import souther.compiler.core.IntNegation;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Dates;
@@ -27,6 +28,7 @@ import souther.compiler.values.StringMachineAnswers;
 import souther.compiler.values.TextExtents;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
+import souther.exact.ExactFailure;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -697,27 +699,54 @@ public sealed interface Carrier extends ValueOrder {
         if (from == Towards.BELOW) {
             if (high == null) {
                 return low == null ? Count.ZERO
-                        : low.inclusive() ? low.at() : count(low).plus(1);
+                        : low.inclusive() ? low.at() : oneFrom(count(low), ExactRatio.ONE);
             }
             if (high.inclusive()) {
                 return high.at();
             }
             // Open above, so the place is not the end. Halfway to the other end where there is one,
-            // and a step in where there is not.
-            return low == null ? count(high).minus(1)
-                    : count(low).halfwayTo(count(high), Granularity.DENSE);
+            // and one in where there is not.
+            return low == null ? oneFrom(count(high), ExactRatio.ONE.negated())
+                    : halfway(count(low), count(high));
         }
         if (low == null) {
             return high == null ? Count.ZERO
-                    : high.inclusive() ? high.at() : count(high).minus(1);
+                    : high.inclusive() ? high.at() : oneFrom(count(high), ExactRatio.ONE.negated());
         }
         if (low.inclusive()) {
             return low.at();
         }
         // Open below, so the place is not the end. Halfway to the other end where there is one — a
-        // count the dense carrier holds, and inside both — and a step in where there is not.
-        return high == null ? count(low).plus(1)
-                : count(low).halfwayTo(count(high), Granularity.DENSE);
+        // count the dense carrier holds, and inside both — and one in where there is not.
+        return high == null ? oneFrom(count(low), ExactRatio.ONE)
+                : halfway(count(low), count(high));
+    }
+
+    /**
+     * The count {@code by} from {@code at} on an order with no step, or null where this could not
+     * hold it.
+     *
+     * <p>Not a step: this order has none, and one is only a distance that lands inside a range open
+     * on the far side. Worked out exactly and made a count only at the end, so where the number is
+     * one this has no room for, the answer is the null every caller here already reads as this
+     * composing nothing — never the range holding nothing.
+     */
+    private static Count oneFrom(Count at, ExactRatio by) {
+        try {
+            return Count.at(at.exactly().plus(by));
+        } catch (ExactFailure _) {
+            return null;
+        }
+    }
+
+    /** The count halfway between two, or null where this could not hold it, for the same reason
+     *  as {@link #oneFrom}. Exact, since half a decimal is a decimal. */
+    private static Count halfway(Count low, Count high) {
+        try {
+            return Count.at(low.exactly().plus(high.exactly()).dividedBy(ExactRatio.of(2)));
+        } catch (ExactFailure _) {
+            return null;
+        }
     }
 
     /**
@@ -823,8 +852,20 @@ public sealed interface Carrier extends ValueOrder {
         java.util.List<Place> stepped = new ArrayList<>();
         for (Place from : singled.places()) {
             if (from instanceof Count count) {
-                stepped.add(count.plus(1));
-                stepped.add(count.minus(1));
+                // Where the values step, the step. Where they do not, the place one away is no
+                // neighbour and only one more candidate, so a place this could not hold is left out
+                // and the rest are still tried.
+                if (spacing() == Granularity.DENSE) {
+                    for (ExactRatio away : List.of(ExactRatio.ONE, ExactRatio.ONE.negated())) {
+                        Count beside = oneFrom(count, away);
+                        if (beside != null) {
+                            stepped.add(beside);
+                        }
+                    }
+                } else {
+                    stepped.add(count.plus(1));
+                    stepped.add(count.minus(1));
+                }
             }
         }
         java.util.List<Place> inside = new ArrayList<>();

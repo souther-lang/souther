@@ -11,6 +11,7 @@ import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.partition.LinesWhereTheyFall;
 import souther.compiler.partition.RuleReachNumbering;
+import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.PathReachability;
@@ -35,6 +36,7 @@ import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.LevelRealizer;
 import souther.compiler.partition.Realization;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionCapacity;
 import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.ValuesTried;
 import souther.compiler.partition.EnsuresThresholds;
@@ -1388,14 +1390,16 @@ final class Coverages {
             private SearchOutcomes endedBy(SearchOutcomes last, Realization ended) {
                 if (ended instanceof Realization.Found) {
                     return overLessThanThePointHad(last,
-                            java.util.Set.of(CompositionBudget.VALUES_A_POINT_IS_TRIED_WITH),
-                            java.util.Set.of());
+                            Set.of(CompositionBudget.VALUES_A_POINT_IS_TRIED_WITH), Set.of(),
+                            Set.of());
                 }
                 // A proof about what was left is no proof about the point: what it is a proof about
                 // is the question this narrowed by leaving values out.
                 if (ended instanceof Realization.Unknown left
-                        && !(left.stoppedBy().isEmpty() && left.notAllOf().isEmpty())) {
-                    return overLessThanThePointHad(last, left.stoppedBy(), left.notAllOf());
+                        && !(left.stoppedBy().isEmpty() && left.notAllOf().isEmpty()
+                                && left.unheld().isEmpty())) {
+                    return overLessThanThePointHad(last, left.stoppedBy(), left.notAllOf(),
+                            left.unheld());
                 }
                 return last;
             }
@@ -1406,36 +1410,39 @@ final class Coverages {
              * <p>On the searches' own answers and nowhere else. An outcome already naming something
              * of this compiler's is one where this was not what fell short, and a second name
              * beside it is a thing an author would act on to be told the same thing.
+             *
+             * <p>Every vocabulary the asking was short in goes with it, each under its own name. The
+             * two readings of a pair walk one order, and one may meet a figure while the other walks
+             * some of a population or reaches a place it cannot hold; choosing one of them would
+             * tell a reader to act on it alone.
              */
             private SearchOutcomes overLessThanThePointHad(SearchOutcomes outcomes,
-                    java.util.Set<CompositionBudget> budgets,
-                    java.util.Set<CompositionRepertoire> repertoires) {
-                // A walk with no step to take reaches no figure, and a walk that met one had a step
-                // — so one asking is short of one of the two and never of both. Said here rather
-                // than left to whichever of them this wrote down: the two are what a reader would
-                // do about it, and a shortfall that arrived holding both would go out as one of
-                // them with nobody the wiser.
-                if (!budgets.isEmpty() && !repertoires.isEmpty()) {
-                    throw new IllegalStateException("one asking short of a figure and of a"
-                            + " population at once: " + budgets + " and " + repertoires);
-                }
+                    Set<CompositionBudget> budgets, Set<CompositionRepertoire> repertoires,
+                    Set<CompositionCapacity> capacities) {
                 java.util.List<ItemAssessment.Attempt> out = new java.util.ArrayList<>();
                 for (ItemAssessment.Attempt each : outcomes.each()) {
                     out.add(each instanceof ItemAssessment.Attempt.Unresolved it
-                            ? shortOf(it, budgets, repertoires) : each);
+                            ? shortOf(it, budgets, repertoires, capacities) : each);
                 }
                 return new SearchOutcomes(out);
             }
 
-            /** One search's answer, wearing what the asking after it was short of. */
+            /**
+             * One search's answer, wearing what the asking after it was short of: under the figure
+             * where one was met, since that is what a reader raises, and otherwise under what the
+             * asking walked some of or could not hold.
+             */
             private ItemAssessment.Attempt shortOf(ItemAssessment.Attempt.Unresolved it,
-                    java.util.Set<CompositionBudget> budgets,
-                    java.util.Set<CompositionRepertoire> repertoires) {
+                    Set<CompositionBudget> budgets, Set<CompositionRepertoire> repertoires,
+                    Set<CompositionCapacity> capacities) {
                 return budgets.isEmpty()
                         ? new ItemAssessment.Attempt.Unexhausted(it.why(), it.way(), it.uncomposed(),
-                                PublicationOrders.COMPOSITION_REPERTOIRES.keep(repertoires))
+                                PublicationOrders.COMPOSITION_REPERTOIRES.keep(repertoires),
+                                PublicationOrders.COMPOSITION_CAPACITIES.keep(capacities))
                         : new ItemAssessment.Attempt.Limited(it.why(), it.way(), it.uncomposed(),
-                                PublicationOrders.COMPOSITION_BUDGETS.keep(budgets));
+                                PublicationOrders.COMPOSITION_BUDGETS.keep(budgets),
+                                PublicationOrders.COMPOSITION_REPERTOIRES.keep(repertoires),
+                                PublicationOrders.COMPOSITION_CAPACITIES.keep(capacities));
             }
 
             private Searching searchingWith(Criterion criterion, String label,
@@ -1675,14 +1682,25 @@ final class Coverages {
         return EstablishmentGap.Observation.of(codes);
     }
 
+    /** No population written some of, for an answer that met none. One value, since nothing
+     *  differs between the empty selections an answer would otherwise make each time. */
+    private static final CanonicalSelection<CompositionRepertoire> NO_REPERTOIRES =
+            PublicationOrders.COMPOSITION_REPERTOIRES.keep(Set.of());
+
+    /** No number not held, for an answer that held every one it worked out. */
+    private static final CanonicalSelection<CompositionCapacity> NO_CAPACITIES =
+            PublicationOrders.COMPOSITION_CAPACITIES.keep(Set.of());
+
     /**
      * What a walk that reached no placement left behind, in the words an assessment is read in.
      *
      * <p>Three shapes and not two, because what a reader does about each differs. A figure is a
      * number to raise; a population this writes some of is work nobody has done and no number
-     * reaches the rest of it; and a walk with neither to say narrowed nothing at all. Held as two,
-     * the middle one was read as the last — so a search that looked in the one place an order
-     * without a step names came back saying the rules leave nothing there.
+     * reaches the rest of it, and a number the walk could not hold is reached by a wider run or by
+     * nothing, and both of those come back under the one shape with no figure in it; and a walk
+     * with none of them to say narrowed nothing at all. Held as two, the middle one was read as the
+     * last — so a search that looked in the one place an order without a step names came back
+     * saying the rules leave nothing there.
      *
      * <p>The word is the walk's own either way and is not read off what it left, which is why it is
      * taken from the same place for all three.
@@ -1697,12 +1715,14 @@ final class Coverages {
             return new ItemAssessment.Attempt.Stopped(why, within,
                     souther.compiler.partition.CompositionAccount.NOTHING,
                     PublicationOrders.COMPOSITION_BUDGETS.keep(unknown.stoppedBy()),
-                    PublicationOrders.COMPOSITION_REPERTOIRES.keep(unknown.notAllOf()));
+                    PublicationOrders.COMPOSITION_REPERTOIRES.keep(unknown.notAllOf()),
+                    PublicationOrders.COMPOSITION_CAPACITIES.keep(unknown.unheld()));
         }
-        if (!unknown.notAllOf().isEmpty()) {
+        if (!unknown.notAllOf().isEmpty() || !unknown.unheld().isEmpty()) {
             return new ItemAssessment.Attempt.Unexhausted(why, within,
                     souther.compiler.partition.CompositionAccount.NOTHING,
-                    PublicationOrders.COMPOSITION_REPERTOIRES.keep(unknown.notAllOf()));
+                    PublicationOrders.COMPOSITION_REPERTOIRES.keep(unknown.notAllOf()),
+                    PublicationOrders.COMPOSITION_CAPACITIES.keep(unknown.unheld()));
         }
         return new ItemAssessment.Attempt.Unresolved(why, within);
     }
@@ -1803,7 +1823,8 @@ final class Coverages {
             case souther.compiler.partition.Generator.BoundaryAttempt.Stopped left ->
                     new ItemAssessment.Attempt.Stopped(left.why(), within, left.unrepresented(),
                             PublicationOrders.COMPOSITION_BUDGETS.keep(left.by()),
-                            PublicationOrders.COMPOSITION_REPERTOIRES.keep(left.notAllOf()));
+                            PublicationOrders.COMPOSITION_REPERTOIRES.keep(left.notAllOf()),
+                            NO_CAPACITIES);
             // A search that ran to the end of what this compiler writes, where that is not the end
             // of what there is to write. It leaves the point open the way the one above does and
             // names nothing anybody could raise, which is why it arrives as its own arm and its
@@ -1811,13 +1832,15 @@ final class Coverages {
             case souther.compiler.partition.Generator.BoundaryAttempt.Unexhausted left ->
                     new ItemAssessment.Attempt.Unexhausted(left.why(), within,
                             left.unrepresented(),
-                            PublicationOrders.COMPOSITION_REPERTOIRES.keep(left.writes()));
+                            PublicationOrders.COMPOSITION_REPERTOIRES.keep(left.writes()),
+                            NO_CAPACITIES);
             // A search that ran to the end of what it was handed, where what it was handed was
             // short of the point. It names a figure like the one above and its word is its own, so
             // the two are carried side by side rather than one being read off the other.
             case souther.compiler.partition.Generator.BoundaryAttempt.Limited left ->
                     new ItemAssessment.Attempt.Limited(left.why(), within, left.unrepresented(),
-                            PublicationOrders.COMPOSITION_BUDGETS.keep(left.by()));
+                            PublicationOrders.COMPOSITION_BUDGETS.keep(left.by()),
+                            NO_REPERTOIRES, NO_CAPACITIES);
             // And a point no search was made for at all. It names a figure like the two above and
             // is not an outcome of a search, which is what keeps it out of what the readings of a
             // line together establish.

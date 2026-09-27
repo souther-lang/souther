@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.observe.MeasureReason;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionCapacity;
 import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.Generator;
@@ -617,17 +618,19 @@ public sealed interface ItemAssessment {
          * second's absence and the second is not recoverable from the first, so both are carried.
          *
          * <p><b>What each vocabulary is, rather than the gap they make together.</b> Which arm this
-         * is turns on {@code by} alone; {@code notAllOf} is what was separately known about the same
-         * offer, and a stop that also walked some of a population loses neither by carrying both
-         * under their own names. Held as the gap an account reads, this would be a history saying
-         * one thing and a value able to say another, and the two would have nothing keeping them in
-         * step — which is the arrangement a figure and a population were taken out of.
+         * is turns on {@code by} alone; {@code notAllOf} and {@code unheld} are what was separately
+         * known about the same offer, and a stop that also walked some of a population, or reached
+         * a number it could not hold, loses none of them by carrying each under its own name. Held
+         * as the gap an account reads, this would be a history saying one thing and a value able to
+         * say another, and the two would have nothing keeping them in step — which is the
+         * arrangement a figure and a population were taken out of.
          */
         record Stopped(Generator.UnresolvedCombination why,
                        souther.compiler.partition.WayToTheBorder way,
                        souther.compiler.partition.CompositionAccount uncomposed,
                        CanonicalSelection<CompositionBudget> stoppedBy,
-                       CanonicalSelection<CompositionRepertoire> notAllOf)
+                       CanonicalSelection<CompositionRepertoire> notAllOf,
+                       CanonicalSelection<CompositionCapacity> unheld)
                 implements Attempt, Searched, Prevented {
 
             public Stopped {
@@ -635,6 +638,7 @@ public sealed interface ItemAssessment {
                         "a search says what it was composed without, or that it was nothing");
                 Objects.requireNonNull(why, "a search that came to nothing says so in its own word");
                 Objects.requireNonNull(notAllOf, "a search says what it walked some of, or none");
+                Objects.requireNonNull(unheld, "a search says which numbers it could not hold, or none");
                 if (stoppedBy == null || stoppedBy.isEmpty()) {
                     throw new IllegalArgumentException("a search this compiler stopped says which"
                             + " budget stopped it");
@@ -651,7 +655,7 @@ public sealed interface ItemAssessment {
 
             @Override
             public EstablishmentGap by() {
-                return new EstablishmentGap.Composition(stoppedBy, notAllOf);
+                return new EstablishmentGap.Composition(stoppedBy, notAllOf, unheld);
             }
         }
 
@@ -669,26 +673,32 @@ public sealed interface ItemAssessment {
          * <p>What it licenses is what {@link Stopped} licenses and nothing more: the question is
          * open, and open because this compiler did not look at everything. Which is why the word is
          * the same word and the gap is not.
+         *
+         * <p>And the same where what the search left is a number it could not hold rather than a
+         * population it writes some of, or both. No figure stopped it either way, which is what
+         * puts it here rather than in {@link Stopped}; which of the two it was is each set's to say.
          */
         record Unexhausted(Generator.UnresolvedCombination why,
                            souther.compiler.partition.WayToTheBorder way,
                            souther.compiler.partition.CompositionAccount uncomposed,
-                           CanonicalSelection<CompositionRepertoire> notAllOf)
+                           CanonicalSelection<CompositionRepertoire> notAllOf,
+                           CanonicalSelection<CompositionCapacity> unheld)
                 implements Attempt, Searched, Prevented {
 
             public Unexhausted {
                 Objects.requireNonNull(uncomposed,
                         "a search says what it was composed without, or that it was nothing");
                 Objects.requireNonNull(why, "a search that came to nothing says so in its own word");
-                if (notAllOf == null || notAllOf.isEmpty()) {
-                    throw new IllegalArgumentException(
-                            "a search that saw some of them says some of what");
+                if (notAllOf == null || unheld == null || (notAllOf.isEmpty() && unheld.isEmpty())) {
+                    throw new IllegalArgumentException("a search that saw some of them says some of"
+                            + " what, or which number it could not hold");
                 }
             }
 
             @Override
             public EstablishmentGap by() {
-                return EstablishmentGap.Composition.of(List.of(), notAllOf.written());
+                return EstablishmentGap.Composition.of(List.of(), notAllOf.written(),
+                        unheld.written());
             }
         }
 
@@ -706,17 +716,25 @@ public sealed interface ItemAssessment {
          * open, and open for a figure somebody could raise. What it refuses is the reading that the
          * word is the whole story — which is how a point this compiler declined to plan for came to
          * be counted as one the model admits no row at.
+         *
+         * <p>What else made the answer short travels beside the figure in its own vocabulary: a
+         * population the asking wrote some of, a number it could not hold. The figure is what puts
+         * the answer here; the rest are no less part of why it is short.
          */
         record Limited(Generator.UnresolvedCombination why,
                        souther.compiler.partition.WayToTheBorder way,
                        souther.compiler.partition.CompositionAccount uncomposed,
-                       CanonicalSelection<CompositionBudget> limitedBy)
+                       CanonicalSelection<CompositionBudget> limitedBy,
+                       CanonicalSelection<CompositionRepertoire> notAllOf,
+                       CanonicalSelection<CompositionCapacity> unheld)
                 implements Attempt, Searched, Prevented {
 
             public Limited {
                 Objects.requireNonNull(uncomposed,
                         "a search says what it was composed without, or that it was nothing");
                 Objects.requireNonNull(why, "a search that came to nothing says so in its own word");
+                Objects.requireNonNull(notAllOf, "an answer says what it walked some of, or none");
+                Objects.requireNonNull(unheld, "an answer says which numbers it could not hold, or none");
                 if (limitedBy == null || limitedBy.isEmpty()) {
                     throw new IllegalArgumentException("an answer short of what the point had says"
                             + " which figure made it short");
@@ -725,7 +743,8 @@ public sealed interface ItemAssessment {
 
             @Override
             public EstablishmentGap by() {
-                return EstablishmentGap.Composition.of(limitedBy.written());
+                return EstablishmentGap.Composition.of(limitedBy.written(), notAllOf.written(),
+                        unheld.written());
             }
         }
 

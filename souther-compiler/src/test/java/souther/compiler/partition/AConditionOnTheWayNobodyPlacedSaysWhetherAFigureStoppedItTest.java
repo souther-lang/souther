@@ -127,7 +127,7 @@ class AConditionOnTheWayNobodyPlacedSaysWhetherAFigureStoppedItTest {
     @Test
     void whatItHandsOverIsAConditionAndNeverAPointNothingWasComposedFor() {
         ReachabilityGap.Why why = ReachabilityGap.Why.TheWalkForItsPositionsWasStopped.by(
-                Set.of(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT));
+                Set.of(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT), Set.of());
 
         assertEquals(List.of(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT),
                 ((ReachabilityGap.Why.TheWalkForItsPositionsWasStopped) why).by().written(),

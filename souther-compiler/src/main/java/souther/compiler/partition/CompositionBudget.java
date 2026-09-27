@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.observe.RunSensitivity;
+
 /**
  * A figure this compiler holds a piece of its own work to.
  *
@@ -227,6 +229,14 @@ public enum CompositionBudget {
     /** The figure itself. What is done on reaching it is the member's to say. */
     public int maximum() {
         return maximum;
+    }
+
+    /**
+     * Whether a wider run could go past it: always, since every member is a figure this compiler
+     * compared something against and stopped on, which is what a wider run widens.
+     */
+    public RunSensitivity runSensitivity() {
+        return RunSensitivity.MAY_CHANGE;
     }
 
     /**

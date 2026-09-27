@@ -9,7 +9,9 @@ import souther.compiler.observe.RunSensitivity;
  * <p>What is there and was not kept, and what this compiler never got to. A value the observation
  * did not keep whole is a value that is there, named by the code an observation writes; the rest
  * arrived at no value and have no such code. What a reader does about them differs, so all of them
- * travel, and a quantity stopped in more than one way says each.
+ * travel, and a quantity stopped in more than one way says each. A quantity that reads several values
+ * has one more way to stop after all of them arrived: working out the number they come to, which
+ * {@link CouldNotWorkOut} says.
  *
  * <p>Whether a wider run would come to another answer is not what tells them apart. An observation
  * answers it out of the code it carries and the codes do not agree with each other — one a wider
@@ -105,6 +107,33 @@ public sealed interface ReadingGap {
         }
     }
 
+    /**
+     * Every value the quantity reads came back, and the number they come to is one this compiler
+     * could not hold.
+     *
+     * <p>Not {@link NoValue}: the row wrote something at every position, and saying otherwise tells
+     * a reader the row is missing a value it has. And not a reason about the row at all — the
+     * numbers are there, and what stopped is this compiler working out how far apart they stand.
+     *
+     * <p>Which of the two ways the number went unheld travels with it, because a host with more
+     * room answers one of them and nothing answers the other, and a reader is told which.
+     */
+    record CouldNotWorkOut(UnheldNumber why) implements ReadingGap {
+
+        public CouldNotWorkOut {
+            if (why == null) {
+                throw new IllegalArgumentException("a number not worked out says why it was not");
+            }
+        }
+
+        /** Unaffected either way: no allowance of this compiler's stopped the working out, and the
+         *  room that ran out, where it was room, is the host's. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
+        }
+    }
+
     ReadingGap NO_VALUE = new NoValue();
 
     ReadingGap COULD_NOT_WALK = new CouldNotWalk();
@@ -114,5 +143,10 @@ public sealed interface ReadingGap {
     /** The gap an observation's code is, for a reader holding one. */
     static ReadingGap of(Incompleteness.Code code) {
         return new Observation(code);
+    }
+
+    /** The gap a number this could not hold is, for a reader that met one. */
+    static ReadingGap of(UnheldNumber why) {
+        return new CouldNotWorkOut(why);
     }
 }

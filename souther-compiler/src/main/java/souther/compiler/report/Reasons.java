@@ -4,6 +4,7 @@ import souther.compiler.diag.SourceRendering;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.Target;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionCapacity;
 import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.CompositionShortfall;
 import souther.compiler.publish.CanonicalSelection;
@@ -193,6 +194,34 @@ final class Reasons {
     }
 
     /**
+     * What a number a search could not hold is called where a reader meets one: what it was working
+     * out, and whether a host with more room would hold it.
+     *
+     * <p>Its own sentence and not a figure's or a population's. No wider run of this compiler holds
+     * either kind, since no figure stopped it; what a reader can still do differs by the second half
+     * — measure on a machine with more room, or nothing — so it is said with every one of them, and
+     * a kind added arrives here as a compile error rather than as a name nobody wrote a sentence for.
+     */
+    static String unheld(CanonicalSelection<CompositionCapacity> capacities) {
+        List<String> out = new ArrayList<>();
+        for (CompositionCapacity each : capacities.written()) {
+            String what = switch (each.where()) {
+                case PLACES_A_PAIR_IS_WALKED_TO -> "the next place along a pair's line";
+                case PLACES_A_DISTANCE_MOVES_A_POSITION_TO ->
+                        "the place a distance moves one of a pair to";
+                case VALUES_OF_A_PROGRESSION_WALKED_TO -> "the next value of a progression";
+                case VALUES_A_POSITION_ON_THE_WAY_IS_WALKED_TO ->
+                        "the next value of a position on the way";
+            };
+            out.add(what + switch (each.why()) {
+                case MORE_ROOM_COULD_ANSWER -> ", which this host had no room to work out";
+                case NO_REPRESENTATION_EXISTS -> ", which has no representation this compiler holds";
+            });
+        }
+        return String.join("; ", out);
+    }
+
+    /**
      * What a search that came to nothing met of this compiler's, said before what it came to.
      *
      * <p>Before, because it is what the word after it is worth. A reader who has been told that
@@ -221,6 +250,10 @@ final class Reasons {
                     + writes(PublicationOrders.COMPOSITION_REPERTOIRES.keep(
                             shortfall.populations()))
                     + " rather than all of them");
+        }
+        if (!shortfall.unheld().isEmpty()) {
+            out.add("this compiler could not hold "
+                    + unheld(PublicationOrders.COMPOSITION_CAPACITIES.keep(shortfall.unheld())));
         }
         return String.join(", and ", out) + ": ";
     }

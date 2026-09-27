@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.observe.RunSensitivity;
+
 /**
  * A population this compiler offers some of rather than all of.
  *
@@ -79,5 +81,13 @@ public enum CompositionRepertoire {
      * about the model, they are told the range holds no value when what happened is that this
      * compiler tried one of them.
      */
-    PLACES_IN_A_RUN_THAT_ARE_NAMED
+    PLACES_IN_A_RUN_THAT_ARE_NAMED;
+
+    /**
+     * Whether a wider run could reach the rest: never, since raising anything reaches none of it.
+     * What would is somebody writing the rest, which is no run of this compiler.
+     */
+    public RunSensitivity runSensitivity() {
+        return RunSensitivity.UNAFFECTED;
+    }
 }

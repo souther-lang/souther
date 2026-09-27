@@ -131,26 +131,14 @@ public record Count(BigDecimal at) implements Place {
     }
 
     /**
-     * The counts added, and the difference of two counts.
+     * This count so many times over, for a run stepped by so many of its steps. The factor is a
+     * plain number rather than a count, since how many steps is no place on any order.
      *
-     * <p>Both are counts, because the domain that proves what a position holds reasons over
-     * differences: {@code a - b <= 0} bounds one position through another, and what it carries either
-     * side of the comparison is a coordinate. Scaling is there for the same reason — a run is
-     * stepped by so many of its steps — and the factor is a plain number rather than a count, since
-     * how many steps is no place on any order.
-     *
-     * <p>Not what weighs a count by a coefficient. What a form comes to is on no carrier's order at
-     * all and need not be a number any carrier counts to, so that arithmetic is
-     * {@link ExactRatio}'s, reached through {@link #exactly}.
+     * <p>No sum or difference of two counts sits beside it. A number worked out of two coordinates
+     * is on no carrier's order until somebody puts it on one, and whether it lands there, and what
+     * it means where it does not, is the question of the reader holding it. So that arithmetic is
+     * {@link ExactRatio}'s, reached through {@link #exactly}, and the way back is {@link #at}.
      */
-    public Count plus(Count other) {
-        return new Count(at.add(other.at));
-    }
-
-    public Count minus(Count other) {
-        return new Count(at.subtract(other.at));
-    }
-
     public Count times(BigDecimal factor) {
         return new Count(at.multiply(factor));
     }
@@ -188,21 +176,6 @@ public record Count(BigDecimal at) implements Place {
     /** This count moved onto a whole one, which is what a discrete carrier's order is made of. */
     public Count rounded(java.math.RoundingMode towards) {
         return new Count(at.setScale(0, towards));
-    }
-
-    /**
-     * The count halfway between this and {@code other}, exact where the halves land on the order and
-     * rounded towards this one where they do not.
-     *
-     * <p>Rounded rather than refused, because a caller asking for the middle of two counts is asking
-     * for one of them to stand for what lies between, and half a step is not a place on any carrier's
-     * order. Where the carrier has no step at all the halves are exact and nothing rounds.
-     */
-    public Count halfwayTo(Count other, Granularity spacing) {
-        BigDecimal span = other.at.subtract(at);
-        return new Count(at.add(spacing == Granularity.DISCRETE
-                ? span.divide(BigDecimal.valueOf(2), 0, java.math.RoundingMode.DOWN)
-                : span.divide(BigDecimal.valueOf(2))));
     }
 
     /** Whether this counts to a place on an order that steps: a count with a fraction in it is

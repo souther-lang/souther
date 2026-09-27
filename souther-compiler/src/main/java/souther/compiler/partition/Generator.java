@@ -3592,10 +3592,11 @@ public final class Generator {
             return new Placed.AtNone(switch (found) {
                 case NumericWitness.Standing.ProvedImpossible _ ->
                         new ReachabilityGap.ProvedImpossible(cut);
-                case NumericWitness.Standing.NotFound it when !it.stoppedBy().isEmpty() ->
+                case NumericWitness.Standing.NotFound it
+                        when !it.stoppedBy().isEmpty() || !it.unheld().isEmpty() ->
                         new ReachabilityGap.Uncomposed(cut,
                                 ReachabilityGap.Why.TheWalkForItsPositionsWasStopped.by(
-                                        it.stoppedBy()));
+                                        it.stoppedBy(), it.unheld()));
                 case null, default -> new ReachabilityGap.Uncomposed(cut, shared
                         ? new ReachabilityGap.Why.TwoNumbersAtOneLocation()
                         : new ReachabilityGap.Why.NoValueComposedForItsPositions());
