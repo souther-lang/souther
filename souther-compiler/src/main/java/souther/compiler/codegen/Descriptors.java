@@ -345,6 +345,10 @@ final class Descriptors {
      *  {@code Strings.admission}, not {@code StringDecoder.normalize()}) still resolve. */
     static final MethodTypeDesc MTD_stringDecoderFrom = MethodTypeDesc.of(CD_StringDecoder, CD_RDecoder);
     static final MethodTypeDesc MTD_leafLong = MethodTypeDesc.of(CD_LongDecoder);
+    /** {@code new LongDecoder(Decoder)}, over a decoder that asks the language first. */
+    static final MethodTypeDesc MTD_longDecoderInit =
+            MethodTypeDesc.of(ConstantDescs.CD_void, CD_RDecoder);
+    static final ClassDesc CD_BoundaryScalars = ClassDesc.of("souther.runtime.BoundaryScalars");
     static final MethodTypeDesc MTD_leafBool = MethodTypeDesc.of(CD_BoolDecoder);
     static final MethodTypeDesc MTD_leafDecimal = MethodTypeDesc.of(CD_DecimalDecoder);
     static final MethodTypeDesc MTD_leafTemporal = MethodTypeDesc.of(CD_TemporalDecoder);

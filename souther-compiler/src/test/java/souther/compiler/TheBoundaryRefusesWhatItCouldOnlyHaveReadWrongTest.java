@@ -16,8 +16,9 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * What a boundary is handed as a scalar is read as it is, and a value that could only be read by
- * changing it is refused at its path (spec §a-boundary-scalar-is-read-not-converted).
+ * What a boundary is handed is read as the value it determines, and a value the decoder would have
+ * to make up is refused at its path (spec §a-boundary-scalar-is-read-not-converted,
+ * §an-object-is-a-mapping, §decoder-error).
  *
  * <p>These are the readings a Raoh release decides and the language depends on, held here because
  * the release could change them without a line of this compiler changing. Before the release these
@@ -25,7 +26,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code Int} 0, a {@code java.sql.Date} was a day that depended on the JVM's default time zone, and a
  * {@code Map<String, Int>} took an {@code Integer} key. Each of those is a value nothing downstream
  * can tell from the value that was sent, which is what an {@code Int} that aborts on overflow
- * rather than wrapping exists to rule out. A Raoh that answers them again turns these red.
+ * rather than wrapping exists to rule out. A Raoh that answers them again turns these red. An
+ * {@code Int} from {@code 5.00} is the one reading the pinned Raoh takes and the language does not:
+ * a decoder of this compiler asks first.
  */
 class TheBoundaryRefusesWhatItCouldOnlyHaveReadWrongTest {
 
@@ -64,18 +67,26 @@ class TheBoundaryRefusesWhatItCouldOnlyHaveReadWrongTest {
         assertEquals(pointer, err.issues().asList().get(0).path().toJsonPointer(), what);
     }
 
-    /** An {@code Int} is read from a whole number a JDK integral type holds, and from nothing else. */
+    /**
+     * An {@code Int} is read from an integer representation and from nothing else: not from a value
+     * that is whole once a number that was written with a fraction is looked at, and not from one
+     * that may have been rounded before it arrived. What a boundary is handed decides, and the
+     * decoder does not infer afterwards what it meant.
+     */
     @Test
-    void anIntIsNotTruncatedNorWrappedNorTakenFromAFraction() throws Exception {
+    void anIntIsReadFromAnIntegerRepresentationAndNoOther() throws Exception {
         assertRefusedAt("/n", read("n", 1.9), "1.9");
-        assertRefusedAt("/n", read("n", 2.0), "2.0, which is a floating-point number");
+        assertRefusedAt("/n", read("n", 5.0), "5.0, which may have been rounded before it arrived");
         assertRefusedAt("/n", read("n", BigInteger.TWO.pow(70)), "2^70");
         assertRefusedAt("/n", read("n", new BigDecimal("5.5")), "5.5");
-        assertRefusedAt("/n", read("n", new AtomicInteger(3)), "a number no JDK integral type is");
+        assertRefusedAt("/n", read("n", new BigDecimal("5.00")), "5.00, whose value is whole");
+        assertRefusedAt("/n", read("n", new BigDecimal("5E+2")), "5E+2, whose value is whole");
+        assertRefusedAt("/n", read("n", new AtomicInteger(3)), "a carrier that is no integer's");
         assertRefusedAt("/n", read("n", "5"), "text");
         assertTrue(read("n", 5_000_000_000L).isOk());
         assertTrue(read("n", 5).isOk());
-        assertTrue(read("n", new BigDecimal("5.00")).isOk(), "5.00 is the whole number 5");
+        assertTrue(read("n", BigInteger.valueOf(5)).isOk());
+        assertTrue(read("n", BigDecimal.valueOf(5)).isOk(), "a BigDecimal with no scale is an integer");
     }
 
     /** The same at a JSON field, where a number is written with or without a point. */
@@ -111,7 +122,8 @@ class TheBoundaryRefusesWhatItCouldOnlyHaveReadWrongTest {
         assertTrue(read("at", java.time.Instant.EPOCH).isOk());
     }
 
-    /** A boundary map has string keys, and one that has another is refused and not carried in. */
+    /** A boundary map has string keys, and one that has another is refused and not carried in
+     *  (spec §an-object-is-a-mapping). It is the object's rule and not a scalar's. */
     @Test
     void aMapKeyedByStringTakesNoOtherKey() throws Exception {
         assertRefusedAt("/m", read("m", Map.of(1, 1L)), "an Integer key");
@@ -120,7 +132,8 @@ class TheBoundaryRefusesWhatItCouldOnlyHaveReadWrongTest {
 
     /**
      * A path is a JSON Pointer as RFC 6901 writes it: {@code /} and {@code ~} inside a key are
-     * escaped, so the key {@code a/b} and the member {@code b} of {@code a} are two paths.
+     * escaped, so the key {@code a/b} and the member {@code b} of {@code a} are two paths
+     * (spec §decoder-error). It is how an error is reported and not a scalar's rule.
      */
     @Test
     void aPathEscapesTheCharactersAPointerWouldOtherwiseSplitOn() throws Exception {
