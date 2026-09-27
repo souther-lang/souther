@@ -467,6 +467,14 @@ class CompileInvariantConstraintTest {
                     invariant Map.size(value) < 1
                 """, input);
         assertEquals(sole(raoh.maxSize(0).decode(input, Path.ROOT)), atMost);
+
+        Map<String, Object> none = Map.of();
+        RecordDecoder<Object, Object> empty = new RecordDecoder<>((in, path) -> Result.ok(none));
+        Issue nonEmpty = soleIssue("""
+                data V = Map<String, Int>
+                    invariant Map.size(value) >= 1
+                """, none);
+        assertEquals(sole(empty.nonempty().decode(none, Path.ROOT)), nonEmpty);
     }
 
     @Test

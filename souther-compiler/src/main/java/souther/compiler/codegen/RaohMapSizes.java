@@ -1,6 +1,7 @@
 package souther.compiler.codegen;
 
 import net.unit8.raoh.ErrorCodes;
+import net.unit8.raoh.MessageKeys;
 import souther.compiler.core.BoundaryConstraint;
 
 import java.lang.classfile.ClassBuilder;
@@ -28,11 +29,12 @@ import static souther.compiler.codegen.Descriptors.MTD_invariantFailure;
  *
  * <p>Checked on the map the model declares — its keys decoded and canonical — because that is the
  * value the clauses are about, and the clauses of one newtype are checked in the order they are
- * declared on one value. Raoh's own {@code minSize} and {@code maxSize} are on the decoder of a
- * string-keyed object, which is the map before its keys are decoded, so they are not what runs here.
- * What runs is the generic step every decoder has ({@code flatMapWithPath}), failing with the issue
- * Raoh's constraint fails with: {@code too_small} with {@code min} and {@code actual}, {@code too_big}
- * with {@code max} and {@code actual}, and Raoh's default message.
+ * declared on one value. Raoh's own {@code nonempty}, {@code minSize} and {@code maxSize} are on
+ * the decoder of a string-keyed object, which is the map before its keys are decoded, so they are not
+ * what runs here. What runs is the generic step every decoder has ({@code flatMapWithPath}), failing
+ * with the issue Raoh's constraint fails with: {@code too_small} under emptiness's message key for
+ * {@code nonempty}, {@code too_small} with {@code min} and {@code actual}, {@code too_big} with
+ * {@code max} and {@code actual}, and Raoh's default message.
  *
  * <p>That issue is written out here, and so it is a copy of Raoh's. Which constraint a clause is was
  * decided by the checker; this only says what Raoh calls it, and a Raoh that came to call it
@@ -40,6 +42,7 @@ import static souther.compiler.codegen.Descriptors.MTD_invariantFailure;
  */
 final class RaohMapSizes {
 
+    private static final String NON_EMPTY = "__mapNonEmpty";
     private static final String AT_LEAST = "__mapMinSize";
     private static final String AT_MOST = "__mapMaxSize";
 
@@ -55,6 +58,14 @@ final class RaohMapSizes {
      */
     static void emit(CodeBuilder code, ClassDesc decoderClass, BoundaryConstraint.OfMap constraint) {
         switch (constraint) {
+            case BoundaryConstraint.MapNonEmpty _ -> {
+                DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
+                        DirectMethodHandleDesc.Kind.STATIC, decoderClass, NON_EMPTY,
+                        MTD_invariantFailure);
+                code.invokedynamic(Lambdas.callSite(Lambdas.Sam.BI_FUNCTION, impl,
+                        MTD_invariantFailure));
+                code.invokeinterface(CD_RDecoder, "flatMapWithPath", MTD_flatMapWithPath);
+            }
             case BoundaryConstraint.MapMinSize m -> chain(code, decoderClass, AT_LEAST, m.n());
             case BoundaryConstraint.MapMaxSize m -> chain(code, decoderClass, AT_MOST, m.n());
         }
@@ -69,10 +80,47 @@ final class RaohMapSizes {
         code.invokeinterface(CD_RDecoder, "flatMapWithPath", MTD_flatMapWithPath);
     }
 
-    /** Emits the two helpers {@link #emit} chains, onto the decoder class being built. */
+    /** Emits the helpers {@link #emit} chains, onto the decoder class being built. */
     static void emitHelpers(ClassBuilder cb) {
+        emitNonEmptyHelper(cb);
         emitHelper(cb, AT_LEAST, ErrorCodes.TOO_SMALL, "min", "must have at least ");
         emitHelper(cb, AT_MOST, ErrorCodes.TOO_BIG, "max", "must have at most ");
+    }
+
+    /**
+     * {@code static Result __mapNonEmpty(Object map, Path path)}: the map where it has an entry, and
+     * otherwise what Raoh's {@code nonempty} fails with — {@code too_small} under the message key
+     * of emptiness, with {@code min} one and {@code actual} nought.
+     */
+    private static void emitNonEmptyHelper(ClassBuilder cb) {
+        cb.withMethodBody(NON_EMPTY, MTD_invariantFailure,
+                ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC, code -> {
+            Label empty = code.newLabel();
+            code.aload(0);
+            code.checkcast(CD_Map);
+            code.invokeinterface(CD_Map, "isEmpty", MethodTypeDesc.of(ConstantDescs.CD_boolean));
+            code.ifne(empty);
+            code.aload(0);
+            code.invokestatic(CD_RResult, "ok", MTD_Rok, true);
+            code.areturn();
+            code.labelBinding(empty);
+            code.aload(1);                                                // path
+            code.loadConstant(ErrorCodes.TOO_SMALL);
+            code.loadConstant(MessageKeys.TOO_SMALL_NONEMPTY);
+            code.aconst_null();                                           // no custom message
+            code.loadConstant("must not be empty");
+            code.loadConstant("min");
+            code.iconst_1();
+            code.invokestatic(CD_Integer, "valueOf", MethodTypeDesc.of(CD_Integer, ConstantDescs.CD_int));
+            code.loadConstant("actual");
+            code.iconst_0();
+            code.invokestatic(CD_Integer, "valueOf", MethodTypeDesc.of(CD_Integer, ConstantDescs.CD_int));
+            code.invokestatic(CD_Map, "of", MethodTypeDesc.of(CD_Map, ConstantDescs.CD_Object,
+                    ConstantDescs.CD_Object, ConstantDescs.CD_Object, ConstantDescs.CD_Object), true);
+            code.invokestatic(CD_RResult, "failWith", MethodTypeDesc.of(CD_RResult, CD_RPath,
+                    CD_String, CD_String, CD_String, CD_String, CD_Map), true);
+            code.areturn();
+        });
     }
 
     /**

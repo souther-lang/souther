@@ -13,6 +13,7 @@ import souther.compiler.types.Type;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * What a value of a declared data is made of and what must hold of one, elaborated once.
@@ -82,9 +83,10 @@ public final class ExecutableInvariants {
         // declared in: a newtype and a product of one field hold the same clauses of that field. A
         // data of more fields has no one value for a constraint to be about, and the boundary
         // checks each of its clauses whole.
-        Map<Clause.Id, BoundaryCheck> boundary = fields.size() == 1
-                ? BoundaryConstraints.of(symbols, data.declares(), fields.get(0), form, statements)
-                : Map.of();
+        Optional<BoundaryConstraints.Checks> boundary = fields.size() == 1
+                ? Optional.of(BoundaryConstraints.of(symbols, data.declares(), fields.get(0), form,
+                        statements))
+                : Optional.empty();
         List<ValueShape.Invariant> invariants = new ArrayList<>();
         for (GoverningInvariant governed : governing) {
             Hir.InvariantClause clause = governed.settled().clause();
@@ -97,11 +99,9 @@ public final class ExecutableInvariants {
                         .say(new DeclarationMessage.AnInvariantExpressionIsBool(
                                 Type.show(condition.type()))).build());
             }
-            // A clause the constraint reading did not reach has nothing proved of it, and is checked
-            // as the condition it is.
-            BoundaryCheck checked = boundary.get(governed.id());
             invariants.add(new ValueShape.Invariant(clause.name(), condition,
-                    checked != null ? checked : BoundaryCheck.conditionOnly()));
+                    boundary.map(checks -> checks.of(governed.id()))
+                            .orElseGet(BoundaryCheck::conditionOnly)));
         }
         return new ValueShape(data.declares(), fields, invariants);
     }

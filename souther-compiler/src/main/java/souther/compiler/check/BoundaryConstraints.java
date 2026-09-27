@@ -10,6 +10,7 @@ import souther.compiler.core.BoundaryConstraint.FixedLength;
 import souther.compiler.core.BoundaryConstraint.FixedSize;
 import souther.compiler.core.BoundaryConstraint.MapMaxSize;
 import souther.compiler.core.BoundaryConstraint.MapMinSize;
+import souther.compiler.core.BoundaryConstraint.MapNonEmpty;
 import souther.compiler.core.BoundaryConstraint.Max;
 import souther.compiler.core.BoundaryConstraint.MaxLength;
 import souther.compiler.core.BoundaryConstraint.MaxSize;
@@ -94,24 +95,57 @@ public final class BoundaryConstraints {
      * the two answers are about one clause, where an index would say only that two lists happen to
      * be in step.
      *
-     * <p>A clause this reading did not reach is not here. Nothing of it was proved equal to a
-     * constraint, so it is checked as its own condition — which holds a value to the whole rule
-     * whatever is missing here, since the rules themselves come from the settled form.
+     * <p>Whether the reading reached every clause is part of the answer ({@link Checks}), because
+     * a clause it did not reach and a clause it has no answer for are two different things.
      */
-    public static Map<Clause.Id, BoundaryCheck> of(Symbols symbols, TypeSymbol.AtModule named,
-                                                   ValueShape.Field sole,
-                                                   ExpandedClauseLookup form,
-                                                   InvariantStatements statements) {
+    public static Checks of(Symbols symbols, TypeSymbol.AtModule named, ValueShape.Field sole,
+                            ExpandedClauseLookup form, InvariantStatements statements) {
         return new BoundaryConstraints(symbols, sole.name()).of(named, sole.type(), form,
                 statements);
     }
 
-    private Map<Clause.Id, BoundaryCheck> of(TypeSymbol.AtModule named, Type base,
-                                             ExpandedClauseLookup form,
-                                             InvariantStatements statements) {
+    /**
+     * How the boundary checks each clause the reading reached, and whether it reached them all.
+     *
+     * @param reached the answer for each clause the reading reached, by which clause it is
+     * @param everyClauseReached whether every clause that governs the data was among them
+     */
+    public record Checks(Map<Clause.Id, BoundaryCheck> reached, boolean everyClauseReached) {
+
+        public Checks {
+            reached = Map.copyOf(reached);
+        }
+
+        /**
+         * How the boundary checks {@code clause}.
+         *
+         * <p>A clause the reading did not reach has nothing proved of it, and is checked as its own
+         * condition — which holds a value to the whole rule, since the rules themselves come from
+         * the settled form. Where every clause was reached, one with no answer is not such a clause:
+         * it is the two readings of one data disagreeing about which clauses it has, and is refused
+         * rather than answered as though nothing had been proved.
+         *
+         * @throws IllegalStateException where every clause was reached and {@code clause} was not
+         *     among them
+         */
+        public BoundaryCheck of(Clause.Id clause) {
+            BoundaryCheck answered = reached.get(clause);
+            if (answered != null) {
+                return answered;
+            }
+            if (everyClauseReached) {
+                throw new IllegalStateException("clause " + clause + " governs the data, and the"
+                        + " reading that reached every clause governing it has no answer for it");
+            }
+            return BoundaryCheck.conditionOnly();
+        }
+    }
+
+    private Checks of(TypeSymbol.AtModule named, Type base, ExpandedClauseLookup form,
+                      InvariantStatements statements) {
+        ExpandedRules rules = TypeOps.expandedInvariants(named, symbols, form);
         Map<Clause.Id, BoundaryCheck> out = new LinkedHashMap<>();
-        for (TypeOps.Declared declared
-                : TypeOps.expandedInvariants(named, symbols, form).reached()) {
+        for (TypeOps.Declared declared : rules.reached()) {
             List<BoundaryConstraint> stated = new ArrayList<>();
             boolean checkCondition = false;
             // The parts the clause was split into, with the tree the expansion made of each. Split
@@ -135,7 +169,7 @@ public final class BoundaryConstraints {
                         return was;
                     });
         }
-        return out;
+        return new Checks(out, rules.everyRuleReached());
     }
 
     /**
@@ -301,7 +335,11 @@ public final class BoundaryConstraints {
         };
     }
 
-    /** The same for a map, bounded by entry count. {@code >= 1} is a minimum of one entry. */
+    /**
+     * The same for a map, bounded by entry count, and read the way a list's size is: a bound at one
+     * entry is non-emptiness, since a map and a list are both collections whose emptiness is said
+     * on its own.
+     */
     private static Optional<BoundaryConstraint> ofMapSize(ComparisonClaim placed, Core against) {
         Integer n = sizeBound(against);
         if (n == null || !(placed instanceof ComparisonClaim.Cut cut)) {
@@ -311,7 +349,8 @@ public final class BoundaryConstraints {
         Long at = inclusiveAt(end, cut.holdsAtTheValue(), n, 0, Integer.MAX_VALUE);
         return at == null ? Optional.empty()
                 : Optional.of(end == EndSide.LOWER
-                        ? new MapMinSize(at.intValue()) : new MapMaxSize(at.intValue()));
+                        ? at == 1 ? new MapNonEmpty() : new MapMinSize(at.intValue())
+                        : new MapMaxSize(at.intValue()));
     }
 
     /** The literal bound a size is held against, or null when it is held against something else. */

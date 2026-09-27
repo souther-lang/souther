@@ -123,9 +123,10 @@ class AnOutputReadsHowTheBoundaryChecksAClauseTest {
                 boundaryOf("Handle"));
     }
 
+    /** A map's bound at one entry is its emptiness, as a list's is. */
     @Test
     void aMapsSizeIsAConstraintOfTheMap() {
-        assertEquals(List.of(new BoundaryCheck(List.of(new BoundaryConstraint.MapMinSize(1)), false)),
+        assertEquals(List.of(new BoundaryCheck(List.of(new BoundaryConstraint.MapNonEmpty()), false)),
                 boundaryOf("Tally"));
     }
 

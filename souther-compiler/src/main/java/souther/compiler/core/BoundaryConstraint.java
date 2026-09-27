@@ -119,6 +119,9 @@ public sealed interface BoundaryConstraint {
     /** About a {@code Map}. */
     sealed interface OfMap extends BoundaryConstraint {}
 
+    /** At least one entry, stated as emptiness rather than as a minimum of one — as a list's is. */
+    record MapNonEmpty() implements OfMap {}
+
     /** At least {@code n} entries. */
     record MapMinSize(int n) implements OfMap {}
 
