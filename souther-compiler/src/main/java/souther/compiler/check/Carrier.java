@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
+import souther.compiler.core.IntNegation;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Place;
@@ -239,7 +240,7 @@ public sealed interface Carrier extends ValueOrder {
             case TIME -> Carrier.TIME;
             case INSTANT -> Carrier.INSTANT;
             // `String` is ordered lexicographically and stands for itself, having no count to
-            // embed into and needing none. `Bool` and `Raw` are not ordered at all.
+            // embed into and needing none. `Bool` is not ordered at all.
             case STRING -> TEXT;
             // A Rational is ordered and is still on no carrier. A carrier is what a position's
             // values are placed on, and no position is declared Rational: the type has no external
@@ -247,7 +248,7 @@ public sealed interface Carrier extends ValueOrder {
             // here beside the counted primitives rather than left to the ordering question above,
             // which this one is not the same as.
             case RATIONAL -> null;
-            case BOOL, RAW -> null;
+            case BOOL -> null;
         };
     }
 
@@ -555,6 +556,7 @@ public sealed interface Carrier extends ValueOrder {
                 case Core.Decimal d -> onTheGrid(Count.of(d.value()));
                 // A minus in front of a value is part of the value written down, and these are the
                 // only carriers with one to write: nothing negates a date, a case or a string.
+                case Core.Neg n when IntNegation.isTheLeastInt(n.operand()) -> null;
                 case Core.Neg n -> {
                     Place inner = literalOf(n.operand(), symbols);
                     yield inner == null ? null : Count.number(inner).negate();

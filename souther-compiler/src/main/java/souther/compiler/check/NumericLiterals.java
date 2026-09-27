@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.core.IntNegation;
 
 import java.math.BigDecimal;
 
@@ -39,6 +40,7 @@ public final class NumericLiterals {
         return switch (e) {
             case Hir.IntLit lit -> BigDecimal.valueOf(lit.value());
             case Hir.DecimalLit lit -> normalized(lit.value());
+            case Hir.Neg neg when IntNegation.isTheLeastInt(neg.operand()) -> null;
             case Hir.Neg neg -> negated(literalOf(neg.operand()));
             case null, default -> null;
         };

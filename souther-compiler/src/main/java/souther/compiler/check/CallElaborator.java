@@ -62,8 +62,8 @@ public final class CallElaborator {
      * would throw at run time, so it is refused here. The empty-list literal (element {@code
      * Nothing}) is fine: it sorts to itself and its max is {@code None}.
      */
-    private static Type requiresOrdering(Kernel kernel, Hir.Apply call, Type result,
-                                         CheckContext ctx) {
+    private static OrderingRequirement requiresOrdering(Kernel kernel, Hir.Apply call,
+                                                        Type result, CheckContext ctx) {
         OrderedElement where = ORDERED_ELEMENT.get(kernel);
         if (where == null) {
             return null;
@@ -77,10 +77,13 @@ public final class CallElaborator {
         if (element == null) {
             return null;
         }
-        if (element instanceof Type.Nothing
-                || TypeOps.supportsOrdering(element, ctx.inners(), ctx.symbols(), ctx.kinds(),
-                        ctx.published())) {
-            return element;
+        if (element instanceof Type.Nothing) {
+            return OrderingRequirement.overNothingToOrder(element);
+        }
+        Ordering how = Ordering.of(element, ctx.inners(), ctx.symbols(), ctx.kinds(),
+                ctx.published());
+        if (how != null) {
+            return OrderingRequirement.orderedBy(element, how);
         }
         String name = call.written().substring(call.written().indexOf('.') + 1);
         throw needsOrdered(call.pos(), name, element,
@@ -95,20 +98,44 @@ public final class CallElaborator {
      * what the list holds, so it reads the binding the key's declared result took rather than the
      * call's result.
      */
-    private static Type requiresOrderedKey(Kernel kernel, Hir.Apply call, Type.FnOf declaredKey,
-                                           Map<String, Type> bindings, CheckContext ctx) {
+    private static OrderingRequirement requiresOrderedKey(Kernel kernel, Hir.Apply call,
+                                                          Type.FnOf declaredKey,
+                                                          Map<String, Type> bindings,
+                                                          CheckContext ctx) {
         if (kernel != Kernel.LIST_SORT_BY) {
             return null;
         }
         Type answered = TypeOps.substitute(declaredKey.result(), bindings);
-        if (BottomInfer.isBottom(answered) || answered instanceof Type.Var
-                || TypeOps.supportsOrdering(answered, ctx.inners(), ctx.symbols(), ctx.kinds(),
-                        ctx.published())) {
-            return answered;
+        if (BottomInfer.isBottom(answered) || answered instanceof Type.Var) {
+            return OrderingRequirement.overNothingToOrder(answered);
+        }
+        Ordering how = Ordering.of(answered, ctx.inners(), ctx.symbols(), ctx.kinds(),
+                ctx.published());
+        if (how != null) {
+            return OrderingRequirement.orderedBy(answered, how);
         }
         throw CompileException.of(Diagnostic
                         .at(call.pos())
                         .hint(new TypeMessage.MapToAnOrderedFieldFirst()).say(new TypeMessage.TheKeyMustBeAnOrderedValue(call.written(), Type.show(answered))).build());
+    }
+
+    /**
+     * What an ordering requirement was checked against and what orders it, which the check settles
+     * in the step that admits the subject: an admitted subject is one that has an order, and that
+     * answer is the one kept.
+     *
+     * @param ordering empty where the subject stands for no value to order yet
+     */
+    private record OrderingRequirement(Type subject, Optional<Core.OrderingBasis> ordering) {
+
+        static OrderingRequirement orderedBy(Type subject, Ordering how) {
+            return new OrderingRequirement(subject,
+                    Optional.of(new Core.OrderingBasis(how.basis())));
+        }
+
+        static OrderingRequirement overNothingToOrder(Type subject) {
+            return new OrderingRequirement(subject, Optional.empty());
+        }
     }
 
     /**
@@ -285,7 +312,7 @@ public final class CallElaborator {
         for (int i = 0; i < params.size(); i++) {
             if (params.get(i) instanceof Type.FnOf declared) {
                 Type.FnOf at = (Type.FnOf) TypeOps.substitute(declared, bind);
-                Type answered = ca.block(i, call.written(), at.params());
+                Type answered = ca.block(i, call.written(), at);
                 // What the function answers settles the rest: this is an application of a declared
                 // signature and nothing more. The fold rule that reads a step's result as an
                 // accumulator to grow is one operation's meaning, and an operation kept standing is
@@ -423,9 +450,10 @@ public final class CallElaborator {
         }
 
         /** Argument {@code i} as a block (or a function value standing in for one), returning the
-         * result type the block yields at {@code paramTypes}. */
-        Type block(int i, String fnName, List<Type> paramTypes) {
-            Core c = Elaborator.elaborateBlockArg(fnName, args.get(i), paramTypes, env, ctx);
+         * result type the block yields at what {@code takes} says it takes. What {@code takes}
+         * says it answers is what a body that is itself a function is read against. */
+        Type block(int i, String fnName, Type.FnOf takes) {
+            Core c = Elaborator.elaborateBlockArg(fnName, args.get(i), takes, env, ctx);
             cores[i] = c;
             return ((Type.FnOf) c.type()).result();
         }
@@ -454,7 +482,7 @@ public final class CallElaborator {
         void settledAs(int i, String fnName, Type.FnOf takes, String what) {
             Core read = cores[i];
             if (!((Type.FnOf) read.type()).params().equals(takes.params())) {
-                read = Elaborator.elaborateBlockArg(fnName, args.get(i), takes.params(), env, ctx);
+                read = Elaborator.elaborateBlockArg(fnName, args.get(i), takes, env, ctx);
             }
             if (takes.result() instanceof Type.Var) {
                 cores[i] = read;
@@ -768,14 +796,15 @@ public final class CallElaborator {
             // signature could not state, and the emitter's special cases. They read the settled
             // substitution and result — they are checks on what the application became, not part
             // of how an application is typed.
-            Type orderingSubject = null;
+            OrderingRequirement orderingSubject = null;
             for (Type param : intrinsic.parameters()) {
                 if (param instanceof Type.FnOf declaredStep) {
                     orderingSubject = requiresOrderedKey(kernel, call, declaredStep,
                             applied.substitution(), ctx);
                 }
             }
-            Type orderedElement = requiresOrdering(kernel, call, applied.result(), ctx);
+            OrderingRequirement orderedElement = requiresOrdering(kernel, call, applied.result(),
+                    ctx);
             if (orderedElement != null) {
                 orderingSubject = orderedElement;
             }
@@ -786,7 +815,8 @@ public final class CallElaborator {
             if (kernel == Kernel.STRING_MATCHES) {
                 fact = settledPattern(new BoundExpr(args.get(0), env.values()), ctx.symbols());
             } else if (orderingSubject != null) {
-                fact = new Core.KernelFact.OrderingSubject(orderingSubject);
+                fact = new Core.KernelFact.OrderingSubject(orderingSubject.subject(),
+                        orderingSubject.ordering());
             } else {
                 fact = Core.KernelFact.None.INSTANCE;
             }
@@ -1049,7 +1079,7 @@ public final class CallElaborator {
                 case TIME -> java.time.LocalTime.parse(text);
                 case DATETIME -> java.time.LocalDateTime.parse(text);
                 case INSTANT -> instantInUtc(text, at);
-                case INT, STRING, BOOL, DECIMAL, RATIONAL, RAW ->
+                case INT, STRING, BOOL, DECIMAL, RATIONAL ->
                         throw new IllegalStateException("`" + fn + "` names no temporal");
             };
         } catch (java.time.format.DateTimeParseException _) {

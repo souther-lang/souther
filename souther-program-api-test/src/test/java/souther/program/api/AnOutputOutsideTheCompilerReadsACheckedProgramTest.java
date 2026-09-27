@@ -28,6 +28,7 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -905,10 +906,18 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
             data RowsIn = { rows: List<Row> }
             data RowsOut = { sorted: List<Row> }
             data EmptyOut = { sorted: List<Int> }
+            data Amount = Int
+            data Won
+            data Lost
+            data Stage = Won | Lost
+            data StageN = Stage
+            data CasesIn = { wons: List<Won>, amounts: List<Amount>, stages: List<StageN> }
+            data CasesOut = { wons: List<Won>, amounts: List<Amount>, stages: List<StageN> }
 
             behavior run : (i: In) -> Out constructs Out
             behavior sortByRun : (i: RowsIn) -> RowsOut constructs RowsOut
             behavior emptyRun : () -> EmptyOut constructs EmptyOut
+            behavior casesRun : (i: CasesIn) -> CasesOut constructs CasesOut
 
             let run (i) =
                 Out { sorted = List.sort(i.ns),
@@ -918,6 +927,10 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
             let sortByRun (i) = RowsOut { sorted = List.sortBy(r -> r.weight, i.rows) }
 
             let emptyRun = EmptyOut { sorted = List.sort([]) }
+
+            let casesRun (i) =
+                CasesOut { wons = List.sort(i.wons), amounts = List.sort(i.amounts),
+                           stages = List.sort(i.stages) }
             """;
 
     /** The one call in {@code body} reaching {@code kernel} — a fixture is written to hold exactly
@@ -987,6 +1000,31 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
                 "the checker still settles a subject for an empty-list literal");
         assertInstanceOf(Type.Nothing.class, subject.type(),
                 "the subject is Nothing, not an element this call never had");
+        assertEquals(Optional.empty(), subject.ordering(),
+                "there is no value to order, so nothing orders it");
+    }
+
+    /**
+     * What a sort orders its values by is settled and carried, as the enumeration listing a case and
+     * the number a quantity wraps — neither of which is the element type the call names.
+     */
+    @Test
+    void aSortSaysWhatOrdersItsElementAndNotOnlyWhatTheElementIs() {
+        CheckedProgram program = checked(ORDERS_LISTS_THREE_WAYS);
+        Core body = ((CheckedImplementation.Body)
+                named(program.module("demo"), "casesRun").implementation()).body();
+        List<String> ordered = new ArrayList<>();
+        for (Core node : everyNodeOf(body)) {
+            if (node instanceof Core.Call call
+                    && call.fn() instanceof Core.Reached.OfKernel k
+                    && k.kernel() == Kernel.LIST_SORT) {
+                Core.KernelFact.OrderingSubject subject = assertInstanceOf(
+                        Core.KernelFact.OrderingSubject.class, factOf(call));
+                ordered.add(Type.show(subject.type()) + " by "
+                        + Type.show(subject.ordering().orElseThrow().type()));
+            }
+        }
+        assertEquals(List.of("Won by Stage", "Amount by Int", "StageN by Stage"), ordered);
     }
 
     /** Every helper a call in {@code body} reaches, walking every node of it. */

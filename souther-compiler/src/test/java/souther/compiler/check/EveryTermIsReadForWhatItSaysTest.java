@@ -22,6 +22,7 @@ import souther.compiler.types.WrittenOwner;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -195,7 +196,10 @@ class EveryTermIsReadForWhatItSaysTest {
 
     private static Core compared(BinOp op, ConstructOccurrence occurrence) {
         return new Core.Binary(op, new Core.Int(1, Type.INT, POS), new Core.Int(2, Type.INT, POS),
-                Core.BinaryReading.AS_THEY_STAND, occurrence, Type.BOOL, POS);
+                Core.BinaryReading.AS_THEY_STAND,
+                op.ordersItsOperands() ? Optional.of(new Core.OrderingBasis(Type.INT))
+                        : Optional.empty(),
+                occurrence, Type.BOOL, POS);
     }
 
     private static Core forked(List<BindingOwner> expansion) {

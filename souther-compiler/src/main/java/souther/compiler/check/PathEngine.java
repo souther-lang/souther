@@ -221,7 +221,7 @@ final class PathEngine {
      * the one that forgot fell over on every ordinary unit case.
      */
     Entered enteringArm(Core.Case arm, Core scrutinee, Known k, Denotations at) {
-        Entered in = arm.binder() == null || arm.bindType() == null
+        Entered in = arm.binder() == null
                 ? new Entered(k, at)
                 : opening(arm, scrutinee, k, at);
         return whatTakingThisCaseSays(arm, scrutinee,
@@ -389,7 +389,7 @@ final class PathEngine {
     /** What the arm holds of the answer: what it binds where it binds one, and the answer itself
      * where it does not — an arm may state a relation about a case that carries nothing. */
     private static Core answered(Core.Case arm, Core scrutinee) {
-        return arm.binder() == null || arm.bindType() == null ? scrutinee
+        return arm.binder() == null ? scrutinee
                 : Terms.read(arm.binder(), arm.bindType(), arm.pos());
     }
 

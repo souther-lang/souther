@@ -959,32 +959,26 @@ final class BodyGen {
             // What is cast is asked of the arm: the same question is asked of it wherever it matters
             // which classes an emitted `match` names.
             Type cast = c.castOnBinding(st);
-            switch (c.pattern().binding()) {
-                case Refinement.OptionPresent wrapped -> {
-                    if (cast == null) {
-                        return;
-                    }
-                    CaseGen.pushBound(code, wrapped, sSlot);
+            switch (c.binding()) {
+                case Core.ArmBinding.Unbound _ -> { }
+                case Core.ArmBinding.Payload payload -> {
+                    CaseGen.pushBound(code, payload.carrier(), sSlot);
                     int bslot = slot(cast);
                     unbox(code, cast, bslot);
-                    bind(c.binder(), bslot, cast);
+                    bind(payload.binder(), bslot, cast);
                 }
-                case Refinement.Direct itself -> {
-                    if (c.binder() == null || itself.bound() == null) {
-                        return;
-                    }
+                case Core.ArmBinding.Selected selected -> {
                     if (cast == null) {
                         // nothing narrowed it: the value is the subject, where it already is
-                        bind(c.binder(), sSlot, st);
+                        bind(selected.binder(), sSlot, st);
                         return;
                     }
                     // a data case binds the instance; a primitive case (e.g. Int) unboxes the value
-                    CaseGen.pushBound(code, itself, sSlot);
+                    code.aload(sSlot);
                     int bslot = slot(cast);
                     unbox(code, cast, bslot);
-                    bind(c.binder(), bslot, cast);
+                    bind(selected.binder(), bslot, cast);
                 }
-                case Refinement.OptionAbsent _ -> { }
             }
         }
 
@@ -1210,7 +1204,7 @@ final class BodyGen {
         private void kernel(Kernel kernel, Core.Call call) {
             if (call.settlement() instanceof Core.CallSettlement.AtKernel(
                     _, Core.KernelFact.OrderingSubject ordered)) {
-                boolean pushed = comparatorFor(ordered.type());
+                boolean pushed = comparatorFor(ordered);
                 if (pushed) {
                     Intrinsics.emitWithComparator(this, kernel, call);
                     return;
@@ -1944,16 +1938,13 @@ final class BodyGen {
          * added to {@link Ordering} would fall the same way through an {@code instanceof} chain.
          */
         private void ordered(Comparison comparison, ComparisonClaim.Cut cut) {
-            // Whether the two may be compared at all was settled by BinaryElaborator against the
-            // types as written; this reads what they open to.
-            Ordering how = Ordering.ofComparison(comparison, ctx.inners, symbols, ctx.kinds,
-                    ctx.published);
-            if (how == null) {
-                throw new IllegalStateException("a comparison the checker admitted has no order: "
-                        + comparison.left().type() + " " + cut.statedRelation() + " "
-                        + comparison.right().type());
-            }
-            switch (how.opened()) {
+            // Whether the two may be compared at all, and what orders them, was settled by
+            // BinaryElaborator against the types as written; this lowers that order.
+            Core.OrderingBasis basis = comparison.ordering().orElseThrow(
+                    () -> new IllegalStateException("a comparison the checker admitted says what"
+                            + " orders it: " + comparison.left().type() + " "
+                            + cut.statedRelation() + " " + comparison.right().type()));
+            switch (Ordering.ofBasis(basis)) {
                 case Ordering.Longs _ -> {
                     unwrapNewtypeValue(genExpr(comparison.left()));
                     unwrapNewtypeValue(genExpr(comparison.right()));
@@ -2050,18 +2041,20 @@ final class BodyGen {
         }
 
         /**
-         * Pushes the comparator values of {@code t} are sorted by, where the value's own
+         * Pushes the comparator the values of a sort are ordered by, where the value's own
          * {@code compareTo} is not the order, and answers whether it pushed one.
          *
          * <p>An enumeration's order is on its sum, and text's is {@code Strings.ordering()}. Where
          * the JVM value's own {@code compareTo} is the order nothing is pushed, and the call goes to
-         * the table row, which is the same runtime method without the comparator.
+         * the table row, which is the same runtime method without the comparator. Nothing is pushed
+         * either where the checker settled no order because there was no value to order.
          */
-        private boolean comparatorFor(Type t) {
-            Ordering held = Ordering.held(t, ctx.inners, symbols, ctx.kinds, ctx.published);
-            if (held == null) {
+        private boolean comparatorFor(Core.KernelFact.OrderingSubject ordered) {
+            if (ordered.ordering().isEmpty()) {
                 return false;
             }
+            Type t = ordered.type();
+            Ordering held = Ordering.held(t, ordered.ordering().get(), ctx.inners);
             return switch (held) {
                 case Ordering.Places places -> {
                     code.invokestatic(cd(places.enumeration()), ORDERING_METHOD, MTD_ordering, true);

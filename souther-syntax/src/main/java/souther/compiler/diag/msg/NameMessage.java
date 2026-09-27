@@ -9,7 +9,7 @@ public sealed interface NameMessage extends Message {
     record ItIsNotAFunctionHere(String name) implements NameMessage, Reported {}
 
     @Code(DiagnosticCode.E1809)
-    record ABlockIsNotAValue() implements NameMessage, Reported {}
+    record NothingSaysWhatThisFunctionTakes() implements NameMessage, Reported {}
 
     @Code(DiagnosticCode.E1803)
     record ANameTheLanguageGivesIsNotAFunction(String name) implements NameMessage, Reported {}

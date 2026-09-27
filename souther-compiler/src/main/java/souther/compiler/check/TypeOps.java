@@ -57,9 +57,11 @@ public final class TypeOps {
      *
      * <p>Ordering is not one of these. Both of these are answered {@code true} or {@code false} and
      * nothing more is wanted, while a reader that admits an ordered value goes on to ask what orders
-     * it — so the answer is a witness and lives in {@link Ordering}, and {@link #supportsOrdering}
-     * is that witness existing. Kept as a row here, the capability had one answer and the four
-     * places that emit a comparison each worked out the other for themselves (issue #856).
+     * it — so the answer is a witness and lives in {@link Ordering}, and a type is ordered where
+     * that witness exists. There is no boolean beside it: a reader that asked only whether a type is
+     * ordered would have thrown away what orders it. Kept as a row here, the capability had one
+     * answer and the four places that emit a comparison each worked out the other for themselves
+     * (issue #856).
      */
     public enum Requires { EQUALITY, EXTERNAL_FORM }
 
@@ -77,11 +79,6 @@ public final class TypeOps {
      * witness rather than a yes, and {@link Ordering} holds it. The {@code symbols} parameter is
      * what that row read and is threaded for a third question that needs it.
      *
-     * <p>{@code Raw} answers yes to equality because its value's own {@code equals} answers, and that
-     * is the only answer available: a Raw is an arbitrary Java object and the language promises
-     * nothing about it. It is the one place a capability is claimed that the representation does not
-     * guarantee.
-     *
      * <p>A variable, {@code Nothing}, {@code Never} and {@code Erroneous} stand for a type rather
      * than being one. They answer the way an unconstrained type does, so a generic core signature and
      * a module that already reported an error are not refused a second time for what they hold.
@@ -90,14 +87,11 @@ public final class TypeOps {
         return switch (t) {
             case Type.Prim p -> switch (required) {
                 case EQUALITY -> true;
-                // Written out rather than answered for every primitive at once, so that a primitive
-                // added here says whether a boundary can carry it. Rational is the one that cannot:
-                // it is a value computation produces and consumes, and no representation of it is
-                // selected for JSON, for a Java boundary or for a fixture (ADR-0116).
-                case EXTERNAL_FORM -> switch (p) {
-                    case INT, STRING, BOOL, DECIMAL, DATE, TIME, DATETIME, INSTANT, RAW -> true;
-                    case RATIONAL -> false;
-                };
+                // Read off the scalars a leaf codec exists for, so that a primitive added there is
+                // one a boundary can carry. Rational is the one that cannot: it is a value
+                // computation produces and consumes, and no representation of it is selected for
+                // JSON, for a Java boundary or for a fixture (ADR-0116).
+                case EXTERNAL_FORM -> LeafScalar.of(p) != null;
             };
             case Type.Ref _ -> switch (required) {
                 case EQUALITY, EXTERNAL_FORM -> true;
@@ -168,18 +162,6 @@ public final class TypeOps {
         // the question is settled by the shape of the type alone. Asked while a module is being
         // resolved as well as after, which is what says it cannot need one.
         return answers(t, Requires.EQUALITY, null);
-    }
-
-    /** Whether values of this type have an ordering — what {@code sort} and a {@code sortBy} key
-     * require of what they order, and what {@code <} requires of two operands of one type. A
-     * single-value newtype is ordered by the value it wraps (ADR-0047), and an enumeration by the
-     * order its cases are declared in (ADR-0069), so a newtype over an enumeration is ordered by
-     * that enumeration. This is {@link Ordering#of} having an answer, and asking it any other way is
-     * a second definition of the same word. */
-    public static boolean supportsOrdering(Type t, NewtypeInners inners, Symbols symbols,
-                                           DeclarationKinds kinds,
-                                           PublishedDeclarations published) {
-        return Ordering.of(t, inners, symbols, kinds, published) != null;
     }
 
     /**
@@ -296,15 +278,6 @@ public final class TypeOps {
             case UnionMember.Named named -> Set.of(named.name());
             case UnionMember.NotAMember _, UnionMember.NoType _ -> Set.of();
         };
-    }
-
-    /** Case names of a stage output, treating a {@code Raw} encoder output as the case {@code "Raw"}
-     * so it can be unioned with propagated error cases (spec §sequential-composition, §case-propagation). */
-    static Set<TypeSymbol> caseNamesOf(Type t) {
-        if (t == Type.RAW) {
-            return Set.of(TypeSymbol.primitive("Raw"));
-        }
-        return namesOf(t);
     }
 
     /** True when a value of {@code sub} is acceptable where {@code sup} is expected. */
@@ -1645,9 +1618,9 @@ public final class TypeOps {
                 case TIME -> new MapKeyRepresentation.Time();
                 case DATETIME -> new MapKeyRepresentation.DateTime();
                 case INSTANT -> new MapKeyRepresentation.Instant();
-                // a key is addressed by the text it is written as, and a number, a flag and Raw have
+                // a key is addressed by the text it is written as, and a number and a flag have
                 // none a boundary could name one by
-                case INT, BOOL, DECIMAL, RATIONAL, RAW -> null;
+                case INT, BOOL, DECIMAL, RATIONAL -> null;
             };
         }
         if (!(key instanceof Type.Ref r) || !unwrapping.add(r.name())) {
@@ -2012,7 +1985,7 @@ public final class TypeOps {
         // name that resolved to no type at all — which is not an error a reader of the resolved
         // signature can tell from a name a module never declared.
         Type.Prim primitive = Type.Prim.named(ref.name());
-        if (primitive != null && primitive.denotedByItsSpelling()) {
+        if (primitive != null) {
             return primitive;
         }
         return switch (ref.name()) {

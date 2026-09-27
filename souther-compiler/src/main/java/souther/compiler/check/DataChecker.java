@@ -1091,7 +1091,7 @@ public final class DataChecker {
                 // declared rather than being refused here by a comparison written before it existed.
                 boolean temporal = at instanceof Type.Prim p && switch (p) {
                     case DATE, TIME, DATETIME, INSTANT -> true;
-                    case INT, STRING, BOOL, DECIMAL, RATIONAL, RAW -> false;
+                    case INT, STRING, BOOL, DECIMAL, RATIONAL -> false;
                 };
                 if (!temporal) {
                     throw derivedCodecDisagrees("an ISO text encoder", at);

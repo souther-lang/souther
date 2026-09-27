@@ -198,7 +198,7 @@ public sealed interface FixtureShape {
     private static FixtureShape scalar(Type.Prim prim) {
         LeafScalar scalar = LeafScalar.of(prim);
         if (scalar == null) {
-            throw new FixtureException("`Raw` is the reserved type and has no decoder, so a fixture"
+            throw new FixtureException("`" + prim.shown() + "` has no decoder, so a fixture"
                     + " has nothing to build one through");
         }
         return new Scalar(scalar);
@@ -216,10 +216,6 @@ public sealed interface FixtureShape {
      * <p>Asked of that answer rather than worked out from where the name lives. Reading it off the
      * runtime namespace and a failed lookup computes the same set out of a spelling convention and
      * an absence, which is two things to keep true where the table already holds one.
-     *
-     * <p>{@code Raw} is spelled like a primitive and denotes a reference, which is the whole reason
-     * the reader's {@code Raw} arm never ran — it fell through to reflection and failed there
-     * instead. It is refused as the reserved name it is.
      */
     private static FixtureShape nominal(TypeSymbol name, Symbols symbols) {
         if (name.isPrimitive()) {
@@ -234,8 +230,8 @@ public sealed interface FixtureShape {
     }
 
     /** The primitive a primitive-spelled name denotes, read through the inverse of the mint one is
-     *  made by. {@code Raw} answers a primitive and is refused as the reserved name it is; a
-     *  primitive-module name that denotes none — {@code Some}, {@code None} — answers nothing. */
+     *  made by. A primitive-module name that denotes none — {@code Some}, {@code None} — answers
+     *  nothing. */
     private static Type.Prim primitive(TypeSymbol name) {
         Type.Prim prim = name.primitiveKind();
         if (prim == null) {

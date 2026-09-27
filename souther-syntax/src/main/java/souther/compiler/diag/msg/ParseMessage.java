@@ -133,6 +133,16 @@ public sealed interface ParseMessage extends Message {
     @Code(DiagnosticCode.E2305)
     record AFractionalLiteralNeedsTheMSuffix(String literal) implements ParseMessage, Reported {}
 
+    /**
+     * An integer literal whose magnitude no {@code Int} holds.
+     *
+     * <p>{@code written} is the digits as the author wrote them. The magnitude of the least
+     * {@code Int} is admitted only under a unary minus, so a bare {@code 9223372036854775808} is
+     * refused with the rest.
+     */
+    @Code(DiagnosticCode.E2305)
+    record AnIntegerLiteralIsOutsideInt(String written) implements ParseMessage, Reported {}
+
     @Code(DiagnosticCode.E2305)
     record AStringLiteralIsNotClosed() implements ParseMessage, Reported {}
 

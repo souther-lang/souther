@@ -1,6 +1,7 @@
 package souther.compiler.program;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.DefinitionRole;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.BehaviorBodies;
@@ -56,6 +57,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -480,7 +482,8 @@ final class CheckedProgramAssembler {
                                  List<CheckedData> data,
                                  Map<String, List<Output.RowsRead.ReadRow>> rowsByBehavior,
                                  Map<String, List<ValueName.Behavior>> requirements,
-                                 Set<String> published) {}
+                                 Set<String> published,
+                                 Set<ValueName.Helper> valuesDeclared) {}
 
     /**
      * The rows this compile read for {@code module}, by the behavior each is a row of.
@@ -564,11 +567,21 @@ final class CheckedProgramAssembler {
             throw new IllegalStateException("`" + module + "` was taken as checked and what it"
                     + " publishes was not read");
         }
+        // Which definitions this module wrote is the settled tree's to say, and what each of them
+        // runs as is what lowering answered for it. A constant folds into whatever reads it and has
+        // no method, so what the emitted definitions hold is not where its declaration is read.
+        Set<ValueName.Helper> valuesDeclared = new LinkedHashSet<>();
+        for (Hir.FnDef fn : declarations.fns()) {
+            if (fn.role() instanceof DefinitionRole.Ordinary
+                    && lowering.roles().get(fn.name()) instanceof LoweringRole.ValueHome home) {
+                valuesDeclared.add(home.value());
+            }
+        }
         return new ModuleReading(module, bodies, checked, signatures, declaredSignatures,
                 implementations,
                 compositions, checks,
                 dataOf(declarations, db, shapes, codecDefs),
-                rowsOf(db, module), requirementsOf(requirements), published);
+                rowsOf(db, module), requirementsOf(requirements), published, valuesDeclared);
     }
 
     /**
@@ -604,7 +617,7 @@ final class CheckedProgramAssembler {
                         rowsOf(read.rowsByBehavior().getOrDefault(named.name(), List.of()), types,
                                 target.signature(), targets, emitted.rowValues()))));
         return new CheckedModule(read.name(), behaviors, emitted.helpers(), emitted.values(),
-                emitted.valueEntries(), read.data(), read.published());
+                emitted.valueEntries(), read.data(), read.published(), read.valuesDeclared());
     }
 
     /**

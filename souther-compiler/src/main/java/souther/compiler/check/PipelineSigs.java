@@ -272,7 +272,7 @@ public final class PipelineSigs {
         if (retired.isEmpty()) {
             return mainline;
         }
-        Set<TypeSymbol> all = new LinkedHashSet<>(TypeOps.caseNamesOf(mainline));
+        Set<TypeSymbol> all = new LinkedHashSet<>(TypeOps.namesOf(mainline));
         if (all.isEmpty()) {
             throw new IllegalStateException("cannot merge non-data stage output with retired cases");
         }

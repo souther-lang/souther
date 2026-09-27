@@ -38,6 +38,7 @@ class AValueEntryBelongsToExactlyThePublishedValuesTest {
         CheckedValueEntry entryForKept = new CheckedValueEntry(kept.name(), entryForYs.body());
 
         assertThrows(IllegalStateException.class, () -> new CheckedModule("m", List.of(), List.of(),
-                List.of(kept), List.of(entryForKept), List.of(), Set.of()));
+                List.of(kept), List.of(entryForKept), List.of(), Set.of(),
+                Set.of(kept.name(), entryForYs.value())));
     }
 }

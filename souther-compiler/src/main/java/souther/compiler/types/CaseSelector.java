@@ -59,7 +59,7 @@ public record CaseSelector(TypeSymbol name, Refinement refinement) {
      *
      * <p>Null where the name denotes no type. {@code Some} and {@code None} are primitive-module
      * names that denote none — an optional's carriers are made by their own factories, which know
-     * the element this cannot — and neither does {@code Raw}, which no stage produces.
+     * the element this cannot.
      */
     public static Type heldBy(TypeSymbol caseName) {
         if (!caseName.isPrimitive()) {
@@ -67,7 +67,7 @@ public record CaseSelector(TypeSymbol name, Refinement refinement) {
         }
         // Read back through the one spelling table rather than repeating it here.
         Type.Prim prim = caseName.primitiveKind();
-        return prim == null || prim == Type.Prim.RAW ? null : prim;
+        return prim;
     }
 
     /** The carrier an optional holding {@code element} is. */
@@ -89,9 +89,9 @@ public record CaseSelector(TypeSymbol name, Refinement refinement) {
      *  that stands for whatever case names it. */
     private static TypeSymbol named(Refinement refinement) {
         return switch (refinement) {
-            case Refinement.Direct ignored -> null;
-            case Refinement.OptionPresent ignored -> TypeSymbol.SOME;
-            case Refinement.OptionAbsent ignored -> TypeSymbol.NONE;
+            case Refinement.Direct _ -> null;
+            case Refinement.OptionPresent _ -> TypeSymbol.SOME;
+            case Refinement.OptionAbsent _ -> TypeSymbol.NONE;
         };
     }
 }

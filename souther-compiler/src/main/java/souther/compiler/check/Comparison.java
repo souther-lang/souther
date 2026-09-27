@@ -35,26 +35,35 @@ public final class Comparison {
     private final Core left;
     private final Core right;
     private final Core.BinaryReading reading;
+    private final Optional<Core.OrderingBasis> ordering;
 
-    private Comparison(ComparisonClaim claim, Core left, Core right, Core.BinaryReading reading) {
+    private Comparison(ComparisonClaim claim, Core left, Core right, Core.BinaryReading reading,
+                       Optional<Core.OrderingBasis> ordering) {
         this.claim = claim;
         this.left = left;
         this.right = right;
         this.reading = reading;
+        this.ordering = ordering;
     }
 
     /** {@code at} as a comparison, or nothing where its operator compares no values. */
     public static Optional<Comparison> of(Core.Binary at) {
         return switch (ComparisonPlacement.of(at.op())) {
             case ComparisonPlacement.Nothing _ -> Optional.empty();
-            case ComparisonClaim claim ->
-                    Optional.of(new Comparison(claim, at.left(), at.right(), at.reading()));
+            case ComparisonClaim claim -> Optional.of(new Comparison(claim, at.left(), at.right(),
+                    at.reading(), at.ordering()));
         };
     }
 
     /** What the two sides are compared as, which the checker settled. */
     public Core.BinaryReading reading() {
         return reading;
+    }
+
+    /** What the two sides are ordered by, which the checker settled: empty where the operator
+     *  places them on no order. */
+    public Optional<Core.OrderingBasis> ordering() {
+        return ordering;
     }
 
     /** What its operator placed on the values. */
@@ -95,12 +104,12 @@ public final class Comparison {
     public boolean equals(Object other) {
         return other instanceof Comparison that && claim.equals(that.claim)
                 && left.equals(that.left) && right.equals(that.right)
-                && reading.equals(that.reading);
+                && reading.equals(that.reading) && ordering.equals(that.ordering);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(claim, left, right, reading);
+        return Objects.hash(claim, left, right, reading, ordering);
     }
 
     @Override

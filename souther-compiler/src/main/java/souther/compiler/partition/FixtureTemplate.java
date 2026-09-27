@@ -58,6 +58,10 @@ public record FixtureTemplate(String text, Hir.Expr value) {
     }
 
     public static FixtureTemplate integer(long value) {
+        // The smallest Int has no magnitude an Int holds, so it is one literal, as the source reads it.
+        if (value == Long.MIN_VALUE) {
+            return new FixtureTemplate(Long.toString(value), new Hir.IntLit(value, NOWHERE, NO_SOURCE));
+        }
         Hir.Expr magnitude = new Hir.IntLit(Math.abs(value), NOWHERE, NO_SOURCE);
         return new FixtureTemplate(Long.toString(value),
                 value < 0 ? new Hir.Neg(magnitude, NOWHERE, NO_SOURCE) : magnitude);

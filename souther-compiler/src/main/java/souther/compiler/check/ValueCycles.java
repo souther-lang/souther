@@ -114,7 +114,7 @@ public final class ValueCycles {
                     && e.getValue().declaredReturn().asFn() != null;
             if (!declaredAFunction && e.getValue().writtenBody() instanceof Hir.Block block) {
                 throw CompileException.of(Diagnostic
-                                .at(block.pos()).say(new NameMessage.ABlockIsNotAValue()).build());
+                                .at(block.pos()).say(new NameMessage.NothingSaysWhatThisFunctionTakes()).build());
             }
             if (!reachesItself.contains(e.getKey())) {
                 continue;

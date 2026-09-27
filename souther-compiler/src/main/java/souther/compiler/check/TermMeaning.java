@@ -264,6 +264,7 @@ public final class TermMeaning {
                 out.add(Core.Binary.class);
                 out.add(x.op());
                 out.add(x.reading());
+                out.add(x.ordering());
                 out.add(x.type());
                 project(x.left(), out);
                 project(x.right(), out);
@@ -360,7 +361,7 @@ public final class TermMeaning {
                 out.add(x.cases().size());
                 for (Core.Case arm : x.cases()) {
                     out.add(arm.pattern());
-                    out.add(arm.binder());
+                    out.add(arm.binding());
                     project(arm.body(), out);
                 }
             }

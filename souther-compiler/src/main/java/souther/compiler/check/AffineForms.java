@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.types.BinOp;
 import souther.compiler.core.ConstructionProjection;
 import souther.compiler.core.Core;
+import souther.compiler.core.IntNegation;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -658,6 +659,9 @@ public final class AffineForms {
             return written;
         }
         return switch (e) {
+            // No number: the smallest Int negated is the run time's abort, and reading it as the
+            // form of the operand negated would put a number there that no run has.
+            case Core.Neg n when IntNegation.isTheLeastInt(n.operand()) -> null;
             case Core.Neg n -> Terms.negate(formOf(n.operand(), at, reading, following, stopped));
             case Core.Binary b when b.op() == BinOp.ADD ->
                     Terms.add(formOf(b.left(), at, reading, following, stopped),

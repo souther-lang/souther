@@ -11,6 +11,7 @@ import souther.compiler.types.Type;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -71,6 +72,24 @@ class AnOperatorSaysWhatItReadsItsOperandsAsTest {
 
             behavior doubled : (a: Amount) -> Amount
             let doubled (a) = a + a
+
+            data StageN = Stage
+
+            behavior aCaseAgainstItself : (w: Won) -> Bool
+            let aCaseAgainstItself (w) = w <= w
+
+            behavior casesOfOneSum : (f: Bool) -> Bool
+            let casesOfOneSum (f) =
+                (if f then Won else Qualified) < (if f then Qualified else Won)
+
+            behavior aSumAgainstItself : (s: Stage, t: Stage) -> Bool
+            let aSumAgainstItself (s, t) = s < t
+
+            behavior aWrappedSumAgainstItself : (s: StageN, t: StageN) -> Bool
+            let aWrappedSumAgainstItself (s, t) = s < t
+
+            behavior quantitiesAgainstEachOther : (a: Amount, b: Amount) -> Bool
+            let quantitiesAgainstEachOther (a, b) = a < b
             """;
 
     @Test
@@ -127,6 +146,70 @@ class AnOperatorSaysWhatItReadsItsOperandsAsTest {
                 "sameness is asked across the cases, which no name of either side is");
         assertEquals(List.of("Circle", "Square"),
                 cases.members().stream().map(each -> each.name()).toList());
+    }
+
+    /** What a comparison reads its operands as and what orders them are two answers. A case
+     *  compared with itself reads as the case and is ordered by the sum listing it, while a case
+     *  beside its sum reads as the sum: putting the sum in the reading for both would leave a
+     *  reader unable to tell a pair that is restated from one that is not. */
+    @Test
+    void aCaseComparedWithItselfIsReadAsTheCaseAndOrderedByTheSumListingIt() {
+        Core.Binary itself = applying("aCaseAgainstItself", BinOp.LE);
+        assertInstanceOf(Core.BinaryReading.AsTheyStand.class, itself.reading());
+        assertEquals("Won", Type.show(itself.left().type()));
+        assertEquals("Stage", orderedBy(itself));
+
+        Core.Binary beside = applying("beforeWon", BinOp.LT);
+        Core.BinaryReading.In in = assertInstanceOf(Core.BinaryReading.In.class, beside.reading());
+        assertEquals("Stage", Type.show(in.type()));
+        assertEquals("Stage", orderedBy(beside),
+                "the sum orders both, and reading them in it is a different answer");
+    }
+
+    @Test
+    void aUnionOfCasesIsOrderedByTheSumListingThemAll() {
+        Core.Binary union = applying("casesOfOneSum", BinOp.LT);
+        assertInstanceOf(Core.BinaryReading.AsTheyStand.class, union.reading());
+        assertInstanceOf(Type.Union.class, union.left().type());
+        assertEquals("Stage", orderedBy(union));
+    }
+
+    @Test
+    void aSumAndANewtypeOverItAreOrderedByTheSum() {
+        assertEquals("Stage", orderedBy(applying("aSumAgainstItself", BinOp.LT)));
+
+        Core.Binary wrapped = applying("aWrappedSumAgainstItself", BinOp.LT);
+        assertEquals("StageN", Type.show(wrapped.left().type()),
+                "the operands stay the newtype, which is nominal");
+        assertEquals("Stage", orderedBy(wrapped));
+    }
+
+    @Test
+    void aQuantityIsOrderedByWhatItWraps() {
+        assertEquals("Int", orderedBy(applying("quantitiesAgainstEachOther", BinOp.LT)));
+        assertEquals("Int", orderedBy(applying("underALimit", BinOp.LE)));
+    }
+
+    @Test
+    void anOperatorThatOrdersNothingHasNothingToBeOrderedBy() {
+        assertEquals(Optional.empty(), applying("aCircle", BinOp.EQ).ordering());
+        assertEquals(Optional.empty(), applying("whole", BinOp.ADD).ordering());
+    }
+
+    @Test
+    void aWrittenComparisonWithNothingToOrderItIsRefused() {
+        Core whole = new Core.Int(1, Type.INT, null);
+        ConstructOccurrence written = applying("aCaseAgainstItself", BinOp.LE).occurrence();
+        assertThrows(IllegalArgumentException.class, () -> new Core.Binary(BinOp.LT, whole, whole,
+                Core.BinaryReading.AS_THEY_STAND, Optional.empty(), written, Type.BOOL, null));
+        assertThrows(IllegalArgumentException.class, () -> new Core.Binary(BinOp.EQ, whole, whole,
+                Core.BinaryReading.AS_THEY_STAND, Optional.of(new Core.OrderingBasis(Type.INT)),
+                ConstructOccurrence.unwritten(), Type.BOOL, null));
+    }
+
+    /** What the checker settled orders the operands of {@code compared}, as the type it names. */
+    private static String orderedBy(Core.Binary compared) {
+        return Type.show(compared.ordering().orElseThrow().type());
     }
 
     @Test

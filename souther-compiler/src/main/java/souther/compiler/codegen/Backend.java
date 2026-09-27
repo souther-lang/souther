@@ -1267,7 +1267,7 @@ public final class Backend {
      *
      * <p>Version 8 narrows it again: a named type standing in a behavior's boundary is one a model
      * declares, so the vocabulary the language keeps for its own operations — what a division by zero
-     * answers with, what a rounding takes, the reserved {@code Raw} — is not carried across one. A
+     * answers with, what a rounding takes — is not carried across one. A
      * module written without an {@code exposing} line publishes every behavior it declares, so a jar
      * built before this carries a public {@code Behavior<souther.runtime.DivisionByZero, …>} that this
      * compiler refuses to write.
@@ -1450,10 +1450,16 @@ public final class Backend {
      * body whose pattern uses a lookaround, a back reference or a property, which this reader
      * refuses, and a class emitted under it hands the author's text to the JVM's engine.
      *
-     * <p>Version 34 changes what a copied clause or helper is identified as. The values of its own
+     * <p>Version 34 changes what the front end reads a carried body as where a function stands as a
+     * value. A lambda answering a function is read against the function type its position gives it,
+     * and a library or helper name standing alone takes the parameter types its declaration gives.
+     * A reader built under version 33 refuses a carried body that holds either, which this reader
+     * admits.
+     *
+     * <p>Version 35 changes what a copied clause or helper is identified as. The values of its own
      * module that it names are held in it, each written once where it is demanded and named by the
      * binding that holds it, and no longer written in full at every reference. The same declaration
-     * is recorded as another text, so a module built under version 33 records copies that this
+     * is recorded as another text, so a module built under version 34 records copies that this
      * reader would hold to something other than what they were built from.
      *
      * <p>That is also where this number stops. It says whether a jar and this compiler agree on
@@ -1466,7 +1472,7 @@ public final class Backend {
      * {@code [#a-published-module-agrees-with-what-it-copied]}). An edit to a declaration moves
      * that and not this; an edit to a rule moves this.
      */
-    public static final int BOUNDARY_VERSION = 34;
+    public static final int BOUNDARY_VERSION = 35;
 
     /** Emits the class a module's own declarations are published on, carrying {@code declarations}.
      * What it says is the caller's; that it is built like every other generated class — the same Java

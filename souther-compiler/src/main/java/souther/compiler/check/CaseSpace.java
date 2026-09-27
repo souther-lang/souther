@@ -272,8 +272,7 @@ sealed interface CaseSpace {
      *
      * <p>A case whose carrier is the value covers what it holds — one atom for a leaf, and the
      * leaves under it for a case that is itself a sum. A name that denotes no type holds nothing to
-     * descend ({@code Raw}, which a stage may be unioned with and which no declaration takes apart)
-     * and covers no atom: the answer {@link AtomSpace} gives a type that names no case, said here
+     * descend ({@code Some} and {@code None}, which no declaration takes apart) and covers no atom: the answer {@link AtomSpace} gives a type that names no case, said here
      * because the type to ask it about is the one that is missing.
      */
     private static List<TypeSymbol> covers(CaseSelector selector, PublishedDeclarations published) {

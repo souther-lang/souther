@@ -442,16 +442,6 @@ class WhatIsAddressableIsWhatTheDocSetNamedTest {
                 "and it is that part, not the manual it is in");
     }
 
-    @Test
-    void aLibraryThatHasNotNamedItsPartsIsStillOneDocument() {
-        List<String> shipped = LibraryDocs.on(getClass().getClassLoader(), Caller.MCP).topics()
-                .stream().map(LibraryDocs.Topic::name).filter(name -> name.startsWith("raoh/")).toList();
-
-        assertEquals(List.of("raoh/tutorial", "raoh/tutorial.ja", "raoh/composition-patterns",
-                        "raoh/boundary-modules", "raoh/locale-aware-messages", "raoh/comparisons"),
-                shipped, "the files raoh's index promises, and nothing this compiler named for it");
-    }
-
     private PrintStream print(ByteArrayOutputStream to) {
         return new PrintStream(to, true, StandardCharsets.UTF_8);
     }

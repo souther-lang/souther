@@ -15,6 +15,7 @@ import souther.compiler.types.WrittenOwner;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -58,7 +59,7 @@ class TwoComparisonsUnderOneOccurrenceAreRefusedTest {
      *  these two nodes. */
     private static Core.Binary comparison(ConstructOccurrence occurrence) {
         return new Core.Binary(BinOp.GE, read(0), read(1), Core.BinaryReading.AS_THEY_STAND,
-                occurrence, Type.BOOL, POS);
+                Optional.of(new Core.OrderingBasis(Type.INT)), occurrence, Type.BOOL, POS);
     }
 
     /** Both of them under one {@code &&}, which combines comparisons rather than being one. */

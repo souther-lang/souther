@@ -83,7 +83,6 @@ class EveryOrderedTypeCarriesAValueBothWaysTest {
         }
 
         assertNull(Carrier.ofValue(Type.BOOL, ScopedDeclarations.wrapsOf(symbols), symbols, ScopedDeclarations.kindsOf(symbols), ScopedDeclarations.of(symbols)), "a `Bool` is not ordered");
-        assertNull(Carrier.ofValue(Type.RAW, ScopedDeclarations.wrapsOf(symbols), symbols, ScopedDeclarations.kindsOf(symbols), ScopedDeclarations.of(symbols)), "and neither is a `Raw`");
     }
 
     /**

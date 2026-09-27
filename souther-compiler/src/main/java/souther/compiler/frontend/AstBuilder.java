@@ -36,6 +36,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.Placement;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -55,6 +56,13 @@ import souther.runtime.Strings;
  * only the compiler pipeline runs through here.
  */
 public final class AstBuilder {
+
+    /** The greatest integer literal an {@code Int} holds. Only a ruler for what is written: what is
+     *  admitted is read into a {@code long} and nothing past here carries a wider number. */
+    private static final BigInteger GREATEST_INT = BigInteger.valueOf(Long.MAX_VALUE);
+
+    /** The magnitude of the least {@code Int}, one past the greatest: written only under a minus. */
+    private static final BigInteger LEAST_INT_MAGNITUDE = GREATEST_INT.add(BigInteger.ONE);
 
     /** What this text is made of and where each of it sits — the one place a place is made from a
      *  text, so nothing below here counts its tokens again. */
@@ -949,7 +957,7 @@ public final class AstBuilder {
             case FIELD_ACCESS -> fieldAccess(n);
             case APPLY_EXPR -> apply(n);
             case BINARY_EXPR -> binary(n);
-            case UNARY_EXPR -> new Ast.Neg(expr(onlyExpr(n)), pos(n), region(n));
+            case UNARY_EXPR -> negation(n);
             case PIPE_EXPR -> pipe(n);
             // The parentheses are dropped from the tree and not from the file: what stands here is
             // the expression inside them, written over the whole of what the author bracketed.
@@ -969,6 +977,23 @@ public final class AstBuilder {
         };
     }
 
+    /** A minus before the magnitude of the least {@code Int}, which no integer literal holds alone,
+     * is that {@code Int}. Every other negation keeps the operand it was written with. */
+    private Ast.Expr negation(SyntaxNode n) {
+        SyntaxNode operand = onlyExpr(n);
+        while (operand.kind() == SyntaxKind.PAREN_EXPR) {
+            operand = onlyExpr(operand);
+        }
+        if (operand.kind() == SyntaxKind.LITERAL_EXPR) {
+            SyntaxToken t = firstMeaningfulToken(operand);
+            if (t.kind() == SyntaxKind.INT_LIT
+                    && new BigInteger(t.text()).equals(LEAST_INT_MAGNITUDE)) {
+                return new Ast.IntLit(Long.MIN_VALUE, pos(n), region(n));
+            }
+        }
+        return new Ast.Neg(expr(onlyExpr(n)), pos(n), region(n));
+    }
+
     private Ast.Expr literal(SyntaxNode n) {
         SyntaxToken t = firstMeaningfulToken(n);
         SourcePos pos = posOf(t);
@@ -977,7 +1002,13 @@ public final class AstBuilder {
         // as it is read, so the value is the wrong ruler for the file in two ways at once.
         Region region = regionOf(t);
         return switch (t.kind()) {
-            case INT_LIT -> new Ast.IntLit(Long.parseLong(t.text()), pos, region);
+            case INT_LIT -> {
+                BigInteger magnitude = new BigInteger(t.text());
+                if (magnitude.compareTo(GREATEST_INT) > 0) {
+                    throw error(pos, new ParseMessage.AnIntegerLiteralIsOutsideInt(t.text()));
+                }
+                yield new Ast.IntLit(magnitude.longValueExact(), pos, region);
+            }
             case DECIMAL_LIT ->
                     new Ast.DecimalLit(new BigDecimal(stripDecimalSuffix(t.text())), pos, region);
             case STRING_LIT -> new Ast.StringLit(stringValue(t), pos, region);

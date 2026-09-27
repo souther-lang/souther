@@ -86,6 +86,15 @@ public enum BinOp implements DelegatedEqualityIsTheCrossingAnswer {
         return family == Family.COMPARISON;
     }
 
+    /** Whether this places its two operands on an order, which is what {@code <}, {@code <=},
+     *  {@code >} and {@code >=} do and {@code ==} does not. */
+    public boolean ordersItsOperands() {
+        return switch (this) {
+            case LT, LE, GT, GE -> true;
+            case EQ, NE, AND, OR, ADD, SUB, MUL, DIV, CONCAT -> false;
+        };
+    }
+
     /** Whether this answers a number of its two operands. */
     public boolean answersANumber() {
         return family == Family.ARITHMETIC;

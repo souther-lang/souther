@@ -40,13 +40,13 @@ final class JvmTypes {
     }
 
     /** The boxed JVM class for a boxable primitive, or {@code null} where the type has none —
-     * a non-primitive, or {@code Raw}, which no stage produces. */
+     * a non-primitive. */
     static ClassDesc boxedPrim(Type t) {
         return switch (t) {
             case Type.Prim p -> switch (p) {
                 case INT -> CD_Long;
                 case BOOL -> CD_Boolean;
-                case DECIMAL, STRING, DATE, TIME, DATETIME, INSTANT, RATIONAL, RAW -> primCarrier(p);
+                case DECIMAL, STRING, DATE, TIME, DATETIME, INSTANT, RATIONAL -> primCarrier(p);
             };
             case Type.Ref _, Type.ListOf _, Type.MapOf _, Type.SetOf _, Type.OptionOf _,
                  Type.Union _, Type.FnOf _, Type.Open _, Type.Nothing _, Type.Never _,
@@ -55,14 +55,13 @@ final class JvmTypes {
     }
 
     /**
-     * The JVM class carrying a value of {@code p}, or {@code null} for {@code Raw}, which no stage
-     * produces and so has none.
+     * The JVM class carrying a value of {@code p}.
      *
      * <p>One fact read at two boundaries. A value a body computes is in this form, and a kernel of
      * the runtime is called with a primitive in this form too: {@code Intrinsics} boxes an argument
      * only where its slot is {@code Object} and hands anything else over as it was produced. Written
      * twice, the two could name different classes, and a call would leave on the stack what its
-     * descriptor does not say. What {@code Raw} is at each boundary is that boundary's to say.
+     * descriptor does not say.
      */
     static ClassDesc primCarrier(Type.Prim p) {
         return switch (p) {
@@ -75,7 +74,6 @@ final class JvmTypes {
             case DATETIME -> CD_LocalDateTime;
             case INSTANT -> CD_Instant;
             case RATIONAL -> CD_Rational;
-            case RAW -> null;
         };
     }
 
@@ -221,14 +219,7 @@ final class JvmTypes {
     /** The same, with a declared type's class answered by {@code classOf}. */
     static ClassDesc jvmType(Type type, Function<TypeSymbol, ClassDesc> classOf) {
         return switch (type) {
-            case Type.Prim p -> {
-                ClassDesc carrier = primCarrier(p);
-                // reserved: no stage produces one, so none reaches codegen
-                if (carrier == null) {
-                    throw new IllegalStateException("no JVM carrier for Raw");
-                }
-                yield carrier;
-            }
+            case Type.Prim p -> primCarrier(p);
             case Type.OptionOf _ -> CD_Option;
             case Type.ListOf _ -> CD_List;
             case Type.MapOf _ -> CD_Map;

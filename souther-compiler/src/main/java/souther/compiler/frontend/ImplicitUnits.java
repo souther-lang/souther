@@ -42,7 +42,6 @@ public final class ImplicitUnits {
 
     private static Set<String> builtIn() {
         Set<String> names = new HashSet<>(Reserved.QUALIFIERS);
-        names.add("Raw");
         // From the table that closes them rather than spelled again: a case the language gives is one
         // a module may not declare, and a list here would have been that set as it last stood.
         for (LanguageCaseId given : LanguageCaseId.values()) {

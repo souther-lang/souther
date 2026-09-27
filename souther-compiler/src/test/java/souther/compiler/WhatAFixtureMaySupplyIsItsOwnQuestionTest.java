@@ -107,24 +107,6 @@ class WhatAFixtureMaySupplyIsItsOwnQuestionTest {
                 """));
     }
 
-    /**
-     * {@code Raw} is spelled like a primitive and denotes a reference, which is why the reader's
-     * {@code Raw} arm never ran: the name fell through to reflection and failed there. Refused for
-     * being the reserved type now, wherever it is spelled.
-     */
-    @Test
-    void theReservedTypeIsRefusedAsItself() {
-        CompileException e = err(HEAD + """
-                let asRaw (r: Raw) : Int = 1
-                example f
-                  | "r" : (asRaw(1)) -> Out { n = 1 }
-                """);
-        // Nothing constructs a `Raw`, so what a row writes at one is a value of another type,
-        // refused as the argument mismatch it is.
-        assertTrue(e.getMessage().contains("E1317"), e.getMessage());
-        assertTrue(e.getMessage().contains("Raw"), e.getMessage());
-    }
-
     /** A tuple has no external representation, and needs none: the operand runs in the module's
      *  own program, so a value that never crosses a boundary is supplied like any other. */
     @Test

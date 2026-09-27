@@ -210,7 +210,7 @@ class WhatABodyDoesDoesNotMoveWithTheNumbersMintedForItsNamesTest {
                     it.pos());
             case Core.Match it -> new Core.Match(it.scrutinee(),
                     it.cases().stream()
-                            .map(one -> new Core.Case(one.pattern(), moved(one.binder(), subst),
+                            .map(one -> new Core.Case(one.pattern(), movedBinding(one.binding(), subst),
                                     one.body(), one.pos()))
                             .toList(),
                     it.place(), it.type(), it.pos());
@@ -221,6 +221,17 @@ class WhatABodyDoesDoesNotMoveWithTheNumbersMintedForItsNamesTest {
     private static Core.Binder moved(Core.Binder binder, Map<BindingId, BindingId> subst) {
         return binder == null ? null
                 : new Core.Binder(binder.name(), moved(binder.binding(), subst));
+    }
+
+    private static Core.ArmBinding movedBinding(Core.ArmBinding binding,
+                                                Map<BindingId, BindingId> subst) {
+        return switch (binding) {
+            case Core.ArmBinding.Unbound unbound -> unbound;
+            case Core.ArmBinding.Selected selected ->
+                    new Core.ArmBinding.Selected(moved(selected.binder(), subst), selected.type());
+            case Core.ArmBinding.Payload payload ->
+                    new Core.ArmBinding.Payload(moved(payload.binder(), subst), payload.carrier());
+        };
     }
 
     private static BindingId moved(BindingId id, Map<BindingId, BindingId> subst) {

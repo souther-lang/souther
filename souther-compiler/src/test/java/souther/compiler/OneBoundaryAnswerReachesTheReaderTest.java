@@ -199,8 +199,6 @@ class OneBoundaryAnswerReachesTheReaderTest {
     void aTypeTheBoundaryDoesNotAdmitBuildsNoSignature() {
         assertRefused("(Int, Int)", "E1311");
         assertRefused("List<Option<Int>>", "E1313");
-        assertRefused("Raw", "E1325");
-        assertRefused("List<Raw>", "E1325");
         assertRefused("Map<Int, String>", "E1314");
     }
 

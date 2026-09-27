@@ -256,7 +256,8 @@ class EveryTreeTheBackendIsHandedIsTypedTest {
         switch (value) {
             case Core.Binder binder -> out.add(binder.binding());
             case List<?> list -> list.forEach(each -> held(each, out));
-            case Record part when part.getClass().getEnclosingClass() == Core.class -> {
+            case Record part when part.getClass().getEnclosingClass() == Core.class
+                    || part instanceof Core.ArmBinding -> {
                 for (RecordComponent component : part.getClass().getRecordComponents()) {
                     Object inside;
                     try {
