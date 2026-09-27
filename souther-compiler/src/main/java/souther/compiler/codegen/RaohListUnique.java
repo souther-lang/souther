@@ -52,6 +52,11 @@ import static souther.compiler.codegen.Descriptors.MTD_void;
  * {@code duplicates} holding each repeated element once, in the order its repetition was found, and
  * Raoh's default message.
  *
+ * <p>Raoh's {@code contains}, {@code containsAll} and {@code toSet} share {@code unique()}'s own
+ * defect — a {@code HashSet}-backed membership, so JVM equality rather than Souther's — and
+ * {@code BoundaryConstraint.OfList} has no clause lowered to them today. Were one added, it would
+ * need the same walk this class uses, not a call into one of them.
+ *
  * <p>That issue is written out here, and so it is a copy of Raoh's. Which constraint a clause is was
  * decided by the checker; this only says what Raoh calls it, and a Raoh that came to call it
  * something else is caught by the test that holds the two issues equal.
