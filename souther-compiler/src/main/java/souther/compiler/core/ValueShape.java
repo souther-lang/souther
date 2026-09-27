@@ -63,24 +63,27 @@ public record ValueShape(TypeSymbol.AtModule name, List<Field> fields, List<Inva
     }
 
     /**
-     * One clause: the name a failure is reported under, what has to hold, and how the boundary
-     * checks it.
+     * One clause: the name a failure is reported under, what has to hold, and what it is as
+     * standard constraints on the data's one field.
      *
      * <p>Unnamed where the author wrote no name. What is reported then is the declaration and the
      * clause's place in {@link ValueShape#invariants()}, which is the order a failure is decided in.
      *
-     * <p>{@code boundary} is part of the clause and not a list beside the clauses. Which constraints
-     * a clause is stated as is the checker's answer about that clause, and a second list matched to
-     * this one by position would be two answers kept in step by nothing but their order.
+     * <p>{@code projection} is part of the clause and not a list beside the clauses. Which
+     * constraints a clause is, is the checker's answer about that clause, and a second list matched
+     * to this one by position would be two answers kept in step by nothing but their order. It says
+     * nothing about the form the data was declared in, as nothing here does.
      */
-    public record Invariant(Optional<String> name, Core condition, BoundaryCheck boundary) {
+    public record Invariant(Optional<String> name, Core condition,
+                            ConstraintProjection projection) {
 
         public Invariant {
             if (condition == null) {
                 throw new IllegalArgumentException("a clause is something that has to hold");
             }
-            if (boundary == null) {
-                throw new IllegalArgumentException("a clause says how the boundary checks it");
+            if (projection == null) {
+                throw new IllegalArgumentException(
+                        "a clause says what it is as constraints, if only that it is none");
             }
         }
     }

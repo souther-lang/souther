@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.core.BoundaryCheck;
 import souther.compiler.core.BoundaryConstraint;
 import souther.compiler.core.BoundaryConstraint.DecimalMax;
 import souther.compiler.core.BoundaryConstraint.DecimalMin;
@@ -22,11 +21,13 @@ import souther.compiler.core.BoundaryConstraint.NonNegative;
 import souther.compiler.core.BoundaryConstraint.Pattern;
 import souther.compiler.core.BoundaryConstraint.Positive;
 import souther.compiler.core.BoundaryConstraint.Unique;
+import souther.compiler.core.ConstraintProjection;
 import souther.compiler.core.Core;
 import souther.compiler.core.IntNegation;
 import souther.compiler.core.Kernel;
 import souther.compiler.core.ValueShape;
 import souther.compiler.numeric.EndSide;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -39,18 +40,19 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Which clauses of a data made of one field the boundary can state as the constraints a decoder
- * names, so a violation carries the rule it broke — a length short of its minimum, a string off its
- * format — instead of one {@code invariant_violation} for every invariant in the model.
+ * What the clauses of a data made of one field are as the standard constraints a decoder names, so
+ * that where a value crosses as that field a violation can carry the rule it broke — a length short
+ * of its minimum, a string off its format — instead of one {@code invariant_violation} for every
+ * invariant in the model.
  *
  * <p>Only exact equivalences are stated. A constraint weaker than the clause would let through what
  * the clause refuses; one stronger than it would refuse values the domain accepts, and would do so at
- * the boundary where it reads as bad input. Anything this cannot prove equivalent is left to the
- * clause's own condition.
+ * the boundary where it reads as bad input. Anything this cannot prove equivalent is left out, and
+ * the clause is not complete without it.
  *
  * <p>Answered here, once, and carried on each clause of the value's shape
- * ({@link ValueShape.Invariant#boundary()}). A backend reads the answer and
- * decides only what its decoder calls each constraint.
+ * ({@link ValueShape.Invariant#projection()}). Where it is checked is decided by how the value
+ * crosses, and what each constraint is called by the backend.
  *
  * <p><b>Read off what a statement states, never off the tree it was written as.</b> One rule written
  * out, reached through a helper and written as the denial of its opposite is one statement
@@ -66,23 +68,24 @@ public final class BoundaryConstraints {
      *  call. */
     private final Symbols symbols;
 
-    /** The name of the data's one field, which is how its clauses read it. */
-    private final String field;
+    /** The binding the data's one field is read through, which is which field a read is of — the
+     *  name it is written with is only what it is called. */
+    private final BindingId field;
 
-    private BoundaryConstraints(Symbols symbols, String field) {
+    private BoundaryConstraints(Symbols symbols, BindingId field) {
         this.symbols = symbols;
         this.field = field;
     }
 
     /**
-     * How the boundary checks each clause that governs {@code named}, a data made of the one field
-     * {@code sole}, keyed by which clause it is.
+     * What each clause that governs {@code named}, a data made of the one field {@code sole}, is as
+     * constraints on that field, keyed by which clause it is.
      *
      * <p>A data of one field and not a newtype. The constraints are what a clause says of that
      * field's value, and a newtype and a product of one field hold the same clauses of the same
      * field (spec §newtype), so they are answered alike. Which of the two crosses as the field's
-     * value, and so reads these, is decided by the form it was declared in, which this does not
-     * ask.
+     * value, and so has its constraints checked there, is decided by the form it was declared in,
+     * which this does not ask.
      *
      * <p>Read from the representation the constraints are written against
      * ({@link InliningPolicy#DISCHARGE}): this module's own helpers expanded, the language's own
@@ -95,41 +98,42 @@ public final class BoundaryConstraints {
      * the two answers are about one clause, where an index would say only that two lists happen to
      * be in step.
      *
-     * <p>Whether the reading reached every clause is part of the answer ({@link Checks}), because
-     * a clause it did not reach and a clause it has no answer for are two different things.
+     * <p>Whether the reading reached every clause is part of the answer ({@link Projections}),
+     * because a clause it did not reach and a clause it has no answer for are two different things.
      */
-    public static Checks of(Symbols symbols, TypeSymbol.AtModule named, ValueShape.Field sole,
-                            ExpandedClauseLookup form, InvariantStatements statements) {
-        return new BoundaryConstraints(symbols, sole.name()).of(named, sole.type(), form,
+    public static Projections of(Symbols symbols, TypeSymbol.AtModule named,
+                                 ValueShape.Field sole, ExpandedClauseLookup form,
+                                 InvariantStatements statements) {
+        return new BoundaryConstraints(symbols, sole.binding()).of(named, sole.type(), form,
                 statements);
     }
 
     /**
-     * How the boundary checks each clause the reading reached, and whether it reached them all.
+     * What each clause the reading reached is as constraints, and whether it reached them all.
      *
      * @param reached the answer for each clause the reading reached, by which clause it is
      * @param everyClauseReached whether every clause that governs the data was among them
      */
-    public record Checks(Map<Clause.Id, BoundaryCheck> reached, boolean everyClauseReached) {
+    public record Projections(Map<Clause.Id, ConstraintProjection> reached,
+                              boolean everyClauseReached) {
 
-        public Checks {
+        public Projections {
             reached = Map.copyOf(reached);
         }
 
         /**
-         * How the boundary checks {@code clause}.
+         * What {@code clause} is as constraints.
          *
-         * <p>A clause the reading did not reach has nothing proved of it, and is checked as its own
-         * condition — which holds a value to the whole rule, since the rules themselves come from
-         * the settled form. Where every clause was reached, one with no answer is not such a clause:
-         * it is the two readings of one data disagreeing about which clauses it has, and is refused
-         * rather than answered as though nothing had been proved.
+         * <p>A clause the reading did not reach has nothing proved of it, and is none. Where every
+         * clause was reached, one with no answer is not such a clause: it is the two readings of one
+         * data disagreeing about which clauses it has, and is refused rather than answered as though
+         * nothing had been proved.
          *
          * @throws IllegalStateException where every clause was reached and {@code clause} was not
          *     among them
          */
-        public BoundaryCheck of(Clause.Id clause) {
-            BoundaryCheck answered = reached.get(clause);
+        public ConstraintProjection of(Clause.Id clause) {
+            ConstraintProjection answered = reached.get(clause);
             if (answered != null) {
                 return answered;
             }
@@ -137,39 +141,39 @@ public final class BoundaryConstraints {
                 throw new IllegalStateException("clause " + clause + " governs the data, and the"
                         + " reading that reached every clause governing it has no answer for it");
             }
-            return BoundaryCheck.conditionOnly();
+            return ConstraintProjection.none();
         }
     }
 
-    private Checks of(TypeSymbol.AtModule named, Type base, ExpandedClauseLookup form,
-                      InvariantStatements statements) {
+    private Projections of(TypeSymbol.AtModule named, Type base, ExpandedClauseLookup form,
+                           InvariantStatements statements) {
         ExpandedRules rules = TypeOps.expandedInvariants(named, symbols, form);
-        Map<Clause.Id, BoundaryCheck> out = new LinkedHashMap<>();
+        Map<Clause.Id, ConstraintProjection> out = new LinkedHashMap<>();
         for (TypeOps.Declared declared : rules.reached()) {
             List<BoundaryConstraint> stated = new ArrayList<>();
-            boolean checkCondition = false;
+            boolean complete = true;
             // The parts the clause was split into, with the tree the expansion made of each. Split
             // again here, this would be a second answer to which parts a clause has, taken off a
             // tree an expansion left.
             for (AuthoredShape.Written part : declared.parts()) {
                 List<BoundaryConstraint> states = constraintsOf(part.id(), base, statements);
                 if (states == null) {
-                    checkCondition = true;
+                    complete = false;
                 } else {
                     stated.addAll(states);
                 }
             }
             // A spread reached twice reaches one clause twice, and both readings are of it.
             out.merge(new Clause.Id(declared.declaredOn(), declared.ordinal()),
-                    new BoundaryCheck(stated, checkCondition), (was, now) -> {
+                    new ConstraintProjection(stated, complete), (was, now) -> {
                         if (!was.equals(now)) {
                             throw new IllegalStateException("one clause of " + named
-                                    + " read as two boundary checks: " + was + " and " + now);
+                                    + " read as two projections: " + was + " and " + now);
                         }
                         return was;
                     });
         }
-        return new Checks(out, rules.everyRuleReached());
+        return new Projections(out, rules.everyRuleReached());
     }
 
     /**
@@ -439,7 +443,7 @@ public final class BoundaryConstraints {
 
     /** Whether {@code e} reads the data's one field. */
     private boolean isValue(Core e) {
-        return Core.withoutStanding(e) instanceof Core.Read read && read.name().equals(field);
+        return Core.withoutStanding(e) instanceof Core.Read read && read.binding().equals(field);
     }
 
     /** The constraint for the pattern the checker settled on {@code call}. A kept

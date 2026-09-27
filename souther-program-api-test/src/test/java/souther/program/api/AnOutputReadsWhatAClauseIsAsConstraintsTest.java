@@ -1,7 +1,7 @@
 package souther.program.api;
 
-import souther.compiler.core.BoundaryCheck;
 import souther.compiler.core.BoundaryConstraint;
+import souther.compiler.core.ConstraintProjection;
 import souther.compiler.core.ValueShape;
 import souther.compiler.program.CheckedData;
 import souther.compiler.program.CheckedModule;
@@ -15,20 +15,21 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * What an output that is not this compiler learns about how the boundary checks each clause.
+ * What an output that is not this compiler learns about what each clause is as standard
+ * constraints.
  *
- * <p>A decoder reports a broken clause as the constraint the clause is stated as — a string short of
- * its minimum length, a map with too few entries — and only what no constraint states as the clause
+ * <p>A newtype's decoder reports a broken clause as the constraint the clause is — a string short of
+ * its minimum length, a map with too few entries — and only what no constraint is as the clause
  * itself. Which constraint a clause is was the checker's to decide, and an output that could read
  * only the condition would have to decide it again from the condition. So the answer crosses with
- * the clause, and what is held here is what it says: each clause on its own, in the order it is
- * declared, whatever the clauses before it are.
+ * the clause, and what is held here is what it says: each clause on its own, whatever the clauses
+ * before it are, and the same whichever form the data was declared in.
  */
-class AnOutputReadsHowTheBoundaryChecksAClauseTest {
+class AnOutputReadsWhatAClauseIsAsConstraintsTest {
 
     private static final String MODULE = """
             module shop
@@ -62,27 +63,27 @@ class AnOutputReadsHowTheBoundaryChecksAClauseTest {
     /** Checked once: every test reads a different declaration of the same module. */
     private static final CheckedModule SHOP = CheckedProgram.of(List.of(MODULE)).module("shop");
 
-    private static List<BoundaryCheck> boundaryOf(String name) {
+    private static List<ConstraintProjection> projectionOf(String name) {
         for (CheckedData each : SHOP.data()) {
             if (each.name().name().equals(name)) {
                 return assertInstanceOf(CheckedData.WithFields.class, each, name).invariants()
-                        .stream().map(ValueShape.Invariant::boundary).toList();
+                        .stream().map(ValueShape.Invariant::projection).toList();
             }
         }
         throw new AssertionError(name + " is not among this module's data");
     }
 
     /**
-     * A clause no constraint states is its condition alone; one stated whole is its constraint alone,
-     * though a clause checked as itself comes before it; one stated in part is both.
+     * A clause no constraint is, is none; one that is a constraint whole is complete, though a clause
+     * that is none comes before it; one that is a constraint in part is not complete.
      */
     @Test
-    void eachClauseSaysWhatItIsStatedAsOnItsOwn() {
+    void eachClauseSaysWhatItIsOnItsOwn() {
         assertEquals(List.of(
-                        BoundaryCheck.conditionOnly(),
-                        new BoundaryCheck(List.of(new BoundaryConstraint.MinLength(3)), false),
-                        new BoundaryCheck(List.of(new BoundaryConstraint.MaxLength(8)), true)),
-                boundaryOf("Code"));
+                        ConstraintProjection.none(),
+                        new ConstraintProjection(List.of(new BoundaryConstraint.MinLength(3)), true),
+                        new ConstraintProjection(List.of(new BoundaryConstraint.MaxLength(8)), false)),
+                projectionOf("Code"));
     }
 
     /**
@@ -95,10 +96,10 @@ class AnOutputReadsHowTheBoundaryChecksAClauseTest {
      */
     @Test
     void aPatternCrossesAsWhatItMeansAndHowItWasWritten() {
-        List<BoundaryCheck> sku = boundaryOf("Sku");
+        List<ConstraintProjection> sku = projectionOf("Sku");
 
         assertEquals(1, sku.size());
-        assertFalse(sku.get(0).checkCondition(), "the pattern is the whole clause");
+        assertTrue(sku.get(0).complete(), "the pattern is the whole clause");
         BoundaryConstraint.Pattern pattern = assertInstanceOf(BoundaryConstraint.Pattern.class,
                 sku.get(0).constraints().get(0));
         assertEquals("[0-9]+", pattern.written());
@@ -108,32 +109,34 @@ class AnOutputReadsHowTheBoundaryChecksAClauseTest {
     }
 
     /**
-     * What a clause is stated as is about the value and not about how it crosses: a product of one
-     * field holds the same clauses of the same field as a newtype does, and is answered alike.
+     * What a clause is as constraints is about the value and not about how it crosses: a product of
+     * one field holds the same clauses of the same field as a newtype does, and is answered alike.
+     * That its constraints are not what its boundary checks is its form's to say.
      */
     @Test
     void aProductOfOneFieldIsAnsweredAsTheNewtypeItIsMadeLike() {
-        assertEquals(boundaryOf("Code"), boundaryOf("Label"));
+        assertEquals(projectionOf("Code"), projectionOf("Label"));
     }
 
-    /** The field is read as the clause names it, whatever it is called. */
+    /** The field is the one the clause reads, whatever it is called. */
     @Test
-    void aClauseIsReadOfTheOneFieldByItsName() {
-        assertEquals(List.of(new BoundaryCheck(List.of(new BoundaryConstraint.MinLength(3)), false)),
-                boundaryOf("Handle"));
+    void aClauseIsReadOfTheOneFieldWhateverItIsCalled() {
+        assertEquals(List.of(new ConstraintProjection(
+                        List.of(new BoundaryConstraint.MinLength(3)), true)),
+                projectionOf("Handle"));
     }
 
     /** A map's bound at one entry is its emptiness, as a list's is. */
     @Test
     void aMapsSizeIsAConstraintOfTheMap() {
-        assertEquals(List.of(new BoundaryCheck(List.of(new BoundaryConstraint.MapNonEmpty()), false)),
-                boundaryOf("Tally"));
+        assertEquals(List.of(new ConstraintProjection(
+                        List.of(new BoundaryConstraint.MapNonEmpty()), true)),
+                projectionOf("Tally"));
     }
 
-    /** A data of more than one field has no one value for a constraint to be about, and the
-     *  boundary checks each of its clauses whole. */
+    /** A data of more than one field has no one field for a constraint to be about. */
     @Test
-    void aClauseOfManyFieldsIsItsCondition() {
-        assertEquals(List.of(BoundaryCheck.conditionOnly()), boundaryOf("Span"));
+    void aClauseOfManyFieldsIsNone() {
+        assertEquals(List.of(ConstraintProjection.none()), projectionOf("Span"));
     }
 }

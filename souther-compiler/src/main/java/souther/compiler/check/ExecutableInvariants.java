@@ -1,7 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.core.BoundaryCheck;
+import souther.compiler.core.ConstraintProjection;
 import souther.compiler.core.Core;
 import souther.compiler.core.ValueShape;
 import souther.compiler.diag.CompileException;
@@ -81,9 +81,9 @@ public final class ExecutableInvariants {
                         inners, fieldTypes, FieldLayout.asWritten(symbols)), data);
         // A constraint is about the value of a data made of one field, whichever form it was
         // declared in: a newtype and a product of one field hold the same clauses of that field. A
-        // data of more fields has no one value for a constraint to be about, and the boundary
-        // checks each of its clauses whole.
-        Optional<BoundaryConstraints.Checks> boundary = fields.size() == 1
+        // data of more fields has no one field for a constraint to be about, and each of its clauses
+        // is none.
+        Optional<BoundaryConstraints.Projections> projected = fields.size() == 1
                 ? Optional.of(BoundaryConstraints.of(symbols, data.declares(), fields.get(0), form,
                         statements))
                 : Optional.empty();
@@ -100,8 +100,8 @@ public final class ExecutableInvariants {
                                 Type.show(condition.type()))).build());
             }
             invariants.add(new ValueShape.Invariant(clause.name(), condition,
-                    boundary.map(checks -> checks.of(governed.id()))
-                            .orElseGet(BoundaryCheck::conditionOnly)));
+                    projected.map(projections -> projections.of(governed.id()))
+                            .orElseGet(ConstraintProjection::none)));
         }
         return new ValueShape(data.declares(), fields, invariants);
     }

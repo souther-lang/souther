@@ -6,8 +6,8 @@ import souther.compiler.check.Lower;
 import souther.compiler.check.Derived;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.ast.Hir;
-import souther.compiler.core.BoundaryCheck;
 import souther.compiler.core.BoundaryConstraint;
+import souther.compiler.core.ConstraintProjection;
 import souther.compiler.core.ValueShape;
 import souther.compiler.regex.PatternMeaning;
 import souther.compiler.types.BindingId;
@@ -744,7 +744,7 @@ final class CodecGen {
                 emitRekeyHelper(cb, key);
             }
             emitSharedInstance(cb, cdDec, ClassFile.ACC_PUBLIC, emitPatternFields(cb));
-            if (invariants.stream().anyMatch(c -> c.boundary().checkCondition())) {
+            if (invariants.stream().anyMatch(c -> !c.projection().complete())) {
                 emitInvariantFailureHelper(cb, data.name());
             }
             if (!patternFields.isEmpty()) {
@@ -758,13 +758,14 @@ final class CodecGen {
     }
 
     /**
-     * A newtype's clauses as its decoder checks them: each in the order it is declared, with how the
-     * boundary checks it, which is the checker's answer and not this emitter's
-     * ({@link ValueShape.Invariant#boundary()}).
+     * The clauses a decoder checks as the value it decodes: a newtype's, each in the order it is
+     * declared, with what it is as constraints — the checker's answer and not this emitter's
+     * ({@link ValueShape.Invariant#projection()}).
      *
      * <p>None for a product, which crosses as an object: its fields are decoded one by one and its
-     * clauses are checked whole where it is constructed, one field or many. Which form a data was
-     * declared in is what decides that, and it is asked here rather than in the answer.
+     * clauses run whole, as the rules they are, where it is constructed — one field or many, whatever
+     * they are as constraints. That is the form a data was declared in deciding how it crosses, and
+     * it is asked here, where the crossing is written, and not in the answer.
      */
     private List<ValueShape.Invariant> invariantsOf(Hir.Data data) {
         return data.newtype() ? ctx.shapeOf(data.declares()).invariants() : List.of();
@@ -774,7 +775,7 @@ final class CodecGen {
     private static List<BoundaryConstraint> constraintsOf(List<ValueShape.Invariant> clauses) {
         List<BoundaryConstraint> out = new ArrayList<>();
         for (ValueShape.Invariant clause : clauses) {
-            out.addAll(clause.boundary().constraints());
+            out.addAll(clause.projection().constraints());
         }
         return out;
     }
@@ -1673,11 +1674,11 @@ final class CodecGen {
 
     /**
      * Constrains the decoder on the stack with the newtype's invariant, clause by clause in the order
-     * they are declared. What the checker stated a clause as ({@link BoundaryCheck}) is chained as
-     * that constraint, so the failure carries the constraint's code, metadata and default message at
-     * the value's path — {@code too_short} with {@code min}, not one {@code invariant_violation} for
-     * every rule in the model. Where the constraints do not cover the clause, the clause's own check
-     * follows them, under the shared code with the rejecting type and, where the clause has one, its
+     * they are declared. What the checker found a clause to be as constraints
+     * ({@link ConstraintProjection}) is chained as those constraints, so the failure carries the
+     * constraint's code, metadata and default message at the value's path — {@code too_short} with
+     * {@code min}, not one {@code invariant_violation} for every rule in the model. Where they are
+     * not the whole clause, the clause's own check follows them, under the shared code with the rejecting type and, where the clause has one, its
      * name in the metadata. That failure is built here rather than through {@code refine}'s message
      * overload, which mints a custom-message issue a resolver refuses to touch — an invariant's text
      * must stay replaceable.
@@ -1690,10 +1691,10 @@ final class CodecGen {
                                           List<ValueShape.Invariant> clauses) {
         for (int i = 0; i < clauses.size(); i++) {
             ValueShape.Invariant clause = clauses.get(i);
-            for (BoundaryConstraint c : clause.boundary().constraints()) {
+            for (BoundaryConstraint c : clause.projection().constraints()) {
                 emitConstraint(code, carrier, c);
             }
-            if (clause.boundary().checkCondition()) {
+            if (!clause.projection().complete()) {
                 code.invokedynamic(invariantPredicateCallSite(base, i));
                 // The clause is captured off the stack, so a clause with no name captures null —
                 // a constant-pool entry could not have been one.
