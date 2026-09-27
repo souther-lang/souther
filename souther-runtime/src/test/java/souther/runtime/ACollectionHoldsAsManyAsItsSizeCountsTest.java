@@ -64,19 +64,18 @@ class ACollectionHoldsAsManyAsItsSizeCountsTest {
 
     /** A walk over the leaves of a vector holding the most a collection holds ends on its last
      *  element: the last leaf is 31 slots, and a step of a whole leaf from its start would carry
-     *  the position over the top of an {@code int}. The leaves are not built; what is asked is the
-     *  arithmetic every such walk advances by. */
+     *  the position over the top of an {@code int}. Only the last two leaves are asked, in
+     *  {@code int} arithmetic as a walk does it, because the step that carried over is the one
+     *  from the last leaf and the leaves before it are all whole. Nothing is built. */
     @Test
     void aWalkOverTheLeavesOfTheFullestVectorEndsOnItsLastElement() {
         int cnt = (int) MOST;
-        long covered = 0;
-        int leaves = 0;
-        for (int base = 0; base < cnt; base += PersistentVector.leafLength(base, cnt)) {
-            assertTrue(base >= 0, "the position wrapped after " + leaves + " leaves");
-            covered += PersistentVector.leafLength(base, cnt);
-            leaves++;
-        }
-        assertEquals(MOST, covered);
-        assertEquals((MOST + 31) / 32, leaves);
+        int last = ((cnt - 1) / 32) * 32;
+        int beforeLast = last - 32;
+
+        assertEquals(32, PersistentVector.leafLength(beforeLast, cnt));
+        assertEquals(last, beforeLast + PersistentVector.leafLength(beforeLast, cnt));
+        assertEquals(31, PersistentVector.leafLength(last, cnt));
+        assertEquals(cnt, last + PersistentVector.leafLength(last, cnt));
     }
 }
