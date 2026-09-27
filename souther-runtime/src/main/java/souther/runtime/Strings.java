@@ -86,7 +86,7 @@ public final class Strings {
      * not one — it is not a sequence of scalar values, or its canonical value has no place.
      *
      * <p>The one way text becomes a value, whichever door it came through. The doors differ in how
-     * they say no — a derived decoder with an issue at the path ({@link TextLeaf#admit}), a crossing
+     * they say no — a derived decoder with an issue at the path, a crossing
      * from Java by aborting ({@link #admit}), a source literal with a diagnostic — and not in what
      * they refuse, so each of them asks this and says the refusal it was in its own way.
      *

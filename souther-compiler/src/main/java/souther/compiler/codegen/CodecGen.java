@@ -23,6 +23,7 @@ import souther.compiler.core.Core;
 
 import souther.compiler.jvm.DecoderKind;
 import souther.compiler.jvm.GeneratedClass;
+import souther.compiler.types.TextRule;
 import java.lang.classfile.ClassBuilder;
 import java.lang.classfile.ClassFile;
 import java.lang.classfile.CodeBuilder;
@@ -61,6 +62,32 @@ final class CodecGen {
     /** The $Dec class currently being generated — the owner of the {@code __rekey} helpers a
      * newtype-keyed map decoder references. Set per {@link #generateDecoderClass}. */
     private ClassDesc decoderClass;
+
+    /** The decoder class whose body is being written, while one is: the owner of the {@code __text}
+     *  a string leaf in it calls. Null outside {@link #buildDecoder}. */
+    private ClassDesc textLeafOwner;
+
+    /** Whether the decoder class being written reads a string, and so needs its {@code __text}. */
+    private boolean usesTextLeaf;
+
+    /**
+     * {@link #build} of a class that is a decoder: one that reads a string carries the
+     * {@code __text} its string leaf calls, so a leaf is never emitted into a class that lacks one.
+     */
+    private byte[] buildDecoder(ClassDesc cdDec, Consumer<ClassBuilder> body) {
+        textLeafOwner = cdDec;
+        usesTextLeaf = false;
+        try {
+            return build(cdDec, cb -> {
+                body.accept(cb);
+                if (usesTextLeaf) {
+                    emitTextHelper(cb);
+                }
+            });
+        } finally {
+            textLeafOwner = null;
+        }
+    }
 
     /** The value class the decoder being generated builds. Its {@code $Ctfe} carries the clause
      *  predicates a refined constraint reaches for, and asking for that class by the type it belongs
@@ -137,12 +164,14 @@ final class CodecGen {
      * any one shape, and the first attempt at it — normalizing where each caller happened to build a
      * leaf — left four paths behind, each found separately and after the fact.
      *
-     * <p>{@code TextLeaf::admit} is the one step through {@code Decoder.flatMapWithPath}: it answers
-     * the NFC form, or says why the text is not a {@code String} — it holds half of a surrogate pair,
-     * or its canonical value is longer than a {@code String} holds. Each refusal is reported at the
-     * leaf's path rather than thrown, since a decoder reports what it could not read; both are Raoh's
-     * {@code invalid_format}, with a message apiece. One step, because every text that arrives passes
-     * it and each step of a decoder is a result built per value. Not
+     * <p>{@code Strings::admission} is lifted through {@code Decoder.map}: it answers the NFC form,
+     * or says why the text is not a {@code String} — it holds half of a surrogate pair, or its
+     * canonical value is longer than a {@code String} holds. The class's own {@code __text} says that
+     * as a {@code Result} through {@code flatMapWithPath}: each refusal is reported at the leaf's path
+     * ({@link TextRule}) rather than thrown, since a decoder reports what it could not read, and both
+     * are Raoh's {@code invalid_format}, with a message apiece. The runtime stops at the admission and
+     * does not know Raoh, and two steps are what a leaf costs every text that arrives, so it is not a
+     * refinement for each refusal. Not
      * {@code StringDecoder.normalize()}, which is Raoh's call into {@code java.text.Normalizer} and
      * answers for whatever Unicode version this JDK shipped with. {@code StringDecoder.from} wraps
      * the result back into a {@link CD_StringDecoder} so a constraint chained after this (a length
@@ -153,18 +182,74 @@ final class CodecGen {
      * fails on what a caller would see rather than on how the code is written.
      */
     private void emitStringLeaf(CodeBuilder code, ClassDesc leafOwner) {
+        if (textLeafOwner == null) {
+            throw new IllegalStateException("a string leaf is emitted into a class that is not"
+                    + " written by buildDecoder, so it has no __text to call");
+        }
         code.invokestatic(leafOwner, "string", MTD_leafString);
-        code.invokedynamic(TEXT_LEAF_ADMIT);
+        code.invokedynamic(STRINGS_ADMISSION);
+        code.invokeinterface(CD_RDecoder, "map", MTD_Rdecoder_map);
+        code.invokedynamic(textCallSite());
         code.invokeinterface(CD_RDecoder, "flatMapWithPath", MTD_flatMapWithPath);
         code.invokestatic(CD_StringDecoder, "from", MTD_stringDecoderFrom);
+        usesTextLeaf = true;
     }
 
-    /** {@code TextLeaf::admit} as a {@code BiFunction}, for the string leaf above. */
-    private static final DynamicCallSiteDesc TEXT_LEAF_ADMIT = Lambdas.callSite(
-            Lambdas.Sam.BI_FUNCTION,
-            MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, CD_TextLeaf,
-                    "admit", MTD_textLeafAdmit),
-            MTD_textLeafAdmit);
+    /** {@code Strings::admission} as a {@code Function}, for the string leaf above. */
+    private static final DynamicCallSiteDesc STRINGS_ADMISSION = Lambdas.callSite(
+            Lambdas.Sam.FUNCTION,
+            MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, CD_Strings,
+                    "admission", MTD_admission),
+            MTD_admission);
+
+    /** This class's {@code __text} as a {@code BiFunction}, for the string leaf above. */
+    private DynamicCallSiteDesc textCallSite() {
+        return Lambdas.callSite(Lambdas.Sam.BI_FUNCTION,
+                MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, textLeafOwner,
+                        "__text", MTD_textOfAdmission),
+                MTD_textOfAdmission);
+    }
+
+    /**
+     * {@code static Result __text(TextAdmission admission, Path path)}: the text an admission let in,
+     * or the failure at {@code path} saying why it is not a {@code String}.
+     *
+     * <p>Raoh's code {@code invalid_format} for either refusal, the one a temporal's text is refused
+     * with too, and a message of its own for each ({@link TextRule}). Emitted into the class that
+     * reads a string, as the other failures a decoder reports are, so that the runtime, which does
+     * not know Raoh, stops at the admission.
+     */
+    private void emitTextHelper(ClassBuilder cb) {
+        cb.withMethodBody("__text", MTD_textOfAdmission,
+                ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC, code -> {
+            Label notAdmitted = code.newLabel();
+            Label notHalfAPair = code.newLabel();
+            code.aload(0);
+            code.instanceOf(CD_TextAdmitted);
+            code.ifeq(notAdmitted);
+            code.aload(0);
+            code.checkcast(CD_TextAdmitted);
+            code.invokevirtual(CD_TextAdmitted, "text", MTD_admittedText);
+            code.invokestatic(CD_RResult, "ok", MTD_Rok, true);
+            code.areturn();
+            code.labelBinding(notAdmitted);
+            code.aload(0);
+            code.instanceOf(CD_TextNotText);
+            code.ifeq(notHalfAPair);
+            emitTextRefusal(code, TextRule.HALF_A_PAIR);
+            code.labelBinding(notHalfAPair);
+            emitTextRefusal(code, TextRule.NO_PLACE);
+        });
+    }
+
+    private void emitTextRefusal(CodeBuilder code, String message) {
+        code.aload(1);                                            // path
+        code.loadConstant(TextRule.REFUSED);
+        code.loadConstant(message);
+        code.invokestatic(CD_Map, "of", MTD_mapOfNone, true);
+        code.invokestatic(CD_RResult, "failCustom", MTD_Rfail4, true);
+        code.areturn();
+    }
 
 
     /**
@@ -300,7 +385,7 @@ final class CodecGen {
         Boundary.Representation.Discriminated form = discriminated(alternatives);
         List<Boundary.WireCase> wireCases = alternatives.wireCases();
         ClassDesc cdDec = cd(decoderOf(sum, src));
-        return build(cdDec, cb -> {
+        return buildDecoder(cdDec, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_RDecoder);
             emitDefaultCtor(cb);
@@ -359,7 +444,7 @@ final class CodecGen {
      */
     byte[] generateEnumSumDecoder(Hir.SumData sum, Boundary.Alternatives alternatives, Src src) {
         ClassDesc cdDec = cd(decoderOf(sum, src));
-        return build(cdDec, cb -> {
+        return buildDecoder(cdDec, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_RDecoder);
             emitDefaultCtor(cb);
@@ -599,7 +684,7 @@ final class CodecGen {
         decoderClass = cdDec;
         decodedValue = valueOf(data);
         Invariants invariants = invariantsOf(data, fields);
-        return build(cdDec, cb -> {
+        return buildDecoder(cdDec, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_RDecoder);
             emitDefaultCtor(cb);
