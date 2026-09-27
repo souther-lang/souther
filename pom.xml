@@ -60,7 +60,7 @@
         <souther.java.minimum>25</souther.java.minimum>
         <souther.jvm.stack>4m</souther.jvm.stack>
         <maven.compiler.release>${souther.java.minimum}</maven.compiler.release>
-        <raoh.version>0.7.2</raoh.version>
+        <raoh.version>0.8.0</raoh.version>
         <jspecify.version>1.0.1</jspecify.version>
         <!-- Where compiled classes go, named so the `m2e` profile below can send the editor's
              somewhere else. A build outside the editor uses the Maven defaults. -->

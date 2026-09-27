@@ -34,7 +34,8 @@ final class Lambdas {
         PREDICATE(CD_Predicate, "test", MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object)),
         TO_INT_FUNCTION(CD_ToIntFunction, "applyAsInt",
                 MethodTypeDesc.of(ConstantDescs.CD_int, CD_Object)),
-        ENCODER(CD_REncoder, "encode", MTD_Rencode);
+        ENCODER(CD_REncoder, "encode", MTD_Rencode),
+        DECODER(CD_RDecoder, "decode", MTD_Rdecode);
 
         private final ClassDesc type;
         private final String method;

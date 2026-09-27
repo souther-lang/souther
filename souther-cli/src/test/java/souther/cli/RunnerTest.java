@@ -854,4 +854,26 @@ class RunnerTest {
         assertTrue(e.localized(java.util.Locale.JAPANESE).contains("エンコード"),
                 e.localized(java.util.Locale.JAPANESE));
     }
+
+    /**
+     * A {@code Decimal} is read with every digit it was written with, by the runner's own reader
+     * (spec §a-boundary-scalar-is-read-not-converted). A reader that parses a fraction as a
+     * {@code double} hands the decoder {@code 0.1} for {@code 0.10000000000000001}, and the decoder
+     * refuses that, so the runner keeps the fraction as the decimal it was written; take that away
+     * and neither of these can be read at all. Both ways in are walked, a bare argument and a field of
+     * a data, because each is a decoder of its own.
+     */
+    @Test
+    void aDecimalIsReadWithEveryDigitItWasWritten() throws Exception {
+        Path file = write("amount.sou", """
+                data Holder = { v: Decimal }
+                behavior bare : (d: Decimal) -> Decimal
+                let bare (d) = d
+                behavior wrapped : (h: Holder) -> Holder
+                let wrapped (h) = h
+                """);
+        assertEquals("0.10000000000000001", Runner.run(file, "bare", "0.10000000000000001").trim());
+        assertEquals("{\"v\":0.10000000000000001}",
+                Runner.run(file, "wrapped", "{\"v\":0.10000000000000001}").trim());
+    }
 }

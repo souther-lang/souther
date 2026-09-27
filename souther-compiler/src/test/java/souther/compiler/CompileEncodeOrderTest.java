@@ -106,8 +106,8 @@ class CompileEncodeOrderTest {
         // that are one member. What closes it is that a boundary writes an amount as an amount
         // ([#primitives]), which makes the two sets the same bytes rather than the same order.
         //
-        // Driven through the derived codecs rather than `souther run`, because the runner's JSON
-        // parser reads a float as a double and the scale is gone before a decoder sees it.
+        // Driven through the derived codecs with the amounts as BigDecimals, so the scale each one
+        // was written with is exactly what reaches the decoder.
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
                 module demo
 
