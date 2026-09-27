@@ -11,6 +11,7 @@ import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.partition.LinesWhereTheyFall;
 import souther.compiler.partition.RuleReachNumbering;
+import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.PathReachability;
@@ -1681,14 +1682,25 @@ final class Coverages {
         return EstablishmentGap.Observation.of(codes);
     }
 
+    /** No population written some of, for an answer that met none. One value, since nothing
+     *  differs between the empty selections an answer would otherwise make each time. */
+    private static final CanonicalSelection<CompositionRepertoire> NO_REPERTOIRES =
+            PublicationOrders.COMPOSITION_REPERTOIRES.keep(Set.of());
+
+    /** No number not held, for an answer that held every one it worked out. */
+    private static final CanonicalSelection<CompositionCapacity> NO_CAPACITIES =
+            PublicationOrders.COMPOSITION_CAPACITIES.keep(Set.of());
+
     /**
      * What a walk that reached no placement left behind, in the words an assessment is read in.
      *
      * <p>Three shapes and not two, because what a reader does about each differs. A figure is a
      * number to raise; a population this writes some of is work nobody has done and no number
-     * reaches the rest of it; and a walk with neither to say narrowed nothing at all. Held as two,
-     * the middle one was read as the last — so a search that looked in the one place an order
-     * without a step names came back saying the rules leave nothing there.
+     * reaches the rest of it, and a number the walk could not hold is reached by a wider run or by
+     * nothing, and both of those come back under the one shape with no figure in it; and a walk
+     * with none of them to say narrowed nothing at all. Held as two, the middle one was read as the
+     * last — so a search that looked in the one place an order without a step names came back
+     * saying the rules leave nothing there.
      *
      * <p>The word is the walk's own either way and is not read off what it left, which is why it is
      * taken from the same place for all three.
@@ -1812,7 +1824,7 @@ final class Coverages {
                     new ItemAssessment.Attempt.Stopped(left.why(), within, left.unrepresented(),
                             PublicationOrders.COMPOSITION_BUDGETS.keep(left.by()),
                             PublicationOrders.COMPOSITION_REPERTOIRES.keep(left.notAllOf()),
-                            PublicationOrders.COMPOSITION_CAPACITIES.keep(Set.of()));
+                            NO_CAPACITIES);
             // A search that ran to the end of what this compiler writes, where that is not the end
             // of what there is to write. It leaves the point open the way the one above does and
             // names nothing anybody could raise, which is why it arrives as its own arm and its
@@ -1821,15 +1833,14 @@ final class Coverages {
                     new ItemAssessment.Attempt.Unexhausted(left.why(), within,
                             left.unrepresented(),
                             PublicationOrders.COMPOSITION_REPERTOIRES.keep(left.writes()),
-                            PublicationOrders.COMPOSITION_CAPACITIES.keep(Set.of()));
+                            NO_CAPACITIES);
             // A search that ran to the end of what it was handed, where what it was handed was
             // short of the point. It names a figure like the one above and its word is its own, so
             // the two are carried side by side rather than one being read off the other.
             case souther.compiler.partition.Generator.BoundaryAttempt.Limited left ->
                     new ItemAssessment.Attempt.Limited(left.why(), within, left.unrepresented(),
                             PublicationOrders.COMPOSITION_BUDGETS.keep(left.by()),
-                            PublicationOrders.COMPOSITION_REPERTOIRES.keep(Set.of()),
-                            PublicationOrders.COMPOSITION_CAPACITIES.keep(Set.of()));
+                            NO_REPERTOIRES, NO_CAPACITIES);
             // And a point no search was made for at all. It names a figure like the two above and
             // is not an outcome of a search, which is what keeps it out of what the readings of a
             // line together establish.

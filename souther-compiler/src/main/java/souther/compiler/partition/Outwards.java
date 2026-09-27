@@ -9,7 +9,6 @@ import souther.compiler.numeric.PlacesApart;
 import souther.compiler.values.ValueSet;
 import souther.exact.ExactFailure;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -194,18 +193,24 @@ final class Outwards {
         // examining the last place of the run happened to take the count up to it.
         Ended ended = Ended.HAVING_TRIED_THEM_ALL;
         UnheldNumber unheld = null;
-        ExactRatio origin = Count.number(first).exactly();
+        // Each direction carried from the last place it reached, one step at a time: the place a
+        // step out is the one before it and a step more, and working it out that way is one sum per
+        // direction rather than a product and a sum from the start every time.
+        ExactRatio forward = by.exactly();
+        ExactRatio backward = forward.negated();
+        ExactRatio above = Count.number(first).exactly();
+        ExactRatio below = above;
         outward:
-        for (int step = 1; ; step++) {
-            ExactRatio offset = by.times(BigDecimal.valueOf(step)).exactly();
+        for (;;) {
             // Worked out exactly and put on the carrier only once each is a number. Where this
             // cannot hold one of them, the walk ends here: a run holding more places than this could
             // work out is not a run walked to its end.
             Place[] neighbours;
             try {
+                above = above.plus(forward);
+                below = below.plus(backward);
                 neighbours = new Place[] {
-                        onTheCarrier(origin.plus(offset), carrier),
-                        onTheCarrier(origin.minus(offset), carrier)};
+                        onTheCarrier(above, carrier), onTheCarrier(below, carrier)};
             } catch (ExactFailure failure) {
                 ended = Ended.AT_A_PLACE_IT_COULD_NOT_HOLD;
                 unheld = UnheldNumber.of(failure);
