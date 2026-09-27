@@ -83,8 +83,9 @@ let filterEntries (keep: ('k, 'a) -> Bool, m: Map<'k, 'a>): Map<'k, 'a> =
 // entries whose key equality class is also in `b`, with `a`'s value; `difference` keeps `a`'s entries
 // whose key equality class is not, again with `a`'s value. Values from `b` are never merged into
 // `a`'s — combining two values under one key is a domain decision, so it is written with `fold` and
-// `updateOrInsert` where the rule lives. Which of the two equal keys represents a shared class is
-// unspecified ([#collections]).
+// `updateOrInsert` where the rule lives. For a class both maps have, `union` and `intersection` keep
+// it and which of the two equal keys represents it is unspecified ([#collections]); `difference`
+// removes that class, so no representative of it survives.
 //
 // These are binary operations, so they take their two operands in the order they are written and the
 // pipe's subject-last rule does not apply: `Set.difference(a, b)` is `a` minus `b`, and threading one
