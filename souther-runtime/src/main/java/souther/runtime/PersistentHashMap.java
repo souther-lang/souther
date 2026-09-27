@@ -402,6 +402,8 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
                     if (Values.equal(valAt(i), val)) {
                         return this;
                     }
+                    // Keeping currentKey and replacing only the value is this runtime's choice, not
+                    // a Souther language contract: which of two equal keys a map holds is unspecified.
                     return copyAndSetValue(bitpos, val, owned);
                 }
                 Node sub = mergeTwoPairs(currentKey, hashOf(currentKey), valAt(i),
@@ -643,6 +645,8 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
                 if (Values.equal(given(values.get(at)), val)) {
                     return this;
                 }
+                // As above: keys is kept as-is and only values changes. An implementation invariant,
+                // not something the language promises about which equal key a map represents.
                 return new HashCollisionNode(hash, keys, replaced(values, at, held(val)));
             }
             addedLeaf.value = true;
