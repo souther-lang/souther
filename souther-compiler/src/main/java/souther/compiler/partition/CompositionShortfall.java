@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import java.util.Collection;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.Set;
 
 /**
@@ -29,17 +30,21 @@ import java.util.Set;
  * @param figures     numbers of this compiler's that stopped it, each one somebody can raise to
  *                    have the search go on
  * @param populations what it writes some of rather than all of, which no figure reaches
+ * @param unheld      numbers it worked out and could not hold, which a wider run reaches or
+ *                    nothing does
  */
 public record CompositionShortfall(Set<CompositionBudget> figures,
-                                   Set<CompositionRepertoire> populations) {
+                                   Set<CompositionRepertoire> populations,
+                                   Set<CompositionCapacity> unheld) {
 
     /** A search that met nothing of this compiler's, which is what came back about the model. */
     public static final CompositionShortfall NONE =
-            new CompositionShortfall(Set.of(), Set.of());
+            new CompositionShortfall(Set.of(), Set.of(), Set.of());
 
     public CompositionShortfall {
         figures = Set.copyOf(figures);
         populations = Set.copyOf(populations);
+        unheld = Set.copyOf(unheld);
     }
 
     /** One that met these figures and nothing it knows it walked part of. */
@@ -54,13 +59,20 @@ public record CompositionShortfall(Set<CompositionBudget> figures,
 
     public static CompositionShortfall of(Collection<CompositionBudget> figures,
                                           Collection<CompositionRepertoire> populations) {
-        return figures.isEmpty() && populations.isEmpty()
-                ? NONE : new CompositionShortfall(Set.copyOf(figures), Set.copyOf(populations));
+        return of(figures, populations, Set.of());
+    }
+
+    public static CompositionShortfall of(Collection<CompositionBudget> figures,
+                                          Collection<CompositionRepertoire> populations,
+                                          Collection<CompositionCapacity> unheld) {
+        return figures.isEmpty() && populations.isEmpty() && unheld.isEmpty()
+                ? NONE : new CompositionShortfall(Set.copyOf(figures), Set.copyOf(populations),
+                        Set.copyOf(unheld));
     }
 
     /** Whether there is anything of this compiler's here to tell a reader about. */
     public boolean nothing() {
-        return figures.isEmpty() && populations.isEmpty();
+        return figures.isEmpty() && populations.isEmpty() && unheld.isEmpty();
     }
 
     /**
@@ -68,8 +80,8 @@ public record CompositionShortfall(Set<CompositionBudget> figures,
      *
      * <p>Every one of them and not the first: two searches that fell short in two ways leave a
      * reader both pieces of work, and one dropped for the other is a number raised that changes
-     * nothing. The two vocabularies are folded apart, because what closes one is not what closes
-     * the other.
+     * nothing. The three vocabularies are folded apart, because what closes one is not what closes
+     * another.
      */
     public CompositionShortfall and(CompositionShortfall other) {
         if (other.nothing()) {
@@ -84,6 +96,8 @@ public record CompositionShortfall(Set<CompositionBudget> figures,
         Set<CompositionRepertoire> writes = EnumSet.noneOf(CompositionRepertoire.class);
         writes.addAll(populations);
         writes.addAll(other.populations());
-        return new CompositionShortfall(both, writes);
+        Set<CompositionCapacity> notHeld = new HashSet<>(unheld);
+        notHeld.addAll(other.unheld());
+        return new CompositionShortfall(both, writes, notHeld);
     }
 }

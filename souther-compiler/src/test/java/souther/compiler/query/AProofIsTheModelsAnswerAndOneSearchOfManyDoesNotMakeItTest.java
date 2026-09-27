@@ -144,6 +144,7 @@ class AProofIsTheModelsAnswerAndOneSearchOfManyDoesNotMakeItTest {
                         Generator.UnresolvedCombination.Reason.wordFor(Set.of(budget))),
                 WAY, souther.compiler.partition.CompositionAccount.NOTHING,
                 PublicationOrders.COMPOSITION_BUDGETS.keep(EnumSet.of(budget)),
-                PublicationOrders.COMPOSITION_REPERTOIRES.keep(List.of()));
+                PublicationOrders.COMPOSITION_REPERTOIRES.keep(List.of()),
+                PublicationOrders.COMPOSITION_CAPACITIES.keep(List.of()));
     }
 }

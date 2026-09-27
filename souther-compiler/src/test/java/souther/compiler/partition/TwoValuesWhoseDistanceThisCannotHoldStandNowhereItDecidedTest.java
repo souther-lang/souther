@@ -6,6 +6,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.observe.RunSensitivity;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -40,11 +41,20 @@ class TwoValuesWhoseDistanceThisCannotHoldStandNowhereItDecidedTest {
     /** A tenth to the power of a scale near the end of the range. */
     private static final BigDecimal FINE = new BigDecimal(BigInteger.ONE, 1 << 30);
 
+    /**
+     * And which of the two ways it went unheld is said with it. One minus a fine decimal is a
+     * whole number past what the host holds, which no run with more room holds either, so every
+     * run says the same about this point.
+     */
     @Test
     void aDistanceThisCannotHoldIsOneItCouldNotTellAbout() {
-        assertEquals(BorderQuantity.Stands.couldNotTell(ReadingGap.COULD_NOT_WORK_OUT),
+        ReadingGap unheld = ReadingGap.of(UnheldNumber.NO_REPRESENTATION_EXISTS);
+
+        assertEquals(BorderQuantity.Stands.couldNotTell(unheld),
                 stands(PAIR, WHERE_THEY_MEET, row(FINE, BigDecimal.ONE)),
                 "the values are both there and what they come to was not worked out");
+        assertEquals(RunSensitivity.UNAFFECTED, unheld.runSensitivity(),
+                "and no wider run works it out");
     }
 
     /**

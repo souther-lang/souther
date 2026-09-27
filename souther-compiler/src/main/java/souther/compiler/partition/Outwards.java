@@ -51,10 +51,24 @@ final class Outwards {
      * raise a number that reaches nothing. So what is offered is the ending itself, and every
      * caller says what it does with each.
      */
-    record Walked(List<Place> places, Ended ended) implements Iterable<Place> {
+    record Walked(List<Place> places, Ended ended, UnheldNumber unheld) implements Iterable<Place> {
 
+        /**
+         * {@code unheld} is why the place the walk stopped at could not be held, and there is one
+         * exactly where that is how it ended: the ending says it stopped there, and which of the two
+         * ways it stopped is what a reader is owed beside it.
+         */
         Walked {
             places = List.copyOf(places);
+            if ((ended == Ended.AT_A_PLACE_IT_COULD_NOT_HOLD) != (unheld != null)) {
+                throw new IllegalArgumentException(
+                        "a walk says why it could not hold a place exactly where it stopped at one: "
+                                + ended + ", " + unheld);
+            }
+        }
+
+        Walked(List<Place> places, Ended ended) {
+            this(places, ended, null);
         }
 
         /** The places, so that a caller wanting only those walks this. */
@@ -179,6 +193,7 @@ final class Outwards {
         // place of the run was found and there is nothing left to examine it with — and never where
         // examining the last place of the run happened to take the count up to it.
         Ended ended = Ended.HAVING_TRIED_THEM_ALL;
+        UnheldNumber unheld = null;
         ExactRatio origin = Count.number(first).exactly();
         outward:
         for (int step = 1; ; step++) {
@@ -191,8 +206,9 @@ final class Outwards {
                 neighbours = new Place[] {
                         onTheCarrier(origin.plus(offset), carrier),
                         onTheCarrier(origin.minus(offset), carrier)};
-            } catch (ExactFailure _) {
+            } catch (ExactFailure failure) {
                 ended = Ended.AT_A_PLACE_IT_COULD_NOT_HOLD;
+                unheld = UnheldNumber.of(failure);
                 break;
             }
             boolean took = false;
@@ -230,7 +246,7 @@ final class Outwards {
                 break;   // neither direction has a place left, so this walked the whole of it
             }
         }
-        return new Walked(out, ended);
+        return new Walked(out, ended, unheld);
     }
 
     /** The place a number is on the carrier, or null where the carrier holds none there. */

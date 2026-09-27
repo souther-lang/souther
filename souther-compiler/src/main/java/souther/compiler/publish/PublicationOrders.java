@@ -6,10 +6,12 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionCapacity;
 import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.partition.RulesTaken;
+import souther.compiler.partition.UnheldNumber;
 import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.ObligationDisposition;
@@ -242,7 +244,9 @@ public final class PublicationOrders {
         for (Incompleteness.Code code : OBSERVATION_CODES_IN_ORDER) {
             out.add(ReadingGap.of(code));
         }
-        out.add(ReadingGap.COULD_NOT_WORK_OUT);
+        for (UnheldNumber why : UnheldNumber.values()) {
+            out.add(ReadingGap.of(why));
+        }
         out.add(ReadingGap.NO_VALUE);
         out.add(ReadingGap.COULD_NOT_WALK);
         out.add(ReadingGap.COULD_NOT_READ_ROW);
@@ -305,6 +309,17 @@ public final class PublicationOrders {
                             CompositionRepertoire.PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE));
 
     /**
+     * What this compiler worked out and could not hold, in the order a reader meets them.
+     *
+     * <p>Its own order for the reason the two above have theirs: a number the arithmetic could not
+     * hold is neither a figure to raise nor work nobody has done. Grouped by what was being worked
+     * out, in the order the searches reach them, and within that the number a wider run holds first,
+     * since that is the one a reader can do something about.
+     */
+    public static final CanonicalSelection.Order<CompositionCapacity> COMPOSITION_CAPACITIES =
+            CanonicalSelection.Order.overValues(CompositionCapacity.every());
+
+    /**
      * What stopped this compiler showing a row can be written, by how far it had got.
      *
      * <p>A value that was built and did not come back whole is nearer an answer than one that was
@@ -362,6 +377,7 @@ public final class PublicationOrders {
                 WeakeningWord.BORDER_VALUE_UNREADABLE,
                 WeakeningWord.BORDER_VALUE_ABSENT,
                 WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE,
+                WeakeningWord.BORDER_VALUE_NOT_WORKED_OUT,
                 WeakeningWord.BORDER_READINGS_NOT_EXHAUSTED,
                 WeakeningWord.LINES_BESIDE_A_BORDER_NOT_TRIED,
                 WeakeningWord.A_BORDERS_ROWS_ARE_ALL_ON_ONE_SIDE,

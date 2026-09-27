@@ -15,9 +15,11 @@ import souther.compiler.numeric.PlacesApart;
 import souther.compiler.regex.Meter;
 import souther.compiler.values.ValueSet;
 import souther.exact.ExactFailure;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Supplier;
 
 /**
@@ -177,14 +179,15 @@ public final class LevelRealizer {
                               souther.compiler.inputs.SearchRegion within,
                               Map<NumericTerm, NumericDomain.Bounds> runs,
                               WitnessSearch looking, ValuesTried tried) {
-        // What each reading left behind, in the two vocabularies there are for it. Kept apart all
-        // the way here: how a walk ended says which of them it is, and a reader told the wrong one
-        // is sent to raise a figure that reached its end or told that no number would have helped
-        // where one would.
+        // What each reading left behind, in the three vocabularies there are for it. Kept apart
+        // all the way here: how a walk ended says which of them it is, and a reader told the wrong
+        // one is sent to raise a figure that reached its end or told that no number would have
+        // helped where one would.
         java.util.Set<CompositionBudget> stoppedBy =
                 java.util.EnumSet.noneOf(CompositionBudget.class);
         java.util.Set<CompositionRepertoire> notAllOf =
                 java.util.EnumSet.noneOf(CompositionRepertoire.class);
+        Set<CompositionCapacity> unheld = new HashSet<>();
         for (Reading reading : readings(two)) {
             NumericDomain.Bounds settled = runs.get(reading.settles());
             NumericDomain.Bounds together = commonRange(settled,
@@ -208,10 +211,11 @@ public final class LevelRealizer {
                         stoppedBy.add(CompositionBudget.PLACES_A_PAIR_IS_LOOKED_AT);
                 case WITH_NO_STEP_TO_TAKE -> notAllOf.add(
                         CompositionRepertoire.PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE);
-                // Neither a figure nor an order without a step, so neither vocabulary gets a word
-                // for it: raising a figure reaches no place this could not hold, and the order has
-                // a next place. What this leaves is the answer below, nothing composed.
-                case AT_A_PLACE_IT_COULD_NOT_HOLD -> { }
+                // Neither a figure nor an order without a step: raising a figure reaches no place
+                // this could not hold, and the order has a next place. So it is the third
+                // vocabulary, with whether a wider run would hold the place.
+                case AT_A_PLACE_IT_COULD_NOT_HOLD -> unheld.add(new CompositionCapacity(
+                        CompositionCapacity.Where.PLACES_A_PAIR_IS_WALKED_TO, walked.unheld()));
             }
             for (Place common : walked) {
                 // Where the settled one has to stand relative to the anchored one: the place the
@@ -224,11 +228,15 @@ public final class LevelRealizer {
                 // handed to a reader that asks where its level falls.
                 // And where this could not hold the place a level moves this one to, this place
                 // composed nothing and the next one is tried. Another place or the other reading
-                // may compose a pair, and where none does the answer is the one below.
+                // may compose a pair; where none does, the place not held is said with the answer
+                // below, since it is a place this left untried and not one it found empty.
                 Criterion here;
                 try {
                     here = relativeTo(reading.where(), common, two.of());
-                } catch (ExactFailure _) {
+                } catch (ExactFailure failure) {
+                    unheld.add(new CompositionCapacity(
+                            CompositionCapacity.Where.PLACES_A_DISTANCE_MOVES_A_POSITION_TO,
+                            UnheldNumber.of(failure)));
                     continue;
                 }
                 Place at = here == null ? null
@@ -248,19 +256,12 @@ public final class LevelRealizer {
         }
         // Nothing was composed, which is what a pair the ranges leave no place for comes to and
         // what this has always said. What a walk left is said beside that answer rather than in
-        // place of it, each in its own vocabulary: raising a figure goes past it, and raising
-        // anything reaches no second place on an order that has no step.
-        //
-        // The word follows the walk that has one. A walk with no step to take composed a place and
-        // tried it, which is what the second word is for; a walk that met the figure says what this
-        // has always said, and the figures hold it to that at both ends. They cannot both be here —
-        // both readings walk the one order this pair is on, and an order with no step reaches no
-        // figure — and it is {@link Realization.Unknown} that holds them to it rather than this
-        // sentence.
-        if (!notAllOf.isEmpty()) {
-            return Realization.Unknown.searchLeftSomethingUntried(stoppedBy, notAllOf);
-        }
-        return Realization.Unknown.nothingComposedOne(stoppedBy);
+        // place of it, each in its own vocabulary: raising a figure goes past it, raising anything
+        // reaches no second place on an order that has no step, and a place not held is reached by
+        // a wider run or by nothing. The two readings may leave different ones, and all of them go.
+        // Which word they come back with is {@link Realization.Unknown#leftOpen}'s to say.
+        return Realization.Unknown.leftOpen(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE,
+                stoppedBy, notAllOf, unheld);
     }
 
     /**
@@ -443,6 +444,7 @@ public final class LevelRealizer {
         // asking what would let the search go further is owed both.
         java.util.Set<CompositionBudget> stoppedBy =
                 java.util.EnumSet.noneOf(CompositionBudget.class);
+        Set<CompositionCapacity> unheld = new HashSet<>();
         LevelCandidateSource.Offered offered =
                 LevelCandidateSource.forItem(over.where(), levels);
         if (offered.stoppedShort()) {
@@ -452,6 +454,7 @@ public final class LevelRealizer {
             Search search = new Search(terms, over.on(), within, runs, tried);
             Reached reached = search.solve(level.asAnExactNumber());
             stoppedBy.addAll(search.stoppedBy());
+            unheld.addAll(search.unheld());
             if (reached == Reached.FOUND) {
                 Realization made = found(search.fixing(), within, tried);
                 if (made instanceof Realization.Found) {
@@ -475,8 +478,11 @@ public final class LevelRealizer {
         // A side is never settled by looking, so what this comes back with is that something was
         // left untried — which is what it has always come back with, whether or not a figure of
         // this compiler's was reached. The figures are said beside that answer and do not choose
-        // it, which is why the answer is not named for one of them running out.
-        return Realization.Unknown.searchLeftSomethingUntried(stoppedBy);
+        // it, which is why the answer is not named for one of them running out. Nor for a value it
+        // could not hold, which goes beside the figures in its own vocabulary.
+        return Realization.Unknown.leftOpen(
+                Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
+                stoppedBy, Set.of(), unheld);
     }
 
     /** How many assignments the search will try before it stops and says it did not settle it. */
@@ -607,9 +613,15 @@ public final class LevelRealizer {
          *  it came back with says that nothing was reached and not what kept it from reaching. */
         private final java.util.Set<CompositionBudget> stoppedBy =
                 java.util.EnumSet.noneOf(CompositionBudget.class);
+        /** Which values this walk reached and could not hold, recorded where each was met. */
+        private final Set<CompositionCapacity> unheld = new HashSet<>();
 
         java.util.Set<CompositionBudget> stoppedBy() {
             return stoppedBy;
+        }
+
+        Set<CompositionCapacity> unheld() {
+            return unheld;
         }
 
         /** Whether there is room for another assignment, marking the budget where there is not. */
@@ -832,9 +844,11 @@ public final class LevelRealizer {
                 // form over an order with no arithmetic, which is refused before a search is built.
                 case WITH_NO_STEP_TO_TAKE -> throw new IllegalStateException(
                         "a progression over an order with no step: " + carriers[i]);
-                // Stopped at a value this could not hold, which no figure reaches past. Nothing to
-                // name, and the answer is the one every walk here comes to.
-                case AT_A_PLACE_IT_COULD_NOT_HOLD -> { }
+                // Stopped at a value this could not hold, which no figure reaches past: the third
+                // vocabulary, with whether a wider run would hold it.
+                case AT_A_PLACE_IT_COULD_NOT_HOLD -> unheld.add(new CompositionCapacity(
+                        CompositionCapacity.Where.VALUES_OF_A_PROGRESSION_WALKED_TO,
+                        walked.unheld()));
             }
             return Reached.INCOMPLETE;
         }

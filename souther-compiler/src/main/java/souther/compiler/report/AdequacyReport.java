@@ -32,6 +32,8 @@ import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.ClosureGap;
 import souther.compiler.partition.ConditionReportAnchor;
 import souther.compiler.reading.Condition;
+import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionCapacity;
 import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.DecidedCondition;
 import souther.compiler.partition.DecisionCondition;
@@ -133,6 +135,7 @@ import souther.compiler.publish.RuleHandleSurface;
 import souther.compiler.publish.WeakeningVocabulary;
 import souther.compiler.publish.WeakeningWord;
 import souther.compiler.partition.ReadingGap;
+import souther.compiler.partition.UnheldNumber;
 import souther.compiler.partition.UndividedPosition;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.BehaviorEvidence;
@@ -3264,9 +3267,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case ReadingGap.CouldNotWalk _ -> "the walk to that position could not be taken";
             case ReadingGap.CouldNotReadRow _ -> "no row came back to read there";
             // The values were there, so nothing is said about the row: what stopped is the number
-            // they come to.
-            case ReadingGap.CouldNotWorkOut _ ->
-                    "the values there come to a number this compiler could not hold";
+            // they come to, and whether a wider run would hold it is said with it.
+            case ReadingGap.CouldNotWorkOut(UnheldNumber unheld) -> switch (unheld) {
+                case MORE_ROOM_COULD_ANSWER -> "the values there come to a number this run had no"
+                        + " room to work out";
+                case NO_REPRESENTATION_EXISTS -> "the values there come to a number this compiler"
+                        + " has no way to hold";
+            };
         };
     }
 
@@ -3302,7 +3309,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // population this writes some of is work nobody has done, and no number anybody
                 // raises reaches the rest of it. Run together, an author reads the second as
                 // something to raise and finds that raising it changes nothing.
-                case EstablishmentGap.Composition(var budgets, var repertoires) ->
+                case EstablishmentGap.Composition(var budgets, var repertoires, var capacities) ->
                         "nothing here settled it"
                                 + (budgets.isEmpty() ? ""
                                         : ", and a figure of this compiler's is why: "
@@ -3310,7 +3317,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                 + (repertoires.isEmpty() ? ""
                                         : ", and this compiler writes some of "
                                                 + Reasons.writes(repertoires)
-                                                + " rather than all of them");
+                                                + " rather than all of them")
+                                + (capacities.isEmpty() ? ""
+                                        : ", and this compiler could not hold "
+                                                + Reasons.unheld(capacities));
             });
         }
         return String.join(", and ", out);
@@ -3400,16 +3410,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // than folded into the figures or left out because a figure was there to name.
             case ItemAssessment.Attempt.Stopped it ->
                     " — this compiler stopped at " + Reasons.said(it.stoppedBy())
-                            + andWritesSomeOf(it.notAllOf()) + ": "
+                            + andWritesSomeOf(it.notAllOf()) + andCouldNotHold(it.unheld()) + ": "
                             + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
                             + alsoLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
             // Said as what this compiler writes rather than as a number it stopped at, because
             // there is no number: an author told to raise one would raise it and get the same
             // offer. What would change this is somebody writing the rest of what it walks, and the
-            // sentence says so.
+            // sentence says so. And a number it could not hold is said in its own clause, since
+            // what reaches it is a wider run or nothing.
             case ItemAssessment.Attempt.Unexhausted it ->
-                    " — this compiler writes some of " + Reasons.writes(it.notAllOf())
-                            + " rather than all of them: "
+                    " — this compiler " + leftUntried(it.notAllOf(), it.unheld()) + ": "
                             + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
                             + alsoLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
             // Both halves, because neither says what the other does. The word is what the search
@@ -3418,7 +3428,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // for; said as the figure alone, they go looking for a search that stopped.
             case ItemAssessment.Attempt.Limited it ->
                     " — over less than the point had, which stops at "
-                            + Reasons.said(it.limitedBy()) + ": "
+                            + Reasons.said(it.limitedBy()) + andWritesSomeOf(it.notAllOf())
+                            + andCouldNotHold(it.unheld()) + ": "
                             + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
                             + alsoLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
             // No search to report on, which is what this says instead of saying what one found. The
@@ -3598,12 +3609,28 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                         + " being written for one";
                         // What stopped the looking, and not that nothing was found. An author does
                         // nothing about the first and may do something about the second.
+                        // A value it could not hold is said after the figures and apart from them,
+                        // since raising a figure does not reach it.
                         case ReachabilityGap.Why
-                                .TheWalkForItsPositionsWasStopped(var by) ->
+                                .TheWalkForItsPositionsWasStopped(var by, var unheld) ->
                                 "a condition on positions this compiler stopped looking at ("
-                                        + Reasons.said(by) + ")";
+                                        + stoppedAt(by, unheld) + ")";
                     };
         };
+    }
+
+    /** The figures a walk met and the values it could not hold, each in its own words, figures
+     *  first. */
+    private static String stoppedAt(CanonicalSelection<CompositionBudget> by,
+                                    CanonicalSelection<CompositionCapacity> unheld) {
+        List<String> out = new ArrayList<>();
+        if (!by.isEmpty()) {
+            out.add(Reasons.said(by));
+        }
+        if (!unheld.isEmpty()) {
+            out.add("could not hold " + Reasons.unheld(unheld));
+        }
+        return String.join("; and ", out);
     }
 
     /**
@@ -3618,6 +3645,26 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         return repertoires.isEmpty() ? ""
                 : ", and writes some of " + Reasons.writes(repertoires)
                         + " rather than all of them";
+    }
+
+    /** What a search with no figure to name left untried: what it writes some of and what it
+     *  could not hold, each in its own clause. */
+    private static String leftUntried(CanonicalSelection<CompositionRepertoire> repertoires,
+                                      CanonicalSelection<CompositionCapacity> capacities) {
+        List<String> out = new ArrayList<>();
+        if (!repertoires.isEmpty()) {
+            out.add("writes some of " + Reasons.writes(repertoires) + " rather than all of them");
+        }
+        if (!capacities.isEmpty()) {
+            out.add("could not hold " + Reasons.unheld(capacities));
+        }
+        return String.join(", and ", out);
+    }
+
+    /** What a search also could not hold, said after whatever came before it, or nothing. Its own
+     *  clause for the reason the one above has one: no figure reaches it. */
+    private static String andCouldNotHold(CanonicalSelection<CompositionCapacity> capacities) {
+        return capacities.isEmpty() ? "" : ", and could not hold " + Reasons.unheld(capacities);
     }
 
     /**
@@ -6584,11 +6631,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case Weakening.BorderValueUnreadable it -> switch (it.why()) {
                 case ReadingGap.Observation _ -> WeakeningWord.BORDER_VALUE_UNREADABLE;
                 case ReadingGap.NoValue _ -> WeakeningWord.BORDER_VALUE_ABSENT;
-                // One word, and the reason underneath keeps which of them it was. A position that
-                // was read and holds nothing is news about the row; none of these is, and a reader
-                // weighing the document acts on all of them the same way.
-                case ReadingGap.CouldNotWalk _, ReadingGap.CouldNotReadRow _,
-                     ReadingGap.CouldNotWorkOut _ -> WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE;
+                // One word, and the reason underneath keeps which of the two it was. A position
+                // that was read and holds nothing is news about the row; neither of these is, and a
+                // reader weighing the document acts on both the same way.
+                case ReadingGap.CouldNotWalk _, ReadingGap.CouldNotReadRow _ ->
+                        WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE;
+                // Every value was read here, so it is not that word: what stopped is the
+                // arithmetic. Both ways of that are one word, and the run sensitivity beside it
+                // says which.
+                case ReadingGap.CouldNotWorkOut _ -> WeakeningWord.BORDER_VALUE_NOT_WORKED_OUT;
             };
             // Beside those and not among them: what the readings that were made came to is above,
             // and this is the readings nobody made.

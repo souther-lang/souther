@@ -856,8 +856,12 @@ public sealed interface Carrier extends ValueOrder {
                 // neighbour and only one more candidate, so a place this could not hold is left out
                 // and the rest are still tried.
                 if (spacing() == Granularity.DENSE) {
-                    stepped.add(oneFrom(count, ExactRatio.ONE));
-                    stepped.add(oneFrom(count, ExactRatio.ONE.negated()));
+                    for (ExactRatio away : List.of(ExactRatio.ONE, ExactRatio.ONE.negated())) {
+                        Count beside = oneFrom(count, away);
+                        if (beside != null) {
+                            stepped.add(beside);
+                        }
+                    }
                 } else {
                     stepped.add(count.plus(1));
                     stepped.add(count.minus(1));

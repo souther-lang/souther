@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.partition.ReadingGap;
+import souther.compiler.partition.UnheldNumber;
 import souther.compiler.publish.WeakeningWord;
 import souther.compiler.query.Weakening;
 
@@ -61,12 +62,12 @@ class EveryReasonAReadingMetIsSaidInItsOwnSentenceTest {
     /**
      * And each word stands over the reasons this decided to put under it.
      *
-     * <p>The decision itself, since nothing else keeps it. A place the walk could not reach, a row
-     * that never came and values whose number this could not hold are one word because a reader
-     * weighing the document does the same thing about each; they are apart from a position that
-     * was read and holds nothing, which is news
-     * about the model rather than about this compiler's reach. What travels underneath is the
-     * reason, so the grouping costs a reader nothing — and it is written here because a grouping
+     * <p>The decision itself, since nothing else keeps it. A place the walk could not reach and a
+     * row that never came are one word because a reader weighing the document does the same thing
+     * about both; they are apart from a position that was read and holds nothing, which is news
+     * about the model rather than about this compiler's reach, and from values that were all read
+     * and whose number this could not hold, which is news about its arithmetic. What travels
+     * underneath is the reason, so the grouping costs a reader nothing — and it is written here because a grouping
      * nothing states is one the next fold can join without saying so.
      *
      * <p><b>Not that reasons under one word are weakened alike.</b> They are not: the codes an
@@ -92,7 +93,8 @@ class EveryReasonAReadingMetIsSaidInItsOwnSentenceTest {
                         WeakeningWord.BORDER_VALUE_UNREADABLE, Set.of("Observation"),
                         WeakeningWord.BORDER_VALUE_ABSENT, Set.of("NoValue"),
                         WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE,
-                                Set.of("CouldNotWalk", "CouldNotReadRow", "CouldNotWorkOut")),
+                                Set.of("CouldNotWalk", "CouldNotReadRow"),
+                        WeakeningWord.BORDER_VALUE_NOT_WORKED_OUT, Set.of("CouldNotWorkOut")),
                 under,
                 () -> "the words no longer stand over the reasons they were meant to: " + under);
     }
@@ -119,7 +121,11 @@ class EveryReasonAReadingMetIsSaidInItsOwnSentenceTest {
                 case "NoValue" -> out.add(ReadingGap.NO_VALUE);
                 case "CouldNotWalk" -> out.add(ReadingGap.COULD_NOT_WALK);
                 case "CouldNotReadRow" -> out.add(ReadingGap.COULD_NOT_READ_ROW);
-                case "CouldNotWorkOut" -> out.add(ReadingGap.COULD_NOT_WORK_OUT);
+                case "CouldNotWorkOut" -> {
+                    for (UnheldNumber why : UnheldNumber.values()) {
+                        out.add(ReadingGap.of(why));
+                    }
+                }
                 // A reason added to the type and not to this list. Written as a failure rather than
                 // skipped: a reason nothing here can build is one nothing here is checking.
                 default -> throw new IllegalStateException(

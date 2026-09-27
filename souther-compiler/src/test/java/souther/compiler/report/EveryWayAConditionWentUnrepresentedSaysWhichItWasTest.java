@@ -114,7 +114,7 @@ class EveryWayAConditionWentUnrepresentedSaysWhichItWasTest {
                 ofTheInput(new ReachabilityGap.Why.NoValueComposedForItsPositions()));
         out.put(ReachabilityGap.Why.TheWalkForItsPositionsWasStopped.class,
                 ofTheInput(ReachabilityGap.Why.TheWalkForItsPositionsWasStopped.by(
-                        Set.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED))));
+                        Set.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED), Set.of())));
         out.put(ReachabilityGap.Why.TwoNumbersAtOneLocation.class,
                 ofTheInput(new ReachabilityGap.Why.TwoNumbersAtOneLocation()));
         out.put(DemandGap.WhyNotStated.ATruthOfAPlaceInsideTheAnswer.class,

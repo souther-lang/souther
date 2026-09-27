@@ -45,12 +45,11 @@ public enum WeakeningWord {
     BORDER_VALUE_ABSENT,
 
     /**
-     * What a row holds at one border was out of this compiler's reach: the walk to the position
-     * could not be taken, no row came back to walk, or the values came back and the number they come
-     * to was one this compiler could not hold.
+     * A row's value at one border was never looked at: the walk to the position could not be taken,
+     * or no row came back to walk.
      *
-     * <p>One word for them, because what a reader does about them is the same: each is this
-     * compiler unable to look rather than the model putting a value elsewhere. Which of them it
+     * <p>One word for the two, because what a reader does about them is the same: both are this
+     * compiler unable to look rather than the model putting a value elsewhere. Which of the two it
      * was is said by the reading's own reason underneath, and the sentence the document writes is
      * chosen from that; a second word here would be that taxonomy kept in two places, free to drift
      * apart. They part when what a reader does about them parts.
@@ -61,6 +60,18 @@ public enum WeakeningWord {
      * travels underneath. A word here says what happened at the coarseness a reader acts on.
      */
     BORDER_OBSERVATION_UNAVAILABLE,
+
+    /**
+     * A row's values at one border were all looked at, and the number they come to was one this
+     * compiler could not hold.
+     *
+     * <p>Apart from {@link #BORDER_OBSERVATION_UNAVAILABLE}, which says nothing was looked at: here
+     * every value was read, and what a reader learns is that this compiler's arithmetic, not its
+     * reach into the row, is what left the point open. Whether a wider run would hold the number is
+     * a question each case answers differently, and it travels beside this word as the reason's own
+     * run sensitivity rather than as a word of its own.
+     */
+    BORDER_VALUE_NOT_WORKED_OUT,
 
     /**
      * A row held more readings at one border than a point is tried against, so the readings a point

@@ -99,8 +99,8 @@ public sealed interface ReachabilityGap {
         record NoValueComposedForItsPositions() implements Why {}
 
         /**
-         * The same, where a budget of this compiler's is what stopped the walk that would have
-         * placed the positions.
+         * The same, where a budget of this compiler's, or a value it could not hold, is what stopped
+         * the walk that would have placed the positions.
          *
          * <p>A case beside the one above rather than a field on it. The two are different news: one
          * says nothing was found in what was walked, the other says the walking stopped, and only
@@ -111,20 +111,28 @@ public sealed interface ReachabilityGap {
          * the budget cost is one condition on the way being composed against, and reporting it as a
          * point nothing could be established at would say more than happened.
          */
-        record TheWalkForItsPositionsWasStopped(CanonicalSelection<CompositionBudget> by)
+        record TheWalkForItsPositionsWasStopped(CanonicalSelection<CompositionBudget> by,
+                                                CanonicalSelection<CompositionCapacity> unheld)
                 implements Why {
 
+            /**
+             * Stopped by a figure, by a value it could not hold, or by both: the walk that would
+             * have placed the positions did not reach its end either way, and each is said in its
+             * own vocabulary since what a reader does about them differs.
+             */
             public TheWalkForItsPositionsWasStopped {
-                if (by == null || by.isEmpty()) {
-                    throw new IllegalArgumentException(
-                            "a walk this compiler stopped says which budget stopped it");
+                if (by == null || unheld == null || (by.isEmpty() && unheld.isEmpty())) {
+                    throw new IllegalArgumentException("a walk this compiler stopped says what"
+                            + " stopped it: a budget, or a value it could not hold");
                 }
             }
 
-            /** The budgets a walk met, in the order a report says them. */
-            public static TheWalkForItsPositionsWasStopped by(Collection<CompositionBudget> met) {
+            /** What a walk met, in the order a report says it. */
+            public static TheWalkForItsPositionsWasStopped by(Collection<CompositionBudget> met,
+                                                              Collection<CompositionCapacity> unheld) {
                 return new TheWalkForItsPositionsWasStopped(
-                        PublicationOrders.COMPOSITION_BUDGETS.keep(met));
+                        PublicationOrders.COMPOSITION_BUDGETS.keep(met),
+                        PublicationOrders.COMPOSITION_CAPACITIES.keep(unheld));
             }
         }
 

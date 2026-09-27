@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionCapacity;
 import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
@@ -9,6 +10,7 @@ import souther.compiler.publish.PublicationOrders;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -120,12 +122,14 @@ public sealed interface WritabilityKnowledge {
             // each of them would take to close stays its own, and a fold that put them in one set
             // would have to lose one of the two.
             Set<CompositionRepertoire> repertoires = EnumSet.noneOf(CompositionRepertoire.class);
+            Set<CompositionCapacity> capacities = new HashSet<>();
             for (EstablishmentGap each : gaps) {
                 switch (each) {
                     case EstablishmentGap.Observation it -> observed.addAll(it.causes().written());
                     case EstablishmentGap.Composition it -> {
                         budgets.addAll(it.budgets().written());
                         repertoires.addAll(it.repertoires().written());
+                        capacities.addAll(it.capacities().written());
                     }
                 }
             }
@@ -133,8 +137,8 @@ public sealed interface WritabilityKnowledge {
             if (!observed.isEmpty()) {
                 kinds.add(EstablishmentGap.Observation.of(observed));
             }
-            if (!budgets.isEmpty() || !repertoires.isEmpty()) {
-                kinds.add(EstablishmentGap.Composition.of(budgets, repertoires));
+            if (!budgets.isEmpty() || !repertoires.isEmpty() || !capacities.isEmpty()) {
+                kinds.add(EstablishmentGap.Composition.of(budgets, repertoires, capacities));
             }
             return new Prevented(PublicationOrders.ESTABLISHMENT_GAPS.keep(kinds));
         }

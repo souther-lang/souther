@@ -370,8 +370,8 @@ public sealed interface BorderQuantity {
             try {
                 apart = Count.number(onAt.value()).exactly()
                         .minus(Count.number(againstAt.value()).exactly());
-            } catch (ExactFailure _) {
-                return Stands.couldNotTell(ReadingGap.COULD_NOT_WORK_OUT);
+            } catch (ExactFailure failure) {
+                return Stands.couldNotTell(ReadingGap.of(UnheldNumber.of(failure)));
             }
             return where.holds(new Level.OfTheQuantity(apart)) ? Stands.YES : Stands.NO;
         }

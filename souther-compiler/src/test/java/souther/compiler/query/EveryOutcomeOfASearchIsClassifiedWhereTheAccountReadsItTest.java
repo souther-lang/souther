@@ -232,7 +232,8 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
                         Generator.UnresolvedCombination.Reason.wordFor(Set.of(budget))),
                 WAY, NOTHING_LEFT_OUT,
                 PublicationOrders.COMPOSITION_BUDGETS.keep(EnumSet.of(budget)),
-                PublicationOrders.COMPOSITION_REPERTOIRES.keep(List.of()));
+                PublicationOrders.COMPOSITION_REPERTOIRES.keep(List.of()),
+                PublicationOrders.COMPOSITION_CAPACITIES.keep(List.of()));
     }
 
     /**
@@ -249,7 +250,8 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
                 new Generator.UnresolvedCombination(List.of("List.sum(p.xs) = 7"),
                         Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED),
                 WAY, NOTHING_LEFT_OUT, PublicationOrders.COMPOSITION_REPERTOIRES.keep(
-                        EnumSet.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD)));
+                        EnumSet.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD)),
+                PublicationOrders.COMPOSITION_CAPACITIES.keep(List.of()));
     }
 
     /**
@@ -265,7 +267,9 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
                 new Generator.UnresolvedCombination(List.of("p.x = 11"),
                         Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED),
                 WAY, NOTHING_LEFT_OUT, PublicationOrders.COMPOSITION_BUDGETS.keep(
-                        EnumSet.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS)));
+                        EnumSet.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS)),
+                PublicationOrders.COMPOSITION_REPERTOIRES.keep(List.of()),
+                PublicationOrders.COMPOSITION_CAPACITIES.keep(List.of()));
     }
 
     /**

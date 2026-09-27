@@ -214,11 +214,14 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
                  ItemAssessment.Attempt.Unavailable _ -> null;
             case ItemAssessment.Attempt.Unresolved it -> CameToNothing.metNothing(it.why());
             case ItemAssessment.Attempt.Stopped it -> new CameToNothing(it.why(),
-                    CompositionShortfall.of(it.stoppedBy().written(), it.notAllOf().written()));
+                    CompositionShortfall.of(it.stoppedBy().written(), it.notAllOf().written(),
+                            it.unheld().written()));
             case ItemAssessment.Attempt.Unexhausted it -> new CameToNothing(it.why(),
-                    CompositionShortfall.writing(it.notAllOf().written()));
+                    CompositionShortfall.of(List.of(), it.notAllOf().written(),
+                            it.unheld().written()));
             case ItemAssessment.Attempt.Limited it -> new CameToNothing(it.why(),
-                    CompositionShortfall.of(it.limitedBy().written()));
+                    CompositionShortfall.of(it.limitedBy().written(), it.notAllOf().written(),
+                            it.unheld().written()));
             case ItemAssessment.Attempt.Unplanned it -> new CameToNothing(it.why(),
                     CompositionShortfall.of(it.limitedBy().written()));
         };

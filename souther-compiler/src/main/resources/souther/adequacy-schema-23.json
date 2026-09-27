@@ -229,6 +229,7 @@
           "border_value_unreadable",
           "border_value_absent",
           "border_observation_unavailable",
+          "border_value_not_worked_out",
           "border_readings_not_exhausted",
           "lines_beside_a_border_not_tried",
           "a_borders_rows_are_all_on_one_side",

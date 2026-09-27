@@ -114,14 +114,21 @@ public sealed interface ReadingGap {
      * <p>Not {@link NoValue}: the row wrote something at every position, and saying otherwise tells
      * a reader the row is missing a value it has. And not a reason about the row at all — the
      * numbers are there, and what stopped is this compiler working out how far apart they stand.
+     *
+     * <p>Which of the two ways the number went unheld travels with it, because a run with more room
+     * answers one of them and no run answers the other.
      */
-    record CouldNotWorkOut() implements ReadingGap {
+    record CouldNotWorkOut(UnheldNumber why) implements ReadingGap {
 
-        /** What was out of reach is the room to hold a number, which no figure a run is allowed
-         *  enlarges. */
+        public CouldNotWorkOut {
+            if (why == null) {
+                throw new IllegalArgumentException("a number not worked out says why it was not");
+            }
+        }
+
         @Override
         public RunSensitivity runSensitivity() {
-            return RunSensitivity.UNAFFECTED;
+            return why.runSensitivity();
         }
     }
 
@@ -131,10 +138,13 @@ public sealed interface ReadingGap {
 
     ReadingGap COULD_NOT_READ_ROW = new CouldNotReadRow();
 
-    ReadingGap COULD_NOT_WORK_OUT = new CouldNotWorkOut();
-
     /** The gap an observation's code is, for a reader holding one. */
     static ReadingGap of(Incompleteness.Code code) {
         return new Observation(code);
+    }
+
+    /** The gap a number this could not hold is, for a reader that met one. */
+    static ReadingGap of(UnheldNumber why) {
+        return new CouldNotWorkOut(why);
     }
 }

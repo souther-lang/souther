@@ -1,7 +1,9 @@
 package souther.compiler.query;
 
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.RunSensitivity;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionCapacity;
 import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
@@ -104,12 +106,13 @@ public sealed interface EstablishmentGap {
      * the one a reader was told about would be whichever was met first.
      */
     record Composition(CanonicalSelection<CompositionBudget> budgets,
-                       CanonicalSelection<CompositionRepertoire> repertoires)
+                       CanonicalSelection<CompositionRepertoire> repertoires,
+                       CanonicalSelection<CompositionCapacity> capacities)
             implements EstablishmentGap {
 
         public Composition {
-            if (budgets == null || repertoires == null
-                    || (budgets.isEmpty() && repertoires.isEmpty())) {
+            if (budgets == null || repertoires == null || capacities == null
+                    || (budgets.isEmpty() && repertoires.isEmpty() && capacities.isEmpty())) {
                 throw new IllegalArgumentException(
                         "a point this compiler left open says what left it open");
             }
@@ -118,16 +121,43 @@ public sealed interface EstablishmentGap {
         /**
          * The gap what a composing met is, in the order a document says each of them.
          *
-         * <p>Two vocabularies and one gap. Both say the composing settled nothing, which is the one
-         * thing a reader of a gap is being told; what differs is what would close it, and that is
-         * why they are two fields and not a set. A figure is a number to raise and reaches what the
-         * search was holding; a population is one this compiler writes some of, and what reaches
-         * the rest is somebody writing the rest.
+         * <p>Three vocabularies and one gap. All say the composing settled nothing, which is the
+         * one thing a reader of a gap is being told; what differs is what would close it, and that
+         * is why they are three fields and not a set. A figure is a number to raise and reaches what
+         * the search was holding; a population is one this compiler writes some of, and what
+         * reaches the rest is somebody writing the rest; a number the search could not hold is
+         * reached by a run with more room or by nothing, and each one says which.
          */
         public static Composition of(Collection<CompositionBudget> budgets,
-                                     Collection<CompositionRepertoire> repertoires) {
+                                     Collection<CompositionRepertoire> repertoires,
+                                     Collection<CompositionCapacity> capacities) {
             return new Composition(PublicationOrders.COMPOSITION_BUDGETS.keep(budgets),
-                    PublicationOrders.COMPOSITION_REPERTOIRES.keep(repertoires));
+                    PublicationOrders.COMPOSITION_REPERTOIRES.keep(repertoires),
+                    PublicationOrders.COMPOSITION_CAPACITIES.keep(capacities));
+        }
+
+        /** The same, where the search held every number it worked out. */
+        public static Composition of(Collection<CompositionBudget> budgets,
+                                     Collection<CompositionRepertoire> repertoires) {
+            return of(budgets, repertoires, List.of());
+        }
+
+        /**
+         * Whether measuring again, allowing more, could close the gap: every part of it has to
+         * say so, as with the codes of an observation.
+         *
+         * <p>A figure is raised by a wider run, and so is a number a wider run has room for. A
+         * population this compiler writes some of is answered the way it always has been. A number
+         * with no representation is not reached by any run, and a gap holding one is not closed by
+         * widening the rest.
+         */
+        public RunSensitivity runSensitivity() {
+            for (CompositionCapacity each : capacities.written()) {
+                if (each.runSensitivity() == RunSensitivity.UNAFFECTED) {
+                    return RunSensitivity.UNAFFECTED;
+                }
+            }
+            return RunSensitivity.MAY_CHANGE;
         }
 
         /** The gap the budgets a search met are, where it met no population it writes some of. */

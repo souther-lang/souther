@@ -95,9 +95,10 @@ final class NumericWitness {
         SequencedMap<NumericTerm.FromOnePosition, Place> standing = new LinkedHashMap<>();
         java.util.Set<CompositionBudget> stoppedBy =
                 java.util.EnumSet.noneOf(CompositionBudget.class);
-        return walk(within, terms, 0, on, looking, standing, stoppedBy)
+        Set<CompositionCapacity> unheld = new HashSet<>();
+        return walk(within, terms, 0, on, looking, standing, stoppedBy, unheld)
                 ? Standing.Found.walked(standing)
-                : new Standing.NotFound(stoppedBy);
+                : new Standing.NotFound(stoppedBy, unheld);
     }
 
     /**
@@ -217,11 +218,15 @@ final class NumericWitness {
          *
          * <p>{@code stoppedBy} is what a reader could raise, and it is empty as readily as not — a
          * walk that tried everything it had to try is not a walk that walked everything there is.
+         * {@code unheld} is the values the walk reached and could not hold, which no figure reaches
+         * past, and it is empty as readily.
          */
-        record NotFound(java.util.Set<CompositionBudget> stoppedBy) implements Standing {
+        record NotFound(java.util.Set<CompositionBudget> stoppedBy,
+                        Set<CompositionCapacity> unheld) implements Standing {
 
             public NotFound {
                 stoppedBy = java.util.Set.copyOf(stoppedBy);
+                unheld = Set.copyOf(unheld);
             }
         }
     }
@@ -238,7 +243,8 @@ final class NumericWitness {
                                 Function<NumericTerm, Carrier> on,
                                 WitnessSearch looking,
                                 Map<NumericTerm.FromOnePosition, Place> standing,
-                                java.util.Set<CompositionBudget> stoppedBy) {
+                                java.util.Set<CompositionBudget> stoppedBy,
+                                Set<CompositionCapacity> unheld) {
         if (at == terms.size()) {
             return true;
         }
@@ -285,7 +291,7 @@ final class NumericWitness {
                 continue;
             }
             standing.put(term, tried);
-            if (walk(next, terms, at + 1, on, looking, standing, stoppedBy)) {
+            if (walk(next, terms, at + 1, on, looking, standing, stoppedBy, unheld)) {
                 return true;
             }
             standing.remove(term);
@@ -311,9 +317,11 @@ final class NumericWitness {
             // a number that reaches none of it. Said as the arm it is rather than left to the figure
             // above being false, which is how the same fact was lost at the pair search.
             case WITH_NO_STEP_TO_TAKE -> { }
-            // And a place further out this could not hold. Nothing is recorded for the same reason:
-            // no figure reaches past it, and the empty hand is still not a proof.
-            case AT_A_PLACE_IT_COULD_NOT_HOLD -> { }
+            // And a place further out this could not hold. No figure reaches past it, so it is not
+            // among the figures; it travels in its own vocabulary, with whether a wider run holds it.
+            case AT_A_PLACE_IT_COULD_NOT_HOLD -> unheld.add(new CompositionCapacity(
+                    CompositionCapacity.Where.VALUES_A_POSITION_ON_THE_WAY_IS_WALKED_TO,
+                    walked.unheld()));
         }
         return false;
     }
