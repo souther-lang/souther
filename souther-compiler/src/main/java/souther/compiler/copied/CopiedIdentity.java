@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * What a reader copies of a declaration, written so that two compiles of the declaration write the
@@ -36,7 +37,8 @@ import java.util.function.Function;
  * written another way is one constant, and the body it is written into would be another body.
  *
  * <p><b>What is left out, and why each.</b> Where the source put a term is where it was written and
- * not what it says. How a name was spelled — an alias, a qualification — is how it was reached, and
+ * not what it says. What the module written here calls a helper or a value it holds is where a body
+ * came from and not what the body computes, so one renamed is the copy it was. How a name was spelled — an alias, a qualification — is how it was reached, and
  * two spellings of one declaration are one reference. The number the compiler gave a binding is
  * minted as a copy is made, so a binding is written as the place it is bound at, counted from the
  * start of the definition: renaming a parameter or a {@code let} moves nothing here, and reading
@@ -124,13 +126,20 @@ public final class CopiedIdentity {
      * fold to one value are one copy. An exact ratio a division leaves is known at compile time and
      * has no literal to be held as, so a value folding to one is held as its body.
      *
-     * @param closed what the value is, closed over {@code owner}
-     * @param folded what it folds to, or empty where it is not a constant
-     * @param owner  the module that declares it
+     * <p>A constant the copy has no room to record is held as its body as well. A decimal's plain
+     * notation is as long as its scale is far from nought, so its text is asked for only where
+     * {@code recordable} says an entry can hold it.
+     *
+     * @param closed     what the value is, closed over {@code owner}
+     * @param folded     what it folds to, or empty where it is not a constant
+     * @param owner      the module that declares it
+     * @param recordable whether a copy recording the constant it is given as its content is one
+     *                   that can be written
      */
-    public static CopyRecord value(Hir.FnDef closed, Optional<Object> folded, Owner owner) {
+    public static CopyRecord value(Hir.FnDef closed, Optional<Object> folded, Owner owner,
+                                   Predicate<WrittenValue> recordable) {
         WrittenValue constant = folded.map(ConstEval::asWritten).orElse(null);
-        return constant != null
+        return constant != null && recordable.test(constant)
                 ? new CopyRecord(CopyRecord.Form.CONSTANT, constant.written())
                 : body(closed, owner);
     }
@@ -252,7 +261,15 @@ public final class CopiedIdentity {
                     callElsewhere(it);
                     return;
                 }
-                word("expansion").reference(it.callee()).count(it.bound().size());
+                // A helper of the module written here stands as its body, and what the module
+                // called it is where that body came from and not what it computes: the helper
+                // renamed is the copy it was. One of the language's is named, since its name is the
+                // same on every side of every artifact and says which body it is.
+                word("expansion");
+                if (!isOfTheModuleWrittenHere(it.callee())) {
+                    reference(it.callee());
+                }
+                count(it.bound().size());
                 for (Hir.Bound bound : it.bound()) {
                     expr(bound.value());
                     bind(bound.binder());
@@ -279,10 +296,14 @@ public final class CopiedIdentity {
                 expr(it.tuple());
             }
             case Hir.Unreachable it -> word("unreachable").word(it.reason());
-            // What a tree that runs is built of. Closing copies a value where it is named and builds
-            // nothing in place, so meeting one means this was handed a tree nobody copies.
-            case Hir.Materialised it -> throw new IllegalStateException(
-                    "a copy is of a closed definition, which builds no value in place: " + it.value());
+            // A value of the module held once where it is demanded is what its body computes, and
+            // is read through the binding that holds it. Which value that was and which region it
+            // was built for are where it came from and where the compiler put it, and neither is
+            // what the copy computes: the value renamed, or held in another region, is the copy it
+            // was. So what is written is the body and nothing of the build around it.
+            case Hir.Materialised it -> expr(it.body());
+            // What a tree that an analysis reads by template is built of, which holds no body to
+            // copy: meeting one means this was handed a tree nobody copies.
             case Hir.ValueBuild it -> throw new IllegalStateException(
                     "a copy is of a closed definition, which builds no value in place: " + it.value());
             case Hir.ValueInvocation it -> throw new IllegalStateException(
@@ -368,6 +389,11 @@ public final class CopiedIdentity {
         } else {
             type(param.type());
         }
+    }
+
+    /** Whether {@code callee} is a helper the module written here declares. */
+    private boolean isOfTheModuleWrittenHere(ValueName callee) {
+        return callee instanceof ValueName.Helper helper && helper.module().equals(owner);
     }
 
     /** Whether {@code callee} is a helper of a module other than the one written here, and other

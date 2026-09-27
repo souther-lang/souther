@@ -48,7 +48,7 @@ record FactSubject(Term identity) {
     /**
      * The one order a walk of several of these takes them in.
      *
-     * <p>Read off what the term this stands for is told apart by ({@link Term#standsForText}) and
+     * <p>Read off what the term this stands for is told apart by ({@link Term#inOneOrder}) and
      * not off what it renders as. A subject renders as the value it points at written for a person,
      * and two subjects of one line evaluated in two places render alike — so a walk ordered by the
      * renderings would take such a pair for one subject.
@@ -59,6 +59,6 @@ record FactSubject(Term identity) {
      */
     static CanonicalOrder<FactSubject> inOneOrder() {
         return (one, other) ->
-                one.identity.standsForText().compareTo(other.identity.standsForText());
+                Term.inOneOrder(one.identity, other.identity);
     }
 }

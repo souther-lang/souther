@@ -67,7 +67,10 @@ final class HelperParams {
         if (!hasOpenParam(m)) {
             return m;   // nothing to settle: don't build the inliner (it scans the whole prelude)
         }
-        HelperInliner inliner = HelperInliner.forModule(m, symbols.library());
+        // What settles a parameter is the type of the body it is used in, which is read off a tree
+        // that shares each value it names as the tree a body is checked as does.
+        HelperInliner inliner = HelperInliner.forModule(m, symbols.library(),
+                ValueAtAReference.SHARED_PER_REGION);
         // The addresses this module holds its own recursions at, which is what the loop below has:
         // it walks the definitions and asks whether each is one of them.
         Set<String> recursive = new LinkedHashSet<>();

@@ -284,6 +284,136 @@ class WhatAModuleCopiedIsHeldToWhatItWasBuiltAgainstTest {
                 refusal(path, READS_A));
     }
 
+    private static final String INCLUDES_BASE = """
+            module app.w exposing ( Wrapped, wrap )
+            import lib.t ( Base )
+            data Wrapped = { ...Base, w: Int }
+            behavior wrap : (n: Int) -> Wrapped
+            let wrap (n) = Wrapped { total = 1, w = n }
+            """;
+
+    private static final String READS_WRAP = """
+            module main.m
+            import app.w ( wrap, Wrapped )
+            behavior go : (n: Int) -> Wrapped
+            let go (n) = wrap(n)
+            """;
+
+    private static final ModuleMessage IT_COPIED_ANOTHER_BASE =
+            new ModuleMessage.ItCopiedAnotherVersion("app.w", "invariant", "Base", "lib.t", "clauses");
+
+    private static String libOfBase(String values, String bound) {
+        return "module lib.t exposing ( Base )\n" + values
+                + "data Base = { total: Int }\n    invariant bound = total <= " + bound + "\n";
+    }
+
+    /** A value of the module that writes a clause, which the clause names, is part of what a type
+     *  that includes the clause checks. */
+    @Test
+    void aValueTheClauseNamesIsHeldWhereTheClauseIsChecked() {
+        Map<String, ClassFileImage> path = builtAgainst(
+                libOfBase("let limit = 3\n", "limit"), INCLUDES_BASE,
+                libOfBase("let limit = 4\n", "limit"));
+
+        assertEquals(IT_COPIED_ANOTHER_BASE, refusal(path, READS_WRAP));
+    }
+
+    @Test
+    void aValueTheClauseNamesThatIsComputedIsHeldTheSameWay() {
+        Map<String, ClassFileImage> path = builtAgainst(
+                libOfBase("let limit = List.length([1, 2, 3])\n", "limit"), INCLUDES_BASE,
+                libOfBase("let limit = List.length([1, 2, 3, 4])\n", "limit"));
+
+        assertEquals(IT_COPIED_ANOTHER_BASE, refusal(path, READS_WRAP));
+    }
+
+    /**
+     * A chain of values each of which names the one before it twice comes to more than a clause is
+     * closed over by copying, and is held to what the values it names rest on instead: the first of
+     * them moved is a clause that moved, and none moved is one that did not.
+     */
+    @Test
+    void aClauseNamingAChainOfValuesTooLongToCopyIsHeldToWhatTheChainRestsOn() {
+        String moved = libOfBase(doublingChain(20, "3"), "c20");
+        Map<String, ClassFileImage> path = builtAgainst(
+                libOfBase(doublingChain(20, "2"), "c20"), INCLUDES_BASE, moved);
+
+        assertEquals(IT_COPIED_ANOTHER_BASE, refusal(path, READS_WRAP));
+
+        Map<String, ClassFileImage> unchanged = builtAgainst(
+                libOfBase(doublingChain(20, "2"), "c20"), INCLUDES_BASE,
+                libOfBase(doublingChain(20, "2"), "c20"));
+        assertAccepted(unchanged, READS_WRAP);
+    }
+
+    /** A value of the helper's module is held in the helper as what it computes, and what the
+     *  module called it is not part of that: a value renamed is the copy it was. */
+    @Test
+    void aValueTheHelperIsClosedOverThatIsOnlyRenamedIsTheCopyItWas() {
+        Map<String, ClassFileImage> path = builtAgainst("""
+                module lib.p exposing ( capped )
+                let cap = List.length([1, 2, 3])
+                let capped (n: Int) = if n > cap then cap else n
+                """, CALLS_THE_HELPER, """
+                module lib.p exposing ( capped )
+                let limit = List.length([1, 2, 3])
+                let capped (n: Int) = if n > limit then limit else n
+                """);
+
+        assertAccepted(path, readerOf("app.r"));
+    }
+
+    /** And of a helper of the module the helper expands into it, which stands there as its body. */
+    @Test
+    void aHelperTheHelperExpandsThatIsOnlyRenamedIsTheCopyItWas() {
+        Map<String, ClassFileImage> path = builtAgainst("""
+                module lib.p exposing ( capped )
+                let atMost (n: Int, m: Int) = if n > m then m else n
+                let capped (n: Int) = atMost(n, 10)
+                """, CALLS_THE_HELPER, """
+                module lib.p exposing ( capped )
+                let noMoreThan (n: Int, m: Int) = if n > m then m else n
+                let capped (n: Int) = noMoreThan(n, 10)
+                """);
+
+        assertAccepted(path, readerOf("app.r"));
+    }
+
+    /** The same of a clause a type that includes it checks. */
+    @Test
+    void aValueTheClauseIsClosedOverThatIsOnlyRenamedIsTheCopyItWas() {
+        Map<String, ClassFileImage> path = builtAgainst(
+                libOfBase("let limit = List.length([1, 2, 3])\n", "limit"), INCLUDES_BASE,
+                libOfBase("let bound = List.length([1, 2, 3])\n", "bound"));
+
+        assertAccepted(path, READS_WRAP);
+    }
+
+    /** A helper naming a chain of values too long to copy into it is held to what the chain rests
+     *  on, and a reader that expands it still compiles against the values it carries. */
+    @Test
+    void aHelperNamingAChainOfValuesTooLongToCopyIsHeldToWhatTheChainRestsOn() {
+        String v1 = "module lib.p exposing ( capped )\n" + doublingChain(20, "2")
+                + "let capped (n: Int) = if n > c20 then c20 else n\n";
+        String v2 = "module lib.p exposing ( capped )\n" + doublingChain(20, "3")
+                + "let capped (n: Int) = if n > c20 then c20 else n\n";
+
+        Map<String, ClassFileImage> moved = builtAgainst(v1, CALLS_THE_HELPER, v2);
+        assertEquals(new ModuleMessage.ItCopiedAnotherVersion("app.r", "helper", "capped", "lib.p",
+                        "closed helper"),
+                refusal(moved, readerOf("app.r")));
+
+        assertAccepted(builtAgainst(v1, CALLS_THE_HELPER, v1), readerOf("app.r"));
+    }
+
+    private static String doublingChain(int links, String first) {
+        StringBuilder chain = new StringBuilder("let c0 = " + first + "\n");
+        for (int at = 1; at <= links; at++) {
+            chain.append("let c%d = c%d + c%d\n".formatted(at, at - 1, at - 1));
+        }
+        return chain.toString();
+    }
+
     /** The departures of an attempted construction are a lookup by the clause that failed, so a
      *  helper that writes them in another order is the helper it was. */
     @Test

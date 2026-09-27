@@ -88,7 +88,8 @@ class AnExpansionKeepsTheSpellingItCopiedTest {
     /** Every name in {@code helper}'s expanded body that points at characters not spelling it. */
     private static List<String> misspelled(String source, String helper) {
         Ast.Module parsed = CstFrontend.parse(source);
-        HelperInliner inliner = HelperInliner.forModule(Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get())), DefaultStdlib.get());
+        HelperInliner inliner = HelperInliner.forModule(Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get())), DefaultStdlib.get(),
+                ValueAtAReference.COPIED);
         Hir.Expr expanded =
                 inliner.inline(inliner.held().get(new souther.compiler.ast.DefinitionName(helper))
                         .definition().writtenBody(), inliner.bodyOf(helper));

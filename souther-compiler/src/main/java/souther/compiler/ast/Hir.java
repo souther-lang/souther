@@ -32,6 +32,7 @@ import java.util.Objects;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.function.UnaryOperator;
 
 /**
@@ -3149,6 +3150,18 @@ public interface Hir {
         List<InvariantClause> out = new ArrayList<>();
         for (InvariantClause clause : clauses) {
             out.add(clause.with(f.apply(clause.expr())));
+        }
+        return out;
+    }
+
+    /** As {@link #mapClauses(List, UnaryOperator)}, telling {@code f} which clause it is given: its
+     * place among the clauses, counted from zero in the order they are held. */
+    public static List<InvariantClause> mapClauses(List<InvariantClause> clauses,
+                                                   BiFunction<Integer, Expr, Expr> f) {
+        List<InvariantClause> out = new ArrayList<>();
+        for (int ordinal = 0; ordinal < clauses.size(); ordinal++) {
+            InvariantClause clause = clauses.get(ordinal);
+            out.add(clause.with(f.apply(ordinal, clause.expr())));
         }
         return out;
     }

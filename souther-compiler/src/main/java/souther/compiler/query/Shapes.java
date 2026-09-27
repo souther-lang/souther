@@ -51,10 +51,12 @@ import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.Region;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.MaterialisationSite;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.WrittenOwner;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -870,9 +872,12 @@ public final class Shapes {
                     // A declared clause is one rule to depart by and may still be several conjuncts to
                     // discharge, so `a && b` under one name is classified twice under that name: what
                     // discharges each half is what an author needs, and the name is what a caller reads.
-                    for (Hir.InvariantClause declared : data.invariants()) {
+                    WrittenOwner.Declaration writer = new WrittenOwner.Declaration(named.key());
+                    for (int ordinal = 0; ordinal < data.invariants().size(); ordinal++) {
+                        Hir.InvariantClause declared = data.invariants().get(ordinal);
                         for (ClausesForDischarge.ClauseReading written
-                                : declaring.conjunctsOf(declared.expr(), new BindingOwner.OfData(named))) {
+                                : declaring.conjunctsOf(declared.expr(), new BindingOwner.OfData(named),
+                                        new MaterialisationSite.Invariant(writer, ordinal))) {
                             clauses.add(InvariantChecker.capabilityOf(written, named, ruleReading)
                                     .named(declared.name()));
                         }

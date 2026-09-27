@@ -81,6 +81,7 @@ import souther.compiler.check.EmittedDefinition;
 import souther.compiler.check.Expandable;
 import souther.compiler.check.PathReachability;
 import souther.compiler.check.UninhabitableTypes;
+import souther.compiler.check.ValueAtAReference;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.DecisionSource;
 import souther.compiler.coverage.DecisionSources;
@@ -1969,7 +1970,10 @@ public final class Bodies {
     /** {@link #carriedClosure}, with what closing each definition copied. */
     public static Carried carrying(Hir.Module from, Collection<Hir.FnDef> roots,
                                    Expanding.Of against) {
-        HelperInliner inliner = HelperInliner.over(against.table(), against.graph());
+        // What a definition is closed as holds each value of its module once where it is demanded,
+        // as a tree that runs does, and leaves another module's as the name it is.
+        HelperInliner inliner = HelperInliner.over(against.table(), against.graph(),
+                ValueAtAReference.SHARED_PER_REGION);
         Map<String, SortedSet<CopyTarget>> absorbed = new LinkedHashMap<>();
         Map<String, Hir.FnDef> out = publishedDefinitions(from, roots, inliner, absorbed);
         if (out.isEmpty()) {
@@ -2259,8 +2263,11 @@ public final class Bodies {
      * as it runs and what it writes belongs to the body it is written into. */
     private static Answer<HelperInliner> expanding(Db db, String module, InliningPolicy policy) {
         Answer<Expanding.Of> against = db.ask(new Expanding(module, policy));
+        // What the checks below read is a tree that shares each value per region, the tree a body
+        // that runs is checked as.
         return against.present()
-                ? Answer.of(HelperInliner.over(against.value().table(), against.value().graph()))
+                ? Answer.of(HelperInliner.over(against.value().table(), against.value().graph(),
+                        ValueAtAReference.SHARED_PER_REGION))
                 : Answer.absent();
     }
 
@@ -2432,7 +2439,7 @@ public final class Bodies {
                     && against.value().graph().recurses(held.reachedAs());
             try {
                 HelperInliner inliner = HelperInliner.over(against.value().table(),
-                        against.value().graph())
+                        against.value().graph(), ValueAtAReference.SHARED_PER_REGION)
                         .callingValuesAsMethodsWhereEmitted(scope.value());
                 // A value runs as a method that takes the values its root region demands; every
                 // other definition runs as the body it was written with.
@@ -2480,7 +2487,8 @@ public final class Bodies {
             // read in. A recursion is a cycle among the declarations in reach, and which
             // declarations those are is what the policy decides.
             HelperInliner inliner = HelperInliner.over(against.value().table(),
-                    against.value().graph()).buildingValuesAsTemplatesWhereAnalysed(scope.value());
+                    against.value().graph(), ValueAtAReference.SHARED_PER_REGION)
+                    .buildingValuesAsTemplatesWhereAnalysed(scope.value());
             HelperEntry held = against.value().table().at(new DefinitionName(fn));
             boolean recursive = held != null
                     && against.value().graph().recurses(held.reachedAs());

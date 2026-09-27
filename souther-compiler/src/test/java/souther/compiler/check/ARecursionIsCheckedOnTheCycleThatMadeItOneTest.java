@@ -51,7 +51,7 @@ class ARecursionIsCheckedOnTheCycleThatMadeItOneTest {
                 new HelperGraph(HelperGraph.of(table).callsOf(), List.of(own("lone")));
 
         assertThrows(IllegalStateException.class,
-                () -> TotalityChecker.check(HelperInliner.over(table, disagreeing)));
+                () -> TotalityChecker.check(HelperInliner.over(table, disagreeing, ValueAtAReference.COPIED)));
     }
 
     /** The control: the same module, answered by the graph built over it, has nothing to prove. */
@@ -60,6 +60,7 @@ class ARecursionIsCheckedOnTheCycleThatMadeItOneTest {
         HelperTable table = tableOf(ONE_HELPER_THAT_CALLS_NOTHING);
 
         assertDoesNotThrow(
-                () -> TotalityChecker.check(HelperInliner.over(table, HelperGraph.of(table))));
+                () -> TotalityChecker.check(
+                        HelperInliner.over(table, HelperGraph.of(table), ValueAtAReference.COPIED)));
     }
 }

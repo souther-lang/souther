@@ -102,6 +102,7 @@ class EveryShapeThatIsTimedStillCompilesTest {
 
     @Test
     void everyModuleShapeCompiles() {
+        compiles("doubling chain", List.of(Values.doublingChain(VALUES)));
         compiles("chain", List.of(Values.chain(VALUES, false)));
         compiles("chain bottom-up", List.of(Values.chain(VALUES, true)));
         compiles("chain via helpers", List.of(Values.throughHelpers(VALUES, false)));

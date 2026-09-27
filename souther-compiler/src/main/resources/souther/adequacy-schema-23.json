@@ -2440,7 +2440,7 @@
     },
     "materialisationRegion": {
       "type": "object",
-      "description": "The region one build of a value was made for, said as the source settles it. `kind` says how: `body` is a definition's body as a whole; `slot` is one of the regions a construct the source wrote opens, named by the construct and `slot`; `block` is the body of a block the source wrote, by its `rule` number; `block_of_name` is the body of a block a name written where a value goes was expanded into, by which reference of that definition the name is. Every arm carries what tells one of its regions from every other, and none of another arm's: a document naming a region two ways is a document a join could pick either of.",
+      "description": "The region one build of a value was made for, said as the source settles it. `kind` says how: `body` is a definition's body as a whole; `slot` is one of the regions a construct the source wrote opens, named by the construct and `slot`; `block` is the body of a block the source wrote, by its `rule` number; `block_of_name` is the body of a block a name written where a value goes was expanded into, by which reference of that definition the name is; `invariant` is one clause of a type's invariant as a whole, by the `declaration` that writes it and the clause's `ordinal`; `ensures` is one arm of a behavior's ensures clause as a whole, by the behavior (`definition`), the clause's `ordinal` and the `arm`. Every arm carries what tells one of its regions from every other, and none of another arm's: a document naming a region two ways is a document a join could pick either of.",
       "required": [
         "kind"
       ],
@@ -2464,6 +2464,21 @@
             ],
             "not": {
               "anyOf": [
+                {
+                  "required": [
+                    "declaration"
+                  ]
+                },
+                {
+                  "required": [
+                    "ordinal"
+                  ]
+                },
+                {
+                  "required": [
+                    "arm"
+                  ]
+                },
                 {
                   "required": [
                     "construct"
@@ -2531,6 +2546,21 @@
               "anyOf": [
                 {
                   "required": [
+                    "declaration"
+                  ]
+                },
+                {
+                  "required": [
+                    "ordinal"
+                  ]
+                },
+                {
+                  "required": [
+                    "arm"
+                  ]
+                },
+                {
+                  "required": [
                     "rule"
                   ]
                 },
@@ -2562,6 +2592,21 @@
             ],
             "not": {
               "anyOf": [
+                {
+                  "required": [
+                    "declaration"
+                  ]
+                },
+                {
+                  "required": [
+                    "ordinal"
+                  ]
+                },
+                {
+                  "required": [
+                    "arm"
+                  ]
+                },
                 {
                   "required": [
                     "construct"
@@ -2622,6 +2667,21 @@
               "anyOf": [
                 {
                   "required": [
+                    "declaration"
+                  ]
+                },
+                {
+                  "required": [
+                    "ordinal"
+                  ]
+                },
+                {
+                  "required": [
+                    "arm"
+                  ]
+                },
+                {
+                  "required": [
                     "construct"
                   ]
                 },
@@ -2653,6 +2713,148 @@
                 {
                   "required": [
                     "rule"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "invariant"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "module",
+              "declaration",
+              "ordinal"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "arm"
+                  ]
+                },
+                {
+                  "required": [
+                    "definition"
+                  ]
+                },
+                {
+                  "required": [
+                    "construct"
+                  ]
+                },
+                {
+                  "required": [
+                    "lowered"
+                  ]
+                },
+                {
+                  "required": [
+                    "slot"
+                  ]
+                },
+                {
+                  "required": [
+                    "clause"
+                  ]
+                },
+                {
+                  "required": [
+                    "cases"
+                  ]
+                },
+                {
+                  "required": [
+                    "index"
+                  ]
+                },
+                {
+                  "required": [
+                    "rule"
+                  ]
+                },
+                {
+                  "required": [
+                    "reference"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "ensures"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "module",
+              "definition",
+              "ordinal",
+              "arm"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "declaration"
+                  ]
+                },
+                {
+                  "required": [
+                    "construct"
+                  ]
+                },
+                {
+                  "required": [
+                    "lowered"
+                  ]
+                },
+                {
+                  "required": [
+                    "slot"
+                  ]
+                },
+                {
+                  "required": [
+                    "clause"
+                  ]
+                },
+                {
+                  "required": [
+                    "cases"
+                  ]
+                },
+                {
+                  "required": [
+                    "index"
+                  ]
+                },
+                {
+                  "required": [
+                    "rule"
+                  ]
+                },
+                {
+                  "required": [
+                    "reference"
                   ]
                 }
               ]
@@ -2921,7 +3123,9 @@
             "body",
             "slot",
             "block",
-            "block_of_name"
+            "block_of_name",
+            "invariant",
+            "ensures"
           ]
         },
         "module": {
@@ -2929,6 +3133,20 @@
         },
         "definition": {
           "type": "string"
+        },
+        "declaration": {
+          "type": "string",
+          "description": "The type whose invariant a build was made for, by the name it is declared under."
+        },
+        "ordinal": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Which clause of that invariant, or of that behavior's ensures, counted from zero in the order the clauses are written."
+        },
+        "arm": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Which arm of that ensures clause, counted from zero in the order the arms are written."
         },
         "construct": {
           "type": "integer",

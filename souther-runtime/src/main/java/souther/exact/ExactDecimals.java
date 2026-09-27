@@ -52,6 +52,26 @@ public final class ExactDecimals {
     }
 
     /**
+     * How many chars {@code d.toPlainString()} is, in {@code long} because the answer can be past
+     * what an {@code int} counts: a sign, the digits, and either the integer zeros a negative scale
+     * stands for or a point with the leading fractional zeros a scale above the precision asks for.
+     * Nought is {@code "0"} at every scale up to zero, whatever the scale says.
+     *
+     * <p>Worked out from the number and its scale, without the text. The text is as long as the
+     * scale is far from nought, so a value a few bytes wide can have one no {@code String} holds,
+     * and asking how long it is by building it is what fails.
+     */
+    public static long plainNotationLength(BigDecimal d) {
+        long sign = d.signum() < 0 ? 1 : 0;
+        long precision = d.precision();
+        long scale = d.scale();
+        if (scale <= 0) {
+            return d.signum() == 0 ? 1 : sign + precision - scale;
+        }
+        return precision > scale ? sign + precision + 1 : sign + 2 + scale;
+    }
+
+    /**
      * The number {@code a} times {@code b}, at whatever scale holds it, or null where no decimal is
      * that number.
      *

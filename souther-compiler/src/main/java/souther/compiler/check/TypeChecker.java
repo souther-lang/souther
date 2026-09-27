@@ -294,7 +294,8 @@ public final class TypeChecker {
         // readings answer the same about a behavior's name: it becomes the function value it names,
         // which a helper may then not apply (E1818). Told nothing, the standalone reading would
         // refuse the name for being a name rather than for being a behavior a helper cannot reach.
-        HelperInliner inliner = HelperInliner.forModule(module, publishedToHere, symbols.library())
+        HelperInliner inliner = HelperInliner.forModule(module, publishedToHere, symbols.library(),
+                        ValueAtAReference.SHARED_PER_REGION)
                 .namingBehaviors(InjectionSigs.arities(calleeSigs));
         // Which declarations reach a `partial` helper, asked once for the two checks that ask it: the
         // invariant rule just below and the totality rule further down.

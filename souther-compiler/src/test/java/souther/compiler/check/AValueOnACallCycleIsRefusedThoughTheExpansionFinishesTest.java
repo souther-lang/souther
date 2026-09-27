@@ -89,7 +89,8 @@ class AValueOnACallCycleIsRefusedThoughTheExpansionFinishesTest {
     @Test
     void theExpansionOfThatModuleFinishes() {
         Ast.Module parsed = CstFrontend.parse(CYCLE);
-        HelperInliner inliner = HelperInliner.forModule(Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get())), DefaultStdlib.get());
+        HelperInliner inliner = HelperInliner.forModule(Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get())), DefaultStdlib.get(),
+                ValueAtAReference.COPIED);
 
         Hir.Expr expanded = assertDoesNotThrow(() -> inliner.inline(
                 inliner.held().get(new souther.compiler.ast.DefinitionName("depth"))

@@ -98,26 +98,26 @@ public final class HelperInliner {
     /**
      * What this expansion puts where a value's name was written.
      *
-     * <p>{@link ValueAtAReference#COPIED} unless a caller says otherwise, which is what every
-     * reader that cannot read a binding still needs. {@link ValueAtAReference#SETTLED_REFERENCE} is
-     * carried by {@link #settledValues} rather than by this, since what it needs is the signature
-     * and not the arm.
+     * <p>Said by whoever makes the inliner, since what the tree it writes is read by decides it and
+     * nothing here can tell: {@link ValueAtAReference#COPIED} is for a reader that cannot read a
+     * binding, {@link ValueAtAReference#SHARED_PER_REGION} for one that can.
+     * {@link ValueAtAReference#SETTLED_REFERENCE} is carried by {@link #settledValues} rather than
+     * by this, since what it needs is the signature and not the arm.
      */
-    private ValueAtAReference reading = ValueAtAReference.COPIED;
+    private final ValueAtAReference reading;
     /** Whether a value that needs nothing from its region is called as a method, not copied. */
     private boolean valuesAreMethods = false;
     /** Whether a value this module declares is built as a reference to its template. */
     private boolean valuesAreTemplates = false;
-    /** Which references to a value are left as the reference, for a body being closed to carry the
-     *  values it names along with it. */
+    /** Which references to a value are left as the reference, for a body being closed. */
     private ValuesLeftNamed valuesStayNamed = ValuesLeftNamed.NONE;
 
-    /** Which values a body being closed names rather than copies. */
+    /** Which values a body being closed names rather than holds. */
     private enum ValuesLeftNamed {
         /** Not closing: every value is read as the expansion's mode says. */
         NONE,
-        /** A helper: its own module's values are copied into it, and another module's value runs
-         *  in that module, so it stays a reference. */
+        /** A helper or a clause: the values of its own module are held in it, once where they are
+         *  demanded, and another module's value runs in that module, so it stays a reference. */
         OF_OTHER_MODULES,
         /** A value: it runs where it is declared, so everything it names stays a reference. */
         ALL
@@ -194,6 +194,9 @@ public final class HelperInliner {
      * @param dependencies which bindings the {@code depends on} parameters of a behavior's
      *                     {@code let} are; empty while writing anything else, because only a
      *                     behavior's {@code let} has them (spec §depends-on)
+     * @param root the region the expression being written is the whole of, where the caller says
+     *             which one it is, and null where it is the body of the definition
+     *             {@code destination} names
      * @param scopedLambdas the lambdas reached by a binding rather than by a name: one a block's
      *                      {@code let} binds, one handed to a function parameter. Apart from
      *                      {@link #table} because they are apart — a declaration is reached by a name
@@ -205,7 +208,8 @@ public final class HelperInliner {
      *                     not write is bound to a parameter and carried unchanged through every
      *                     copy that hands it on ({@link #crossedInto})
      */
-    private record Writing(BindingOwner destination, BindingOwner enclosing,
+    private record Writing(BindingOwner destination, MaterialisationSite root,
+                           BindingOwner enclosing,
                            ExpansionLineage lineage, Hir.Binders binders,
                            Set<BindingId> dependencies,
                            Map<BindingId, ScopedLambda> scopedLambdas,
@@ -238,8 +242,8 @@ public final class HelperInliner {
             Map<BindingId, ExpansionSite.Supplied.Handover> here =
                     new LinkedHashMap<>(suppliedFrom);
             here.putAll(supplied);
-            return new Writing(destination, copy, deeper, binders, dependencies, scopedLambdas,
-                    here);
+            return new Writing(destination, root, copy, deeper, binders, dependencies,
+                    scopedLambdas, here);
         }
     }
 
@@ -296,9 +300,20 @@ public final class HelperInliner {
      * operation handed a block on to another. */
     private record LambdaOrigin(String param, String owner, SourcePos pos) {}
 
-    private HelperInliner(HelperTable table, HelperGraph graph) {
+    private HelperInliner(HelperTable table, HelperGraph graph, ValueAtAReference reading) {
+        if (reading == ValueAtAReference.SETTLED_REFERENCE) {
+            throw new IllegalArgumentException("what a settled reference stands for is told to an"
+                    + " inliner beside this, by readingSettledValues");
+        }
         this.table = table;
         this.graph = graph;
+        this.reading = reading;
+    }
+
+    /** Whether a value is materialised once per evaluation region here, which is what a tree that
+     *  runs, or one a walk of regions reads, is written as. */
+    public boolean sharesValuesPerRegion() {
+        return reading == ValueAtAReference.SHARED_PER_REGION;
     }
 
     /** The body of {@code fn} in this module — what an expansion written into it belongs to. */
@@ -310,8 +325,9 @@ public final class HelperInliner {
      * prelude helpers join the inlining map under the qualified names they are reached by
      * ({@code Bool.not}), a module's own under the bare names it declared them with — so the two
      * never stand for one key, and how a call came to name one of them was settled before this. */
-    public static HelperInliner forModule(Hir.Module module, Stdlib stdlib) {
-        return forModule(module, Map.of(), stdlib);
+    public static HelperInliner forModule(Hir.Module module, Stdlib stdlib,
+                                          ValueAtAReference reading) {
+        return forModule(module, Map.of(), stdlib, reading);
     }
 
     /**
@@ -324,9 +340,9 @@ public final class HelperInliner {
      * answered where that is collected.
      */
     public static HelperInliner forModule(Hir.Module module, Map<String, Hir.FnDef> imported,
-                                          Stdlib stdlib) {
+                                          Stdlib stdlib, ValueAtAReference reading) {
         HelperTable table = HelperTable.of(module, imported, InliningPolicy.FULL, stdlib);
-        return new HelperInliner(table, HelperGraph.of(table));
+        return new HelperInliner(table, HelperGraph.of(table), reading);
     }
 
     /**
@@ -339,8 +355,8 @@ public final class HelperInliner {
      * them.
      */
     public static HelperInliner forHelpers(String module, Map<String, Hir.FnDef> own,
-                                           Stdlib stdlib) {
-        return forHelpers(module, own, InliningPolicy.FULL, stdlib);
+                                           Stdlib stdlib, ValueAtAReference reading) {
+        return forHelpers(module, own, InliningPolicy.FULL, stdlib, reading);
     }
 
     /**
@@ -351,8 +367,9 @@ public final class HelperInliner {
      * a module's own helper is expanded, and a recursive call is left standing, by the same rules.
      */
     public static HelperInliner forHelpers(String module, Map<String, Hir.FnDef> own,
-                                           InliningPolicy policy, Stdlib stdlib) {
-        return forHelpers(module, own, Map.of(), policy, stdlib);
+                                           InliningPolicy policy, Stdlib stdlib,
+                                           ValueAtAReference reading) {
+        return forHelpers(module, own, Map.of(), policy, stdlib, reading);
     }
 
     /**
@@ -363,9 +380,9 @@ public final class HelperInliner {
      */
     public static HelperInliner forHelpers(String module, Map<String, Hir.FnDef> declared,
                                            Map<String, Hir.FnDef> imported, InliningPolicy policy,
-                                           Stdlib stdlib) {
+                                           Stdlib stdlib, ValueAtAReference reading) {
         HelperTable table = HelperTable.of(module, declared, Map.of(), imported, policy, stdlib);
-        return over(table, HelperGraph.of(table));
+        return over(table, HelperGraph.of(table), reading);
     }
 
     /**
@@ -375,8 +392,9 @@ public final class HelperInliner {
      * asks them once and every body of that module is expanded against the same two answers. The
      * factories above are for a caller holding declarations rather than answers.
      */
-    public static HelperInliner over(HelperTable table, HelperGraph graph) {
-        return new HelperInliner(table, graph);
+    public static HelperInliner over(HelperTable table, HelperGraph graph,
+                                     ValueAtAReference reading) {
+        return new HelperInliner(table, graph, reading);
     }
 
     /**
@@ -411,27 +429,12 @@ public final class HelperInliner {
     }
 
     /**
-     * The same, materialising each value once per evaluation region rather than copying its body at
-     * every reference.
-     *
-     * <p>What a tree that runs is built in. A value denotes as if its body stood at each reference,
-     * and the body is pure, total and has no identity to observe (ADR-0072), so one materialisation
-     * answers for every reference that reads it. What bounds the sharing is the region: a branch, an
-     * arm, the right of a short-circuit, the body of a block — anywhere entered on some paths and
-     * not others. Bound outside one, a value would be evaluated where no reference to it is reached.
-     */
-    public HelperInliner sharingOneMaterialisationPerRegion() {
-        this.reading = ValueAtAReference.SHARED_PER_REGION;
-        return this;
-    }
-
-    /**
      * In the tree the backend emits from, a value that needs nothing from the region around it is
      * emitted as a method of its own, and a reference to it is a call.
      *
-     * <p>Said apart from {@link #sharingOneMaterialisationPerRegion}, which every representation
-     * that runs asks for: the representation an analysis reads has no method to call and keeps the
-     * body where the value was named.
+     * <p>Said apart from sharing each value per region ({@link #sharesValuesPerRegion}), which every
+     * representation that runs asks for: the representation an analysis reads has no method to call
+     * and keeps the body where the value was named.
      */
     public HelperInliner callingValuesAsMethodsWhereEmitted(Symbols symbols) {
         this.valuesAreMethods = table.policy() == InliningPolicy.FULL;
@@ -805,9 +808,10 @@ public final class HelperInliner {
         // reference the graph over that module's table is keyed by.
         ReachName.Declaration here = new ReachName.Own(new ValueName.Helper(module, fn.name()));
         // A value stays a reference to the values it names: it runs where it is declared, so what
-        // it names is built there and never copied. A helper is expanded into its reader, and its
-        // own module's values are expanded with it; a value another module declares runs in that
-        // module whichever body names it, so it stays a reference in a helper as well.
+        // it names is built there and never copied. A helper is handed to its reader whole, and its
+        // own module's values are held in it, each bound once where it is demanded; a value another
+        // module declares runs in that module whichever body names it, so it stays a reference in
+        // a helper as well.
         ValuesLeftNamed namedBefore = valuesStayNamed;
         valuesStayNamed = fn.params().isEmpty()
                 ? ValuesLeftNamed.ALL : ValuesLeftNamed.OF_OTHER_MODULES;
@@ -835,8 +839,9 @@ public final class HelperInliner {
 
     /**
      * The clauses of {@code data}, a declaration of {@code module}, closed over that module and no
-     * other: its own helpers and values expanded, and every definition of another module left as
-     * what names it — a value as its name, a helper as an expansion whose callee says which one.
+     * other: its own helpers expanded and its own values held in each clause, once where they are
+     * demanded, and every definition of another module left as what names it — a value as its
+     * name, a helper as an expansion whose callee says which one.
      *
      * <p>What a declaration's invariant is, said in terms of its own module. The clauses a reader
      * checks have the other modules' definitions written into them as well, and those are copies of
@@ -851,7 +856,9 @@ public final class HelperInliner {
         valuesStayNamed = ValuesLeftNamed.OF_OTHER_MODULES;
         try {
             BindingOwner declared = new BindingOwner.OfData(data.declares());
-            return Hir.mapClauses(data.invariants(), clause -> inline(clause, declared));
+            WrittenOwner.Declaration writer = new WrittenOwner.Declaration(data.declares().key());
+            return Hir.mapClauses(data.invariants(), (ordinal, clause) -> inline(clause, declared,
+                    new MaterialisationSite.Invariant(writer, ordinal)));
         } finally {
             valuesStayNamed = namedBefore;
         }
@@ -1339,7 +1346,7 @@ public final class HelperInliner {
      * {@code depends on} parameters are the trailing bindings named in {@code dependencies}. */
     public Hir.Expr inline(Hir.Expr e, Set<BindingId> dependencies, BindingOwner into) {
         heldToTheBound(e);
-        return writing(into, dependencies, () -> expanded(e));
+        return writing(into, null, dependencies, () -> expanded(e));
     }
 
     /**
@@ -1364,7 +1371,27 @@ public final class HelperInliner {
      */
     public Hir.Expr inline(Hir.Expr e, BindingOwner into) {
         heldToTheBound(e);
-        return writing(into, Set.of(), () -> expanded(e));
+        return writing(into, null, Set.of(), () -> expanded(e));
+    }
+
+    /**
+     * The same, for an expression that is not the body of a definition, with each value it names
+     * materialised once per evaluation region rather than copied at every reference.
+     *
+     * <p>{@code root} is the region {@code e} is the whole of. A definition's body says which region
+     * it is by the definition, and {@code into} alone cannot say it for what a declaration writes:
+     * a data's {@code invariant} has one root per clause, and {@code into} is the data.
+     *
+     * <p>Only for an inliner made to share ({@link #sharesValuesPerRegion}): a region is what a
+     * shared build is bound in, and an inliner that copies has none to be told.
+     */
+    public Hir.Expr inline(Hir.Expr e, BindingOwner into, MaterialisationSite root) {
+        if (!sharesValuesPerRegion()) {
+            throw new IllegalStateException("a region is told to an inliner that shares values per"
+                    + " region, and this one copies them: " + root);
+        }
+        heldToTheBound(e);
+        return writing(into, root, Set.of(), () -> expanded(e));
     }
 
     /**
@@ -1378,6 +1405,13 @@ public final class HelperInliner {
      */
     Expansion<Hir.Expr> expanding(Hir.Expr e, BindingOwner into) {
         return expanding(() -> inline(e, into));
+    }
+
+    /** As {@link #expanding(Hir.Expr, BindingOwner)}, for an expression that is the whole of the
+     * region {@code root}, with each value it names materialised once per region
+     * ({@link #inline(Hir.Expr, BindingOwner, MaterialisationSite)}). */
+    Expansion<Hir.Expr> expanding(Hir.Expr e, BindingOwner into, MaterialisationSite root) {
+        return expanding(() -> inline(e, into, root));
     }
 
     /**
@@ -1411,7 +1445,8 @@ public final class HelperInliner {
      * <p>A writing may hold another. A helper's body is expanded while the body that called it is
      * being expanded, so the one in force is put back when this one is done rather than dropped.
      */
-    private Hir.Expr writing(BindingOwner into, Set<BindingId> dependencies,
+    private Hir.Expr writing(BindingOwner into, MaterialisationSite root,
+                             Set<BindingId> dependencies,
                              java.util.function.Supplier<Hir.Expr> expansion) {
         Writing outer = writing;
         // Numbered among what this pass has written into that body, so a second writing into it — a
@@ -1422,7 +1457,7 @@ public final class HelperInliner {
         // The writing is what places the copies, so it is what they are written under. Rooted at
         // the body instead, two writings into one body would place one call's copy in one spot
         // twice — the body cannot tell them apart, and which writing this is is exactly what does.
-        writing = new Writing(into, mine, ExpansionLineage.ORIGINAL, new Hir.Binders(mine),
+        writing = new Writing(into, root, mine, ExpansionLineage.ORIGINAL, new Hir.Binders(mine),
                 dependencies, new HashMap<>(), new LinkedHashMap<>());
         try {
             return expansion.get();
@@ -2561,8 +2596,12 @@ public final class HelperInliner {
      * build has no need of a name, and one that cannot be named is refused where a build asks.
      */
     private Supplier<MaterialisationSite> rootSite() {
+        MaterialisationSite named = writing.root();
         BindingOwner into = writing.destination();
         return () -> {
+            if (named != null) {
+                return named;
+            }
             if (into instanceof BindingOwner.OfValue definition) {
                 return new MaterialisationSite.Body(
                         new WrittenOwner.Body(definition.module(), definition.name()));
@@ -2613,6 +2652,10 @@ public final class HelperInliner {
                              Supplier<MaterialisationSite> site) {
         String reached = named.reaches();
         if (readAt(reached) != null) {
+            return;
+        }
+        // A body being closed leaves the values it does not hold as the names they are.
+        if (leftNamed(named.reachesADeclaration())) {
             return;
         }
         if (valuesAreTemplates && declarationArity(named).isEmpty() && isATemplateValue(named)) {
@@ -2719,7 +2762,7 @@ public final class HelperInliner {
      * is written under no build and every reader of a build reads the same tree.
      */
     public Hir.FnDef valueTemplate(Hir.FnDef fn) {
-        Hir.Expr body = writing(bodyOf(fn.name()), Set.of(), () -> {
+        Hir.Expr body = writing(bodyOf(fn.name()), null, Set.of(), () -> {
             heldToTheBound(fn.writtenBody());
             return region(inline(fn.writtenBody()), rootSite());
         });
@@ -2973,7 +3016,7 @@ public final class HelperInliner {
     public LoweredDefinition valueMethod(Hir.FnDef fn) {
         List<Hir.FnParam> parameters = new ArrayList<>();
         Map<BindingId, ValueName.Helper> carried = new LinkedHashMap<>();
-        Hir.Expr body = writing(bodyOf(fn.name()), Set.of(), () -> {
+        Hir.Expr body = writing(bodyOf(fn.name()), null, Set.of(), () -> {
             heldToTheBound(fn.writtenBody());
             Hir.Expr calls = inline(fn.writtenBody());
             Map<String, Hir.Var.Denoting> demanded = demandedHere(calls);

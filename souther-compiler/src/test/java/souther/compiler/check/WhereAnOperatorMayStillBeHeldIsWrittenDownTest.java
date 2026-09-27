@@ -207,8 +207,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.BinaryElaborator.arithmetic",
                     "writes it into the checked node, and into the one inside a construction where"
                             + " the answer is a newtype"),
-            new Held("souther.compiler.check.Terms.writtenSyntaxOf",
-                    "writes it back into the syntax a value is rendered as"),
             new Held("souther.compiler.check.Resolve.expr",
                     "writes what that answered into the node the resolved tree holds"),
 

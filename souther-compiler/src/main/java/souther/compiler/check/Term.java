@@ -8,6 +8,7 @@ import souther.compiler.types.ValueName;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -223,10 +224,6 @@ final class Term {
     private final List<Term> parts;
     private final int hash;
 
-    /** {@link #standsForText}, written the first time it is asked for. A walk puts its terms in
-     *  order by comparing these, so one term is compared as often as the walk has neighbours for
-     *  it, and each comparison would write out everything the term reaches. */
-    private volatile String standsForText;
 
     /**
      * How a term's hash is mixed with the hashes of its parts.
@@ -426,13 +423,18 @@ final class Term {
     }
 
     /**
-     * What stands for this term where a walk of several has to take them in one order.
+     * The one order a walk of several terms takes them in.
      *
-     * <p><b>The same walk the hash takes, written out instead of added up.</b> What a term is told
+     * <p><b>The same walk the hash takes, compared instead of added up.</b> What a term is told
      * apart by is its shape, what that shape carries and its parts, and {@link #hashOf} already says
      * how each kind of carried thing is read without ever reaching which object it is. So the order
-     * is read off the same places, and two terms that are equal are written alike here for the same
-     * reason they are hashed alike.
+     * is read off the same places — the shape, then what it carries, then its parts one by one — and
+     * two terms that are equal come out level here for the same reason they are hashed alike.
+     *
+     * <p><b>Compared, and never written out.</b> A term is a graph and not a tree: a value named
+     * twice by the value before it, over a chain of them, is one part read twice at each link.
+     * Written out, what stands for such a term doubles at each link; compared, each pair of parts is
+     * compared once ({@link Ordering}) and the comparison is as long as the graph.
      *
      * <p><b>And not off {@link #rendered}.</b> That is for a person: it drops what the algebra tells
      * two apart by — an evaluation renders as what was written and where, and two evaluations of one
@@ -445,31 +447,65 @@ final class Term {
      * where the gap is reached it is refused rather than chosen through — see
      * {@link souther.compiler.numeric.CanonicalForm#entriesIn}.
      */
-    String standsForText() {
-        String written = standsForText;
-        if (written == null) {
-            written = writtenForOrder();
-            standsForText = written;
-        }
-        return written;
+    static int inOneOrder(Term one, Term other) {
+        return new Ordering().compare(one, other);
     }
 
-    private String writtenForOrder() {
-        StringBuilder sb = new StringBuilder();
-        sb.append(shape.name()).append('(').append(textOf(of));
-        if (shape == Shape.EQ) {
-            // An equality is between two values and not from one to the other, so the two are
-            // written in one order however they were built — the same thing the hash does by
-            // adding them.
-            String one = parts.get(0).standsForText();
-            String other = parts.get(1).standsForText();
-            sb.append(one.compareTo(other) <= 0 ? one + "," + other : other + "," + one);
-        } else {
-            for (Term part : parts) {
-                sb.append(',').append(part.standsForText());
+    /**
+     * One comparison of two terms, holding what each pair of their parts came to.
+     *
+     * <p>Held by identity, since a part read twice is one object read twice, and for one comparison
+     * and not beyond it. Two terms built by two interners are equal and not the same object, and a
+     * pair of them is compared once however many places the graph reaches it from.
+     */
+    private static final class Ordering {
+
+        private final Map<Term, Map<Term, Integer>> compared = new IdentityHashMap<>();
+
+        int compare(Term one, Term other) {
+            if (one == other) {
+                return 0;
             }
+            Map<Term, Integer> against = compared.computeIfAbsent(one, _ -> new IdentityHashMap<>());
+            Integer known = against.get(other);
+            if (known == null) {
+                known = comparedOnce(one, other);
+                against.put(other, known);
+            }
+            return known;
         }
-        return sb.append(')').toString();
+
+        private int comparedOnce(Term one, Term other) {
+            int by = one.shape.name().compareTo(other.shape.name());
+            if (by != 0) {
+                return by;
+            }
+            by = textOf(one.of).compareTo(textOf(other.of));
+            if (by != 0) {
+                return by;
+            }
+            List<Term> these = inOrder(one);
+            List<Term> those = inOrder(other);
+            for (int at = 0; at < Math.min(these.size(), those.size()); at++) {
+                by = compare(these.get(at), those.get(at));
+                if (by != 0) {
+                    return by;
+                }
+            }
+            return Integer.compare(these.size(), those.size());
+        }
+
+        /** The parts in the order they are compared in. An equality is between two values and not
+         *  from one to the other, so its two are taken in one order however they were built — the
+         *  same thing the hash does by adding them. */
+        private List<Term> inOrder(Term term) {
+            if (term.shape != Shape.EQ) {
+                return term.parts;
+            }
+            Term first = term.parts.get(0);
+            Term second = term.parts.get(1);
+            return compare(first, second) <= 0 ? term.parts : List.of(second, first);
+        }
     }
 
     /** What stands for a value a shape carries, taken the way {@link #hashOf} takes it. */
@@ -597,21 +633,44 @@ final class Term {
         return hash;
     }
 
+    /**
+     * Structural, as the type says. Two terms built by two interners are two graphs, and a part read
+     * twice in one is read twice in the other, so each pair of parts is compared once for the whole
+     * question and a pair found equal is not asked again.
+     */
     @Override
     public boolean equals(Object other) {
-        if (this == other) {
+        return other instanceof Term term && same(this, term, new IdentityHashMap<>());
+    }
+
+    private static boolean same(Term one, Term other, Map<Term, Map<Term, Boolean>> met) {
+        if (one == other) {
             return true;
         }
-        if (!(other instanceof Term term) || term.hash != hash || term.shape != shape
-                || !java.util.Objects.equals(term.of, of)) {
+        if (other.hash != one.hash || other.shape != one.shape
+                || !java.util.Objects.equals(other.of, one.of)
+                || other.parts.size() != one.parts.size()) {
             return false;
         }
-        if (shape == Shape.EQ) {
-            return (parts.get(0).equals(term.parts.get(0)) && parts.get(1).equals(term.parts.get(1)))
-                    || (parts.get(0).equals(term.parts.get(1))
-                            && parts.get(1).equals(term.parts.get(0)));
+        Map<Term, Boolean> against = met.computeIfAbsent(one, _ -> new IdentityHashMap<>());
+        Boolean known = against.get(other);
+        if (known != null) {
+            return known;
         }
-        return parts.equals(term.parts);
+        boolean answer;
+        if (one.shape == Shape.EQ) {
+            List<Term> a = one.parts;
+            List<Term> b = other.parts;
+            answer = (same(a.get(0), b.get(0), met) && same(a.get(1), b.get(1), met))
+                    || (same(a.get(0), b.get(1), met) && same(a.get(1), b.get(0), met));
+        } else {
+            answer = true;
+            for (int at = 0; at < one.parts.size() && answer; at++) {
+                answer = same(one.parts.get(at), other.parts.get(at), met);
+            }
+        }
+        against.put(other, answer);
+        return answer;
     }
 
     /**

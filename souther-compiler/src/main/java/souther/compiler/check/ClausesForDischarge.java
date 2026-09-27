@@ -4,6 +4,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.MaterialisationSite;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -60,7 +61,7 @@ public final class ClausesForDischarge {
                 ClauseHelpers.settled(expandable.module(), symbols, declarations, kinds);
         return new ClausesForDischarge(settled, HelperInliner.forHelpers(settled.name(),
                 HelperInliner.helpersOf(settled), published, InliningPolicy.DISCHARGE,
-                symbols.library()));
+                symbols.library(), ValueAtAReference.SHARED_PER_REGION));
     }
 
     /** The declarations that state an {@code invariant}, as their authors wrote them. */
@@ -95,12 +96,17 @@ public final class ClausesForDischarge {
      * in and splices in whatever that body is made of, so a clause expanded any earlier is placed
      * inside the helper it names and split where that helper's author put an {@code &&}.
      *
+     * <p>The clause is the whole of the region {@code root}, and each value it names is read as one
+     * materialisation per region rather than as a copy of its body at every reference.
+     *
      * @param owner what the names in an expansion belong to — a declaration or a signature
+     * @param root  the region the clause is the whole of
      */
-    public List<ClauseReading> conjunctsOf(Hir.Expr written, BindingOwner owner) {
+    public List<ClauseReading> conjunctsOf(Hir.Expr written, BindingOwner owner,
+                                           MaterialisationSite root) {
         List<ClauseReading> out = new ArrayList<>();
         for (ClauseHelpers.AuthoredPart each : ClauseHelpers.conjunctsOf(written)) {
-            Expansion<Hir.Expr> read = expansion.expanding(each.written(), owner);
+            Expansion<Hir.Expr> read = expansion.expanding(each.written(), owner, root);
             out.add(new ClauseReading(each, read.value(), CallsLeftStanding.of(read.standing())));
         }
         return out;

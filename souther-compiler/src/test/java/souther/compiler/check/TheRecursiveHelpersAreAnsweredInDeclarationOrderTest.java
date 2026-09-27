@@ -74,7 +74,7 @@ class TheRecursiveHelpersAreAnsweredInDeclarationOrderTest {
     void theInlinerCarriesTheGraphsOrderRatherThanRebuildingIt() {
         HelperTable table = tableOf(SIX_ON_ONE_CYCLE);
         HelperGraph graph = HelperGraph.of(table);
-        List<String> carried = declaredHere(HelperInliner.over(table, graph).recursiveHelpers());
+        List<String> carried = declaredHere(HelperInliner.over(table, graph, ValueAtAReference.COPIED).recursiveHelpers());
         assertEquals(declaredHere(graph.recursive()), carried);
     }
 

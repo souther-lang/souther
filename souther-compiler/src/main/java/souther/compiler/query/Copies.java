@@ -2,15 +2,18 @@ package souther.compiler.query;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.CarriedDefinitions;
+import souther.compiler.check.ConstEval;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.InliningPolicy;
 import souther.compiler.check.InvariantSettled;
 import souther.compiler.check.Lower;
 import souther.compiler.check.TypeOps;
+import souther.compiler.check.ValueAtAReference;
 import souther.compiler.copied.CopiedIdentity;
 import souther.compiler.copied.CopyRecord;
 import souther.compiler.copied.CopyTarget;
+import souther.compiler.meta.PublishedCopies;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -173,7 +176,8 @@ public final class Copies {
             }
             Bodies.Carried carried = Bodies.carrying(from, roots, against.value());
             HelperInliner folding = HelperInliner.over(against.value().table(),
-                    against.value().graph()).callingValuesAsMethodsWhereEmitted(scope.value());
+                    against.value().graph(), ValueAtAReference.SHARED_PER_REGION)
+                    .callingValuesAsMethodsWhereEmitted(scope.value());
             SortedMap<CopyTarget, CopyRecord> provides = new TreeMap<>();
             SortedMap<CopyTarget, SortedSet<CopyTarget>> absorbed = new TreeMap<>();
             // What a constant is rests on everything folding it went through. A reader carries the
@@ -190,7 +194,12 @@ public final class Copies {
                 if (def.params().isEmpty()) {
                     CopyTarget.Value target = new CopyTarget.Value(declared);
                     CopyRecord offered = CopiedIdentity.value(def,
-                            folding.constantOfOwn(declared.name()), owner);
+                            folding.constantOfOwn(declared.name()), owner,
+                            constant -> {
+                                ConstEval.Extent extent = ConstEval.extentOf(constant);
+                                return PublishedCopies.constantFits(target, extent.chars(),
+                                        extent.bytes());
+                            });
                     provides.put(target, offered);
                     if (offered.form() == CopyRecord.Form.CONSTANT) {
                         absorbed.put(target, new TreeSet<>());
@@ -198,14 +207,18 @@ public final class Copies {
                     } else {
                         absorbed.put(target, closing);
                     }
-                } else {
+                }
+            }
+            for (Hir.FnDef def : carried.definitions().values()) {
+                ValueName.Helper declared = ownDefinition(def, name);
+                if (declared != null && !def.params().isEmpty()) {
                     CopyTarget.Helper target = new CopyTarget.Helper(declared);
                     provides.put(target, CopiedIdentity.helper(def, owner));
-                    absorbed.put(target, closing);
+                    absorbed.put(target, carried.absorbed().get(def.name()));
                 }
             }
             HelperInliner closingClauses = HelperInliner.over(against.value().table(),
-                    against.value().graph());
+                    against.value().graph(), ValueAtAReference.SHARED_PER_REGION);
             for (Hir.Def def : resolved.value().defs()) {
                 if (def instanceof Hir.Data data) {
                     CopyTarget.Invariant target = new CopyTarget.Invariant(data.declares().key());

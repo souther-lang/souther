@@ -8,7 +8,6 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
-import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -196,49 +195,27 @@ public final class AffineForms {
     }
 
     /**
-     * One walk of one expression: the names it is inside, and what each name it has read came to.
+     * {@link #of(Core, Object, Reading)}, holding what each name came to in {@code answered}, which
+     * the caller keeps for as long as it reads with {@code reading}.
      *
-     * <p>The first is what stops a name that reaches itself. The second is what stops a name read
-     * twice from being read twice: what a binding comes to is a fact about the value it was given
-     * and the environment that value is read in, and both are fixed where the binding was made
-     * (ADR-0111) — so the second reading of a name is the first reading asked again. A body naming
-     * one binding twice, over a chain of bindings that each do, is a reading that doubles with
-     * every link without it.
-     *
-     * <p>Held for one walk and not beyond it. What a name comes to is this reading's answer, and a
-     * table outliving the walk would be one reading's answer offered to another's.
-     *
-     * <p>A name is entered on the way to its own answer, so what is held under it was reached with
-     * it on the path. That is the same path every reading of it takes: a path can hold a binding
-     * twice only where a value reaches itself, which is refused before any of this runs.
+     * <p>For a reading that asks itself something while it reads — the fact an operation states of
+     * its arguments, what a condition compares — so that a value it is part way through reading is
+     * read once and not once per question. What is held is keyed by the value and the environment
+     * it is read in ({@link BindingWalk}), so an answer is taken again only for the same question.
      */
-    private static final class Walk<A, E> {
+    static <A, E> LinearForm<A> of(Core raw, E at, Reading<A, E> reading,
+                                   BindingWalk.Answers<Outcome<A, E>> answered) {
+        return of(raw, at, reading, new Walk<>(answered)) instanceof Outcome.Composed<A, E> composed
+                ? composed.form() : null;
+    }
 
-        private final java.util.Set<BindingId> following = new java.util.HashSet<>();
-        private final java.util.Map<BindingId, Outcome<A, E>> read = new java.util.HashMap<>();
+    /** One walk of one expression, reading each name it meets once ({@link BindingWalk}). */
+    private static final class Walk<A, E> extends BindingWalk<Outcome<A, E>> {
 
-        /** Whether {@code binding} may be followed from here, marking it followed where it may. */
-        boolean enter(BindingId binding) {
-            return following.add(binding);
-        }
+        Walk() {}
 
-        /** Done following {@code binding}. */
-        void leave(BindingId binding) {
-            following.remove(binding);
-        }
-
-        /** What {@code binding} came to, asking {@code answer} the first time and no other. */
-        Outcome<A, E> readingOf(BindingId binding,
-                                java.util.function.Supplier<Outcome<A, E>> answer) {
-            Outcome<A, E> already = read.get(binding);
-            if (already != null) {
-                return already;
-            }
-            Outcome<A, E> came = answer.get();
-            if (came != null) {
-                read.put(binding, came);
-            }
-            return came;
+        Walk(BindingWalk.Answers<Outcome<A, E>> answered) {
+            super(answered);
         }
     }
 
@@ -390,10 +367,10 @@ public final class AffineForms {
             if (through.value() == e || !following.enter(r.binding())) {
                 return null;
             }
-            // Asked once per binding. What a name comes to is the value it was given read in the
+            // Asked once per question. What a name comes to is the value it was given read in the
             // environment it was given in, and a second occurrence of the name is that same
             // question — so the walk holds the answer rather than composing the value again.
-            Outcome<A, E> form = following.readingOf(r.binding(),
+            Outcome<A, E> form = following.readingOf(r.binding(), through.value(), through.at(),
                     () -> of(through.value(), through.at(), reading, following));
             following.leave(r.binding());
             return form;

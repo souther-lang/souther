@@ -272,13 +272,7 @@ public final class DecimalMath {
      * Nought is {@code "0"} at every scale up to zero, whatever the scale says.
      */
     static long plainTextLength(BigDecimal d) {
-        long sign = d.signum() < 0 ? 1 : 0;
-        long precision = d.precision();
-        long scale = d.scale();
-        if (scale <= 0) {
-            return d.signum() == 0 ? 1 : sign + precision - scale;
-        }
-        return precision > scale ? sign + precision + 1 : sign + 2 + scale;
+        return ExactDecimals.plainNotationLength(d);
     }
 
     /**

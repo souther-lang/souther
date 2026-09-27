@@ -11,6 +11,7 @@ import souther.compiler.types.RuleOrigin;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.SourceReferenceOrigin;
+import souther.compiler.types.TypeKey;
 import souther.compiler.types.ValueName;
 import souther.compiler.types.WrittenOwner;
 import tools.jackson.databind.JsonNode;
@@ -87,7 +88,28 @@ class ABuildIsWrittenInTheWordsTheSchemaNamesTest {
                 Set.of("kind", "module", "definition", "rule"));
         out.put(new MaterialisationSite.GeneratedBlock(new SourceReferenceOrigin(OWNER, 4)),
                 Set.of("kind", "module", "definition", "reference"));
+        // A clause of a type's invariant is named by the type and which clause, and an arm of a
+        // behavior's ensures by the behavior, which clause and which arm.
+        out.put(new MaterialisationSite.Invariant(
+                        new WrittenOwner.Declaration(new TypeKey("m", "Amount")), 1),
+                Set.of("kind", "module", "declaration", "ordinal"));
+        out.put(new MaterialisationSite.Ensures(new WrittenOwner.Stated("m", "f"), 0, 2),
+                Set.of("kind", "module", "definition", "ordinal", "arm"));
         return out;
+    }
+
+    /** Every kind of region there is, named above: a kind added is one somebody says the keys of
+     *  here before this passes. */
+    @Test
+    void everyKindOfRegionIsNamedAbove() {
+        Set<String> kinds = new TreeSet<>();
+        for (Class<?> each : MaterialisationSite.class.getPermittedSubclasses()) {
+            kinds.add(each.getSimpleName());
+        }
+        Set<String> named = new TreeSet<>();
+        NAMED_BY.keySet().forEach(site -> named.add(site.getClass().getSimpleName()));
+
+        assertEquals(kinds, named);
     }
 
     private static Set<String> with(Set<String> keys, String more) {
@@ -266,7 +288,8 @@ class ABuildIsWrittenInTheWordsTheSchemaNamesTest {
      *  so a document is wrong only for carrying the key at all and not for the shape under it. */
     private static void withStray(ObjectNode at, String key) {
         switch (key) {
-            case "construct", "lowered", "index", "rule", "reference" -> at.put(key, 0);
+            case "construct", "lowered", "index", "rule", "reference", "ordinal", "arm" ->
+                    at.put(key, 0);
             case "cases" -> at.putArray(key).add("Yes");
             default -> at.put(key, "x");
         }

@@ -8,6 +8,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.Resolve;
 import souther.compiler.check.SyntaxSymbols;
+import souther.compiler.check.ValueAtAReference;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.meta.ModuleReadback;
@@ -192,7 +193,8 @@ class WhetherCodeIsOutOfSightIsSettledWhereItIsParsedTest {
     private static Hir.Expr bodyOf(String source, String fn) {
         var parsed = CstFrontend.parseWithSlices(source, null, new SourceId("demo.sou"));
         Hir.Module module = Resolve.module(parsed.module(), SyntaxSymbols.of(parsed.module(), DefaultStdlib.get()));
-        HelperInliner inliner = HelperInliner.forModule(module, DefaultStdlib.get());
+        HelperInliner inliner = HelperInliner.forModule(module, DefaultStdlib.get(),
+                ValueAtAReference.COPIED);
         souther.compiler.check.HelperEntry held =
                 inliner.held().get(new souther.compiler.ast.DefinitionName(fn));
         assertNotNull(held, "the fn under test is one of the module's own");
