@@ -8,8 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * Text from outside is a {@code String} only where its canonical value has a place (spec
- * §what-a-string-holds). The bound is the carrier's, so these ask {@link Strings#admission} of a
- * carrier that holds a few units: text that long cannot be built to ask the JVM's own.
+ * §what-a-string-holds). The bound is in code points, so these ask {@link Strings#admission} of a
+ * bound of a few: text as long as the real one cannot be built to ask it.
  */
 class TextAdmittedAsAStringHasAPlaceTest {
 

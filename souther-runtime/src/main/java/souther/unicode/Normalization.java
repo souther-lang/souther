@@ -34,14 +34,14 @@ public final class Normalization {
     public static String nfc(String s) {
         String canonical = nfcWithin(s, Long.MAX_VALUE);
         if (canonical == null) {
-            throw new IllegalStateException("no text is longer than Long.MAX_VALUE UTF-16 units");
+            throw new IllegalStateException("no text is longer than Long.MAX_VALUE code points");
         }
         return canonical;
     }
 
     /**
-     * {@link #nfc}, or null where the answer is longer than {@code longest} UTF-16 units — which is
-     * found out before that much is built, so a caller whose carrier has a bound on a text's length
+     * {@link #nfc}, or null where the answer is longer than {@code longest} code points — which is
+     * found out before that much is built, so a caller that has a bound on a text's length
      * can ask for the answer without asking for more than the bound.
      *
      * <p>Text made only of code points below {@link NormalizationTables#NFC_TRIVIAL_LIMIT} is its own
@@ -55,7 +55,7 @@ public final class Normalization {
     public static @Nullable String nfcWithin(String s, long longest) {
         int unsettled = firstAtTrivialLimit(s);
         if (unsettled == s.length()) {
-            return s.length() <= longest ? s : null;
+            return s.length() <= longest || s.codePointCount(0, s.length()) <= longest ? s : null;
         }
         return normalizeFrom(s, unsettled == 0 ? 0 : s.offsetByCodePoints(unsettled, -1), longest);
     }
@@ -92,11 +92,12 @@ public final class Normalization {
     /** {@link #normalizeWithin}, taking the text before {@code from} as it is: the caller knows it
      *  is its own NFC and that nothing from {@code from} on composes into it. */
     private static @Nullable String normalizeFrom(String s, int from, long longest) {
-        if (from > longest) {
+        int kept = s.codePointCount(0, from);
+        if (kept > longest) {
             return null;
         }
         Composing composing = new Composing(longest, (int) Math.min(s.length(), longest));
-        composing.keep(s, from);
+        composing.keep(s, from, kept);
         for (int at = from; at < s.length(); ) {
             int cp = s.codePointAt(at);
             at += Character.charCount(cp);
@@ -137,6 +138,7 @@ public final class Normalization {
 
         private final long longest;
         private final StringBuilder out;
+        private long written;
         private int starter = -1;
         private int[] marks = new int[8];
         private int markCount;
@@ -146,10 +148,11 @@ public final class Normalization {
             this.out = new StringBuilder(expected);
         }
 
-        /** Writes the text before {@code end} as it is: asked before anything is taken, of text no
-         *  longer than {@code longest}. */
-        void keep(String s, int end) {
+        /** Writes the text before {@code end}, {@code codePoints} long, as it is: asked before
+         *  anything is taken, of text no longer than {@code longest}. */
+        void keep(String s, int end, int codePoints) {
             out.append(s, 0, end);
+            written = codePoints;
         }
 
         /** Takes the next decomposed code point; false where what is written has passed
@@ -270,10 +273,11 @@ public final class Normalization {
         }
 
         private boolean writeOne(int cp) {
-            if (out.length() + Character.charCount(cp) > longest) {
+            if (written >= longest) {
                 return false;
             }
             out.appendCodePoint(cp);
+            written++;
             return true;
         }
     }
