@@ -7,9 +7,11 @@ import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
 import net.unit8.raoh.Result;
 import net.unit8.raoh.decode.Decoder;
+import net.unit8.raoh.decode.builtin.ListDecoder;
 import net.unit8.raoh.decode.builtin.RecordDecoder;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
@@ -277,6 +279,67 @@ class CompileInvariantConstraintTest {
                 """, List.of(1L, 2L, 1L));
         assertEquals("duplicate_element", issue.code());
         assertEquals(List.of(1L), issue.meta().get("duplicates"));
+    }
+
+    /**
+     * {@code Unique} reports what Raoh's own reports for it. Where an element's Java equality is
+     * Souther's too — an {@code Int}, unlike a {@code Decimal} — {@code RaohListUnique} and Raoh's
+     * {@code ListDecoder.unique()} walk the same elements and must fail with the same issue, field
+     * for field: held here to being the one Raoh builds, the way {@link #aMapsSizeIsReportedAsRaohReportsIt}
+     * holds a map's size constraints to Raoh's. A {@code Decimal} is deliberately not used for this
+     * one — the two are meant to differ there (issue #2033), so parity is not what a Decimal case
+     * would be checking.
+     */
+    @Test
+    void aRepeatedElementIsReportedAsRaohReportsIt() throws Exception {
+        List<Object> input = List.of(1L, 2L, 1L);
+        ListDecoder<Object, Object> raoh = new ListDecoder<>((in, path) -> Result.ok(input));
+
+        Issue issue = soleIssue("""
+                data V = List<Int>
+                    invariant List.allDistinctBy(x -> x, value)
+                """, input);
+        assertEquals(sole(raoh.unique().decode(input, Path.ROOT)), issue);
+    }
+
+    /** {@code Unique} is stated of the elements' Souther equality (spec §collections), and two
+     * spellings of one amount are one element by it — where Raoh's own {@code unique()} would tell
+     * them apart by {@code BigDecimal.equals}, which reads the scale (issue #2033). */
+    @Test
+    void aDecimalRepeatedAtAnotherScaleIsADuplicate() throws Exception {
+        Issue issue = soleIssue("""
+                data V = List<Decimal>
+                    invariant List.allDistinctBy(x -> x, value)
+                """, List.of(new BigDecimal("1.0"), new BigDecimal("1.00")));
+        assertEquals("duplicate_element", issue.code());
+        assertEquals(List.of(new BigDecimal("1.00")), issue.meta().get("duplicates"));
+        assertFalse(issue.customMessage(), "Raoh's own message, so a resolver may replace it");
+    }
+
+    /** The same equality reaches an amount nested in a container the list holds — the same defect
+     * the flat case has, one level down (issue #2033). */
+    @Test
+    void aDecimalRepeatedInsideANestedListIsADuplicate() throws Exception {
+        Issue issue = soleIssue("""
+                data V = List<List<Decimal>>
+                    invariant List.allDistinctBy(x -> x, value)
+                """, List.of(List.of(new BigDecimal("1.0")), List.of(new BigDecimal("1.00"))));
+        assertEquals("duplicate_element", issue.code());
+        assertEquals(List.of(List.of(new BigDecimal("1.00"))), issue.meta().get("duplicates"));
+    }
+
+    /** Each repeated element is named once, at the point its repetition is first found — not at its
+     * own first occurrence, and not again once it has been named. */
+    @Test
+    void aRepeatedElementIsNamedOnceAtItsFirstRepetition() throws Exception {
+        Issue issue = soleIssue("""
+                data V = List<Decimal>
+                    invariant List.allDistinctBy(x -> x, value)
+                """, List.of(new BigDecimal("1.0"), new BigDecimal("2.0"), new BigDecimal("2.00"),
+                new BigDecimal("1.00"), new BigDecimal("1.000")));
+        assertEquals("duplicate_element", issue.code());
+        assertEquals(List.of(new BigDecimal("2.00"), new BigDecimal("1.00")),
+                issue.meta().get("duplicates"));
     }
 
     /** A projection that is not the identity says it of something else, and Raoh has no constraint for
