@@ -2172,7 +2172,7 @@ public final class AstBuilder {
      * <p>NFC and not NFKC: compatibility folding turns ① into 1 and a half-width kana into a
      * full-width one, which is a different claim about the text than "these are the same characters".
      *
-     * <p>{@link Strings#admitted}, not {@code java.text.Normalizer}: the one Unicode 18.0.0 NFC
+     * <p>{@link Strings#admission}, not {@code java.text.Normalizer}: the one Unicode 18.0.0 NFC
      * this language runs everywhere, not whatever Unicode version this JDK shipped with.
      */
     private String stringValue(SyntaxToken literal) {

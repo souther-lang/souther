@@ -29,7 +29,7 @@ public final class Normalization {
      *  nfc(s)} — because composing an already-canonical sequence recomposes nothing further.
      *
      *  <p>Of text that is a sequence of scalar values, which is the only text there is to normalize:
-     *  whether text from outside is one is asked by {@code Strings.admitted} before this, and this
+     *  whether text from outside is one is asked by {@code Strings.admission} before this, and this
      *  asks nothing. Half a surrogate pair handed in comes back out where it was. */
     public static String nfc(String s) {
         String canonical = nfcWithin(s, Long.MAX_VALUE);

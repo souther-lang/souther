@@ -326,8 +326,8 @@ final class Descriptors {
     static final MethodTypeDesc MTD_Rdecoder = MethodTypeDesc.of(CD_RDecoder);
     static final MethodTypeDesc MTD_Rencoder = MethodTypeDesc.of(CD_REncoder);
     static final MethodTypeDesc MTD_leafString = MethodTypeDesc.of(CD_StringDecoder);
-    /** {@code Strings.admit(String):String} and {@code Strings.admitted(String):String}, text let
-     *  into the domain, lifted into a {@code Function} at the call site that reaches for one. */
+    /** {@code Strings.admit(String):String}, text let into the domain, lifted into a
+     *  {@code Function} at the call site that reaches for one. */
     static final MethodTypeDesc MTD_admit = MethodTypeDesc.of(CD_String, CD_String);
     /** {@code TextLeaf.admit(String, Path):Result}, a decoder's string leaf as one step. */
     static final ClassDesc CD_TextLeaf = ClassDesc.of("souther.runtime.TextLeaf");

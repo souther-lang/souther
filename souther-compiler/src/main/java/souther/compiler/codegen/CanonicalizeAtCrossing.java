@@ -16,8 +16,8 @@ import static souther.compiler.codegen.Descriptors.*;
 /**
  * Lets in the text a value of a declared {@code Type} holds, wherever it just crossed from outside
  * the compiler's own reach into a Souther value: each {@code String} goes through
- * {@code Strings.admit}, which refuses text holding half of a surrogate pair by aborting and
- * canonicalizes the rest. The crossings are an injected behavior's answer
+ * {@code Strings.admit}, which refuses by aborting text that is not a {@code String} — it holds half
+ * of a surrogate pair, or its canonical value has no place — and canonicalizes the rest. The crossings are an injected behavior's answer
  * ({@code BodyGen.requiredCall}), the argument a Java caller hands a generated behavior's public
  * {@code apply} ({@code Backend.generateSpecFn}), a composition's own arguments and each stage's
  * answer ({@code Backend.generatePipe}), the field a Java-supplied factory
