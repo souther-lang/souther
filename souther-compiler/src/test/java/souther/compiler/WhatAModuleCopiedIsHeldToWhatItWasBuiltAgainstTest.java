@@ -346,6 +346,49 @@ class WhatAModuleCopiedIsHeldToWhatItWasBuiltAgainstTest {
         assertAccepted(unchanged, READS_WRAP);
     }
 
+    /** A value of the helper's module is held in the helper as what it computes, and what the
+     *  module called it is not part of that: a value renamed is the copy it was. */
+    @Test
+    void aValueTheHelperIsClosedOverThatIsOnlyRenamedIsTheCopyItWas() {
+        Map<String, ClassFileImage> path = builtAgainst("""
+                module lib.p exposing ( capped )
+                let cap = List.length([1, 2, 3])
+                let capped (n: Int) = if n > cap then cap else n
+                """, CALLS_THE_HELPER, """
+                module lib.p exposing ( capped )
+                let limit = List.length([1, 2, 3])
+                let capped (n: Int) = if n > limit then limit else n
+                """);
+
+        assertAccepted(path, readerOf("app.r"));
+    }
+
+    /** And of a helper of the module the helper expands into it, which stands there as its body. */
+    @Test
+    void aHelperTheHelperExpandsThatIsOnlyRenamedIsTheCopyItWas() {
+        Map<String, ClassFileImage> path = builtAgainst("""
+                module lib.p exposing ( capped )
+                let atMost (n: Int, m: Int) = if n > m then m else n
+                let capped (n: Int) = atMost(n, 10)
+                """, CALLS_THE_HELPER, """
+                module lib.p exposing ( capped )
+                let noMoreThan (n: Int, m: Int) = if n > m then m else n
+                let capped (n: Int) = noMoreThan(n, 10)
+                """);
+
+        assertAccepted(path, readerOf("app.r"));
+    }
+
+    /** The same of a clause a type that includes it checks. */
+    @Test
+    void aValueTheClauseIsClosedOverThatIsOnlyRenamedIsTheCopyItWas() {
+        Map<String, ClassFileImage> path = builtAgainst(
+                libOfBase("let limit = List.length([1, 2, 3])\n", "limit"), INCLUDES_BASE,
+                libOfBase("let bound = List.length([1, 2, 3])\n", "bound"));
+
+        assertAccepted(path, READS_WRAP);
+    }
+
     /** A helper naming a chain of values too long to copy into it is held to what the chain rests
      *  on, and a reader that expands it still compiles against the values it carries. */
     @Test
