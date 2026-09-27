@@ -64,6 +64,8 @@ public sealed interface ValueOrigin<K> {
     interface Answering<K, R> {
 
         /**
+         * What {@code origin} comes to.
+         *
          * @param origin the origin being answered
          * @param part   what each of its parts came to, asked of a part and answered once for it
          */
