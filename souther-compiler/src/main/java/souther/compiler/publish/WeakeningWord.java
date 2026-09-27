@@ -138,6 +138,16 @@ public enum WeakeningWord {
      */
     A_BORDERS_FAULT_FAMILY_NOT_WORKED_OUT,
 
+    /**
+     * A coverage item's own place on the order — whether a row is owed there at all — is one a
+     * model's own decimals put far enough apart in scale that the exact arithmetic could not read.
+     *
+     * <p>Apart from {@link #BORDER_VALUE_NOT_WORKED_OUT}: there every value was read and the
+     * arithmetic gave out totalling what they come to; here whether the line asks for a row here at
+     * all is itself what the arithmetic could not settle, before any row was read against it.
+     */
+    ITEMS_PLACE_NOT_WORKED_OUT,
+
     /** A rule of the model that a reader set aside. */
     RULE_UNREAD,
 

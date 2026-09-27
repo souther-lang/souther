@@ -133,10 +133,10 @@ public record LevelInterval(Bound low, Bound high) {
      * <p>Told apart from an end nothing bounds, which stays an envelope with that end absent: a run
      * this could not read at all is never a run whose digits happened to reach every value, and a
      * reader of {@link #toLookIn} that ran the two together read "this compiler could not work out
-     * where to look" as "there is nowhere to look" — sound for {@link LevelSpace.Lattice#witness},
-     * which only ever needs a candidate, and not sound for {@link LevelSpace.Lattice#inspect},
-     * whose bound this feeds directly and which an absent end there widens to the carrier's own
-     * extent.
+     * where to look" as "there is nowhere to look" — sound for the {@code witness} the space
+     * {@link LevelSpace#onACarrier} returns, which only ever needs a candidate, and not sound for
+     * that same space's {@code inspect}, whose bound this feeds directly and which an absent end
+     * there widens to the carrier's own extent.
      */
     public sealed interface LookedIn {
 

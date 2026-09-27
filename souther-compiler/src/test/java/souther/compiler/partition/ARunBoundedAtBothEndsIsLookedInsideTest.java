@@ -115,7 +115,7 @@ class ARunBoundedAtBothEndsIsLookedInsideTest {
                 "three times a decimal reaches every third of one, so it reaches into this run");
         Level found = assertInstanceOf(Witness.Found.class,
                 fills.witness(between, Towards.ABOVE)).level();
-        assertTrue(fills.attainable(found) && between.contains(found),
+        assertTrue(Boolean.TRUE.equals(fills.attainable(found).orNull()) && between.contains(found),
                 "and what comes back is a value it takes, inside the run: " + found);
 
         LevelSpace steps = LevelSpace.steppingBy(ExactRatio.of(3));
@@ -165,7 +165,7 @@ class ARunBoundedAtBothEndsIsLookedInsideTest {
             assertInstanceOf(Occupancy.Inhabited.class, fills.inspect(between), generator);
             Level found = assertInstanceOf(Witness.Found.class,
                     fills.witness(between, Towards.ABOVE), generator).level();
-            assertTrue(fills.attainable(found) && between.contains(found),
+            assertTrue(Boolean.TRUE.equals(fills.attainable(found).orNull()) && between.contains(found),
                     () -> "generator " + generator + " offered " + found
                             + ", which is not a value of it inside the run");
         }

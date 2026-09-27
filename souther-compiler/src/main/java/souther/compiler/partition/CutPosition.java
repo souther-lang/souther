@@ -281,10 +281,11 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
      * <p>The second and the third told apart, where a collapsed {@code null} once ran them
      * together: an order with no numbers never needed the rounding in the first place, and a
      * caller reading both as one absence was reading "this compiler could not work out where to
-     * look" as "there is nowhere to look" — sound for {@link LevelSpace.Lattice#witness}, which
-     * only ever needs a candidate and answers {@code Witness.NONE} either way, and not sound for
-     * {@link LevelSpace.Lattice#inspect}, whose bound this feeds directly into and which an absent
-     * end there widens to the carrier's own extent.
+     * look" as "there is nowhere to look" — sound for the {@code witness} the space
+     * {@link LevelSpace#onACarrier} returns, which only ever needs a candidate and answers
+     * {@code Witness.NONE} either way, and not sound for that same space's {@code inspect}, whose
+     * bound this feeds directly into and which an absent end there widens to the carrier's own
+     * extent.
      */
     public sealed interface JustBeyond {
 

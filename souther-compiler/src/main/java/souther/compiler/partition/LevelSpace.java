@@ -102,9 +102,21 @@ public interface LevelSpace {
      */
     Witness witness(LevelInterval run, Towards from);
 
-    /** Whether the quantity can take this level at all. */
-    default boolean attainable(Level level) {
-        return inspect(LevelInterval.point(level)).any();
+    /**
+     * Whether the quantity can take this level at all — or which way the exact arithmetic could
+     * not tell.
+     *
+     * <p>{@link ExactAnswer} and not a plain {@code boolean}, because {@link Occupancy#any} folds
+     * a run this could not read into the same {@code false} an order that genuinely has nothing
+     * there answers with, and a caller that read {@code false} as a proof — that a level is not
+     * one the quantity takes, and not merely that this could not show it is — would be the mistake
+     * {@link Occupancy} exists to stop, one layer up from where it is already stopped.
+     */
+    default ExactAnswer<Boolean> attainable(Level level) {
+        return switch (inspect(LevelInterval.point(level))) {
+            case Occupancy.NotWorkedOut not -> ExactAnswer.unheld(not.why());
+            case Occupancy other -> ExactAnswer.held(other.any());
+        };
     }
 
     /**
@@ -128,38 +140,49 @@ public interface LevelSpace {
 
     /**
      * The nearest level the quantity can take at or past {@code from}, the way {@code towards} says,
-     * or empty where the order names none there.
+     * or empty where the order names none there — or which way the exact arithmetic could not tell.
      *
      * <p>What both points of a border are found with: the threshold itself where the quantity takes
      * it, and the first value it does take otherwise.
      */
-    default Optional<Level> nearestAtOrBeyond(Level from, Towards towards) {
-        return Optional.ofNullable(inspect(runFrom(from, towards, true)).end(towards));
+    default ExactAnswer<Optional<Level>> nearestAtOrBeyond(Level from, Towards towards) {
+        return endAnswer(runFrom(from, towards, true), towards);
     }
 
     /**
      * The nearest level this quantity can take strictly past {@code from}, the way {@code towards}
-     * says, or empty where the order names no single value there.
+     * says, or empty where the order names no single value there — or which way the exact
+     * arithmetic could not tell.
      *
      * <p>Adjacency, and nothing else. Empty says the run past this level has no end, which is not a
      * statement that it is empty: a decimal difference has no successor and has every larger
      * difference. That other question is {@link #anythingBeyond}, and both are read off the one
      * {@link Occupancy} so they cannot disagree.
      */
-    default Optional<Level> neighbour(Level from, Towards towards) {
-        return Optional.ofNullable(inspect(runFrom(from, towards, false)).end(towards));
+    default ExactAnswer<Optional<Level>> neighbour(Level from, Towards towards) {
+        return endAnswer(runFrom(from, towards, false), towards);
+    }
+
+    private ExactAnswer<Optional<Level>> endAnswer(LevelInterval run, Towards towards) {
+        return switch (inspect(run)) {
+            case Occupancy.NotWorkedOut not -> ExactAnswer.unheld(not.why());
+            case Occupancy other -> ExactAnswer.held(Optional.ofNullable(other.end(towards)));
+        };
     }
 
     /**
      * Whether this quantity takes any value at all strictly past {@code from}, the way
-     * {@code towards} says.
+     * {@code towards} says — or which way the exact arithmetic could not tell.
      *
      * <p>What decides whether a border has a side there. False only where the order itself stops —
      * an enumeration at its last case, a string a rule holds another string apart from — and never
      * because the step between two values has no name.
      */
-    default boolean anythingBeyond(Level from, Towards towards) {
-        return inspect(runFrom(from, towards, false)).any();
+    default ExactAnswer<Boolean> anythingBeyond(Level from, Towards towards) {
+        return switch (inspect(runFrom(from, towards, false))) {
+            case Occupancy.NotWorkedOut not -> ExactAnswer.unheld(not.why());
+            case Occupancy other -> ExactAnswer.held(other.any());
+        };
     }
 
     /** Everything one way of a level, which is what the three questions above are asked about. */
@@ -352,6 +375,15 @@ public interface LevelSpace {
              *  bounded. */
             @Override
             Extremum generated(ExactRatio at, Towards into, boolean strictly) {
+                // Membership is cheaper than the multiplier below and can answer where that cannot:
+                // a value's own place among the multiples is one division and a check the quotient
+                // is whole, and a model's own decimals can put `at` and the step far enough apart in
+                // scale that rounding the quotient goes Unheld even where `at` sits on the lattice
+                // exactly. Asked first, this is never wrong where the multiplier would have agreed,
+                // and is the whole of the answer where the multiplier could not have been worked out.
+                if (!strictly && reaches(at)) {
+                    return new Extremum.At(new Level.OfTheQuantity(at));
+                }
                 ExactRatio steps = at.dividedBy(generator);
                 ExactAnswer<java.math.BigInteger> rounded =
                         into == Towards.ABOVE ? steps.ceiling() : steps.floor();

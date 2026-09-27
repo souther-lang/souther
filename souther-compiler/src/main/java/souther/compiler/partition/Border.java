@@ -4,10 +4,12 @@ import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.publish.PublishedRuleHandle;
 import souther.compiler.publish.PublishedSentence;
 
@@ -318,7 +320,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         // point.
         PointContributions own = PointContributions.by(origin.authoredLine());
         return switch (answer(point)) {
-            case PointAnswer.NotOwed _ -> List.of();
+            case PointAnswer.NotOwed _, PointAnswer.NotWorkedOut _ -> List.of();
             case PointAnswer.AtLine _ -> List.of(
                     new OwedPoint(new BorderObligationPoint.AtLine(line, point),
                             PointAttribution.of(own)));
@@ -895,8 +897,23 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         // What the run is owed to, from the same reading that said what it asks: the line this point
         // is named for is the border's own, and the far side is where the run stops — which is the
         // end lying the way the run does.
-        return inside.region().parts().stream().anyMatch(part -> space.inspect(part).any())
-                ? new PointAnswer.InRegion(inside, run.endsAt(away))
+        //
+        // Walked rather than asked with anyMatch, since a part the exact arithmetic could not read
+        // is not a part with nothing in it: a region every part of which answered so has not been
+        // shown to hold nothing, and only a part this did find something in settles that a row is
+        // owed here without waiting for the rest.
+        UnheldNumber notWorkedOut = null;
+        for (LevelInterval part : inside.region().parts()) {
+            switch (space.inspect(part)) {
+                case Occupancy.Inhabited _ -> {
+                    return new PointAnswer.InRegion(inside, run.endsAt(away));
+                }
+                case Occupancy.NotWorkedOut not -> notWorkedOut = not.why();
+                case Occupancy.Empty _ -> { }
+            }
+        }
+        return notWorkedOut != null
+                ? new PointAnswer.NotWorkedOut(notWorkedOut)
                 : new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT);
     }
 
@@ -918,11 +935,24 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      */
     private static PointAnswer pointAt(LevelSpace space, Level cut, Towards towards,
                                        boolean isTheThreshold, NumericDomain.Bounds reach) {
-        if (isTheThreshold && space.attainable(cut)) {
-            // Admitted already: a threshold the rules refuse is a line this never made.
-            return new PointAnswer.AtLine(new Criterion.AtTheLevel(cut));
+        if (isTheThreshold) {
+            switch (space.attainable(cut)) {
+                case ExactAnswer.Unheld<Boolean> unheld -> {
+                    return new PointAnswer.NotWorkedOut(unheld.why());
+                }
+                case ExactAnswer.Held<Boolean> held -> {
+                    // Admitted already: a threshold the rules refuse is a line this never made.
+                    if (held.value()) {
+                        return new PointAnswer.AtLine(new Criterion.AtTheLevel(cut));
+                    }
+                }
+            }
         }
-        Optional<Level> at = beyond(space, cut, towards);
+        ExactAnswer<Optional<Level>> beyondAnswer = beyond(space, cut, towards);
+        if (beyondAnswer instanceof ExactAnswer.Unheld<Optional<Level>> unheld) {
+            return new PointAnswer.NotWorkedOut(unheld.why());
+        }
+        Optional<Level> at = ((ExactAnswer.Held<Optional<Level>>) beyondAnswer).value();
         if (at.isEmpty()) {
             return new PointAnswer.NotOwed(NotOwedReason.THE_CARRIER_NAMES_NO_NEIGHBOUR);
         }
@@ -938,16 +968,21 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
     }
 
     /**
-     * The nearest level the quantity takes on one side of the threshold.
+     * The nearest level the quantity takes on one side of the threshold, or which way the exact
+     * arithmetic could not tell.
      *
      * <p>The value beside the threshold where the quantity takes the threshold, and the first value
      * it does take otherwise. Two questions the order answers apart: {@code 2 * a <= 9} has no
      * neighbour of 9 to ask for, because 9 is not a level it stands at, and the level it stands at
      * below 9 is not one step from anything.
      */
-    static Optional<Level> beyond(LevelSpace space, Level cut, Towards towards) {
-        return space.attainable(cut) ? space.neighbour(cut, towards)
-                : space.nearestAtOrBeyond(cut, towards);
+    static ExactAnswer<Optional<Level>> beyond(LevelSpace space, Level cut, Towards towards) {
+        return switch (space.attainable(cut)) {
+            case ExactAnswer.Unheld<Boolean> unheld -> ExactAnswer.unheld(unheld.why());
+            case ExactAnswer.Held<Boolean> held -> held.value()
+                    ? space.neighbour(cut, towards)
+                    : space.nearestAtOrBeyond(cut, towards);
+        };
     }
 
     /**

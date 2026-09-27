@@ -1119,6 +1119,7 @@ final class Coverages {
         for (DomainPoint point : border.answers().keySet()) {
             items.put(point, switch (border.demand(point)) {
                 case Demand.NotOwed not -> new ItemAssessment.NotOwed(not.reason());
+                case Demand.NotWorkedOut not -> new ItemAssessment.NotWorkedOut(not.why());
                 case Demand.Owed owed -> {
                     Measurement<ItemAssessment.Coverage> coverage = absent != null ? absent
                             : verdictOf(shape.met(owed.criterion(), rows), guard,

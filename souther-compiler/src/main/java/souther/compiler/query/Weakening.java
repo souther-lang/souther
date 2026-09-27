@@ -147,6 +147,35 @@ public sealed interface Weakening {
     }
 
     /**
+     * A coverage item's own place on the order — whether a row is owed there at all — is one a
+     * model's own decimals put far enough apart in scale that the exact arithmetic could not read,
+     * so what became of it is undecided rather than settled either way.
+     *
+     * <p>Apart from {@link BorderValueUnreadable}: there a row's value could not be read against a
+     * line already known to ask for one; here whether the line asks for a row here at all — is it
+     * at the threshold, does the order name a neighbour, does the model leave a run beside it — is
+     * what the arithmetic gave out on. Neither a row this compiler could not measure nor a fact the
+     * model settled, so counting it as excluded or counting it against coverage would both say more
+     * than this found out.
+     */
+    record ItemsPlaceNotWorkedOut(souther.compiler.partition.Border border,
+                                  souther.compiler.numeric.UnheldNumber why) implements Weakening {
+
+        public ItemsPlaceNotWorkedOut {
+            if (why == null) {
+                throw new IllegalArgumentException("not worked out, in one of the two ways it is not");
+            }
+        }
+
+        /** Unaffected either way: no allowance of this compiler's stopped the working out, and the
+         *  room that ran out, where it was room, is the host's. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
+        }
+    }
+
+    /**
      * A row holds more readings at one border than a point is tried against, so what no reading
      * stands at is undecided rather than absent.
      *

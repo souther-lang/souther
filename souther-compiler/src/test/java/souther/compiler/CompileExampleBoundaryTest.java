@@ -117,7 +117,8 @@ class CompileExampleBoundaryTest {
                 """);
         BorderAssessment.Point zero = at(away, "0").get(0);
         assertFalse(zero.owed().hasRowWitness());
-        assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(zero.item().weakeningSource()));
+        assertEquals(MeasurementStatus.COMPLETE,
+                AdequacyReport.statusOf(zero.item().weakeningSource(zero.border().border())));
         assertTrue(zero.border().origin().saidWithoutAPlace().startsWith("invariant"),
                 zero.border().origin().saidWithoutAPlace());
 
@@ -140,7 +141,8 @@ class CompileExampleBoundaryTest {
                 """);
 
         BorderAssessment.Point hundred = at(lines, "100").get(0);
-        assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(hundred.item().weakeningSource()));
+        assertEquals(MeasurementStatus.COMPLETE,
+                AdequacyReport.statusOf(hundred.item().weakeningSource(hundred.border().border())));
         assertTrue(hundred.owed().hasRowWitness(),
                 "the row wrote 100 and the guard compared it");
         assertTrue(hundred.border().origin().isWrittenRatherThanNamed(),
@@ -184,7 +186,8 @@ class CompileExampleBoundaryTest {
                 .filter(p -> p.border().origin().isWrittenRatherThanNamed()).findFirst().orElseThrow();
         BorderAssessment.Point second = at(lines, "100").get(0);
 
-        assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(second.item().weakeningSource()),
+        assertEquals(MeasurementStatus.COMPLETE,
+                AdequacyReport.statusOf(second.item().weakeningSource(second.border().border())),
                 "the arms were measured");
         assertFalse(second.owed().hasRowWitness(), "no row was ever compared against 100");
         assertFalse(first.owed().hasRowWitness(), "and the row wrote -1, not 0");

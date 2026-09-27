@@ -55,7 +55,7 @@ class AnOrderWhoseOwnStepIsNoDecimalStillHasItsValuesTest {
     void aLatticeOverAThirdTakesAThird() {
         LevelSpace thirds = LevelSpace.steppingBy(A_THIRD);
 
-        assertTrue(thirds.attainable(at(A_THIRD)),
+        assertTrue(Boolean.TRUE.equals(thirds.attainable(at(A_THIRD)).orNull()),
                 "a third is a multiple of a third, so this order stands there");
         assertInstanceOf(Occupancy.Inhabited.class,
                 thirds.inspect(LevelInterval.point(at(A_THIRD))),
@@ -73,7 +73,7 @@ class AnOrderWhoseOwnStepIsNoDecimalStillHasItsValuesTest {
     void andTheSameLatticeTakesNoHalf() {
         LevelSpace thirds = LevelSpace.steppingBy(A_THIRD);
 
-        assertFalse(thirds.attainable(at(A_HALF)),
+        assertFalse(Boolean.TRUE.equals(thirds.attainable(at(A_HALF)).orNull()),
                 "a half is no whole number of thirds");
         assertEquals(new Occupancy.Empty(), thirds.inspect(LevelInterval.point(at(A_HALF))));
     }
@@ -86,7 +86,8 @@ class AnOrderWhoseOwnStepIsNoDecimalStillHasItsValuesTest {
      */
     @Test
     void aWholeNumberedLatticeTakesNoThird() {
-        assertFalse(LevelSpace.steppingBy(ExactRatio.ONE).attainable(at(A_THIRD)),
+        assertFalse(Boolean.TRUE.equals(
+                        LevelSpace.steppingBy(ExactRatio.ONE).attainable(at(A_THIRD)).orNull()),
                 "the whole numbers are not a third apart, so the line falls between two of them");
         assertTrue(LevelSpace.steppingBy(ExactRatio.ONE).canCutAt(at(A_THIRD)),
                 "and the line is still a line, which is the question the order answers yes to");
@@ -98,10 +99,10 @@ class AnOrderWhoseOwnStepIsNoDecimalStillHasItsValuesTest {
         LevelSpace thirds = LevelSpace.steppingBy(A_THIRD);
 
         assertEquals(Optional.of(at(ExactRatio.ONE)),
-                thirds.neighbour(at(TWO_THIRDS), Towards.ABOVE),
+                thirds.neighbour(at(TWO_THIRDS), Towards.ABOVE).orNull(),
                 "one is the value above two thirds on an order counting by thirds");
         assertEquals(Optional.of(at(A_THIRD)),
-                thirds.neighbour(at(TWO_THIRDS), Towards.BELOW));
+                thirds.neighbour(at(TWO_THIRDS), Towards.BELOW).orNull());
     }
 
     /**
@@ -144,9 +145,9 @@ class AnOrderWhoseOwnStepIsNoDecimalStillHasItsValuesTest {
     void aDenseLatticeOverAThirdTakesItsGenerator() {
         LevelSpace thirds = LevelSpace.overFiniteDecimals(A_THIRD);
 
-        assertTrue(thirds.attainable(at(A_THIRD)));
-        assertEquals(Optional.empty(), thirds.neighbour(at(A_THIRD), Towards.ABOVE),
+        assertTrue(Boolean.TRUE.equals(thirds.attainable(at(A_THIRD)).orNull()));
+        assertEquals(Optional.empty(), thirds.neighbour(at(A_THIRD), Towards.ABOVE).orNull(),
                 "what fills has no next value, which is a different answer from having none past it");
-        assertTrue(thirds.anythingBeyond(at(A_THIRD), Towards.ABOVE));
+        assertTrue(Boolean.TRUE.equals(thirds.anythingBeyond(at(A_THIRD), Towards.ABOVE).orNull()));
     }
 }

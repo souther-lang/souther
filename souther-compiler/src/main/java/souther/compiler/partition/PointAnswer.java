@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.numeric.UnheldNumber;
+
 import java.util.List;
 
 /**
@@ -16,6 +18,13 @@ import java.util.List;
  * <p>Sealed over the two kinds of point a border has, so a point against the line cannot come back
  * carrying a region and a region cannot come back without one. Which of the two a role is, is
  * {@link PointRole#againstTheLine}'s answer and the border holds itself to it.
+ *
+ * <p><b>And apart from {@link NotWorkedOut}</b>, which is neither owed nor refused: a point whose
+ * own place on the order a model's own decimals put far enough apart in scale that the exact
+ * arithmetic could not read is one this could not settle at all, and {@link NotOwed} is a fact
+ * about the model — the rules refuse it, or this language names no neighbour there — the way
+ * {@link Occupancy.Empty} is a fact about the quantity. Conflating the two would let a point this
+ * compiler gave up on report as one the model itself excludes.
  */
 public sealed interface PointAnswer {
 
@@ -25,6 +34,17 @@ public sealed interface PointAnswer {
         public NotOwed {
             if (reason == null) {
                 throw new IllegalArgumentException("a point nobody is owed a row at says why");
+            }
+        }
+    }
+
+    /** Neither owed nor refused: the exact arithmetic could not hold what settling this point
+     *  needed. */
+    record NotWorkedOut(UnheldNumber why) implements PointAnswer {
+
+        public NotWorkedOut {
+            if (why == null) {
+                throw new IllegalArgumentException("not worked out, in one of the two ways it is not");
             }
         }
     }
@@ -80,7 +100,7 @@ public sealed interface PointAnswer {
     /** What a row here has to do, or null where none is asked for. */
     default Criterion criterion() {
         return switch (this) {
-            case NotOwed _ -> null;
+            case NotOwed _, NotWorkedOut _ -> null;
             case AtLine at -> at.criterion();
             case InRegion in -> in.criterion();
         };
@@ -93,9 +113,12 @@ public sealed interface PointAnswer {
      * says what a row has to do goes through this, so the two cannot come apart.
      */
     default Demand demand() {
-        Criterion asked = criterion();
-        return asked == null
-                ? new Demand.NotOwed(((NotOwed) this).reason()) : new Demand.Owed(asked);
+        return switch (this) {
+            case NotOwed not -> new Demand.NotOwed(not.reason());
+            case NotWorkedOut not -> new Demand.NotWorkedOut(not.why());
+            case AtLine at -> new Demand.Owed(at.criterion());
+            case InRegion in -> new Demand.Owed(in.criterion());
+        };
     }
 
     /** What a row here is owed for beside the line and who can move it, which is nothing for a

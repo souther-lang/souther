@@ -284,6 +284,10 @@ public sealed interface ObligationDisposition {
                      // point is met by a row standing there, and no strategy for the neighbours
                      // takes that back.
                      Weakening.ABorderNotHeldAgainstTheLinesBesideIt _,
+                     // And whether a row is owed at a point at all, which the arithmetic gave out
+                     // on before any reading of one could be asked for — a question this sentence's
+                     // reading never reached, and not a gap in the reading itself.
+                     Weakening.ItemsPlaceNotWorkedOut _,
                      Weakening.ModelReadingIncomplete _,
                      // A body this image does not carry says nothing about a point of a line
                      // either: whether a row stands at one is not what it is short of.

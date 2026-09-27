@@ -85,6 +85,9 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         // And the figure the readings of one row are tried against: a build allowed more tries the
         // readings the walk stopped short of.
         table.put("BorderReadingsNotExhausted", "answers/MAY_CHANGE");
+        // A coverage item's own place on the order is a question the exact arithmetic answers or
+        // does not; a wider run does not change what scale a model's decimals were written at.
+        table.put("ItemsPlaceNotWorkedOut", "answers/UNAFFECTED");
         // A border nothing held against the lines beside it, which does not answer one way: a
         // strategy nobody wrote and rows all on one side are not allowances, and a run nobody
         // watched is. The row is written with the one that is, so what it shows is the answer
@@ -219,6 +222,7 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                  Weakening.BodyNotInEvaluation _, Weakening.BoundaryNotDerived _,
                  Weakening.InputNotRead _, Weakening.PairSpaceTruncated _,
                  Weakening.BorderReadingsNotExhausted _,
+                 Weakening.ItemsPlaceNotWorkedOut _,
                  Weakening.ProofContradicted _, Weakening.ArmsUnsettled _,
                  Weakening.DecisionOfRowUnreadable _, Weakening.DecisionRunNotWatched _,
                  Weakening.MeetingsNotWalked _,
@@ -256,6 +260,8 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                         SourceConstruct.IF)));
         out.add(new Weakening.PairSpaceTruncated("b", 9, 4));
         out.add(new Weakening.BorderReadingsNotExhausted(border(), 4));
+        out.add(new Weakening.ItemsPlaceNotWorkedOut(border(),
+                souther.compiler.numeric.UnheldNumber.MORE_ROOM_COULD_ANSWER));
         out.add(new Weakening.ABorderNotHeldAgainstTheLinesBesideIt(border(),
                 Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why.NOTHING_WATCHED_THE_RUNS));
         out.add(new Weakening.MeetingsNotWalked("b", 1));

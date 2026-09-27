@@ -123,8 +123,12 @@ public final class DomainEnd {
         Level at = like instanceof Level.OnACarrier on
                 ? new Level.OnACarrier(on.of(), end.at())
                 : new Level.OfTheQuantity(Count.number(end.at()).exactly());
-        Optional<Level> value = end.inclusive() ? space.nearestAtOrBeyond(at, side.inward())
-                : Border.beyond(space, at, side.inward());
+        // `.orNull()` and not the refusal further up the chain answers with: this end has no arm
+        // for "not worked out" yet, so a run the exact arithmetic could not read here still reads
+        // as an end nothing bounds, until this is widened the same way.
+        Optional<Level> found = (end.inclusive() ? space.nearestAtOrBeyond(at, side.inward())
+                : Border.beyond(space, at, side.inward())).orNull();
+        Optional<Level> value = found == null ? Optional.empty() : found;
         if (value.isPresent()) {
             return Bound.at(value.get(), true);
         }

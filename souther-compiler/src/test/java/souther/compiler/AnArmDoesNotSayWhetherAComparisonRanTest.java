@@ -137,7 +137,8 @@ coverageOf(linesFor("-1", "100000", "Manual"), "gate/r.cost", "100000").made().o
                         "gate/r.cost = 100000", "gate/r.cost = 100001"),
                 labels(lines));
         for (BorderAssessment.Point line : pointsFor("0", "100001", "Manual")) {
-            assertNull(line.item().weakeningSource().why(), line.label() + " was measured");
+            assertNull(line.item().weakeningSource(line.border().border()).why(),
+                    line.label() + " was measured");
         }
     }
 
