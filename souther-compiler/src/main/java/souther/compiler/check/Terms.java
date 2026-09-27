@@ -1325,8 +1325,7 @@ final class Terms {
     /** What a {@code match} arm binds, or null where it binds nothing — which is the same condition
      * {@link #opening} leaves the reading where it found it under. */
     private static Core.Read openedByArm(Core.Case arm) {
-        return arm.binder() == null || arm.bindType() == null
-                ? null : read(arm.binder(), arm.bindType(), arm.pos());
+        return arm.binder() == null ? null : read(arm.binder(), arm.bindType(), arm.pos());
     }
 
     /**
@@ -1347,7 +1346,7 @@ final class Terms {
      * the two agreed only for as long as nothing could tell them apart (#824).
      */
     private Denotations opening(Core.Case arm, Core scrutinee, Denotations at) {
-        if (arm.binder() == null || arm.bindType() == null) {
+        if (arm.binder() == null) {
             return at;
         }
         Core.Read root = read(arm.binder(), arm.bindType(), arm.pos());
@@ -1386,22 +1385,21 @@ final class Terms {
     /**
      * What the arm's binding opens, or null where nothing here says.
      *
-     * <p>Asked of what the pattern binds and not of what the arm looks like. A case whose carrier is
-     * the value binds that value, so the binding stands for the scrutinee and is about it. An
-     * optional's present carrier binds what stands under it: a different value, named as what that
+     * <p>Asked of what the arm's name stands for and not of what the arm looks like. A name for the
+     * matched value stands for the scrutinee and is about it, whichever carrier was tested. A name
+     * for what stands under an optional's present carrier is a different value, named as what that
      * optional holds, and one no expression here is — so it is about something while standing for
-     * nothing. An absent carrier binds nothing at all. That is the whole of it — {@link Refinement}
-     * has three answers and each one settles this.
+     * nothing. An arm with no name opens nothing.
      */
     private Opens opens(Core.Case arm, Core scrutinee, Denotations at) {
         FactSubject of = subjectOf(scrutinee, at);
         if (of == null) {
             return null;
         }
-        return switch (arm.pattern().binding()) {
-            case Refinement.Direct(Type carried) -> arithmetic(carried, scrutinee, at);
-            case Refinement.OptionPresent _ -> new Opens(null, heldBy(of), null);
-            case Refinement.OptionAbsent _ -> null;
+        return switch (arm.binding()) {
+            case Core.ArmBinding.Selected selected -> arithmetic(selected.type(), scrutinee, at);
+            case Core.ArmBinding.Payload _ -> new Opens(null, heldBy(of), null);
+            case Core.ArmBinding.Unbound _ -> null;
         };
     }
 

@@ -959,32 +959,27 @@ final class BodyGen {
             // What is cast is asked of the arm: the same question is asked of it wherever it matters
             // which classes an emitted `match` names.
             Type cast = c.castOnBinding(st);
-            switch (c.pattern().binding()) {
-                case Refinement.OptionPresent wrapped -> {
-                    if (cast == null) {
-                        return;
-                    }
-                    CaseGen.pushBound(code, wrapped, sSlot);
+            switch (c.binding()) {
+                case Core.ArmBinding.Unbound _ -> { }
+                case Core.ArmBinding.Payload payload -> {
+                    // What stands under the carrier the arm tested for.
+                    CaseGen.pushBound(code, c.pattern().selectedCase().orElseThrow().refinement(), sSlot);
                     int bslot = slot(cast);
                     unbox(code, cast, bslot);
-                    bind(c.binder(), bslot, cast);
+                    bind(payload.binder(), bslot, cast);
                 }
-                case Refinement.Direct itself -> {
-                    if (c.binder() == null || itself.bound() == null) {
-                        return;
-                    }
+                case Core.ArmBinding.Selected selected -> {
                     if (cast == null) {
                         // nothing narrowed it: the value is the subject, where it already is
-                        bind(c.binder(), sSlot, st);
+                        bind(selected.binder(), sSlot, st);
                         return;
                     }
                     // a data case binds the instance; a primitive case (e.g. Int) unboxes the value
-                    CaseGen.pushBound(code, itself, sSlot);
+                    code.aload(sSlot);
                     int bslot = slot(cast);
                     unbox(code, cast, bslot);
-                    bind(c.binder(), bslot, cast);
+                    bind(selected.binder(), bslot, cast);
                 }
-                case Refinement.OptionAbsent _ -> { }
             }
         }
 

@@ -11,6 +11,7 @@ import souther.compiler.types.BindingOwner;
 import souther.compiler.types.CaseSelector;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ReachName;
+import souther.compiler.types.Refinement;
 import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
@@ -231,8 +232,18 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
     }
 
     private Core.Case arm(Core.ResolvedPattern pattern, Core.Binder binder) {
-        return new Core.Case(pattern, binder, new Core.Read(binder.name(), binder.binding(),
-                pattern.bindType(), POS), POS);
+        Core.ArmBinding binding = switch (pattern) {
+            case Core.ResolvedPattern.Single(var selected) -> switch (selected.refinement()) {
+                case Refinement.OptionPresent present ->
+                        new Core.ArmBinding.Payload(binder, present.bound());
+                case Refinement.Direct direct -> new Core.ArmBinding.Selected(binder, direct.bound());
+                case Refinement.OptionAbsent _ -> throw new IllegalArgumentException("names nothing");
+            };
+            case Core.ResolvedPattern.AnyOf(var _, var subject) ->
+                    new Core.ArmBinding.Selected(binder, subject);
+        };
+        return new Core.Case(pattern, binding, new Core.Read(binder.name(), binder.binding(),
+                binding.type(), POS), POS);
     }
 
     private static Core answer() {

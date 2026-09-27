@@ -58,6 +58,23 @@ class CompileOptionMatchTest {
     }
 
     @Test
+    void noneAsNamesTheOptionThatWasMatched() throws Exception {
+        // `as` binds the whole matched value everywhere, and nothing stands under `None`, so the name
+        // stands for the optional itself and can be matched again.
+        String src = MODULE.replace("| None -> Label { value = \"none\" }",
+                """
+                | None as n ->
+                            match n with
+                                | Some a -> Label { value = a.value }
+                                | None -> Label { value = "still none" }""");
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
+        Object trip = Codecs.decoded(loader, "demo.Trip", Map.of("id", "t-1"));
+        Object behavior = Emitted.behavior(loader, "demo", "approverLabel").getConstructor().newInstance();
+        Object label = Codecs.apply(behavior, trip);
+        assertEquals("still none", (String) Codecs.encode(loader, "demo.Label", label));
+    }
+
+    @Test
     void someNestedDestructureBindsTheBaseValue() throws Exception {
         // `Some(Id(v))` opens the wrapped newtype in the pattern, so `v` is the base String — the
         // `.value` on the positional binding disappears, consistent with `X(Y(s))` on user cases.

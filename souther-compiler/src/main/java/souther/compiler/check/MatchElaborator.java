@@ -45,7 +45,7 @@ public final class MatchElaborator {
         // rather than by asking the type again, so a form the space gains has to be answered here
         // too rather than falling into the general reading with nobody the wiser.
         return switch (CaseSpace.of(st, ctx.kinds(), ctx.published())) {
-            case CaseSpace.Plain ignored -> throw CompileException.of(Diagnostic.at(m.pos(), 5)
+            case CaseSpace.Plain _ -> throw CompileException.of(Diagnostic.at(m.pos(), 5)
                     .say(new MatchMessage.TheSubjectIsNotASum(Type.show(st))).build());
             case CaseSpace.Optional option ->
                     elaborateOptionMatch(m, scrutinee, option, env, ctx, expected);
@@ -216,7 +216,7 @@ public final class MatchElaborator {
             Core.ResolvedPattern pattern = alternatives.size() == 1
                     ? new Core.ResolvedPattern.Single(alternatives.get(0))
                     : new Core.ResolvedPattern.AnyOf(alternatives, scrutinee);
-            Type bindType = pattern.bindType();
+            Core.ArmBinding binding = armBinding(c.binding(), pattern, scrutinee);
             if (c.unwrapAsserts() != null) {
                 if (!(pattern instanceof Core.ResolvedPattern.Single)) {
                     throw CompileException.of(Diagnostic.at(c.pos()).say(new MatchMessage.AnOrPatternOpensNothing()).build());
@@ -229,13 +229,13 @@ public final class MatchElaborator {
             Core body;
             try {
                 body = Elaborator.liftIntoOption(
-                        Elaborator.elaborate(c.body(), bound(env, c.binding(), bindType), ctx,
+                        Elaborator.elaborate(c.body(), bound(env, c.binding(), binding.type()), ctx,
                                 expected),
                         expected, ctx.published());
             } catch (NotACaseOfThisMatch inner) {
                 throw inner.takenFromTheMatchAround(space, ctx.published());
             }
-            arms.add(new Core.Case(pattern, CoreBinders.of(c.binding()), body, c.pos()));
+            arms.add(new Core.Case(pattern, binding, body, c.pos()));
             branchType = mergeBranch(m, branchType, body.type(), c, expected);
         }
         List<TypeSymbol> unanswered = partition.unanswered();
@@ -274,7 +274,8 @@ public final class MatchElaborator {
                 throw CompileException.of(Diagnostic.at(c.pos()).say(new MatchMessage.NotACaseOfAnOptional(caseType)).build());
             }
             CaseSelector selector = resolved.selector();
-            Type bind = selector.bound();
+            Core.ResolvedPattern pattern = new Core.ResolvedPattern.Single(resolved);
+            Core.ArmBinding binding = armBinding(c.binding(), pattern, scrutineeCore.type());
             if (c.unwrapAsserts() != null) {
                 // Only the carrier that holds something has something to open.
                 if (!(selector.refinement() instanceof Refinement.OptionPresent wrapped)) {
@@ -286,10 +287,10 @@ public final class MatchElaborator {
                 throw CompileException.of(Diagnostic.at(c.pos()).say(new MatchMessage.MatchedByMoreThanOneCase(caseType)).build());
             }
             Core body = Elaborator.liftIntoOption(
-                    Elaborator.elaborate(c.body(), bound(env, c.binding(), bind), ctx, expected),
+                    Elaborator.elaborate(c.body(), bound(env, c.binding(), binding.type()), ctx,
+                            expected),
                     expected, ctx.published());
-            arms.add(new Core.Case(new Core.ResolvedPattern.Single(resolved),
-                    CoreBinders.of(c.binding()), body, c.pos()));
+            arms.add(new Core.Case(pattern, binding, body, c.pos()));
             branchType = mergeBranch(m, branchType, body.type(), c, expected);
         }
         List<String> missing = new ArrayList<>();
@@ -393,6 +394,34 @@ public final class MatchElaborator {
                 }
             }
         }
+    }
+
+    /**
+     * The name an arm introduces and which value it stands for, decided here from what was written
+     * and what the arm selects, and carried as such.
+     *
+     * <p>{@code Some} is the one case whose name is written positionally, and it names what stands
+     * under the carrier. Every other spelling is {@code as} and names the value matched: a single
+     * case as its own type, an or-pattern as the subject, and an optional's absent carrier as the
+     * optional, since nothing stands under it.
+     *
+     * @param subject the type of the value the {@code match} is over
+     */
+    private static Core.ArmBinding armBinding(Hir.Binder written, Core.ResolvedPattern pattern,
+                                              Type subject) {
+        if (written == null) {
+            return new Core.ArmBinding.Unbound();
+        }
+        Core.Binder binder = CoreBinders.of(written);
+        return switch (pattern) {
+            case Core.ResolvedPattern.Single(var selected) -> switch (selected.refinement()) {
+                case Refinement.OptionPresent present ->
+                        new Core.ArmBinding.Payload(binder, present.bound());
+                case Refinement.OptionAbsent _ -> new Core.ArmBinding.Selected(binder, subject);
+                case Refinement.Direct direct -> new Core.ArmBinding.Selected(binder, direct.bound());
+            };
+            case Core.ResolvedPattern.AnyOf(var _, var _) -> new Core.ArmBinding.Selected(binder, subject);
+        };
     }
 
     /** Extends {@code env} with {@code binding} when both it and its type are present; otherwise

@@ -16,9 +16,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * <p>What a checker can produce is what a backend has to handle, so a state the backend has no
  * meaning for is one the checker must not be able to write. Three of them were reachable and are
  * not: a selector whose name and carrier disagree, a case whose held type disagrees with its name,
- * and an arm whose binding disagrees with what it selects. The first two are refused where the value
- * is made; the third is not refused but absent, the binding being read off the selection rather than
- * stored beside it.
+ * and an arm with a name for a value and no type to read it as. Each is refused where the value is
+ * made.
  */
 class ACaseIsNotHalfDecidedTest {
 
@@ -69,25 +68,31 @@ class ACaseIsNotHalfDecidedTest {
     }
 
     @Test
-    void anArmsBindingIsReadOffWhatItSelects() {
-        CaseSelector present = CaseSelector.optionPresent(ELEMENT);
-        assertEquals(present.refinement(), new Core.ResolvedPattern.Single(covering(present,
-                        TypeSymbol.SOME)).binding(),
-                "one case binds what that case's carrier holds, and there is nowhere to say"
-                        + " otherwise");
-        assertNull(new Core.ResolvedPattern.Single(
-                        covering(CaseSelector.optionAbsent(), TypeSymbol.NONE)).bindType(),
+    void aNameForAValueIsReadAsSomeTypeWhicheverCarrierWasTested() {
+        Core.Binder name = new Core.Binder("n",
+                new BindingId(new BindingOwner.OfValue("demo", "f"), 0));
+        Type optional = Type.option(ELEMENT);
+        // The absent carrier holds nothing, and a name for the value that was matched is the
+        // optional itself: what a carrier holds and what a name stands for are two facts.
+        assertNull(CaseSelector.optionAbsent().bound(),
                 "a carrier holding nothing says so as fully as any other");
+        assertEquals(optional, new Core.ArmBinding.Selected(name, optional).type());
+        assertThrows(IllegalArgumentException.class,
+                () -> new Core.ArmBinding.Selected(name, null),
+                "a name for the matched value is read as some type");
+        assertThrows(IllegalArgumentException.class,
+                () -> new Core.ArmBinding.Payload(name, null),
+                "a name for what a carrier holds is read as some type");
     }
 
     @Test
-    void anArmAnsweringForSeveralBindsTheSubject() {
+    void anArmAnsweringForSeveralIsOverTheSubject() {
         TypeSymbol anInt = TypeSymbol.primitive(Type.Prim.INT);
         TypeSymbol aBool = TypeSymbol.primitive(Type.Prim.BOOL);
         Type subject = Type.union(java.util.Set.of(anInt, aBool));
         Core.ResolvedPattern.AnyOf several = new Core.ResolvedPattern.AnyOf(
                 List.of(aLeaf(anInt), aLeaf(aBool)), subject);
-        assertEquals(new Refinement.Direct(subject), several.binding(),
+        assertEquals(subject, several.subject(),
                 "no one case type fits all of the alternatives, and each is already the subject");
     }
 

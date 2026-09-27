@@ -55,9 +55,13 @@ class BlockReachesTest {
     void aMatchArmsBinderDoesNotReachIntoASiblingArm() {
         BindingId first = binding(0);
         BindingId second = binding(1);
-        Core.Case sees = new Core.Case(pattern(), new Core.Binder("x", first), read(first), POS);
+        Core.Case sees = new Core.Case(pattern(),
+                new Core.ArmBinding.Selected(new Core.Binder("x", first), Type.ref(CASE)),
+                read(first), POS);
         // this arm's body reads the other arm's binder, which its own scope never bound
-        Core.Case leaks = new Core.Case(pattern(), new Core.Binder("y", second), read(first), POS);
+        Core.Case leaks = new Core.Case(pattern(),
+                new Core.ArmBinding.Selected(new Core.Binder("y", second), Type.ref(CASE)),
+                read(first), POS);
         Core.Match match = new Core.Match(read(second), List.of(sees, leaks),
                 Core.ForkPlace.asWritten(ConstructOccurrence.unwritten()), Type.INT, POS);
         Core.Block block = block(match);
