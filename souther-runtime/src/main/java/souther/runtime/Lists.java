@@ -150,7 +150,7 @@ public final class Lists {
         if (from > to) {
             return PersistentVector.empty();
         }
-        Capacity.span(from, to, Capacity.MOST_ELEMENTS);
+        Capacity.span(from, to);
         PersistentVector.Builder<Long> out = new PersistentVector.Builder<>();
         for (long i = from; ; i++) {
             out.add(i);

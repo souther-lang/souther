@@ -36,12 +36,13 @@ public final class Capacity {
     }
 
     /** Aborts where the consecutive integers from {@code from} to {@code to}, both included, are
-     *  more than {@code most}. Nothing is built, and {@code to - from} is not formed where it can
-     *  overflow. The caller has already taken {@code from} above {@code to} as the empty span. */
-    static void span(long from, long to, long most) {
+     *  more than a collection holds. Nothing is built. The width is formed in a {@code long}, where
+     *  it can wrap: a wrapped width is negative or zero, and a true one past what a {@code long}
+     *  counts is past {@link #MOST_ELEMENTS} whichever it wraps to. The caller has already taken
+     *  {@code from} above {@code to} as the empty span. */
+    static void span(long from, long to) {
         long width = to - from + 1;
-        // A width that wrapped is negative or zero: the true one is past what a long counts.
-        if (width <= 0 || width > most) {
+        if (width <= 0 || width > MOST_ELEMENTS) {
             throw new ConstraintViolation("List.rangeInclusive is out of range: " + from + " to " + to);
         }
     }
