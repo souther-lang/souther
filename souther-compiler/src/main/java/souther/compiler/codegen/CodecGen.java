@@ -754,6 +754,10 @@ final class CodecGen {
                     .anyMatch(BoundaryConstraint.OfMap.class::isInstance)) {
                 RaohMapSizes.emitHelpers(cb);
             }
+            if (constraintsOf(invariants).stream()
+                    .anyMatch(BoundaryConstraint.Unique.class::isInstance)) {
+                RaohListUnique.emitHelpers(cb);
+            }
         });
     }
 
@@ -1792,8 +1796,7 @@ final class CodecGen {
                 pushInt(code, f.n());
                 code.invokevirtual(CD_ListDecoder, "fixedSize", MTD_listSizeBound);
             }
-            case BoundaryConstraint.Unique _ ->
-                    code.invokevirtual(CD_ListDecoder, "unique", MTD_listSign);
+            case BoundaryConstraint.Unique _ -> RaohListUnique.emit(code, decoderClass);
             case BoundaryConstraint.OfMap m -> RaohMapSizes.emit(code, decoderClass, m);
         }
     }

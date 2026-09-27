@@ -442,6 +442,13 @@ final class Descriptors {
      * array and a Map's object are put in the order their own external representations give. */
     static final MethodTypeDesc MTD_Rencoder_andThen = MethodTypeDesc.of(CD_REncoder, CD_REncoder);
     static final MethodTypeDesc MTD_Sets_toList = MethodTypeDesc.of(CD_List, CD_Set);
+    /** {@code Sets.empty()} / {@code Sets.insert(Object, Set)} / {@code Sets.contains(Object, Set)} —
+     *  the membership {@link RaohListUnique} walks a list with, Raoh-free like the rest of {@code
+     *  Sets} (souther.runtime.Sets). */
+    static final MethodTypeDesc MTD_Sets_empty = MethodTypeDesc.of(CD_Set);
+    static final MethodTypeDesc MTD_Sets_insert = MethodTypeDesc.of(CD_Set, CD_Object, CD_Set);
+    static final MethodTypeDesc MTD_Sets_contains =
+            MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object, CD_Set);
     /** {@code Representations.sortedArray/sortedObject}: an encoded collection, put in order. */
     static final MethodTypeDesc MTD_Representations_sorted = MethodTypeDesc.of(CD_Object, CD_Object);
     /** {@code Representations.canonicalNumber}: an amount, written the one way an amount is. */
