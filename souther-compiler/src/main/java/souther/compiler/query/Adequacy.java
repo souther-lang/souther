@@ -39,6 +39,7 @@ import souther.compiler.publish.PublicationOrders;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.CheckSurface;
+import souther.compiler.check.FixtureValueEntries;
 import souther.compiler.check.Sig;
 import souther.compiler.check.StatedContract;
 import souther.compiler.check.SpecImplementation;
@@ -5105,8 +5106,13 @@ public final class Adequacy {
                                                             List<Hir.Expr> inputs) {
             Map<String, Generator.Baseline.Named> at = new LinkedHashMap<>();
             for (int p = 0; p < inputs.size() && p < spec.params().size(); p++) {
-                if (inputs.get(p) instanceof Hir.Var.Denoting denoting
-                        && denoting.denotes() instanceof souther.compiler.types.ValueName.Helper helper) {
+                // The same question FixtureValueEntries asks of a row's own operand, so a name this
+                // reads as a baseline is a name that also has a fixture entry to be composed against
+                // — never one buried in an argument or a field, which is read as generated code
+                // already and names no value by this reading.
+                Hir.Var.Denoting denoting = FixtureValueEntries.bareValueReference(inputs.get(p));
+                if (denoting != null) {
+                    ValueName.Helper helper = (ValueName.Helper) denoting.denotes();
                     at.put(spec.params().get(p).name(),
                             new Generator.Baseline.Named(helper.module(), denoting.name()));
                 }

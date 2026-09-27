@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -69,6 +70,40 @@ class AFixtureEntryIsMintedOnlyWhereNoPublishedOneAlreadyAnswersTest {
                 .count();
         assertEquals(0, fixtureEntriesForBaseline,
                 "a published value's fixture entry is the published one, not a second mint");
+    }
+
+    /**
+     * A value buried inside a row's own operand — an argument, never the operand itself — gets no
+     * entry, and so is never asked to write a type it would otherwise be let keep unwritten.
+     *
+     * <p>{@code inc} here is exactly the value {@link
+     * souther.compiler.CompileExposedValueTest#anUnpublishedValueIsNotAskedForItsTypeWhateverItIsRunAs}
+     * pins as never needing one, applied inside the row's operand rather than named by it. Minting an
+     * entry for it anyway — which {@link FixtureValueEntries#referencedValues} once did, by reading
+     * past the top of the operand — would ask it to write a function type where nothing else does,
+     * turning an argument to an otherwise ordinary computed row into a refusal.
+     */
+    @Test
+    void aValueAppliedInsideARowsOperandGetsNoEntry() {
+        CheckSurface surface = surfaceOf("""
+                module m exposing ( use )
+
+                let adder (n: Int) = (x) -> x + n
+                let inc = adder(1)
+
+                let applyTo (f: (Int) -> Int, x: Int) = f(x)
+
+                behavior use : (n: Int) -> Int
+
+                let use (n) = n
+
+                example use
+                    | "computed input" : (applyTo(inc, 1)) -> 2
+                """);
+
+        ValueName.Helper inc = new ValueName.Helper("m", "inc");
+        assertNull(surface.fixtureValueMethods().get(inc),
+                "`inc` is an argument the row's operand applies, not a name the row itself is");
     }
 
     private static Hir.FnDef mintedAs(CheckSurface surface, String method) {

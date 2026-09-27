@@ -22,13 +22,21 @@ import java.util.Set;
  * callers of one address, not two entries answering the one question.
  *
  * <p>{@link #referencedValues} finds which values those are by walking the same written text {@link
- * RowFixtures#placed} numbers, in exactly the forms {@code FixtureReader.raw} reads a fixture in — a
- * literal's parts, a construction's fields and spreads, a collection's elements, a {@code let}'s value
- * and body. Not a callee an application applies, which is a different question a fixture never asks by
- * name. Not every value the module happens to declare, either: which values a search composing a
- * further row may still ask for by name, among those no row here mentions, is a wider question this
- * does not answer, and {@code FixtureReader} still reads such a value by its template where this finds
- * it no entry.
+ * RowFixtures#placed} numbers, and it asks of each operand exactly {@link #bareValueReference}'s
+ * question: is the whole of it nothing but a name denoting a value. An argument a computed operand
+ * hands a helper is not this — {@code applyTo(inc, 1)} names no value by this reading, it is a row's
+ * own operand and runs as generated code already — and a private value that stood at one, being
+ * one nothing outside its own module ever reaches, has no type to write for a caller nothing gives
+ * it one. Not every value the module happens to declare, either: which values a search composing a
+ * further row may still ask for by name, among those no row here names this way, is a wider question
+ * this does not answer, and {@code FixtureReader} still reads such a value by its template where this
+ * finds it no entry.
+ *
+ * <p>{@link #bareValueReference} is the one place this question is asked. {@link
+ * souther.compiler.query.Adequacy}'s search reads a row's own baseline by the same question, over
+ * the same operands, so a name this mints no entry for is a name the search does not read as a
+ * baseline either — two readers of one operand answering from one predicate rather than each
+ * keeping a copy of it to drift out of step with the other's.
  *
  * <p>An entry's body decides nothing about how the value it names runs: {@link HelperInliner#materialise}
  * reads that reference the same way it reads any other, and chooses a method call, a folded constant,
@@ -49,6 +57,22 @@ public final class FixtureValueEntries {
     }
 
     /**
+     * Whether {@code e} is nothing but a bare name denoting a value — never a construction built
+     * from one, an argument or a field holding one, or a spread copying one. The value denoted, or
+     * null where {@code e} is any other form or denotes anything else.
+     *
+     * <p>Shallow, and deliberately so: a value inside a larger operand is not named by this reading,
+     * it is computed by the operand — {@code applyTo(inc, 1)} runs {@code inc} as generated code
+     * already, through {@code inc}'s own compiled representation, the same as any other name a row's
+     * operand reaches. Reading past the top would find it anyway and mint an entry nothing calls, for
+     * a value that may hold a function an entry cannot be given one of without a type nothing else
+     * asks it to have (spec §a-function-bindings-type-is-known).
+     */
+    public static Hir.Var.Denoting bareValueReference(Hir.Expr e) {
+        return e instanceof Hir.Var.Denoting v && v.denotes() instanceof ValueName.Helper ? v : null;
+    }
+
+    /**
      * The values a row or fake names bare, each held as the reference it was named through — reused
      * as the entry's own body, so the entry reaches the value exactly as the fixture resolved it (its
      * own module for a local value, the declaring module for an imported one) rather than this
@@ -56,58 +80,19 @@ public final class FixtureValueEntries {
      *
      * <p>{@code placed} is {@link RowFixtures#placed}'s own answer, handed in rather than asked for
      * here: {@link RowFixtures#emitted} already walks it once for the same module, and a second
-     * walk here would be the second order {@code placed}'s own doc refuses. A name found among these
-     * operands is a name some row or fake actually wrote — never a name a value's own body happens to
-     * reach, which lowering resolves on its own once an entry exists for the value naming it. A name
-     * written more than once keeps its first reference; every one denotes the same value, so one
-     * entry answers all of them.
+     * walk here would be the second order {@code placed}'s own doc refuses. A name written more than
+     * once keeps its first reference; every one denotes the same value, so one entry answers all of
+     * them.
      */
     static Map<ValueName.Helper, Hir.Var.Denoting> referencedValues(List<RowFixtures.Placed> placed) {
         Map<ValueName.Helper, Hir.Var.Denoting> out = new LinkedHashMap<>();
         for (RowFixtures.Placed each : placed) {
-            collect(each.operand(), out);
+            Hir.Var.Denoting v = bareValueReference(each.operand());
+            if (v != null) {
+                out.putIfAbsent((ValueName.Helper) v.denotes(), v);
+            }
         }
         return out;
-    }
-
-    /**
-     * {@code e}'s value references, in exactly the forms {@code FixtureReader.raw} descends into: a
-     * literal has none, a negation and a fold read their operands, a construction reads its spreads
-     * and its fields, a collection reads its elements, an application reads its arguments and never
-     * the callee it applies, and a {@code let} reads its value and its body.
-     */
-    private static void collect(Hir.Expr e, Map<ValueName.Helper, Hir.Var.Denoting> out) {
-        if (e instanceof Hir.Var.Denoting v && v.denotes() instanceof ValueName.Helper helper) {
-            out.putIfAbsent(helper, v);
-        } else if (e instanceof Hir.Neg n) {
-            collect(n.operand(), out);
-        } else if (e instanceof Hir.Binary b) {
-            collect(b.left(), out);
-            collect(b.right(), out);
-        } else if (e instanceof Hir.Apply c) {
-            for (Hir.Expr arg : c.args()) {
-                collect(arg, out);
-            }
-        } else if (e instanceof Hir.LetIn let) {
-            collect(let.value(), out);
-            collect(let.body(), out);
-        } else if (e instanceof Hir.NewData nd) {
-            for (Hir.Var spread : nd.spreads()) {
-                collect(spread, out);
-            }
-            for (Hir.FieldInit fi : nd.inits()) {
-                collect(fi.value(), out);
-            }
-        } else if (e instanceof Hir.ListLit l) {
-            for (Hir.Expr element : l.elements()) {
-                collect(element, out);
-            }
-        } else if (e instanceof Hir.Tuple t) {
-            for (Hir.Expr element : t.elements()) {
-                collect(element, out);
-            }
-        }
-        // A literal, and anything else a fixture may write, names no value.
     }
 
     /**
