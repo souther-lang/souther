@@ -48,9 +48,11 @@ class AnOutputReadsHowTheBoundaryChecksAClauseTest {
                 invariant ordered = from <= to
             """;
 
+    /** Checked once: every test reads a different declaration of the same module. */
+    private static final CheckedModule SHOP = CheckedProgram.of(List.of(MODULE)).module("shop");
+
     private static List<BoundaryCheck> boundaryOf(String name) {
-        CheckedModule module = CheckedProgram.of(List.of(MODULE)).module("shop");
-        for (CheckedData each : module.data()) {
+        for (CheckedData each : SHOP.data()) {
             if (each.name().name().equals(name)) {
                 return assertInstanceOf(CheckedData.WithFields.class, each, name).invariants()
                         .stream().map(ValueShape.Invariant::boundary).toList();

@@ -205,6 +205,20 @@ class CompileInvariantConstraintTest {
         assertEquals(1, patterns, "the invariant's regex is a static field of the decoder");
     }
 
+    /** Two patterns are two fields, whatever their texts: `Aa` and `BB` hash alike, and so does any
+     *  regex written from them the same way. */
+    @Test
+    void twoPatternsAreKeptApartThoughTheirTextsHashAlike() throws Exception {
+        Issue issue = soleIssue("""
+                data V = String
+                    invariant first = String.matches(".*Aa.*", value)
+                    invariant second = String.matches(".*BB.*", value)
+                """, "Aa");
+        assertEquals("invalid_format", issue.code());
+        assertEquals(".*BB.*", issue.meta().get("pattern"),
+                "the second pattern, held apart from the first");
+    }
+
     @Test
     void aValueThatHoldsStillDecodes() throws Exception {
         ClassLoader loader = new BytesClassLoader(Compiler.compile("""
