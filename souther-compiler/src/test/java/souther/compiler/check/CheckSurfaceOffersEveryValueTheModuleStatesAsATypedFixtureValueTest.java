@@ -185,6 +185,31 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
                         "example.member"), List.of()));
     }
 
+    /**
+     * A nullary value of a behavior's own declared output type is not a candidate — only an input
+     * type is, the domain {@code Adequacy.Generated.named} has always read a baseline from.
+     */
+    @Test
+    void aValueOfABehaviorsOutputTypeIsNotACandidate() {
+        String source = model("""
+                let vip = Customer { grade = Gold }
+                let junk = Accepted { at = "x" }
+                """);
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        CheckSurface surface = compilation.db()
+                .ask(new Shapes.CheckSurface("example.member")).value();
+        assertNotNull(surface, "the module under test does not get as far as being assembled");
+
+        for (List<ReachName.Declaration> candidates : surface.typedFixtureValues().values()) {
+            for (ReachName.Declaration candidate : candidates) {
+                assertEquals(new ValueName.Helper("example.member", "vip"), candidate.denotes(),
+                        "`junk` builds `admit`'s own output type, which is not among the types a"
+                                + " row may spread it over");
+            }
+        }
+    }
+
     private static List<ReachName.Declaration> candidatesOf(String source, String module) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();

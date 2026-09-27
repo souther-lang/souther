@@ -64,9 +64,9 @@ public final class CheckSurface implements Assembly {
     /** Which method every value a fixture may call by name runs as, by the value's own declaration —
      *  {@link FixtureValueEntries#emitted}'s correspondence, mint and reuse alike. */
     private final Map<ValueName.Helper, String> fixtureValueMethods;
-    /** Every nullary value this module declares whose body states some behavior's own declared
-     *  input or output type, keyed by that type — {@link TypedFixtureValues#of}'s answer, read once
-     *  here and never recomputed by a search reading it later. */
+    /** Every nullary value this module declares whose body states a type one of this module's own
+     *  behaviors declares a parameter at, keyed by that type — {@link TypedFixtureValues#of}'s
+     *  answer, read once here and never recomputed by a search reading it later. */
     private final Map<TypeSymbol, List<ReachName.Declaration>> typedFixtureValues;
     /** Where each behavior gets its body, as the module was classified. Not in the tree: a tree
      *  read off the path has no {@code let} to say, so two surfaces whose trees are the same can
@@ -333,9 +333,9 @@ public final class CheckSurface implements Assembly {
         return fixtureValueMethods;
     }
 
-    /** Every nullary value this module declares whose body states some behavior's own declared
-     *  input or output type, keyed by that type — what a search may offer as a baseline for a
-     *  parameter of that type, before any row or fake ever names one ({@link
+    /** Every nullary value this module declares whose body states a type one of this module's own
+     *  behaviors declares a parameter at, keyed by that type — what a search may offer as a
+     *  baseline for a parameter of that type, before any row or fake ever names one ({@link
      *  TypedFixtureValues#of}). */
     public Map<TypeSymbol, List<ReachName.Declaration>> typedFixtureValues() {
         return typedFixtureValues;
