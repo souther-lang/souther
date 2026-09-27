@@ -142,18 +142,15 @@ public final class Lists {
      *  {@code List.rangeInclusive}); {@code from} above {@code to} gives the empty list. A primitive rather
      *  than a fold, because a fold needs a list to walk and this is what produces one.
      *
-     *  <p>A span longer than a list can hold aborts up front rather than filling memory until it
-     *  dies — an out-of-range bound is a model bug, not a business result, so it gets the treatment
-     *  {@link IntMath} gives an overflow. The width is computed before the walk because
-     *  {@code to - from} itself can overflow. */
+     *  <p>A span longer than a list holds ({@link Capacity#MOST_ELEMENTS}) aborts up front rather
+     *  than filling memory until it dies — an out-of-range bound is a model bug, not a business
+     *  result, so it gets the treatment {@link IntMath} gives an overflow. A span within it that the
+     *  heap cannot hold is the host's refusal and not this one. */
     public static List<Long> rangeInclusive(long from, long to) {
         if (from > to) {
             return PersistentVector.empty();
         }
-        long width = to - from + 1;
-        if (width <= 0 || width > Integer.MAX_VALUE) {
-            throw new ConstraintViolation("List.rangeInclusive is out of range: " + from + " to " + to);
-        }
+        Capacity.span(from, to, Capacity.MOST_ELEMENTS);
         PersistentVector<Long> out = PersistentVector.empty();
         for (long i = from; ; i++) {
             out = out.append(i);
