@@ -7,6 +7,7 @@ import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
 import net.unit8.raoh.Result;
 import net.unit8.raoh.decode.Decoder;
+import net.unit8.raoh.decode.builtin.ListDecoder;
 import net.unit8.raoh.decode.builtin.RecordDecoder;
 import org.junit.jupiter.api.Test;
 
@@ -278,6 +279,27 @@ class CompileInvariantConstraintTest {
                 """, List.of(1L, 2L, 1L));
         assertEquals("duplicate_element", issue.code());
         assertEquals(List.of(1L), issue.meta().get("duplicates"));
+    }
+
+    /**
+     * {@code Unique} reports what Raoh's own reports for it. Where an element's Java equality is
+     * Souther's too — an {@code Int}, unlike a {@code Decimal} — {@code RaohListUnique} and Raoh's
+     * {@code ListDecoder.unique()} walk the same elements and must fail with the same issue, field
+     * for field: held here to being the one Raoh builds, the way {@link #aMapsSizeIsReportedAsRaohReportsIt}
+     * holds a map's size constraints to Raoh's. A {@code Decimal} is deliberately not used for this
+     * one — the two are meant to differ there (issue #2033), so parity is not what a Decimal case
+     * would be checking.
+     */
+    @Test
+    void aRepeatedElementIsReportedAsRaohReportsIt() throws Exception {
+        List<Object> input = List.of(1L, 2L, 1L);
+        ListDecoder<Object, Object> raoh = new ListDecoder<>((in, path) -> Result.ok(input));
+
+        Issue issue = soleIssue("""
+                data V = List<Int>
+                    invariant List.allDistinctBy(x -> x, value)
+                """, input);
+        assertEquals(sole(raoh.unique().decode(input, Path.ROOT)), issue);
     }
 
     /** {@code Unique} is stated of the elements' Souther equality (spec §collections), and two
