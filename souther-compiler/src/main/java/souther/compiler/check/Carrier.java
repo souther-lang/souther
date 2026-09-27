@@ -136,10 +136,10 @@ public sealed interface Carrier extends ValueOrder {
             return index < 0 ? null : Count.of(index);
         }
 
-        /** The case at a count. Only ever asked of a count this carrier holds, which is what
-         * {@link Carrier#onTheGrid} is for. */
+        /** The case at a count, which must be one this carrier holds ({@link #requiredOnGrid}). */
         public TypeSymbol caseAt(Place count) {
-            return cases.get(Count.number(count).at().intValueExact());
+            Place held = requiredOnGrid(count);
+            return cases.get(Count.number(held).at().intValueExact());
         }
     }
 
@@ -498,6 +498,29 @@ public sealed interface Carrier extends ValueOrder {
                 yield written != null && written.sameAs(count) ? count : null;
             }
         };
+    }
+
+    /**
+     * {@code place}, once this carrier has confirmed it is one of the places it holds
+     * ({@link #onTheGrid}).
+     *
+     * <p>A place a value is about to be read or written at is asked for on this carrier's own
+     * grid ({@link #onTheGrid}'s own doc), and every reader downstream of that point — the digits,
+     * the case, the date — works because the place is one this carrier answers for. That was a
+     * caller's discipline to remember rather than a fact this enforced, so a place built off the
+     * grid reached a narrowing conversion as itself, a {@code java.math} refusal from inside a
+     * checker rather than the invariant violation it is. Asked here instead, once, at the choke
+     * point every reader of a place passes through.
+     *
+     * @throws IllegalArgumentException where {@code place} is not one of this carrier's own
+     */
+    default Place requiredOnGrid(Place place) {
+        Place held = onTheGrid(place);
+        if (held == null) {
+            throw new IllegalArgumentException(
+                    "a place read or written as a value must be one this carrier holds: " + place);
+        }
+        return held;
     }
 
     /** Whether a place counts to a whole number, which is what a stepping order is made of. A place
@@ -1550,12 +1573,13 @@ public sealed interface Carrier extends ValueOrder {
      */
     default ObservedValue valueOf(Place count) {
         return switch (this) {
-            case Whole _ -> new ObservedValue.Integer(Count.number(count).at().longValueExact());
+            case Whole _ ->
+                    new ObservedValue.Integer(Count.number(requiredOnGrid(count)).at().longValueExact());
             case Dense _ -> new ObservedValue.Decimal(Count.number(count).at());
-            case Days _ -> new ObservedValue.Temporal(Dates.written(count));
-            case Seconds _ -> new ObservedValue.Temporal(DateTimes.written(count));
-            case SecondsOfDay _ -> new ObservedValue.Temporal(Times.written(count));
-            case Nanos _ -> new ObservedValue.Temporal(Instants.written(count));
+            case Days _ -> new ObservedValue.Temporal(Dates.written(requiredOnGrid(count)));
+            case Seconds _ -> new ObservedValue.Temporal(DateTimes.written(requiredOnGrid(count)));
+            case SecondsOfDay _ -> new ObservedValue.Temporal(Times.written(requiredOnGrid(count)));
+            case Nanos _ -> new ObservedValue.Temporal(Instants.written(requiredOnGrid(count)));
             case Ordinal ordinal -> new ObservedValue.Unit(ordinal.caseAt(count));
             case Text _ -> new ObservedValue.Text(count.spelled());
         };
@@ -1577,10 +1601,10 @@ public sealed interface Carrier extends ValueOrder {
     default String written(Place count) {
         return switch (this) {
             case Whole _, Dense _ -> count.spelled();
-            case Days _ -> Dates.written(count);
-            case Seconds _ -> DateTimes.written(count);
-            case SecondsOfDay _ -> Times.written(count);
-            case Nanos _ -> Instants.written(count);
+            case Days _ -> Dates.written(requiredOnGrid(count));
+            case Seconds _ -> DateTimes.written(requiredOnGrid(count));
+            case SecondsOfDay _ -> Times.written(requiredOnGrid(count));
+            case Nanos _ -> Instants.written(requiredOnGrid(count));
             // The case's name, which is the only thing a person ever writes at such a position. An
             // ordinal in a report would name a line at a number the model does not contain.
             case Ordinal ordinal -> ordinal.caseAt(count).name();

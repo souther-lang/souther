@@ -1819,8 +1819,17 @@ final class TermRealizations {
                 : wholeNumbers(wanted, observed, 1, asFarAs, asFarAs).numbers();
     }
 
+    /** {@code at} as a whole number, which every {@link #wholeNumbers} search this is asked of hands
+     *  back — asked anyway, since the day this reaches an {@code at} that is not one, the answer
+     *  it gives is that search's contract broken, and not a {@code java.math} refusal. */
     private static int whole(Place at) {
-        return ((Count) at).at().intValueExact();
+        try {
+            return ((Count) at).at().intValueExact();
+        } catch (ArithmeticException notWhole) {
+            throw new IllegalStateException(
+                    "a place a whole-number search produced is not itself a whole number: " + at,
+                    notWhole);
+        }
     }
 
     /**

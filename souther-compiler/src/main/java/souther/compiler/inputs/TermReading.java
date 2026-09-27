@@ -294,7 +294,7 @@ final class TermReading {
         // A place that is not a count is not a date. No operation declaring this arm is given
         // anything else, so this is the observation being something other than what the position
         // declares, which is what `NotNumber` says.
-        if (!(read instanceof Count count)) {
+        if (!(read instanceof Count count) || observed.onTheGrid(count) == null) {
             return new Reading.NotNumber();
         }
         java.time.LocalDate date = Dates.dateAt(count);

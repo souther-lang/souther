@@ -1,6 +1,7 @@
 package souther.compiler.values;
 
 import souther.compiler.types.TypeSymbol;
+import souther.exact.ExactDecimals;
 
 import java.math.BigDecimal;
 
@@ -53,7 +54,7 @@ public sealed interface Value {
             if (value == null) {
                 throw new IllegalArgumentException("a written number is not absent");
             }
-            value = value.stripTrailingZeros();
+            value = ExactDecimals.leastDigits(value);
         }
     }
 

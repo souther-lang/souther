@@ -80,7 +80,7 @@ public record FixtureTemplate(String text, Hir.Expr value) {
      * for.
      */
     public static FixtureTemplate decimal(BigDecimal value) {
-        BigDecimal stripped = value.stripTrailingZeros();
+        BigDecimal stripped = ExactDecimals.leastDigits(value);
         if (!ExactDecimals.fitsPlainNotation(stripped)) {
             return null;
         }
@@ -208,7 +208,7 @@ public record FixtureTemplate(String text, Hir.Expr value) {
      * came back missing the name in the middle.
      */
     public static FixtureTemplate on(Carrier carrier, Place at, TypeReachName.Naming naming) {
-        if (!carrier.extent().admits(at)) {
+        if (carrier.onTheGrid(at) == null) {
             return null;
         }
         return switch (carrier) {

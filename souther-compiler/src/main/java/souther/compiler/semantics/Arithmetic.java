@@ -127,6 +127,11 @@ public sealed interface Arithmetic {
          * what the operator computes is written down once, here, where the operator is named.
          */
         public static BigDecimal quotientOf(BigDecimal value, BigDecimal by) {
+            if (by.signum() == 0) {
+                throw new IllegalArgumentException(
+                        "a truncating quotient's divisor of nought is refused where the term is"
+                                + " made, and is never one this reads");
+            }
             return value.divideToIntegralValue(by);
         }
     }
