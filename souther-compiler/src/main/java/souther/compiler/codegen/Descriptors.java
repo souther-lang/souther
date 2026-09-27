@@ -360,6 +360,9 @@ final class Descriptors {
     static final MethodTypeDesc MTD_mapOf2 =
             MethodTypeDesc.of(CD_Map, CD_Object, CD_Object, CD_Object, CD_Object);
     static final MethodTypeDesc MTD_nodeIs = MethodTypeDesc.of(ConstantDescs.CD_boolean);
+    static final MethodTypeDesc MTD_nodeDouble = MethodTypeDesc.of(ConstantDescs.CD_double);
+    static final MethodTypeDesc MTD_doubleIs =
+            MethodTypeDesc.of(ConstantDescs.CD_boolean, ConstantDescs.CD_double);
     /** What a string decoder's {@code flatMapWithPath} calls a temporal's text question at: the text
      *  and the path in, the result out. */
     static final MethodTypeDesc MTD_temporalText = MethodTypeDesc.of(CD_RResult, CD_String, CD_RPath);

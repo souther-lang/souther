@@ -15,6 +15,7 @@ import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.CaseShape;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.TemporalRule;
+import net.unit8.raoh.ErrorCodes;
 import souther.runtime.BoundaryScalars;
 import souther.temporal.TemporalText;
 import souther.compiler.types.Type;
@@ -297,9 +298,8 @@ final class CodecGen {
             // text is the string leaf itself, which canonicalizes and does nothing else; a temporal
             // is that leaf parsed
             case MapKeyRepresentation.Text _ -> emitStringLeaf(code, CD_ObjectDecoders);
-            // Through the same builder a field's leaf goes through. Spelled out here instead, a
-            // key parsed the text and skipped the refinements beside it, so what a `Time` holds
-            // depended on whether it stood at a field or under one.
+            // Through the same builder a field's leaf goes through, so the language's question of
+            // the text and the hold to the second are one rule at a field and under a key.
             case MapKeyRepresentation.Lexical l ->
                     emitTemporalFromText(code, CD_ObjectDecoders, l.leaf().type());
         }
@@ -1129,7 +1129,8 @@ final class CodecGen {
             MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));
 
     /**
-     * Emits a temporal leaf decoder from text: Raoh's string leaf, refined, parsed, refined again.
+     * Emits a temporal leaf decoder from text: Raoh's string leaf, asked whether the text is one,
+     * parsed to build the value, and held to the second.
      *
      * <p>A {@code Time} and a {@code DateTime} are held to the second. They carry no fraction of one
      * (spec §a-local-temporal-is-held-to-the-second), so text that has one says something the domain
@@ -1312,9 +1313,6 @@ final class CodecGen {
         return admitted;
     }
 
-    /** Raoh's code for a value of a kind the position does not read. */
-    private static final String TYPE_MISMATCH = "type_mismatch";
-
     /**
      * The scalars whose bare-value reading is asked a question before Raoh reads them (spec
      * §a-boundary-scalar-is-read-not-converted): what Raoh takes is wider than the language reads,
@@ -1380,7 +1378,8 @@ final class CodecGen {
     private void emitBareScalarHelper(ClassBuilder cb, BareScalar scalar) {
         cb.withMethodBody(scalar.helper, MTD_Rdecode,
                 ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC, code -> {
-            Label admitted = emitRefusal(code, CD_BoundaryScalars, scalar.question, TYPE_MISMATCH,
+            Label admitted = emitRefusal(code, CD_BoundaryScalars, scalar.question,
+                    ErrorCodes.TYPE_MISMATCH,
                     Optional.of(scalar.expected));
             code.labelBinding(admitted);
             code.invokestatic(CD_ObjectDecoders, scalar.factory, scalar.leaf);
@@ -1402,7 +1401,8 @@ final class CodecGen {
      * that took more digits than a {@code double} holds: {@code 0.10000000000000001} arrives as
      * {@code 0.1}. Nothing here can tell it from a literal that said {@code 0.1}, so it is refused,
      * and a fraction the reader kept as a {@code BigDecimal} (Jackson's
-     * {@code USE_BIG_DECIMAL_FOR_FLOATS}) is read exactly. Any other node is Raoh's.
+     * {@code USE_BIG_DECIMAL_FOR_FLOATS}) is read exactly. Any other node is Raoh's, and so is a
+     * {@code NaN} or an infinity, which is no number and not a number that was rounded.
      */
     private void emitJsonDecimalHelper(ClassBuilder cb) {
         cb.withMethodBody(JSON_DECIMAL_HELPER, MTD_Rdecode,
@@ -1419,8 +1419,13 @@ final class CodecGen {
             code.checkcast(CD_JsonNode);
             code.invokevirtual(CD_JsonNode, "isBigDecimal", MTD_nodeIs);
             code.ifne(admitted);
+            code.aload(0);
+            code.checkcast(CD_JsonNode);
+            code.invokevirtual(CD_JsonNode, "doubleValue", MTD_nodeDouble);
+            code.invokestatic(ConstantDescs.CD_Double, "isFinite", MTD_doubleIs);
+            code.ifeq(admitted);
             code.aload(1);                                        // path
-            code.loadConstant(TYPE_MISMATCH);
+            code.loadConstant(ErrorCodes.TYPE_MISMATCH);
             code.loadConstant(BoundaryScalars.ROUNDED);
             code.loadConstant("expected");
             code.loadConstant(BareScalar.DECIMAL.expected);

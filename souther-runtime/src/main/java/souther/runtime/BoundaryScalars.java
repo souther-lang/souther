@@ -37,8 +37,12 @@ public final class BoundaryScalars {
     }
 
     /** Why a bare value is not an exact number, or null where it is one or is not a carrier this
-     *  asks about. */
+     *  asks about. A {@code NaN} and an infinity are asked about no further: they are no number at
+     *  all, which is not the reason a finite {@code double} is refused for, and the decoder that
+     *  reads them says so in its own words. */
     public static @Nullable String decimalRefusal(Object value) {
-        return value instanceof Double || value instanceof Float ? ROUNDED : null;
+        boolean rounded = (value instanceof Double d && Double.isFinite(d))
+                || (value instanceof Float f && Float.isFinite(f));
+        return rounded ? ROUNDED : null;
     }
 }

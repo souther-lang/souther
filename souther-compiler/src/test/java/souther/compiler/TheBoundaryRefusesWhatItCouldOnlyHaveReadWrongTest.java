@@ -9,12 +9,19 @@ import net.unit8.raoh.Err;
 import net.unit8.raoh.Issue;
 import net.unit8.raoh.Ok;
 import net.unit8.raoh.Result;
+import org.jooq.Field;
+import org.jooq.Record;
+import org.jooq.SQLDialect;
+import org.jooq.impl.DSL;
 import org.junit.jupiter.api.Test;
+import souther.compiler.generated.JsonBoundary;
 import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.node.ObjectNode;
 
 import tools.jackson.databind.json.JsonMapper;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -41,10 +48,19 @@ class TheBoundaryRefusesWhatItCouldOnlyHaveReadWrongTest {
             module demo
 
             data In = { n: Int, d: Decimal, at: Instant, day: Date, m: Map<String, Int> }
+            data Row = { n: Int, d: Decimal, at: Instant, day: Date }
+            data Flag = { b: Bool }
+            data Name = { s: String }
             data Out = { n: Int }
 
             behavior pass : (i: In) -> Out constructs Out
             let pass (i) = Out { n = i.n }
+
+            behavior atAnInt : (n: Int) -> Out constructs Out
+            let atAnInt (n) = Out { n = n }
+
+            behavior atADecimal : (d: Decimal) -> Out constructs Out
+            let atADecimal (d) = Out { n = 1 }
             """;
 
     /** A reader that keeps a fraction as the decimal it was written, and one that does not. */
@@ -134,7 +150,13 @@ class TheBoundaryRefusesWhatItCouldOnlyHaveReadWrongTest {
         assertMismatchAt("/d", read("d", 0.1f), "a float");
         assertMismatchAt("/d", read("d", Double.NaN), "NaN");
         assertMismatchAt("/d", read("d", Double.POSITIVE_INFINITY), "infinity");
+        assertMismatchAt("/d", read("d", Float.NEGATIVE_INFINITY), "a float infinity");
         assertMismatchAt("/d", read("d", "1.5"), "text");
+        // Said as what they are: no number at all, and not a number that was rounded.
+        for (Object noNumber : new Object[] {Double.NaN, Double.POSITIVE_INFINITY}) {
+            assertFalse(messageOf(read("d", noNumber)).contains("rounded"), String.valueOf(noNumber));
+        }
+        assertTrue(messageOf(read("d", 1.5)).contains("rounded"), "a finite double may have been");
         assertTrue(read("d", new BigDecimal("0.10000000000000001")).isOk());
         assertTrue(read("d", 7L).isOk());
         assertTrue(read("d", BigInteger.TEN).isOk());
@@ -161,6 +183,101 @@ class TheBoundaryRefusesWhatItCouldOnlyHaveReadWrongTest {
         assertTrue(Codecs.decode(LOADER, "demo.In", "jsonDecoder", ROUNDING.readTree("""
                 {"n":1,"d":15,"at":"2026-07-25T00:00:00Z","day":"2026-07-25","m":{"k":1}}
                 """)).isOk(), "a whole number is an integer node, which is exact");
+    }
+
+    /**
+     * A row of a relational source is read by the same rules: it reaches the same leaf decoders
+     * through {@code recordDecoder()}, and a rule that held at a field and a key and not at a column
+     * would be one more way in with a rule of its own.
+     */
+    @Test
+    void aRowOfARelationalSourceIsReadByTheSameRules() throws Exception {
+        assertTrue(readRow(5L, new BigDecimal("1.5"), "2026-07-25T00:00:00Z",
+                java.time.LocalDate.of(2026, 7, 25)).isOk());
+        assertMismatchAt("/n", readRow(new BigDecimal("5.00"), new BigDecimal("1.5"),
+                "2026-07-25T00:00:00Z", "2026-07-25"), "5.00 in an integer column");
+        assertMismatchAt("/d", readRow(5L, 1.5, "2026-07-25T00:00:00Z", "2026-07-25"),
+                "a double in a decimal column");
+        assertMismatchAt("/at", readRow(5L, new BigDecimal("1.5"), new java.sql.Timestamp(0L),
+                "2026-07-25"), "a java.sql.Timestamp");
+        assertMismatchAt("/day", readRow(5L, new BigDecimal("1.5"), "2026-07-25T00:00:00Z",
+                new java.sql.Date(0L)), "a java.sql.Date");
+        assertRefusedAt("/at", readRow(5L, new BigDecimal("1.5"), "2026-07-25t00:00:00z",
+                "2026-07-25"), "text the language does not admit as an Instant");
+    }
+
+    private static Result<?> readRow(Object n, Object d, Object at, Object day) throws Exception {
+        Field<Object> fn = DSL.field(DSL.name("n"), Object.class);
+        Field<Object> fd = DSL.field(DSL.name("d"), Object.class);
+        Field<Object> fat = DSL.field(DSL.name("at"), Object.class);
+        Field<Object> fday = DSL.field(DSL.name("day"), Object.class);
+        Record row = DSL.using(SQLDialect.DEFAULT).newRecord(fn, fd, fat, fday);
+        row.set(fn, n);
+        row.set(fd, d);
+        row.set(fat, at);
+        row.set(fday, day);
+        return Codecs.decode(LOADER, "demo.Row", "recordDecoder", row);
+    }
+
+    /**
+     * The runner reads a top-level argument through decoders of its own, and a reader that parsed a
+     * fraction as a {@code double} hands one of them a node that is already rounded. It refuses it as
+     * a generated {@code jsonDecoder()} does, and refuses {@code 5.0} for an {@code Int}.
+     */
+    @Test
+    void aTopLevelArgumentTheRunnerReadsIsHeldToTheSameRules() throws Exception {
+        assertInstanceOf(JsonBoundary.Read.Refused.class,
+                Crossing.reading(MODEL, "demo", "atADecimal", "0.5"), "a fraction parsed as a double");
+        assertInstanceOf(JsonBoundary.Read.Value.class,
+                Crossing.reading(MODEL, "demo", "atADecimal", "5"), "a whole number is exact");
+        assertInstanceOf(JsonBoundary.Read.Refused.class,
+                Crossing.reading(MODEL, "demo", "atAnInt", "5.0"), "5.0 for an Int");
+        assertInstanceOf(JsonBoundary.Read.Value.class,
+                Crossing.reading(MODEL, "demo", "atAnInt", "5"));
+    }
+
+    /**
+     * A {@code Bool} is read from a boolean and a {@code String} from text, and from nothing that
+     * would have to be turned into one: a scalar of another kind is not made into the kind the
+     * position asks for, whichever source hands it over. These two need no question of their own
+     * because Raoh's decoders for them read one kind and no other; this is what holds them to that.
+     */
+    @Test
+    void aBoolAndAStringAreReadFromTheirOwnKindAndNoOther() throws Exception {
+        assertTrue(Codecs.decode(LOADER, "demo.Flag", Map.of("b", true)).isOk());
+        assertMismatchAt("/b", Codecs.decode(LOADER, "demo.Flag", Map.of("b", "true")), "the text true");
+        assertMismatchAt("/b", Codecs.decode(LOADER, "demo.Flag", Map.of("b", 1L)), "the number 1");
+        assertTrue(Codecs.decode(LOADER, "demo.Flag", "jsonDecoder", EXACT.readTree("{\"b\":true}")).isOk());
+        assertMismatchAt("/b", Codecs.decode(LOADER, "demo.Flag", "jsonDecoder",
+                EXACT.readTree("{\"b\":\"true\"}")), "the JSON text true");
+        assertMismatchAt("/b", Codecs.decode(LOADER, "demo.Flag", "jsonDecoder",
+                EXACT.readTree("{\"b\":1}")), "the JSON number 1");
+
+        assertTrue(Codecs.decode(LOADER, "demo.Name", Map.of("s", "x")).isOk());
+        assertMismatchAt("/s", Codecs.decode(LOADER, "demo.Name", Map.of("s", 5L)), "the number 5");
+        assertMismatchAt("/s", Codecs.decode(LOADER, "demo.Name", Map.of("s", true)), "the boolean true");
+        assertMismatchAt("/s", Codecs.decode(LOADER, "demo.Name", "jsonDecoder",
+                EXACT.readTree("{\"s\":5}")), "the JSON number 5");
+        assertMismatchAt("/s", Codecs.decode(LOADER, "demo.Name", "jsonDecoder",
+                EXACT.readTree("{\"s\":true}")), "the JSON boolean true");
+    }
+
+    /** A node that holds no number is refused as that too, and not as one that was rounded. */
+    @Test
+    void aJsonNodeThatIsNoNumberIsNotSaidToHaveBeenRounded() throws Exception {
+        for (double noNumber : new double[] {Double.NaN, Double.NEGATIVE_INFINITY}) {
+            ObjectNode node = (ObjectNode) EXACT.readTree("""
+                    {"n":1,"at":"2026-07-25T00:00:00Z","day":"2026-07-25","m":{"k":1}}
+                    """);
+            node.put("d", noNumber);
+            Result<?> r = Codecs.decode(LOADER, "demo.In", "jsonDecoder", node);
+            assertMismatchAt("/d", r, "the JSON node " + noNumber);
+            assertFalse(messageOf(r).contains("rounded"), messageOf(r));
+        }
+    }
+
+    private static String messageOf(Result<?> result) {
+        return ((Err<?>) result).issues().asList().get(0).message();
     }
 
     private static BigDecimal decimalOf(Object in) throws Exception {

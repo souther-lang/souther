@@ -19,6 +19,7 @@ import souther.runtime.Temporals;
 import souther.runtime.TextAdmission;
 
 import net.unit8.raoh.Err;
+import net.unit8.raoh.ErrorCodes;
 import net.unit8.raoh.Issues;
 import net.unit8.raoh.Ok;
 import net.unit8.raoh.Path;
@@ -257,16 +258,14 @@ public final class JsonBoundary {
     private static Decoder<JsonNode, BigDecimal> exactDecimal() {
         Decoder<JsonNode, BigDecimal> raoh = JsonDecoders.decimal();
         return (node, path) -> {
-            if (node != null && node.isFloatingPointNumber() && !node.isBigDecimal()) {
-                return Result.failCustom(path, TYPE_MISMATCH, BoundaryScalars.ROUNDED,
+            if (node != null && node.isFloatingPointNumber() && !node.isBigDecimal()
+                    && Double.isFinite(node.doubleValue())) {
+                return Result.failCustom(path, ErrorCodes.TYPE_MISMATCH, BoundaryScalars.ROUNDED,
                         Map.of("expected", "exact number", "actual", node.getClass().getSimpleName()));
             }
             return raoh.decode(node, path);
         };
     }
-
-    /** Raoh's code for a value of a kind the position does not read. */
-    private static final String TYPE_MISMATCH = "type_mismatch";
 
     /**
      * A temporal read from text, under the rules the type has wherever it arrives
