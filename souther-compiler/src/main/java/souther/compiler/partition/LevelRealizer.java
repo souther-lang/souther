@@ -14,6 +14,7 @@ import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.regex.Meter;
 import souther.compiler.values.ValueSet;
+import souther.exact.ExactFailure;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -187,8 +188,7 @@ public final class LevelRealizer {
         for (Reading reading : readings(two)) {
             NumericDomain.Bounds settled = runs.get(reading.settles());
             NumericDomain.Bounds together = commonRange(settled,
-                    runs.get(reading.anchors()), two.of(),
-                    Count.number(reading.where().anchor().asAPlace()));
+                    runs.get(reading.anchors()), two.of(), distance(reading.where().anchor()));
             Outwards.Walked walked = alongTheLine(together, two.of(), reading.anchors(),
                     within, looking);
             if (walked == null) {
@@ -208,6 +208,10 @@ public final class LevelRealizer {
                         stoppedBy.add(CompositionBudget.PLACES_A_PAIR_IS_LOOKED_AT);
                 case WITH_NO_STEP_TO_TAKE -> notAllOf.add(
                         CompositionRepertoire.PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE);
+                // Neither a figure nor an order without a step, so neither vocabulary gets a word
+                // for it: raising a figure reaches no place this could not hold, and the order has
+                // a next place. What this leaves is the answer below, nothing composed.
+                case AT_A_PLACE_IT_COULD_NOT_HOLD -> { }
             }
             for (Place common : walked) {
                 // Where the settled one has to stand relative to the anchored one: the place the
@@ -218,7 +222,15 @@ public final class LevelRealizer {
                 // Null where the carrier's arithmetic could not put the item's levels beside the
                 // place the other position stands at — read on, an item with no level in it was
                 // handed to a reader that asks where its level falls.
-                Criterion here = relativeTo(reading.where(), common, two.of());
+                // And where this could not hold the place a level moves this one to, this place
+                // composed nothing and the next one is tried. Another place or the other reading
+                // may compose a pair, and where none does the answer is the one below.
+                Criterion here;
+                try {
+                    here = relativeTo(reading.where(), common, two.of());
+                } catch (ExactFailure _) {
+                    continue;
+                }
                 Place at = here == null ? null
                         : placeMeeting(here, reading.settles(), two.of(), settled, looking, tried,
                                 Map.of(new RealizationTarget.AtOnePosition(reading.anchors()),
@@ -352,13 +364,35 @@ public final class LevelRealizer {
      * values do not count there is no distance to add, and the only level such a quantity takes is
      * the one where the two meet — so the place is the one they meet at and any other level names
      * nothing.
+     *
+     * <p>Added exactly and put on the carrier only at the end, so a distance no decimal writes
+     * reaches the carrier as the number it is and the carrier says there is no value there.
+     *
+     * @throws ExactFailure where this cannot hold the place the distance moves to, which is this
+     *         compiler composing nothing from {@code from} and never the carrier holding nothing
+     *         there. The caller trying one place after another is the one that knows what that means
      */
     private static Place movedBy(Place from, Level level, Carrier carrier) {
-        Count apart = Count.number(level.asAPlace());
+        ExactRatio apart = distance(level);
         if (!carrier.counts()) {
-            return apart.signum() == 0 ? from : null;
+            return apart.isZero() ? from : null;
         }
-        return carrier.onTheGrid(Count.number(from).plus(apart));
+        Count at = Count.at(Count.number(from).exactly().plus(apart));
+        return at == null ? null : carrier.onTheGrid(at);
+    }
+
+    /**
+     * The number a level of the distance between two positions is.
+     *
+     * <p>Established by every caller: a distance is a number, and a level of it on an order with no
+     * numbers reaching here is this compiler having mixed two orders.
+     */
+    private static ExactRatio distance(Level level) {
+        ExactRatio at = level.asANumber();
+        if (at == null) {
+            throw new IllegalStateException("a distance that is no number: " + level);
+        }
+        return at;
     }
 
     /**
@@ -798,6 +832,9 @@ public final class LevelRealizer {
                 // form over an order with no arithmetic, which is refused before a search is built.
                 case WITH_NO_STEP_TO_TAKE -> throw new IllegalStateException(
                         "a progression over an order with no step: " + carriers[i]);
+                // Stopped at a value this could not hold, which no figure reaches past. Nothing to
+                // name, and the answer is the one every walk here comes to.
+                case AT_A_PLACE_IT_COULD_NOT_HOLD -> { }
             }
             return Reached.INCOMPLETE;
         }
@@ -1169,8 +1206,8 @@ public final class LevelRealizer {
      * caller is the one holding whether that happened.
      */
     static NumericDomain.Bounds commonRange(NumericDomain.Bounds on, NumericDomain.Bounds against,
-                                            Carrier carrier, Count apart) {
-        NumericDomain.Bounds moved = carrier.counts() ? shifted(on, apart.negate()) : on;
+                                            Carrier carrier, ExactRatio apart) {
+        NumericDomain.Bounds moved = carrier.counts() ? shifted(on, apart.negated()) : on;
         return new NumericDomain.Bounds(
                 Endpoint.lower(moved == null ? null : moved.min(),
                         against == null ? null : against.min()),
@@ -1188,16 +1225,31 @@ public final class LevelRealizer {
      * refuse. Intersected without the distance, the search offered exactly that pair and the report
      * said every value tried had been refused.
      */
-    private static NumericDomain.Bounds shifted(NumericDomain.Bounds bounds, Count by) {
+    private static NumericDomain.Bounds shifted(NumericDomain.Bounds bounds, ExactRatio by) {
         if (bounds == null) {
             return null;
         }
         return new NumericDomain.Bounds(moved(bounds.min(), by), moved(bounds.max(), by));
     }
 
-    private static Endpoint moved(Endpoint end, Count by) {
-        return end == null || !(end.at() instanceof Count count) ? end
-                : new Endpoint(count.plus(by), end.inclusive());
+    /**
+     * An end moved by the distance, or no end where the place it moves to is none this can write.
+     *
+     * <p>Dropping the end widens the range, and that is sound here: what this bounds is where a
+     * search starts looking, and every placement it composes is put back to the rules before it is
+     * handed back ({@link #found}). A wider start costs looking and never offers a placement the
+     * rules refuse.
+     */
+    private static Endpoint moved(Endpoint end, ExactRatio by) {
+        if (end == null || !(end.at() instanceof Count count)) {
+            return end;
+        }
+        try {
+            Count at = Count.at(count.exactly().plus(by));
+            return at == null ? null : new Endpoint(at, end.inclusive());
+        } catch (ExactFailure _) {
+            return null;
+        }
     }
 
     /**

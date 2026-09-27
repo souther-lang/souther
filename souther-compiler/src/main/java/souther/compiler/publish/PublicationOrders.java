@@ -226,11 +226,13 @@ public final class PublicationOrders {
      *
      * <p>Composed from the order above and not written again. A reading that met an observation's
      * code is that code, so the two orders agreeing is not something to keep in step — there is one
-     * order, and this is it with the one reason that is no observation's put after them. A walk
-     * that reached no value is last for the same reason the codes are in the order they are: it is
-     * the furthest from an answer. The two that never reached a value to begin with follow it, a
-     * step further out again — a position that was read and holds nothing is nearer a number than a
-     * position nothing arrived at, and a walk that was refused is nearer than a row that never came.
+     * order, and this is it with the reasons that are no observation's put after them. First of
+     * those is a number the values came to and this could not work out: every value arrived, which
+     * is nearer an answer than a position holding none. A walk that reached no value comes next for
+     * the same reason the codes are in the order they are: it is further from an answer. The two
+     * that never reached a value to begin with follow it, a step further out again — a position that
+     * was read and holds nothing is nearer a number than a position nothing arrived at, and a walk
+     * that was refused is nearer than a row that never came.
      */
     public static final CanonicalSelection.Order<ReadingGap> READING_GAPS =
             CanonicalSelection.Order.overValues(everyReadingGap());
@@ -240,6 +242,7 @@ public final class PublicationOrders {
         for (Incompleteness.Code code : OBSERVATION_CODES_IN_ORDER) {
             out.add(ReadingGap.of(code));
         }
+        out.add(ReadingGap.COULD_NOT_WORK_OUT);
         out.add(ReadingGap.NO_VALUE);
         out.add(ReadingGap.COULD_NOT_WALK);
         out.add(ReadingGap.COULD_NOT_READ_ROW);

@@ -61,9 +61,10 @@ class EveryReasonAReadingMetIsSaidInItsOwnSentenceTest {
     /**
      * And each word stands over the reasons this decided to put under it.
      *
-     * <p>The decision itself, since nothing else keeps it. A place the walk could not reach and a
-     * row that never came are one word because a reader weighing the document does the same thing
-     * about both; they are apart from a position that was read and holds nothing, which is news
+     * <p>The decision itself, since nothing else keeps it. A place the walk could not reach, a row
+     * that never came and values whose number this could not hold are one word because a reader
+     * weighing the document does the same thing about each; they are apart from a position that
+     * was read and holds nothing, which is news
      * about the model rather than about this compiler's reach. What travels underneath is the
      * reason, so the grouping costs a reader nothing — and it is written here because a grouping
      * nothing states is one the next fold can join without saying so.
@@ -91,7 +92,7 @@ class EveryReasonAReadingMetIsSaidInItsOwnSentenceTest {
                         WeakeningWord.BORDER_VALUE_UNREADABLE, Set.of("Observation"),
                         WeakeningWord.BORDER_VALUE_ABSENT, Set.of("NoValue"),
                         WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE,
-                                Set.of("CouldNotWalk", "CouldNotReadRow")),
+                                Set.of("CouldNotWalk", "CouldNotReadRow", "CouldNotWorkOut")),
                 under,
                 () -> "the words no longer stand over the reasons they were meant to: " + under);
     }
@@ -118,6 +119,7 @@ class EveryReasonAReadingMetIsSaidInItsOwnSentenceTest {
                 case "NoValue" -> out.add(ReadingGap.NO_VALUE);
                 case "CouldNotWalk" -> out.add(ReadingGap.COULD_NOT_WALK);
                 case "CouldNotReadRow" -> out.add(ReadingGap.COULD_NOT_READ_ROW);
+                case "CouldNotWorkOut" -> out.add(ReadingGap.COULD_NOT_WORK_OUT);
                 // A reason added to the type and not to this list. Written as a failure rather than
                 // skipped: a reason nothing here can build is one nothing here is checking.
                 default -> throw new IllegalStateException(

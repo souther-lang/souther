@@ -311,6 +311,9 @@ final class NumericWitness {
             // a number that reaches none of it. Said as the arm it is rather than left to the figure
             // above being false, which is how the same fact was lost at the pair search.
             case WITH_NO_STEP_TO_TAKE -> { }
+            // And a place further out this could not hold. Nothing is recorded for the same reason:
+            // no figure reaches past it, and the empty hand is still not a proof.
+            case AT_A_PLACE_IT_COULD_NOT_HOLD -> { }
         }
         return false;
     }

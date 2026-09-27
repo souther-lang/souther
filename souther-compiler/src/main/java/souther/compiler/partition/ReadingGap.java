@@ -9,7 +9,9 @@ import souther.compiler.observe.RunSensitivity;
  * <p>What is there and was not kept, and what this compiler never got to. A value the observation
  * did not keep whole is a value that is there, named by the code an observation writes; the rest
  * arrived at no value and have no such code. What a reader does about them differs, so all of them
- * travel, and a quantity stopped in more than one way says each.
+ * travel, and a quantity stopped in more than one way says each. A quantity that reads several values
+ * has one more way to stop after all of them arrived: working out the number they come to, which
+ * {@link CouldNotWorkOut} says.
  *
  * <p>Whether a wider run would come to another answer is not what tells them apart. An observation
  * answers it out of the code it carries and the codes do not agree with each other — one a wider
@@ -105,11 +107,31 @@ public sealed interface ReadingGap {
         }
     }
 
+    /**
+     * Every value the quantity reads came back, and the number they come to is one this compiler
+     * could not hold.
+     *
+     * <p>Not {@link NoValue}: the row wrote something at every position, and saying otherwise tells
+     * a reader the row is missing a value it has. And not a reason about the row at all — the
+     * numbers are there, and what stopped is this compiler working out how far apart they stand.
+     */
+    record CouldNotWorkOut() implements ReadingGap {
+
+        /** What was out of reach is the room to hold a number, which no figure a run is allowed
+         *  enlarges. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
+        }
+    }
+
     ReadingGap NO_VALUE = new NoValue();
 
     ReadingGap COULD_NOT_WALK = new CouldNotWalk();
 
     ReadingGap COULD_NOT_READ_ROW = new CouldNotReadRow();
+
+    ReadingGap COULD_NOT_WORK_OUT = new CouldNotWorkOut();
 
     /** The gap an observation's code is, for a reader holding one. */
     static ReadingGap of(Incompleteness.Code code) {

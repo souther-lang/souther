@@ -10,6 +10,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
+import souther.exact.ExactFailure;
 
 import java.util.List;
 import java.util.Map;
@@ -362,8 +363,17 @@ public sealed interface BorderQuantity {
                 return holdsByOrder(where, onAt.value().compareTo(againstAt.value()))
                         ? Stands.YES : Stands.NO;
             }
-            Count apart = Count.number(onAt.value()).minus(Count.number(againstAt.value()));
-            return where.holds(new Level.OfTheQuantity(apart.exactly())) ? Stands.YES : Stands.NO;
+            // The distance is a level of the quantity and is never put on a carrier, so it stays the
+            // exact number it is. Where this cannot hold that number the pair stands somewhere this
+            // did not work out, which is neither at the item nor away from it.
+            ExactRatio apart;
+            try {
+                apart = Count.number(onAt.value()).exactly()
+                        .minus(Count.number(againstAt.value()).exactly());
+            } catch (ExactFailure _) {
+                return Stands.couldNotTell(ReadingGap.COULD_NOT_WORK_OUT);
+            }
+            return where.holds(new Level.OfTheQuantity(apart)) ? Stands.YES : Stands.NO;
         }
 
         /** Whether a pair standing {@code order} round from where they meet is at the item, for a

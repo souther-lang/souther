@@ -3263,6 +3263,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // nothing here found anything out about one.
             case ReadingGap.CouldNotWalk _ -> "the walk to that position could not be taken";
             case ReadingGap.CouldNotReadRow _ -> "no row came back to read there";
+            // The values were there, so nothing is said about the row: what stopped is the number
+            // they come to.
+            case ReadingGap.CouldNotWorkOut _ ->
+                    "the values there come to a number this compiler could not hold";
         };
     }
 
@@ -6580,11 +6584,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case Weakening.BorderValueUnreadable it -> switch (it.why()) {
                 case ReadingGap.Observation _ -> WeakeningWord.BORDER_VALUE_UNREADABLE;
                 case ReadingGap.NoValue _ -> WeakeningWord.BORDER_VALUE_ABSENT;
-                // One word, and the reason underneath keeps which of the two it was. A position
-                // that was read and holds nothing is news about the row; neither of these is, and a
-                // reader weighing the document acts on both the same way.
-                case ReadingGap.CouldNotWalk _, ReadingGap.CouldNotReadRow _ ->
-                        WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE;
+                // One word, and the reason underneath keeps which of them it was. A position that
+                // was read and holds nothing is news about the row; none of these is, and a reader
+                // weighing the document acts on all of them the same way.
+                case ReadingGap.CouldNotWalk _, ReadingGap.CouldNotReadRow _,
+                     ReadingGap.CouldNotWorkOut _ -> WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE;
             };
             // Beside those and not among them: what the readings that were made came to is above,
             // and this is the readings nobody made.

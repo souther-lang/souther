@@ -45,11 +45,12 @@ public enum WeakeningWord {
     BORDER_VALUE_ABSENT,
 
     /**
-     * A row's value at one border was never looked at: the walk to the position could not be taken,
-     * or no row came back to walk.
+     * What a row holds at one border was out of this compiler's reach: the walk to the position
+     * could not be taken, no row came back to walk, or the values came back and the number they come
+     * to was one this compiler could not hold.
      *
-     * <p>One word for the two, because what a reader does about them is the same: both are this
-     * compiler unable to look rather than the model putting a value elsewhere. Which of the two it
+     * <p>One word for them, because what a reader does about them is the same: each is this
+     * compiler unable to look rather than the model putting a value elsewhere. Which of them it
      * was is said by the reading's own reason underneath, and the sentence the document writes is
      * chosen from that; a second word here would be that taxonomy kept in two places, free to drift
      * apart. They part when what a reader does about them parts.
