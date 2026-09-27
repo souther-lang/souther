@@ -151,11 +151,11 @@ public final class Lists {
             return PersistentVector.empty();
         }
         Capacity.span(from, to, Capacity.MOST_ELEMENTS);
-        PersistentVector<Long> out = PersistentVector.empty();
+        PersistentVector.Builder<Long> out = new PersistentVector.Builder<>();
         for (long i = from; ; i++) {
-            out = out.append(i);
+            out.add(i);
             if (i == to) {
-                return out;
+                return out.build();
             }
         }
     }
