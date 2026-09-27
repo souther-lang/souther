@@ -31,7 +31,6 @@ import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -509,23 +508,21 @@ final class Terms {
      * to be written.
      */
     LinearForm<FactSubject> affineOf(Core raw, Denotations at) {
-        AffineForms.Walk<FactSubject, Denotations> outer = affineWalkInForce;
-        // The reading asks this of itself while it reads — the facts an operation states of what it
-        // was given, what a condition compares — and what each name came to is one answer until the
-        // reading that began it is done.
-        AffineForms.Walk<FactSubject, Denotations> mine =
-                outer == null ? new AffineForms.Walk<>() : outer.reentered();
-        affineWalkInForce = mine;
-        try {
-            return AffineForms.formIn(raw, at, affineReading, mine);
-        } finally {
-            affineWalkInForce = outer;
-        }
+        return AffineForms.of(raw, at, affineReading, affineAnswers);
     }
 
-    /** The walk of the affine reading being read, or null when none is: what a question this asks
-     *  of itself is read in. */
-    private AffineForms.Walk<FactSubject, Denotations> affineWalkInForce;
+    /**
+     * What each name the affine reading followed came to, by the value it was given and the
+     * environment it was read in.
+     *
+     * <p>Held for as long as this is, because the reading is this one's and the same question has
+     * the same answer every time it is asked. It is asked again from inside itself — the facts an
+     * operation states of what it was given and what a condition compares are read while a value
+     * is being read — and a value named twice by the value before it, over a chain of them, is read
+     * once for each question rather than once for each way down to it.
+     */
+    private final BindingWalk.Answers<AffineForms.Outcome<FactSubject, Denotations>> affineAnswers =
+            new BindingWalk.Answers<>();
 
     /**
      * The same, saying where the reading stopped where it did, and naming only the atoms
@@ -2769,10 +2766,8 @@ final class Terms {
     static boolean isWritten(Core e, Set<BindingId> written) {
         return switch (Core.withoutStanding(e)) {
             // A temporal is one of the literals the language has (spec
-            // §a-temporal-value-is-written-as-a-literal), so it is written wherever it stands. It
-            // was carried here as a call and answered `false` in this switch's default while
-            // `writtenSyntaxOf` was writing it back out — one value, two answers about whether the
-            // source holds it.
+            // §a-temporal-value-is-written-as-a-literal), so it is written wherever it stands, as
+            // {@link #writtenLiteralOf} writes it back out.
             case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
                  Core.UnitValue _ -> true;
             case Core.Neg n -> isWritten(n.operand(), written);
@@ -2877,15 +2872,17 @@ final class Terms {
     // --- what the two representations share ----------------------------------------------------
 
     /**
-     * {@code e} as the syntax the author would have written for it, for a reader that shows a value
-     * back to a person. A value written out is the same value in either representation, so this is a
-     * rendering and not a second tree — everything computed answers with nothing.
+     * {@code e} as the literal the author would have written for it, or null where it is not one:
+     * a number, a text, a truth, a temporal, a case of an enumeration, and a number negated. What
+     * reads this reads a literal ({@link Carrier#literalOf(Hir.Expr)}), and anything else — a sum, an
+     * operation over values — is computed and answers with nothing.
      *
-     * <p><b>Rendering only.</b> What a value comes to at compile time is
-     * {@link CoreConstantEval}, which reads this tree rather than a copy of it: folding what this
-     * writes out would be following each name by copying its body, once per reference, which is
-     * what makes a name read twice cost twice. A reader that wants the answer and not the syntax
-     * asks {@link #folded}.
+     * <p><b>A literal and nothing wider.</b> Each form has at most one part that is itself read, so
+     * this follows one way down and is as long as the chain of names it follows. Written as a
+     * rendering of any expression it built a tree for a sum of names nobody read, and a value that
+     * names another twice, over a chain of them, is a tree that doubles at each link. What a value
+     * comes to at compile time is {@link CoreConstantEval}'s, and a reader that wants the answer and
+     * not the literal asks {@link #folded}.
      *
      * <p><b>Read where it stands.</b> A helper call is expanded as a binding over the helper's body
      * (spec §invariant-discharge-representation), so a value an author wrote at a call stands under
@@ -2900,23 +2897,8 @@ final class Terms {
      * means: what a name <em>denotes</em> is {@link #inside}'s, and this is the written value's own
      * question.
      */
-    static Hir.Expr writtenSyntaxOf(Core e, Denotations at) {
-        return writtenSyntaxOf(e, at, new BindingsMet());
-    }
-
-    /**
-     * What the bindings met while writing a value back out were given, and what each of those was
-     * written back as ({@link BindingWalk}).
-     *
-     * <p>The second is what keeps the writing as long as the value's bindings and not as long as
-     * they multiply out to. A binding read twice is written back once, and both reads are that one
-     * tree, so the tree that comes back shares its parts: a reader of it that walks it as a tree
-     * walks each shared part once per place it stands. A value written back as nothing is one that
-     * was computed, and is remembered as that.
-     */
-    private static final class BindingsMet {
-        final Map<BindingId, Core> values = new HashMap<>();
-        final BindingWalk<Optional<Hir.Expr>> written = new BindingWalk<>();
+    static Hir.Expr writtenLiteralOf(Core e, Denotations at) {
+        return writtenLiteralOf(e, at, new HashMap<>());
     }
 
     /**
@@ -2938,14 +2920,7 @@ final class Terms {
                 ApplicationDerivationCause.ApplicationWrittenBack::new);
     }
 
-    /** What a binding was given, written back once however many places read the binding. */
-    private static Hir.Expr writtenBinding(BindingId binding, Core given, Denotations at,
-                                           BindingsMet met) {
-        return met.written.readingOf(binding,
-                () -> Optional.ofNullable(writtenSyntaxOf(given, at, met))).orElse(null);
-    }
-
-    private static Hir.Expr writtenSyntaxOf(Core e, Denotations at, BindingsMet given) {
+    private static Hir.Expr writtenLiteralOf(Core e, Denotations at, Map<BindingId, Core> given) {
         // Written over nothing, every one of them. A value rendered back out of what was computed is
         // the value and not the characters any of it came from: the fold has already been over them,
         // and what it arrived at may be a number no line of the file spells.
@@ -2953,42 +2928,39 @@ final class Terms {
             // A binding is the value its body is, with the binder standing for what it was given.
             case Core.LetIn li -> {
                 BindingId binder = li.binder().binding();
-                given.values.put(binder, li.value());
-                Hir.Expr result = writtenSyntaxOf(li.body(), at, given);
-                given.values.remove(binder);
+                given.put(binder, li.value());
+                Hir.Expr result = writtenLiteralOf(li.body(), at, given);
+                given.remove(binder);
                 yield result;
             }
             // And a name whose binding the clause's shape already consumed stands for what the
             // environment says it was given — which is the same rule, asked where the binding is no
             // longer in the tree ({@link ClauseExpr.Scoped}).
-            case Core.Read r when given.values.containsKey(r.binding()) ->
-                    writtenBinding(r.binding(), given.values.get(r.binding()), at, given);
+            case Core.Read r when given.containsKey(r.binding()) ->
+                    writtenLiteralOf(given.get(r.binding()), at, given);
             case Core.Read r when at.valueOf(r.binding()) != null ->
-                    writtenBinding(r.binding(), at.valueOf(r.binding()), at, given);
+                    writtenLiteralOf(at.valueOf(r.binding()), at, given);
             case Core.Int i -> new Hir.IntLit(i.value(), i.pos(), null);
             case Core.Decimal d -> new Hir.DecimalLit(d.value(), d.pos(), null);
             case Core.Str s -> new Hir.StringLit(s.value(), s.pos(), null);
             case Core.Bool b -> new Hir.BoolLit(b.value(), b.pos(), null);
             case Core.Neg n -> {
-                Hir.Expr operand = writtenSyntaxOf(n.operand(), at, given);
+                Hir.Expr operand = writtenLiteralOf(n.operand(), at, given);
                 yield operand == null ? null : new Hir.Neg(operand, n.pos(), null);
             }
-            case Core.Binary b -> {
-                Hir.Expr left = writtenSyntaxOf(b.left(), at, given);
-                Hir.Expr right = writtenSyntaxOf(b.right(), at, given);
-                yield left == null || right == null ? null
-                        : new Hir.Binary(b.op(), left, right, b.origin(), b.pos(), null);
-            }
-            case Core.PreservedCall call -> {
-                List<Hir.Expr> args = written(call.args(), at, given);
+            // A construction the library writes over one text is how a temporal is written where
+            // the representation keeps the call standing, and its text is its one part.
+            case Core.PreservedCall call when call.args().size() == 1 -> {
+                Hir.Expr text = writtenLiteralOf(call.args().getFirst(), at, given);
                 // The operation is named again here because the name the author wrote is gone by
                 // now, and the application they wrote is what made that necessary. Both occurrences
                 // are this writing's, and each is said by what it stands for.
-                yield args == null ? null
+                yield !(text instanceof Hir.StringLit) ? null
                         : Hir.Apply.synthetic(call.operation().name(), reachOf(call.operation()),
                                 ReferenceOrigin.composedOutOf(call.reference(), 0,
                                         ReferenceDerivationCause.ReferenceWrittenBack::new),
-                                writtenBackFrom(call.application()), args, call.pos(), null);
+                                writtenBackFrom(call.application()), List.of(text), call.pos(),
+                                null);
             }
             // A temporal is written as a literal with its text spelled out (spec
             // §a-temporal-value-is-written-as-a-literal). Rendered here for the same reason every
@@ -3020,20 +2992,6 @@ final class Terms {
             }
             case null, default -> null;
         };
-    }
-
-    /** Every argument as it was written, or null where any of them was computed. */
-    private static List<Hir.Expr> written(List<Core> args, Denotations at,
-                                          BindingsMet given) {
-        List<Hir.Expr> out = new ArrayList<>();
-        for (Core arg : args) {
-            Hir.Expr each = writtenSyntaxOf(arg, at, given);
-            if (each == null) {
-                return null;
-            }
-            out.add(each);
-        }
-        return out;
     }
 
     // --- helpers -------------------------------------------------------------------------------

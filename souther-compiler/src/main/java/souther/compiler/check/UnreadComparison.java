@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -320,6 +321,12 @@ public final class UnreadComparison {
 
     /** Whether what a reading stopped at is a value an operation made of a position. */
     private static <K> boolean madeByAnOperation(ValueOrigin<K> stoppedAt) {
+        return stoppedAt.answered(UnreadComparison::madeByAnOperation);
+    }
+
+    /** The same of {@code stoppedAt}, given what each of its parts came to. */
+    private static <K> boolean madeByAnOperation(ValueOrigin<K> stoppedAt,
+                                                 Function<ValueOrigin<K>, Boolean> part) {
         return switch (stoppedAt) {
             case ValueOrigin.Applied<K> _, ValueOrigin.MadeFromAPosition<K> _ -> true;
             // Arithmetic the terms do not take apart — unless what is under it came from a
@@ -337,17 +344,18 @@ public final class UnreadComparison {
             // a choice is a position's own values or a literal, that promise is false and what an
             // author is owed is the other word. What decided the choice is not asked: an operation
             // over the test made none of the values the rule is about.
-            case ValueOrigin.OneOf<K> choice -> everyOneMadeByAnOperation(choice.alternatives());
+            case ValueOrigin.OneOf<K> choice -> everyOne(choice.alternatives(), part);
             case ValueOrigin.IsAPosition<K> _, ValueOrigin.Written<K> _,
                  ValueOrigin.Unnameable<K> _, ValueOrigin.NoValue<K> _ -> false;
         };
     }
 
     /** Whether every value in {@code of} is one an operation made of a position. Stops at the
-     *  first that is not, each answer being a walk of whatever stands under it. */
-    private static <K> boolean everyOneMadeByAnOperation(List<ValueOrigin<K>> of) {
+     *  first that is not. */
+    private static <K> boolean everyOne(List<ValueOrigin<K>> of,
+                                        Function<ValueOrigin<K>, Boolean> part) {
         for (ValueOrigin<K> each : of) {
-            if (!madeByAnOperation(each)) {
+            if (!part.apply(each)) {
                 return false;
             }
         }

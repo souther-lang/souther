@@ -100,9 +100,8 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
     private static final Told REWRITTEN_WHERE_IT_NOW_STANDS =
             Told.takingA(NEW_DATA, "with", 2, SourcePos.class);
 
-    private static final Told WRITTEN_UNDER_THE_BINDINGS_IN_FORCE = Told.takingWhatIsCalled(
-            "souther/compiler/check/Terms", "writtenSyntaxOf", 2,
-            "souther/compiler/check/Terms$BindingsMet");
+    private static final Told WRITTEN_UNDER_THE_BINDINGS_IN_FORCE =
+            Told.takingA("souther/compiler/check/Terms", "writtenLiteralOf", 2, Map.class);
 
     private static final List<Told> TOLD_APART = List.of(SYNTHETIC_OF_AN_EXPRESSION,
             SYNTHETIC_OF_A_SPELLING, REPLACED_BY_AN_APPLICATION, READ_UNDER_WHAT_IS_IN_FORCE,

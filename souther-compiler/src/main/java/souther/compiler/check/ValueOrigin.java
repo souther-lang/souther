@@ -13,7 +13,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
+import java.util.function.Function;
 import java.util.Set;
 
 /**
@@ -37,37 +37,95 @@ import java.util.Set;
  */
 public sealed interface ValueOrigin<K> {
 
-    /** Every position this names, however deeply, in the order the reader met them. */
-    default Set<K> positions() {
-        // A part with nothing under it has nothing to share, so it is asked without a table.
-        return switch (this) {
-            case IsAPosition<K> it -> Set.of(it.at());
-            case NoValue<K> _, Written<K> _, MadeFromAPosition<K> _, Unnameable<K> _ -> Set.of();
-            default -> positionsIn(new IdentityHashMap<>());
-        };
+    /**
+     * What {@code answering} makes of this, asking it of each part once however many places reach
+     * that part.
+     *
+     * <p>The one way to read what an origin is made of. A name read in several places is one origin
+     * standing in several places ({@link #of(Core, Object, Reading)}), so a value in which each link
+     * names the one before it twice is a graph as long as the source wrote it and a tree that doubles
+     * at each link. A reader that walks it by recursing into the parts walks the tree; one that goes
+     * through this reads the graph. Parts are held by identity and not by equality: equality of two
+     * origins is a walk of both, which is the cost this is here to spare.
+     *
+     * @param answering what an origin comes to, given what each of its parts came to
+     */
+    default <R> R answered(Answering<K, R> answering) {
+        return new Answers<>(answering).of(this);
     }
 
     /**
-     * The same, given what has already been asked of the parts met so far.
+     * What one origin comes to, given what its parts came to.
      *
-     * <p>A name read in several places is one origin standing in several places
-     * ({@link #of(Core, Object, Reading)}), so a value in which each link names the one before it
-     * twice is a chain as long as the source wrote it and a tree that doubles at each link. Asked of
-     * each part once, the walk is as long as the chain. Held by identity and not by equality:
-     * equality of two origins is a walk of both, which is the cost this is here to spare.
+     * @param <K> what the caller calls a position
+     * @param <R> what the reading answers
      */
-    Set<K> positionsIn(Map<ValueOrigin<K>, Set<K>> met);
+    @FunctionalInterface
+    interface Answering<K, R> {
+
+        /**
+         * @param origin the origin being answered
+         * @param part   what each of its parts came to, asked of a part and answered once for it
+         */
+        R of(ValueOrigin<K> origin, Function<ValueOrigin<K>, R> part);
+    }
+
+    /** One reading of one origin, holding what each part came to. */
+    final class Answers<K, R> {
+
+        private final Answering<K, R> answering;
+        private final Map<ValueOrigin<K>, R> answered = new IdentityHashMap<>();
+
+        private Answers(Answering<K, R> answering) {
+            this.answering = answering;
+        }
+
+        private R of(ValueOrigin<K> origin) {
+            if (answered.containsKey(origin)) {
+                return answered.get(origin);
+            }
+            R came = answering.of(origin, this::of);
+            answered.put(origin, came);
+            return came;
+        }
+    }
+
+    /** Every position this names, however deeply, in the order the reader met them. */
+    default Set<K> positions() {
+        return answered(ValueOrigin::positionsOf);
+    }
+
+    private static <K> Set<K> positionsOf(ValueOrigin<K> origin,
+                                          Function<ValueOrigin<K>, Set<K>> part) {
+        return switch (origin) {
+            case IsAPosition<K> it -> Set.of(it.at());
+            case Applied<K> it -> across(it.arguments(), part);
+            case Composed<K> it -> across(it.parts(), part);
+            case Constructed<K> it -> across(it.fields().values(), part);
+            case OneOf<K> it -> {
+                Set<K> out = new LinkedHashSet<>(across(it.decidedBy(), part));
+                out.addAll(across(it.alternatives(), part));
+                yield Collections.unmodifiableSet(out);
+            }
+            case NoValue<K> _, Written<K> _, MadeFromAPosition<K> _, Unnameable<K> _ -> Set.of();
+        };
+    }
+
+    /** What every part in {@code of} came to, together, in the order they were met. */
+    private static <K> Set<K> across(Collection<ValueOrigin<K>> of,
+                                     Function<ValueOrigin<K>, Set<K>> part) {
+        Set<K> out = new LinkedHashSet<>();
+        for (ValueOrigin<K> each : of) {
+            out.addAll(part.apply(each));
+        }
+        return Collections.unmodifiableSet(out);
+    }
 
     /** The expression is the position itself, or a number taken of it. */
     record IsAPosition<K>(K at) implements ValueOrigin<K> {
 
         public IsAPosition {
             Objects.requireNonNull(at, "this one names the position it is");
-        }
-
-        @Override
-        public Set<K> positionsIn(Map<ValueOrigin<K>, Set<K>> met) {
-            return Set.of(at);
         }
     }
 
@@ -85,11 +143,6 @@ public sealed interface ValueOrigin<K> {
         public Applied {
             Objects.requireNonNull(operation, "an application names its operation");
             arguments = List.copyOf(arguments);
-        }
-
-        @Override
-        public Set<K> positionsIn(Map<ValueOrigin<K>, Set<K>> met) {
-            return across(arguments, met);
         }
     }
 
@@ -110,11 +163,6 @@ public sealed interface ValueOrigin<K> {
                 // value written out or one this reader cannot name, and both of those say so.
                 throw new IllegalArgumentException("an expression composed of nothing is a leaf");
             }
-        }
-
-        @Override
-        public Set<K> positionsIn(Map<ValueOrigin<K>, Set<K>> met) {
-            return across(parts, met);
         }
     }
 
@@ -141,11 +189,6 @@ public sealed interface ValueOrigin<K> {
                 // what such a value says of itself.
                 throw new IllegalArgumentException("a construction given nothing is a leaf");
             }
-        }
-
-        @Override
-        public Set<K> positionsIn(Map<ValueOrigin<K>, Set<K>> met) {
-            return across(fields.values(), met);
         }
     }
 
@@ -185,18 +228,6 @@ public sealed interface ValueOrigin<K> {
                 }
             }
         }
-
-        @Override
-        public Set<K> positionsIn(Map<ValueOrigin<K>, Set<K>> met) {
-            Set<K> out = new LinkedHashSet<>();
-            for (ValueOrigin<K> each : decidedBy) {
-                out.addAll(positionsOf(each, met));
-            }
-            for (ValueOrigin<K> each : alternatives) {
-                out.addAll(positionsOf(each, met));
-            }
-            return Collections.unmodifiableSet(out);
-        }
     }
 
     /**
@@ -208,22 +239,10 @@ public sealed interface ValueOrigin<K> {
      * whole was made from, whether every value it may be was made by an operation. Both of those
      * are questions about the values, and this is the absence of one.
      */
-    record NoValue<K>() implements ValueOrigin<K> {
-
-        @Override
-        public Set<K> positionsIn(Map<ValueOrigin<K>, Set<K>> met) {
-            return Set.of();
-        }
-    }
+    record NoValue<K>() implements ValueOrigin<K> {}
 
     /** A value written out where it stands. */
-    record Written<K>() implements ValueOrigin<K> {
-
-        @Override
-        public Set<K> positionsIn(Map<ValueOrigin<K>, Set<K>> met) {
-            return Set.of();
-        }
-    }
+    record Written<K>() implements ValueOrigin<K> {}
 
     /**
      * A value that came from a position without being one: an element an operation handed out, and
@@ -238,84 +257,38 @@ public sealed interface ValueOrigin<K> {
         public MadeFromAPosition {
             Objects.requireNonNull(at, "this one names where the value came from");
         }
-
-        @Override
-        public Set<K> positionsIn(Map<ValueOrigin<K>, Set<K>> met) {
-            return Set.of();
-        }
     }
 
     /** Nothing this reader can say about it. */
-    record Unnameable<K>() implements ValueOrigin<K> {
-
-        @Override
-        public Set<K> positionsIn(Map<ValueOrigin<K>, Set<K>> met) {
-            return Set.of();
-        }
-    }
-
-    /** The positions {@code part} names, asked of it the first time it is met and no other. */
-    private static <K> Set<K> positionsOf(ValueOrigin<K> part, Map<ValueOrigin<K>, Set<K>> met) {
-        Set<K> known = met.get(part);
-        if (known == null) {
-            known = part.positionsIn(met);
-            met.put(part, known);
-        }
-        return known;
-    }
-
-    /** The positions everything in {@code of} names, in the order they were met. */
-    private static <K> Set<K> across(Collection<ValueOrigin<K>> of, Map<ValueOrigin<K>, Set<K>> met) {
-        Set<K> out = new LinkedHashSet<>();
-        for (ValueOrigin<K> each : of) {
-            out.addAll(positionsOf(each, met));
-        }
-        return Collections.unmodifiableSet(out);
-    }
+    record Unnameable<K>() implements ValueOrigin<K> {}
 
     /** The position this is made from where it is made from one and names none, or null. Asked of
      *  the whole rather than of a part: a value made from a position is one value however many
      *  operations stand over it. */
     default K madeFrom() {
-        return switch (this) {
-            case MadeFromAPosition<K> from -> from.at();
-            case IsAPosition<K> _, Written<K> _, Unnameable<K> _, NoValue<K> _ -> null;
-            default -> madeFromIn(this, new IdentityHashMap<>());
-        };
+        return answered(ValueOrigin::madeFromOf);
     }
 
-    /** What {@code part} is made from, asked of it the first time it is met and no other
-     *  ({@link #positionsIn}). */
-    private static <K> K madeFromOf(ValueOrigin<K> part, Map<ValueOrigin<K>, Optional<K>> met) {
-        Optional<K> known = met.get(part);
-        if (known == null) {
-            known = Optional.ofNullable(madeFromIn(part, met));
-            met.put(part, known);
-        }
-        return known.orElse(null);
-    }
-
-    private static <K> K madeFromIn(ValueOrigin<K> origin, Map<ValueOrigin<K>, Optional<K>> met) {
+    private static <K> K madeFromOf(ValueOrigin<K> origin, Function<ValueOrigin<K>, K> part) {
         return switch (origin) {
             case MadeFromAPosition<K> from -> from.at();
-            case Applied<K> applied -> firstMadeFrom(applied.arguments(), met);
-            case Composed<K> composed -> firstMadeFrom(composed.parts(), met);
-            case Constructed<K> built -> firstMadeFrom(built.fields().values(), met);
+            case Applied<K> applied -> firstMadeFrom(applied.arguments(), part);
+            case Composed<K> composed -> firstMadeFrom(composed.parts(), part);
+            case Constructed<K> built -> firstMadeFrom(built.fields().values(), part);
             // Only where every value it could be came from the one position, since the value is
             // one of them and nothing here says which. What decided it is not asked: a choice made
             // on what stands at a position is not a value made from it.
-            case OneOf<K> choice -> sameMadeFrom(choice.alternatives(), met);
+            case OneOf<K> choice -> sameMadeFrom(choice.alternatives(), part);
             case IsAPosition<K> _, Written<K> _, Unnameable<K> _, NoValue<K> _ -> null;
         };
     }
 
     /** The one position everything in {@code of} is made from, or null where they differ or any of
      *  them is made from none. */
-    private static <K> K sameMadeFrom(List<ValueOrigin<K>> of,
-                                      Map<ValueOrigin<K>, Optional<K>> met) {
+    private static <K> K sameMadeFrom(List<ValueOrigin<K>> of, Function<ValueOrigin<K>, K> part) {
         K agreed = null;
         for (ValueOrigin<K> each : of) {
-            K from = madeFromOf(each, met);
+            K from = part.apply(each);
             if (from == null || (agreed != null && !agreed.equals(from))) {
                 return null;
             }
@@ -325,9 +298,9 @@ public sealed interface ValueOrigin<K> {
     }
 
     private static <K> K firstMadeFrom(Collection<ValueOrigin<K>> of,
-                                       Map<ValueOrigin<K>, Optional<K>> met) {
+                                       Function<ValueOrigin<K>, K> part) {
         for (ValueOrigin<K> each : of) {
-            K from = madeFromOf(each, met);
+            K from = part.apply(each);
             if (from != null) {
                 return from;
             }
@@ -419,8 +392,8 @@ public sealed interface ValueOrigin<K> {
         if (e instanceof Core.Read read) {
             AffineForms.ReadThrough<E> through = reading.readThrough(read, at);
             if (through != null && following.enter(read.binding())) {
-                ValueOrigin<K> inside = following.readingOf(read.binding(),
-                        () -> of(through.value(), through.at(), reading, following));
+                ValueOrigin<K> inside = following.readingOf(read.binding(), through.value(),
+                        through.at(), () -> of(through.value(), through.at(), reading, following));
                 following.leave(read.binding());
                 return inside;
             }

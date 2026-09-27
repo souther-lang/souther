@@ -195,28 +195,27 @@ public final class AffineForms {
     }
 
     /**
-     * {@link #of(Core, Object, Reading)} inside the walk {@code walk} began, for a reading that is
-     * asked something of its own while it reads: the fact an operation states of its arguments, what
-     * a condition compares. What each name came to is one answer for as long as the reading is in
-     * progress, however many times it is asked from inside itself.
+     * {@link #of(Core, Object, Reading)}, holding what each name came to in {@code answered}, which
+     * the caller keeps for as long as it reads with {@code reading}.
+     *
+     * <p>For a reading that asks itself something while it reads — the fact an operation states of
+     * its arguments, what a condition compares — so that a value it is part way through reading is
+     * read once and not once per question. What is held is keyed by the value and the environment
+     * it is read in ({@link BindingWalk}), so an answer is taken again only for the same question.
      */
-    static <A, E> LinearForm<A> formIn(Core raw, E at, Reading<A, E> reading, Walk<A, E> walk) {
-        return of(raw, at, reading, walk) instanceof Outcome.Composed<A, E> composed
+    static <A, E> LinearForm<A> of(Core raw, E at, Reading<A, E> reading,
+                                   BindingWalk.Answers<Outcome<A, E>> answered) {
+        return of(raw, at, reading, new Walk<>(answered)) instanceof Outcome.Composed<A, E> composed
                 ? composed.form() : null;
     }
 
     /** One walk of one expression, reading each name it meets once ({@link BindingWalk}). */
-    static final class Walk<A, E> extends BindingWalk<Outcome<A, E>> {
+    private static final class Walk<A, E> extends BindingWalk<Outcome<A, E>> {
 
         Walk() {}
 
-        private Walk(Walk<A, E> reading) {
-            super(reading);
-        }
-
-        /** A walk for a question the reading asks itself in the middle of this one. */
-        Walk<A, E> reentered() {
-            return new Walk<>(this);
+        Walk(BindingWalk.Answers<Outcome<A, E>> answered) {
+            super(answered);
         }
     }
 
@@ -368,10 +367,10 @@ public final class AffineForms {
             if (through.value() == e || !following.enter(r.binding())) {
                 return null;
             }
-            // Asked once per binding. What a name comes to is the value it was given read in the
+            // Asked once per question. What a name comes to is the value it was given read in the
             // environment it was given in, and a second occurrence of the name is that same
             // question — so the walk holds the answer rather than composing the value again.
-            Outcome<A, E> form = following.readingOf(r.binding(),
+            Outcome<A, E> form = following.readingOf(r.binding(), through.value(), through.at(),
                     () -> of(through.value(), through.at(), reading, following));
             following.leave(r.binding());
             return form;

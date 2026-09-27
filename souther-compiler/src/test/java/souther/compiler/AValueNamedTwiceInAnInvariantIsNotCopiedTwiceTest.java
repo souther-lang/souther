@@ -1,11 +1,14 @@
 package souther.compiler;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.diag.CompileException;
 
 import java.time.Duration;
 import java.util.function.UnaryOperator;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 /**
@@ -64,6 +67,34 @@ class AValueNamedTwiceInAnInvariantIsNotCopiedTwiceTest {
     void aHelperThatNamesTheChainIsCompiled() {
         compilesAtTheCostOfTheSource(doublingChain(30)
                 + "\nlet h (n: Int) = n + c30\nbehavior f : (n: Int) -> Int\nlet f (n) = h(n)\n");
+    }
+
+    /**
+     * A value built once for the clause holds what its body wrote, and a newtype's {@code T(v)}
+     * written there is the construction it means wherever the clause is read — so a clause that
+     * reaches one through a value is refused as one that constructs, as it is where it writes it.
+     */
+    @Test
+    void aValueTheClauseHoldsIsReadAsTheConstructionItsBodyWrites() {
+        String source = """
+                module m exposing ( D, f )
+
+                data Cap = Int
+                    invariant value > 0
+
+                let cap = Cap(10)
+
+                data D = Int
+                    invariant value < cap.value && value > 0 - cap.value
+
+                behavior f : (n: Int) -> Int
+                    constructs D
+                let f (n) = if D(n) as d then 1 else 0
+                """;
+
+        CompileException refused = assertThrows(CompileException.class,
+                () -> Compiler.compile(source));
+        assertEquals("E1105", refused.diagnostic().code(), refused.getMessage());
     }
 
     /** A parameter the author left untyped is one the helper's body is read to settle. */
