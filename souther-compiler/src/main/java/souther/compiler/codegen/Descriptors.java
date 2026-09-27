@@ -329,7 +329,13 @@ final class Descriptors {
     /** {@code Strings.admit(String):String} and {@code Strings.admitted(String):String}, text let
      *  into the domain, lifted into a {@code Function} at the call site that reaches for one. */
     static final MethodTypeDesc MTD_admit = MethodTypeDesc.of(CD_String, CD_String);
-    static final ClassDesc CD_Objects = ClassDesc.of("java.util.Objects");
+    /** What asking whether text is a {@code String} answers, and the three questions a decoder asks
+     *  of it: {@code Strings.admission}, {@code isText} / {@code hasPlace}, {@code textOf}. */
+    static final ClassDesc CD_TextAdmission = ClassDesc.of("souther.runtime.TextAdmission");
+    static final MethodTypeDesc MTD_admission = MethodTypeDesc.of(CD_TextAdmission, CD_String);
+    static final MethodTypeDesc MTD_admissionTest =
+            MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_TextAdmission);
+    static final MethodTypeDesc MTD_admissionText = MethodTypeDesc.of(CD_String, CD_TextAdmission);
     /** {@code StringDecoder.from(Decoder<I,String>)} — wraps a plain string-producing decoder back
      *  into a {@link CD_StringDecoder} so the fluent constraint methods after it (following
      *  {@code Strings.admitted}, not {@code StringDecoder.normalize()}) still resolve. */

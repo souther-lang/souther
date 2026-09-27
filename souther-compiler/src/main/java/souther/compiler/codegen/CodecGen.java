@@ -138,9 +138,11 @@ final class CodecGen {
      * any one shape, and the first attempt at it — normalizing where each caller happened to build a
      * leaf — left four paths behind, each found separately and after the fact.
      *
-     * <p>{@code Strings::admitted} is lifted through {@code Decoder.map}: it answers the NFC form, or
-     * null where the text holds half of a surrogate pair. The null is refused at the leaf's path
-     * ({@link TextRule}) rather than thrown, since a decoder reports what it could not read. Not
+     * <p>{@code Strings::admission} is lifted through {@code Decoder.map}: it answers the NFC form
+     * as an {@code Admitted}, or says why the text is not a {@code String} — it holds half of a
+     * surrogate pair, or its canonical value is longer than a {@code String} holds. Each refusal is
+     * reported at the leaf's path ({@link TextRule}) rather than thrown, since a decoder reports what
+     * it could not read; both are Raoh's {@code invalid_format}, with a message apiece. Not
      * {@code StringDecoder.normalize()}, which is Raoh's call into {@code java.text.Normalizer} and
      * answers for whatever Unicode version this JDK shipped with. {@code StringDecoder.from} wraps
      * the result back into a {@link CD_StringDecoder} so a constraint chained after this (a length
@@ -152,29 +154,42 @@ final class CodecGen {
      */
     private void emitStringLeaf(CodeBuilder code, ClassDesc leafOwner) {
         code.invokestatic(leafOwner, "string", MTD_leafString);
-        code.invokedynamic(STRINGS_ADMITTED);
+        code.invokedynamic(STRINGS_ADMISSION);
         code.invokeinterface(CD_RDecoder, "map", MTD_Rdecoder_map);
-        code.invokedynamic(NON_NULL);
+        code.invokedynamic(IS_TEXT);
         code.loadConstant(TextRule.REFUSED);
         code.loadConstant(TextRule.HALF_A_PAIR);
         code.invokeinterface(CD_RDecoder, "refine", MTD_Rrefine_message);
+        code.invokedynamic(HAS_PLACE);
+        code.loadConstant(TextRule.REFUSED);
+        code.loadConstant(TextRule.NO_PLACE);
+        code.invokeinterface(CD_RDecoder, "refine", MTD_Rrefine_message);
+        code.invokedynamic(TEXT_OF);
+        code.invokeinterface(CD_RDecoder, "map", MTD_Rdecoder_map);
         code.invokestatic(CD_StringDecoder, "from", MTD_stringDecoderFrom);
     }
 
-    /** {@code Strings::admitted} as a {@code Function}, for the string leaf above. */
-    private static final DynamicCallSiteDesc STRINGS_ADMITTED = Lambdas.callSite(
-            Lambdas.Sam.FUNCTION,
-            MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, CD_Strings,
-                    "admitted", MTD_admit),
-            MTD_admit);
+    /** {@code Strings::admission} as a {@code Function}, for the string leaf above. */
+    private static final DynamicCallSiteDesc STRINGS_ADMISSION = Lambdas.callSite(
+            Lambdas.Sam.FUNCTION, stringsMethod("admission", MTD_admission), MTD_admission);
 
-    /** {@code Objects::nonNull} as a {@code Predicate}: whether {@code Strings::admitted} let the
-     *  text in. */
-    private static final DynamicCallSiteDesc NON_NULL = Lambdas.callSite(
-            Lambdas.Sam.PREDICATE,
-            MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, CD_Objects,
-                    "nonNull", MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object)),
-            MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));
+    /** {@code Strings::isText} as a {@code Predicate}: whether the text is a sequence of scalar
+     *  values. */
+    private static final DynamicCallSiteDesc IS_TEXT = Lambdas.callSite(
+            Lambdas.Sam.PREDICATE, stringsMethod("isText", MTD_admissionTest), MTD_admissionTest);
+
+    /** {@code Strings::hasPlace} as a {@code Predicate}: whether what is text is short enough to be
+     *  a {@code String}. */
+    private static final DynamicCallSiteDesc HAS_PLACE = Lambdas.callSite(
+            Lambdas.Sam.PREDICATE, stringsMethod("hasPlace", MTD_admissionTest), MTD_admissionTest);
+
+    /** {@code Strings::textOf} as a {@code Function}: the text of what both refusals let through. */
+    private static final DynamicCallSiteDesc TEXT_OF = Lambdas.callSite(
+            Lambdas.Sam.FUNCTION, stringsMethod("textOf", MTD_admissionText), MTD_admissionText);
+
+    private static DirectMethodHandleDesc stringsMethod(String name, MethodTypeDesc type) {
+        return MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, CD_Strings, name, type);
+    }
 
 
     /**

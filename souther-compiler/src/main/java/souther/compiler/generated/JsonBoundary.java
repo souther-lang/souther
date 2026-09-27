@@ -34,7 +34,6 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * A value crossing between JSON and the classes this compilation generated.
@@ -143,16 +142,19 @@ public final class JsonBoundary {
     /**
      * Text as it arrives, let in: what the generated string leaf does, in Java.
      *
-     * <p>{@link Strings#admitted} decides it — Unicode 18.0.0's NFC, or null where the text holds
-     * half of a surrogate pair — and the null is refused at the path the way the generated leaf
-     * refuses it ({@link TextRule}). Not {@code StringDecoder.normalize()}, which answers for
+     * <p>{@link Strings#admission} decides it — Unicode 18.0.0's NFC, or why the text is not a
+     * {@code String}: it holds half of a surrogate pair, or its canonical value is longer than a
+     * {@code String} holds — and each refusal is reported at the path the way the generated leaf
+     * reports it ({@link TextRule}). Not {@code StringDecoder.normalize()}, which answers for
      * whatever Unicode version this JDK's own {@code java.text.Normalizer} carries.
      * {@link StringDecoder#from} keeps the result a {@link StringDecoder}, so {@link #temporal} can
      * still chain {@code .date()} etc. on it.
      */
     private static <I> StringDecoder<I> admitted(StringDecoder<I> text) {
-        return StringDecoder.from(text.map(Strings::admitted)
-                .refine(Objects::nonNull, TextRule.REFUSED, TextRule.HALF_A_PAIR));
+        return StringDecoder.from(text.map(Strings::admission)
+                .refine(Strings::isText, TextRule.REFUSED, TextRule.HALF_A_PAIR)
+                .refine(Strings::hasPlace, TextRule.REFUSED, TextRule.NO_PLACE)
+                .map(Strings::textOf));
     }
 
     /**

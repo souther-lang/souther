@@ -89,20 +89,61 @@ public final class Strings {
      *
      * <p>Refused and not repaired. Replacing half a pair with U+FFFD would make text that held one
      * and text that held U+FFFD itself one value, which is the loss a key collision is refused for.
+     *
+     * <p>A {@code String} holds no more than {@link #LONGEST_TEXT} UTF-16 units, so text whose
+     * canonical value is longer has no place and is refused too. It is the canonical value that is
+     * measured, since that is the {@code String} the text would be; how long the text arrived is not a
+     * property of any {@code String}. Canonicalizing is itself bounded, so a text that cannot be one
+     * is not built out to find that out.
      */
-    public static @Nullable String admitted(String text) {
-        return halfAPairAt(text) < 0 ? Normalization.nfc(text) : null;
+    public static TextAdmission admission(String text) {
+        return admission(text, LONGEST_TEXT);
     }
 
-    /** {@link #admitted}, aborting where the text is not a sequence of scalar values: what a
-     *  crossing from Java answers, where the host handed over something that is not text. */
-    public static String admit(String text) {
-        String admitted = admitted(text);
-        if (admitted == null) {
-            throw new ConstraintViolation("text crossing into the domain holds half of a surrogate"
-                    + " pair at UTF-16 index " + halfAPairAt(text) + ", which is not a character");
+    /** {@link #admission} for a carrier that holds {@code longest} UTF-16 units: the bound is the
+     *  carrier's, and this is what a test that cannot build text that long asks of it. */
+    static TextAdmission admission(String text, long longest) {
+        int half = halfAPairAt(text);
+        if (half >= 0) {
+            return new TextAdmission.NotText(half);
         }
-        return admitted;
+        String canonical = Normalization.nfcWithin(text, longest);
+        return canonical == null
+                ? new TextAdmission.NoPlace() : new TextAdmission.Admitted(canonical);
+    }
+
+    /** {@link #admission}, answering the text where it is a {@code String} and null where it is not:
+     *  for a door that says no the same way whichever refusal it was. */
+    public static @Nullable String admitted(String text) {
+        return admission(text) instanceof TextAdmission.Admitted a ? a.text() : null;
+    }
+
+    /** {@link #admission}, aborting where the text is not one: what a crossing from Java answers,
+     *  where the host handed over something that is not text, or text that has no place. */
+    public static String admit(String text) {
+        return switch (admission(text)) {
+            case TextAdmission.Admitted a -> a.text();
+            case TextAdmission.NotText n -> throw new ConstraintViolation(
+                    "text crossing into the domain holds half of a surrogate pair at UTF-16 index "
+                            + n.at() + ", which is not a character");
+            case TextAdmission.NoPlace _ -> throw new ConstraintViolation(
+                    "text crossing into the domain is longer than a String holds once canonicalized");
+        };
+    }
+
+    /** Whether {@code admission} is not {@link TextAdmission.NotText}: a decoder's first refusal. */
+    public static boolean isText(TextAdmission admission) {
+        return !(admission instanceof TextAdmission.NotText);
+    }
+
+    /** Whether {@code admission} is not {@link TextAdmission.NoPlace}: a decoder's second refusal. */
+    public static boolean hasPlace(TextAdmission admission) {
+        return !(admission instanceof TextAdmission.NoPlace);
+    }
+
+    /** The text of an {@link TextAdmission.Admitted}, once a decoder has refused the others. */
+    public static String textOf(TextAdmission admission) {
+        return ((TextAdmission.Admitted) admission).text();
     }
 
     /** Where {@code text} holds a surrogate that is not one half of a pair beside the other, or -1

@@ -156,6 +156,15 @@ public sealed interface ParseMessage extends Message {
     record AStringLiteralHoldsHalfASurrogatePair() implements ParseMessage, Reported {}
 
     /**
+     * A literal whose canonical value is longer than a {@code String} holds.
+     *
+     * <p>Text from any door has to have a place as a {@code String}, and a literal is one of the
+     * doors.
+     */
+    @Code(DiagnosticCode.E2305)
+    record AStringLiteralIsLongerThanAStringHolds() implements ParseMessage, Reported {}
+
+    /**
      * A backslash written before something the language does not read as an escape.
      *
      * <p>Refused rather than read as the character alone: dropping the backslash would take a

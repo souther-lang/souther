@@ -46,6 +46,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import souther.runtime.Strings;
+import souther.runtime.TextAdmission;
 
 /**
  * Builds the compiler's {@link Ast} from a concrete syntax tree. This is where the surface forms the
@@ -2175,11 +2176,13 @@ public final class AstBuilder {
      * this language runs everywhere, not whatever Unicode version this JDK shipped with.
      */
     private String stringValue(SyntaxToken literal) {
-        String admitted = Strings.admitted(CstLexer.textOf(literal.text()));
-        if (admitted == null) {
-            throw error(posOf(literal), new ParseMessage.AStringLiteralHoldsHalfASurrogatePair());
-        }
-        return admitted;
+        return switch (Strings.admission(CstLexer.textOf(literal.text()))) {
+            case TextAdmission.Admitted a -> a.text();
+            case TextAdmission.NotText _ -> throw error(posOf(literal),
+                    new ParseMessage.AStringLiteralHoldsHalfASurrogatePair());
+            case TextAdmission.NoPlace _ -> throw error(posOf(literal),
+                    new ParseMessage.AStringLiteralIsLongerThanAStringHolds());
+        };
     }
 
     private <M extends Message & Reported> CompileException error(SourcePos pos, M said) {
