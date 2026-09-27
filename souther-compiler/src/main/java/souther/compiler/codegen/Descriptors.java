@@ -343,7 +343,7 @@ final class Descriptors {
     static final MethodTypeDesc MTD_mapOfNone = MethodTypeDesc.of(CD_Map);
     /** {@code StringDecoder.from(Decoder<I,String>)} — wraps a plain string-producing decoder back
      *  into a {@link CD_StringDecoder} so the fluent constraint methods after it (following
-     *  {@code Strings.admitted}, not {@code StringDecoder.normalize()}) still resolve. */
+     *  {@code Strings.admission}, not {@code StringDecoder.normalize()}) still resolve. */
     static final MethodTypeDesc MTD_stringDecoderFrom = MethodTypeDesc.of(CD_StringDecoder, CD_RDecoder);
     static final MethodTypeDesc MTD_leafLong = MethodTypeDesc.of(CD_LongDecoder);
     static final MethodTypeDesc MTD_leafBool = MethodTypeDesc.of(CD_BoolDecoder);

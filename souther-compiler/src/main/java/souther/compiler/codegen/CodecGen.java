@@ -71,7 +71,7 @@ final class CodecGen {
     private boolean usesTextLeaf;
 
     /**
-     * {@link #build} of a class that is a decoder: one that reads a string carries the
+     * {@link Descriptors#build} of a class that is a decoder: one that reads a string carries the
      * {@code __text} its string leaf calls, so a leaf is never emitted into a class that lacks one.
      */
     private byte[] buildDecoder(ClassDesc cdDec, Consumer<ClassBuilder> body) {
