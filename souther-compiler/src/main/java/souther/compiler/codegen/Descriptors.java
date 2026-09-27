@@ -214,8 +214,7 @@ final class Descriptors {
     static final ClassDesc CD_Maps = ClassDesc.of("souther.runtime.Maps");
     static final ClassDesc CD_Sets = ClassDesc.of("souther.runtime.Sets");
     static final ClassDesc CD_Representations = ClassDesc.of("souther.runtime.Representations");
-    static final ClassDesc CD_Temporals = ClassDesc.of("souther.runtime.Temporals");
-    static final ClassDesc CD_Option = ClassDesc.of("souther.runtime.Option");
+    static final ClassDesc CD_Temporals = ClassDesc.of("souther.runtime.Temporals");    static final ClassDesc CD_Option = ClassDesc.of("souther.runtime.Option");
     static final ClassDesc CD_Options = ClassDesc.of("souther.runtime.Options");
     static final ClassDesc CD_OptionSome = CD_Option.nested("Some");
     static final ClassDesc CD_OptionNone = CD_Option.nested("None");
@@ -346,9 +345,29 @@ final class Descriptors {
      *  {@code Strings.admission}, not {@code StringDecoder.normalize()}) still resolve. */
     static final MethodTypeDesc MTD_stringDecoderFrom = MethodTypeDesc.of(CD_StringDecoder, CD_RDecoder);
     static final MethodTypeDesc MTD_leafLong = MethodTypeDesc.of(CD_LongDecoder);
+    /** {@code new LongDecoder(Decoder)} and its siblings, over a decoder that asks the language
+     *  first. */
+    static final MethodTypeDesc MTD_wrappingInit =
+            MethodTypeDesc.of(ConstantDescs.CD_void, CD_RDecoder);
+    static final ClassDesc CD_BoundaryScalars = ClassDesc.of("souther.runtime.BoundaryScalars");
     static final MethodTypeDesc MTD_leafBool = MethodTypeDesc.of(CD_BoolDecoder);
     static final MethodTypeDesc MTD_leafDecimal = MethodTypeDesc.of(CD_DecimalDecoder);
     static final MethodTypeDesc MTD_leafTemporal = MethodTypeDesc.of(CD_TemporalDecoder);
+    /** {@code Object.getClass()}, {@code Class.getSimpleName()}, {@code Map.of} of two entries and
+     *  {@code JsonNode}'s yes-or-no questions about the number it holds. */
+    static final MethodTypeDesc MTD_getClass = MethodTypeDesc.of(CD_Class);
+    static final MethodTypeDesc MTD_getSimpleName = MethodTypeDesc.of(CD_String);
+    static final MethodTypeDesc MTD_mapOf2 =
+            MethodTypeDesc.of(CD_Map, CD_Object, CD_Object, CD_Object, CD_Object);
+    static final MethodTypeDesc MTD_nodeIs = MethodTypeDesc.of(ConstantDescs.CD_boolean);
+    static final ClassDesc CD_Number = ClassDesc.of("java.lang.Number");
+    /** {@code JsonNode.numberValue():Number} — the carrier a JSON number node holds. */
+    static final MethodTypeDesc MTD_nodeNumberValue = MethodTypeDesc.of(CD_Number);
+    /** What a string decoder's {@code flatMapWithPath} calls a temporal's text question at: the text
+     *  and the path in, the result out. */
+    static final MethodTypeDesc MTD_temporalText = MethodTypeDesc.of(CD_RResult, CD_String, CD_RPath);
+    /** {@code Temporals.dateRefusal(Object):String} and its siblings. */
+    static final MethodTypeDesc MTD_temporalRefusal = MethodTypeDesc.of(CD_String, CD_Object);
     static final MethodTypeDesc MTD_field = MethodTypeDesc.of(CD_CombinePart, CD_String, CD_RDecoder);
     static final MethodTypeDesc MTD_nullableField = MethodTypeDesc.of(CD_CombinePart, CD_String, CD_RDecoder);
     /** {@code CombinePart}'s own decode, and the conversion for a position that wants a decoder. */
