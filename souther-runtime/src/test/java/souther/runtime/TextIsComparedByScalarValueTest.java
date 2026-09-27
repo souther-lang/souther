@@ -7,12 +7,12 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * {@link Strings#compare} is the lexicographic order of the scalar values two strings are made of,
- * and {@link Strings#admitted} lets in text only where it is made of scalar values.
+ * and {@link Strings#admission} lets in text only where it is made of scalar values.
  *
  * <p>The comparison is held against the definition itself: the code points taken out and compared
  * one after another. It does not take them out — it compares units and moves one range of them — so
@@ -51,11 +51,11 @@ class TextIsComparedByScalarValueTest {
     @Test
     void textMadeOfScalarValuesIsLetInCanonical() {
         String pair = new String(Character.toChars(0x10000));
-        assertEquals(pair, Strings.admitted(pair));
-        assertEquals("", Strings.admitted(""));
+        assertEquals(pair, Strings.admit(pair));
+        assertEquals("", Strings.admit(""));
         // か and a combining voiced sound mark, which is が.
         assertEquals(String.valueOf((char) 0x304C),
-                Strings.admitted(new String(new char[] {0x304B, 0x3099})));
+                Strings.admit(new String(new char[] {0x304B, 0x3099})));
     }
 
     @Test
@@ -63,7 +63,7 @@ class TextIsComparedByScalarValueTest {
         String high = String.valueOf((char) 0xD800);
         String low = String.valueOf((char) 0xDC00);
         for (String half : List.of(high, low, low + high, "a" + high, high + "a", high + high)) {
-            assertNull(Strings.admitted(half));
+            assertInstanceOf(TextAdmission.NotText.class, Strings.admission(half));
             assertThrows(ConstraintViolation.class, () -> Strings.admit(half));
         }
     }

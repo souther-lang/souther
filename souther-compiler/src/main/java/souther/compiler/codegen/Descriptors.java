@@ -326,13 +326,24 @@ final class Descriptors {
     static final MethodTypeDesc MTD_Rdecoder = MethodTypeDesc.of(CD_RDecoder);
     static final MethodTypeDesc MTD_Rencoder = MethodTypeDesc.of(CD_REncoder);
     static final MethodTypeDesc MTD_leafString = MethodTypeDesc.of(CD_StringDecoder);
-    /** {@code Strings.admit(String):String} and {@code Strings.admitted(String):String}, text let
-     *  into the domain, lifted into a {@code Function} at the call site that reaches for one. */
+    /** {@code Strings.admit(String):String}, text let into the domain, lifted into a
+     *  {@code Function} at the call site that reaches for one. */
     static final MethodTypeDesc MTD_admit = MethodTypeDesc.of(CD_String, CD_String);
-    static final ClassDesc CD_Objects = ClassDesc.of("java.util.Objects");
+    /** What asking whether text is a {@code String} answers ({@code Strings.admission}) and the
+     *  two refusals a decoder says apart. */
+    static final ClassDesc CD_TextAdmission = ClassDesc.of("souther.runtime.TextAdmission");
+    static final ClassDesc CD_TextAdmitted = ClassDesc.of("souther.runtime.TextAdmission$Admitted");
+    static final ClassDesc CD_TextNotText = ClassDesc.of("souther.runtime.TextAdmission$NotText");
+    static final MethodTypeDesc MTD_admission = MethodTypeDesc.of(CD_TextAdmission, CD_String);
+    /** A generated decoder's {@code __text(TextAdmission, Path)}: the {@code Result} an admission
+     *  is, for {@code Decoder.flatMapWithPath}. */
+    static final MethodTypeDesc MTD_textOfAdmission =
+            MethodTypeDesc.of(CD_RResult, CD_TextAdmission, CD_RPath);
+    static final MethodTypeDesc MTD_admittedText = MethodTypeDesc.of(CD_String);
+    static final MethodTypeDesc MTD_mapOfNone = MethodTypeDesc.of(CD_Map);
     /** {@code StringDecoder.from(Decoder<I,String>)} — wraps a plain string-producing decoder back
      *  into a {@link CD_StringDecoder} so the fluent constraint methods after it (following
-     *  {@code Strings.admitted}, not {@code StringDecoder.normalize()}) still resolve. */
+     *  {@code Strings.admission}, not {@code StringDecoder.normalize()}) still resolve. */
     static final MethodTypeDesc MTD_stringDecoderFrom = MethodTypeDesc.of(CD_StringDecoder, CD_RDecoder);
     static final MethodTypeDesc MTD_leafLong = MethodTypeDesc.of(CD_LongDecoder);
     static final MethodTypeDesc MTD_leafBool = MethodTypeDesc.of(CD_BoolDecoder);

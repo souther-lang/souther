@@ -16,8 +16,9 @@ import souther.unicode.ScalarValues;
  *
  * <p>A {@code String} is a sequence of Unicode scalar values (spec §string-code-points): every code
  * point but the surrogates. A {@code java.lang.String} can hold more than that — half of a surrogate
- * pair on its own — so text that arrives from outside is let in by {@link #admit} or
- * {@link #admitted}, and everything here may take it that the text it is handed holds no such half.
+ * pair on its own — so text that arrives from outside is let in by {@link #admission} or
+ * {@link #admit}, and everything here may take it that the text it is handed holds no such half and
+ * has a place as a {@code String}.
  *
  * <p>Every length, index and range here counts code points, which is what the language publishes;
  * the UTF-16 code unit a JVM {@code String} stores is this class's business and reaches no signature
@@ -28,10 +29,12 @@ import souther.unicode.ScalarValues;
 public final class Strings {
 
     /**
-     * The longest text, in UTF-16 units, every {@code java.lang.String} on this run time holds,
-     * whatever its characters are.
+     * The longest text, in UTF-16 units, this run time declares a Souther {@code String} to hold.
      *
-     * <p>Not {@code Integer.MAX_VALUE}, which is only what a length is counted in. A {@code String}
+     * <p>A declaration, and not the most a {@code java.lang.String} can hold: one kept in Latin-1
+     * may be longer, and text past this is not a {@code String} however it is held. It is chosen as
+     * what a {@code java.lang.String} holds whatever its characters are. Not
+     * {@code Integer.MAX_VALUE}, which is only what a length is counted in. A {@code java.lang.String}
      * keeps its text in one array, a VM refuses an array a few elements short of that with "Requested
      * array size exceeds VM limit" however much heap it has, and a text with any character outside
      * Latin-1 — or any text at all where compact strings are off — takes two bytes a unit, which
@@ -79,30 +82,51 @@ public final class Strings {
     }
 
     /**
-     * Text arriving from outside, as the {@code String} it is: canonicalized to NFC, or null where it
-     * is not a sequence of scalar values at all.
+     * Text arriving from outside, as the {@code String} it is: canonicalized to NFC, or why it is
+     * not one — it is not a sequence of scalar values, or its canonical value has no place.
      *
      * <p>The one way text becomes a value, whichever door it came through. The doors differ in how
-     * they say no — a derived decoder with an issue at the path, a crossing from Java by aborting
-     * ({@link #admit}), a source literal with a diagnostic — and not in what they refuse, so each of
-     * them asks this and reads the null its own way.
+     * they say no — a derived decoder with an issue at the path, a crossing
+     * from Java by aborting ({@link #admit}), a source literal with a diagnostic — and not in what
+     * they refuse, so each of them asks this and says the refusal it was in its own way.
      *
      * <p>Refused and not repaired. Replacing half a pair with U+FFFD would make text that held one
      * and text that held U+FFFD itself one value, which is the loss a key collision is refused for.
+     *
+     * <p>A {@code String} holds no more than {@link #LONGEST_TEXT} UTF-16 units, so text whose
+     * canonical value is longer has no place and is refused too, though a {@code java.lang.String}
+     * may be able to hold it. It is the canonical value that is measured, since that is the
+     * {@code String} the text would be; how long the text arrived is not a property of any
+     * {@code String}. Canonicalizing is itself bounded, so a text that cannot be one is not built
+     * out to find that out.
      */
-    public static @Nullable String admitted(String text) {
-        return halfAPairAt(text) < 0 ? Normalization.nfc(text) : null;
+    public static TextAdmission admission(String text) {
+        return admission(text, LONGEST_TEXT);
     }
 
-    /** {@link #admitted}, aborting where the text is not a sequence of scalar values: what a
-     *  crossing from Java answers, where the host handed over something that is not text. */
-    public static String admit(String text) {
-        String admitted = admitted(text);
-        if (admitted == null) {
-            throw new ConstraintViolation("text crossing into the domain holds half of a surrogate"
-                    + " pair at UTF-16 index " + halfAPairAt(text) + ", which is not a character");
+    /** {@link #admission} for a carrier that declares {@code longest} UTF-16 units to be what a
+     *  {@code String} holds: this is what a test that cannot build text that long asks of it. */
+    static TextAdmission admission(String text, long longest) {
+        int half = halfAPairAt(text);
+        if (half >= 0) {
+            return new TextAdmission.NotText(half);
         }
-        return admitted;
+        String canonical = Normalization.nfcWithin(text, longest);
+        return canonical == null
+                ? new TextAdmission.NoPlace() : new TextAdmission.Admitted(canonical);
+    }
+
+    /** {@link #admission}, aborting where the text is not one: what a crossing from Java answers,
+     *  where the host handed over something that is not text, or text that has no place. */
+    public static String admit(String text) {
+        return switch (admission(text)) {
+            case TextAdmission.Admitted a -> a.text();
+            case TextAdmission.NotText n -> throw new ConstraintViolation(
+                    "text crossing into the domain holds half of a surrogate pair at UTF-16 index "
+                            + n.at() + ", which is not a character");
+            case TextAdmission.NoPlace _ -> throw new ConstraintViolation(
+                    "text crossing into the domain is longer than a String holds once canonicalized");
+        };
     }
 
     /** Where {@code text} holds a surrogate that is not one half of a pair beside the other, or -1

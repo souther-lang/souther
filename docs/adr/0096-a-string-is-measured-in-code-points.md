@@ -1,6 +1,27 @@
 # ADR-0096: A string is measured in Unicode code points, and arrives canonical
 
-Status: Accepted. Revised 2026-09-26 — see *Revision*.
+Status: Accepted. Revised 2026-09-26 and 2026-09-27 — see *Revision*.
+
+## Revision (2026-09-27)
+
+Admission decided whether text is a sequence of scalar values and canonical, and stopped there. A
+`String` also holds no more text than the carrier declares one to hold
+(`[#what-a-string-holds]`), and that was asked only of the operations that build one. The bound is
+what a carrier declares a `String` to hold and not what its own representation of text could, so
+text can arrive that the host holds and the carrier declares no `String` to. A `java.lang.String` in
+the narrower encoding can be longer than the JVM declares, and a carrier that counts lengths in more
+bits can be handed a great deal more. Kept, that text would make `append("", s)` end for want of a
+place on a `String` the program already holds, and a `String` would not be an identity for the
+operation that is defined over it.
+
+Whether text has a place is now part of whether it is a `String`. Admission answers one of three:
+the text as the canonical `String` it is, text that is not scalar values, or text whose canonical
+value has no place. It is the canonical value that is measured, since that is the `String` the text
+would be, and the canonicalizing is itself bounded, so text that cannot be one is not built out to
+find that out. A derived decoder reports the second and the third at the path with the same Raoh
+code, `invalid_format`, each with its own message; a crossing from Java aborts; a literal is a
+diagnostic. The doors still differ in how they say no and not in what they refuse. Operations that
+build a `String` keep their own bound, which is what lets them refuse before building.
 
 ## Revision (2026-09-26)
 

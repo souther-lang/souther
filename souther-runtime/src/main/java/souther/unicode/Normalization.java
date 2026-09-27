@@ -29,7 +29,7 @@ public final class Normalization {
      *  nfc(s)} — because composing an already-canonical sequence recomposes nothing further.
      *
      *  <p>Of text that is a sequence of scalar values, which is the only text there is to normalize:
-     *  whether text from outside is one is asked by {@code Strings.admitted} before this, and this
+     *  whether text from outside is one is asked by {@code Strings.admission} before this, and this
      *  asks nothing. Half a surrogate pair handed in comes back out where it was. */
     public static String nfc(String s) {
         String canonical = nfcWithin(s, Long.MAX_VALUE);
@@ -100,6 +100,12 @@ public final class Normalization {
         for (int at = from; at < s.length(); ) {
             int cp = s.codePointAt(at);
             at += Character.charCount(cp);
+            if (isInert(cp)) {
+                if (!composing.takeInert(cp)) {
+                    return null;
+                }
+                continue;
+            }
             int[] decomposed = decomposeOne(cp);
             if (decomposed == null) {
                 if (!composing.take(cp)) {
@@ -162,6 +168,16 @@ public final class Normalization {
                 }
             }
             if (!write(kept)) {
+                return false;
+            }
+            starter = cp;
+            return true;
+        }
+
+        /** {@link #take} of a code point that is {@link #isInert}: it composes with nothing before it
+         *  and decomposes into nothing, so it ends the run and starts the next, and no table is asked. */
+        boolean takeInert(int cp) {
+            if (!write(settle())) {
                 return false;
             }
             starter = cp;
@@ -360,6 +376,50 @@ public final class Normalization {
         }
         COMPOSE_KEYS = pairs.keySet().stream().mapToLong(Long::longValue).toArray();
         COMPOSE_VALUES = pairs.values().stream().mapToInt(Integer::intValue).toArray();
+    }
+
+    /** One bit per code point, set for those that are {@link #isInert}: every code point but those
+     *  read off the tables below as having a part in composition or decomposition. */
+    private static final long[] INERT = inertStarters();
+
+    private static long[] inertStarters() {
+        long[] bits = new long[(Character.MAX_CODE_POINT + 1) / Long.SIZE];
+        Arrays.fill(bits, -1L);
+        for (int cp : NormalizationTables.DECOMP.codePoints()) {
+            clear(bits, cp);
+        }
+        // What follows a starter in a composition is the second member of a pair.
+        for (int[] mapped : NormalizationTables.DECOMP.mapped()) {
+            if (mapped.length == 2) {
+                clear(bits, mapped[1]);
+            }
+        }
+        for (int cp : NormalizationTables.CCC_KEYS) {
+            clear(bits, cp);
+        }
+        for (int cp = S_BASE; cp < S_BASE + S_COUNT; cp++) {
+            clear(bits, cp);
+        }
+        for (int cp = V_BASE; cp < V_BASE + V_COUNT; cp++) {
+            clear(bits, cp);
+        }
+        for (int cp = T_BASE; cp < T_BASE + T_COUNT; cp++) {
+            clear(bits, cp);
+        }
+        return bits;
+    }
+
+    private static void clear(long[] bits, int cp) {
+        bits[cp >>> 6] &= ~(1L << cp);
+    }
+
+    /**
+     * Whether {@code cp} is a starter that has no decomposition and is the second member of no
+     * composition, Hangul's included: it composes with nothing before it, and nothing is asked of a
+     * table to know that. Most text in a script written without combining marks is made of them.
+     */
+    private static boolean isInert(int cp) {
+        return (INERT[cp >>> 6] & (1L << cp)) != 0;
     }
 
     private static long pairKey(int starter, int cp) {

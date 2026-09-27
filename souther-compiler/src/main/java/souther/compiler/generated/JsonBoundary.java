@@ -8,17 +8,19 @@ import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.TemporalRule;
+import souther.compiler.types.TextRule;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
-import souther.compiler.types.TextRule;
 import souther.runtime.Representations;
 import souther.runtime.Sets;
 import souther.runtime.Strings;
 import souther.runtime.Temporals;
+import souther.runtime.TextAdmission;
 
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Issues;
 import net.unit8.raoh.Ok;
+import net.unit8.raoh.Path;
 import net.unit8.raoh.Result;
 import net.unit8.raoh.decode.Decoder;
 import net.unit8.raoh.decode.ObjectDecoders;
@@ -34,7 +36,6 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * A value crossing between JSON and the classes this compilation generated.
@@ -143,16 +144,28 @@ public final class JsonBoundary {
     /**
      * Text as it arrives, let in: what the generated string leaf does, in Java.
      *
-     * <p>{@link Strings#admitted} decides it — Unicode 18.0.0's NFC, or null where the text holds
-     * half of a surrogate pair — and the null is refused at the path the way the generated leaf
-     * refuses it ({@link TextRule}). Not {@code StringDecoder.normalize()}, which answers for
-     * whatever Unicode version this JDK's own {@code java.text.Normalizer} carries.
+     * <p>{@link Strings#admission} decides it — Unicode 18.0.0's NFC, or why the text is not a
+     * {@code String}: it holds half of a surrogate pair, or its canonical value is longer than a
+     * {@code String} holds — and {@link #textOf} reports each refusal at the path, as the generated
+     * leaf does ({@link TextRule}). Not {@code StringDecoder.normalize()}, which answers for whatever
+     * Unicode version this JDK's own {@code java.text.Normalizer} carries.
      * {@link StringDecoder#from} keeps the result a {@link StringDecoder}, so {@link #temporal} can
      * still chain {@code .date()} etc. on it.
      */
     private static <I> StringDecoder<I> admitted(StringDecoder<I> text) {
-        return StringDecoder.from(text.map(Strings::admitted)
-                .refine(Objects::nonNull, TextRule.REFUSED, TextRule.HALF_A_PAIR));
+        return StringDecoder.from(text.map(Strings::admission).flatMapWithPath(JsonBoundary::textOf));
+    }
+
+    /** The text an admission let in, or the failure at {@code path} saying why it is not a
+     *  {@code String}. */
+    public static Result<String> textOf(TextAdmission admission, Path path) {
+        return switch (admission) {
+            case TextAdmission.Admitted a -> Result.ok(a.text());
+            case TextAdmission.NotText _ ->
+                    Result.failCustom(path, TextRule.REFUSED, TextRule.HALF_A_PAIR, Map.of());
+            case TextAdmission.NoPlace _ ->
+                    Result.failCustom(path, TextRule.REFUSED, TextRule.NO_PLACE, Map.of());
+        };
     }
 
     /**
