@@ -46,6 +46,7 @@ import souther.compiler.check.SpecImplementation;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.ExpectationState;
@@ -5111,10 +5112,13 @@ public final class Adequacy {
                 // — never one buried in an argument or a field, which is read as generated code
                 // already and names no value by this reading.
                 Hir.Var.Denoting denoting = FixtureValueEntries.bareValueReference(inputs.get(p));
+                // The reference itself, whole — never denoting().name() beside module(), which for
+                // an imported value are two different strings (the declaration's own bare name and
+                // this module's qualified spelling of it) and answered a name FixtureTemplate went
+                // on to build the wrong ValueName.Helper from.
                 if (denoting != null) {
-                    ValueName.Helper helper = (ValueName.Helper) denoting.denotes();
                     at.put(spec.params().get(p).name(),
-                            new Generator.Baseline.Named(helper.module(), denoting.name()));
+                            new Generator.Baseline.Named(denoting.reachesADeclaration()));
                 }
             }
             return at.isEmpty() ? Optional.empty()
@@ -5184,8 +5188,14 @@ public final class Adequacy {
                     continue;
                 }
                 for (String value : stated.getOrDefault(of, List.of())) {
+                    // Own, and module rather than the value's own declaring module: `values`' keys
+                    // are already the qualified spelling for an import, same as `namesIn` used to
+                    // rebuild. Carried over rather than fixed — this reading names a value no row
+                    // ever wrote, so there is no fixture entry for it to be reached through either
+                    // way, and it still answers by reading the value's own body.
                     Generator.Baseline origin = Generator.Baseline.stating(takes.get(p).name(),
-                            new Generator.Baseline.Named(module, value));
+                            new Generator.Baseline.Named(
+                                    new ReachName.Own(new ValueName.Helper(module, value))));
                     if (!out.contains(origin)) {
                         out.add(origin);
                     }

@@ -269,22 +269,24 @@ public record FixtureTemplate(String text, Hir.Expr value) {
      * module-level {@code let} is a row an author writes today — the value is expanded where the
      * row is read — and this is that same row, composed.
      *
-     * <p>{@code occurrence} is which reference of the helper this is, and the run that composed it
-     * says so. The name reaches a declaration, so it is some reference of one; no source wrote it
-     * and no construct a source wrote is behind it, so nothing here could work one out — which is
-     * why it is taken and not minted. What the name reaches is {@code module} and {@code name}'s to
-     * answer, and the occurrence does not repeat it.
+     * <p>{@code reachedAs} is taken whole and not rebuilt: it already carries what the value
+     * denotes ({@link ReachName#denotes()}, what a fixture entry is keyed by) and how this module
+     * writes it ({@link ReachName#rendered()}, what the row prints) — for an imported value the two
+     * are not the same string, and reconstructing one from a spelling or a spelling from one is the
+     * rediscovery {@link ReachName}'s own doc refuses.
      *
-     * @param module     what the name belongs to, which is what a reader of the name resolves it
-     *                   through
-     * @param name       the name as this module writes it
+     * <p>{@code occurrence} is which reference of the value this is, and the run that composed it
+     * says so; no source wrote it and no construct a source wrote is behind it, so nothing here
+     * could work one out — which is why it is taken and not minted.
+     *
+     * @param reachedAs  the value, as this module reaches it
      * @param occurrence which reference this run composed, from {@link FixtureReferences}
      */
-    public static FixtureTemplate named(String module, String name,
+    public static FixtureTemplate named(ReachName.Declaration reachedAs,
                                         FixtureReferenceOrigin occurrence) {
-        ValueName.Helper helper = new ValueName.Helper(module, name);
-        return new FixtureTemplate(name,
-                Hir.Var.respelled(name, new ReachName.Own(helper), occurrence, NOWHERE, NO_SOURCE));
+        String written = reachedAs.rendered();
+        return new FixtureTemplate(written,
+                Hir.Var.respelled(written, reachedAs, occurrence, NOWHERE, NO_SOURCE));
     }
 
     /**
