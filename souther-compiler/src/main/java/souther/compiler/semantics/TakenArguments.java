@@ -1,5 +1,7 @@
 package souther.compiler.semantics;
 
+import souther.exact.ExactDecimals;
+
 import java.math.BigDecimal;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -89,7 +91,7 @@ public record TakenArguments(Map<Integer, BigDecimal> byPosition) {
             if (!out.isEmpty()) {
                 out.append(", ");
             }
-            out.append(read.toPlainString());
+            out.append(ExactDecimals.spelledBounded(read));
         });
         return out.toString();
     }

@@ -1,5 +1,7 @@
 package souther.compiler.values;
 
+import souther.exact.ExactDecimals;
+
 /**
  * The order the parts of a plan are held in, read off the plan and off nothing else.
  *
@@ -370,7 +372,7 @@ final class PlanOrder {
     private static String of(Value value) {
         return switch (value) {
             case Value.Text it -> "0;" + it.value().length() + ";" + it.value();
-            case Value.Number it -> "1;" + it.value().toPlainString();
+            case Value.Number it -> "1;" + ExactDecimals.spelledBounded(it.value());
             case Value.Truth it -> "2;" + it.value();
             case Value.Case it -> "3;" + it.data();
         };

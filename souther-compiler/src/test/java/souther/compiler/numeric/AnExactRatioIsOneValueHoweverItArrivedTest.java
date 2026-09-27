@@ -143,4 +143,28 @@ class AnExactRatioIsOneValueHoweverItArrivedTest {
                 .compareTo(ExactRatio.of(Long.MAX_VALUE)) > 0,
                 "and past where a long stops, since comparing cross-multiplies");
     }
+
+    /**
+     * The fewest places a value stands above, over the whole range an {@code int} names and not
+     * only where a bound doubled up to it would have looked. A count between where the doubling
+     * gave up and the top of what an {@code int} holds is one this compiler still holds a decimal
+     * at, and used to be answered with an uncaught exception instead of the count.
+     */
+    @Test
+    void placesAValueStandsAboveIsFoundOverTheWholeIntRange() {
+        assertEquals(4, held(new ExactRatio(BigInteger.ONE, BigInteger.ONE, -3, -3)));
+        // Past where a bound doubled up from two would have given up before reaching this far.
+        assertEquals(1_500_000_001,
+                held(new ExactRatio(BigInteger.ONE, BigInteger.ONE, -1_500_000_000L, -1_500_000_000L)));
+        // At the very top of what an int names, which a caller adding one to must not overflow.
+        assertEquals(Integer.MAX_VALUE,
+                held(new ExactRatio(BigInteger.ONE, BigInteger.ONE, -2_147_483_646L, -2_147_483_646L)));
+        // Past what an int names at all: no count here answers, and not an exception.
+        assertTrue(new ExactRatio(BigInteger.ONE, BigInteger.ONE, -2_147_483_747L, -2_147_483_747L)
+                .placesItStandsAbove().isEmpty());
+    }
+
+    private static int held(ExactRatio at) {
+        return at.placesItStandsAbove().getAsInt();
+    }
 }

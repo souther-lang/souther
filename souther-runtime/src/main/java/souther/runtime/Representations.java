@@ -1,6 +1,7 @@
 package souther.runtime;
 
 import org.jspecify.annotations.Nullable;
+import souther.exact.ExactDecimals;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -61,20 +62,6 @@ public final class Representations {
     private static final int ARRAY = 5;
     private static final int OBJECT = 6;
 
-    /**
-     * How many digits an exponent may be spelt out into. It bounds the <em>expansion</em> and not the
-     * output: a value that already carries a thousand significant digits is written with all of them,
-     * here as anywhere, and that is not this rule's business. What this stops is a compact input
-     * asking for an enormous output — {@code 1E+1000000} is eleven characters and a million and one
-     * digits.
-     *
-     * <p>A thousand is where a reader gives up as well ({@code jackson-core}'s
-     * {@code StreamReadConstraints.DEFAULT_MAX_NUM_LEN}), which is where the figure comes from. It is
-     * a reference point and not the definition: that limit is per-factory and configurable, and the
-     * form this class writes is part of the language.
-     */
-    private static final int MAX_SPELT_OUT_DIGITS = 1000;
-
     private Representations() {}
 
     /**
@@ -89,9 +76,9 @@ public final class Representations {
      * <p>Which is bounded, because asking for the digits is what an exponent lets a caller not pay
      * for: {@code 1E+1000000} is eleven characters and a million and one digits, so spelling every
      * amount out would let a small input ask for an arbitrarily large one. The cut is
-     * {@link #MAX_SPELT_OUT_DIGITS}, and it falls on the amount rather than on the value that carried it
-     * — the two forms of one amount reach the same side of it, which is what keeps this a function
-     * of the amount.
+     * {@link ExactDecimals#MAX_SPELT_OUT_DIGITS}, and it falls on the amount rather than on the value
+     * that carried it — the two forms of one amount reach the same side of it, which is what keeps
+     * this a function of the amount.
      */
     public static BigDecimal canonicalNumber(BigDecimal amount) {
         BigDecimal stripped = DecimalMath.leastDigits(amount);
@@ -100,7 +87,7 @@ public final class Representations {
         }
         // in long, because a scale at the floor asks for more digits than an int can count
         long spelledOut = (long) stripped.precision() - stripped.scale();
-        return spelledOut <= MAX_SPELT_OUT_DIGITS ? stripped.setScale(0) : stripped;
+        return spelledOut <= ExactDecimals.MAX_SPELT_OUT_DIGITS ? stripped.setScale(0) : stripped;
     }
 
     /** The members of an encoded array, in ascending order of their own external representation. */

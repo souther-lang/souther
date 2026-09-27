@@ -1,11 +1,13 @@
 package souther.compiler.numeric;
 
 import souther.exact.ExactArithmetic;
+import souther.exact.ExactDecimals;
 import souther.exact.ExactParts;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
+import java.util.OptionalInt;
 
 /**
  * An exact ratio of two whole numbers, which is what the constraint algebra reasons in.
@@ -534,7 +536,8 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
 
     /**
      * The fewest places a decimal needs before the last of them lands inside this value: the least
-     * count above nought with this value standing above ten to the minus that.
+     * count above nought with this value standing above ten to the minus that — or empty where no
+     * count an {@code int} names does.
      *
      * <p>For a search that has to name a number inside a distance and wants to know how far in to
      * look. The count is what the value's size says, so it is read off the order rather than by
@@ -542,27 +545,33 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
      * of about a million, and a number of that many digits built to be measured is the work this
      * type is held the way it is to avoid.
      *
-     * @throws ArithmeticException where this value is at or below nought, which has no such count,
-     *         or where the count is past what one here holds
+     * <p>Binary search over the whole of what an {@code int} holds and not a bound doubled up to
+     * it: a search that gives up once its own doubling passes half of {@link Integer#MAX_VALUE}
+     * answers nothing for a count between there and the top of the range, though one may hold —
+     * the range is one comparison to ask about outright and thirty-one more to place the answer
+     * inside it, so nothing is bought by doubling up to it first.
+     *
+     * <p>{@link OptionalInt} and not {@link ExactAnswer}: this value is held exactly whatever its
+     * scale, and no operation on it failed — what an {@code int} cannot name is the count, a metric
+     * of the value and not the value itself, and {@link UnheldNumber} is the exact arithmetic's own
+     * vocabulary for the second of those and answers nothing about the first. A caller folding this
+     * into a wider {@code ExactAnswer} says which of its own words that is, since neither of
+     * {@code UnheldNumber}'s is about a host language's {@code int}.
+     *
+     * @throws ArithmeticException where this value is at or below nought, which has no such count
      */
-    public int placesItStandsAbove() {
+    public OptionalInt placesItStandsAbove() {
         if (signum() <= 0) {
             throw new ArithmeticException("no count of places stands below " + this);
         }
         if (standsAbove(1)) {
-            return 1;
+            return OptionalInt.of(1);
+        }
+        if (!standsAbove(Integer.MAX_VALUE)) {
+            return OptionalInt.empty();
         }
         int under = 1;
-        int over = 2;
-        while (!standsAbove(over)) {
-            under = over;
-            if (over > Integer.MAX_VALUE / 2) {
-                throw new ArithmeticException(
-                        "no decimal here names a number inside a distance this small");
-            }
-            over += over;
-        }
-        // The answer is above `under` and at or below `over`, and halving that keeps it so.
+        int over = Integer.MAX_VALUE;
         while (over - under > 1) {
             int between = under + (over - under) / 2;
             if (standsAbove(between)) {
@@ -571,7 +580,7 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
                 under = between;
             }
         }
-        return over;
+        return OptionalInt.of(over);
     }
 
     /** Whether this value stands above ten to the minus {@code places}, which is a comparison and
@@ -593,16 +602,34 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
      * <p>Apart from {@link #toString}, which is for a message about this compiler and says the plain
      * shape of the number. This is for a sentence somebody reads about their own model.
      *
+     * <p>Past a thousand digits, in exponent notation rather than spelled out in full
+     * ({@link ExactDecimals#spelledBounded}): a model's own decimals can be scaled far enough from
+     * an ordinary one that the compact value behind them costs nothing to hold and everything to
+     * write out, and a report is not the place that cost is asked to be paid.
+     *
      * @throws ArithmeticException where neither form is one this host writes, which is a number
      *         standing where no decimal and no pair of whole numbers reaches it
      */
     public String spelled() {
         BigDecimal written = asWrittenDecimal();
         if (written != null) {
-            return written.stripTrailingZeros().toPlainString();
+            return ExactDecimals.spelledBounded(written.stripTrailingZeros());
         }
         Fraction fraction = asFraction();
         return fraction.numerator() + "/" + fraction.denominator();
+    }
+
+    /**
+     * {@code d}, at its own scale, the same bounded way {@link #spelled} writes one — in exponent
+     * notation past a thousand digits rather than spelled out in full.
+     *
+     * <p>For a caller holding a bare decimal rather than a ratio, so that this policy has one place
+     * to be asked from and {@code souther.exact} stays a name only the numeric package reaches for:
+     * a caller elsewhere in this compiler that wants a decimal written for a reader asks here rather
+     * than importing the exact arithmetic's own package to do it a second way.
+     */
+    public static String spelledBounded(BigDecimal d) {
+        return ExactDecimals.spelledBounded(d);
     }
 
     /**

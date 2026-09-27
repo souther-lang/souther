@@ -16,6 +16,7 @@ import souther.compiler.numeric.Towards;
 import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.util.Optional;
+import java.util.OptionalInt;
 
 /**
  * How one {@link BorderQuantity}'s own values are ordered, and which of them the quantity can take.
@@ -209,7 +210,15 @@ public interface LevelSpace {
                 if (digits instanceof ExactAnswer.Unheld<Integer> unheld) {
                     return new Occupancy.NotWorkedOut(unheld.why());
                 }
-                NumericDomain.Bounds look = run.toLookIn(digits.orNull());
+                // The digit count held, and rounding an end inward by that many is its own
+                // arithmetic and can still give out — a run this could not narrow an end of is,
+                // again, a run this could not read and never one the narrowing happened to leave
+                // wide open.
+                LevelInterval.LookedIn looked = run.toLookIn(digits.orNull());
+                if (looked instanceof LevelInterval.LookedIn.NotWorkedOut notWorkedOut) {
+                    return new Occupancy.NotWorkedOut(notWorkedOut.why());
+                }
+                NumericDomain.Bounds look = ((LevelInterval.LookedIn.InBounds) looked).envelope();
                 Endpoint lo = Endpoint.lower(look.min(), extent.low());
                 Endpoint hi = Endpoint.upper(look.max(), extent.high());
                 if (!Endpoint.someValueLiesBetween(lo, hi)) {
@@ -288,7 +297,14 @@ public interface LevelSpace {
                         instanceof ExactAnswer.Held<Integer> held
                         ? java.util.List.of(0, held.value()) : java.util.List.of(0);
                 for (int digits : tries) {
-                    NumericDomain.Bounds look = run.toLookIn(digits);
+                    // A round nothing bounds the run this way is not a witness this tries: a
+                    // candidate is all this needs, and the next scale in `tries`, or nought's own
+                    // answer, is as sound a place to look as this one would have been.
+                    if (!(run.toLookIn(digits)
+                            instanceof LevelInterval.LookedIn.InBounds inBounds)) {
+                        continue;
+                    }
+                    NumericDomain.Bounds look = inBounds.envelope();
                     // Handed the run's own ends and not ends held to the carrier's extent. Which end
                     // a range gives up is the range's own answer and the carrier holds it inside
                     // what it reaches itself; narrowed here first, a run nothing bounds below was
@@ -439,8 +455,14 @@ public interface LevelSpace {
                 if (apart.signum() <= 0) {
                     return Witness.NONE;
                 }
-                ExactRatio step = generator.dividedBy(
-                        ExactRatio.of(BigInteger.TEN.pow(scaleToOpen(generator, apart))));
+                OptionalInt scale = scaleToOpen(generator, apart);
+                if (scale.isEmpty()) {
+                    // No scale an int names opens this run against a generator this fine — the
+                    // sound answer with less, the same one a scale the exact arithmetic cannot
+                    // reach is already answered with above.
+                    return Witness.NONE;
+                }
+                ExactRatio step = generator.dividedBy(tenToThe(scale.getAsInt()));
                 ExactAnswer<java.math.BigInteger> steps = from == Towards.ABOVE
                         ? low.dividedBy(step).floor() : high.dividedBy(step).ceiling();
                 if (!(steps instanceof ExactAnswer.Held<java.math.BigInteger> heldSteps)) {
@@ -457,20 +479,55 @@ public interface LevelSpace {
 
             /**
              * How far the generator has to be divided down for its multiples to land inside a run
-             * {@code apart} wide: the smallest {@code s} with {@code 10^s · apart > g}.
+             * {@code apart} wide: the smallest {@code s} with {@code 10^s · apart > g} — or empty
+             * where no scale an {@code int} names opens it.
              *
              * <p>Worked out and not guessed, the way {@link CutPosition#digitsToTellApartFrom} works
-             * out the digits between two lines. A handful of scales tried instead is a bound on how
-             * large a generator this can answer for, and nothing says what that bound is.
+             * out the digits between two lines: a comparison against {@code 10^s} held as an
+             * exponent rather than a multiple of ten tried at every step between none and the
+             * answer, or built at the answer once it is found — a generator a model's own decimals
+             * put near the end of the scale range asks for an {@code s} in the hundreds of millions,
+             * and {@code 10^s} built as digits at that scale is the same cost the scale was worked
+             * out to avoid.
+             *
+             * <p>Binary search over the whole of what an {@code int} holds and not a bound doubled
+             * up to it: a search that gives up once its own doubling passes half of
+             * {@link Integer#MAX_VALUE} answers nothing for a scale between there and the top of the
+             * range, though one may open the run — the range is one comparison to ask about outright
+             * and thirty-one more to place the answer inside it, so nothing is bought by doubling up
+             * to it first.
              */
-            private int scaleToOpen(ExactRatio generator, ExactRatio apart) {
-                int scale = 0;
-                ExactRatio reach = apart;
-                while (reach.compareTo(generator) <= 0) {
-                    reach = reach.times(ExactRatio.of(BigInteger.TEN));
-                    scale++;
+            private OptionalInt scaleToOpen(ExactRatio generator, ExactRatio apart) {
+                if (apart.compareTo(generator) > 0) {
+                    return OptionalInt.of(0);
                 }
-                return scale;
+                ExactRatio ratio = generator.dividedBy(apart);
+                if (!opensAt(ratio, Integer.MAX_VALUE)) {
+                    return OptionalInt.empty();
+                }
+                int under = 0;
+                int over = Integer.MAX_VALUE;
+                while (over - under > 1) {
+                    int between = under + (over - under) / 2;
+                    if (opensAt(ratio, between)) {
+                        over = between;
+                    } else {
+                        under = between;
+                    }
+                }
+                return OptionalInt.of(over);
+            }
+
+            /** Whether {@code generator} divided down by {@code s} places lands inside a run the
+             *  ratio of generator to width names — {@code ratio < 10^s} — which is a comparison and
+             *  builds neither side. */
+            private static boolean opensAt(ExactRatio ratio, int s) {
+                return ratio.compareTo(tenToThe(s)) < 0;
+            }
+
+            /** {@code 10^s}, held as an exponent and not built as digits, whatever {@code s} is. */
+            private static ExactRatio tenToThe(int s) {
+                return new ExactRatio(BigInteger.ONE, BigInteger.ONE, s, s);
             }
         };
     }
