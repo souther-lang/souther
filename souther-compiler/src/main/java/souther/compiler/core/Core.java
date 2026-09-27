@@ -1341,24 +1341,74 @@ public sealed interface Core {
             }
         }
 
-        /** The name stands for what lies under the carrier the arm selects: an optional's element. */
-        record Payload(Binder binder, Type type) implements ArmBinding {
+        /**
+         * The name stands for what lies under {@code carrier}, the optional's present carrier the
+         * arm selects, and is read as the element that carrier holds. The carrier is what the value
+         * is reached through, so an emitter opens it from here and does not go back to the pattern
+         * to find out which one it was.
+         */
+        record Payload(Binder binder, Refinement.OptionPresent carrier) implements ArmBinding {
 
             public Payload {
-                if (binder == null || type == null) {
-                    throw new IllegalArgumentException("a name for what a carrier holds is read as some type");
+                if (binder == null || carrier == null) {
+                    throw new IllegalArgumentException("a name for what a carrier holds names the carrier");
                 }
+            }
+
+            @Override
+            public Type type() {
+                return carrier.bound();
             }
         }
     }
 
-    /** One arm of a {@code match}: what it selects, what it calls the value, and what it answers. */
+    /**
+     * One arm of a {@code match}: what it selects, what it calls the value, and what it answers.
+     *
+     * <p>The name has to be one the selection can give. A name for what stands under a carrier is
+     * for the carrier that has something under it, and the one the arm tests; a name for the matched
+     * value is read as the type the selection says that value is. Pairs that say otherwise are
+     * refused here, so an emitter reads whichever half it needs and the other cannot contradict it.
+     * What is left to {@link Match} is the one thing this cannot see: an optional's absent carrier
+     * and an or-pattern are read as the value the {@code match} is over.
+     */
     record Case(ResolvedPattern pattern, ArmBinding binding, Core body, SourcePos pos) {
 
         public Case {
             if (binding == null) {
                 throw new IllegalArgumentException("an arm that names nothing says so with Unbound");
             }
+            if (pattern != null && !nameableBy(pattern, binding)) {
+                throw new IllegalArgumentException("an arm selecting " + pattern.caseTypes()
+                        + " cannot name " + binding);
+            }
+        }
+
+        private static boolean nameableBy(ResolvedPattern pattern, ArmBinding binding) {
+            return switch (binding) {
+                case ArmBinding.Unbound _ -> true;
+                case ArmBinding.Payload payload -> pattern instanceof ResolvedPattern.Single one
+                        && one.selected().refinement().equals(payload.carrier());
+                case ArmBinding.Selected selected -> switch (pattern) {
+                    case ResolvedPattern.Single one -> switch (one.selected().refinement()) {
+                        case Refinement.Direct direct -> selected.type().equals(direct.bound());
+                        // Which optional is the match's to say ({@link Match}).
+                        case Refinement.OptionAbsent _ -> true;
+                        // Its element is what `Some v` names; the carrier itself has no name.
+                        case Refinement.OptionPresent _ -> false;
+                    };
+                    case ResolvedPattern.AnyOf several -> selected.type().equals(several.subject());
+                };
+            };
+        }
+
+        /** Whether the name is for the value the {@code match} is over, whatever it is: the
+         *  optional a {@code None} was found in, or the subject an or-pattern was written on. */
+        boolean namesTheSubject() {
+            return binding instanceof ArmBinding.Selected
+                    && (pattern instanceof ResolvedPattern.AnyOf
+                    || pattern instanceof ResolvedPattern.Single one
+                            && one.selected().refinement() instanceof Refinement.OptionAbsent);
         }
 
         /** The name the arm introduces, or null where it introduces none. */
@@ -1425,6 +1475,13 @@ public sealed interface Core {
             if (place == null) {
                 throw new IllegalArgumentException("a fork stands somewhere: some fork of the"
                         + " model, in some copy of the body that wrote it");
+            }
+            for (Case arm : cases) {
+                if (arm.namesTheSubject() && !arm.bindType().equals(scrutinee.type())) {
+                    throw new IllegalArgumentException("an arm naming the value this match is over"
+                            + " reads it as " + Type.show(arm.bindType()) + ", and it is "
+                            + Type.show(scrutinee.type()));
+                }
             }
         }
 

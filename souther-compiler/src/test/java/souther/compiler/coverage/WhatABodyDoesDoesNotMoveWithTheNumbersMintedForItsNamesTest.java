@@ -230,7 +230,7 @@ class WhatABodyDoesDoesNotMoveWithTheNumbersMintedForItsNamesTest {
             case Core.ArmBinding.Selected selected ->
                     new Core.ArmBinding.Selected(moved(selected.binder(), subst), selected.type());
             case Core.ArmBinding.Payload payload ->
-                    new Core.ArmBinding.Payload(moved(payload.binder(), subst), payload.type());
+                    new Core.ArmBinding.Payload(moved(payload.binder(), subst), payload.carrier());
         };
     }
 

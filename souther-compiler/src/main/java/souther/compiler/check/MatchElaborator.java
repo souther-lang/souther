@@ -416,7 +416,7 @@ public final class MatchElaborator {
         return switch (pattern) {
             case Core.ResolvedPattern.Single(var selected) -> switch (selected.refinement()) {
                 case Refinement.OptionPresent present ->
-                        new Core.ArmBinding.Payload(binder, present.bound());
+                        new Core.ArmBinding.Payload(binder, present);
                 case Refinement.OptionAbsent _ -> new Core.ArmBinding.Selected(binder, subject);
                 case Refinement.Direct direct -> new Core.ArmBinding.Selected(binder, direct.bound());
             };

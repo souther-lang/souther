@@ -962,8 +962,7 @@ final class BodyGen {
             switch (c.binding()) {
                 case Core.ArmBinding.Unbound _ -> { }
                 case Core.ArmBinding.Payload payload -> {
-                    // What stands under the carrier the arm tested for.
-                    CaseGen.pushBound(code, c.pattern().selectedCase().orElseThrow().refinement(), sSlot);
+                    CaseGen.pushBound(code, payload.carrier(), sSlot);
                     int bslot = slot(cast);
                     unbox(code, cast, bslot);
                     bind(payload.binder(), bslot, cast);

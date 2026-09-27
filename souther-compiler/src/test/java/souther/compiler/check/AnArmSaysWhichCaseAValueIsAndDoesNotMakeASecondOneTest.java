@@ -235,7 +235,7 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
         Core.ArmBinding binding = switch (pattern) {
             case Core.ResolvedPattern.Single(var selected) -> switch (selected.refinement()) {
                 case Refinement.OptionPresent present ->
-                        new Core.ArmBinding.Payload(binder, present.bound());
+                        new Core.ArmBinding.Payload(binder, present);
                 case Refinement.Direct direct -> new Core.ArmBinding.Selected(binder, direct.bound());
                 case Refinement.OptionAbsent _ -> throw new IllegalArgumentException("names nothing");
             };
