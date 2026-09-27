@@ -74,17 +74,18 @@ class WhoMayMakeAPlaceInATextTest {
     /**
      * And who mints a place in no text at all, which is the one spelling left open.
      *
-     * <p>Three passes, each with the same reason: what they build is not written anywhere. A
-     * checker's own reads, a fixture this compiler generated, a branch nothing in the source
-     * reaches — none of them is quoted back at a reader, and what makes such a position useful is
-     * that two of them are equal. It names no text, so nothing can resolve it and no reader can be
-     * sent to it, which is why it is the spelling that stays open.
+     * <p>Four passes, each with the same reason: what they build is not written anywhere. A fixture
+     * entry a search discovers by type, a checker's own reads, a fixture this compiler generated, a
+     * branch nothing in the source reaches — none of them is quoted back at a reader, and what
+     * makes such a position useful is that two of them are equal. It names no text, so nothing can
+     * resolve it and no reader can be sent to it, which is why it is the spelling that stays open.
      *
      * <p>Written down all the same. A row that is new is a pass that has decided some code is
      * nowhere, and whether the code it is about really is written nowhere is the question to ask
      * of it.
      */
     private static final List<String> MINTING_A_PLACE_IN_NO_TEXT = List.of(
+            "souther/compiler/check/FixtureValueEntries",
             "souther/compiler/check/InvariantChecker",
             "souther/compiler/partition/FixtureTemplate",
             "souther/compiler/query/Adequacy$DeadBranches");

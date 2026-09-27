@@ -782,9 +782,17 @@ public final class Shapes {
             Answer<souther.compiler.check.FakeTables> declared =
                     db.ask(new Names.FakeTables(name));
             Answer<BehaviorBodies> bodies = db.ask(new Bodies.Implementation(name));
+            // What TypedFixtureValues.of reads a candidate's declared type against beyond this
+            // module's own definitions. Not Bodies.ImportedDefinitions(name): asking it here cycles
+            // back into this same CheckSurface (its own closure needs ClausesTakenIn and the rest of
+            // what this assembly settles), the same shape of cycle DeclaredTypeReading's checked-
+            // world FieldTypes already refuses. So this reads no import for now — every candidate
+            // TypedFixtureValues discovers is this module's own — and the library, so it can leave
+            // that out of what it discovers among those.
+            Answer<Stdlib> stdlib = db.ask(new Front.Library());
             if (!settling.present() || !normalized.present() || !resolved.present()
                     || !scope.present() || !fns.present() || !declared.present()
-                    || !bodies.present()) {
+                    || !bodies.present() || !stdlib.present()) {
                 return Answer.absent();
             }
             try {
@@ -793,7 +801,9 @@ public final class Shapes {
                                 settling.value(), normalized.value(), fns.value(),
                                 declarationNewtypes(db),
                                 signatures.present() ? signatures.value() : Map.of(),
-                                declared.value(), bodies.value());
+                                declared.value(), bodies.value(), Map.of(), stdlib.value(),
+                                scope.value(), publishedDeclarations(db), declarationKinds(db),
+                                newtypeInners(db));
                 // A definition that did not desugar is missing from what was handed in, and a
                 // surface without it would be this module read as one that does not write it.
                 return assembled == null ? Answer.absent() : Answer.of(assembled);

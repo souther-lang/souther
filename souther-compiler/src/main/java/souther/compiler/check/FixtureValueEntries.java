@@ -3,6 +3,10 @@ package souther.compiler.check;
 import souther.compiler.ast.DefinitionRole;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
+import souther.compiler.diag.SourcePos;
+import souther.compiler.types.FixtureReferenceOrigin;
+import souther.compiler.types.ReachName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.LinkedHashMap;
@@ -107,31 +111,60 @@ public final class FixtureValueEntries {
     public record Emitted(Map<String, Hir.FnDef> defs, Map<ValueName.Helper, String> methods) {
     }
 
+    /** Nowhere a source wrote: the position a candidate {@link TypedFixtureValues} discovers is
+     *  minted under, since no row or fake wrote a reference for this to reuse the position of. */
+    private static final SourcePos DISCOVERED = new SourcePos(0, 0);
+
     /** The fixture entries {@code surface}'s rows and fakes need, and the correspondence a fixture
      *  reads a named value's method through. {@code placed} is {@link RowFixtures#placed}'s answer
-     *  for the same module, shared rather than recomputed. */
+     *  for the same module, shared rather than recomputed. {@code typed} is {@link
+     *  TypedFixtureValues#of}'s answer for the same module: a candidate a search may offer as a
+     *  baseline before any row names it, minted here so that {@code FixtureReader} finds an entry
+     *  already made for it rather than falling back to interpreting its body. A value both a row
+     *  names and {@code typed} states keeps the row's own reference — reused, never minted twice.
+     */
     public static Emitted emitted(CheckSurface surface, DeclarationNewtypes newtypes,
-                                  List<RowFixtures.Placed> placed) {
+                                  List<RowFixtures.Placed> placed,
+                                  Map<TypeSymbol, List<ReachName.Declaration>> typed) {
         Hir.Module module = surface.module();
         Set<String> published = ValueEntries.publishedValues(module);
         Map<String, Hir.FnDef> defs = new LinkedHashMap<>();
         Map<ValueName.Helper, String> methods = new LinkedHashMap<>();
         for (Map.Entry<ValueName.Helper, Hir.Var.Denoting> named
                 : referencedValues(placed).entrySet()) {
-            ValueName.Helper of = named.getKey();
-            if (of.module().equals(module.name()) && published.contains(of.name())) {
-                methods.put(of, ValueEntries.methodFor(of.name()));
-                continue;
+            mint(defs, methods, module, newtypes, published, named.getKey(), named.getValue());
+        }
+        for (List<ReachName.Declaration> candidates : typed.values()) {
+            for (ReachName.Declaration candidate : candidates) {
+                ValueName.Helper of = (ValueName.Helper) candidate.denotes();
+                if (methods.containsKey(of)) {
+                    continue;
+                }
+                Hir.Var.Denoting reference = (Hir.Var.Denoting) Hir.Var.respelled(
+                        candidate.rendered(), candidate, new FixtureReferenceOrigin(0), DISCOVERED,
+                        null);
+                mint(defs, methods, module, newtypes, published, of, reference);
             }
-            Hir.Var.Denoting reference = named.getValue();
-            String name = methodFor(of.module() + "." + of.name());
-            Hir.FnDef entry = new Hir.FnDef(WrittenName.synthetic(name, reference.pos()),
-                    module.name(), List.of(), null, new Hir.FnBody.Written(reference),
-                    new Hir.Modifiers(true, true), new DefinitionRole.FixtureValueEntry(of),
-                    reference.pos());
-            defs.put(name, Desugared.Fn.desugar(entry, newtypes).read());
-            methods.put(of, name);
         }
         return new Emitted(defs, methods);
+    }
+
+    /** Mints the entry {@code of} is read through, or reuses its published one where the module
+     *  already publishes it — one decision, made the same way whether a row named {@code reference}
+     *  or {@link TypedFixtureValues} discovered it. */
+    private static void mint(Map<String, Hir.FnDef> defs, Map<ValueName.Helper, String> methods,
+                             Hir.Module module, DeclarationNewtypes newtypes, Set<String> published,
+                             ValueName.Helper of, Hir.Var.Denoting reference) {
+        if (of.module().equals(module.name()) && published.contains(of.name())) {
+            methods.put(of, ValueEntries.methodFor(of.name()));
+            return;
+        }
+        String name = methodFor(of.module() + "." + of.name());
+        Hir.FnDef entry = new Hir.FnDef(WrittenName.synthetic(name, reference.pos()),
+                module.name(), List.of(), null, new Hir.FnBody.Written(reference),
+                new Hir.Modifiers(true, true), new DefinitionRole.FixtureValueEntry(of),
+                reference.pos());
+        defs.put(name, Desugared.Fn.desugar(entry, newtypes).read());
+        methods.put(of, name);
     }
 }
