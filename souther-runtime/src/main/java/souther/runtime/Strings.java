@@ -29,44 +29,44 @@ import souther.unicode.ScalarValues;
 public final class Strings {
 
     /**
-     * The longest text, in UTF-16 units, this run time declares a Souther {@code String} to hold.
+     * The longest text, in code points, a Souther {@code String} holds (spec §what-a-string-holds).
      *
-     * <p>A declaration, and not the most a {@code java.lang.String} can hold: one kept in Latin-1
-     * may be longer, and text past this is not a {@code String} however it is held. It is chosen as
-     * what a {@code java.lang.String} holds whatever its characters are. Not
-     * {@code Integer.MAX_VALUE}, which is only what a length is counted in. A {@code java.lang.String}
-     * keeps its text in one array, a VM refuses an array a few elements short of that with "Requested
-     * array size exceeds VM limit" however much heap it has, and a text with any character outside
-     * Latin-1 — or any text at all where compact strings are off — takes two bytes a unit, which
-     * halves it again. This is the JDK's own portable bound on an array
-     * ({@code ArraysSupport.SOFT_MAX_ARRAY_LENGTH}) halved, so what has a place does not depend on
-     * which characters a text holds or on how the VM was started. A text within it is an ordinary
-     * allocation, which the heap may still refuse, as it may any other.
+     * <p>A number of the language, counted in what {@code String.length} counts, so it is the same on
+     * every carrier and does not depend on which characters a text holds. A carrier represents a
+     * {@code String} of this length or it is not an implementation of the language. On the JVM it is
+     * at most {@code 2 * LONGEST_TEXT} UTF-16 units, which a {@code java.lang.String} holds in either
+     * of its encodings. A text within it is an ordinary allocation, which the heap may still refuse,
+     * as it may any other.
      */
-    static final long LONGEST_TEXT = (Integer.MAX_VALUE - 8) / 2;
+    static final long LONGEST_TEXT = (1L << 28) - 1;
 
     private Strings() {}
 
     /**
-     * Aborts where a text {@code units} long has no place — asked of the text an operation is
+     * Aborts where a text {@code codePoints} long has no place — asked of the text an operation is
      * defined as canonicalizing (two strings joined, {@code n} copies, the pieces and separators of
      * a join) before it is built, so the host is never asked to build what no {@code String} holds
      * (spec §an-operation-refuses-only-what-its-own-answer-has-no-place-for: a form the operation is
      * defined as). In {@code long}, because the sum of two lengths is not always an {@code int}.
      */
-    private static void holds(long units, String what) {
-        if (units > LONGEST_TEXT) {
+    private static void holds(long codePoints, String what) {
+        holds(codePoints, what, LONGEST_TEXT);
+    }
+
+    private static void holds(long codePoints, String what, long longest) {
+        if (codePoints > longest) {
             throw new ConstraintViolation(
-                    what + " is " + units + " UTF-16 units, longer than a String holds");
+                    what + " is " + codePoints + " code points, longer than a String holds");
         }
     }
 
-    /** {@link #holds} of {@code copies} copies of a text {@code units} long, asked by division so that
-     *  a count near the top of {@code Int} is not multiplied past what a {@code long} counts. */
-    private static void holdsCopies(long copies, int units, String what) {
-        if (copies > LONGEST_TEXT / units) {
-            throw new ConstraintViolation(what + ", " + copies + " copies of " + units
-                    + " UTF-16 units, is longer than a String holds");
+    /** {@link #holds} of {@code copies} copies of a text {@code codePoints} long, asked by division
+     *  so that a count near the top of {@code Int} is not multiplied past what a {@code long}
+     *  counts. */
+    private static void holdsCopies(long copies, long codePoints, String what, long longest) {
+        if (copies > longest / codePoints) {
+            throw new ConstraintViolation(what + ", " + copies + " copies of " + codePoints
+                    + " code points, is longer than a String holds");
         }
     }
 
@@ -74,7 +74,11 @@ public final class Strings {
      *  can lengthen a text at a seam as well as shorten it, so the answer is measured as it is
      *  built and not taken to be as long as what it was built from. */
     private static String canonical(String joined, String what) {
-        String canonical = Normalization.nfcWithin(joined, LONGEST_TEXT);
+        return canonical(joined, what, LONGEST_TEXT);
+    }
+
+    private static String canonical(String joined, String what, long longest) {
+        String canonical = Normalization.nfcWithin(joined, longest);
         if (canonical == null) {
             throw new ConstraintViolation(what + " is longer than a String holds once canonicalized");
         }
@@ -93,7 +97,7 @@ public final class Strings {
      * <p>Refused and not repaired. Replacing half a pair with U+FFFD would make text that held one
      * and text that held U+FFFD itself one value, which is the loss a key collision is refused for.
      *
-     * <p>A {@code String} holds no more than {@link #LONGEST_TEXT} UTF-16 units, so text whose
+     * <p>A {@code String} holds no more than {@link #LONGEST_TEXT} code points, so text whose
      * canonical value is longer has no place and is refused too, though a {@code java.lang.String}
      * may be able to hold it. It is the canonical value that is measured, since that is the
      * {@code String} the text would be; how long the text arrived is not a property of any
@@ -104,8 +108,8 @@ public final class Strings {
         return admission(text, LONGEST_TEXT);
     }
 
-    /** {@link #admission} for a carrier that declares {@code longest} UTF-16 units to be what a
-     *  {@code String} holds: this is what a test that cannot build text that long asks of it. */
+    /** {@link #admission} for a {@code String} of {@code longest} code points at most: this is what a
+     *  test that cannot build text that long asks of it. */
     static TextAdmission admission(String text, long longest) {
         int half = halfAPairAt(text);
         if (half >= 0) {
@@ -235,7 +239,7 @@ public final class Strings {
      *  closed under concatenation — a base letter followed by a combining mark composes into one
      *  code point, not two — so the join has to canonicalize again at the seam. */
     public static String append(String a, String b) {
-        holds((long) a.length() + b.length(), "String.append");
+        holds(length(a) + length(b), "String.append");
         return canonical(a + b, "String.append");
     }
 
@@ -244,11 +248,11 @@ public final class Strings {
      *  as one {@code append} makes. A list can hold the same string many times over, so a short list
      *  of short strings can join to more than a {@code String} holds; that is measured first. */
     public static String join(List<String> xs, String sep) {
-        long units = xs.isEmpty() ? 0 : (long) sep.length() * (xs.size() - 1);
+        long codePoints = xs.isEmpty() ? 0 : length(sep) * (xs.size() - 1);
         for (String x : xs) {
-            units += x.length();
+            codePoints += length(x);
         }
-        holds(units, "String.join");
+        holds(codePoints, "String.join");
         return canonical(String.join(sep, xs), "String.join");
     }
 
@@ -271,7 +275,7 @@ public final class Strings {
         for (int at = s.indexOf(target); at >= 0; at = s.indexOf(target, at + target.length())) {
             occurrences++;
         }
-        holds(s.length() + occurrences * (replacement.length() - target.length()), "String.replace");
+        holds(length(s) + occurrences * (length(replacement) - length(target)), "String.replace");
         return canonical(s.replace(target, replacement), "String.replace");
     }
 
@@ -410,18 +414,23 @@ public final class Strings {
     }
 
     /** {@code n} copies of {@code s} joined (Elm {@code String.repeat}); {@code n} of 0 or less gives
-     *  the empty string. Copies no {@code String} could hold abort rather than quietly giving fewer
-     *  copies than were asked for — a model bug, not a business result, and the same treatment
-     *  {@link IntMath} gives an overflow. What is measured is the copies' length, not the count: two
-     *  units repeated a billion times are past what a {@code String} holds though a billion is not.
+     *  the empty string, and so does an empty {@code s} for any {@code n}. Copies no {@code String}
+     *  could hold abort rather than quietly giving fewer copies than were asked for — a model bug,
+     *  not a business result, and the same treatment {@link IntMath} gives an overflow. What is
+     *  measured is the copies' length, not the count: two code points repeated a hundred and fifty
+     *  million times are past what a {@code String} holds though that count alone is not.
      *  Canonicalized: the seam between one copy and the next is exactly {@link #append}'s seam,
      *  repeated. */
     public static String repeat(String s, long n) {
+        return repeat(s, n, LONGEST_TEXT);
+    }
+
+    static String repeat(String s, long n, long longest) {
         if (n <= 0 || s.isEmpty()) {
             return "";
         }
-        holdsCopies(n, s.length(), "String.repeat");
-        return canonical(s.repeat((int) n), "String.repeat");
+        holdsCopies(n, length(s), "String.repeat", longest);
+        return canonical(s.repeat((int) n), "String.repeat", longest);
     }
 
     /** Breaks {@code s} into lines (Elm {@code String.lines}): {@code \r\n} is normalised to
@@ -435,12 +444,12 @@ public final class Strings {
      *  string already that wide is returned unchanged, and an empty {@code pad} fills nothing, so it
      *  is returned unchanged too. */
     public static String padLeft(String s, long width, String pad) {
-        return pad(s, width, pad, true);
+        return pad(s, width, pad, true, LONGEST_TEXT);
     }
 
     /** {@code s} widened on the right, the mirror of {@link #padLeft}. */
     public static String padRight(String s, long width, String pad) {
-        return pad(s, width, pad, false);
+        return pad(s, width, pad, false, LONGEST_TEXT);
     }
 
     /** Widens {@code s} to exactly {@code width} code points with copies of {@code pad} — on the
@@ -459,26 +468,29 @@ public final class Strings {
      * a time with a fresh canonicalization each time, which would canonicalize the same leading code
      * points as many times as there are copies of {@code pad} still to add.
      *
-     * <p>The width is asked first, before anything is worked out from it: the answer is {@code width}
-     * code points and every code point is at least one unit, so a width past what a {@code String}
+     * <p>An empty {@code pad} and an {@code s} already {@code width} wide answer {@code s} before
+     * the width is asked of anything: they build nothing, so whatever the width is, it has no
+     * answer to be too long for. Past those, the width is asked first, before anything is worked
+     * out from it: the answer is {@code width} code points, so a width past what a {@code String}
      * holds is an answer with no place, and what is worked out from a width within it stays within
      * what a {@code long} counts. The copies of {@code pad} that cover what is needed are a form
      * padding is defined as ("{@code pad} is repeated and cut", spec §stdlib-string), so they are
      * measured before they are built, as the fill and {@code s} joined are. */
-    private static String pad(String s, long width, String pad, boolean atStart) {
+    static String pad(String s, long width, String pad, boolean atStart, long longest) {
         if (pad.isEmpty() || length(s) >= width) {
             return s;
         }
-        holds(width, "String.pad");
+        holds(width, "String.pad", longest);
         long padLength = length(pad);
         long need = width - length(s);
         while (true) {
             long copies = 1 + (need - 1) / padLength;
-            holdsCopies(copies, pad.length(), "String.pad's fill");
-            String fill = canonical(pad.repeat((int) copies), "String.pad's fill");
+            holdsCopies(copies, padLength, "String.pad's fill", longest);
+            String fill = canonical(pad.repeat((int) copies), "String.pad's fill", longest);
             String trimmedFill = length(fill) > need ? slice(fill, 0, need) : fill;
-            holds((long) trimmedFill.length() + s.length(), "String.pad");
-            String joined = canonical(atStart ? trimmedFill + s : s + trimmedFill, "String.pad");
+            holds(length(trimmedFill) + length(s), "String.pad", longest);
+            String joined = canonical(atStart ? trimmedFill + s : s + trimmedFill, "String.pad",
+                    longest);
             if (length(joined) >= width) {
                 return joined;
             }
@@ -561,6 +573,7 @@ public final class Strings {
     private static String mapCase(String s, boolean lower) {
         int[] cps = s.codePoints().toArray();
         StringBuilder out = new StringBuilder(cps.length);
+        int[] written = {0};
         for (int i = 0; i < cps.length; i++) {
             int cp = cps[i];
             int[] mapped = null;
@@ -574,22 +587,24 @@ public final class Strings {
                 mapped = lookup(lower ? CaseTables.LOWER : CaseTables.UPPER, cp);
             }
             if (mapped == null) {
-                putMapped(out, cp, lower);
+                putMapped(out, written, cp, lower);
             } else {
                 for (int m : mapped) {
-                    putMapped(out, m, lower);
+                    putMapped(out, written, m, lower);
                 }
             }
         }
         return out.toString();
     }
 
-    private static void putMapped(StringBuilder out, int cp, boolean lower) {
-        if (out.length() + Character.charCount(cp) > LONGEST_TEXT) {
+    /** Appends {@code cp} to {@code out}, which holds {@code written[0]} code points. */
+    private static void putMapped(StringBuilder out, int[] written, int cp, boolean lower) {
+        if (written[0] >= LONGEST_TEXT) {
             throw new ConstraintViolation((lower ? "String.lowercase" : "String.uppercase")
-                    + " maps to more UTF-16 units than a String holds");
+                    + " maps to more code points than a String holds");
         }
         out.appendCodePoint(cp);
+        written[0]++;
     }
 
     /** Unicode's {@code Final_Sigma} condition: immediately preceded, skipping {@code Case_Ignorable}

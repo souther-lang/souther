@@ -57,13 +57,14 @@ class NfcOneRunAtATimeIsNfcOfTheWholeTest {
         }
     }
 
-    /** The bound is on the answer: exactly as long is an answer, one unit longer is none. */
+    /** The bound is on the answer, in code points: exactly as long is an answer, one code point
+     *  longer is none. */
     @Test
     void anAnswerLongerThanTheBoundIsNone() {
         String s = "é".repeat(5) + "𝅥";            // five é and a mark of two units
-        assertEquals(7, Normalization.nfc(s).length());
-        assertEquals(Normalization.nfc(s), Normalization.nfcWithin(s, 7));
-        assertNull(Normalization.nfcWithin(s, 6));
+        assertEquals(6, Normalization.nfc(s).codePointCount(0, Normalization.nfc(s).length()));
+        assertEquals(Normalization.nfc(s), Normalization.nfcWithin(s, 6));
+        assertNull(Normalization.nfcWithin(s, 5));
     }
 
     private static String threeStepsOverTheWhole(String s) {
