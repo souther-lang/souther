@@ -49,22 +49,23 @@ public final class FixtureValueEntries {
     }
 
     /**
-     * The values a row or fake of {@code surface} names bare, each held as the reference it was named
-     * through — reused as the entry's own body, so the entry reaches the value exactly as the fixture
-     * resolved it (its own module for a local value, the declaring module for an imported one) rather
-     * than this guessing which of the two a fresh reference would have to say.
+     * The values a row or fake names bare, each held as the reference it was named through — reused
+     * as the entry's own body, so the entry reaches the value exactly as the fixture resolved it (its
+     * own module for a local value, the declaring module for an imported one) rather than this
+     * guessing which of the two a fresh reference would have to say.
      *
-     * <p>Walked over every operand {@link RowFixtures#placed} numbers, so a name found here is a name
-     * some row or fake actually wrote — never a name a value's own body happens to reach, which
-     * lowering resolves on its own once an entry exists for the value naming it. A name written more
-     * than once keeps its first reference; every one denotes the same value, so one entry answers all
-     * of them.
+     * <p>{@code placed} is {@link RowFixtures#placed}'s own answer, handed in rather than asked for
+     * here: {@link RowFixtures#emitted} already walks it once for the same module, and a second
+     * walk here would be the second order {@code placed}'s own doc refuses. A name found among these
+     * operands is a name some row or fake actually wrote — never a name a value's own body happens to
+     * reach, which lowering resolves on its own once an entry exists for the value naming it. A name
+     * written more than once keeps its first reference; every one denotes the same value, so one
+     * entry answers all of them.
      */
-    static Map<ValueName.Helper, Hir.Var.Denoting> referencedValues(
-            CheckSurface surface, Map<ValueName.Behavior, Sig> signatures) {
+    static Map<ValueName.Helper, Hir.Var.Denoting> referencedValues(List<RowFixtures.Placed> placed) {
         Map<ValueName.Helper, Hir.Var.Denoting> out = new LinkedHashMap<>();
-        for (RowFixtures.Placed placed : RowFixtures.placed(surface, signatures)) {
-            collect(placed.operand(), out);
+        for (RowFixtures.Placed each : placed) {
+            collect(each.operand(), out);
         }
         return out;
     }
@@ -119,15 +120,16 @@ public final class FixtureValueEntries {
     }
 
     /** The fixture entries {@code surface}'s rows and fakes need, and the correspondence a fixture
-     *  reads a named value's method through. */
+     *  reads a named value's method through. {@code placed} is {@link RowFixtures#placed}'s answer
+     *  for the same module, shared rather than recomputed. */
     public static Emitted emitted(CheckSurface surface, DeclarationNewtypes newtypes,
-                                  Map<ValueName.Behavior, Sig> signatures) {
+                                  List<RowFixtures.Placed> placed) {
         Hir.Module module = surface.module();
         Set<String> published = ValueEntries.publishedValues(module);
         Map<String, Hir.FnDef> defs = new LinkedHashMap<>();
         Map<ValueName.Helper, String> methods = new LinkedHashMap<>();
         for (Map.Entry<ValueName.Helper, Hir.Var.Denoting> named
-                : referencedValues(surface, signatures).entrySet()) {
+                : referencedValues(placed).entrySet()) {
             ValueName.Helper of = named.getKey();
             if (of.module().equals(module.name()) && published.contains(of.name())) {
                 methods.put(of, ValueEntries.methodFor(of.name()));

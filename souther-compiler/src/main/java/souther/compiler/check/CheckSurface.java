@@ -180,17 +180,21 @@ public final class CheckSurface implements Assembly {
         FakeTables fakes = FakeTables.namesWrittenOut(declared, self);
         CheckSurface written = new CheckSurface(settling, declarations, fns, desugaredFrom, examples, fakes,
                 List.of(), Map.of(), Map.of(), bodies);
+        // Every operand a row or a fake writes, walked once: RowFixtures.emitted mints a method for
+        // each and FixtureValueEntries reads the same list for the names among them, rather than
+        // each asking RowFixtures.placed for its own copy.
+        List<RowFixtures.Placed> placed = RowFixtures.placed(written, signatures);
         // What each row operand computes, emitted beside the module's own so a row runs its operand
         // in the program the behavior it is about is applied in. Which method is whose is kept with
         // the assembly: it is decided here and read wherever a row is run, never counted out again.
-        RowFixtures.Emitted rows = RowFixtures.emitted(written, newtypes, signatures);
+        RowFixtures.Emitted rows = RowFixtures.emitted(written, newtypes, placed);
         // And what another module reads a value it publishes through: a definition of the same
         // family, emitted for the same reason, and kept apart from the rows in that no row runs it.
         Map<String, Hir.FnDef> entries = ValueEntries.emitted(written, newtypes);
         // And what a fixture reads a named value through, whether or not the module publishes it —
         // reusing the entry above where one already exists rather than minting a second.
         FixtureValueEntries.Emitted fixtureEntries =
-                FixtureValueEntries.emitted(written, newtypes, signatures);
+                FixtureValueEntries.emitted(written, newtypes, placed);
         // fixtureEntries.methods(), not fixtureEntries.defs(): a value already published needs no
         // new definition, but its method still has to be carried past `written`, whose table is
         // empty — checking `defs()` here would silently drop that correspondence.

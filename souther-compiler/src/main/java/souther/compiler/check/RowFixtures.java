@@ -160,12 +160,16 @@ public final class RowFixtures {
      *
      * <p>An expectation written as a bare case name has none: it asserts which arm the behavior
      * answered with and nothing under it, so there is no value to compute and nothing to emit.
+     *
+     * <p>{@code placed} is {@link #placed}'s own answer, handed in rather than asked for here: a
+     * caller minting more than one family of definition from one module's rows and fakes — a row's
+     * operand, a fixture's value entry — asks {@link #placed} once and hands every miner the same
+     * list, for the reason its own doc states: two walks are two orders.
      */
     public static Emitted emitted(CheckSurface surface, DeclarationNewtypes newtypes,
-                                  Map<ValueName.Behavior, Sig> signatures) {
+                                  List<Placed> placed) {
         Map<String, Hir.FnDef> out = new LinkedHashMap<>();
         Map<Hir.Expr, String> methods = new IdentityHashMap<>();
-        List<Placed> placed = placed(surface, signatures);
         for (int i = 0; i < placed.size(); i++) {
             Hir.Expr operand = placed.get(i).operand();
             RowPosition position = placed.get(i).position();
