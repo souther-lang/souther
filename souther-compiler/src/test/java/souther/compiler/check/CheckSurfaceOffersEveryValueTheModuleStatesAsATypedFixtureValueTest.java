@@ -210,6 +210,73 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
         }
     }
 
+    private static final String STAGE = """
+            module example.stage exposing ( Raw, Mid, first )
+
+            data Raw = { n: Int }
+            data Mid = { n: Int }
+
+            behavior first : (raw: Raw) -> Mid
+                constructs Mid
+
+            let first (raw) = Mid { n = raw.n }
+            """;
+
+    private static final String COMPOSED = """
+            module example.composed exposing ( admit )
+
+            import example.stage ( Raw, Mid, first )
+
+            data Grade = Bronze | Gold
+            data Customer = { grade: Grade }
+            data Accepted = { at: String }
+
+            behavior admit : (customer: Customer) -> Accepted
+                constructs Accepted
+
+            let admit (customer) = Accepted { at = "now" }
+
+            behavior finish : (m: Mid) -> Accepted
+                constructs Accepted
+
+            let finish (m) = Accepted { at = "done" }
+
+            behavior process = first >-> finish
+
+            let junk = Raw { n = 1 }
+            """;
+
+    /**
+     * A nullary value of {@code Raw} is not a candidate: {@code Raw} reaches this module's own
+     * behaviors only through {@code process}, a {@code >->} composition, and {@code
+     * Adequacy.Generated} never generates a row against a composition directly — {@code specOf}
+     * answers null for anything but a {@code SpecBehavior}, and generation stops there. A
+     * composition's input is its first stage's own ({@code first}, borrowed and not declared here),
+     * so nothing this module declares takes a {@code Raw} the way a row could be composed against
+     * it.
+     */
+    @Test
+    void aValueOfACompositionsInputTypeIsNotACandidate() {
+        Compilation compilation = Compilation.ofSources(List.of(STAGE, COMPOSED),
+                ModulePath.EMPTY);
+        compilation.answerEverything();
+        CheckSurface surface = compilation.db()
+                .ask(new Shapes.CheckSurface("example.composed")).value();
+        assertNotNull(surface, "the module under test does not get as far as being assembled");
+
+        ValueName.Helper junk = new ValueName.Helper("example.composed", "junk");
+        for (List<ReachName.Declaration> candidates : surface.typedFixtureValues().values()) {
+            for (ReachName.Declaration candidate : candidates) {
+                assertNotNull(candidate.denotes());
+                if (candidate.denotes().equals(junk)) {
+                    throw new AssertionError("`junk` builds `Raw`, which only a composition takes"
+                            + " here, so it should not be among the candidates: "
+                            + surface.typedFixtureValues());
+                }
+            }
+        }
+    }
+
     private static List<ReachName.Declaration> candidatesOf(String source, String module) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();

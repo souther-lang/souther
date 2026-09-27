@@ -27,14 +27,18 @@ import java.util.Set;
  * takes or answers has no reason to trade the wider typing for that, and offering it as a candidate
  * that answers no parameter would be exactly that trade for nothing.
  *
- * <p>Own behaviors and their input types, not {@code behaviors}' whole domain and not output types
- * either. {@code behaviors} is {@code Bodies.Reachable} — this module's own and every one it
- * borrows — because reading a candidate's body needs the wider table to type a call the body makes
- * of a borrowed behavior; but a borrowed behavior's own parameter is a fact about the module that
- * declares it, not this one, and offering a candidate for it is a claim this module never makes. Nor
- * is a behavior's answer: {@code Adequacy.Generated.named}, the search this hoists, has only ever
- * read {@code sig.inputTypes()} — never {@code outputType()} — so keeping this to input types is
- * carrying that search's own domain forward exactly rather than widening it along the way.
+ * <p>Own {@link Hir.SpecBehavior}s and their input types, not {@code behaviors}' whole domain and
+ * not output types either. {@code behaviors} is {@code Bodies.Reachable} — this module's own and
+ * every one it borrows — because reading a candidate's body needs the wider table to type a call
+ * the body makes of a borrowed behavior; but a borrowed behavior's own parameter is a fact about the
+ * module that declares it, not this one, and offering a candidate for it is a claim this module
+ * never makes. Nor is a {@link Hir.PipeBehavior}'s: {@code Adequacy.Generated.compute} only ever
+ * generates rows for a {@code SpecBehavior} — {@code specOf} answers null for anything else and
+ * generation stops there, its own comment saying why: {@code "A composition's inputs are its first
+ * stage's and are divided there"}. Nor is a behavior's answer: {@code Adequacy.Generated.named}, the
+ * search this hoists, has only ever read {@code sig.inputTypes()} — never {@code outputType()} — so
+ * keeping this to a {@code SpecBehavior}'s input types is carrying that search's own domain forward
+ * exactly rather than widening it along the way.
  *
  * <p>Read over {@link HelperTable#reachable} and not {@link Bodies.ModuleDefinitions}: that answer
  * is downstream of this module's own {@code CheckSurface} and asking it here would be the cycle
@@ -77,17 +81,27 @@ public final class TypedFixtureValues {
 
     /**
      * The candidates {@code module} states, keyed by the type each is declared to build, in the
-     * order {@link HelperTable#reachable} reaches them — one of {@code module}'s own behaviors' own
-     * declared input types, and no other.
+     * order {@link HelperTable#reachable} reaches them — one of {@code module}'s own {@code
+     * SpecBehavior}s' own declared input types, and no other.
      */
     public static Map<TypeSymbol, List<ReachName.Declaration>> of(Hir.Module module,
             Map<String, Hir.FnDef> importedDefinitions, Stdlib stdlib, Symbols symbols,
             PublishedDeclarations published, DeclarationKinds kinds, NewtypeInners fieldWraps,
             Map<ValueName.Behavior, Sig> behaviors) {
+        Set<String> generated = new LinkedHashSet<>();
+        for (Hir.BehaviorDef behavior : module.behaviors()) {
+            if (behavior instanceof Hir.SpecBehavior spec) {
+                generated.add(spec.name());
+            }
+        }
         Set<TypeSymbol> relevant = new LinkedHashSet<>();
         for (Map.Entry<ValueName.Behavior, Sig> each : behaviors.entrySet()) {
-            if (!each.getKey().module().equals(module.name())) {
-                continue;   // borrowed, not declared — its parameter is a fact about its own module
+            if (!each.getKey().module().equals(module.name())
+                    || !generated.contains(each.getKey().name())) {
+                // Borrowed rather than declared, its parameter is a fact about its own module; a
+                // composition's rather than a SpecBehavior's, its input is its first stage's and
+                // divided there — Adequacy.Generated never generates a row against it directly.
+                continue;
             }
             for (Type type : each.getValue().inputTypes()) {
                 if (type instanceof Type.Ref(TypeSymbol of)) {
