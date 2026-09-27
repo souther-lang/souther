@@ -1614,9 +1614,10 @@ public interface Hir {
     /**
      * {@code x -> expr}, or {@code (acc, x) -> expr} — a block (spec §blocks).
      *
-     * <p>Second-class: it may only be an argument, never a value that is returned, stored in a
-     * field, or bound by {@code let}. The parser only accepts one in an argument position, and
-     * because it cannot escape, the backend inlines it rather than building a closure.
+     * <p>Where a position or a declaration says what the block takes, it is a function value like
+     * any other: it may be returned, held in a collection or bound by {@code let}, and the backend
+     * builds a closure for it where it is kept rather than applied. Where nothing says, it is
+     * refused where it is written.
      *
      * <p>{@code rule} is which block of the source this is, minted where the syntax is read and
      * carried by every copy. A block handed to a function parameter is the rule the fork that
@@ -1628,13 +1629,24 @@ public interface Hir {
      * wrote: a name standing where a value goes is the function it names, and what a pass puts
      * there is the block applying it. Null for a block the author wrote, which its rule names.
      *
+     * <p>{@code named} is what that name reaches and what the declaration says it takes, for the
+     * same blocks: null for one an author wrote, or one a pass built for another reason.
+     *
      * <p>Said by whoever writes the block and not read back off what stands inside it. The body is
      * walked again after it is written — a call in it becomes an {@link Expansion}, a binding may
      * come to stand around it — so a reader working out which block this is from the shape it ended
      * up with is asking a question the shape stopped answering.
      */
     record Block(List<Binder> params, Expr body, souther.compiler.types.RuleOrigin rule,
-                 SourceReferenceOrigin expandedFrom, SourcePos pos, Region region) implements Expr {
+                 SourceReferenceOrigin expandedFrom, NamedFunction named, SourcePos pos,
+                 Region region) implements Expr {
+
+        /** A block that is not a name written out: an author's lambda, or one a pass built for a
+         *  reason of its own. */
+        public Block(List<Binder> params, Expr body, souther.compiler.types.RuleOrigin rule,
+                     SourceReferenceOrigin expandedFrom, SourcePos pos, Region region) {
+            this(params, body, rule, expandedFrom, null, pos, region);
+        }
 
         /** How the parameters were written, in order. */
         public List<String> paramNames() {
@@ -1643,6 +1655,32 @@ public interface Hir {
                 names.add(p.name());
             }
             return names;
+        }
+    }
+
+    /**
+     * The function a name written where a value goes reaches, as the block that stands for it holds
+     * it.
+     *
+     * <p>{@code target} says which function it is, and the kinds of function say where its type
+     * is read: a binding holds its own, a behavior is typed by the requirements the body was
+     * checked under, and every other declaration says it in its parameters.
+     *
+     * <p>{@code declaredTakes} is what the declaration has settled for those parameters, resolved:
+     * the type its author wrote, or the one reading its body gave a parameter left unwritten. Null
+     * where the declaration is one of the first two, where a parameter has no type settled, and
+     * where one of them is not a type until something instantiates it. It is read off the declaration when the
+     * name is written out, the one place the declaration is at hand for every kind of function —
+     * whether the body is later expanded, left standing or bound is decided after, and none of the
+     * three changes what the function takes.
+     */
+    record NamedFunction(ValueName target, List<Type> declaredTakes) {
+
+        public NamedFunction {
+            if (target == null) {
+                throw new IllegalArgumentException("a function is the one a name reaches");
+            }
+            declaredTakes = declaredTakes == null ? null : List.copyOf(declaredTakes);
         }
     }
 
@@ -3003,8 +3041,8 @@ public interface Hir {
             case Block bl -> {
                 Expr body = atExpr.apply(bl.body());
                 yield body == bl.body() ? bl
-                        : new Block(bl.params(), body, bl.rule(), bl.expandedFrom(), bl.pos(),
-                                bl.region());
+                        : new Block(bl.params(), body, bl.rule(), bl.expandedFrom(), bl.named(),
+                                bl.pos(), bl.region());
             }
             case ListLit l -> {
                 List<Expr> elements = each(l.elements(), atExpr);

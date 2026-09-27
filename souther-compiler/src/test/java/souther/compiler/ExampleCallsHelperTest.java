@@ -469,7 +469,7 @@ class ExampleCallsHelperTest {
                 """);
         // The lambda escapes as the operand's answer, which no position that takes a value holds:
         // the refusal is the language's own (E1809), not a sentence about library functions.
-        assertTrue(e.getMessage().contains("A block is not a value"), e.getMessage());
+        assertTrue(e.getMessage().contains("Nothing says what this function takes"), e.getMessage());
         assertTrue(!e.getMessage().contains("standard-library"), e.getMessage());
     }
 

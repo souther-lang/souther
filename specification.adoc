@@ -2837,16 +2837,16 @@ What holds wherever something is applied:
 * [[an-application-gives-the-arguments-it-takes]]an application MUST give as many arguments as the thing takes. A newtype wraps one value, a block takes what it was written with, a helper takes its parameters;
 * [[an-argument-has-the-type-its-parameter-takes]]an argument MUST have the type its parameter takes.
 
-A block is written where a function is taken, and that position is part of what the standard library states:
+Where an application takes a function, that position states the function type of the value written there, and it is part of what the standard library states:
 
-* [[a-function-goes-where-a-function-is-taken]]a block or a function name goes in the argument that takes a function, and only there. Which argument that is belongs to the function being called (<<stdlib>>);
+* [[a-function-goes-where-a-function-is-taken]]a block or a function name written at an argument that takes a function is read at the function type that argument states. Which argument that is belongs to the function being called (<<stdlib>>), and one written at an argument that takes no function has no such type to be read at;
 * [[a-block-answers-the-type-its-position-takes]]a block MUST answer with what its position takes — the accumulator of a `+fold+`, `+Bool+` for a predicate, the element type of what is being grown.
 
-[[a-block-is-not-a-value]]A block is not a value. It may be passed as an argument, or bound with `+let+` and applied, and it MUST NOT be returned or stored in a field: a function has no external representation (<<external-representation>>), so nothing carries it across a boundary.
+[[a-function-value-has-a-type-where-it-is-written]]A function value has a type where it is written. A position that takes a function gives the lambda written there what it takes and what it answers, so a lambda answering a lambda is read against the function type its outer position gives, and a name gives the type its declaration states (<<blocks>>). A lambda written where neither does — returned, held in a collection, chosen between — and that nothing applies has no type to stand at, and MUST be written where one is given. A function still has no external representation (<<external-representation>>), so it MUST NOT be stored in a field or cross a behavior's input or output.
 
 [[a-function-binding-has-one-type]]A binding holding a function has one type. Applied at two argument types, or given by two branches that produce different function types, it has no single one to be.
 
-[[a-function-bindings-type-is-known]]That type MUST be readable where the binding is written — from its annotation, or from an application in the same scope. Nothing outside the scope is consulted for it. A binding inside a block takes it from the applications in the body it is in force over. A top-level definition takes it from nothing that reads it: a reference in another definition is where a copy of the value is substituted and typed as that copy (<<fn-value-semantics>>), and the definition itself gets no type from it. A value the module publishes is handed to a reader as it stands, and no copy of it stands anywhere for it to be typed in, so a published value holding a function MUST write its type: `+let pick: (Int) -> Option<Int> = picker(1)+`. A value that is not published is not asked for one, whichever way the compiler goes on to run it: whether a program is accepted does not depend on that.
+[[a-function-bindings-type-is-known]]That type MUST be readable where the binding is written — from its annotation, from what the declaration says where the value is a name (or a choice between names that agree), or from an application in the same scope. Nothing outside the scope is consulted for it. A binding inside a block takes it from the applications in the body it is in force over. A top-level definition takes it from nothing that reads it: a reference in another definition is where a copy of the value is substituted and typed as that copy (<<fn-value-semantics>>), and the definition itself gets no type from it. A value the module publishes is handed to a reader as it stands, and no copy of it stands anywhere for it to be typed in, so a published value holding a function MUST write its type: `+let pick: (Int) -> Option<Int> = picker(1)+`. A value that is not published is not asked for one, whichever way the compiler goes on to run it: whether a program is accepted does not depend on that.
 
 [[an-annotation-on-a-function-binding-is-a-function-type]]An annotation on a binding that holds a function MUST be a function type. An ordinary type does not describe a function, so it settles nothing and disagrees with the value in the same breath. For a binding inside a block, leaving the annotation off is the other way to write the binding, and then the applications in the body it is in force over settle it.
 
@@ -2906,7 +2906,7 @@ A written return type is a declaration into the body, and it stays one where the
 
 The body is an expression. `+{ ... }+` is a block expression (<<block-expression>>), written to place a `+let+` or `+guard+`.
 
-`+=+` introduces a named definition. The bodies of an anonymous block (<<blocks>>) and a `+match+` case are introduced by `+->+` — the same symbol as the type arrow. A lambda written on the right of `+=+` is the parameter-list form written the other way round: `+let f = (x) -> e+` and `+let f (x) = e+` define one thing, and which of the two a source writes changes nothing about what is defined. Only a lambda the source wrote is read this way. A `+.field+` getter is a block too (<<blocks>>), but its parameter is synthesized, so it stays a block — and a block is not a value, which is what a definition writing no parameters would need it to be. A definition that writes a function type is a *value* of that type, and the lambda on the right is that value rather than the definition's parameters. In `+let bump: (Int) -> Int = (x) -> next(x)+` the written type says what the definition is, and reading `+x+` as a parameter of `+bump+` would leave that type describing a definition answering a function rather than being one. A lambda's own parameters take no annotation, so this is where a function value states its type, as a binding does (<<block-expression>>).
+`+=+` introduces a named definition. The bodies of an anonymous block (<<blocks>>) and a `+match+` case are introduced by `+->+` — the same symbol as the type arrow. A lambda written on the right of `+=+` is the parameter-list form written the other way round: `+let f = (x) -> e+` and `+let f (x) = e+` define one thing, and which of the two a source writes changes nothing about what is defined. Only a lambda the source wrote is read this way. A `+.field+` getter is a block too (<<blocks>>), but its parameter is synthesized, so it has no declaration of its own to read a parameter type from. Where no surrounding position gives it a function type it cannot stand as a function value (<<a-function-value-has-a-type-where-it-is-written>>), which is what a definition writing no parameters would need it to be. A definition that writes a function type is a *value* of that type, and the lambda on the right is that value rather than the definition's parameters. In `+let bump: (Int) -> Int = (x) -> next(x)+` the written type says what the definition is, and reading `+x+` as a parameter of `+bump+` would leave that type describing a definition answering a function rather than being one. A lambda's own parameters take no annotation, so this is where a function value states its type, as a binding does (<<block-expression>>).
 
 [#fn-value-semantics]
 === A value is substituted where it is named
@@ -3792,7 +3792,7 @@ A function written where a call takes one is made there and run elsewhere. Evalu
 
 [[an-arm-is-named-by-what-tells-it-from-the-others]]*An arm is named to a machine by what tells it from the others.* What a reader is shown of an arm is a word and a place, and neither tells two of them apart: a body with two `+guard+`s writes two arms called `+else+`, and a fork whose caller supplies the rule is one arm per rule handed in — at one place, under one word, where the helper is written in the module that calls it. So the document publishes the arm's identity wherever it names one, in the account and on the finding alike, and a consumer joins the two on it (`+obligationId+`).
 
-[[an-arm-whose-rule-nobody-worked-out-is-not-counted]]*An arm standing for a number of rules nobody could work out is not counted.* A fork whose declaration says its caller decides is one arm per rule a caller hands in (<<a-block-is-not-a-value>>), and where which rule reached it could not be worked out, one place can be as many arms as there are rules reaching it: a row through it may or may not be a row through this one. Such an arm is outside both numbers, and the fork is named under them. Held inside the count, what a row is owed for would be a predicate the sentence over the denominator does not hold of.
+[[an-arm-whose-rule-nobody-worked-out-is-not-counted]]*An arm standing for a number of rules nobody could work out is not counted.* A fork whose declaration says its caller decides is one arm per rule a caller hands in (<<a-function-goes-where-a-function-is-taken>>), and where which rule reached it could not be worked out, one place can be as many arms as there are rules reaching it: a row through it may or may not be a row through this one. Such an arm is outside both numbers, and the fork is named under them. Held inside the count, what a row is owed for would be a predicate the sentence over the denominator does not hold of.
 
 *A boundary a guard drew is met by reaching the comparison, not by writing the value.* A threshold read off a `+guard+` is a boundary to reach (<<example-adequacy>>), and a row can carry exactly that value and never get to the guard because an earlier branch went the other way. Such a boundary counts as met only where a row both wrote the value and went through one of the two arms of the `+if+` whose condition compares it. That is a fact about the rule that drew the border and holds of all four of its points (<<a-border-has-four-point-roles>>): a row well inside a guard's line that never reached the guard says as little about it as a row on the line that did not. A boundary an invariant drew is met by writing the value: nothing outside the bound can be constructed, so the edge is the whole of what there is to reach.
 
@@ -6554,15 +6554,15 @@ it in this scope so its parameter types follow.
 Reported at the binding (<<a-function-bindings-type-is-known>>). The second form is a published top-level value. An application of it in another definition does not help there, so the message does not offer one.
 
 [#e1809]
-=== A block is returned or stored
+=== Nothing says what a function takes
 
 [,text]
 ----
-A block is not a value: it may be passed as an argument or bound to a `let` and applied, but it
-cannot be returned or stored in a field.
+Nothing says what this function takes: write it where a declaration gives its type, or write the
+type of the `let` that holds it.
 ----
 
-Reported where a block leaves the scope it was written in (<<a-block-is-not-a-value>>). A function has no external representation (<<external-representation>>), so a field holding one could not be decoded or encoded and an output holding one could not cross out.
+Reported where the lambda is written (<<a-function-value-has-a-type-where-it-is-written>>). No position it stands in takes a function, and it is no name whose declaration states one, so it has no parameter types to be read at.
 
 [#e1810]
 === An annotation on a function binding is not a function type

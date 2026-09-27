@@ -134,9 +134,9 @@ class CompileInvariantQuantifierTest {
         Compiler.compile(src);
     }
 
-    /** What it cannot do is escape: a static method is not a value to be carried off. */
+    /** It is the same function held in a list: the binding names what the declaration declares. */
     @Test
-    void aTotalHelperThatEscapesInAnInvariantIsRejected() {
+    void aTotalHelperHeldInAListInAnInvariantIsTheSameFunction() throws Exception {
         String src = """
                 module demo
                 data 木 = { 子: Option<木> }
@@ -148,7 +148,10 @@ class CompileInvariantQuantifierTest {
                     List.length([g]) >= 0
                 }
                 """;
-        assertThrows(CompileException.class, () -> Compiler.compile(src));
+        ClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
+        Result<?> r = Codecs.decoder(loader, "demo.X").decode(
+                Map.of("root", Map.of("子", Map.of())), Path.ROOT);
+        assertTrue(r instanceof Ok, "the invariant holds, so decoding succeeds");
     }
 
     @Test

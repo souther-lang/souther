@@ -1450,6 +1450,12 @@ public final class Backend {
      * body whose pattern uses a lookaround, a back reference or a property, which this reader
      * refuses, and a class emitted under it hands the author's text to the JVM's engine.
      *
+     * <p>Version 34 changes what the front end reads a carried body as where a function stands as a
+     * value. A lambda answering a function is read against the function type its position gives it,
+     * and a library or helper name standing alone takes the parameter types its declaration gives.
+     * A reader built under version 33 refuses a carried body that holds either, which this reader
+     * admits.
+     *
      * <p>That is also where this number stops. It says whether a jar and this compiler agree on
      * what the metadata says and on the rules a declaration is turned into JVM facts by — a
      * behavior's class and methods, how one is held and built, a type's layout and codecs. It does
@@ -1460,7 +1466,7 @@ public final class Backend {
      * {@code [#a-published-module-agrees-with-what-it-copied]}). An edit to a declaration moves
      * that and not this; an edit to a rule moves this.
      */
-    public static final int BOUNDARY_VERSION = 33;
+    public static final int BOUNDARY_VERSION = 34;
 
     /** Emits the class a module's own declarations are published on, carrying {@code declarations}.
      * What it says is the caller's; that it is built like every other generated class — the same Java
