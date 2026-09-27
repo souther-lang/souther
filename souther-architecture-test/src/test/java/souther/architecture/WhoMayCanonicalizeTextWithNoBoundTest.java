@@ -15,15 +15,14 @@ import java.util.TreeSet;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * In the run time, text is canonicalized with no bound on the answer's length only where it
- * arrives from outside.
+ * In the run time, no text is canonicalized with no bound on the answer's length.
  *
  * <p>An operation that builds a string asks {@code Normalization.nfcWithin} for its answer, with
  * the length a {@code String} holds as the bound, so an answer past it is found before it is built
- * and aborts as the operation's contract says. {@code Normalization.nfc} asks for the answer
- * however long it is. A builder calling it is one whose answer can reach the host's own
- * {@code OutOfMemoryError} instead of the abort. The one place it is still called is the door text
- * comes in by, where what an over-long canonical form is refused as is the door's to say.
+ * and aborts as the operation's contract says. The door text comes in by asks it the same way, and
+ * refuses text whose canonical form has no place. {@code Normalization.nfc} asks for the answer
+ * however long it is, so a caller of it is one whose answer can reach the host's own
+ * {@code OutOfMemoryError} instead of the abort or the refusal.
  */
 class WhoMayCanonicalizeTextWithNoBoundTest {
 
@@ -31,14 +30,11 @@ class WhoMayCanonicalizeTextWithNoBoundTest {
 
     private static final String NORMALIZATION = "souther/unicode/Normalization";
 
-    private static final List<String> CANONICALIZES_WITH_NO_BOUND = List.of(
-            "souther/runtime/Strings#admitted");
-
     @Test
-    void everyRunTimeMethodThatCanonicalizesWithNoBoundIsWrittenDownHere() {
-        assertEquals(CANONICALIZES_WITH_NO_BOUND, canonicalizingWithNoBound(),
-                "a string an operation builds is canonicalized within the length a String holds,"
-                        + " so an answer past it aborts rather than exhausting the host");
+    void noRunTimeMethodCanonicalizesWithNoBound() {
+        assertEquals(List.of(), canonicalizingWithNoBound(),
+                "text is canonicalized within the length a String holds, so an answer past it"
+                        + " aborts or is refused rather than exhausting the host");
     }
 
     private static List<String> canonicalizingWithNoBound() {

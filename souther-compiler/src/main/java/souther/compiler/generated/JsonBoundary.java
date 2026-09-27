@@ -10,11 +10,10 @@ import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.TemporalRule;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
-import souther.compiler.types.TextRule;
 import souther.runtime.Representations;
 import souther.runtime.Sets;
-import souther.runtime.Strings;
 import souther.runtime.Temporals;
+import souther.runtime.TextLeaf;
 
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Issues;
@@ -142,19 +141,15 @@ public final class JsonBoundary {
     /**
      * Text as it arrives, let in: what the generated string leaf does, in Java.
      *
-     * <p>{@link Strings#admission} decides it — Unicode 18.0.0's NFC, or why the text is not a
+     * <p>{@link TextLeaf#admit} decides it — Unicode 18.0.0's NFC, or why the text is not a
      * {@code String}: it holds half of a surrogate pair, or its canonical value is longer than a
-     * {@code String} holds — and each refusal is reported at the path the way the generated leaf
-     * reports it ({@link TextRule}). Not {@code StringDecoder.normalize()}, which answers for
-     * whatever Unicode version this JDK's own {@code java.text.Normalizer} carries.
-     * {@link StringDecoder#from} keeps the result a {@link StringDecoder}, so {@link #temporal} can
-     * still chain {@code .date()} etc. on it.
+     * {@code String} holds — and reports each refusal at the path, as the generated leaf does. Not
+     * {@code StringDecoder.normalize()}, which answers for whatever Unicode version this JDK's own
+     * {@code java.text.Normalizer} carries. {@link StringDecoder#from} keeps the result a
+     * {@link StringDecoder}, so {@link #temporal} can still chain {@code .date()} etc. on it.
      */
     private static <I> StringDecoder<I> admitted(StringDecoder<I> text) {
-        return StringDecoder.from(text.map(Strings::admission)
-                .refine(Strings::isText, TextRule.REFUSED, TextRule.HALF_A_PAIR)
-                .refine(Strings::hasPlace, TextRule.REFUSED, TextRule.NO_PLACE)
-                .map(Strings::textOf));
+        return StringDecoder.from(text.flatMapWithPath(TextLeaf::admit));
     }
 
     /**

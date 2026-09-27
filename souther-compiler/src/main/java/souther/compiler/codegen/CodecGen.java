@@ -15,7 +15,6 @@ import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.CaseShape;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.TemporalRule;
-import souther.compiler.types.TextRule;
 import souther.compiler.types.Type;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.TypeSymbol;
@@ -138,11 +137,12 @@ final class CodecGen {
      * any one shape, and the first attempt at it — normalizing where each caller happened to build a
      * leaf — left four paths behind, each found separately and after the fact.
      *
-     * <p>{@code Strings::admission} is lifted through {@code Decoder.map}: it answers the NFC form
-     * as an {@code Admitted}, or says why the text is not a {@code String} — it holds half of a
-     * surrogate pair, or its canonical value is longer than a {@code String} holds. Each refusal is
-     * reported at the leaf's path ({@link TextRule}) rather than thrown, since a decoder reports what
-     * it could not read; both are Raoh's {@code invalid_format}, with a message apiece. Not
+     * <p>{@code TextLeaf::admit} is the one step through {@code Decoder.flatMapWithPath}: it answers
+     * the NFC form, or says why the text is not a {@code String} — it holds half of a surrogate pair,
+     * or its canonical value is longer than a {@code String} holds. Each refusal is reported at the
+     * leaf's path rather than thrown, since a decoder reports what it could not read; both are Raoh's
+     * {@code invalid_format}, with a message apiece. One step, because every text that arrives passes
+     * it and each step of a decoder is a result built per value. Not
      * {@code StringDecoder.normalize()}, which is Raoh's call into {@code java.text.Normalizer} and
      * answers for whatever Unicode version this JDK shipped with. {@code StringDecoder.from} wraps
      * the result back into a {@link CD_StringDecoder} so a constraint chained after this (a length
@@ -154,42 +154,17 @@ final class CodecGen {
      */
     private void emitStringLeaf(CodeBuilder code, ClassDesc leafOwner) {
         code.invokestatic(leafOwner, "string", MTD_leafString);
-        code.invokedynamic(STRINGS_ADMISSION);
-        code.invokeinterface(CD_RDecoder, "map", MTD_Rdecoder_map);
-        code.invokedynamic(IS_TEXT);
-        code.loadConstant(TextRule.REFUSED);
-        code.loadConstant(TextRule.HALF_A_PAIR);
-        code.invokeinterface(CD_RDecoder, "refine", MTD_Rrefine_message);
-        code.invokedynamic(HAS_PLACE);
-        code.loadConstant(TextRule.REFUSED);
-        code.loadConstant(TextRule.NO_PLACE);
-        code.invokeinterface(CD_RDecoder, "refine", MTD_Rrefine_message);
-        code.invokedynamic(TEXT_OF);
-        code.invokeinterface(CD_RDecoder, "map", MTD_Rdecoder_map);
+        code.invokedynamic(TEXT_LEAF_ADMIT);
+        code.invokeinterface(CD_RDecoder, "flatMapWithPath", MTD_flatMapWithPath);
         code.invokestatic(CD_StringDecoder, "from", MTD_stringDecoderFrom);
     }
 
-    /** {@code Strings::admission} as a {@code Function}, for the string leaf above. */
-    private static final DynamicCallSiteDesc STRINGS_ADMISSION = Lambdas.callSite(
-            Lambdas.Sam.FUNCTION, stringsMethod("admission", MTD_admission), MTD_admission);
-
-    /** {@code Strings::isText} as a {@code Predicate}: whether the text is a sequence of scalar
-     *  values. */
-    private static final DynamicCallSiteDesc IS_TEXT = Lambdas.callSite(
-            Lambdas.Sam.PREDICATE, stringsMethod("isText", MTD_admissionTest), MTD_admissionTest);
-
-    /** {@code Strings::hasPlace} as a {@code Predicate}: whether what is text is short enough to be
-     *  a {@code String}. */
-    private static final DynamicCallSiteDesc HAS_PLACE = Lambdas.callSite(
-            Lambdas.Sam.PREDICATE, stringsMethod("hasPlace", MTD_admissionTest), MTD_admissionTest);
-
-    /** {@code Strings::textOf} as a {@code Function}: the text of what both refusals let through. */
-    private static final DynamicCallSiteDesc TEXT_OF = Lambdas.callSite(
-            Lambdas.Sam.FUNCTION, stringsMethod("textOf", MTD_admissionText), MTD_admissionText);
-
-    private static DirectMethodHandleDesc stringsMethod(String name, MethodTypeDesc type) {
-        return MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, CD_Strings, name, type);
-    }
+    /** {@code TextLeaf::admit} as a {@code BiFunction}, for the string leaf above. */
+    private static final DynamicCallSiteDesc TEXT_LEAF_ADMIT = Lambdas.callSite(
+            Lambdas.Sam.BI_FUNCTION,
+            MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, CD_TextLeaf,
+                    "admit", MTD_textLeafAdmit),
+            MTD_textLeafAdmit);
 
 
     /**

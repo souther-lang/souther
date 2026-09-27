@@ -131,21 +131,6 @@ public final class Strings {
         };
     }
 
-    /** Whether {@code admission} is not {@link TextAdmission.NotText}: a decoder's first refusal. */
-    public static boolean isText(TextAdmission admission) {
-        return !(admission instanceof TextAdmission.NotText);
-    }
-
-    /** Whether {@code admission} is not {@link TextAdmission.NoPlace}: a decoder's second refusal. */
-    public static boolean hasPlace(TextAdmission admission) {
-        return !(admission instanceof TextAdmission.NoPlace);
-    }
-
-    /** The text of an {@link TextAdmission.Admitted}, once a decoder has refused the others. */
-    public static String textOf(TextAdmission admission) {
-        return ((TextAdmission.Admitted) admission).text();
-    }
-
     /** Where {@code text} holds a surrogate that is not one half of a pair beside the other, or -1
      *  where it holds none. */
     private static int halfAPairAt(String text) {

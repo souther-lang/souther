@@ -9,8 +9,8 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.msg.ParseMessage;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.generated.JsonBoundary;
-import souther.compiler.types.TextRule;
 import souther.runtime.ConstraintViolation;
+import souther.runtime.TextLeaf;
 
 import org.junit.jupiter.api.Test;
 
@@ -76,7 +76,7 @@ class TextHoldingHalfASurrogatePairIsRefusedAtEveryDoorTest {
 
     private static void assertRefusedAt(String pointer, Result<?> result) {
         Issue issue = assertInstanceOf(Err.class, result).issues().asList().get(0);
-        assertEquals(TextRule.REFUSED, issue.code());
+        assertEquals(TextLeaf.REFUSED, issue.code());
         assertEquals(pointer, issue.path().toJsonPointer());
     }
 
@@ -109,7 +109,7 @@ class TextHoldingHalfASurrogatePairIsRefusedAtEveryDoorTest {
                 {"keyed", "{\"" + escapedHigh + "\": 1}", "/" + HIGH}}) {
             JsonBoundary.Read.Refused refused = Crossing.refusalOf(TAKING, "demo", each[0], each[1]);
             Issue issue = refused.issues().asList().get(0);
-            assertEquals(TextRule.REFUSED, issue.code(), each[0]);
+            assertEquals(TextLeaf.REFUSED, issue.code(), each[0]);
             assertEquals(each[2], issue.path().toJsonPointer(), each[0]);
         }
         assertEquals("1", Crossing.of(TAKING, "demo", "bare", "\"\\ud800\\udc00\""));

@@ -1,5 +1,10 @@
 package souther.runtime;
 
+import net.unit8.raoh.Err;
+import net.unit8.raoh.Issue;
+import net.unit8.raoh.Ok;
+import net.unit8.raoh.Path;
+import net.unit8.raoh.Result;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -63,18 +68,22 @@ class TextAdmittedAsAStringHasAPlaceTest {
         }
     }
 
+    /** A decoder says each refusal at the path, with Raoh's one code and a message of its own. */
     @Test
-    void theDecodersQuestionsAreAnsweredFromWhatAdmissionSaid() {
-        TextAdmission noPlace = new TextAdmission.NoPlace();
-        TextAdmission notText = new TextAdmission.NotText(0);
-        TextAdmission admitted = new TextAdmission.Admitted("a");
-        assertEquals(false, Strings.isText(notText));
-        assertEquals(true, Strings.isText(noPlace));
-        assertEquals(true, Strings.isText(admitted));
-        assertEquals(false, Strings.hasPlace(noPlace));
-        assertEquals(true, Strings.hasPlace(notText));
-        assertEquals(true, Strings.hasPlace(admitted));
-        assertEquals("a", Strings.textOf(admitted));
+    void aDecodersLeafSaysWhichRefusalItWas() {
+        Path at = Path.ROOT.append("s");
+        assertEquals(new Ok<>("a"), TextLeaf.answer(new TextAdmission.Admitted("a"), at));
+        Issue halfAPair = issueOf(TextLeaf.answer(new TextAdmission.NotText(0), at));
+        Issue noPlace = issueOf(TextLeaf.answer(new TextAdmission.NoPlace(), at));
+        assertEquals(TextLeaf.REFUSED, halfAPair.code());
+        assertEquals(TextLeaf.REFUSED, noPlace.code());
+        assertEquals(TextLeaf.HALF_A_PAIR, halfAPair.message());
+        assertEquals(TextLeaf.NO_PLACE, noPlace.message());
+        assertEquals("/s", noPlace.path().toJsonPointer());
+    }
+
+    private static Issue issueOf(Result<String> result) {
+        return assertInstanceOf(Err.class, result).issues().asList().get(0);
     }
 
     @Test
