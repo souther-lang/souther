@@ -1,6 +1,6 @@
 # ADR-0035: A match case destructures a case's fields; `as` binds the whole; Option binds positionally
 
-Status: Accepted
+Status: Accepted. Clarified: `| None as n` binds the matched optional, which the decision already said and the checker did not do.
 
 ## Context
 
@@ -28,7 +28,8 @@ Option's payload binding to the positional F#/Elm form.
   single named case only — an or-pattern binds the sum type and has no case fields.
 - **`as` binds the whole matched value**, everywhere: `| Member as m` binds the case, `| A | B as x`
   binds the sum type, and `| Member { id } as whole` binds both the field and the whole. There is no
-  longer an Option-specific meaning for `as`.
+  longer an Option-specific meaning for `as`. That includes `| None as n`: nothing stands under
+  `None`, so `n` is the matched optional itself, typed as the scrutinee's `Option<T>`.
 - **Option binds positionally**: `| Some v` binds the wrapped value (F#'s `Some x`, Elm's `Just x`);
   `| None` is nullary. `| Some as v` is rejected with a message pointing at `| Some v`. `Some` is the
   one built-in case with an anonymous payload, so positional binding is meaningful only there; user

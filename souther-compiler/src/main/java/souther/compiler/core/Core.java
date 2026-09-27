@@ -1245,12 +1245,13 @@ public sealed interface Core {
                      SourcePos pos) implements Core {}
 
     /**
-     * What an arm selects and what it binds, both decided by the checker.
+     * What an arm selects, as the checker decided it.
      *
      * <p>{@code cases} are the cases the arm answers for, in the order they are written; more than
-     * one is an or-pattern. {@code binding} is what the value is read as once the arm is taken, and
-     * it is the arm's own rather than any one case's: an or-pattern binds the subject, because no
-     * single case type fits all of its alternatives.
+     * one is an or-pattern. What name the arm introduces, and which value that name stands for, is
+     * {@link ArmBinding}'s to say and is not read off this: a selection says which carrier is
+     * tested, and the same selection is bound as the value itself or as what stands under it
+     * depending on what was written.
      *
      * <p><b>As the checker resolved them, and not as they were written.</b> A case is carried here
      * as a {@link ResolvedCase} — what the value is tested and read as, together with the atoms
@@ -1262,9 +1263,9 @@ public sealed interface Core {
      * neither how many leaves it reaches nor whether it is an optional's carrier.
      *
      * <p>Nothing here is worked out again downstream. A reader emitting this tests each case's
-     * {@link Refinement} and reads the binding through {@code binding}, and never asks whether the
-     * subject was an optional, whether the arm named one case or several, or whether a case is a
-     * primitive. Those are the questions {@code Core} exists to have answered already.
+     * {@link Refinement}, and never asks whether the subject was an optional, whether the arm named
+     * one case or several, or whether a case is a primitive. Those are the questions {@code Core}
+     * exists to have answered already.
      */
     sealed interface ResolvedPattern {
 
@@ -1294,17 +1295,6 @@ public sealed interface Core {
          */
         Optional<ResolvedCase> selectedCase();
 
-        /**
-         * What the value is read as once the arm is taken.
-         *
-         * <p>Derived rather than carried. What an arm binds follows from what it selects — one case
-         * binds what that case's carrier holds, several bind the subject — so holding the two apart
-         * would be holding one fact in two places, and a pattern selecting an optional's absent
-         * carrier while binding its present one would be a Core the emitter has no meaning for: it
-         * would test one carrier and read the value out of the other.
-         */
-        Refinement binding();
-
         /** The cases this answers for. */
         default List<TypeSymbol> caseTypes() {
             List<TypeSymbol> out = new java.util.ArrayList<>();
@@ -1314,12 +1304,7 @@ public sealed interface Core {
             return out;
         }
 
-        /** The type the binding takes inside the arm, or null where the arm binds nothing readable. */
-        default Type bindType() {
-            return binding().bound();
-        }
-
-        /** An arm answering for one case, which binds what that case's carrier holds. */
+        /** An arm answering for one case. */
         record Single(ResolvedCase selected) implements ResolvedPattern {
 
             public Single {
@@ -1338,15 +1323,11 @@ public sealed interface Core {
                 return Optional.of(selected);
             }
 
-            @Override
-            public Refinement binding() {
-                return selected.refinement();
-            }
         }
 
         /**
-         * An arm answering for several, which binds the subject: no one case type fits all of its
-         * alternatives, and every alternative is already the subject.
+         * An arm answering for several: no one case type fits all of its alternatives, and every
+         * alternative is already the subject, which is the type a name written on it stands as.
          */
         record AnyOf(List<ResolvedCase> cases, Type subject) implements ResolvedPattern {
 
@@ -1355,7 +1336,7 @@ public sealed interface Core {
                     throw new IllegalArgumentException("an arm answering for several names several");
                 }
                 if (subject == null) {
-                    throw new IllegalArgumentException("what such an arm binds is the subject");
+                    throw new IllegalArgumentException("what such an arm is over is the subject");
                 }
                 cases = List.copyOf(cases);
             }
@@ -1364,20 +1345,132 @@ public sealed interface Core {
             public Optional<ResolvedCase> selectedCase() {
                 return Optional.empty();
             }
+        }
+    }
+
+    /**
+     * The name a {@code match} arm introduces, and which value it stands for.
+     *
+     * <p>Three answers, and a name that stands for a value comes with the type it stands as: an arm
+     * that has a binder has a type for it, and there is no arm that has one without the other.
+     * What an arm selects and what its name stands for are separate facts. The same selection is
+     * named as the value itself ({@code None as n}, {@code Member as m}) or as what stands under its
+     * carrier ({@code Some v}), and only what was written says which.
+     */
+    sealed interface ArmBinding {
+
+        /** The arm's name, or null where the arm introduces none. */
+        Binder binder();
+
+        /** The type the name stands as inside the arm, or null where the arm introduces none. */
+        Type type();
+
+        /** The arm introduces no name. */
+        record Unbound() implements ArmBinding {
 
             @Override
-            public Refinement binding() {
-                return new Refinement.Direct(subject);
+            public Binder binder() {
+                return null;
+            }
+
+            @Override
+            public Type type() {
+                return null;
+            }
+        }
+
+        /**
+         * The name stands for the value that was matched, read as {@code type}: the case a single
+         * case selected, the subject for an or-pattern, and the optional itself for an optional's
+         * absent carrier, which has nothing under it to name instead.
+         */
+        record Selected(Binder binder, Type type) implements ArmBinding {
+
+            public Selected {
+                if (binder == null || type == null) {
+                    throw new IllegalArgumentException("a name for the matched value is read as some type");
+                }
+            }
+        }
+
+        /**
+         * The name stands for what lies under {@code carrier}, the optional's present carrier the
+         * arm selects, and is read as the element that carrier holds. The carrier is what the value
+         * is reached through, so an emitter opens it from here and does not go back to the pattern
+         * to find out which one it was.
+         */
+        record Payload(Binder binder, Refinement.OptionPresent carrier) implements ArmBinding {
+
+            public Payload {
+                if (binder == null || carrier == null) {
+                    throw new IllegalArgumentException("a name for what a carrier holds names the carrier");
+                }
+            }
+
+            @Override
+            public Type type() {
+                return carrier.bound();
             }
         }
     }
 
-    /** One arm of a {@code match}: what it selects, what it calls the value, and what it answers. */
-    record Case(ResolvedPattern pattern, Binder binder, Core body, SourcePos pos) {
+    /**
+     * One arm of a {@code match}: what it selects, what it calls the value, and what it answers.
+     *
+     * <p>The name has to be one the selection can give. A name for what stands under a carrier is
+     * for the carrier that has something under it, and the one the arm tests; a name for the matched
+     * value is read as the type the selection says that value is. Pairs that say otherwise are
+     * refused here, so an emitter reads whichever half it needs and the other cannot contradict it.
+     * What is left to {@link Match} is the one thing this cannot see: an optional's absent carrier
+     * and an or-pattern are read as the value the {@code match} is over.
+     */
+    record Case(ResolvedPattern pattern, ArmBinding binding, Core body, SourcePos pos) {
+
+        public Case {
+            if (binding == null) {
+                throw new IllegalArgumentException("an arm that names nothing says so with Unbound");
+            }
+            if (pattern != null && !nameableBy(pattern, binding)) {
+                throw new IllegalArgumentException("an arm selecting " + pattern.caseTypes()
+                        + " cannot name " + binding);
+            }
+        }
+
+        private static boolean nameableBy(ResolvedPattern pattern, ArmBinding binding) {
+            return switch (binding) {
+                case ArmBinding.Unbound _ -> true;
+                case ArmBinding.Payload payload -> pattern instanceof ResolvedPattern.Single one
+                        && one.selected().refinement().equals(payload.carrier());
+                case ArmBinding.Selected selected -> switch (pattern) {
+                    case ResolvedPattern.Single one -> switch (one.selected().refinement()) {
+                        case Refinement.Direct direct -> selected.type().equals(direct.bound());
+                        // Which optional is the match's to say ({@link Match}).
+                        case Refinement.OptionAbsent _ -> true;
+                        // Its element is what `Some v` names; the carrier itself has no name.
+                        case Refinement.OptionPresent _ -> false;
+                    };
+                    case ResolvedPattern.AnyOf several -> selected.type().equals(several.subject());
+                };
+            };
+        }
+
+        /** Whether the name is for the value the {@code match} is over, whatever it is: the
+         *  optional a {@code None} was found in, or the subject an or-pattern was written on. */
+        boolean namesTheSubject() {
+            return binding instanceof ArmBinding.Selected
+                    && (pattern instanceof ResolvedPattern.AnyOf
+                    || (pattern instanceof ResolvedPattern.Single one
+                            && one.selected().refinement() instanceof Refinement.OptionAbsent));
+        }
+
+        /** The name the arm introduces, or null where it introduces none. */
+        public Binder binder() {
+            return binding.binder();
+        }
 
         /** How the binding was written, or null where the arm binds nothing. */
         public String bindingName() {
-            return binder == null ? null : binder.name();
+            return binder() == null ? null : binder().name();
         }
 
         /** The cases this arm answers for. */
@@ -1395,16 +1488,13 @@ public sealed interface Core {
          * @param subject the type of the value the {@code match} is over
          */
         public Type castOnBinding(Type subject) {
-            if (binder == null) {
-                return null;
-            }
-            return switch (pattern.binding()) {
+            return switch (binding) {
+                case ArmBinding.Unbound _ -> null;
                 // What an optional holds is opened and cast to the type it was checked to hold.
-                case Refinement.OptionPresent wrapped -> wrapped.bound();
-                // A case is cast to its own type, unless nothing narrowed it: then it is the subject.
-                case Refinement.Direct itself ->
-                        itself.bound() == null || itself.bound().equals(subject) ? null : itself.bound();
-                case Refinement.OptionAbsent _ -> null;
+                case ArmBinding.Payload payload -> payload.type();
+                // The value is cast to its own type, unless nothing narrowed it: then it is the subject.
+                case ArmBinding.Selected selected ->
+                        selected.type().equals(subject) ? null : selected.type();
             };
         }
 
@@ -1414,15 +1504,15 @@ public sealed interface Core {
             return pattern.selectedCase();
         }
 
-        /** The type the binding takes inside this arm. */
+        /** The type the binding takes inside this arm, or null where the arm introduces none. */
         public Type bindType() {
-            return pattern.bindType();
+            return binding.type();
         }
 
         /** The same arm answering a rewritten body — what a pass rewriting expressions produces, so
          * a rewrite carries what the arm selects and binds rather than restating it. */
         public Case answering(Core rewritten) {
-            return rewritten == body ? this : new Case(pattern, binder, rewritten, pos);
+            return rewritten == body ? this : new Case(pattern, binding, rewritten, pos);
         }
     }
 
@@ -1437,6 +1527,13 @@ public sealed interface Core {
             if (place == null) {
                 throw new IllegalArgumentException("a fork stands somewhere: some fork of the"
                         + " model, in some copy of the body that wrote it");
+            }
+            for (Case arm : cases) {
+                if (arm.namesTheSubject() && !arm.bindType().equals(scrutinee.type())) {
+                    throw new IllegalArgumentException("an arm naming the value this match is over"
+                            + " reads it as " + Type.show(arm.bindType()) + ", and it is "
+                            + Type.show(scrutinee.type()));
+                }
             }
         }
 

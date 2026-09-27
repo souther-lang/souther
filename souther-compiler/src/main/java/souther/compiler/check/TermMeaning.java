@@ -361,7 +361,7 @@ public final class TermMeaning {
                 out.add(x.cases().size());
                 for (Core.Case arm : x.cases()) {
                     out.add(arm.pattern());
-                    out.add(arm.binder());
+                    out.add(arm.binding());
                     project(arm.body(), out);
                 }
             }

@@ -4082,7 +4082,9 @@ match request with
     | PreApproved as a -> ...
 ----
 
-An or-pattern's binding differs from a single case. A single case's `+as+` binds to that case's type (the `+s+` in `+| Submitted as s+` is `+Submitted+`), but an or-pattern's `+as+` binds to *the scrutinee's sum type*, because no single case type fits all alternatives. So an or-pattern binding cannot read case-specific fields; carry it as the sum or open it again with match. Exhaustiveness counts cases one by one; a case received by two cases is a duplicate error.
+An or-pattern's binding differs from a single case. A single declared case's `+as+` binds to that case's type (the `+s+` in `+| Submitted as s+` is `+Submitted+`), but an or-pattern's `+as+` binds to *the scrutinee's sum type*, because no single case type fits all alternatives. So an or-pattern binding cannot read case-specific fields; carry it as the sum or open it again with match. Exhaustiveness counts cases one by one; a case received by two cases is a duplicate error.
+
+`+None+` holds nothing, so its `+as+` binds the value that was matched: `+n+` in `+| None as n+` is the optional itself, of the scrutinee's `+Option<T>+` type, and it can be matched again like any other optional.
 
 The `+Some+` of `+Option+` (<<algebraic-types>>) extracts the wrapped value by *positional binding*. The `+v+` in `+| Some v+` is bound to the contents, not to `+Some+`. `+Some+` is the only built-in case with a payload, so it reaches the contents by positional binding rather than `+as+` (which binds the whole value elsewhere). `+| Some as v+` cannot be written. A `+?+` field and the return of `+List.get+` / `+Map.get+` are extracted this way.
 
