@@ -6582,11 +6582,11 @@ it in this scope so its parameter types follow.
 
 [,text]
 ----
-`inc` is published and holds a function, but its function type is not written: write it
+`inc` is reached by an entry and holds a function, but its function type is not written: write it
 (`let inc: (Int) -> Bool = ...`).
 ----
 
-Reported at the binding (<<a-function-bindings-type-is-known>>). The second form is a published top-level value. An application of it in another definition does not help there, so the message does not offer one.
+Reported at the binding (<<a-function-bindings-type-is-known>>). The second form is a top-level value another module or a fixture reaches by an entry — a nullary bridge that is no copy of the value, so there is no application anywhere else to settle its type from. An application of it in another definition does not help there, so the message does not offer one.
 
 [#e1809]
 === Nothing says what a function takes
