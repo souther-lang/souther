@@ -236,11 +236,37 @@ public sealed interface Core {
      * <p>{@code reading} is what the operator reads its operands as, which the checker settled and
      * the three types here do not say. {@code type} is what the operator answers, and the two differ:
      * {@code i / j} over two {@code Int}s reads them as they stand and answers a {@code Rational}.
+     *
+     * <p>{@code ordering} is what the operands are ordered by, which the checker settled for the
+     * operators that place them on an order and which is empty for every other. It is not the
+     * reading: {@code w <= w} for a case {@code w} reads its operands as {@code w} and is ordered by
+     * the enumeration listing it, while {@code stage < w} reads them as that enumeration. A comparison
+     * no source wrote may leave it empty, since only a source-written one is lowered.
      */
     record Binary(BinOp op, Core left, Core right, BinaryReading reading,
-                  ConstructOccurrence occurrence, Type type, SourcePos pos) implements Core {
+                  Optional<OrderingBasis> ordering, ConstructOccurrence occurrence, Type type,
+                  SourcePos pos) implements Core {
+
+        /** An operator that orders nothing, or a comparison no source wrote, so with no basis. */
+        public Binary(BinOp op, Core left, Core right, BinaryReading reading,
+                      ConstructOccurrence occurrence, Type type, SourcePos pos) {
+            this(op, left, right, reading, Optional.empty(), occurrence, type, pos);
+        }
 
         public Binary {
+            if (ordering == null) {
+                throw new IllegalArgumentException(
+                        "an operator's ordering is a basis or nothing: " + op);
+            }
+            if (ordering.isPresent() && !op.ordersItsOperands()) {
+                throw new IllegalArgumentException(
+                        "an operator that orders nothing has nothing to be ordered by: " + op);
+            }
+            if (ordering.isEmpty() && op.ordersItsOperands() && occurrence != null
+                    && occurrence.isWritten()) {
+                throw new IllegalArgumentException(
+                        "a written comparison says what its operands are ordered by: " + op);
+            }
             // A comparison is some comparison of the model, in some copy of the body that wrote it.
             // Both halves are the occurrence's to say, and a comparison that is neither is one no
             // reading of coverage can file.
@@ -262,6 +288,26 @@ public sealed interface Core {
         /** What the source wrote, for a reader whose question is about the construct alone. */
         public SourceConstructOrigin origin() {
             return occurrence.origin();
+        }
+    }
+
+    /**
+     * The type whose order a comparison or a sort places its values on, as the checker settled it:
+     * {@code Int} for an {@code Int} and for a quantity over one, the enumeration for a case of it,
+     * for a union of its cases and for a newtype over it, {@code Rational} for a pair read at its
+     * exact value.
+     *
+     * <p>A type of the language and never how a backend compares it: the order of a value is what
+     * this names, and a backend lowers it in whatever representation it holds the type in. It is not
+     * the type of an operand, and no operand's type says it — a case of two sums has no order of its
+     * own, and which sum orders it is the checker's answer to a question a backend does not ask.
+     */
+    record OrderingBasis(Type type) {
+
+        public OrderingBasis {
+            if (type == null) {
+                throw new IllegalArgumentException("an order is the order of some type");
+            }
         }
     }
 
@@ -711,12 +757,18 @@ public sealed interface Core {
          * {@code Nothing} for an empty-list literal, a still-open type variable, or bottom — as where
          * the Type does support ordering. A Type the requirement refused never reaches here; that is
          * a compile error instead. Never a comparator, method symbol, or other backend
-         * representation: a backend reads {@link #type()} and decides its own representation from
-         * it. */
-        record OrderingSubject(Type type) implements KernelFact {
+         * representation: a backend reads {@link #type()} and {@link #ordering()} and decides its
+         * own representation from them.
+         *
+         * <p>{@code ordering} is what the values of {@code type} are ordered by ({@link
+         * OrderingBasis}): the enumeration for a list of one of its cases, {@code Int} for a list of
+         * a quantity over an {@code Int}. It is empty exactly where there was nothing yet to check —
+         * the requirement stood, and no value of any type is there to be ordered. */
+        record OrderingSubject(Type type, Optional<OrderingBasis> ordering) implements KernelFact {
 
             public OrderingSubject {
                 Objects.requireNonNull(type, "a settled ordering subject is settled to some type");
+                Objects.requireNonNull(ordering, "an ordering is a basis or nothing");
             }
         }
     }
@@ -1556,8 +1608,8 @@ public sealed interface Core {
                 Core left = atExpr.apply(b.left());
                 Core right = atExpr.apply(b.right());
                 yield left == b.left() && right == b.right() ? b
-                        : new Binary(b.op(), left, right, b.reading(), b.occurrence(), b.type(),
-                                b.pos());
+                        : new Binary(b.op(), left, right, b.reading(), b.ordering(), b.occurrence(),
+                                b.type(), b.pos());
             }
             case Call c -> {
                 List<Core> args = each(c.args(), atExpr);

@@ -57,9 +57,11 @@ public final class TypeOps {
      *
      * <p>Ordering is not one of these. Both of these are answered {@code true} or {@code false} and
      * nothing more is wanted, while a reader that admits an ordered value goes on to ask what orders
-     * it — so the answer is a witness and lives in {@link Ordering}, and {@link #supportsOrdering}
-     * is that witness existing. Kept as a row here, the capability had one answer and the four
-     * places that emit a comparison each worked out the other for themselves (issue #856).
+     * it — so the answer is a witness and lives in {@link Ordering}, and a type is ordered where
+     * that witness exists. There is no boolean beside it: a reader that asked only whether a type is
+     * ordered would have thrown away what orders it. Kept as a row here, the capability had one
+     * answer and the four places that emit a comparison each worked out the other for themselves
+     * (issue #856).
      */
     public enum Requires { EQUALITY, EXTERNAL_FORM }
 
@@ -160,18 +162,6 @@ public final class TypeOps {
         // the question is settled by the shape of the type alone. Asked while a module is being
         // resolved as well as after, which is what says it cannot need one.
         return answers(t, Requires.EQUALITY, null);
-    }
-
-    /** Whether values of this type have an ordering — what {@code sort} and a {@code sortBy} key
-     * require of what they order, and what {@code <} requires of two operands of one type. A
-     * single-value newtype is ordered by the value it wraps (ADR-0047), and an enumeration by the
-     * order its cases are declared in (ADR-0069), so a newtype over an enumeration is ordered by
-     * that enumeration. This is {@link Ordering#of} having an answer, and asking it any other way is
-     * a second definition of the same word. */
-    public static boolean supportsOrdering(Type t, NewtypeInners inners, Symbols symbols,
-                                           DeclarationKinds kinds,
-                                           PublishedDeclarations published) {
-        return Ordering.of(t, inners, symbols, kinds, published) != null;
     }
 
     /**

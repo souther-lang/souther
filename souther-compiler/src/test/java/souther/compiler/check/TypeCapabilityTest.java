@@ -16,18 +16,24 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class TypeCapabilityTest {
 
+    /** Whether the type has an order, which is {@link Ordering#of} having an answer. */
+    private static boolean ordered(Type type) {
+        return Ordering.of(type, NewtypeInners.NONE, null, DeclarationKinds.NONE,
+                PublishedDeclarations.NONE) != null;
+    }
+
     @Test
     void aTupleComparesButDoesNotOrder() {
         Type pair = Type.tuple(List.of(Type.STRING, Type.STRING));
         assertTrue(TypeOps.supportsEquality(pair));
-        assertFalse(TypeOps.supportsOrdering(pair, NewtypeInners.NONE, null, DeclarationKinds.NONE, PublishedDeclarations.NONE));
+        assertFalse(ordered(pair));
     }
 
     @Test
     void aFunctionAnswersNoneOfTheThree() {
         Type fn = Type.fn(List.of(Type.INT), Type.BOOL);
         assertFalse(TypeOps.supportsEquality(fn));
-        assertFalse(TypeOps.supportsOrdering(fn, NewtypeInners.NONE, null, DeclarationKinds.NONE, PublishedDeclarations.NONE));
+        assertFalse(ordered(fn));
         assertFalse(TypeOps.hasExternalForm(fn, null));
     }
 
@@ -43,23 +49,23 @@ class TypeCapabilityTest {
 
     @Test
     void aListOfOrderedElementsIsNotItselfOrdered() {
-        assertFalse(TypeOps.supportsOrdering(Type.list(Type.INT), NewtypeInners.NONE, null, DeclarationKinds.NONE, PublishedDeclarations.NONE));
+        assertFalse(ordered(Type.list(Type.INT)));
         assertTrue(TypeOps.supportsEquality(Type.list(Type.INT)));
     }
 
     @Test
     void theOrderedPrimitivesAreTheFiveThatCarryAnOrder() {
-        assertTrue(TypeOps.supportsOrdering(Type.INT, NewtypeInners.NONE, null, DeclarationKinds.NONE, PublishedDeclarations.NONE));
-        assertTrue(TypeOps.supportsOrdering(Type.STRING, NewtypeInners.NONE, null, DeclarationKinds.NONE, PublishedDeclarations.NONE));
-        assertTrue(TypeOps.supportsOrdering(Type.DECIMAL, NewtypeInners.NONE, null, DeclarationKinds.NONE, PublishedDeclarations.NONE));
-        assertTrue(TypeOps.supportsOrdering(Type.DATE, NewtypeInners.NONE, null, DeclarationKinds.NONE, PublishedDeclarations.NONE));
-        assertTrue(TypeOps.supportsOrdering(Type.DATETIME, NewtypeInners.NONE, null, DeclarationKinds.NONE, PublishedDeclarations.NONE));
+        assertTrue(ordered(Type.INT));
+        assertTrue(ordered(Type.STRING));
+        assertTrue(ordered(Type.DECIMAL));
+        assertTrue(ordered(Type.DATE));
+        assertTrue(ordered(Type.DATETIME));
     }
 
     @Test
     void boolComparesButDoesNotOrder() {
         assertTrue(TypeOps.supportsEquality(Type.BOOL));
-        assertFalse(TypeOps.supportsOrdering(Type.BOOL, NewtypeInners.NONE, null, DeclarationKinds.NONE, PublishedDeclarations.NONE));
+        assertFalse(ordered(Type.BOOL));
     }
 
     @Test
