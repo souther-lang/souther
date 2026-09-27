@@ -82,12 +82,12 @@ public sealed interface LoweringRole
     }
 
     /**
-     * The values {@code module} declares that some entry reaches from outside {@code roles} — a
-     * published one or a fixture one alike — by the value's own bare name.
+     * The values of {@code module} that some entry answers for — a published one or a fixture one
+     * alike — by the value's own bare name, read off {@code roles}.
      *
      * <p>Both kinds for the same reason: either is read by an entry that is no copy of the value, so
-     * there is no application here for an unwritten function type to be settled from, and a value
-     * either reaches this way has to have one written (spec §fn-declaration, ADR-0074). A value
+     * there is no application anywhere else for an unwritten function type to be settled from, and a
+     * value either reaches this way has to have one written (spec §fn-declaration, ADR-0074). A value
      * neither reaches is still typed wherever it is copied in, which is the check an entry's own
      * value skips — widening this set is what keeps a fixture's entry from being the one kind of
      * external caller nothing here asks the value's type for.
