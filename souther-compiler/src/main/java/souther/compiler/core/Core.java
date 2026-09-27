@@ -1407,8 +1407,8 @@ public sealed interface Core {
         boolean namesTheSubject() {
             return binding instanceof ArmBinding.Selected
                     && (pattern instanceof ResolvedPattern.AnyOf
-                    || pattern instanceof ResolvedPattern.Single one
-                            && one.selected().refinement() instanceof Refinement.OptionAbsent);
+                    || (pattern instanceof ResolvedPattern.Single one
+                            && one.selected().refinement() instanceof Refinement.OptionAbsent));
         }
 
         /** The name the arm introduces, or null where it introduces none. */
