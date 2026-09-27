@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.core.BoundaryCheck;
 import souther.compiler.core.Core;
 import souther.compiler.core.ValueShape;
 import souther.compiler.diag.CompileException;
@@ -50,13 +51,16 @@ public final class ExecutableInvariants {
      *     reaches what they name — the answer the module's emitted methods are read off too
      * @param helpers the signatures of the recursive helpers a clause may reach — the same table the
      *     body check reads, because a clause naming a total helper names the same one a body does
+     * @param form the clauses in the representation the boundary's constraints are read from
+     * @param statements what each part of a clause states in that representation
      * @throws CompileException where a clause is not a condition
      */
-    public static ValueShape of(Hir.Data data, List<SettledInvariant> governing,
+    public static ValueShape of(Hir.Data data, List<GoverningInvariant> governing,
                                 DerivedSymbols symbols,
                                 PublishedDeclarations published, DeclarationKinds kinds,
                                 NewtypeInners inners, EffectiveFieldTypes fieldTypes,
-                                Map<String, Type> helpers) {
+                                Map<String, Type> helpers, ExpandedClauseLookup form,
+                                InvariantStatements statements) {
         Map<String, Type> types = TypeOps.fieldTypes(data, symbols);
         Map<String, BindingId> bindings =
                 TypeOps.fieldBindings(data.declares(), symbols);
@@ -74,9 +78,15 @@ public final class ExecutableInvariants {
         CheckContext ctx =
                 CheckContext.executableInvariant(symbols, new DeclarationAccess(published, kinds,
                         inners, fieldTypes, FieldLayout.asWritten(symbols)), data);
+        // A newtype's value is what the boundary decodes and what a constraint is about. A product's
+        // clauses are about its fields, and the boundary checks each of them whole.
+        Map<Clause.Id, BoundaryCheck> boundary = data.newtype()
+                ? BoundaryConstraints.against(symbols)
+                        .of(data.declares(), types.get("value"), form, statements)
+                : Map.of();
         List<ValueShape.Invariant> invariants = new ArrayList<>();
-        for (SettledInvariant settled : governing) {
-            Hir.InvariantClause clause = settled.clause();
+        for (GoverningInvariant governed : governing) {
+            Hir.InvariantClause clause = governed.settled().clause();
             // Desugared first, the way a body is: a clause writing a comprehension states the same
             // condition as the `if` it is derived from, and one of the two reaching the check and
             // the other reaching what runs is the shape this exists to stop.
@@ -86,7 +96,11 @@ public final class ExecutableInvariants {
                         .say(new DeclarationMessage.AnInvariantExpressionIsBool(
                                 Type.show(condition.type()))).build());
             }
-            invariants.add(new ValueShape.Invariant(clause.name(), condition));
+            // A clause the constraint reading did not reach has nothing proved of it, and is checked
+            // as the condition it is.
+            BoundaryCheck checked = boundary.get(governed.id());
+            invariants.add(new ValueShape.Invariant(clause.name(), condition,
+                    checked != null ? checked : BoundaryCheck.conditionOnly()));
         }
         return new ValueShape(data.declares(), fields, invariants);
     }

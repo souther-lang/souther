@@ -3,8 +3,6 @@ package souther.compiler.codegen;
 import souther.compiler.query.Bodies;
 
 import souther.compiler.check.EmittedDefinition;
-import souther.compiler.check.ExpandedClauseLookup;
-import souther.compiler.check.InvariantStatements;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.DeclarationKinds;
@@ -152,11 +150,10 @@ public final class Backend {
      * {@code requirements} says what each behavior takes injected and in
      * what order — the answer the example verifier reads too, so a fake reaches the parameter this
      * constructor binds it to; {@code checked} carries the type checker's elaborated bodies, which is what
-     * the emitter reads instead of inferring types again; {@code dischargeInvariants} carries
-     * this module's invariant clauses in the representation the language's own operations survive in, which
-     * is what a derived decoder's constraint mapping reads (spec §decoder-error); {@code shapes} says
-     * what a value of each declared data is made of and what must hold of one, which is what a
-     * construction is refused by and is the checker's answer rather than this emitter's;
+     * the emitter reads instead of inferring types again; {@code shapes} says what a value of each
+     * declared data is made of, what must hold of one and how the boundary checks each clause, which
+     * is what a construction is refused by and a derived decoder reports with (spec §decoder-error),
+     * and is the checker's answer rather than this emitter's;
      * {@code linkage} is where what every behavior, type and value these classes link against offers
      * is read, and where reading another module's is recorded — {@code symbols}, {@code published}
      * and {@code kinds} read into it too. Whether a behavior of the module is implemented, unwritten
@@ -170,17 +167,14 @@ public final class Backend {
                                                Map<String, List<BehaviorRequirement>> requirements,
                                                Bodies.Elaborated checked,
                                                Map<ValueName.Behavior, Composition> compositions,
-                                               ExpandedClauseLookup dischargeInvariants,
-                                               InvariantStatements invariantStatements,
                                                Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                Map<String, Type> standingCalls,
                                                SourceLayouts layouts,
                                                LinkageReader linkage) {
         return generate(module, symbols, published, kinds, kernels, typePackage, sigs,
-                requirements, checked, compositions, dischargeInvariants,
-                invariantStatements, shapes, checks, standingCalls, layouts, linkage,
-                Instrumentation.NONE);
+                requirements, checked, compositions, shapes, checks, standingCalls, layouts,
+                linkage, Instrumentation.NONE);
     }
 
     /**
@@ -205,8 +199,6 @@ public final class Backend {
                                                Map<String, List<BehaviorRequirement>> requirements,
                                                Bodies.Elaborated checked,
                                                Map<ValueName.Behavior, Composition> compositions,
-                                               ExpandedClauseLookup dischargeInvariants,
-                                               InvariantStatements invariantStatements,
                                                Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                Map<String, Type> standingCalls,
@@ -215,8 +207,7 @@ public final class Backend {
                                                Instrumentation instrumentation) {
         try {
             return generating(module, symbols, published, kinds, kernels, typePackage, sigs,
-                    requirements, checked, compositions,
-                    dischargeInvariants, invariantStatements, shapes, checks, standingCalls,
+                    requirements, checked, compositions, shapes, checks, standingCalls,
                     layouts, linkage, instrumentation);
         } catch (IllegalArgumentException e) {
             // Something the writer would not hold, from a member no definition here claimed — a
@@ -235,8 +226,6 @@ public final class Backend {
                                                   Map<String, List<BehaviorRequirement>> requirements,
                                                   Bodies.Elaborated checked,
                                                   Map<ValueName.Behavior, Composition> compositions,
-                                                  ExpandedClauseLookup dischargeInvariants,
-                                                  InvariantStatements invariantStatements,
                                                   Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                   Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                   Map<String, Type> standingCalls,
@@ -271,8 +260,6 @@ public final class Backend {
                 caseToSums, typePackage,
                 module.published(), standingCalls, layouts,
                 module.pos().quotedFrom(), linkage);
-        ctx.setDischargeInvariants(dischargeInvariants);
-        ctx.setInvariantStatements(invariantStatements);
         ctx.setValueShapes(shapes);
         ctx.setEnsuresChecks(checks);
         // The one place a coverage plan is made, and it is made from the bodies about to be emitted.

@@ -3,6 +3,8 @@ package souther.compiler.query;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorBodies;
 import souther.compiler.check.Boundary;
+import souther.compiler.check.BoundaryConstraints;
+import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseDischarge;
 import souther.compiler.check.ClauseLocations;
 import souther.compiler.check.DeclarationAccess;
@@ -27,7 +29,9 @@ import souther.compiler.check.ExpandedClauseResult;
 import souther.compiler.check.ExpandedClauses;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.GoverningInvariant;
 import souther.compiler.check.InvariantSettled;
+import souther.compiler.check.InvariantStatements;
 import souther.compiler.check.SettledInvariant;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.Cardinality;
@@ -1650,19 +1654,23 @@ public final class Shapes {
      * <p>A clause another module wrote is the one {@link ClausesTakenIn} hands over, which is the
      * clause that module settled reaching what it names as this module does.
      *
+     * <p>Each with which clause it is ({@link GoverningInvariant}). The list is the clauses of
+     * several declarations run together, and which declaration asked for a clause is known here and
+     * nowhere after.
+     *
      * <p>Every data, whether or not a meaning was settled for it: what a module has to emit does not
      * turn on whether one of its declarations came out. Absent where a declaration a spread takes
      * in has no normalized form, which is a module whose settling failed and said so.
      */
     public record SettledInvariantsGoverning(String name)
-            implements Key<Map<TypeSymbol.AtModule, List<SettledInvariant>>> {
+            implements Key<Map<TypeSymbol.AtModule, List<GoverningInvariant>>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<TypeSymbol.AtModule, List<SettledInvariant>>> compute(Db db) {
+        public Answer<Map<TypeSymbol.AtModule, List<GoverningInvariant>>> compute(Db db) {
             Answer<InvariantSettled> settling = db.ask(new Settling(name));
             Answer<ResolvedSymbols> scope = Names.resolvedSymbols(db, name);
             Answer<Map<TypeSymbol.AtModule, List<SettledInvariant>>> takenIn =
@@ -1670,7 +1678,7 @@ public final class Shapes {
             if (!settling.present() || !scope.present() || !takenIn.present()) {
                 return Answer.absent();
             }
-            Map<TypeSymbol.AtModule, List<SettledInvariant>> out = new LinkedHashMap<>();
+            Map<TypeSymbol.AtModule, List<GoverningInvariant>> out = new LinkedHashMap<>();
             // In the order the module writes its declarations, which is the order the table of
             // normalized ones does not keep.
             for (InvariantSettled.Def def : settling.value().defs()) {
@@ -1678,7 +1686,7 @@ public final class Shapes {
                         instanceof Normalized.Data data)) {
                     continue;
                 }
-                List<SettledInvariant> governing = new ArrayList<>();
+                List<GoverningInvariant> governing = new ArrayList<>();
                 for (TypeSymbol.AtModule declaration
                         : TypeOps.declarationsGoverning(data.node().declares(), scope.value())) {
                     List<SettledInvariant> clauses = declaration.module().equals(name)
@@ -1686,7 +1694,12 @@ public final class Shapes {
                     if (clauses == null) {
                         return Answer.absent();
                     }
-                    governing.addAll(clauses);
+                    // A declaration's clauses in the order it writes them, which is what a clause's
+                    // ordinal counts.
+                    for (int ordinal = 0; ordinal < clauses.size(); ordinal++) {
+                        governing.add(new GoverningInvariant(
+                                new Clause.Id(declaration, ordinal), clauses.get(ordinal)));
+                    }
                 }
                 out.put(data.node().declares(), List.copyOf(governing));
             }
@@ -1769,6 +1782,10 @@ public final class Shapes {
      * read them. Handed over apart, whoever ran a clause would work out where a field is read
      * through, and that walk and this one would have to be kept answering alike.
      *
+     * <p>Each clause with how the boundary checks it ({@link BoundaryConstraints}): the other
+     * question about a clause that every output asks, answered here so that no output answers it
+     * from the condition a second time.
+     *
      * <p>Only the declarations that have a meaning. What could not be settled is not here and
      * nothing here asks why — the same reading the module check makes of the same key, so a
      * declaration with no meaning is not reported twice.
@@ -1796,11 +1813,15 @@ public final class Shapes {
                     || !spreads.present()) {
                 return Answer.absent();
             }
-            Answer<Map<TypeSymbol.AtModule, List<SettledInvariant>>> governing =
+            Answer<Map<TypeSymbol.AtModule, List<GoverningInvariant>>> governing =
                     db.ask(new SettledInvariantsGoverning(name));
-            if (!governing.present()) {
+            // What each part of a clause states, which is what says whether the boundary can state
+            // it as a constraint.
+            Answer<RuleReadingSource> reading = ruleReading(db, name);
+            if (!governing.present() || !reading.present()) {
                 return Answer.absent();
             }
+            InvariantStatements statements = InvariantStatements.of(reading.value());
             Map<TypeSymbol.AtModule, ValueShape> shapes = new LinkedHashMap<>();
             List<Report> reports = new ArrayList<>();
             for (Hir.Def def : settled.value().defs()) {
@@ -1813,7 +1834,7 @@ public final class Shapes {
                             ExecutableInvariants.of(data, governing.value().get(data.declares()),
                                     scope.value(), publishedDeclarations(db), declarationKinds(db),
                                     newtypeInners(db), effectiveFieldTypes(db),
-                                    helpers.value()));
+                                    helpers.value(), expandedClauses(db), statements));
                 } catch (Unanswerable _) {
                     // Rests on something already reported where it went wrong.
                 } catch (CompileException e) {

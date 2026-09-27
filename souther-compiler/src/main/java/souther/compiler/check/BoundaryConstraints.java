@@ -1,31 +1,54 @@
-package souther.compiler.codegen;
+package souther.compiler.check;
 
-import souther.compiler.types.ValueName;
-import souther.compiler.check.ComparisonClaim;
-import souther.compiler.check.InvariantStatement;
-import souther.compiler.check.StatedComparison;
-import souther.compiler.check.Symbols;
+import souther.compiler.core.BoundaryCheck;
+import souther.compiler.core.BoundaryConstraint;
+import souther.compiler.core.BoundaryConstraint.DecimalMax;
+import souther.compiler.core.BoundaryConstraint.DecimalMin;
+import souther.compiler.core.BoundaryConstraint.DecimalNonNegative;
+import souther.compiler.core.BoundaryConstraint.DecimalPositive;
+import souther.compiler.core.BoundaryConstraint.FixedLength;
+import souther.compiler.core.BoundaryConstraint.FixedSize;
+import souther.compiler.core.BoundaryConstraint.MapMaxSize;
+import souther.compiler.core.BoundaryConstraint.MapMinSize;
+import souther.compiler.core.BoundaryConstraint.Max;
+import souther.compiler.core.BoundaryConstraint.MaxLength;
+import souther.compiler.core.BoundaryConstraint.MaxSize;
+import souther.compiler.core.BoundaryConstraint.Min;
+import souther.compiler.core.BoundaryConstraint.MinLength;
+import souther.compiler.core.BoundaryConstraint.MinSize;
+import souther.compiler.core.BoundaryConstraint.NonEmpty;
+import souther.compiler.core.BoundaryConstraint.NonNegative;
+import souther.compiler.core.BoundaryConstraint.Pattern;
+import souther.compiler.core.BoundaryConstraint.Positive;
+import souther.compiler.core.BoundaryConstraint.Unique;
 import souther.compiler.core.Core;
 import souther.compiler.core.IntNegation;
 import souther.compiler.core.Kernel;
 import souther.compiler.numeric.EndSide;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
- * Maps a newtype's invariant onto Raoh's decoder constraints (issue #83), so a violation reported by
- * a derived decoder carries the code and metadata of the rule it broke — {@code too_short} with
- * {@code min}, {@code invalid_format} with {@code pattern} — instead of one {@code
- * invariant_violation} for every invariant in the model. The failure itself is Raoh's: the code, the
- * metadata, the default message and the path all come from the constraint, so a
- * {@code MessageResolver} keyed on the standard codes works unchanged.
+ * Which of a newtype's clauses the boundary can state as the constraints a decoder names, so a
+ * violation carries the rule it broke — a length short of its minimum, a string off its format —
+ * instead of one {@code invariant_violation} for every invariant in the model.
  *
- * <p>Only exact equivalences are mapped. A constraint weaker than the invariant would be caught by
- * {@code __construct}, which still runs; a constraint stronger than it would reject values the
- * domain accepts, and would do so at the boundary where it reads as bad input. Anything this cannot
- * prove equivalent is left to the emitter's fallback.
+ * <p>Only exact equivalences are stated. A constraint weaker than the clause would let through what
+ * the clause refuses; one stronger than it would refuse values the domain accepts, and would do so at
+ * the boundary where it reads as bad input. Anything this cannot prove equivalent is left to the
+ * clause's own condition.
+ *
+ * <p>Answered here, once, and carried on each clause of the value's shape
+ * ({@link souther.compiler.core.ValueShape.Invariant#boundary()}). A backend reads the answer and
+ * decides only what its decoder calls each constraint.
  *
  * <p><b>Read off what a statement states, never off the tree it was written as.</b> One rule written
  * out, reached through a helper and written as the denial of its opposite is one statement
@@ -34,94 +57,104 @@ import java.util.Optional;
  * model. The bindings a helper left and the denial an author wrote are spent where the statement is
  * made, and what arrives here is a claim about two values in that order.
  */
-public final class InvariantConstraints {
+public final class BoundaryConstraints {
 
     /** The name a newtype's single field carries, and so the name its invariant reads it by. */
     private static final String VALUE = "value";
-
-    public sealed interface Constraint {}
-
-    /** A {@code StringDecoder} constraint. */
-    public sealed interface OfString extends Constraint {}
-
-    public record MinLength(int n) implements OfString {}
-
-    public record MaxLength(int n) implements OfString {}
-
-    public record FixedLength(int n) implements OfString {}
-
-    /**
-     * A format a decoded string is held to.
-     *
-     * <p>Two texts, because they answer two questions. {@code regex} is what the JVM's matcher runs,
-     * written from what the pattern means ({@link JavaPatterns}); {@code written} is the pattern the
-     * author's call was given, which is what a failure says the value was held to. A failure that
-     * quoted the first would be quoting this backend's lowering to whoever reads the issue.
-     *
-     * @param regex   the pattern the matcher runs
-     * @param written the pattern the call was given, as it composed at compile time
-     */
-    public record Pattern(String regex, String written) implements OfString {}
-
-    /** A {@code LongDecoder} constraint — Souther's {@code Int} is carried as a long. */
-    public sealed interface OfInt extends Constraint {}
-
-    public record Min(long n) implements OfInt {}
-
-    public record Max(long n) implements OfInt {}
-
-    public record Positive() implements OfInt {}
-
-    public record NonNegative() implements OfInt {}
-
-    /** A {@code DecimalDecoder} constraint. */
-    public sealed interface OfDecimal extends Constraint {}
-
-    public record DecimalMin(BigDecimal n) implements OfDecimal {}
-
-    public record DecimalMax(BigDecimal n) implements OfDecimal {}
-
-    public record DecimalPositive() implements OfDecimal {}
-
-    public record DecimalNonNegative() implements OfDecimal {}
-
-    /** A {@code ListDecoder} constraint — a newtype over a {@code List}, whose decoder Raoh answers
-     * typed until something untyped is chained onto it. */
-    public sealed interface OfList extends Constraint {}
-
-    /** {@code nonempty()} rather than {@code minSize(1)}: Raoh states emptiness on its own, and says so
-     * in the message. */
-    public record NonEmpty() implements OfList {}
-
-    public record MinSize(int n) implements OfList {}
-
-    public record MaxSize(int n) implements OfList {}
-
-    public record FixedSize(int n) implements OfList {}
-
-    /** {@code unique()}: no element appears twice, compared by value as Souther compares. */
-    public record Unique() implements OfList {}
-
-    /** A {@code RecordDecoder} constraint — a newtype over a {@code Map}, which crosses the boundary as
-     * an object and is decoded as a record of its values. */
-    public sealed interface OfMap extends Constraint {}
-
-    public record MapMinSize(int n) implements OfMap {}
-
-    public record MapMaxSize(int n) implements OfMap {}
 
     /** The symbols this reads clauses against. Which operations state a constraint is a fact about
      *  the library the clause was resolved against, so it is held here rather than asked at each
      *  call. */
     private final Symbols symbols;
 
-    private InvariantConstraints(Symbols symbols) {
+    private BoundaryConstraints(Symbols symbols) {
         this.symbols = symbols;
     }
 
     /** Reading statements against the library {@code symbols} names. */
-    public static InvariantConstraints against(Symbols symbols) {
-        return new InvariantConstraints(symbols);
+    public static BoundaryConstraints against(Symbols symbols) {
+        return new BoundaryConstraints(symbols);
+    }
+
+    /**
+     * How the boundary checks each clause that governs the newtype {@code named}, whose value is a
+     * {@code base}, keyed by which clause it is.
+     *
+     * <p>Read from the representation the constraints are written against
+     * ({@link InliningPolicy#DISCHARGE}): this module's own helpers expanded, the language's own
+     * operations left standing. The mapping is about the operations an author wrote —
+     * {@code List.length}, {@code List.allDistinctBy} — and in the settled form a prelude helper has
+     * become the fold it is derived from, so every collection rule would go unrecognised there.
+     *
+     * <p>Keyed by the clause and not by position. The clauses a value is checked against are the
+     * settled ones, and this is the other representation of the same clauses; the key is what says
+     * the two answers are about one clause, where an index would say only that two lists happen to
+     * be in step.
+     *
+     * <p>A clause this reading did not reach is not here. Nothing of it was proved equal to a
+     * constraint, so it is checked as its own condition — which holds a value to the whole rule
+     * whatever is missing here, since the rules themselves come from the settled form.
+     */
+    public Map<Clause.Id, BoundaryCheck> of(TypeSymbol.AtModule named, Type base,
+                                            ExpandedClauseLookup form,
+                                            InvariantStatements statements) {
+        Map<Clause.Id, BoundaryCheck> out = new LinkedHashMap<>();
+        for (TypeOps.Declared declared
+                : TypeOps.expandedInvariants(named, symbols, form).reached()) {
+            List<BoundaryConstraint> stated = new ArrayList<>();
+            boolean checkCondition = false;
+            // The parts the clause was split into, with the tree the expansion made of each. Split
+            // again here, this would be a second answer to which parts a clause has, taken off a
+            // tree an expansion left.
+            for (AuthoredShape.Written part : declared.parts()) {
+                List<BoundaryConstraint> states = constraintsOf(part.id(), base, statements);
+                if (states == null) {
+                    checkCondition = true;
+                } else {
+                    stated.addAll(states);
+                }
+            }
+            // A spread reached twice reaches one clause twice, and both readings are of it.
+            out.merge(new Clause.Id(declared.declaredOn(), declared.ordinal()),
+                    new BoundaryCheck(stated, checkCondition), (was, now) -> {
+                        if (!was.equals(now)) {
+                            throw new IllegalStateException("one clause of " + named
+                                    + " read as two boundary checks: " + was + " and " + now);
+                        }
+                        return was;
+                    });
+        }
+        return out;
+    }
+
+    /**
+     * The constraints one part states, or null where it keeps its own check.
+     *
+     * <p><b>Recognised statement by statement and committed part by part.</b> A part states as many
+     * rules as the reading arrives at — a denied choice states one per branch — and each of them is
+     * mapped on its own. What is stated is all of them or none: a part half of whose rules became
+     * constraints would report one of its own statements as a constraint and the other as the
+     * clause, so one thing an author wrote would break in two different words depending on which
+     * half the value broke.
+     *
+     * <p>Null where the reading has no form for the clause, which is not a part that constrains
+     * nothing: the rule still runs, and what it reaches the boundary as is its own condition.
+     */
+    private List<BoundaryConstraint> constraintsOf(PartId<RuleRef.Invariant> part, Type base,
+                                                   InvariantStatements statements) {
+        List<InvariantStatement> states = statements.of(part);
+        if (states == null) {
+            return null;
+        }
+        List<BoundaryConstraint> out = new ArrayList<>();
+        for (InvariantStatement each : states) {
+            Optional<BoundaryConstraint> c = of(each, base);
+            if (c.isEmpty()) {
+                return null;
+            }
+            out.add(c.get());
+        }
+        return List.copyOf(out);
     }
 
     /**
@@ -144,10 +177,10 @@ public final class InvariantConstraints {
     }
 
     /**
-     * The Raoh constraint equivalent to {@code statement} on a newtype whose value is {@code base},
-     * or empty when this cannot prove one.
+     * The constraint equivalent to {@code statement} on a newtype whose value is {@code base}, or
+     * empty when this cannot prove one.
      */
-    public Optional<Constraint> of(InvariantStatement statement, Type base) {
+    private Optional<BoundaryConstraint> of(InvariantStatement statement, Type base) {
         return switch (statement) {
             case InvariantStatement.Unread _ -> Optional.empty();
             case InvariantStatement.Applies it -> ofCall(it.call(), base);
@@ -155,7 +188,7 @@ public final class InvariantConstraints {
         };
     }
 
-    private Optional<Constraint> ofComparison(StatedComparison states, Type base) {
+    private Optional<BoundaryConstraint> ofComparison(StatedComparison states, Type base) {
         // `0 <= value` says what `value >= 0` says, and which side bore the value is spent here:
         // what comes back is a claim about the value and what it is held against, in that order.
         StatedComparison.Numbered<Measured> bound = states.at(this::measured);
@@ -208,8 +241,8 @@ public final class InvariantConstraints {
      * there is none to name.
      *
      * <p>A length, a size and an {@code Int} are whole numbers, so a bound that refuses the number
-     * it names admits exactly what the next one along admits — and Raoh's constraints are inclusive,
-     * so that is the one to hand it. At either end of what the constraint can hold there is no next
+     * it names admits exactly what the next one along admits — and the constraints are inclusive,
+     * so that is the one to state. At either end of what the constraint can hold there is no next
      * number, and the clause keeps the check it already has.
      */
     private static Long inclusiveAt(EndSide end, boolean holdsAtTheValue, long n,
@@ -230,15 +263,15 @@ public final class InvariantConstraints {
     }
 
     /**
-     * A bound on how many elements a list has: {@code List.length(value) >= 1} is Raoh's
-     * {@code nonempty()}, {@code >= 3} its {@code minSize(3)}, and so on. A size is a whole number, so a
-     * strict bound is the adjacent inclusive one — read the same way a string's length is.
+     * A bound on how many elements a list has: {@code List.length(value) >= 1} is non-emptiness,
+     * {@code >= 3} a minimum of three, and so on. A size is a whole number, so a strict bound is the
+     * adjacent inclusive one — read the same way a string's length is.
      *
      * <p>A {@code Set} has no entry of its own here. Souther decodes one as a list and drops the
-     * duplicates while mapping it (spec §collections), so a constraint chained after that mapping is no
-     * longer on a typed decoder, and one chained before it would count the duplicates.
+     * duplicates while mapping it (spec §collections), so a constraint on the decoded list would
+     * count the duplicates the set does not have.
      */
-    private static Optional<Constraint> ofListSize(ComparisonClaim placed, Core against) {
+    private static Optional<BoundaryConstraint> ofListSize(ComparisonClaim placed, Core against) {
         Integer n = sizeBound(against);
         if (n == null) {
             return Optional.empty();
@@ -257,9 +290,8 @@ public final class InvariantConstraints {
         };
     }
 
-    /** The same for a map, which Raoh decodes as a record of its values and bounds by entry count.
-     * There is no emptiness constraint of its own there, so {@code >= 1} is a minimum of one. */
-    private static Optional<Constraint> ofMapSize(ComparisonClaim placed, Core against) {
+    /** The same for a map, bounded by entry count. {@code >= 1} is a minimum of one entry. */
+    private static Optional<BoundaryConstraint> ofMapSize(ComparisonClaim placed, Core against) {
         Integer n = sizeBound(against);
         if (n == null || !(placed instanceof ComparisonClaim.Cut cut)) {
             return Optional.empty();
@@ -280,20 +312,17 @@ public final class InvariantConstraints {
         return bound.intValue();
     }
 
-    private Optional<Constraint> ofCall(Core.PreservedCall call, Type base) {
-        // The generated boundary constraint runs what the pattern means, written for the JVM's
-        // engine (JavaPatterns), as a whole-string predicate — the same text the run time's check
-        // runs, so the two accept the same strings — and quotes the pattern the call was given when
-        // a value fails it. The meaning is the one the checker settled on the call: this reads no
-        // pattern text.
+    private Optional<BoundaryConstraint> ofCall(Core.PreservedCall call, Type base) {
+        // What the pattern means, as the checker settled it on the call, and the text the call was
+        // given: this reads no pattern text.
         if (base == Type.STRING && applies(call, Kernel.STRING_MATCHES) && call.args().size() == 2
                 && isValue(call.args().get(1))) {
             return Optional.of(matching(call));
         }
-        // `List.allDistinctBy(x -> x, value)` says of the elements what Raoh's `unique()` says of them:
-        // no two are equal, by the same value equality (spec §collections, ADR-0009). A projection that
-        // is not the identity says it of something else — the elements' products, their ids — and Raoh
-        // has no constraint for that, so the clause keeps its own check.
+        // `List.allDistinctBy(x -> x, value)` says of the elements that no two are equal, by the same
+        // value equality (spec §collections). A projection that is not the identity says it
+        // of something else — the elements' products, their ids — and there is no constraint for
+        // that, so the clause keeps its own check.
         if (base instanceof Type.ListOf && statesDistinctness(call)
                 && call.args().size() == 2 && isValue(call.args().get(1))
                 && isIdentity(call.args().get(0))) {
@@ -302,7 +331,8 @@ public final class InvariantConstraints {
         return Optional.empty();
     }
 
-    private static Optional<Constraint> ofStringLength(ComparisonClaim placed, Core against) {
+    private static Optional<BoundaryConstraint> ofStringLength(ComparisonClaim placed,
+                                                               Core against) {
         Integer bound = sizeBound(against);
         if (bound == null) {
             return Optional.empty();
@@ -321,18 +351,17 @@ public final class InvariantConstraints {
         };
     }
 
-    private static Optional<Constraint> ofInt(ComparisonClaim placed, Core against) {
+    private static Optional<BoundaryConstraint> ofInt(ComparisonClaim placed, Core against) {
         Long bound = intLiteral(against);
         if (bound == null || !(placed instanceof ComparisonClaim.Cut cut)) {
             return Optional.empty();
         }
         long n = bound;
         EndSide end = endOf(cut);
-        // Raoh has a name for each of the two bounds at nought, and they are two names rather than
-        // one: a bound refusing nought is `positive()` where the same bound moved to one is a
-        // minimum of one, and both are emitted. So which of them a rule comes to is read before the
-        // bound is moved — unlike a list, where the bound at one and the bound past nought are the
-        // one constraint and moving first says so.
+        // A bound at nought is stated as the sign it is, and the two of them as two: a bound
+        // refusing nought is `Positive` where the same bound moved to one is a minimum of one. So
+        // which of them a rule comes to is read before the bound is moved — unlike a list, where the
+        // bound at one and the bound past nought are the one constraint and moving first says so.
         if (end == EndSide.LOWER && n == 0) {
             return Optional.of(cut.holdsAtTheValue() ? new NonNegative() : new Positive());
         }
@@ -341,14 +370,14 @@ public final class InvariantConstraints {
                 : Optional.of(end == EndSide.LOWER ? new Min(at) : new Max(at));
     }
 
-    private static Optional<Constraint> ofDecimal(ComparisonClaim placed, Core against) {
+    private static Optional<BoundaryConstraint> ofDecimal(ComparisonClaim placed, Core against) {
         BigDecimal bound = decimalLiteral(against);
         if (bound == null || !(placed instanceof ComparisonClaim.Cut cut)) {
             return Optional.empty();
         }
         boolean zero = bound.signum() == 0;
         // A Decimal has no next value, so a bound refusing the number it names is no inclusive
-        // bound at all — except at nought, which Raoh states directly as positive().
+        // bound at all — except at nought, which is stated as the sign it is.
         if (!cut.holdsAtTheValue()) {
             return endOf(cut) == EndSide.LOWER && zero
                     ? Optional.of(new DecimalPositive()) : Optional.empty();
@@ -370,7 +399,7 @@ public final class InvariantConstraints {
             throw new IllegalStateException(
                     "a String.matches call carries the pattern the checker read: " + call);
         }
-        return new Pattern(JavaPatterns.of(settled.meaning()), settled.written());
+        return new Pattern(settled.meaning(), settled.written());
     }
 
     /**

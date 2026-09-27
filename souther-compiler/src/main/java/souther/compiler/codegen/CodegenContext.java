@@ -1,7 +1,5 @@
 package souther.compiler.codegen;
 
-import souther.compiler.check.ExpandedClauseLookup;
-import souther.compiler.check.InvariantStatements;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.core.Kernel;
@@ -179,18 +177,6 @@ final class CodegenContext {
     }
 
     /**
-     * This module's declarations' invariant clauses in the representation the language's own operations
-     * survive in ({@link souther.compiler.check.InliningPolicy#DISCHARGE}). The constraint mapping a
-     * derived decoder does is written against those operations, so it reads this rather than the
-     * settled form the rest of the backend emits from.
-     *
-     * <p>Null until it is set, and not an empty one. A module reading as stating nothing and a module
-     * whose representation never arrived are the same empty map and opposite facts, and a decoder
-     * built from the second would silently constrain nothing.
-     */
-    private ExpandedClauseLookup dischargeInvariants;
-
-    /**
      * Where each behavior's declared relation is checked, as it was decided before emission.
      *
      * <p>Set rather than worked out, for the reason it is a decision and not a pair of facts: the
@@ -213,42 +199,6 @@ final class CodegenContext {
      */
     EnsuresEnforcement ensuresCheckOf(ValueName.Behavior behavior) {
         return EnsuresEnforcement.in(ensuresChecks, pkg, behavior);
-    }
-
-    /**
-     * What each conjunct of this module's declarations states, statement by statement.
-     *
-     * <p>The reading the front end made, handed over rather than repeated. What a rule states is
-     * settled where the clause's shape was read — a binding crossed, a denial spent — and a backend
-     * that read the tree for itself would recognise a rule written out and decline the same rule
-     * named through a helper, which is a difference in what a decoder reports and not in the model.
-     *
-     * <p>Null until it is set, for the reason {@link #dischargeInvariants} gives.
-     */
-    private InvariantStatements invariantStatements;
-
-    void setInvariantStatements(InvariantStatements statements) {
-        this.invariantStatements = statements;
-    }
-
-    InvariantStatements invariantStatements() {
-        if (invariantStatements == null) {
-            throw new IllegalStateException(
-                    "what " + pkg + "'s clauses state was never handed over");
-        }
-        return invariantStatements;
-    }
-
-    void setDischargeInvariants(ExpandedClauseLookup clauses) {
-        this.dischargeInvariants = clauses;
-    }
-
-    ExpandedClauseLookup dischargeInvariants() {
-        if (dischargeInvariants == null) {
-            throw new IllegalStateException(
-                    "the analysis representation of " + pkg + "'s clauses was never handed over");
-        }
-        return dischargeInvariants;
     }
 
     private Map<TypeSymbol.AtModule, ValueShape> shapes = Map.of();

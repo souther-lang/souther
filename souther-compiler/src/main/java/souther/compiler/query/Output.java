@@ -20,11 +20,8 @@ import souther.compiler.execute.ProgramExecution;
 import souther.compiler.execute.WrittenValue;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
-import souther.compiler.check.ExpandedClauseLookup;
 import souther.compiler.check.FakeTables;
 import souther.compiler.check.Prepared;
-import souther.compiler.check.InvariantStatements;
-import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.ExpandedClauses;
 import souther.compiler.types.TypeKey;
 import souther.compiler.check.BehaviorBodies;
@@ -131,7 +128,7 @@ public final class Output {
                         in.scope().library().kernelSignatures(),
                         in.typePackages(), in.sigs(),
                         in.requirements(), in.checked(), in.compositions(),
-                        in.dischargeClauses(), in.invariantStatements(), in.shapes(), in.checks(),
+                        in.shapes(), in.checks(),
                         in.standingCalls(), new TheTextsThisCompileHolds(db), in.linkage());
                 emitted.copied(new CopyContract(offers.value().provides(), copied.value()));
                 publishDeclarations(db, emitted);
@@ -192,8 +189,6 @@ public final class Output {
                       Map<String, List<BehaviorRequirement>> requirements,
                       Bodies.Elaborated checked,
                       Map<ValueName.Behavior, souther.compiler.core.Composition> compositions,
-                      ExpandedClauseLookup dischargeClauses,
-                      InvariantStatements invariantStatements,
                       Map<souther.compiler.types.TypeSymbol.AtModule,
                               souther.compiler.core.ValueShape> shapes,
                       Map<ValueName.Behavior, EnsuresEnforcement> checks,
@@ -202,10 +197,10 @@ public final class Output {
                       LinkageReader linkage) {
 
             Inputs {
-                if (published == null || kinds == null || dischargeClauses == null) {
+                if (published == null || kinds == null) {
                     throw new IllegalArgumentException("emitting a module asks the declarations"
-                            + " what they say, which form each of them is and what their clauses"
-                            + " state, so it is handed somewhere to read every one of them");
+                            + " what they say and which form each of them is, so it is handed"
+                            + " somewhere to read every one of them");
                 }
             }
         }
@@ -252,24 +247,21 @@ public final class Output {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Map<String, List<BehaviorRequirement>>> requirements =
                     db.ask(new Bodies.Requirements(name));
-            // A derived decoder maps a clause onto the Raoh constraint that says the same thing, and it
-            // is written against the operations an author wrote — which the lowered module no longer has.
+            // Whether this module's clauses could be expanded into the representation their rules
+            // are read in. A precondition of emitting the module and not something the emitter
+            // reads: where the expansion was refused it said why, and a module short of that reading
+            // emits nothing.
+            Answer<Map<TypeKey, ExpandedClauses>> expandable =
+                    db.ask(new Shapes.ExpandedDeclarationClauses(name));
             // Where each behavior of this module has its clause checked. A decision of the
             // language's, so it is asked for rather than made here: the emitter and the checked
             // program are two readers of it, and each making it from the contracts and the injected
             // set would be two answers to one question.
-            // Whether this module's clauses could be expanded at all. A precondition of emitting
-            // the module and not something the emitter reads: a decoder is what the boundary holds
-            // a value to, so one built where a rule could not be read holds it to less than the
-            // model says and carries no word for having done so. What a clause of a declaration is
-            // still comes from the lookup below, one declaration at a time.
-            Answer<Map<TypeKey, ExpandedClauses>> expandable =
-                    db.ask(new Shapes.ExpandedDeclarationClauses(name));
             Answer<Map<ValueName.Behavior, EnsuresEnforcement>> checks =
                     db.ask(new Bodies.EnsuresChecks(name));
-            // What must hold of a value of each declared data, and the binding each field is read
-            // through. Both are the check's answer; the emitter used to elaborate the clauses again
-            // and work the bindings out a second time.
+            // What must hold of a value of each declared data, the binding each field is read
+            // through, and how the boundary checks each clause. All three are the check's answer,
+            // so the emitter decides none of them.
             Answer<Map<souther.compiler.types.TypeSymbol.AtModule, souther.compiler.core.ValueShape>>
                     shapes = db.ask(new Shapes.ValueShapes(name));
             // What a call left standing is typed against — the same answer the check typed it
@@ -278,16 +270,11 @@ public final class Output {
             // would agree only until one of them was edited.
             Answer<Map<String, souther.compiler.types.Type>> standing =
                     db.ask(new Bodies.RecursiveCallSigs(name, souther.compiler.check.InliningPolicy.FULL));
-            // What each conjunct of a declaration's rules states. The mapping onto a decoder's
-            // constraints is about what a rule says, and reading that off the tree recognises a rule
-            // written out and declines the same rule named through a helper.
-            Answer<RuleReadingSource> reading = Shapes.ruleReading(db, name);
             if (!checked.present() || !compositions.present()
                     || !lowering.present()
                     || !signatures.present()
                     || !prepared.present() || !requirements.present() || !expandable.present()
-                    || !checks.present() || !standing.present() || !shapes.present()
-                    || !reading.present()) {
+                    || !checks.present() || !standing.present() || !shapes.present()) {
                 return null;
             }
             // What every behavior, type and value these classes may link against offers, this
@@ -319,7 +306,6 @@ public final class Output {
                     prepared.value().importedFrom(), Map.copyOf(ownSignatures),
                     requirements.value(), checked.value(),
                     compositions.value(),
-                    Shapes.expandedClauses(db), InvariantStatements.of(reading.value()),
                     shapes.value(), checks.value(),
                     Set.copyOf(prepared.value().operandMethods().values()), standing.value(),
                     linkage);
@@ -522,7 +508,7 @@ public final class Output {
                         in.scope().library().kernelSignatures(),
                         in.typePackages(), in.sigs(),
                         in.requirements(), in.checked(), in.compositions(),
-                        in.dischargeClauses(), in.invariantStatements(), in.shapes(), in.checks(),
+                        in.shapes(), in.checks(),
                         in.standingCalls(), new TheTextsThisCompileHolds(db), in.linkage(),
                         instrumentation);
                 // The classes, what they implement and whose numbers a run through them leaves,
