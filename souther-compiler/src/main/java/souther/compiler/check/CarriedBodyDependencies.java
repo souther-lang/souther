@@ -26,11 +26,8 @@ public final class CarriedBodyDependencies {
      * The classes emitting a definition that is a method of its own names: what it takes, and its
      * body.
      */
-    public static Set<TypeSymbol.AtModule> of(EmittedDefinition emitted, DerivedSymbols symbols,
-                                              PublishedDeclarations published,
-                                              DeclarationKinds kinds) {
-        return EmittedClassReferences.of(emitted, NewtypeInners.asWritten(symbols), symbols, kinds,
-                published);
+    public static Set<TypeSymbol.AtModule> of(EmittedDefinition emitted, DerivedSymbols symbols) {
+        return EmittedClassReferences.of(emitted, NewtypeInners.asWritten(symbols), symbols);
     }
 
     /**
@@ -61,6 +58,6 @@ public final class CarriedBodyDependencies {
             throw new IllegalStateException("`" + closed.name() + "` was typed on its own and could"
                     + " not be typed as its reader types it: " + e.getMessage(), e);
         }
-        return EmittedClassReferences.of(typed, declarations.inners(), symbols, kinds, published);
+        return EmittedClassReferences.of(typed, declarations.inners(), symbols);
     }
 }

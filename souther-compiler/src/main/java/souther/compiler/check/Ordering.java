@@ -113,39 +113,44 @@ public sealed interface Ordering {
     }
 
     /**
-     * The sum that answers for values of {@code type}, or null where no generated sum does: the
-     * class a sort over them names, for whatever asks which classes an emitted call names.
+     * The sum that answers for the values of a sort over {@code subject}, or null where no
+     * generated sum does: the class a sort over them names, for whatever asks which classes an
+     * emitted call names.
      *
      * <p>Read off {@link #held}, which the emitter switches over, so the two cannot disagree about
      * which sort takes its comparator from a sum. A newtype over an enumeration answers null and
      * sorts by the {@code compareTo} its own class carries — the sum's {@code __order} would be
      * handed the wrapper and not the case.
      */
-    static TypeSymbol enumerationOfHeld(Type type, NewtypeInners inners, Symbols symbols,
-                                        DeclarationKinds kinds, PublishedDeclarations published) {
-        return held(type, inners, symbols, kinds, published) instanceof Places places
-                ? places.enumeration() : null;
+    static TypeSymbol enumerationOfHeld(Type subject, Core.OrderingBasis basis,
+                                        NewtypeInners inners) {
+        return held(subject, basis, inners) instanceof Places places ? places.enumeration() : null;
     }
 
     /**
-     * How a value of {@code type} is ordered as the runtime is handed it — the newtype by the
-     * {@code compareTo} its own class carries — or null where it has no order. What the sort family
-     * reads, since it hands each value over as it stands.
+     * How the values of a sort over {@code subject} are ordered as the runtime is handed them,
+     * given what the checker settled orders them. What the sort family reads, since it hands each
+     * value over as it stands.
      *
-     * <p>Never {@link Wrapped}: {@link #asHeld} answers for the value as its own type holds it.
+     * <p>The basis says which order it is, and the subject says only whether a name is worn over the
+     * value: a newtype is handed over as itself and by the {@code compareTo} its own class carries,
+     * so it is {@link Natural} whatever the basis is. Nothing here asks what orders a type; that was
+     * the checker's, and is on the call.
+     *
+     * <p>Never {@link Wrapped}.
      */
-    static Ordering held(Type type, NewtypeInners inners, Symbols symbols, DeclarationKinds kinds,
-                         PublishedDeclarations published) {
-        Ordering how = of(type, inners, symbols, kinds, published);
-        return how == null ? null : how.asHeld();
+    static Ordering held(Type subject, Core.OrderingBasis basis, NewtypeInners inners) {
+        return TypeOps.newtypeSpine(subject, inners).layers().isEmpty()
+                ? ofBasis(basis) : new Natural(basis.type());
     }
 
     /**
      * How a value of this type, as the JVM holds it, is ordered — or null where it has no order.
      *
-     * <p>Whether a type is ordered is this answer existing, which is what {@link
-     * TypeOps#supportsOrdering} reports. Asking here and reporting there is one question and not
-     * two: a reader that admits a value it cannot emit a comparison for is what #856 was.
+     * <p>Whether a type is ordered is this answer existing, and what orders it is the answer itself.
+     * A reader that asks only whether a type is ordered has dropped what the checker then has to
+     * put on the tree, so admission takes this answer and keeps it: a reader that admits a value it
+     * cannot emit a comparison for is what #856 was.
      */
     static Ordering of(Type type, NewtypeInners inners, Symbols symbols, DeclarationKinds kinds,
                        PublishedDeclarations published) {
@@ -158,36 +163,40 @@ public sealed interface Ordering {
     }
 
     /**
-     * How the operands of a comparison the checker admitted are ordered, where {@code reading} is
-     * what it read them as and {@code left} is the type of its left operand.
+     * How a value of the type a basis names is compared, once its names are off.
      *
-     * <p>The checker's alone: it settles the answer here and puts its {@link #basis} on the
-     * comparison, and what emits the comparison reads that ({@link #ofBasis}) and asks nothing of the
-     * operands' types. Which enumeration orders a case beside its sum, and whether one exact side
-     * makes the pair exact, are in the reading.
+     * <p>A translation and not a second resolution: it reads the basis and no declaration, so it
+     * cannot answer differently from the checker that named it. A basis is the terminal of a
+     * newtype spine and is never a newtype, and one that has no order — which the checker never
+     * names — is a checker and an emitter disagreeing.
      */
-    static Ordering ofReading(Core.BinaryReading reading, Type left, NewtypeInners inners,
-                              Symbols symbols, DeclarationKinds kinds,
-                              PublishedDeclarations published) {
-        Type read = switch (reading) {
-            case Core.BinaryReading.AsTheyStand _ -> left;
-            case Core.BinaryReading.In in -> in.type();
-            case Core.BinaryReading.ExactNumbers _ -> Type.RATIONAL;
+    static Ordering ofBasis(Core.OrderingBasis basis) {
+        Ordering how = switch (basis.type()) {
+            case Type.Prim p -> ofPrimitive(p);
+            case Type.Ref r -> new Places(r.name());
+            default -> null;
         };
-        return of(read, inners, symbols, kinds, published);
+        if (how == null) {
+            throw new IllegalStateException(
+                    "an order the checker named is one that has none: " + Type.show(basis.type()));
+        }
+        return how;
     }
 
-    /**
-     * How a value of the type an order is the order of is compared, once its names are off — or
-     * null where the checker's basis is not one that has an order, which is the checker and the
-     * emitter disagreeing.
-     *
-     * <p>A basis is never a newtype, since the spine was walked to the terminal to name it, so
-     * nothing is left to open.
-     */
-    static Ordering ofBasis(Core.OrderingBasis basis, NewtypeInners inners, Symbols symbols,
-                            DeclarationKinds kinds, PublishedDeclarations published) {
-        return of(basis.type(), inners, symbols, kinds, published);
+    /** The order of a primitive, or null where it has none. */
+    private static Ordering ofPrimitive(Type.Prim p) {
+        return switch (p) {
+            case INT -> LONGS;
+            case STRING -> STRINGS;
+            // Each of these is carried by a Comparable whose compareTo is the order the language
+            // gives it (spec §equality).
+            case DECIMAL, DATE, TIME, DATETIME, INSTANT -> new Natural(p);
+            // A Rational is ordered by its exact mathematical value (ADR-0116), and the runtime
+            // value that carries one compares by exactly that — one representation per value, so
+            // the order it carries and the equality it answers are the same reading of it.
+            case RATIONAL -> new Natural(p);
+            case BOOL -> null;
+        };
     }
 
     /** How a value still held as the type it was asked of is ordered: a newtype by the {@code
@@ -208,18 +217,7 @@ public sealed interface Ordering {
     private static Ordering ofTerminal(Type terminal, Symbols symbols, DeclarationKinds kinds,
                                        PublishedDeclarations published) {
         return switch (terminal) {
-            case Type.Prim p -> switch (p) {
-                case INT -> LONGS;
-                case STRING -> STRINGS;
-                // Each of these is carried by a Comparable whose compareTo is the order the
-                // language gives it (spec §equality).
-                case DECIMAL, DATE, TIME, DATETIME, INSTANT -> new Natural(terminal);
-                // A Rational is ordered by its exact mathematical value (ADR-0116), and the runtime
-                // value that carries one compares by exactly that — one representation per value, so
-                // the order it carries and the equality it answers are the same reading of it.
-                case RATIONAL -> new Natural(terminal);
-                case BOOL -> null;
-            };
+            case Type.Prim p -> ofPrimitive(p);
             // A sum every one of whose cases is a unit data, one of its cases, or a union of them.
             // Null where more than one enumeration lists the case: the order belongs to the sum, so
             // a value two sums place differently has none of its own, and that is refused rather

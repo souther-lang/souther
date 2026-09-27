@@ -73,17 +73,14 @@ public final class BinaryElaborator {
                 // except that a bare literal takes the other side's newtype from context.
                 Type lt = left.type();
                 Type rt = right.type();
-                Core.BinaryReading reading = orderedReading(lt, rt, bin.left(), bin.right(),
+                OrderedReading ordered = orderedReading(lt, rt, bin.left(), bin.right(),
                         ctx.inners(), ctx.symbols(), ctx.kinds(), ctx.published());
-                if (reading == null) {
+                if (ordered == null) {
                     throw CompileException.of(Diagnostic
                                     .at(bin.pos()).say(new TypeMessage.ComparisonNeedsOrderedValuesOfOneType(Type.show(lt), Type.show(rt))).build());
                 }
-                // Admitted, so ordered: the reading exists only where the pair has an order.
-                Ordering how = Ordering.ofReading(reading, lt, ctx.inners(), ctx.symbols(),
-                        ctx.kinds(), ctx.published());
-                yield new Core.Binary(bin.op(), left, right, reading,
-                        Optional.of(new Core.OrderingBasis(how.basis())),
+                yield new Core.Binary(bin.op(), left, right, ordered.reading(),
+                        Optional.of(ordered.basis()),
                         ctx.occurrenceOf(bin.origin()), Type.BOOL, bin.pos());
             }
             case ADD, SUB, MUL, DIV -> {
@@ -203,35 +200,53 @@ public final class BinaryElaborator {
      * implementation detail: the nominal boundary is the type, so {@code data StageA = Stage} and
      * {@code data StageB = Stage} open to one order and are still not comparable (ADR-0047). A
      * reading that reduced both sides first and then asked what orders them would admit that pair.
-     * What orders the type read here is {@link Ordering#ofReading}, which the caller puts on the
-     * comparison beside the reading and which decides nothing about admission.
+     * The reading comes with what orders the pair, settled in the same step that admitted it: what
+     * admits a pair is that it has an order, so the answer that says it has one is the one kept.
+     * The order is not the reading — {@code w <= w} reads its operands as {@code w} and is ordered
+     * by the enumeration listing {@code w}.
      */
-    static Core.BinaryReading orderedReading(Type lt, Type rt, Hir.Expr le, Hir.Expr re,
-                                             NewtypeInners inners,
-                                             Symbols symbols, DeclarationKinds kinds,
-                                             PublishedDeclarations published) {
+    static OrderedReading orderedReading(Type lt, Type rt, Hir.Expr le, Hir.Expr re,
+                                         NewtypeInners inners,
+                                         Symbols symbols, DeclarationKinds kinds,
+                                         PublishedDeclarations published) {
         // Two of the same type, where that type has an order: 金額 <= 金額, Stage <= Stage, and
         // StageN <= StageN, whose order is the enumeration it wraps (ADR-0047 over ADR-0069).
         if (lt.equals(rt)) {
-            return TypeOps.supportsOrdering(lt, inners, symbols, kinds, published)
-                    ? Core.BinaryReading.AS_THEY_STAND : null;
+            Ordering how = Ordering.of(lt, inners, symbols, kinds, published);
+            return how == null ? null
+                    : new OrderedReading(Core.BinaryReading.AS_THEY_STAND, basisOf(how));
         }
         // Two values of one enumeration that are not one type: a case value is a value of its sum
         // (spec §sum-data), so `stage < Won` compares in the sum both sides belong to (issue #161).
         TypeSymbol enumeration = TypeOps.comparisonEnumeration(lt, rt, symbols, kinds, published);
         if (enumeration != null) {
-            return new Core.BinaryReading.In(Type.ref(enumeration));
+            Type sum = Type.ref(enumeration);
+            return new OrderedReading(new Core.BinaryReading.In(sum), new Core.OrderingBasis(sum));
         }
         if (exactlyComparable(lt, rt)) {
-            return Core.BinaryReading.EXACT_NUMBERS;
+            return new OrderedReading(Core.BinaryReading.EXACT_NUMBERS,
+                    new Core.OrderingBasis(Type.RATIONAL));
         }
         // A newtype and a source literal of what it wraps: 金額 <= 100, but not 金額 <= n for an
         // Int variable, and not 金額 <= 数量. Ordering asks in addition that the wrapped value be
-        // ordered, which the equality rule this shares does not.
-        return TypeOps.supportsOrdering(lt, inners, symbols, kinds, published)
-                && TypeOps.base(lt, inners).equals(TypeOps.base(rt, inners))
+        // ordered, which the equality rule this shares does not. The pair is ordered by what both
+        // sides open to, which the two sharing a base makes the one the left is ordered by.
+        Ordering how = Ordering.of(lt, inners, symbols, kinds, published);
+        return how != null && TypeOps.base(lt, inners).equals(TypeOps.base(rt, inners))
                 && literalPairsNewtype(lt, rt, le, re, symbols)
-                ? new Core.BinaryReading.In(newtypeOfThePair(lt, rt, symbols)) : null;
+                ? new OrderedReading(new Core.BinaryReading.In(newtypeOfThePair(lt, rt, symbols)),
+                        basisOf(how))
+                : null;
+    }
+
+    /**
+     * What a pair is read as and what orders it, which the checker settles together and the tree
+     * carries side by side.
+     */
+    record OrderedReading(Core.BinaryReading reading, Core.OrderingBasis basis) {}
+
+    private static Core.OrderingBasis basisOf(Ordering how) {
+        return new Core.OrderingBasis(how.basis());
     }
 
     /**

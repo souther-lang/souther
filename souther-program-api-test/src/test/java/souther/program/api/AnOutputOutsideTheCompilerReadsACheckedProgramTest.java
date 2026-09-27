@@ -910,8 +910,9 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
             data Won
             data Lost
             data Stage = Won | Lost
-            data CasesIn = { wons: List<Won>, amounts: List<Amount> }
-            data CasesOut = { wons: List<Won>, amounts: List<Amount> }
+            data StageN = Stage
+            data CasesIn = { wons: List<Won>, amounts: List<Amount>, stages: List<StageN> }
+            data CasesOut = { wons: List<Won>, amounts: List<Amount>, stages: List<StageN> }
 
             behavior run : (i: In) -> Out constructs Out
             behavior sortByRun : (i: RowsIn) -> RowsOut constructs RowsOut
@@ -928,7 +929,8 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
             let emptyRun = EmptyOut { sorted = List.sort([]) }
 
             let casesRun (i) =
-                CasesOut { wons = List.sort(i.wons), amounts = List.sort(i.amounts) }
+                CasesOut { wons = List.sort(i.wons), amounts = List.sort(i.amounts),
+                           stages = List.sort(i.stages) }
             """;
 
     /** The one call in {@code body} reaching {@code kernel} — a fixture is written to hold exactly
@@ -1022,7 +1024,7 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
                         + Type.show(subject.ordering().orElseThrow().type()));
             }
         }
-        assertEquals(List.of("Won by Stage", "Amount by Int"), ordered);
+        assertEquals(List.of("Won by Stage", "Amount by Int", "StageN by Stage"), ordered);
     }
 
     /** Every helper a call in {@code body} reaches, walking every node of it. */

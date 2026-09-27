@@ -1210,7 +1210,7 @@ final class BodyGen {
         private void kernel(Kernel kernel, Core.Call call) {
             if (call.settlement() instanceof Core.CallSettlement.AtKernel(
                     _, Core.KernelFact.OrderingSubject ordered)) {
-                boolean pushed = comparatorFor(ordered.type());
+                boolean pushed = comparatorFor(ordered);
                 if (pushed) {
                     Intrinsics.emitWithComparator(this, kernel, call);
                     return;
@@ -1950,12 +1950,7 @@ final class BodyGen {
                     () -> new IllegalStateException("a comparison the checker admitted says what"
                             + " orders it: " + comparison.left().type() + " "
                             + cut.statedRelation() + " " + comparison.right().type()));
-            Ordering how = Ordering.ofBasis(basis, ctx.inners, symbols, ctx.kinds, ctx.published);
-            if (how == null) {
-                throw new IllegalStateException("a comparison the checker admitted has no order: "
-                        + Type.show(basis.type()));
-            }
-            switch (how) {
+            switch (Ordering.ofBasis(basis)) {
                 case Ordering.Longs _ -> {
                     unwrapNewtypeValue(genExpr(comparison.left()));
                     unwrapNewtypeValue(genExpr(comparison.right()));
@@ -2052,18 +2047,20 @@ final class BodyGen {
         }
 
         /**
-         * Pushes the comparator values of {@code t} are sorted by, where the value's own
+         * Pushes the comparator the values of a sort are ordered by, where the value's own
          * {@code compareTo} is not the order, and answers whether it pushed one.
          *
          * <p>An enumeration's order is on its sum, and text's is {@code Strings.ordering()}. Where
          * the JVM value's own {@code compareTo} is the order nothing is pushed, and the call goes to
-         * the table row, which is the same runtime method without the comparator.
+         * the table row, which is the same runtime method without the comparator. Nothing is pushed
+         * either where the checker settled no order because there was no value to order.
          */
-        private boolean comparatorFor(Type t) {
-            Ordering held = Ordering.held(t, ctx.inners, symbols, ctx.kinds, ctx.published);
-            if (held == null) {
+        private boolean comparatorFor(Core.KernelFact.OrderingSubject ordered) {
+            if (ordered.ordering().isEmpty()) {
                 return false;
             }
+            Type t = ordered.type();
+            Ordering held = Ordering.held(t, ordered.ordering().get(), ctx.inners);
             return switch (held) {
                 case Ordering.Places places -> {
                     code.invokestatic(cd(places.enumeration()), ORDERING_METHOD, MTD_ordering, true);

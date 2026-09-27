@@ -30,31 +30,24 @@ final class EmittedClassReferences {
 
     private final NewtypeInners inners;
     private final Symbols symbols;
-    private final DeclarationKinds kinds;
-    private final PublishedDeclarations published;
     private final Set<TypeSymbol.AtModule> found = new LinkedHashSet<>();
 
-    private EmittedClassReferences(NewtypeInners inners, Symbols symbols, DeclarationKinds kinds,
-                                   PublishedDeclarations published) {
+    private EmittedClassReferences(NewtypeInners inners, Symbols symbols) {
         this.inners = inners;
         this.symbols = symbols;
-        this.kinds = kinds;
-        this.published = published;
     }
 
     /** What a body emitted inline names. */
-    static Set<TypeSymbol.AtModule> of(Core body, NewtypeInners inners, Symbols symbols,
-                                       DeclarationKinds kinds, PublishedDeclarations published) {
-        EmittedClassReferences walk = new EmittedClassReferences(inners, symbols, kinds, published);
+    static Set<TypeSymbol.AtModule> of(Core body, NewtypeInners inners, Symbols symbols) {
+        EmittedClassReferences walk = new EmittedClassReferences(inners, symbols);
         walk.visit(body, null);
         return walk.found;
     }
 
     /** What a definition emitted as a method of its own names: what it takes, and its body. */
     static Set<TypeSymbol.AtModule> of(EmittedDefinition definition, NewtypeInners inners,
-                                       Symbols symbols, DeclarationKinds kinds,
-                                       PublishedDeclarations published) {
-        EmittedClassReferences walk = new EmittedClassReferences(inners, symbols, kinds, published);
+                                       Symbols symbols) {
+        EmittedClassReferences walk = new EmittedClassReferences(inners, symbols);
         for (EmittedDefinition.Parameter parameter : definition.parameters()) {
             walk.add(parameter.type());
         }
@@ -188,12 +181,9 @@ final class EmittedClassReferences {
     private void comparedBy(Core.Binary bin) {
         Comparison comparison = Comparison.of(bin).orElse(null);
         if (comparison != null && comparison.claim() instanceof ComparisonClaim.Cut
-                && comparison.ordering().isPresent()) {
-            Ordering how = Ordering.ofBasis(comparison.ordering().get(), inners, symbols, kinds,
-                    published);
-            if (how instanceof Ordering.Places places) {
-                add(places.enumeration());
-            }
+                && comparison.ordering().isPresent()
+                && Ordering.ofBasis(comparison.ordering().get()) instanceof Ordering.Places places) {
+            add(places.enumeration());
         }
     }
 
@@ -203,8 +193,9 @@ final class EmittedClassReferences {
      */
     private void sortedBy(Core.Call call) {
         if (call.settlement() instanceof Core.CallSettlement.AtKernel(
-                _, Core.KernelFact.OrderingSubject ordered)) {
-            add(Ordering.enumerationOfHeld(ordered.type(), inners, symbols, kinds, published));
+                _, Core.KernelFact.OrderingSubject ordered)
+                && ordered.ordering().isPresent()) {
+            add(Ordering.enumerationOfHeld(ordered.type(), ordered.ordering().get(), inners));
         }
     }
 

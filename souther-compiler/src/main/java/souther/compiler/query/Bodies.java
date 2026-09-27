@@ -2235,7 +2235,7 @@ public final class Bodies {
                         ? checked.value().emittedDefinitions()
                         .get(carried.name().substring(prefix.length())) : null;
                 Set<TypeSymbol.AtModule> named = emitted != null
-                        ? CarriedBodyDependencies.of(emitted, symbols.value(), declarations, kinds)
+                        ? CarriedBodyDependencies.of(emitted, symbols.value())
                         : CarriedBodyDependencies.of(carried, symbols.value(), declarations, kinds,
                         standingCalls);
                 for (TypeSymbol.AtModule built : named) {
