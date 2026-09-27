@@ -65,6 +65,7 @@ class ATemporalTextIsTheLanguagesAndNotTheParsersTest {
             taken(Kind.DATE, "2026-07-25"),
             taken(Kind.DATE, "+12026-07-25"),
             taken(Kind.DATE, "-0001-01-01"),
+            refused(Kind.DATE, "-0000-01-01", Refusal.MALFORMED),
             refused(Kind.DATE, "+2026-07-25", Refusal.MALFORMED),
             refused(Kind.DATE, "2026-7-25", Refusal.MALFORMED),
             refused(Kind.DATE, "2026-02-30", Refusal.MALFORMED),

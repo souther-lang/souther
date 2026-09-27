@@ -1396,13 +1396,14 @@ final class CodecGen {
      * {@code static Result __decimalNode(Object in, Path path)}: what a JSON field's {@code Decimal}
      * decodes with.
      *
-     * <p>A fraction the reader has parsed as a binary floating-point number is already the nearest
-     * {@code double}, and the decimal that prints is a different number from the one written when
-     * that took more digits than a {@code double} holds: {@code 0.10000000000000001} arrives as
-     * {@code 0.1}. Nothing here can tell it from a literal that said {@code 0.1}, so it is refused,
-     * and a fraction the reader kept as a {@code BigDecimal} (Jackson's
-     * {@code USE_BIG_DECIMAL_FOR_FLOATS}) is read exactly. Any other node is Raoh's, and so is a
-     * {@code NaN} or an infinity, which is no number and not a number that was rounded.
+     * <p>The carrier a number node holds is asked the one question a bare {@code Double} or
+     * {@code Float} is asked ({@link BoundaryScalars#decimalRefusal}): a fraction the reader has
+     * parsed as a binary floating-point number is already the nearest {@code double}, and the
+     * decimal that prints is a different number from the one written when that took more digits
+     * than a {@code double} holds ({@code 0.10000000000000001} arrives as {@code 0.1}, which
+     * nothing here can tell from a literal that said {@code 0.1}), while a fraction the reader kept
+     * as a {@code BigDecimal} (Jackson's {@code USE_BIG_DECIMAL_FOR_FLOATS}) is read exactly. A
+     * node that is not a number, and a {@code NaN} or an infinity, are Raoh's.
      */
     private void emitJsonDecimalHelper(ClassBuilder cb) {
         cb.withMethodBody(JSON_DECIMAL_HELPER, MTD_Rdecode,
@@ -1413,24 +1414,27 @@ final class CodecGen {
             code.ifeq(admitted);
             code.aload(0);
             code.checkcast(CD_JsonNode);
-            code.invokevirtual(CD_JsonNode, "isFloatingPointNumber", MTD_nodeIs);
+            code.invokevirtual(CD_JsonNode, "isNumber", MTD_nodeIs);
             code.ifeq(admitted);
+            // The carrier a JSON number holds is asked the one question every reading of a bare
+            // number asks (BoundaryScalars), so a double the reader parsed a fraction into is
+            // refused here the same way a double at a bare value is.
             code.aload(0);
             code.checkcast(CD_JsonNode);
-            code.invokevirtual(CD_JsonNode, "isBigDecimal", MTD_nodeIs);
-            code.ifne(admitted);
-            code.aload(0);
-            code.checkcast(CD_JsonNode);
-            code.invokevirtual(CD_JsonNode, "doubleValue", MTD_nodeDouble);
-            code.invokestatic(ConstantDescs.CD_Double, "isFinite", MTD_doubleIs);
-            code.ifeq(admitted);
+            code.invokevirtual(CD_JsonNode, "numberValue", MTD_nodeNumberValue);
+            code.astore(2);
+            code.aload(2);
+            code.invokestatic(CD_BoundaryScalars, "decimalRefusal", MTD_temporalRefusal);
+            code.astore(3);
+            code.aload(3);
+            code.ifnull(admitted);
             code.aload(1);                                        // path
             code.loadConstant(ErrorCodes.TYPE_MISMATCH);
-            code.loadConstant(BoundaryScalars.ROUNDED);
+            code.aload(3);
             code.loadConstant("expected");
             code.loadConstant(BareScalar.DECIMAL.expected);
             code.loadConstant("actual");
-            code.aload(0);
+            code.aload(2);
             code.invokevirtual(ConstantDescs.CD_Object, "getClass", MTD_getClass);
             code.invokevirtual(CD_Class, "getSimpleName", MTD_getSimpleName);
             code.invokestatic(CD_Map, "of", MTD_mapOf2, true);

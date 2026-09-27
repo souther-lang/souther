@@ -249,21 +249,25 @@ public final class JsonBoundary {
     }
 
     /**
-     * A {@code Decimal} read from a JSON number, as the generated decoder's {@code __decimalNode}
-     * reads it: a fraction the reader has parsed as a {@code double} is refused, since it is already
-     * the nearest binary value and the decimal that prints may not be the number that was written.
-     * Whether a reader keeps the fraction as the decimal it was written is the reader's to be told
-     * (Jackson's {@code USE_BIG_DECIMAL_FOR_FLOATS}), and the runner's is.
+     * A {@code Decimal} read from a JSON number, asking the one question every reading of a bare
+     * number asks ({@link BoundaryScalars#decimalRefusal}), as the generated decoder's
+     * {@code __decimalNode} does: a {@code double} the reader parsed a fraction into is refused,
+     * since it is already the nearest binary value and the decimal that prints may not be the
+     * number that was written. Whether a reader keeps the fraction as the decimal it was written is
+     * the reader's to be told (Jackson's {@code USE_BIG_DECIMAL_FOR_FLOATS}), and the runner's is.
+     * A node that is not a number, and what a {@code NaN} or an infinity carries, are Raoh's: this
+     * only extracts the carrier a JSON number holds and asks whether it is exact.
      */
     private static Decoder<JsonNode, BigDecimal> exactDecimal() {
         Decoder<JsonNode, BigDecimal> raoh = JsonDecoders.decimal();
         return (node, path) -> {
-            if (node != null && node.isFloatingPointNumber() && !node.isBigDecimal()
-                    && Double.isFinite(node.doubleValue())) {
-                return Result.failCustom(path, ErrorCodes.TYPE_MISMATCH, BoundaryScalars.ROUNDED,
-                        Map.of("expected", "exact number", "actual", node.getClass().getSimpleName()));
-            }
-            return raoh.decode(node, path);
+            String refusal = node != null && node.isNumber()
+                    ? BoundaryScalars.decimalRefusal(node.numberValue()) : null;
+            return refusal != null
+                    ? Result.failCustom(path, ErrorCodes.TYPE_MISMATCH, refusal,
+                            Map.of("expected", "exact number",
+                                    "actual", node.numberValue().getClass().getSimpleName()))
+                    : raoh.decode(node, path);
         };
     }
 
