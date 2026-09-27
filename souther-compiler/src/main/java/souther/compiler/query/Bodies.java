@@ -2273,7 +2273,8 @@ public final class Bodies {
 
     /**
      * The definitions this compilation mints for a module, by the name each is emitted under: the
-     * operand of each row and the entry of each value the module publishes.
+     * operand of each row, the entry of each value the module publishes, and the entry of each value
+     * a fixture names bare that no published entry already answers for.
      *
      * <p>What they have in common is mechanism. No source declares them, they are made once for the
      * module, they go through the passes a definition goes through, and each is emitted as a method.

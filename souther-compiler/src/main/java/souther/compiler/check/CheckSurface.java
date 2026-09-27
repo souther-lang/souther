@@ -44,8 +44,9 @@ public final class CheckSurface implements Assembly {
      *  the names were, and carried rather than worked out again from the blocks. */
     private final FakeTables fakes;
     /** What this compilation writes for its own purposes and no source declares: the definition of
-     *  each row operand and the entry of each value the module publishes. Each says which it is by
-     *  its role, and every rule that cares asks that. */
+     *  each row operand, the entry of each value the module publishes, and the entry of each value
+     *  a fixture names bare that has no published one. Each says which it is by its role, and every
+     *  rule that cares asks that. */
     private final List<Hir.FnDef> mintedDefs;
     /**
      * The definitions this was joined from, as they were handed in.
@@ -276,7 +277,8 @@ public final class CheckSurface implements Assembly {
     }
 
     /** The definitions this compilation minted for the module, in the order they were emitted: the
-     *  rows' operands and the entries of the values it publishes. */
+     *  rows' operands, the entries of the values it publishes, and the entries of the values a
+     *  fixture names bare that no published entry already answers for. */
     public List<Hir.FnDef> mintedDefs() {
         return mintedDefs;
     }

@@ -32,11 +32,14 @@ import java.util.Set;
  * this does not answer, and {@code FixtureReader} still reads such a value by its template where this
  * finds it no entry.
  *
- * <p>{@link #bareValueReference} is the one place this question is asked. {@link
- * souther.compiler.query.Adequacy}'s search reads a row's own baseline by the same question, over
- * the same operands, so a name this mints no entry for is a name the search does not read as a
- * baseline either — two readers of one operand answering from one predicate rather than each
- * keeping a copy of it to drift out of step with the other's.
+ * <p>{@link #bareValueReference} is the one place this question is asked, so that a reader of it and
+ * this do not keep two copies of the same predicate to drift apart. {@link
+ * souther.compiler.query.Adequacy}'s search reads a row's own input by it too, when deciding which
+ * value to reuse as a baseline for a further row — the invariant that reading rests on is one
+ * direction only: a name the search treats as a baseline is a name this mints an entry for, since
+ * {@link RowFixtures#placed} is wider than a row's own inputs (it numbers a {@code with}, an
+ * expected value and a fake's occurrences too), and this mints for every position among them, not
+ * only the ones the search happens to read as an origin.
  *
  * <p>An entry's body decides nothing about how the value it names runs: {@link HelperInliner#materialise}
  * reads that reference the same way it reads any other, and chooses a method call, a folded constant,
