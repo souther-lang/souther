@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * What a reader copies of a declaration, written so that two compiles of the declaration write the
@@ -68,11 +69,20 @@ public final class CopiedIdentity {
     /** Whether a name bound outside what is written is a field of the declaration, which is what a
      *  clause reads. A helper or a value is closed, and one reading such a name is not. */
     private final boolean freeNamesAreFields;
+    /** What each value of the module written here rests on, where a value is written as its name
+     *  and not as the body it stands for; null for a value not written that way. */
+    private final Function<ValueName.Helper, String> valueRestsOn;
 
     private CopiedIdentity(Owner owner, boolean freeNamesAreFields) {
+        this(owner, freeNamesAreFields, _ -> null);
+    }
+
+    private CopiedIdentity(Owner owner, boolean freeNamesAreFields,
+                           Function<ValueName.Helper, String> valueRestsOn) {
         this.owner = owner.module();
         this.declaredHere = owner.declares();
         this.freeNamesAreFields = freeNamesAreFields;
+        this.valueRestsOn = valueRestsOn;
     }
 
     /**
@@ -88,11 +98,20 @@ public final class CopiedIdentity {
     /** A helper as its reader expands it: {@code closed}, with parameters, closed over the module
      *  that declares it. */
     public static CopyRecord helper(Hir.FnDef closed, Owner owner) {
+        return helper(closed, owner, _ -> null);
+    }
+
+    /**
+     * The same, for a helper that names the values of {@code owner} and does not expand them,
+     * written with what each rests on beside its name ({@link #clauses(List, Owner, Function)}).
+     */
+    public static CopyRecord helper(Hir.FnDef closed, Owner owner,
+                                    Function<ValueName.Helper, String> restsOn) {
         if (closed.params().isEmpty()) {
             throw new IllegalArgumentException("`" + closed.name() + "` is a value, and is copied"
                     + " as one");
         }
-        CopiedIdentity writing = new CopiedIdentity(owner, false);
+        CopiedIdentity writing = new CopiedIdentity(owner, false, restsOn);
         writing.word("takes").count(closed.params().size());
         for (Hir.FnParam param : closed.params()) {
             writing.bind(param.binder());
@@ -124,13 +143,20 @@ public final class CopiedIdentity {
      * fold to one value are one copy. An exact ratio a division leaves is known at compile time and
      * has no literal to be held as, so a value folding to one is held as its body.
      *
-     * @param closed what the value is, closed over {@code owner}
-     * @param folded what it folds to, or empty where it is not a constant
-     * @param owner  the module that declares it
+     * <p>A constant the copy has no room to record is held as its body as well. A decimal's plain
+     * notation is as long as its scale is far from nought, so its text is asked for only where
+     * {@code recordable} says an entry can hold it.
+     *
+     * @param closed     what the value is, closed over {@code owner}
+     * @param folded     what it folds to, or empty where it is not a constant
+     * @param owner      the module that declares it
+     * @param recordable whether a copy recording the constant it is given as its content is one
+     *                   that can be written
      */
-    public static CopyRecord value(Hir.FnDef closed, Optional<Object> folded, Owner owner) {
+    public static CopyRecord value(Hir.FnDef closed, Optional<Object> folded, Owner owner,
+                                   Predicate<WrittenValue> recordable) {
         WrittenValue constant = folded.map(ConstEval::asWritten).orElse(null);
-        return constant != null
+        return constant != null && recordable.test(constant)
                 ? new CopyRecord(CopyRecord.Form.CONSTANT, constant.written())
                 : body(closed, owner);
     }
@@ -138,7 +164,20 @@ public final class CopiedIdentity {
     /** A type's invariant as the types that include it check it: its clauses, closed over
      *  {@code owner}, in the order written. */
     public static CopyRecord clauses(List<Hir.InvariantClause> clauses, Owner owner) {
-        CopiedIdentity writing = new CopiedIdentity(owner, true);
+        return clauses(clauses, owner, _ -> null);
+    }
+
+    /**
+     * The same, for clauses that name the values of {@code owner} and do not expand them.
+     *
+     * <p>Such a name is written with what the value it names rests on, which is what makes the
+     * clause move with the value: a value changed is a clause held to something else, as it is where
+     * the value is written into the clause. {@code restsOn} answers it for a value of the module and
+     * is null for one it says nothing of, which is written as its name alone.
+     */
+    public static CopyRecord clauses(List<Hir.InvariantClause> clauses, Owner owner,
+                                     Function<ValueName.Helper, String> restsOn) {
+        CopiedIdentity writing = new CopiedIdentity(owner, true, restsOn);
         writing.count(clauses.size());
         for (Hir.InvariantClause clause : clauses) {
             writing.optional(clause.name());
@@ -314,7 +353,13 @@ public final class CopiedIdentity {
             }
             case ValueName.OfType type -> word("type").word(LinkageProjection.shown(type.type()));
             case ValueName.Builtin builtin -> word("builtin").word(builtin.name());
-            case ValueName.Helper helper -> word("helper").word(helper.module()).word(helper.name());
+            case ValueName.Helper helper -> {
+                word("helper").word(helper.module()).word(helper.name());
+                String restsOn = helper.module().equals(owner) ? valueRestsOn.apply(helper) : null;
+                if (restsOn != null) {
+                    word("resting on").word(restsOn);
+                }
+            }
             case ValueName.Behavior behavior ->
                     word("behavior").word(behavior.module()).word(behavior.name());
             case ValueName.Stdlib.Operation operation ->

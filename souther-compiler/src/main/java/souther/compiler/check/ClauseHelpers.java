@@ -5,8 +5,10 @@ import souther.compiler.ast.Hir;
 import souther.compiler.copied.CopyTarget;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.MaterialisationSite;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.TypeKey;
+import souther.compiler.types.WrittenOwner;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -66,7 +68,8 @@ public final class ClauseHelpers {
         // says is refused rather than answered with nothing.
         Hir.Module settled = settled(m, symbols, PublishedDeclarations.THE_ONE_THAT_MAKES_THEM,
                 kinds);
-        HelperInliner inliner = HelperInliner.forModule(settled, published, symbols.library());
+        HelperInliner inliner = HelperInliner.forModule(settled, published, symbols.library(),
+                ValueAtAReference.SHARED_PER_REGION);
         Map<TypeKey, SequencedSet<CopyTarget>> copiedBy = new LinkedHashMap<>();
         Map<TypeKey, List<CallsLeftStanding>> standingBy = new LinkedHashMap<>();
         SequencedSet<ReachName.Declaration> standingInEnsures = new LinkedHashSet<>();
@@ -128,7 +131,8 @@ public final class ClauseHelpers {
         Hir.Module m = expandable.module();
         Hir.Module settled = settled(m, symbols, declarations, kinds);
         HelperInliner inliner = HelperInliner.forHelpers(m.name(), HelperInliner.helpersOf(settled),
-                published, InliningPolicy.DISCHARGE, symbols.library());
+                published, InliningPolicy.DISCHARGE, symbols.library(),
+                ValueAtAReference.SHARED_PER_REGION);
         Map<TypeKey, ExpandedClauses> out = new LinkedHashMap<>();
         for (Hir.Def def : settled.defs()) {
             TypeKey declares = def.declares().key();
@@ -242,9 +246,10 @@ public final class ClauseHelpers {
             return def;
         }
         BindingOwner declared = new BindingOwner.OfData(d.declares());
+        WrittenOwner.Declaration writer = new WrittenOwner.Declaration(d.declares().key());
         return new Hir.Data(d.written(), d.declares(), d.newtype(), d.includes(), d.fields(),
-                Hir.mapClauses(d.invariants(),
-                        clause -> inlinedClause(inliner, declared, met, clause)),
+                Hir.mapClauses(d.invariants(), (ordinal, clause) -> inlinedClause(inliner, declared,
+                        new MaterialisationSite.Invariant(writer, ordinal), met, clause)),
                 d.pos());
     }
 
@@ -256,10 +261,11 @@ public final class ClauseHelpers {
      * look.
      */
     private static Hir.Expr inlinedClause(HelperInliner inliner, BindingOwner declared,
-                                          Consumer<Made> met, Hir.Expr clause) {
+                                          MaterialisationSite root, Consumer<Made> met,
+                                          Hir.Expr clause) {
         AuthoredShape shape = shapeOf(clause);
         Expansion<Hir.Expr> one = inliner.expanding(() ->
-                expandedOver(shape, part -> inliner.inline(part, declared)));
+                expandedOver(shape, part -> inliner.inline(part, declared, root)));
         met.accept(new Made(CallsLeftStanding.of(one.standing()), shape));
         return one.value();
     }
@@ -281,11 +287,15 @@ public final class ClauseHelpers {
                                                        Hir.SpecBehavior spec) {
         BindingOwner owner = new BindingOwner.OfSignature(
                 new souther.compiler.types.ValueName.Behavior(module, spec.name()));
+        WrittenOwner.Stated stated = new WrittenOwner.Stated(module, spec.name());
         List<Hir.EnsuresClause> clauses = new ArrayList<>();
-        for (Hir.EnsuresClause clause : spec.ensures()) {
+        for (int at = 0; at < spec.ensures().size(); at++) {
+            Hir.EnsuresClause clause = spec.ensures().get(at);
             List<Hir.EnsuresArm> arms = new ArrayList<>();
-            for (Hir.EnsuresArm arm : clause.arms()) {
-                arms.add(arm.with(inliner.inline(arm.expr(), owner)));
+            for (int each = 0; each < clause.arms().size(); each++) {
+                Hir.EnsuresArm arm = clause.arms().get(each);
+                arms.add(arm.with(inliner.inline(arm.expr(), owner,
+                        new MaterialisationSite.Ensures(stated, at, each))));
             }
             clauses.add(new Hir.EnsuresClause(clause.name(), List.copyOf(arms),
                     clause.pos(), clause.region()));

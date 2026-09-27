@@ -31,6 +31,7 @@ import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -508,8 +509,23 @@ final class Terms {
      * to be written.
      */
     LinearForm<FactSubject> affineOf(Core raw, Denotations at) {
-        return AffineForms.of(raw, at, affineReading);
+        AffineForms.Walk<FactSubject, Denotations> outer = affineWalkInForce;
+        // The reading asks this of itself while it reads — the facts an operation states of what it
+        // was given, what a condition compares — and what each name came to is one answer until the
+        // reading that began it is done.
+        AffineForms.Walk<FactSubject, Denotations> mine =
+                outer == null ? new AffineForms.Walk<>() : outer.reentered();
+        affineWalkInForce = mine;
+        try {
+            return AffineForms.formIn(raw, at, affineReading, mine);
+        } finally {
+            affineWalkInForce = outer;
+        }
     }
+
+    /** The walk of the affine reading being read, or null when none is: what a question this asks
+     *  of itself is read in. */
+    private AffineForms.Walk<FactSubject, Denotations> affineWalkInForce;
 
     /**
      * The same, saying where the reading stopped where it did, and naming only the atoms
@@ -2887,7 +2903,22 @@ final class Terms {
      * question.
      */
     static Hir.Expr writtenSyntaxOf(Core e, Denotations at) {
-        return writtenSyntaxOf(e, at, new HashMap<>());
+        return writtenSyntaxOf(e, at, new BindingsMet());
+    }
+
+    /**
+     * What the bindings met while writing a value back out were given, and what each of those was
+     * written back as ({@link BindingWalk}).
+     *
+     * <p>The second is what keeps the writing as long as the value's bindings and not as long as
+     * they multiply out to. A binding read twice is written back once, and both reads are that one
+     * tree, so the tree that comes back shares its parts: a reader of it that walks it as a tree
+     * walks each shared part once per place it stands. A value written back as nothing is one that
+     * was computed, and is remembered as that.
+     */
+    private static final class BindingsMet {
+        final Map<BindingId, Core> values = new HashMap<>();
+        final BindingWalk<Optional<Hir.Expr>> written = new BindingWalk<>();
     }
 
     /**
@@ -2909,7 +2940,14 @@ final class Terms {
                 ApplicationDerivationCause.ApplicationWrittenBack::new);
     }
 
-    private static Hir.Expr writtenSyntaxOf(Core e, Denotations at, Map<BindingId, Core> given) {
+    /** What a binding was given, written back once however many places read the binding. */
+    private static Hir.Expr writtenBinding(BindingId binding, Core given, Denotations at,
+                                           BindingsMet met) {
+        return met.written.readingOf(binding,
+                () -> Optional.ofNullable(writtenSyntaxOf(given, at, met))).orElse(null);
+    }
+
+    private static Hir.Expr writtenSyntaxOf(Core e, Denotations at, BindingsMet given) {
         // Written over nothing, every one of them. A value rendered back out of what was computed is
         // the value and not the characters any of it came from: the fold has already been over them,
         // and what it arrived at may be a number no line of the file spells.
@@ -2917,18 +2955,18 @@ final class Terms {
             // A binding is the value its body is, with the binder standing for what it was given.
             case Core.LetIn li -> {
                 BindingId binder = li.binder().binding();
-                given.put(binder, li.value());
+                given.values.put(binder, li.value());
                 Hir.Expr result = writtenSyntaxOf(li.body(), at, given);
-                given.remove(binder);
+                given.values.remove(binder);
                 yield result;
             }
             // And a name whose binding the clause's shape already consumed stands for what the
             // environment says it was given — which is the same rule, asked where the binding is no
             // longer in the tree ({@link ClauseExpr.Scoped}).
-            case Core.Read r when given.containsKey(r.binding()) ->
-                    writtenSyntaxOf(given.get(r.binding()), at, given);
+            case Core.Read r when given.values.containsKey(r.binding()) ->
+                    writtenBinding(r.binding(), given.values.get(r.binding()), at, given);
             case Core.Read r when at.valueOf(r.binding()) != null ->
-                    writtenSyntaxOf(at.valueOf(r.binding()), at, given);
+                    writtenBinding(r.binding(), at.valueOf(r.binding()), at, given);
             case Core.Int i -> new Hir.IntLit(i.value(), i.pos(), null);
             case Core.Decimal d -> new Hir.DecimalLit(d.value(), d.pos(), null);
             case Core.Str s -> new Hir.StringLit(s.value(), s.pos(), null);
@@ -2988,7 +3026,7 @@ final class Terms {
 
     /** Every argument as it was written, or null where any of them was computed. */
     private static List<Hir.Expr> written(List<Core> args, Denotations at,
-                                          Map<BindingId, Core> given) {
+                                          BindingsMet given) {
         List<Hir.Expr> out = new ArrayList<>();
         for (Core arg : args) {
             Hir.Expr each = writtenSyntaxOf(arg, at, given);

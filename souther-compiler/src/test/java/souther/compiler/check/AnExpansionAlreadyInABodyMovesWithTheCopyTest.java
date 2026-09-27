@@ -131,7 +131,7 @@ class AnExpansionAlreadyInABodyMovesWithTheCopyTest {
     }
 
     private static HelperInliner inlinerOver(Hir.Module module) {
-        return HelperInliner.forModule(module, DefaultStdlib.get());
+        return HelperInliner.forModule(module, DefaultStdlib.get(), ValueAtAReference.COPIED);
     }
 
     private static Hir.FnDef fnOf(Hir.Module module, String name) {

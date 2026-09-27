@@ -6,6 +6,7 @@ import souther.compiler.execute.WrittenValue;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ValueName;
+import souther.exact.ExactDecimals;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -87,6 +88,31 @@ public final class ConstEval {
             default -> null;
         };
     }
+
+    /**
+     * How long {@code constant} is when it is written, in characters and in the bytes of a class
+     * file's modified UTF-8.
+     *
+     * <p>Worked out without the text where the text is the thing that may not be makeable: a
+     * decimal is as long in plain notation as its scale is far from nought, so one a few bytes wide
+     * can have a text nothing holds. Its text is digits, a sign and a point, one byte each.
+     */
+    public static Extent extentOf(WrittenValue constant) {
+        if (constant instanceof WrittenValue.Decimal decimal) {
+            long length = ExactDecimals.plainNotationLength(decimal.value());
+            return new Extent(length, length);
+        }
+        String text = constant.written();
+        long bytes = 0;
+        for (int at = 0; at < text.length(); at++) {
+            char each = text.charAt(at);
+            bytes += each == 0 ? 2 : each < 0x80 ? 1 : each < 0x800 ? 2 : 3;
+        }
+        return new Extent(text.length(), bytes);
+    }
+
+    /** How many characters a text is, and how many bytes they take in modified UTF-8. */
+    public record Extent(long chars, long bytes) {}
 
     /** Folding against the library {@code symbols} names. */
     public static ConstEval against(Symbols symbols) {

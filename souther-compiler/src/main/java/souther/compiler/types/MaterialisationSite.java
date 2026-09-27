@@ -43,6 +43,49 @@ public sealed interface MaterialisationSite extends SettledAnswer {
     }
 
     /**
+     * The region one clause of a declaration's {@code invariant} is the whole of.
+     *
+     * <p>Told by the declaration and the clause's place among the declaration's clauses, which every
+     * representation of them keeps in the order they were written ({@code TypeOps.Declared} counts
+     * them the same way). Not the clause's name, which a clause may not have, and not its position,
+     * which is where the text is and not which clause it is.
+     *
+     * @param declaration the declaration that writes the clause
+     * @param ordinal     which of its clauses, counted from zero in the order written
+     */
+    record Invariant(WrittenOwner.Declaration declaration, int ordinal)
+            implements MaterialisationSite {
+
+        public Invariant {
+            if (declaration == null || ordinal < 0) {
+                throw new IllegalArgumentException(
+                        "an invariant clause is some declaration's: " + declaration + " at " + ordinal);
+            }
+        }
+    }
+
+    /**
+     * The region one arm of a behavior's {@code ensures} clause is the whole of.
+     *
+     * <p>Told by the behavior and where the arm stands among the behavior's clauses and among the
+     * clause's arms, both counted from zero in the order written, and never by the name a clause may
+     * or may not have.
+     *
+     * @param stated the behavior that states it
+     * @param clause which of its clauses
+     * @param arm    which arm of that clause
+     */
+    record Ensures(WrittenOwner.Stated stated, int clause, int arm) implements MaterialisationSite {
+
+        public Ensures {
+            if (stated == null || clause < 0 || arm < 0) {
+                throw new IllegalArgumentException(
+                        "an ensures arm is some behavior's: " + stated + " at " + clause + "." + arm);
+            }
+        }
+    }
+
+    /**
      * A region a fork, a short-circuit or a comprehension the author wrote opens.
      *
      * @param construct which construct it is, in the words the source counted it by

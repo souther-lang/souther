@@ -7,7 +7,6 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
-import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -195,49 +194,28 @@ public final class AffineForms {
     }
 
     /**
-     * One walk of one expression: the names it is inside, and what each name it has read came to.
-     *
-     * <p>The first is what stops a name that reaches itself. The second is what stops a name read
-     * twice from being read twice: what a binding comes to is a fact about the value it was given
-     * and the environment that value is read in, and both are fixed where the binding was made
-     * (ADR-0111) — so the second reading of a name is the first reading asked again. A body naming
-     * one binding twice, over a chain of bindings that each do, is a reading that doubles with
-     * every link without it.
-     *
-     * <p>Held for one walk and not beyond it. What a name comes to is this reading's answer, and a
-     * table outliving the walk would be one reading's answer offered to another's.
-     *
-     * <p>A name is entered on the way to its own answer, so what is held under it was reached with
-     * it on the path. That is the same path every reading of it takes: a path can hold a binding
-     * twice only where a value reaches itself, which is refused before any of this runs.
+     * {@link #of(Core, Object, Reading)} inside the walk {@code walk} began, for a reading that is
+     * asked something of its own while it reads: the fact an operation states of its arguments, what
+     * a condition compares. What each name came to is one answer for as long as the reading is in
+     * progress, however many times it is asked from inside itself.
      */
-    private static final class Walk<A, E> {
+    static <A, E> LinearForm<A> formIn(Core raw, E at, Reading<A, E> reading, Walk<A, E> walk) {
+        return of(raw, at, reading, walk) instanceof Outcome.Composed<A, E> composed
+                ? composed.form() : null;
+    }
 
-        private final java.util.Set<BindingId> following = new java.util.HashSet<>();
-        private final java.util.Map<BindingId, Outcome<A, E>> read = new java.util.HashMap<>();
+    /** One walk of one expression, reading each name it meets once ({@link BindingWalk}). */
+    static final class Walk<A, E> extends BindingWalk<Outcome<A, E>> {
 
-        /** Whether {@code binding} may be followed from here, marking it followed where it may. */
-        boolean enter(BindingId binding) {
-            return following.add(binding);
+        Walk() {}
+
+        private Walk(Walk<A, E> reading) {
+            super(reading);
         }
 
-        /** Done following {@code binding}. */
-        void leave(BindingId binding) {
-            following.remove(binding);
-        }
-
-        /** What {@code binding} came to, asking {@code answer} the first time and no other. */
-        Outcome<A, E> readingOf(BindingId binding,
-                                java.util.function.Supplier<Outcome<A, E>> answer) {
-            Outcome<A, E> already = read.get(binding);
-            if (already != null) {
-                return already;
-            }
-            Outcome<A, E> came = answer.get();
-            if (came != null) {
-                read.put(binding, came);
-            }
-            return came;
+        /** A walk for a question the reading asks itself in the middle of this one. */
+        Walk<A, E> reentered() {
+            return new Walk<>(this);
         }
     }
 

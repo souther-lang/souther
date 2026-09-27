@@ -6,8 +6,12 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -454,6 +458,18 @@ final class Term {
         return written;
     }
 
+    /**
+     * The most characters what stands for a term is written to before it is given as a digest of
+     * what would have been written.
+     *
+     * <p>A term is written out of the text of its parts, and a value that is named twice by the
+     * value before it, over a chain of them, is a term whose text doubles at each link. A digest is
+     * as long as it is and no more, and is a function of the same text, so two terms written alike
+     * are still written alike; what is given up is only that the order two long terms come in is not
+     * the order of their text.
+     */
+    private static final int LONGEST_TEXT_WRITTEN_OUT = 4096;
+
     private String writtenForOrder() {
         StringBuilder sb = new StringBuilder();
         sb.append(shape.name()).append('(').append(textOf(of));
@@ -469,7 +485,20 @@ final class Term {
                 sb.append(',').append(part.standsForText());
             }
         }
-        return sb.append(')').toString();
+        sb.append(')');
+        return sb.length() <= LONGEST_TEXT_WRITTEN_OUT ? sb.toString() : digestOf(sb);
+    }
+
+    /** {@code text} as a digest of it, written the way a term is: as text that says which term it
+     *  is. */
+    private static String digestOf(CharSequence text) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(text.toString().getBytes(StandardCharsets.UTF_8));
+            return "digest:" + HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("every Java platform has SHA-256", e);
+        }
     }
 
     /** What stands for a value a shape carries, taken the way {@link #hashOf} takes it. */

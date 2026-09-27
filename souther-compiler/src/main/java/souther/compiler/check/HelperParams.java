@@ -67,7 +67,9 @@ final class HelperParams {
         if (!hasOpenParam(m)) {
             return m;   // nothing to settle: don't build the inliner (it scans the whole prelude)
         }
-        HelperInliner inliner = HelperInliner.forModule(m, symbols.library());
+        // Only the helpers' shapes are read here, and they read a value's body where it is named.
+        HelperInliner inliner = HelperInliner.forModule(m, symbols.library(),
+                ValueAtAReference.COPIED);
         // The addresses this module holds its own recursions at, which is what the loop below has:
         // it walks the definitions and asks whether each is one of them.
         Set<String> recursive = new LinkedHashSet<>();

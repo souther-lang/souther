@@ -4297,6 +4297,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         WrittenOwner.theBodyThatWrote(block.reference().owner()).definition());
                 into.put("reference", block.reference().ordinal());
             }
+            case MaterialisationSite.Invariant invariant -> {
+                into.put("kind", word(MaterialisationRegionWord.INVARIANT));
+                into.put("module", invariant.declaration().module());
+                into.put("declaration", invariant.declaration().declaration().name());
+                into.put("ordinal", invariant.ordinal());
+            }
+            case MaterialisationSite.Ensures ensures -> {
+                into.put("kind", word(MaterialisationRegionWord.ENSURES));
+                into.put("module", ensures.stated().module());
+                into.put("definition", ensures.stated().behavior());
+                into.put("ordinal", ensures.clause());
+                into.put("arm", ensures.arm());
+            }
         }
     }
 

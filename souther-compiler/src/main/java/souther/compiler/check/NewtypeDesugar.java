@@ -159,7 +159,16 @@ public final class NewtypeDesugar {
                 yield new Hir.Match(go(mt.scrutinee(), newtypes), cases, mt.origin(), mt.pos(),
                         mt.region());
             }
-            default -> e;   // literals, Var — no child expressions to rewrite
+            // The value one build of it stands for is what a `T(v)` written in the value's body is
+            // read in, so the body is rewritten and the build around it is kept.
+            case Hir.Materialised m -> new Hir.Materialised(m.value(), m.site(),
+                    go(m.body(), newtypes), m.pos(), m.region());
+            // No child expression to rewrite: a literal, a name, a build that refers to its value's
+            // template, and a call of a value's method, which takes names of bindings.
+            // Listed rather than left to a default, so a node added to Hir is refused here until
+            // someone says what rewriting it means.
+            case Hir.IntLit _, Hir.DecimalLit _, Hir.StringLit _, Hir.BoolLit _, Hir.Var _,
+                 Hir.Unreachable _, Hir.ValueBuild _, Hir.ValueInvocation _ -> e;
         };
     }
 

@@ -5,6 +5,7 @@ import souther.compiler.check.HelperGraph;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.HelperTable;
 import souther.compiler.check.InliningPolicy;
+import souther.compiler.check.ValueAtAReference;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.BindingOwner;
 
@@ -76,7 +77,8 @@ class AnExpansionAnswersWithTheRecursionsItLeftStandingTest {
         Hir.FnDef def = HelperInliner.helpersOf(db.ask(new Bodies.Settled(module)).value()).get(fn);
         assertTrue(def != null, fn + " is a helper of " + module);
 
-        HelperInliner inliner = HelperInliner.over(table, HelperGraph.of(table));
+        HelperInliner inliner = HelperInliner.over(table, HelperGraph.of(table),
+                ValueAtAReference.COPIED);
         inliner.inline(def.writtenBody(), new BindingOwner.OfValue(module, fn));
         Set<String> rendered = new java.util.LinkedHashSet<>();
         inliner.leftStanding().forEach(reference -> rendered.add(reference.rendered()));

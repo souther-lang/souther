@@ -72,7 +72,8 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
                               Map<String, Hir.FnDef> takenOn) {
         HelperTable table =
                 HelperTable.of(module, declared, takenOn, Map.of(), InliningPolicy.FULL, DefaultStdlib.get());
-        TotalityChecker.check(HelperInliner.over(table, HelperGraph.of(table)));
+        TotalityChecker.check(
+                HelperInliner.over(table, HelperGraph.of(table), ValueAtAReference.COPIED));
     }
 
     /**
@@ -85,7 +86,8 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
     @Test
     void whereItIsHeldIsNotAnExemption() {
         Hir.FnDef own = spinOf("maths");
-        HelperInliner maths = HelperInliner.forHelpers("maths", Map.of("spin", own), DefaultStdlib.get());
+        HelperInliner maths = HelperInliner.forHelpers("maths", Map.of("spin", own), DefaultStdlib.get(),
+                ValueAtAReference.COPIED);
         Hir.FnDef closed = maths.closeAcross(own, "maths");
 
         assertEquals("maths.spin", closed.name());
@@ -108,7 +110,8 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
     @Test
     void aDefinitionAnotherModuleWroteIsNotThisOnesToProve() {
         Hir.FnDef own = spinOf("maths");
-        HelperInliner maths = HelperInliner.forHelpers("maths", Map.of("spin", own), DefaultStdlib.get());
+        HelperInliner maths = HelperInliner.forHelpers("maths", Map.of("spin", own), DefaultStdlib.get(),
+                ValueAtAReference.COPIED);
         Hir.FnDef closed = maths.closeAcross(own, "maths");
 
         assertEquals("maths", closed.declaredIn());
@@ -135,7 +138,8 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
                 let wrapped (n: Int) : Int = spin(n)
                 """);
         Map<String, Hir.FnDef> declared = HelperInliner.helpersOf(maths);
-        HelperInliner from = HelperInliner.forHelpers("maths", declared, DefaultStdlib.get());
+        HelperInliner from = HelperInliner.forHelpers("maths", declared, DefaultStdlib.get(),
+                ValueAtAReference.COPIED);
         Hir.FnDef spin = from.closeAcross(declared.get("spin"), "maths");
         Hir.FnDef wrapped = from.closeAcross(declared.get("wrapped"), "maths");
 
@@ -153,7 +157,8 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
         HelperTable table = HelperTable.of("order", HelperInliner.helpersOf(order), takenOn,
                 Map.of(), InliningPolicy.FULL, DefaultStdlib.get());
         PartialReachability reachability =
-                PartialReachability.of(HelperInliner.over(table, HelperGraph.of(table)));
+                PartialReachability.of(
+                        HelperInliner.over(table, HelperGraph.of(table), ValueAtAReference.COPIED));
 
         // `wrapped` is unmarked, and what it reaches is the module that declared it to answer for.
         assertEquals(Optional.empty(),
@@ -196,7 +201,8 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
                 let hands (n: Int) : Int = loop(spin, n)
                 """);
         Map<String, Hir.FnDef> declared = HelperInliner.helpersOf(maths);
-        HelperInliner from = HelperInliner.forHelpers("maths", declared, DefaultStdlib.get());
+        HelperInliner from = HelperInliner.forHelpers("maths", declared, DefaultStdlib.get(),
+                ValueAtAReference.COPIED);
         Hir.FnDef spin = from.closeAcross(declared.get("spin"), "maths");
         Hir.FnDef written = declared.get("hands");
         // Taken on by `order` under the name it reaches it by, and its body read against `order`'s
@@ -217,7 +223,8 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
         HelperTable table = HelperTable.of("order", HelperInliner.helpersOf(order), takenOn,
                 Map.of(), InliningPolicy.FULL, DefaultStdlib.get());
         PartialReachability reachability =
-                PartialReachability.of(HelperInliner.over(table, HelperGraph.of(table)));
+                PartialReachability.of(
+                        HelperInliner.over(table, HelperGraph.of(table), ValueAtAReference.COPIED));
 
         // `maths` answered for its own body. Reading it again here reports `maths.spin` against a
         // module whose author never wrote it.

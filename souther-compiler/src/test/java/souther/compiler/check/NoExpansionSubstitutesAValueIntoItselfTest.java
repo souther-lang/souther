@@ -47,7 +47,8 @@ class NoExpansionSubstitutesAValueIntoItselfTest {
 
     private static HelperInliner inlinerFor(String source) {
         Ast.Module parsed = CstFrontend.parse(source);
-        return HelperInliner.forModule(Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get())), DefaultStdlib.get());
+        return HelperInliner.forModule(Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get())), DefaultStdlib.get(),
+                ValueAtAReference.COPIED);
     }
 
     private static Hir.Expr expand(HelperInliner inliner, String helper) {

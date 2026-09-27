@@ -92,16 +92,28 @@ public final class Lower {
     }
 
     /**
+     * {@code inliner}, refused unless it shares each value per evaluation region.
+     *
+     * <p>Every tree written here is one that runs or one a walk of regions reads, and both hold a
+     * value once where it is demanded. Copied at every reference instead, what a body holds is the
+     * product of its references rather than the sum of what the source wrote, so an inliner made to
+     * copy is a mistake of whoever made it and is said here and not answered.
+     */
+    private static void sharing(HelperInliner inliner) {
+        if (!inliner.sharesValuesPerRegion()) {
+            throw new IllegalArgumentException("a body is lowered by an inliner that shares values"
+                    + " per region, and this one copies them");
+        }
+    }
+
+    /**
      * The same, for a behavior's implementation, told what its behavior declares in {@code depends
      * on} — the names that arrive as the {@code let}'s trailing parameters (spec §depends-on). A
      * helper has none, and neither has a recursive helper's own body.
      */
     public static Expansion<Hir.FnDef> body(Hir.FnDef fn, HelperInliner inliner, boolean recursive,
                                             Set<String> dependencies) {
-        // A body that runs reads each value it names as one materialisation per evaluation region.
-        // Copying it at every reference instead makes what a body holds the product of its
-        // references rather than the sum of what the source wrote (ADR-0072).
-        inliner.sharingOneMaterialisationPerRegion();
+        sharing(inliner);
         Hir.Expr expanded = recursive
                 ? inliner.inlineRecursiveBody(fn)
                 : inliner.inline(fn.writtenBody(), dependencies(fn, dependencies), inliner.bodyOf(fn.name()));
@@ -117,7 +129,7 @@ public final class Lower {
      * root region demands.
      */
     public static Expansion<LoweredDefinition> valueMethod(Hir.FnDef fn, HelperInliner inliner) {
-        inliner.sharingOneMaterialisationPerRegion();
+        sharing(inliner);
         LoweredDefinition method = inliner.valueMethod(fn);
         Hir.FnDef desugared = method.definition().withBody(
                 new Hir.FnBody.Written(desugar(method.definition().writtenBody())));
@@ -137,7 +149,7 @@ public final class Lower {
      * values it names and takes nothing.
      */
     public static Expansion<Hir.FnDef> valueTemplate(Hir.FnDef fn, HelperInliner inliner) {
-        inliner.sharingOneMaterialisationPerRegion();
+        sharing(inliner);
         Hir.FnDef template = inliner.valueTemplate(fn);
         return new Expansion<>(
                 template.withBody(new Hir.FnBody.Written(desugar(template.writtenBody()))),
