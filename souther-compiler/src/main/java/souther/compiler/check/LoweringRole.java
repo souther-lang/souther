@@ -6,6 +6,10 @@ import souther.compiler.ast.RowPosition;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.Set;
+
 /**
  * What a definition is, as the lowering of its body reads it: what it runs as, rather than where it
  * came from.
@@ -40,6 +44,8 @@ public sealed interface LoweringRole
             case DefinitionRole.RowValue(RowPosition position) -> new RowValue(position);
             case DefinitionRole.PublishedValueEntry(ValueName.Helper value) ->
                     new PublishedValueEntry(value);
+            case DefinitionRole.FixtureValueEntry(ValueName.Helper value) ->
+                    new FixtureValueEntry(value);
             case DefinitionRole.TakenOn(ReachName.Declaration reachedAs) ->
                     definition.params().isEmpty() ? new ValueDeclaredElsewhere(reachedAs)
                             : new Helper(reachedAs);
@@ -75,6 +81,32 @@ public sealed interface LoweringRole
         };
     }
 
+    /**
+     * The values of {@code module} that some entry answers for — a published one or a fixture one
+     * alike — by the value's own bare name, read off {@code roles}.
+     *
+     * <p>Both kinds for the same reason: either is read by an entry that is no copy of the value, so
+     * there is no application anywhere else for an unwritten function type to be settled from, and a
+     * value either reaches this way has to have one written (spec §fn-declaration, ADR-0074). A value
+     * neither reaches is still typed wherever it is copied in, which is the check an entry's own
+     * value skips — widening this set is what keeps a fixture's entry from being the one kind of
+     * external caller nothing here asks the value's type for.
+     */
+    static Set<String> valuesWithAnEntry(Map<String, LoweringRole> roles, String module) {
+        Set<String> out = new LinkedHashSet<>();
+        for (LoweringRole role : roles.values()) {
+            ValueName.Helper value = switch (role) {
+                case PublishedValueEntry(ValueName.Helper v) -> v;
+                case FixtureValueEntry(ValueName.Helper v) -> v;
+                default -> null;
+            };
+            if (value != null && value.module().equals(module)) {
+                out.add(value.name());
+            }
+        }
+        return out;
+    }
+
     /** The implementation of {@code behavior}, which the module emits as the behavior. */
     record Behavior(ValueName.Behavior behavior) implements LoweringRole {}
 
@@ -88,7 +120,7 @@ public sealed interface LoweringRole
 
     /** What a module emits as a method of its own. */
     sealed interface Emitted extends LoweringRole
-            permits ValueHome, Helper, RowValue, PublishedValueEntry {}
+            permits ValueHome, Helper, RowValue, PublishedValueEntry, FixtureValueEntry {}
 
     /**
      * The one place {@code value} runs: the module that declares it builds it and hands it to what
@@ -107,4 +139,13 @@ public sealed interface LoweringRole
 
     /** The entry through which another module calls {@code value}. */
     record PublishedValueEntry(ValueName.Helper value) implements Emitted {}
+
+    /**
+     * The entry through which a fixture calls {@code value}, in place of interpreting its body a
+     * second time.
+     *
+     * <p>Not {@link PublishedValueEntry}: a value kept private to its module, or declared by an
+     * attached file, is never one of those and may still be one of these.
+     */
+    record FixtureValueEntry(ValueName.Helper value) implements Emitted {}
 }

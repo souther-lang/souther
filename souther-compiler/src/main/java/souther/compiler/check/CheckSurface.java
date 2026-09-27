@@ -44,8 +44,9 @@ public final class CheckSurface implements Assembly {
      *  the names were, and carried rather than worked out again from the blocks. */
     private final FakeTables fakes;
     /** What this compilation writes for its own purposes and no source declares: the definition of
-     *  each row operand and the entry of each value the module publishes. Each says which it is by
-     *  its role, and every rule that cares asks that. */
+     *  each row operand, the entry of each value the module publishes, and the entry of each value
+     *  a fixture names bare that has no published one. Each says which it is by its role, and every
+     *  rule that cares asks that. */
     private final List<Hir.FnDef> mintedDefs;
     /**
      * The definitions this was joined from, as they were handed in.
@@ -57,6 +58,9 @@ public final class CheckSurface implements Assembly {
      */
     private final List<Desugared.Fn> desugaredFrom;
     private final Map<Hir.Expr, String> operandMethods;
+    /** Which method every value a fixture may call by name runs as, by the value's own declaration —
+     *  {@link FixtureValueEntries#emitted}'s correspondence, mint and reuse alike. */
+    private final Map<ValueName.Helper, String> fixtureValueMethods;
     /** Where each behavior gets its body, as the module was classified. Not in the tree: a tree
      *  read off the path has no {@code let} to say, so two surfaces whose trees are the same can
      *  still disagree about this. */
@@ -68,7 +72,7 @@ public final class CheckSurface implements Assembly {
                          List<Desugared.Fn> fns, List<Desugared.Fn> desugaredFrom,
                          List<Hir.Example> examples, FakeTables fakes,
                          List<Hir.FnDef> mintedDefs, Map<Hir.Expr, String> operandMethods,
-                         BehaviorBodies bodies) {
+                         Map<ValueName.Helper, String> fixtureValueMethods, BehaviorBodies bodies) {
         this.settling = settling;
         this.declarations = List.copyOf(declarations);
         this.fns = List.copyOf(fns);
@@ -77,6 +81,7 @@ public final class CheckSurface implements Assembly {
         this.fakes = fakes;
         this.mintedDefs = List.copyOf(mintedDefs);
         this.operandMethods = operandMethods;
+        this.fixtureValueMethods = fixtureValueMethods;
         this.bodies = bodies;
     }
 
@@ -175,21 +180,33 @@ public final class CheckSurface implements Assembly {
         // read, and writing a name out does not touch either.
         FakeTables fakes = FakeTables.namesWrittenOut(declared, self);
         CheckSurface written = new CheckSurface(settling, declarations, fns, desugaredFrom, examples, fakes,
-                List.of(), Map.of(), bodies);
+                List.of(), Map.of(), Map.of(), bodies);
+        // Every operand a row or a fake writes, walked once: RowFixtures.emitted mints a method for
+        // each and FixtureValueEntries reads the same list for the names among them, rather than
+        // each asking RowFixtures.placed for its own copy.
+        List<RowFixtures.Placed> placed = RowFixtures.placed(written, signatures);
         // What each row operand computes, emitted beside the module's own so a row runs its operand
         // in the program the behavior it is about is applied in. Which method is whose is kept with
         // the assembly: it is decided here and read wherever a row is run, never counted out again.
-        RowFixtures.Emitted rows = RowFixtures.emitted(written, newtypes, signatures);
+        RowFixtures.Emitted rows = RowFixtures.emitted(written, newtypes, placed);
         // And what another module reads a value it publishes through: a definition of the same
         // family, emitted for the same reason, and kept apart from the rows in that no row runs it.
         Map<String, Hir.FnDef> entries = ValueEntries.emitted(written, newtypes);
-        if (rows.defs().isEmpty() && entries.isEmpty()) {
+        // And what a fixture reads a named value through, whether or not the module publishes it —
+        // reusing the entry above where one already exists rather than minting a second.
+        FixtureValueEntries.Emitted fixtureEntries =
+                FixtureValueEntries.emitted(written, newtypes, placed);
+        // fixtureEntries.methods(), not fixtureEntries.defs(): a value already published needs no
+        // new definition, but its method still has to be carried past `written`, whose table is
+        // empty — checking `defs()` here would silently drop that correspondence.
+        if (rows.defs().isEmpty() && entries.isEmpty() && fixtureEntries.methods().isEmpty()) {
             return written;
         }
         List<Hir.FnDef> minted = new ArrayList<>(rows.defs().values());
         minted.addAll(entries.values());
+        minted.addAll(fixtureEntries.defs().values());
         return new CheckSurface(settling, declarations, fns, desugaredFrom, examples, fakes,
-                minted, rows.methods(), bodies);
+                minted, rows.methods(), fixtureEntries.methods(), bodies);
     }
 
     /** What the module is called. */
@@ -260,7 +277,8 @@ public final class CheckSurface implements Assembly {
     }
 
     /** The definitions this compilation minted for the module, in the order they were emitted: the
-     *  rows' operands and the entries of the values it publishes. */
+     *  rows' operands, the entries of the values it publishes, and the entries of the values a
+     *  fixture names bare that no published entry already answers for. */
     public List<Hir.FnDef> mintedDefs() {
         return mintedDefs;
     }
@@ -268,6 +286,11 @@ public final class CheckSurface implements Assembly {
     /** Which method each row operand's value runs as, by the operand. */
     public Map<Hir.Expr, String> operandMethods() {
         return operandMethods;
+    }
+
+    /** Which method every value a fixture may call by name runs as, by the value's own declaration. */
+    public Map<ValueName.Helper, String> fixtureValueMethods() {
+        return fixtureValueMethods;
     }
 
     /** Which module each imported name was written out to. */

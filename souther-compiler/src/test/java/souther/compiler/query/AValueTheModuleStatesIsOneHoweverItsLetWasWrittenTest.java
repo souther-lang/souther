@@ -7,6 +7,8 @@ import souther.compiler.check.ResolvedFieldTypes;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.partition.Generator;
+import souther.compiler.types.ReachName;
+import souther.compiler.types.ValueName;
 
 import java.util.List;
 
@@ -71,8 +73,8 @@ class AValueTheModuleStatesIsOneHoweverItsLetWasWrittenTest {
     }
 
     private static Generator.Baseline originAt(String parameter, String value) {
-        return Generator.Baseline.stating(parameter,
-                new Generator.Baseline.Named("example.member", value));
+        return Generator.Baseline.stating(parameter, new Generator.Baseline.Named(
+                new ReachName.Own(new ValueName.Helper("example.member", value))));
     }
 
     /** The origins the module states for the behavior under test, one per value of a parameter's

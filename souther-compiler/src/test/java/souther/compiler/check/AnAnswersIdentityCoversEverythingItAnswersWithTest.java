@@ -77,6 +77,10 @@ class AnAnswersIdentityCoversEverythingItAnswersWithTest {
             "souther.compiler.check.CheckSurface.operandMethods",
             "keyed on operand identity, over the very nodes the tree hands out — it says nothing"
                     + " the tree and the definitions built from it do not already say",
+            "souther.compiler.check.CheckSurface.fixtureValueMethods",
+            "the address for a value here is a pure function of its name — ValueEntries.methodFor or"
+                    + " FixtureValueEntries.methodFor — so the map says nothing the minted definitions"
+                    + " and the row and fake text they were found in do not already say",
             "souther.compiler.check.DeclaredArgument.stands",
             "the type at a position is a fact the library settled about that position and not a"
                     + " second thing to tell two arguments apart by: two readings of one declaration"

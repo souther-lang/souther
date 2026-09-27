@@ -24,6 +24,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
@@ -832,8 +833,23 @@ public final class Generator {
             return new Baseline(Lookup.built(put -> put.put(parameter, value)));
         }
 
-        /** A value the module states, by the name a row writes it under. */
-        public record Named(String module, String name) {}
+        /**
+         * A value the module states, held as the reference it is reached by rather than as a name
+         * rebuilt from parts.
+         *
+         * <p>{@code reachedAs} carries both what this denotes ({@link ReachName#denotes()}, the
+         * identity a fixture entry is keyed by) and how it is written ({@link ReachName#rendered()},
+         * what a generated row prints). The two are not one string for an imported value — its
+         * rendered form is qualified while its declaration's own name is not — so building one from
+         * the other reconstructs a name from parts this already has whole, and had it wrong: a value
+         * imported bare and one written qualified denote the one declaration and render two ways.
+         */
+        public record Named(ReachName.Declaration reachedAs) {
+
+            public Named {
+                Objects.requireNonNull(reachedAs, "a baseline is the reference a value is reached by");
+            }
+        }
     }
 
     /**
@@ -2599,7 +2615,7 @@ public final class Generator {
                 continue;
             }
             if (!(check.build(observed.size(),
-                    FixtureTemplate.named(named.module(), named.name(), references.next()))
+                    FixtureTemplate.named(named.reachedAs(), references.next()))
                             instanceof CandidateCheck.Built.Value(var value))) {
                 return null;
             }
@@ -2761,8 +2777,7 @@ public final class Generator {
             if (at == null) {
                 continue;
             }
-            FixtureTemplate named = FixtureTemplate.named(at.module(), at.name(),
-                    references.next());
+            FixtureTemplate named = FixtureTemplate.named(at.reachedAs(), references.next());
             List<Integer> moved = delta.under(axes.axes(), parameter);
             FixtureTemplate written = moved.isEmpty() ? named
                     : withFieldsMoved(subject, p, axes.axes(), moved, where, named);

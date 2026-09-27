@@ -139,16 +139,20 @@ public final class FixtureReader {
     }
 
     /** The value the method emitted under {@code emittedAs} answers with. What a failure inside it
-     *  is said of is the operand — the row's own account of itself — and not the method's name,
-     *  which no source spells. */
-    Object ran(String emittedAs) {
+     *  is said of is {@code what} — the caller's own account of what it was running — and not the
+     *  method's name, which no source spells. A row names its own operand; a named value's entry is
+     *  named by the value, which is not what a row wrote and is told apart from one for that reason. */
+    Object ran(String emittedAs, String what) {
         try {
             return operands.run(emittedAs);
         } catch (InvocationFailure f) {
-            // The row's reading of it, said of the operand rather than of the method it was emitted
-            // as: what a report names is what the author wrote.
-            throw RowFailures.of(f, "the value the row writes");
+            throw RowFailures.of(f, what);
         }
+    }
+
+    /** {@link #ran(String, String)}, for a row's own operand. */
+    Object ran(String emittedAs) {
+        return ran(emittedAs, "the value the row writes");
     }
 
     Object built(Hir.Expr written, Type type) {
@@ -1253,13 +1257,7 @@ public final class FixtureReader {
                 }
                 yield expandedValue(local, held, at, admission);
             }
-            case ValueName.Helper helper -> {
-                Hir.Expr value = valueBody(v.name());
-                if (value == null) {
-                    throw new FixtureException("`" + v.name() + "` is not a value a fixture can name");
-                }
-                yield expandedValue(helper, value, at, admission);
-            }
+            case ValueName.Helper helper -> namedValue(v, helper, at, admission);
             // `Map.empty` / `Set.empty`: a library value, not a library call, so there is no method to
             // run and its value is known from the name alone. It is the empty collection, which a row
             // writes `[]` — admitted for the reason `fromList` is (see `collectionOrNewtype`), so a
@@ -1270,6 +1268,36 @@ public final class FixtureReader {
             case null, default ->
                     throw new FixtureException("`" + v.name() + "` is not a value a fixture can name");
         };
+    }
+
+    /**
+     * {@code helper}'s value, as {@code v} named it. Where a row or fake names it, {@link
+     * souther.compiler.check.FixtureValueEntries} minted or reused an entry for it, and this runs that
+     * entry and puts the live result back into fixture notation rather than interpreting the value's
+     * written body a second time. Which method that is, and whether it belongs to this module or was
+     * reused from a published entry of the module {@code helper} names, is decided once where the
+     * entry was minted and read here off
+     * {@link souther.compiler.check.Prepared.ForExamples#fixtureValueMethods}, keyed on {@code helper}
+     * — the value's canonical identity, which is the same whichever module names it.
+     *
+     * <p>Where nothing named it there — a value a search composing a further row reaches that no row
+     * here mentions — there is no entry to run, and the value is read the old way, off its own written
+     * body, found under {@code v.reaches()}: the rendered reach {@code values} is keyed by, and not
+     * {@code helper.name()}, which is the value's own bare name in the module that declares it and
+     * misses an imported one in a table keyed by how this module reaches it.
+     */
+    private Object namedValue(Hir.Var.Denoting v, ValueName.Helper helper, Position at,
+                              Admission admission) {
+        String method = module.fixtureValueMethods().get(helper);
+        if (method != null) {
+            String what = "the value `" + helper.name() + "`";
+            return neutral.of(ran(method, what), at, what);
+        }
+        Hir.Expr value = valueBody(v.reaches());
+        if (value == null) {
+            throw new FixtureException("`" + helper.name() + "` is not a value a fixture can name");
+        }
+        return expandedValue(helper, value, at, admission);
     }
 
     /** A unit case as a fixture writes it: a unit's decoder ignores the input, so an empty map
@@ -1472,19 +1500,28 @@ public final class FixtureReader {
             // name, one another module published by that module's name and its own. `bare()` is the
             // name it was *declared* under, which is not that key for an imported value (issue #212).
             String spread = ref.name();
-            Hir.Expr value = ref.denotes() instanceof ValueName.Local local
-                    ? bindings.get(local.id()) : valueBody(spread);
-            if (value == null) {
-                throw new FixtureException("`" + spread
-                        + "` is not a value a fixture can spread");
-            }
+            Position spreadAt = Position.at(Type.ref(nd.typeName().answered().type()));
             // The fields of a value of another type, which is how the language writes one record from
             // another (`Filed { ...d, filedOn = on }`, where `d` is a `Document`). So the frame this
             // opens states no value of the construction's type, while the fields it copies were
             // written at their own positions and hold there.
-            Object copied = expandedValue(ref.denotes(), value,
-                    Position.at(Type.ref(nd.typeName().answered().type())),
-                    admission == Admission.UNHELD ? admission : Admission.HELD_BELOW);
+            //
+            // A binding is still read from the fixture's own text — it names a frame this reading is
+            // already inside, not a module's. A value is read the way `named` reads one: through its
+            // entry where a row or fake named it and one was minted, off its own body otherwise.
+            Admission below = admission == Admission.UNHELD ? admission : Admission.HELD_BELOW;
+            Object copied;
+            if (ref.denotes() instanceof ValueName.Local local) {
+                Hir.Expr value = bindings.get(local.id());
+                if (value == null) {
+                    throw new FixtureException("`" + spread + "` is not a value a fixture can spread");
+                }
+                copied = expandedValue(local, value, spreadAt, below);
+            } else if (ref.denotes() instanceof ValueName.Helper helper) {
+                copied = namedValue(ref, helper, spreadAt, below);
+            } else {
+                throw new FixtureException("`" + spread + "` is not a value a fixture can spread");
+            }
             if (!(copied instanceof Map<?, ?> fields)) {
                 throw new FixtureException("`" + spread + "` is not a record, so it has no fields to"
                         + " spread");

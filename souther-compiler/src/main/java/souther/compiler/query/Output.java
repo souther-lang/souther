@@ -19,6 +19,7 @@ import souther.compiler.execute.ConstantOutcome;
 import souther.compiler.execute.ProgramExecution;
 import souther.compiler.execute.WrittenValue;
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.DefinitionRole;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.FakeTables;
 import souther.compiler.check.Prepared;
@@ -148,20 +149,28 @@ public final class Output {
         }
 
         /**
-         * The module as what ships carries it: without the methods emitted for its rows' operands.
+         * The module as what ships carries it: without the methods emitted for its rows' operands or
+         * for a fixture's own entries.
          *
          * <p>A row runs against {@link Evaluated}'s classes, which keep them; what is written out is
          * the same program less definitions nothing it holds references — an operand's method is
          * reached from a row and from nothing else. Which definitions those are is read off the
          * correspondence the preparation constructed, not off the shape of a name.
+         *
+         * <p>A fixture's own entry is the same kind of definition for the same reason: {@code
+         * OperandRunner} is the only caller, whether the entry is a private baseline's own or a
+         * current-module relay to a value another module publishes. A published value's own entry is
+         * not this — {@link Bodies.Elaborated} carries it under {@link
+         * souther.compiler.check.ValueEntries}, and another module's classes call it, so it ships.
          */
         private static Hir.Module shipped(Inputs in) {
-            if (in.rowMethods().isEmpty()) {
+            if (in.rowMethods().isEmpty() && in.fixtureOnlyMethods().isEmpty()) {
                 return in.lowered();
             }
             List<Hir.FnDef> kept = new ArrayList<>();
             for (Hir.FnDef fn : in.lowered().takenOn()) {
-                if (!in.rowMethods().contains(fn.name())) {
+                if (!in.rowMethods().contains(fn.name())
+                        && !in.fixtureOnlyMethods().contains(fn.name())) {
                     kept.add(fn);
                 }
             }
@@ -193,6 +202,7 @@ public final class Output {
                               souther.compiler.core.ValueShape> shapes,
                       Map<ValueName.Behavior, EnsuresEnforcement> checks,
                       Set<String> rowMethods,
+                      Set<String> fixtureOnlyMethods,
                       Map<String, souther.compiler.types.Type> standingCalls,
                       LinkageReader linkage) {
 
@@ -300,6 +310,14 @@ public final class Output {
                     ownSignatures.put(behavior, sig);
                 }
             });
+            // A fixture's own entry, never one reused from a value's published one: the definitions
+            // this compilation minted for it, told apart by role rather than by the shape of a name.
+            Set<String> fixtureOnlyMethods = new LinkedHashSet<>();
+            for (Hir.FnDef fn : prepared.value().mintedDefs()) {
+                if (fn.role() instanceof DefinitionRole.FixtureValueEntry) {
+                    fixtureOnlyMethods.add(fn.name());
+                }
+            }
             return new Inputs(lowering.value().lowered(), scope.value(),
                     linkage.readingPublished(Shapes.publishedDeclarations(db)),
                     linkage.readingKinds(Shapes.declarationKinds(db)),
@@ -307,7 +325,8 @@ public final class Output {
                     requirements.value(), checked.value(),
                     compositions.value(),
                     shapes.value(), checks.value(),
-                    Set.copyOf(prepared.value().operandMethods().values()), standing.value(),
+                    Set.copyOf(prepared.value().operandMethods().values()),
+                    Set.copyOf(fixtureOnlyMethods), standing.value(),
                     linkage);
         }
 

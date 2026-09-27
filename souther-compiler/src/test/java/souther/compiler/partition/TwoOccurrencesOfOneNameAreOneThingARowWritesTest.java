@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.types.FixtureReferenceOrigin;
+import souther.compiler.types.ReachName;
+import souther.compiler.types.ValueName;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -28,8 +30,9 @@ class TwoOccurrencesOfOneNameAreOneThingARowWritesTest {
 
     @Test
     void twoReferencesToOneNameAreTwoValuesAndOneLine() {
-        FixtureTemplate first = FixtureTemplate.named(MODULE, NAME, new FixtureReferenceOrigin(0));
-        FixtureTemplate second = FixtureTemplate.named(MODULE, NAME, new FixtureReferenceOrigin(1));
+        ReachName.Own reachedAs = new ReachName.Own(new ValueName.Helper(MODULE, NAME));
+        FixtureTemplate first = FixtureTemplate.named(reachedAs, new FixtureReferenceOrigin(0));
+        FixtureTemplate second = FixtureTemplate.named(reachedAs, new FixtureReferenceOrigin(1));
 
         assertNotEquals(first, second,
                 "a run that composed the name twice composed two references");
