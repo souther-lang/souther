@@ -11,6 +11,7 @@ import souther.compiler.types.TemporalRule;
 import souther.compiler.types.TextRule;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.runtime.BoundaryScalars;
 import souther.runtime.Representations;
 import souther.runtime.Sets;
 import souther.runtime.Strings;
@@ -31,6 +32,7 @@ import net.unit8.raoh.encode.ObjectEncoders;
 import net.unit8.raoh.json.JsonDecoders;
 import tools.jackson.databind.JsonNode;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -240,10 +242,31 @@ public final class JsonBoundary {
             case STRING -> admitted(JsonDecoders.string());
             case INT -> JsonDecoders.long_();
             case BOOL -> JsonDecoders.bool();
-            case DECIMAL -> JsonDecoders.decimal();
+            case DECIMAL -> exactDecimal();
             case DATE, TIME, DATETIME, INSTANT -> temporal(admitted(JsonDecoders.string()), scalar);
         };
     }
+
+    /**
+     * A {@code Decimal} read from a JSON number, as the generated decoder's {@code __decimalNode}
+     * reads it: a fraction the reader has parsed as a {@code double} is refused, since it is already
+     * the nearest binary value and the decimal that prints may not be the number that was written.
+     * Whether a reader keeps the fraction as the decimal it was written is the reader's to be told
+     * (Jackson's {@code USE_BIG_DECIMAL_FOR_FLOATS}), and the runner's is.
+     */
+    private static Decoder<JsonNode, BigDecimal> exactDecimal() {
+        Decoder<JsonNode, BigDecimal> raoh = JsonDecoders.decimal();
+        return (node, path) -> {
+            if (node != null && node.isFloatingPointNumber() && !node.isBigDecimal()) {
+                return Result.failCustom(path, TYPE_MISMATCH, BoundaryScalars.ROUNDED,
+                        Map.of("expected", "exact number", "actual", node.getClass().getSimpleName()));
+            }
+            return raoh.decode(node, path);
+        };
+    }
+
+    /** Raoh's code for a value of a kind the position does not read. */
+    private static final String TYPE_MISMATCH = "type_mismatch";
 
     /**
      * A temporal read from text, under the rules the type has wherever it arrives

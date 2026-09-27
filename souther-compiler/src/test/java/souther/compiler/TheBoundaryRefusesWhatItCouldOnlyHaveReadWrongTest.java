@@ -6,8 +6,11 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import net.unit8.raoh.Err;
+import net.unit8.raoh.Issue;
+import net.unit8.raoh.Ok;
 import net.unit8.raoh.Result;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.DeserializationFeature;
 
 import tools.jackson.databind.json.JsonMapper;
 
@@ -23,26 +26,31 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>These are the readings a Raoh release decides and the language depends on, held here because
  * the release could change them without a line of this compiler changing. Before the release these
  * were pinned to, each answered a value: {@code 1.9} was the {@code Int} 1, {@code 2^70} was the
- * {@code Int} 0, a {@code java.sql.Date} was a day that depended on the JVM's default time zone, and a
- * {@code Map<String, Int>} took an {@code Integer} key. Each of those is a value nothing downstream
+ * {@code Int} 0, a {@code java.sql.Date} was a day that depended on the JVM's default time zone, a
+ * {@code Map<String, Int>} took an {@code Integer} key, and a {@code Decimal} read from a
+ * {@code double} was the number that {@code double} prints and not the one that was written. Each of those is a value nothing downstream
  * can tell from the value that was sent, which is what an {@code Int} that aborts on overflow
  * rather than wrapping exists to rule out. A Raoh that answers them again turns these red. An
- * {@code Int} from {@code 5.00} is the one reading the pinned Raoh takes and the language does not:
- * a decoder of this compiler asks first.
+ * {@code Int} from {@code 5.00}, a {@code Decimal} from a {@code Double} and a {@code Decimal} from a
+ * JSON node that holds a {@code double} are the readings the pinned Raoh takes and the language does
+ * not: a decoder of this compiler asks first.
  */
 class TheBoundaryRefusesWhatItCouldOnlyHaveReadWrongTest {
 
     private static final String MODEL = """
             module demo
 
-            data In ={ n: Int, d: Decimal, at: Instant, day: Date, m: Map<String, Int> }
+            data In = { n: Int, d: Decimal, at: Instant, day: Date, m: Map<String, Int> }
             data Out = { n: Int }
 
             behavior pass : (i: In) -> Out constructs Out
             let pass (i) = Out { n = i.n }
             """;
 
-    private static final JsonMapper MAPPER = JsonMapper.builder().build();
+    /** A reader that keeps a fraction as the decimal it was written, and one that does not. */
+    private static final JsonMapper EXACT = JsonMapper.builder()
+            .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).build();
+    private static final JsonMapper ROUNDING = JsonMapper.builder().build();
 
     private static final BytesClassLoader LOADER = new BytesClassLoader(Compiler.compile(MODEL),
             TheBoundaryRefusesWhatItCouldOnlyHaveReadWrongTest.class.getClassLoader());
@@ -67,6 +75,16 @@ class TheBoundaryRefusesWhatItCouldOnlyHaveReadWrongTest {
         assertEquals(pointer, err.issues().asList().get(0).path().toJsonPointer(), what);
     }
 
+    /** Refused as a value of a kind the position does not read, which is Raoh's own code for it,
+     *  whether Raoh or this compiler's decoder is the one that says it. */
+    private static void assertMismatchAt(String pointer, Result<?> result, String what) {
+        assertRefusedAt(pointer, result, what);
+        Issue issue = ((Err<?>) result).issues().asList().get(0);
+        assertEquals("type_mismatch", issue.code(), what + ": " + issue);
+        assertTrue(issue.meta().containsKey("expected"),
+                what + " carries what was expected, as Raoh's own does: " + issue.meta());
+    }
+
     /**
      * An {@code Int} is read from an integer representation and from nothing else: not from a value
      * that is whole once a number that was written with a fraction is looked at, and not from one
@@ -75,14 +93,14 @@ class TheBoundaryRefusesWhatItCouldOnlyHaveReadWrongTest {
      */
     @Test
     void anIntIsReadFromAnIntegerRepresentationAndNoOther() throws Exception {
-        assertRefusedAt("/n", read("n", 1.9), "1.9");
-        assertRefusedAt("/n", read("n", 5.0), "5.0, which may have been rounded before it arrived");
-        assertRefusedAt("/n", read("n", BigInteger.TWO.pow(70)), "2^70");
-        assertRefusedAt("/n", read("n", new BigDecimal("5.5")), "5.5");
-        assertRefusedAt("/n", read("n", new BigDecimal("5.00")), "5.00, whose value is whole");
-        assertRefusedAt("/n", read("n", new BigDecimal("5E+2")), "5E+2, whose value is whole");
-        assertRefusedAt("/n", read("n", new AtomicInteger(3)), "a carrier that is no integer's");
-        assertRefusedAt("/n", read("n", "5"), "text");
+        assertMismatchAt("/n", read("n", 1.9), "1.9");
+        assertMismatchAt("/n", read("n", 5.0), "5.0, which may have been rounded before it arrived");
+        assertMismatchAt("/n", read("n", BigInteger.TWO.pow(70)), "2^70");
+        assertMismatchAt("/n", read("n", new BigDecimal("5.5")), "5.5");
+        assertMismatchAt("/n", read("n", new BigDecimal("5.00")), "5.00, whose value is whole");
+        assertMismatchAt("/n", read("n", new BigDecimal("5E+2")), "5E+2, whose value is whole");
+        assertMismatchAt("/n", read("n", new AtomicInteger(3)), "a carrier that is no integer's");
+        assertMismatchAt("/n", read("n", "5"), "text");
         assertTrue(read("n", 5_000_000_000L).isOk());
         assertTrue(read("n", 5).isOk());
         assertTrue(read("n", BigInteger.valueOf(5)).isOk());
@@ -94,23 +112,59 @@ class TheBoundaryRefusesWhatItCouldOnlyHaveReadWrongTest {
     void anIntAtAJsonFieldIsAnIntegerLiteralInRange() throws Exception {
         for (String refused : new String[] {
                 "1.0", "1e2", "1.9", "9223372036854775808", "1180591620717411303424", "\"5\""}) {
-            Result<?> r = Codecs.decode(LOADER, "demo.In", "jsonDecoder", MAPPER.readTree("""
+            Result<?> r = Codecs.decode(LOADER, "demo.In", "jsonDecoder", EXACT.readTree("""
                     {"n":%s,"d":1.5,"at":"2026-07-25T00:00:00Z","day":"2026-07-25","m":{"k":1}}
                     """.formatted(refused)));
-            assertRefusedAt("/n", r, "the JSON number " + refused);
+            assertMismatchAt("/n", r, "the JSON number " + refused);
         }
-        assertTrue(Codecs.decode(LOADER, "demo.In", "jsonDecoder", MAPPER.readTree("""
+        assertTrue(Codecs.decode(LOADER, "demo.In", "jsonDecoder", EXACT.readTree("""
                 {"n":9223372036854775807,"d":1.5,"at":"2026-07-25T00:00:00Z","day":"2026-07-25","m":{"k":1}}
                 """)).isOk());
     }
 
-    /** A {@code Decimal} that is no number is a failure at its path and not an exception out of the decoder. */
+    /**
+     * A {@code Decimal} is read from an exact number. A {@code Double} or a {@code Float} may have
+     * been rounded before it arrived, and what it prints is the text of the binary value it was
+     * rounded to; a number that is none is a failure at its path and not an exception out of the
+     * decoder.
+     */
     @Test
-    void aDecimalThatIsNoNumberIsAFailureAndNotAnException() throws Exception {
-        assertRefusedAt("/d", read("d", Double.NaN), "NaN");
-        assertRefusedAt("/d", read("d", Double.POSITIVE_INFINITY), "infinity");
-        assertTrue(read("d", 1.5).isOk());
+    void aDecimalIsReadFromAnExactNumberAndNoOther() throws Exception {
+        assertMismatchAt("/d", read("d", 1.5), "1.5, a double that happens to be exact");
+        assertMismatchAt("/d", read("d", 0.1f), "a float");
+        assertMismatchAt("/d", read("d", Double.NaN), "NaN");
+        assertMismatchAt("/d", read("d", Double.POSITIVE_INFINITY), "infinity");
+        assertMismatchAt("/d", read("d", "1.5"), "text");
+        assertTrue(read("d", new BigDecimal("0.10000000000000001")).isOk());
         assertTrue(read("d", 7L).isOk());
+        assertTrue(read("d", BigInteger.TEN).isOk());
+    }
+
+    /**
+     * At a JSON field the reader decides how a fraction arrives. One that keeps it as a
+     * {@code BigDecimal} hands the decoder the number that was written, whatever its digits; one that
+     * parses it as a {@code double} has rounded {@code 0.10000000000000001} to {@code 0.1} before the
+     * decoder sees it, and nothing can tell that from a literal that said {@code 0.1}, so it is
+     * refused and not read as the number it is close to.
+     */
+    @Test
+    void aDecimalAtAJsonFieldIsReadExactlyOrNotAtAll() throws Exception {
+        String written = """
+                {"n":1,"d":0.10000000000000001,"at":"2026-07-25T00:00:00Z","day":"2026-07-25","m":{"k":1}}
+                """;
+        Object exact = ((Ok<?>) Codecs.decode(LOADER, "demo.In", "jsonDecoder", EXACT.readTree(written)))
+                .value();
+        assertEquals(new BigDecimal("0.10000000000000001"), decimalOf(exact),
+                "the number written, with every digit it was written with");
+        assertMismatchAt("/d", Codecs.decode(LOADER, "demo.In", "jsonDecoder", ROUNDING.readTree(written)),
+                "a fraction the reader parsed as a double");
+        assertTrue(Codecs.decode(LOADER, "demo.In", "jsonDecoder", ROUNDING.readTree("""
+                {"n":1,"d":15,"at":"2026-07-25T00:00:00Z","day":"2026-07-25","m":{"k":1}}
+                """)).isOk(), "a whole number is an integer node, which is exact");
+    }
+
+    private static BigDecimal decimalOf(Object in) throws Exception {
+        return (BigDecimal) in.getClass().getMethod("d").invoke(in);
     }
 
     /** A temporal is a {@code java.time} value or its text; a {@code java.sql} one carries no zone. */

@@ -345,16 +345,21 @@ final class Descriptors {
      *  {@code Strings.admission}, not {@code StringDecoder.normalize()}) still resolve. */
     static final MethodTypeDesc MTD_stringDecoderFrom = MethodTypeDesc.of(CD_StringDecoder, CD_RDecoder);
     static final MethodTypeDesc MTD_leafLong = MethodTypeDesc.of(CD_LongDecoder);
-    /** {@code new LongDecoder(Decoder)}, over a decoder that asks the language first. */
-    static final MethodTypeDesc MTD_longDecoderInit =
+    /** {@code new LongDecoder(Decoder)} and its siblings, over a decoder that asks the language
+     *  first. */
+    static final MethodTypeDesc MTD_wrappingInit =
             MethodTypeDesc.of(ConstantDescs.CD_void, CD_RDecoder);
     static final ClassDesc CD_BoundaryScalars = ClassDesc.of("souther.runtime.BoundaryScalars");
     static final MethodTypeDesc MTD_leafBool = MethodTypeDesc.of(CD_BoolDecoder);
     static final MethodTypeDesc MTD_leafDecimal = MethodTypeDesc.of(CD_DecimalDecoder);
     static final MethodTypeDesc MTD_leafTemporal = MethodTypeDesc.of(CD_TemporalDecoder);
-    /** {@code new TemporalDecoder(Decoder)}, over a decoder that asks the language first. */
-    static final MethodTypeDesc MTD_temporalDecoderInit =
-            MethodTypeDesc.of(ConstantDescs.CD_void, CD_RDecoder);
+    /** {@code Object.getClass()}, {@code Class.getSimpleName()}, {@code Map.of} of two entries and
+     *  {@code JsonNode}'s yes-or-no questions about the number it holds. */
+    static final MethodTypeDesc MTD_getClass = MethodTypeDesc.of(CD_Class);
+    static final MethodTypeDesc MTD_getSimpleName = MethodTypeDesc.of(CD_String);
+    static final MethodTypeDesc MTD_mapOf2 =
+            MethodTypeDesc.of(CD_Map, CD_Object, CD_Object, CD_Object, CD_Object);
+    static final MethodTypeDesc MTD_nodeIs = MethodTypeDesc.of(ConstantDescs.CD_boolean);
     /** What a string decoder's {@code flatMapWithPath} calls a temporal's text question at: the text
      *  and the path in, the result out. */
     static final MethodTypeDesc MTD_temporalText = MethodTypeDesc.of(CD_RResult, CD_String, CD_RPath);

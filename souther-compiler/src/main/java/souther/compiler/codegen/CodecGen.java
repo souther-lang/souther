@@ -15,6 +15,7 @@ import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.CaseShape;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.TemporalRule;
+import souther.runtime.BoundaryScalars;
 import souther.temporal.TemporalText;
 import souther.compiler.types.Type;
 import souther.compiler.jvm.SoutherJvmAbi;
@@ -78,9 +79,10 @@ final class CodecGen {
     private final Set<Type.Prim> bareTemporals = EnumSet.noneOf(Type.Prim.class);
     private final Set<Type.Prim> temporalTexts = EnumSet.noneOf(Type.Prim.class);
 
-    /** Whether the decoder class being written reads an {@code Int} from a bare value, and so needs
-     *  its {@code __long}. */
-    private boolean usesIntLeaf;
+    /** The numbers the decoder class being written reads from a bare value, each of which needs its
+     *  own helper, and whether it reads a {@code Decimal} from a JSON field. */
+    private final Set<BareScalar> bareScalars = EnumSet.noneOf(BareScalar.class);
+    private boolean usesJsonDecimalLeaf;
 
     /**
      * {@link Descriptors#build} of a class that is a decoder: one that reads a string carries the
@@ -91,7 +93,8 @@ final class CodecGen {
     private byte[] buildDecoder(ClassDesc cdDec, Consumer<ClassBuilder> body) {
         textLeafOwner = cdDec;
         usesTextLeaf = false;
-        usesIntLeaf = false;
+        bareScalars.clear();
+        usesJsonDecimalLeaf = false;
         bareTemporals.clear();
         temporalTexts.clear();
         try {
@@ -106,8 +109,11 @@ final class CodecGen {
                 for (Type.Prim temporal : temporalTexts) {
                     emitTemporalTextHelper(cb, temporal);
                 }
-                if (usesIntLeaf) {
-                    emitIntHelper(cb);
+                for (BareScalar scalar : bareScalars) {
+                    emitBareScalarHelper(cb, scalar);
+                }
+                if (usesJsonDecimalLeaf) {
+                    emitJsonDecimalHelper(cb);
                 }
             });
         } finally {
@@ -1105,9 +1111,9 @@ final class CodecGen {
             case STRING -> {
                 emitStringLeaf(code, owner);
             }
-            case INT -> emitIntLeaf(code, owner);
+            case INT -> emitNumberLeaf(code, owner, BareScalar.INT);
             case BOOL -> code.invokestatic(owner, "bool", MTD_leafBool);
-            case DECIMAL -> code.invokestatic(owner, "decimal", MTD_leafDecimal);
+            case DECIMAL -> emitNumberLeaf(code, owner, BareScalar.DECIMAL);
             case DATE -> emitTemporalLeaf(code, src, Type.Prim.DATE);
             case TIME -> emitTemporalLeaf(code, src, Type.Prim.TIME);
             case DATETIME -> emitTemporalLeaf(code, src, Type.Prim.DATETIME);
@@ -1203,7 +1209,7 @@ final class CodecGen {
                 MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, temporalHelperOwner(),
                         bareTemporalHelper(temporal), MTD_Rdecode),
                 MTD_Rdecode));
-        code.invokespecial(CD_TemporalDecoder, "<init>", MTD_temporalDecoderInit);
+        code.invokespecial(CD_TemporalDecoder, "<init>", MTD_wrappingInit);
         bareTemporals.add(temporal);
         emitToTheSecond(code, temporal);
     }
@@ -1264,16 +1270,23 @@ final class CodecGen {
     /** Returns the failure at the path where the runtime says the value (argument 0) is not the
      *  temporal, and falls through to the label it answers where nothing is said. */
     private Label emitTemporalRefusal(CodeBuilder code, Type.Prim temporal) {
-        return emitRefusal(code, CD_Temporals, bareRefusal(temporal));
+        return emitRefusal(code, CD_Temporals, bareRefusal(temporal), TemporalRule.REFUSED,
+                Optional.empty());
     }
 
     /**
      * Returns the failure at the path (argument 1) where {@code owner.question} says the value
-     * (argument 0) is not what is being read, in Raoh's {@code invalid_format} with the reason's own
-     * wording, and falls through to the label it answers where nothing is said. The runtime answers
-     * the reason or null and does not know Raoh; a refusal is a result here.
+     * (argument 0) is not what is being read, and falls through to the label it answers where
+     * nothing is said. The runtime answers the reason or null and does not know Raoh; a refusal is
+     * a result here, worded as the reason words it.
+     *
+     * <p>Which of Raoh's codes it is says what kind of thing is wrong, and is the caller's:
+     * {@code invalid_format} for a text whose shape is wrong, {@code type_mismatch} for a value of a
+     * kind the position does not read. A mismatch carries {@code expected} and the carrier's class as
+     * {@code actual}, as Raoh's own does, so a resolver that renders one renders this.
      */
-    private Label emitRefusal(CodeBuilder code, ClassDesc owner, String question) {
+    private Label emitRefusal(CodeBuilder code, ClassDesc owner, String question, String errorCode,
+                              Optional<String> expected) {
         Label admitted = code.newLabel();
         code.aload(0);
         code.invokestatic(owner, question, MTD_temporalRefusal);
@@ -1281,46 +1294,145 @@ final class CodecGen {
         code.aload(2);
         code.ifnull(admitted);
         code.aload(1);                                            // path
-        code.loadConstant(TemporalRule.REFUSED);
+        code.loadConstant(errorCode);
         code.aload(2);
-        code.invokestatic(CD_Map, "of", MTD_mapOfNone, true);
+        if (expected.isPresent()) {
+            code.loadConstant("expected");
+            code.loadConstant(expected.get());
+            code.loadConstant("actual");
+            code.aload(0);
+            code.invokevirtual(ConstantDescs.CD_Object, "getClass", MTD_getClass);
+            code.invokevirtual(CD_Class, "getSimpleName", MTD_getSimpleName);
+            code.invokestatic(CD_Map, "of", MTD_mapOf2, true);
+        } else {
+            code.invokestatic(CD_Map, "of", MTD_mapOfNone, true);
+        }
         code.invokestatic(CD_RResult, "failCustom", MTD_Rfail4, true);
         code.areturn();
         return admitted;
     }
 
+    /** Raoh's code for a value of a kind the position does not read. */
+    private static final String TYPE_MISMATCH = "type_mismatch";
+
     /**
-     * What an {@code Int} is read from at a bare value: an integer representation, and not a number
-     * that is written with a fractional form because its value happens to be whole (spec
-     * §a-boundary-scalar-is-read-not-converted). Raoh's {@code ObjectDecoders.long_()} reads an
-     * integral {@code BigDecimal} such as {@code 5.00}, so the question is put first and the rest
-     * — the carriers it takes, the range, the path — is Raoh's. A JSON field needs no question:
-     * {@code JsonDecoders.long_()} takes an integer literal and no other.
+     * The scalars whose bare-value reading is asked a question before Raoh reads them (spec
+     * §a-boundary-scalar-is-read-not-converted): what Raoh takes is wider than the language reads,
+     * and the difference is a value the decoder would make up.
+     *
+     * <p>An {@code Int} is read from an integer representation, and not from a {@code BigDecimal}
+     * written with a scale because its value happens to be whole. A {@code Decimal} is read from an
+     * exact number, and not from a {@code Double} or a {@code Float}, which may have been rounded
+     * before they arrived and print the shortest text of the binary value they were rounded to. The
+     * rest — the carriers Raoh takes, the range, the path — stays Raoh's.
      */
-    private void emitIntLeaf(CodeBuilder code, ClassDesc owner) {
-        if (owner.equals(CD_JsonDecoders)) {
-            code.invokestatic(owner, "long_", MTD_leafLong);
+    private enum BareScalar {
+        INT("__long", "intRefusal", "integer", "long_", CD_LongDecoder, MTD_leafLong),
+        DECIMAL("__decimal", "decimalRefusal", "exact number", "decimal", CD_DecimalDecoder,
+                MTD_leafDecimal);
+
+        final String helper;
+        final String question;
+        final String expected;
+        final String factory;
+        final ClassDesc decoder;
+        final MethodTypeDesc leaf;
+
+        BareScalar(String helper, String question, String expected, String factory,
+                   ClassDesc decoder, MethodTypeDesc leaf) {
+            this.helper = helper;
+            this.question = question;
+            this.expected = expected;
+            this.factory = factory;
+            this.decoder = decoder;
+            this.leaf = leaf;
+        }
+    }
+
+    /**
+     * An {@code Int} or a {@code Decimal} leaf. A bare value is asked first, by the class's own
+     * {@code __long} or {@code __decimal}; a JSON field's {@code Int} needs no question, since
+     * {@code JsonDecoders.long_()} takes an integer literal and no other, and its {@code Decimal} is
+     * asked what kind of node it is ({@link #emitJsonDecimalHelper}).
+     */
+    private void emitNumberLeaf(CodeBuilder code, ClassDesc owner, BareScalar scalar) {
+        if (owner.equals(CD_JsonDecoders) && scalar == BareScalar.INT) {
+            code.invokestatic(owner, scalar.factory, scalar.leaf);
             return;
         }
-        code.new_(CD_LongDecoder);
+        boolean json = owner.equals(CD_JsonDecoders);
+        code.new_(scalar.decoder);
         code.dup();
         code.invokedynamic(Lambdas.callSite(Lambdas.Sam.DECODER,
                 MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, temporalHelperOwner(),
-                        INT_HELPER, MTD_Rdecode),
+                        json ? JSON_DECIMAL_HELPER : scalar.helper, MTD_Rdecode),
                 MTD_Rdecode));
-        code.invokespecial(CD_LongDecoder, "<init>", MTD_longDecoderInit);
-        usesIntLeaf = true;
+        code.invokespecial(scalar.decoder, "<init>", MTD_wrappingInit);
+        if (json) {
+            usesJsonDecimalLeaf = true;
+        } else {
+            bareScalars.add(scalar);
+        }
     }
 
-    private static final String INT_HELPER = "__long";
-
-    /** {@code static Result __long(Object in, Path path)}: what a bare-value {@code Int} decodes with. */
-    private void emitIntHelper(ClassBuilder cb) {
-        cb.withMethodBody(INT_HELPER, MTD_Rdecode,
+    /** {@code static Result __long(Object in, Path path)} and {@code __decimal}: what a bare-value
+     *  {@code Int} and {@code Decimal} decode with. */
+    private void emitBareScalarHelper(ClassBuilder cb, BareScalar scalar) {
+        cb.withMethodBody(scalar.helper, MTD_Rdecode,
                 ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC, code -> {
-            Label admitted = emitRefusal(code, CD_BoundaryScalars, "intRefusal");
+            Label admitted = emitRefusal(code, CD_BoundaryScalars, scalar.question, TYPE_MISMATCH,
+                    Optional.of(scalar.expected));
             code.labelBinding(admitted);
-            code.invokestatic(CD_ObjectDecoders, "long_", MTD_leafLong);
+            code.invokestatic(CD_ObjectDecoders, scalar.factory, scalar.leaf);
+            code.aload(0);
+            code.aload(1);
+            code.invokeinterface(CD_RDecoder, "decode", MTD_Rdecode);
+            code.areturn();
+        });
+    }
+
+    private static final String JSON_DECIMAL_HELPER = "__decimalNode";
+
+    /**
+     * {@code static Result __decimalNode(Object in, Path path)}: what a JSON field's {@code Decimal}
+     * decodes with.
+     *
+     * <p>A fraction the reader has parsed as a binary floating-point number is already the nearest
+     * {@code double}, and the decimal that prints is a different number from the one written when
+     * that took more digits than a {@code double} holds: {@code 0.10000000000000001} arrives as
+     * {@code 0.1}. Nothing here can tell it from a literal that said {@code 0.1}, so it is refused,
+     * and a fraction the reader kept as a {@code BigDecimal} (Jackson's
+     * {@code USE_BIG_DECIMAL_FOR_FLOATS}) is read exactly. Any other node is Raoh's.
+     */
+    private void emitJsonDecimalHelper(ClassBuilder cb) {
+        cb.withMethodBody(JSON_DECIMAL_HELPER, MTD_Rdecode,
+                ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC, code -> {
+            Label admitted = code.newLabel();
+            code.aload(0);
+            code.instanceOf(CD_JsonNode);
+            code.ifeq(admitted);
+            code.aload(0);
+            code.checkcast(CD_JsonNode);
+            code.invokevirtual(CD_JsonNode, "isFloatingPointNumber", MTD_nodeIs);
+            code.ifeq(admitted);
+            code.aload(0);
+            code.checkcast(CD_JsonNode);
+            code.invokevirtual(CD_JsonNode, "isBigDecimal", MTD_nodeIs);
+            code.ifne(admitted);
+            code.aload(1);                                        // path
+            code.loadConstant(TYPE_MISMATCH);
+            code.loadConstant(BoundaryScalars.ROUNDED);
+            code.loadConstant("expected");
+            code.loadConstant(BareScalar.DECIMAL.expected);
+            code.loadConstant("actual");
+            code.aload(0);
+            code.invokevirtual(ConstantDescs.CD_Object, "getClass", MTD_getClass);
+            code.invokevirtual(CD_Class, "getSimpleName", MTD_getSimpleName);
+            code.invokestatic(CD_Map, "of", MTD_mapOf2, true);
+            code.invokestatic(CD_RResult, "failCustom", MTD_Rfail4, true);
+            code.areturn();
+            code.labelBinding(admitted);
+            code.invokestatic(CD_JsonDecoders, "decimal", MTD_leafDecimal);
             code.aload(0);
             code.aload(1);
             code.invokeinterface(CD_RDecoder, "decode", MTD_Rdecode);
@@ -1351,9 +1463,9 @@ final class CodecGen {
             case TEXT -> {
                 emitStringLeaf(code, leaf);
             }
-            case INT -> emitIntLeaf(code, leaf);
+            case INT -> emitNumberLeaf(code, leaf, BareScalar.INT);
             case BOOL -> code.invokestatic(leaf, "bool", MTD_leafBool);
-            case DECIMAL -> code.invokestatic(leaf, "decimal", MTD_leafDecimal);
+            case DECIMAL -> emitNumberLeaf(code, leaf, BareScalar.DECIMAL);
             case DATE -> emitTemporalLeaf(code, src, Type.Prim.DATE);
             case TIME -> emitTemporalLeaf(code, src, Type.Prim.TIME);
             case DATETIME -> emitTemporalLeaf(code, src, Type.Prim.DATETIME);

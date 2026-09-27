@@ -28,6 +28,7 @@ import tools.jackson.core.StreamReadConstraints;
 import tools.jackson.core.StreamWriteConstraints;
 import tools.jackson.core.TokenStreamContext;
 import tools.jackson.core.exc.StreamConstraintsException;
+import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -647,7 +648,15 @@ public final class Runner {
         return p.isEmpty() ? "(root)" : p;
     }
 
-    private static final JsonMapper JSON = JsonMapper.builder().build();
+    /**
+     * A fraction is kept as the decimal it was written. Left to the default, the mapper parses one as
+     * a {@code double} before any decoder sees it, and a {@code Decimal} would be read from the
+     * nearest binary value instead of the number that was written (spec
+     * §a-boundary-scalar-is-read-not-converted); the decoder refuses that, so a program's input
+     * could not be read at all.
+     */
+    private static final JsonMapper JSON = JsonMapper.builder()
+            .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).build();
 
     /** How deep the mapper reads and writes before it refuses, counted in levels of JSON. */
     private static final int READ_DEPTH_LIMIT =
