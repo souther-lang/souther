@@ -5,7 +5,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
-import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import souther.temporal.TemporalText;
 
@@ -146,10 +145,12 @@ public final class Temporals {
      * Whether a decoded temporal carries no fraction of a second — the predicate the generated
      * decoder refines a {@code Time} and a {@code DateTime} by.
      *
-     * <p>Text arriving with one says something those two cannot hold, and the boundary reports that
-     * rather than dropping it: a value quietly rounded reads downstream as the value that was sent,
-     * and nothing later can tell that it was not. An {@code Instant} is the temporal that keeps a
-     * sub-second reading, so it is not refined and answers true here.
+     * <p>This is the question for a value a Java caller hands over already built, which has no text
+     * to ask (spec {@code [#temporal-text]} asks the text, and asks it first). A value with a fraction
+     * says something those two cannot hold, and the boundary reports that rather than dropping it: a
+     * value quietly rounded reads downstream as the value that was sent, and nothing later can tell
+     * that it was not. An {@code Instant} is the temporal that keeps a sub-second reading, so it is
+     * not refined and answers true here.
      */
     public static boolean toTheSecond(Object temporal) {
         return switch (temporal) {
@@ -159,50 +160,10 @@ public final class Temporals {
         };
     }
 
-    // The questions a generated decoder asks of a text before it parses one, in the order it reports
-    // the reasons. Each is a method of its own because it is what a lambda in the generated class
-    // names; what they ask is TemporalText's.
-
-    /** Whether a text is a {@code Date}. */
-    public static boolean isDate(Object text) {
-        return TemporalText.holds(text, TemporalText.Kind.DATE, Optional.empty());
-    }
-
-    /** Whether a text is a {@code Time}. */
-    public static boolean isTime(Object text) {
-        return TemporalText.holds(text, TemporalText.Kind.TIME, Optional.empty());
-    }
-
-    /** Whether a text is a {@code DateTime}. */
-    public static boolean isDateTime(Object text) {
-        return TemporalText.holds(text, TemporalText.Kind.DATETIME, Optional.empty());
-    }
-
-    /** Whether a text is an {@code Instant}. */
-    public static boolean isInstant(Object text) {
-        return TemporalText.holds(text, TemporalText.Kind.INSTANT, Optional.empty());
-    }
-
-    /** Whether a text is free of the fraction of a second a {@code Time} cannot hold. */
-    public static boolean timeHasNoFraction(Object text) {
-        return TemporalText.holds(text, TemporalText.Kind.TIME, Optional.of(TemporalText.Refusal.SUB_SECOND));
-    }
-
-    /** Whether a text is free of the fraction of a second a {@code DateTime} cannot hold. */
-    public static boolean dateTimeHasNoFraction(Object text) {
-        return TemporalText.holds(text, TemporalText.Kind.DATETIME,
-                Optional.of(TemporalText.Refusal.SUB_SECOND));
-    }
-
-    /** Whether a text names no leap second. */
-    public static boolean instantNamesNoLeapSecond(Object text) {
-        return TemporalText.holds(text, TemporalText.Kind.INSTANT,
-                Optional.of(TemporalText.Refusal.LEAP_SECOND));
-    }
-
-    // What a bare-value decoder asks before it hands a text to Raoh: the reason the text is not one,
-    // said as TemporalText words it, or null where it is one or is not a text. The runtime stops at
-    // the fact; that a refusal is a failure at a path is the generated decoder's to say.
+    // What a decoder asks of a text before it hands the text to a parser: the reason the text is not
+    // the temporal, worded as TemporalText words it, or null where it is one or is not a text at all
+    // (a real temporal a Java caller hands over is not asked). The runtime stops at the fact; that a
+    // refusal is a failure at a path is the decoder's to say.
 
     /** Why a text is not a {@code Date}, or null. */
     public static @Nullable String dateRefusal(Object text) {

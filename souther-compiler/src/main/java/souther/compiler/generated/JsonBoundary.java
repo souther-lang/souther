@@ -252,15 +252,14 @@ public final class JsonBoundary {
      * <p>These were {@code string().time()} and its siblings, spelled out beside the generated
      * decoder's own — so a top-level {@code Time} argument took {@code 09:00:00.5} and a top-level
      * {@code Instant} took a leap second, both of which the same types refuse at a data's field. A
-     * rule that changes with the way in is not the type's rule, and this reads the one table rather
-     * than restating it a third time.
+     * rule that changes with the way in is not the type's rule, so the text is put to the same
+     * question the generated decoder puts ({@link #temporalText}), before Raoh's parse builds the
+     * value.
      */
     private static <I> Decoder<I, ?> temporal(StringDecoder<I> text, LeafScalar scalar) {
         TemporalRule rule = TemporalRule.of(scalar);
-        StringDecoder<I> guarded = text;
-        for (TemporalRule.TextGate gate : rule.text()) {
-            guarded = guarded.refine(gate::holds, TemporalRule.REFUSED, gate.message());
-        }
+        StringDecoder<I> guarded = StringDecoder.from(
+                text.flatMapWithPath((s, path) -> temporalText(scalar, s, path)));
         TemporalDecoder<I, ?> parsed = switch (scalar) {
             case DATE -> guarded.date();
             case TIME -> guarded.time();
@@ -272,6 +271,22 @@ public final class JsonBoundary {
         return rule.guardsValue()
                 ? parsed.refine(Temporals::toTheSecond, TemporalRule.REFUSED, TemporalRule.SUB_SECOND)
                 : parsed;
+    }
+
+    /** The text, or the failure at {@code path} saying why it is not the temporal: what the generated
+     *  decoder's own {@code __dateText} and its siblings say. */
+    private static Result<String> temporalText(LeafScalar scalar, String text, Path path) {
+        String refusal = switch (scalar) {
+            case DATE -> Temporals.dateRefusal(text);
+            case TIME -> Temporals.timeRefusal(text);
+            case DATETIME -> Temporals.dateTimeRefusal(text);
+            case INSTANT -> Temporals.instantRefusal(text);
+            case STRING, INT, BOOL, DECIMAL ->
+                    throw new IllegalStateException(scalar + " is not a temporal");
+        };
+        return refusal == null
+                ? Result.ok(text)
+                : Result.failCustom(path, TemporalRule.REFUSED, refusal, Map.of());
     }
 
     /**

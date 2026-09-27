@@ -98,7 +98,27 @@ class ATemporalTextIsTheLanguagesAndNotTheParsersTest {
             refused(Kind.INSTANT, "2026-07-25T00:00:00", Refusal.MALFORMED),
             refused(Kind.INSTANT, "2026-07-25T00:00:00+9:00", Refusal.MALFORMED),
             refused(Kind.INSTANT, "2026-07-25T00:00:00+19:00", Refusal.MALFORMED),
-            refused(Kind.INSTANT, "2026-06-30T23:59:60Z", Refusal.LEAP_SECOND));
+            refused(Kind.INSTANT, "2026-06-30T23:59:60Z", Refusal.LEAP_SECOND),
+
+            // The ends of each domain, each in its own: an Instant reaches a year past a Date on
+            // either side, and a carry from an hour 24 or an offset is asked of the moment it names.
+            taken(Kind.DATE, "+999999999-12-31"),
+            taken(Kind.DATE, "-999999999-01-01"),
+            taken(Kind.DATE, "2000-02-29"),
+            refused(Kind.DATE, "+1000000000-01-01", Refusal.MALFORMED),
+            refused(Kind.DATE, "1900-02-29", Refusal.MALFORMED),
+            taken(Kind.DATETIME, "+999999999-12-31T23:59:59"),
+            refused(Kind.DATETIME, "-1000000000-01-01T00:00", Refusal.MALFORMED),
+            taken(Kind.INSTANT, "-1000000000-01-01T00:00:00Z"),
+            taken(Kind.INSTANT, "+1000000000-12-31T23:59:59.999999999Z"),
+            taken(Kind.INSTANT, "+999999999-12-31T24:00:00Z"),
+            row(Kind.INSTANT, "-999999999-01-01T00:00:00+18:00", null, Refusal.NOT_UTC),
+            row(Kind.INSTANT, "2026-07-25T24:00:00+09:00", null, Refusal.NOT_UTC),
+            refused(Kind.INSTANT, "-1000000001-12-31T23:59:59Z", Refusal.MALFORMED),
+            refused(Kind.INSTANT, "+1000000001-01-01T00:00:00Z", Refusal.MALFORMED),
+            refused(Kind.INSTANT, "+1000000000-12-31T24:00:00Z", Refusal.MALFORMED),
+            refused(Kind.INSTANT, "-1000000000-01-01T00:00:00+01:00", Refusal.MALFORMED),
+            refused(Kind.INSTANT, "2026-02-30T00:00:00Z", Refusal.MALFORMED));
 
     /** The table is what the language says, before any path is asked. */
     @Test
@@ -180,6 +200,47 @@ class ATemporalTextIsTheLanguagesAndNotTheParsersTest {
             assertEquals(r.readAtBoundary(), Codecs.decode(loader, "demo.Keyed", keys).isOk(),
                     where + " under a bare-value key");
         }
+    }
+
+    /**
+     * What a boundary reads is written back as text source may write, and read again as the same
+     * value: {@code C ⊆ S ⊆ B}, asked of the encoder this compiler derives and not of
+     * {@code toString}. A text that names a moment another way (an offset, an hour 24) comes back in
+     * the one form, and the text that comes back is the one the value is written as.
+     */
+    @Test
+    void whatTheEncoderWritesForAValueABoundaryReadIsReadBackAndWrittenInSource() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(MODEL),
+                ATemporalTextIsTheLanguagesAndNotTheParsersTest.class.getClassLoader());
+        for (Row r : ROWS) {
+            if (!r.readAtBoundary()) {
+                continue;
+            }
+            String field = FIELD.get(r.kind());
+            Map<String, Object> raw = new HashMap<>(USUAL);
+            raw.put(field, r.text());
+            String where = r.kind() + " " + r.text();
+
+            Object value = Codecs.decoded(loader, "demo.In", raw);
+            Map<?, ?> written = (Map<?, ?>) Codecs.encode(loader, "demo.In", value);
+            String text = String.valueOf(written.get(field));
+            assertEquals(Optional.empty(), TemporalText.inSource(r.kind(), text),
+                    where + " is written back as " + text + ", which source may not write");
+            assertEquals(value, Codecs.decoded(loader, "demo.In", MAPPER.convertValue(written, Map.class)),
+                    where + " does not read back as the value it was written from");
+        }
+    }
+
+    /** The one worked example the specification gives: an offset names a moment, written in UTC. */
+    @Test
+    void anOffsetIsWrittenBackAsTheSameMomentInUtc() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(MODEL),
+                ATemporalTextIsTheLanguagesAndNotTheParsersTest.class.getClassLoader());
+        Map<String, Object> raw = new HashMap<>(USUAL);
+        raw.put("at", "2026-07-25T09:00:00+09:00");
+        Map<?, ?> written = (Map<?, ?>) Codecs.encode(loader, "demo.In",
+                Codecs.decoded(loader, "demo.In", raw));
+        assertEquals("2026-07-25T00:00:00Z", String.valueOf(written.get("at")));
     }
 
     /** The runner reads a top-level argument by the same language. */

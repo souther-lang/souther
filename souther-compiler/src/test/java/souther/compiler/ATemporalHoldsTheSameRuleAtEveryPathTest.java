@@ -30,9 +30,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * every source, and the runner's own decoders, which read a top-level argument and were a third
  * copy of the policy until they were made to read the one table ({@code TemporalRule}).
  *
- * <p>The bare-value factory is Raoh's own and parses text inside itself, where nothing here can
- * stand, so {@link #aLeapSecondIsRefusedAtTheNeutralDecoderToo} holds what the pinned Raoh does and
- * the text it reads is checked against the language in
+ * <p>The bare-value decoders are walked too. Raoh's own factory parses a {@code String} inside
+ * itself, so the decoder class asks the language first ({@code __date} and its siblings) and hands
+ * a real temporal to Raoh as it was; which text those admit, spelling by spelling, is held in
  * {@link ATemporalTextIsTheLanguagesAndNotTheParsersTest}.
  */
 class ATemporalHoldsTheSameRuleAtEveryPathTest {
@@ -74,19 +74,27 @@ class ATemporalHoldsTheSameRuleAtEveryPathTest {
     }
 
     /**
-     * A leap second is refused at the bare-value decoder too.
+     * A leap second is refused at the bare-value decoder too, and says so as the other paths do.
      *
-     * <p>That decoder takes a real {@code Instant} as itself and parses a {@code String} inside
-     * Raoh, so nothing on this side stands between the text and the parse, and what it refuses is
-     * what the pinned Raoh refuses. The text is Raoh's own to say there ("invalid_format"), which is
-     * why this asserts the refusal and not its wording. That the pinned Raoh refuses the texts
-     * {@code TemporalText} refuses is held by
-     * {@link ATemporalTextIsTheLanguagesAndNotTheParsersTest}.
+     * <p>That decoder takes a real {@code Instant} as itself and a {@code String} as text. The text
+     * is put to the language before Raoh parses it, so the refusal is the language's and worded
+     * as it is at a JSON field, and not whatever the Raoh built against would say.
      */
     @Test
     void aLeapSecondIsRefusedAtTheNeutralDecoderToo() throws Exception {
         net.unit8.raoh.Result<?> r = decoded(AT_A_FIELD, fieldsWith("at", "2026-06-30T23:59:60Z"));
         assertTrue(!r.isOk(), "a leap second must not be admitted at a bare-value field");
+        assertTrue(String.valueOf(r).contains("names a leap second"), String.valueOf(r));
+    }
+
+    /** And a fraction of zero, which reads as a whole second once parsed, is refused there too. */
+    @Test
+    void aFractionOfZeroIsRefusedAtTheNeutralDecoderToo() throws Exception {
+        for (String[] field : new String[][] {{"t", "09:00:00.000"}, {"dt", "2026-07-01T09:00:00.000"}}) {
+            net.unit8.raoh.Result<?> r = decoded(AT_A_FIELD, fieldsWith(field[0], field[1]));
+            assertTrue(!r.isOk(), field[1] + " must not be admitted at a bare-value field");
+            assertTrue(String.valueOf(r).contains("holds no fraction of a second"), String.valueOf(r));
+        }
     }
 
     /** And what each path still takes, so the refusals are not a boundary that stopped working. */
