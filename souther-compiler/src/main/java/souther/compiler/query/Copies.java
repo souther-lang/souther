@@ -13,7 +13,6 @@ import souther.compiler.check.ValueAtAReference;
 import souther.compiler.copied.CopiedIdentity;
 import souther.compiler.copied.CopyRecord;
 import souther.compiler.copied.CopyTarget;
-import souther.compiler.copied.ValueDigests;
 import souther.compiler.meta.PublishedCopies;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.TypeSymbol;
@@ -23,7 +22,6 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -32,7 +30,6 @@ import java.util.SortedMap;
 import java.util.SortedSet;
 import java.util.TreeMap;
 import java.util.TreeSet;
-import java.util.function.Function;
 
 /**
  * What each module's declarations offer another module to copy into its classes, and what a module's
@@ -179,7 +176,7 @@ public final class Copies {
             }
             Bodies.Carried carried = Bodies.carrying(from, roots, against.value());
             HelperInliner folding = HelperInliner.over(against.value().table(),
-                    against.value().graph(), ValueAtAReference.COPIED)
+                    against.value().graph(), ValueAtAReference.SHARED_PER_REGION)
                     .callingValuesAsMethodsWhereEmitted(scope.value());
             SortedMap<CopyTarget, CopyRecord> provides = new TreeMap<>();
             SortedMap<CopyTarget, SortedSet<CopyTarget>> absorbed = new TreeMap<>();
@@ -188,9 +185,6 @@ public final class Copies {
             Set<CopyTarget> restsOn = new LinkedHashSet<>();
             CopiedIdentity.Owner owner = new CopiedIdentity.Owner(name, helper ->
                     against.value().table().reached(new ReachName.Own(helper)));
-            Map<String, Hir.FnDef> values = new LinkedHashMap<>();
-            // The values first: a helper or a clause that names one without expanding it is
-            // identified by what that value rests on, which is worked out from what is offered here.
             for (Hir.FnDef def : carried.definitions().values()) {
                 ValueName.Helper declared = ownDefinition(def, name);
                 if (declared == null) {
@@ -198,7 +192,6 @@ public final class Copies {
                 }
                 SortedSet<CopyTarget> closing = carried.absorbed().get(def.name());
                 if (def.params().isEmpty()) {
-                    values.put(declared.name(), def);
                     CopyTarget.Value target = new CopyTarget.Value(declared);
                     CopyRecord offered = CopiedIdentity.value(def,
                             folding.constantOfOwn(declared.name()), owner,
@@ -216,33 +209,21 @@ public final class Copies {
                     }
                 }
             }
-            Function<ValueName.Helper, String> valueRestsOn = ValueDigests.over(name, values,
-                    value -> provides.get(new CopyTarget.Value(new ValueName.Helper(name, value))));
             for (Hir.FnDef def : carried.definitions().values()) {
                 ValueName.Helper declared = ownDefinition(def, name);
                 if (declared != null && !def.params().isEmpty()) {
                     CopyTarget.Helper target = new CopyTarget.Helper(declared);
-                    provides.put(target, CopiedIdentity.helper(def, owner, valueRestsOn));
+                    provides.put(target, CopiedIdentity.helper(def, owner));
                     absorbed.put(target, carried.absorbed().get(def.name()));
                 }
             }
             HelperInliner closingClauses = HelperInliner.over(against.value().table(),
-                    against.value().graph(), ValueAtAReference.COPIED);
+                    against.value().graph(), ValueAtAReference.SHARED_PER_REGION);
             for (Hir.Def def : resolved.value().defs()) {
                 if (def instanceof Hir.Data data) {
                     CopyTarget.Invariant target = new CopyTarget.Invariant(data.declares().key());
-                    // A clause is identified by what it comes to with its values written into it,
-                    // and by the values it names where that comes to more than a class file, or
-                    // than an expansion, can hold.
-                    List<Hir.InvariantClause> expanded = closingClauses.closeClausesAcross(data, name);
-                    CopyRecord clauses = expanded == null ? null
-                            : CopiedIdentity.clauses(expanded, owner);
-                    if (clauses == null || !PublishedCopies.fits(target, clauses)) {
-                        clauses = CopiedIdentity.clauses(
-                                closingClauses.closeClausesNamingValues(data, name), owner,
-                                valueRestsOn);
-                    }
-                    provides.put(target, clauses);
+                    provides.put(target, CopiedIdentity.clauses(
+                            closingClauses.closeClausesAcross(data, name), owner));
                     absorbed.put(target,
                             new TreeSet<>(settling.value().copiedBy(data.declares().key())));
                 }

@@ -1970,9 +1970,10 @@ public final class Bodies {
     /** {@link #carriedClosure}, with what closing each definition copied. */
     public static Carried carrying(Hir.Module from, Collection<Hir.FnDef> roots,
                                    Expanding.Of against) {
-        // Closing writes a value's body where it is named, or leaves it named, and never a build.
+        // What a definition is closed as holds each value of its module once where it is demanded,
+        // as a tree that runs does, and leaves another module's as the name it is.
         HelperInliner inliner = HelperInliner.over(against.table(), against.graph(),
-                ValueAtAReference.COPIED);
+                ValueAtAReference.SHARED_PER_REGION);
         Map<String, SortedSet<CopyTarget>> absorbed = new LinkedHashMap<>();
         Map<String, Hir.FnDef> out = publishedDefinitions(from, roots, inliner, absorbed);
         if (out.isEmpty()) {

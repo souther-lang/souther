@@ -109,16 +109,15 @@ public final class HelperInliner {
     private boolean valuesAreMethods = false;
     /** Whether a value this module declares is built as a reference to its template. */
     private boolean valuesAreTemplates = false;
-    /** Which references to a value are left as the reference, for a body being closed to carry the
-     *  values it names along with it. */
+    /** Which references to a value are left as the reference, for a body being closed. */
     private ValuesLeftNamed valuesStayNamed = ValuesLeftNamed.NONE;
 
-    /** Which values a body being closed names rather than copies. */
+    /** Which values a body being closed names rather than holds. */
     private enum ValuesLeftNamed {
         /** Not closing: every value is read as the expansion's mode says. */
         NONE,
-        /** A helper: its own module's values are copied into it, and another module's value runs
-         *  in that module, so it stays a reference. */
+        /** A helper or a clause: the values of its own module are held in it, once where they are
+         *  demanded, and another module's value runs in that module, so it stays a reference. */
         OF_OTHER_MODULES,
         /** A value: it runs where it is declared, so everything it names stays a reference. */
         ALL
@@ -805,40 +804,23 @@ public final class HelperInliner {
             throw new IllegalArgumentException("`" + module + "` is not the module this expands"
                     + " into, which is `" + table.module() + "`");
         }
-        // A value stays a reference to the values it names: it runs where it is declared, so what
-        // it names is built there and never copied. A helper is expanded into its reader, and its
-        // own module's values are expanded with it; a value another module declares runs in that
-        // module whichever body names it, so it stays a reference in a helper as well.
-        if (fn.params().isEmpty()) {
-            return closing(fn, module, ValuesLeftNamed.ALL, Long.MAX_VALUE);
-        }
-        // Past what a helper is closed over by copying, its own module's values stay references
-        // as well: the values it names are carried with it, and a chain of them in which each
-        // names the one before it twice is a tree that doubles at each link.
-        Hir.FnDef closed = closing(fn, module, ValuesLeftNamed.OF_OTHER_MODULES, LONGEST_CLOSING);
-        return closed != null ? closed
-                : closing(fn, module, ValuesLeftNamed.ALL, Long.MAX_VALUE);
-    }
-
-    /** {@code fn} closed with {@code leaving} left as names, or null where that copies more than
-     *  {@code copies} bodies of values. */
-    private Hir.FnDef closing(Hir.FnDef fn, String module, ValuesLeftNamed leaving, long copies) {
         // Its own module is reading here, so it reaches its own declaration bare — which is the
         // reference the graph over that module's table is keyed by.
         ReachName.Declaration here = new ReachName.Own(new ValueName.Helper(module, fn.name()));
+        // A value stays a reference to the values it names: it runs where it is declared, so what
+        // it names is built there and never copied. A helper is handed to its reader whole, and its
+        // own module's values are held in it, each bound once where it is demanded; a value another
+        // module declares runs in that module whichever body names it, so it stays a reference in
+        // a helper as well.
         ValuesLeftNamed namedBefore = valuesStayNamed;
-        long copiesBefore = valueCopiesLeft;
-        valuesStayNamed = leaving;
-        valueCopiesLeft = copies;
+        valuesStayNamed = fn.params().isEmpty()
+                ? ValuesLeftNamed.ALL : ValuesLeftNamed.OF_OTHER_MODULES;
         Hir.Expr closed;
         try {
             closed = graph.recurses(here)
                     ? inlineRecursiveBody(fn) : inline(fn.writtenBody(), bodyOf(fn.name()));
-        } catch (ValueCopiesExhausted _) {
-            return null;
         } finally {
             valuesStayNamed = namedBefore;
-            valueCopiesLeft = copiesBefore;
         }
         return fn.reachedAs(new ReachName.OfModule(new ValueName.Helper(module, fn.name())))
                 .withBody(new Hir.FnBody.Written(
@@ -857,66 +839,28 @@ public final class HelperInliner {
 
     /**
      * The clauses of {@code data}, a declaration of {@code module}, closed over that module and no
-     * other: its own helpers and values expanded, and every definition of another module left as
-     * what names it — a value as its name, a helper as an expansion whose callee says which one.
-     * Null where the values it expands are more than {@link #LONGEST_CLOSING} bodies copied, which
-     * is a clause with no such expansion to be identified by ({@link #closeClausesNamingValues}).
+     * other: its own helpers expanded and its own values held in each clause, once where they are
+     * demanded, and every definition of another module left as what names it — a value as its
+     * name, a helper as an expansion whose callee says which one.
      *
      * <p>What a declaration's invariant is, said in terms of its own module. The clauses a reader
      * checks have the other modules' definitions written into them as well, and those are copies of
      * those definitions, held to what they offer and not to what this declaration does.
      */
     public List<Hir.InvariantClause> closeClausesAcross(Hir.Data data, String module) {
-        return closingClauses(data, module, ValuesLeftNamed.OF_OTHER_MODULES, LONGEST_CLOSING);
-    }
-
-    /**
-     * The same, with every value left as its name, its own module's as well.
-     *
-     * <p>For a clause whose values are too many to be written where they are named: copied at each
-     * reference, a chain of values that each name the one before them twice is a tree that doubles
-     * at each link. A value is named the way a closed value's references are ({@link #closeAcross}),
-     * and what the name stands for is left to whoever identifies the clause.
-     */
-    public List<Hir.InvariantClause> closeClausesNamingValues(Hir.Data data, String module) {
-        return closingClauses(data, module, ValuesLeftNamed.ALL, Long.MAX_VALUE);
-    }
-
-    /** The most bodies of values a clause is closed over by copying before its values are left as
-     *  names. Far past what an author writes, and far short of what a chain of values that name
-     *  each other twice comes to. */
-    private static final long LONGEST_CLOSING = 4096;
-
-    private List<Hir.InvariantClause> closingClauses(Hir.Data data, String module,
-                                                     ValuesLeftNamed leaving, long copies) {
         if (!module.equals(table.module())) {
             throw new IllegalArgumentException("`" + module + "` is not the module this expands"
                     + " into, which is `" + table.module() + "`");
         }
         ValuesLeftNamed namedBefore = valuesStayNamed;
-        long copiesBefore = valueCopiesLeft;
-        valuesStayNamed = leaving;
-        valueCopiesLeft = copies;
+        valuesStayNamed = ValuesLeftNamed.OF_OTHER_MODULES;
         try {
             BindingOwner declared = new BindingOwner.OfData(data.declares());
-            return Hir.mapClauses(data.invariants(), clause -> inline(clause, declared));
-        } catch (ValueCopiesExhausted _) {
-            return null;
+            WrittenOwner.Declaration writer = new WrittenOwner.Declaration(data.declares().key());
+            return Hir.mapClauses(data.invariants(), (ordinal, clause) -> inline(clause, declared,
+                    new MaterialisationSite.Invariant(writer, ordinal)));
         } finally {
             valuesStayNamed = namedBefore;
-            valueCopiesLeft = copiesBefore;
-        }
-    }
-
-    /** How many more bodies of values this expansion may copy, or unbounded. */
-    private long valueCopiesLeft = Long.MAX_VALUE;
-
-    /** The expansion was told how many values it may copy and would have copied more. */
-    private static final class ValueCopiesExhausted extends RuntimeException {
-        private static final long serialVersionUID = 1L;
-
-        ValueCopiesExhausted() {
-            super(null, null, false, false);
         }
     }
 
@@ -2666,6 +2610,10 @@ public final class HelperInliner {
         if (readAt(reached) != null) {
             return;
         }
+        // A body being closed leaves the values it does not hold as the names they are.
+        if (leftNamed(named.reachesADeclaration())) {
+            return;
+        }
         if (valuesAreTemplates && declarationArity(named).isEmpty() && isATemplateValue(named)) {
             materialiseAsABuild(named, here, order, values, site);
             return;
@@ -3225,9 +3173,6 @@ public final class HelperInliner {
      * writing it there says of each node what writing it at every level said.
      */
     private Hir.Expr substituted(String reached, Hir.Expr body) {
-        if (valueCopiesLeft != Long.MAX_VALUE && --valueCopiesLeft < 0) {
-            throw new ValueCopiesExhausted();
-        }
         if (!substituting.add(reached)) {
             throw new ExpansionCycle("`" + reached + "` is substituted into itself ("
                     + String.join(" -> ", substituting) + " -> " + reached + "), and a module whose"

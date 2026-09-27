@@ -69,20 +69,11 @@ public final class CopiedIdentity {
     /** Whether a name bound outside what is written is a field of the declaration, which is what a
      *  clause reads. A helper or a value is closed, and one reading such a name is not. */
     private final boolean freeNamesAreFields;
-    /** What each value of the module written here rests on, where a value is written as its name
-     *  and not as the body it stands for; null for a value not written that way. */
-    private final Function<ValueName.Helper, String> valueRestsOn;
 
     private CopiedIdentity(Owner owner, boolean freeNamesAreFields) {
-        this(owner, freeNamesAreFields, _ -> null);
-    }
-
-    private CopiedIdentity(Owner owner, boolean freeNamesAreFields,
-                           Function<ValueName.Helper, String> valueRestsOn) {
         this.owner = owner.module();
         this.declaredHere = owner.declares();
         this.freeNamesAreFields = freeNamesAreFields;
-        this.valueRestsOn = valueRestsOn;
     }
 
     /**
@@ -98,20 +89,11 @@ public final class CopiedIdentity {
     /** A helper as its reader expands it: {@code closed}, with parameters, closed over the module
      *  that declares it. */
     public static CopyRecord helper(Hir.FnDef closed, Owner owner) {
-        return helper(closed, owner, _ -> null);
-    }
-
-    /**
-     * The same, for a helper that names the values of {@code owner} and does not expand them,
-     * written with what each rests on beside its name ({@link #clauses(List, Owner, Function)}).
-     */
-    public static CopyRecord helper(Hir.FnDef closed, Owner owner,
-                                    Function<ValueName.Helper, String> restsOn) {
         if (closed.params().isEmpty()) {
             throw new IllegalArgumentException("`" + closed.name() + "` is a value, and is copied"
                     + " as one");
         }
-        CopiedIdentity writing = new CopiedIdentity(owner, false, restsOn);
+        CopiedIdentity writing = new CopiedIdentity(owner, false);
         writing.word("takes").count(closed.params().size());
         for (Hir.FnParam param : closed.params()) {
             writing.bind(param.binder());
@@ -164,20 +146,7 @@ public final class CopiedIdentity {
     /** A type's invariant as the types that include it check it: its clauses, closed over
      *  {@code owner}, in the order written. */
     public static CopyRecord clauses(List<Hir.InvariantClause> clauses, Owner owner) {
-        return clauses(clauses, owner, _ -> null);
-    }
-
-    /**
-     * The same, for clauses that name the values of {@code owner} and do not expand them.
-     *
-     * <p>Such a name is written with what the value it names rests on, which is what makes the
-     * clause move with the value: a value changed is a clause held to something else, as it is where
-     * the value is written into the clause. {@code restsOn} answers it for a value of the module and
-     * is null for one it says nothing of, which is written as its name alone.
-     */
-    public static CopyRecord clauses(List<Hir.InvariantClause> clauses, Owner owner,
-                                     Function<ValueName.Helper, String> restsOn) {
-        CopiedIdentity writing = new CopiedIdentity(owner, true, restsOn);
+        CopiedIdentity writing = new CopiedIdentity(owner, true);
         writing.count(clauses.size());
         for (Hir.InvariantClause clause : clauses) {
             writing.optional(clause.name());
@@ -318,10 +287,18 @@ public final class CopiedIdentity {
                 expr(it.tuple());
             }
             case Hir.Unreachable it -> word("unreachable").word(it.reason());
-            // What a tree that runs is built of. Closing copies a value where it is named and builds
-            // nothing in place, so meeting one means this was handed a tree nobody copies.
-            case Hir.Materialised it -> throw new IllegalStateException(
-                    "a copy is of a closed definition, which builds no value in place: " + it.value());
+            // A value of the module held once where it is demanded: what it is built of and nothing
+            // of the region it was built for, which is where the compiler put it and not what it
+            // says. Read once and named by the binding that holds it wherever it is read.
+            case Hir.Materialised it -> {
+                word("built");
+                if (it.value() instanceof ValueName.Helper value) {
+                    word(value.module()).word(value.name());
+                }
+                expr(it.body());
+            }
+            // What a tree that an analysis reads by template is built of, which holds no body to
+            // copy: meeting one means this was handed a tree nobody copies.
             case Hir.ValueBuild it -> throw new IllegalStateException(
                     "a copy is of a closed definition, which builds no value in place: " + it.value());
             case Hir.ValueInvocation it -> throw new IllegalStateException(
@@ -353,13 +330,7 @@ public final class CopiedIdentity {
             }
             case ValueName.OfType type -> word("type").word(LinkageProjection.shown(type.type()));
             case ValueName.Builtin builtin -> word("builtin").word(builtin.name());
-            case ValueName.Helper helper -> {
-                word("helper").word(helper.module()).word(helper.name());
-                String restsOn = helper.module().equals(owner) ? valueRestsOn.apply(helper) : null;
-                if (restsOn != null) {
-                    word("resting on").word(restsOn);
-                }
-            }
+            case ValueName.Helper helper -> word("helper").word(helper.module()).word(helper.name());
             case ValueName.Behavior behavior ->
                     word("behavior").word(behavior.module()).word(behavior.name());
             case ValueName.Stdlib.Operation operation ->

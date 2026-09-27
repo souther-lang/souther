@@ -66,6 +66,13 @@ class AValueNamedTwiceInAnInvariantIsNotCopiedTwiceTest {
                 + "\nlet h (n: Int) = n + c30\nbehavior f : (n: Int) -> Int\nlet f (n) = h(n)\n");
     }
 
+    /** A parameter the author left untyped is one the helper's body is read to settle. */
+    @Test
+    void aHelperWithAParameterToSettleThatNamesTheChainIsCompiled() {
+        compilesAtTheCostOfTheSource(doublingChain(30)
+                + "\nlet h (x) = x + c30\nbehavior f : (n: Int) -> Int\nlet f (n) = h(n)\n");
+    }
+
     @Test
     void aHelperTheModulePublishesThatNamesTheChainIsCompiled() {
         compilesAtTheCostOfTheSource(doublingChain(30).replace("exposing ( f )", "exposing ( f, h )")

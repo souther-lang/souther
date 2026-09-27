@@ -44,13 +44,6 @@ public final class PublishedCopies {
                 <= LONGEST_UTF8_CONSTANT;
     }
 
-    /** Whether the entry recording {@code target} as {@code record} is one a class file can hold. */
-    public static boolean fits(CopyTarget target, CopyRecord record) {
-        long bytes = counted(target.kind()) + counted(target.module()) + counted(target.name())
-                + counted(record.form().written()) + counted(record.content());
-        return bytes <= LONGEST_UTF8_CONSTANT;
-    }
-
     /** What {@link PublishedRequirements#counted(String)} writes of {@code text}, in bytes. */
     private static long counted(String text) {
         return String.valueOf(text.length()).length() + 1 + modifiedUtf8Length(text);
