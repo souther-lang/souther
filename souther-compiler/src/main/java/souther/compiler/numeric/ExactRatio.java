@@ -180,11 +180,21 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
                 .mod(modulus);
     }
 
-    public ExactRatio plus(ExactRatio other) {
-        return from(ExactArithmetic.plus(parts(), other.parts()));
+    /**
+     * The sum, or which way the arithmetic could not hold it.
+     *
+     * <p>The one operation a model's own numbers reach a failure through: the exact sum of a decimal
+     * near the end of the scale range and an ordinary one has as many digits as the two exponents are
+     * apart, and a host has no room for that or no representation for it at all. See
+     * {@link ExactAnswer}.
+     */
+    public ExactAnswer<ExactRatio> plus(ExactRatio other) {
+        return ExactAnswer.of(() -> from(ExactArithmetic.plus(parts(), other.parts())));
     }
 
-    public ExactRatio minus(ExactRatio other) {
+    /** The difference, or which way the arithmetic could not hold it. Same failure as {@link #plus}:
+     *  a difference is a sum of the negation. */
+    public ExactAnswer<ExactRatio> minus(ExactRatio other) {
         return plus(other.negated());
     }
 
@@ -253,43 +263,48 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
     }
 
     /**
-     * The largest whole number no greater than this.
+     * The largest whole number no greater than this, or which way the arithmetic could not hold it.
      *
      * <p>Read the way the order is read, and for the same reason. How large a value is and how large
      * the whole number below it is are two questions: two powers that all but cancel leave a value
      * of about one, whose floor is one digit and whose two numbers are hundreds of millions. A step
      * that worked the second out by writing the value down refused such a value over an answer that
-     * was never going to be large.
+     * was never going to be large. A value at the end of the scale range is the case where that
+     * answer itself has no representation, which {@link ExactAnswer} says rather than throws.
      */
-    public BigInteger floor() {
+    public ExactAnswer<BigInteger> floor() {
         return rounded(RoundingMode.FLOOR, 0);
     }
 
-    /** The smallest whole number no less than this. */
-    public BigInteger ceiling() {
+    /** The smallest whole number no less than this, or which way the arithmetic could not hold it. */
+    public ExactAnswer<BigInteger> ceiling() {
         return rounded(RoundingMode.CEILING, 0);
     }
 
-    /** This with the part of it past the point dropped, which is towards nought from either side. */
-    public BigInteger truncated() {
+    /** This with the part of it past the point dropped, which is towards nought from either side, or
+     *  which way the arithmetic could not hold it. */
+    public ExactAnswer<BigInteger> truncated() {
         return rounded(RoundingMode.DOWN, 0);
     }
 
     /**
-     * The whole number {@code this × 10^scale} comes to, rounded the way {@code towards} says.
+     * The whole number {@code this × 10^scale} comes to, rounded the way {@code towards} says, or
+     * which way the arithmetic could not hold it.
      *
      * <p>The tens stay a count and never become a ratio. Made into one they would have had to fit
      * the exponents a ratio holds, and a value whose powers all but cancel sits well inside those
      * while either of its own exponents stands at the end of them — so a step on the way would have
      * refused a value and an answer both of which are small.
      */
-    private BigInteger rounded(RoundingMode towards, int scale) {
-        try {
-            return ExactArithmetic.roundedTimesTenTo(parts(), scale, towards);
-        } catch (IllegalArgumentException _) {
-            throw new ArithmeticException(
-                    "no whole number is this value, and none was to be chosen for it");
-        }
+    private ExactAnswer<BigInteger> rounded(RoundingMode towards, int scale) {
+        return ExactAnswer.of(() -> {
+            try {
+                return ExactArithmetic.roundedTimesTenTo(parts(), scale, towards);
+            } catch (IllegalArgumentException _) {
+                throw new ArithmeticException(
+                        "no whole number is this value, and none was to be chosen for it");
+            }
+        });
     }
 
     /**
@@ -485,7 +500,8 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
     }
 
     /**
-     * This as a decimal, rounded the way {@code towards} says where it is not one exactly.
+     * This as a decimal, rounded the way {@code towards} says where it is not one exactly, or which
+     * way the arithmetic could not hold it.
      *
      * <p>For a bound that has to be handed over as a written number. The direction is the caller's
      * because only the caller knows which way widens: an upper bound rounded up still admits
@@ -496,8 +512,11 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
      * number that comes back is as large as the answer and no larger: neither the value's own two
      * numbers nor the power that carried it to the place is formed.
      */
-    public BigDecimal asDecimal(RoundingMode towards, int scale) {
-        return new BigDecimal(rounded(towards, scale), scale);
+    public ExactAnswer<BigDecimal> asDecimal(RoundingMode towards, int scale) {
+        return switch (rounded(towards, scale)) {
+            case ExactAnswer.Held<BigInteger> held -> ExactAnswer.held(new BigDecimal(held.value(), scale));
+            case ExactAnswer.Unheld<BigInteger> unheld -> ExactAnswer.unheld(unheld.why());
+        };
     }
 
     /**

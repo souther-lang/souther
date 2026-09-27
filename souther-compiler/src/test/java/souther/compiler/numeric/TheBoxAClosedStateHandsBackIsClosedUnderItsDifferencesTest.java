@@ -71,7 +71,7 @@ class TheBoxAClosedStateHandsBackIsClosedUnderItsDifferencesTest {
                         continue;
                     }
                     ExactCut carried = box.mostOf(there) == null ? null
-                            : ExactCut.meetingBoth(box.mostOf(there), apart);
+                            : ExactCut.meetingBoth(box.mostOf(there), apart).orNull();
                     assertEquals(ExactCut.tighterUpper(box.mostOf(here), carried),
                             box.mostOf(here),
                             () -> here + " - " + there + " is " + apart + " and " + there
@@ -84,7 +84,7 @@ class TheBoxAClosedStateHandsBackIsClosedUnderItsDifferencesTest {
                         continue;
                     }
                     ExactCut below = new ExactCut(
-                            box.leastOf(there).at().minus(back.at()),
+                            box.leastOf(there).at().minus(back.at()).orNull(),
                             box.leastOf(there).inclusive() && back.inclusive());
                     assertEquals(ExactCut.tighterLower(box.leastOf(here), below),
                             box.leastOf(here),
@@ -148,7 +148,7 @@ class TheBoxAClosedStateHandsBackIsClosedUnderItsDifferencesTest {
                 "the rounds ran out and the box is a fixed point of the differences all the same");
         // `z - x <= 1` with `x` wherever the rounds left it, which is what carrying it along the
         // differences puts `z` at — and is where the box has it.
-        assertEquals(closed.box().mostOf("x").at().plus(ExactRatio.ONE),
+        assertEquals(closed.box().mostOf("x").at().plus(ExactRatio.ONE).orNull(),
                 closed.box().mostOf("z").at(),
                 "the difference did not reach `z` at the end the rounds left `x` at");
     }

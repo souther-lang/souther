@@ -2017,6 +2017,7 @@ public final class FieldDomains {
             case ProjectionEvidence.Cause.NothingIsLeft _ -> "5";
             case ProjectionEvidence.Cause.PositionsSpacedDifferently _ -> "6";
             case ProjectionEvidence.Cause.ARuleTheReadingCannotName _ -> "7";
+            case ProjectionEvidence.Cause.ArithmeticCouldNotHoldANumber _ -> "9";
             // Last, because it is the one cause about the pair of readings rather than about
             // anything either of them met.
             case ProjectionEvidence.Cause.TwoValuesStateRulesAboutIt _ -> "8";
@@ -2334,6 +2335,8 @@ public final class FieldDomains {
                     causes.add(new ProjectionEvidence.Cause.NothingIsLeft());
             case souther.compiler.numeric.ProjectionCertification.PositionsSpacedDifferently _ ->
                     causes.add(new ProjectionEvidence.Cause.PositionsSpacedDifferently());
+            case souther.compiler.numeric.ProjectionCertification.ArithmeticLeftTheClosureIncomplete _ ->
+                    causes.add(new ProjectionEvidence.Cause.ArithmeticCouldNotHoldANumber());
             // Which rule it was is this side's to say, and it is already said: the algebra holds the
             // rules as it read them, and the name an author would recognise is on the reading that
             // handed them over. Asserted rather than defended against, because the two walk

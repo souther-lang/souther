@@ -11,7 +11,7 @@ import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.partition.RulesTaken;
-import souther.compiler.partition.UnheldNumber;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.ObligationDisposition;
@@ -383,6 +383,7 @@ public final class PublicationOrders {
                 WeakeningWord.A_BORDERS_ROWS_ARE_ALL_ON_ONE_SIDE,
                 WeakeningWord.A_BORDERS_RUN_NOT_WATCHED,
                 WeakeningWord.NO_REACHABLE_DISTINGUISHER_FOR_A_BORDER,
+                WeakeningWord.A_BORDERS_FAULT_FAMILY_NOT_WORKED_OUT,
                 WeakeningWord.BODY_NOT_IN_EVALUATION,
                 WeakeningWord.BEHAVIOR_INPUT_NOT_READ,
                 WeakeningWord.BEHAVIOR_BOUNDARY_NOT_DERIVED,

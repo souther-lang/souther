@@ -97,13 +97,15 @@ public final class ClosedState<A> {
     private final DifferenceBounds<A> differences;
     private final boolean holdsNothing;
     private final Status status;
+    private final boolean everyBoundWasComposed;
 
     private ClosedState(Box<A> box, DifferenceBounds<A> differences, boolean holdsNothing,
-                        Status status) {
+                        Status status, boolean everyBoundWasComposed) {
         this.box = box;
         this.differences = differences;
         this.holdsNothing = holdsNothing;
         this.status = status;
+        this.everyBoundWasComposed = everyBoundWasComposed;
     }
 
     /**
@@ -124,6 +126,7 @@ public final class ClosedState<A> {
         if (!box.holdsAValue()) {
             return empty(differences);
         }
+        boolean everyBoundWasComposed = differences.everyHopWasComposed();
         for (int round = 0; round < ROUNDS; round++) {
             // The reading is made afresh from the box this round starts in, and every rule is read
             // against that one. A reading that carried the box along as the rules narrowed it would
@@ -139,17 +142,19 @@ public final class ClosedState<A> {
             }
             AffineReduction.Reduction.Tightened<A> tightened =
                     (AffineReduction.Reduction.Tightened<A>) found;
-            Box<A> next = throughDifferences(
+            Carried<A> carried = throughDifferences(
                     box.meeting(tightened.atLeast(), tightened.atMost()), differences, positions);
+            everyBoundWasComposed &= carried.everyBoundWasComposed();
+            Box<A> next = carried.box();
             if (!next.holdsAValue()) {
                 return empty(differences);
             }
             if (next.equals(box)) {
-                return settled(box, differences, Status.STABLE);
+                return settled(box, differences, Status.STABLE, everyBoundWasComposed);
             }
             box = next;
         }
-        return settled(box, differences, Status.BUDGET_EXHAUSTED);
+        return settled(box, differences, Status.BUDGET_EXHAUSTED, everyBoundWasComposed);
     }
 
     /**
@@ -199,7 +204,7 @@ public final class ClosedState<A> {
      * would be checking a property the other does not have.
      */
     private static <A> Box<A> carriedAlong(Box<A> box, DifferenceBounds<A> differences) {
-        return throughDifferences(box, differences, box.positions());
+        return throughDifferences(box, differences, box.positions()).box();
     }
 
     /**
@@ -212,14 +217,17 @@ public final class ClosedState<A> {
      * not the rounds settled.
      */
     private static <A> ClosedState<A> settled(Box<A> box, DifferenceBounds<A> differences,
-                                              Status status) {
+                                              Status status, boolean everyBoundWasComposed) {
         assert box.equals(carriedAlong(box, differences))
                 : "a difference still narrows the box that is about to be handed back";
-        return new ClosedState<>(box, differences, false, status);
+        return new ClosedState<>(box, differences, false, status, everyBoundWasComposed);
     }
 
     private static <A> ClosedState<A> empty(DifferenceBounds<A> differences) {
-        return new ClosedState<>(Box.unbounded(), differences, true, Status.STABLE);
+        // Nothing is left, so there is no box for the arithmetic to have failed to carry a bound
+        // onto: emptiness is either the difference closure's own proof or a form the rules leave
+        // nothing, and both hold whatever the closure could or could not compose.
+        return new ClosedState<>(Box.unbounded(), differences, true, Status.STABLE, true);
     }
 
     private static <A> Set<A> positionsOf(List<AffineConstraint<A>> constraints,
@@ -246,6 +254,10 @@ public final class ClosedState<A> {
         return new Box<>(least, most);
     }
 
+    /** A box carried along the differences, and whether every bound it carried was one the exact
+     *  arithmetic could compose. */
+    private record Carried<A>(Box<A> box, boolean everyBoundWasComposed) {}
+
     /**
      * The box carried along the differences: what one position is left bounds every position held
      * against it.
@@ -256,10 +268,11 @@ public final class ClosedState<A> {
      * arrive as a difference or as a sum — which is the spelling deciding the answer again, one level
      * up.
      */
-    private static <A> Box<A> throughDifferences(Box<A> box, DifferenceBounds<A> differences,
-                                                 Set<A> positions) {
+    private static <A> Carried<A> throughDifferences(Box<A> box, DifferenceBounds<A> differences,
+                                                      Set<A> positions) {
         Map<A, ExactCut> least = new LinkedHashMap<>();
         Map<A, ExactCut> most = new LinkedHashMap<>();
+        boolean everyBoundWasComposed = true;
         for (A here : positions) {
             ExactCut high = box.mostOf(here);
             ExactCut low = box.leastOf(here);
@@ -267,18 +280,26 @@ public final class ClosedState<A> {
                 if (here.equals(there)) {
                     continue;
                 }
-                // `here - there <= d` with `there <= h` puts `here` at `h + d`.
+                // `here - there <= d` with `there <= h` puts `here` at `h + d`. Where the exact sum
+                // cannot be held, this carries no bound from `there` onto `here` this round — the
+                // same as `apart` not having been found — which only ever leaves `here` wider.
                 ExactCut apart = differences.differenceBound(here, there);
                 if (apart != null && box.mostOf(there) != null) {
-                    high = ExactCut.tighterUpper(high,
-                            ExactCut.meetingBoth(box.mostOf(there), apart));
+                    switch (ExactCut.meetingBoth(box.mostOf(there), apart)) {
+                        case ExactAnswer.Held<ExactCut> composed ->
+                                high = ExactCut.tighterUpper(high, composed.value());
+                        case ExactAnswer.Unheld<ExactCut> _ -> everyBoundWasComposed = false;
+                    }
                 }
                 // `there - here <= d` with `there >= l` puts `here` at `l - d`.
                 ExactCut back = differences.differenceBound(there, here);
                 if (back != null && box.leastOf(there) != null) {
-                    low = ExactCut.tighterLower(low, new ExactCut(
-                            box.leastOf(there).at().minus(back.at()),
-                            box.leastOf(there).inclusive() && back.inclusive()));
+                    switch (box.leastOf(there).at().minus(back.at())) {
+                        case ExactAnswer.Held<ExactRatio> at -> low = ExactCut.tighterLower(low,
+                                new ExactCut(at.value(),
+                                        box.leastOf(there).inclusive() && back.inclusive()));
+                        case ExactAnswer.Unheld<ExactRatio> _ -> everyBoundWasComposed = false;
+                    }
                 }
             }
             if (low != null) {
@@ -288,7 +309,7 @@ public final class ClosedState<A> {
                 most.put(here, high);
             }
         }
-        return new Box<>(least, most);
+        return new Carried<>(new Box<>(least, most), everyBoundWasComposed);
     }
 
     /**
@@ -337,5 +358,19 @@ public final class ClosedState<A> {
     /** Whether the rounds settled. Metadata about the derivation; see {@link Status}. */
     Status status() {
         return status;
+    }
+
+    /**
+     * Whether the derivation composed every bound it tried to: every hop the difference closure
+     * summed, and every bound a round carried from one position onto another.
+     *
+     * <p>False where a model's own decimals put two values far enough apart in scale that their
+     * exact sum has no representation this host writes. The box handed back is still sound — a hop
+     * or a carried bound the arithmetic could not compose is treated as absent, which only ever
+     * widens what is left — but it is no longer known to be the whole of what the rules leave, so a
+     * reader asking for that has to be refused rather than shown a box that looks complete.
+     */
+    public boolean everyBoundWasComposed() {
+        return everyBoundWasComposed;
     }
 }

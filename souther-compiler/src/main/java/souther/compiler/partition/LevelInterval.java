@@ -112,9 +112,13 @@ public record LevelInterval(Bound low, Bound high) {
      *
      * <p>Nothing beyond whole numbers where the run has an end nothing bounds, since there is no
      * distance to read.
+     *
+     * @return the count, or which way the exact arithmetic could not hold the distance between the
+     *         two ends — see {@link CutPosition#digitsToTellApartFrom}
      */
-    public int digitsToLookIn() {
-        return low == null || high == null ? 0 : low.at().digitsToTellApartFrom(high.at());
+    public souther.compiler.numeric.ExactAnswer<Integer> digitsToLookIn() {
+        return low == null || high == null ? souther.compiler.numeric.ExactAnswer.held(0)
+                : low.at().digitsToTellApartFrom(high.at());
     }
 
     /**

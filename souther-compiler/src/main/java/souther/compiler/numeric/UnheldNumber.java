@@ -1,4 +1,4 @@
-package souther.compiler.partition;
+package souther.compiler.numeric;
 
 import souther.exact.ExactFailure;
 import souther.exact.ExactRangeExceeded;
@@ -17,6 +17,10 @@ import souther.exact.ExactRoomExceeded;
  * allowance: the room that ran out is the host's, and no figure of this compiler's was compared
  * against. So both are met again by every wider run, and this says nothing on that axis. What does is
  * the vocabulary carrying it, which answers for both alike.
+ *
+ * <p>Held in this package because {@link ExactRatio} answers with it directly: an operation that
+ * fails is one of this arithmetic's own outcomes and not a partition question, so the word for it
+ * lives beside the arithmetic and not above it.
  */
 public enum UnheldNumber {
 

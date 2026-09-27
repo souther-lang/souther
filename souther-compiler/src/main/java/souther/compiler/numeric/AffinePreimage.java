@@ -56,16 +56,31 @@ public sealed interface AffinePreimage {
     record Stepping(ExactRatio from, ExactRatio by, Granularity spacing) implements AffinePreimage {
 
         /**
-         * With the member written as the one between none and {@code by}.
+         * With the member written as the one between none and {@code by} — or, where a model's own
+         * decimals put {@code from} far enough apart in scale from {@code by} that the division and
+         * the subtraction the move takes have no representation this host writes, the widest
+         * progression {@code spacing} admits.
          *
          * <p>So that one set is one value. The arithmetic that finds these multiplies by an inverse
          * and the number that falls out depends on which inverse was taken — {@code 5 + 2·k} and
          * {@code 1 + 2·k} hold the same values, and left as they were written they would be two
          * answers with nothing to tell a reader they are one.
+         *
+         * <p>What is lost when the move has no representation is which member of the coset is the
+         * canonical one, and not that there is a coset — so the sound answer with less is the one
+         * progression a search can always choose from, every value the spacing admits, rather than a
+         * member this cannot name.
          */
         public Stepping {
             if (from == null || by == null || spacing == null || by.signum() <= 0) {
                 throw new IllegalArgumentException("a progression steps by something positive: " + by);
+            }
+            ExactRatio moved = normalized(from, by);
+            if (moved != null) {
+                from = moved;
+            } else {
+                from = ExactRatio.ZERO;
+                by = ExactRatio.ONE;
             }
             if (spacing == Granularity.DISCRETE && (!from.isWhole() || !by.isWhole())) {
                 throw new IllegalArgumentException(
@@ -77,7 +92,13 @@ public sealed interface AffinePreimage {
                         "a progression names values of its position, and a position holds what a"
                                 + " model can write: " + from + " by " + by);
             }
-            from = from.minus(by.times(ExactRatio.of(from.dividedBy(by).floor())));
+        }
+
+        private static ExactRatio normalized(ExactRatio from, ExactRatio by) {
+            if (!(from.dividedBy(by).floor() instanceof ExactAnswer.Held<java.math.BigInteger> held)) {
+                return null;
+            }
+            return from.minus(by.times(ExactRatio.of(held.value()))).orNull();
         }
     }
 

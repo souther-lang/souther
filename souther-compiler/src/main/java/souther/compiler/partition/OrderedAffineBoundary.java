@@ -5,6 +5,7 @@ import souther.compiler.check.ComparisonClaim;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
@@ -124,19 +125,26 @@ public record OrderedAffineBoundary(BorderQuantity of, Seam seam, Towards satisf
      * opposite sides of it.
      */
     public boolean satisfiedBy(Map<NumericTerm, Place> values) {
-        return seam.sideOf(along(direction().direction(), values)) == satisfiedOn;
+        ExactRatio at = along(direction().direction(), values).orNull();
+        // A row whose sum this cannot hold satisfies nothing this can tell, and this method has no
+        // word of its own for that — every caller that reads a boundary as satisfied or not is
+        // reading a question that answers with less than a boolean where the sum could not be worked
+        // out, and this is the one shape here without room to say so. Read false, which is the answer
+        // that keeps the row out of the part it would have been sorted into, rather than one this
+        // compiler is not entitled to.
+        return at != null && seam.sideOf(at) == satisfiedOn;
     }
 
     /**
      * What a direction comes to at a row, which is what each position holds weighed by what the
-     * direction weighs it.
+     * direction weighs it — or which way the exact arithmetic could not hold the sum.
      *
      * <p>Zero for a position the direction does not name, which is what a coefficient of nothing is.
      * Written here for both the line the model drew and the lines it did not, so that neither is
      * scored by a rule the other is not.
      */
-    public static ExactRatio along(Map<NumericTerm, ExactRatio> direction,
-                                   Map<NumericTerm, Place> values) {
+    public static ExactAnswer<ExactRatio> along(Map<NumericTerm, ExactRatio> direction,
+                                                Map<NumericTerm, Place> values) {
         ExactRatio at = ExactRatio.ZERO;
         // Walked by the terms. What the sum comes to does not depend on the order, but which
         // position is named where a row holds no number at one of them does, and a direction says
@@ -147,9 +155,14 @@ public record OrderedAffineBoundary(BorderQuantity of, Seam seam, Towards satisf
                 throw new IllegalArgumentException("a row read at a quantity holds a number at each"
                         + " of its positions, and holds none at " + each.getKey());
             }
-            at = at.plus(Count.number(held).exactly().times(each.getValue()));
+            ExactAnswer<ExactRatio> summed =
+                    at.plus(Count.number(held).exactly().times(each.getValue()));
+            if (summed instanceof ExactAnswer.Unheld<ExactRatio> unheld) {
+                return ExactAnswer.unheld(unheld.why());
+            }
+            at = summed.orNull();
         }
-        return at;
+        return ExactAnswer.held(at);
     }
 
     /** The left of the {@code left = right} a report names this line by, which is the quantity's

@@ -2,8 +2,10 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.values.ValueSet;
@@ -205,10 +207,22 @@ final class Outwards {
             // Worked out exactly and put on the carrier only once each is a number. Where this
             // cannot hold one of them, the walk ends here: a run holding more places than this could
             // work out is not a run walked to its end.
+            ExactAnswer<ExactRatio> steppedAbove = above.plus(forward);
+            ExactAnswer<ExactRatio> steppedBelow = below.plus(backward);
+            if (steppedAbove instanceof ExactAnswer.Unheld<ExactRatio> unheldAbove) {
+                ended = Ended.AT_A_PLACE_IT_COULD_NOT_HOLD;
+                unheld = unheldAbove.why();
+                break;
+            }
+            if (steppedBelow instanceof ExactAnswer.Unheld<ExactRatio> unheldBelow) {
+                ended = Ended.AT_A_PLACE_IT_COULD_NOT_HOLD;
+                unheld = unheldBelow.why();
+                break;
+            }
+            above = steppedAbove.orNull();
+            below = steppedBelow.orNull();
             Place[] neighbours;
             try {
-                above = above.plus(forward);
-                below = below.plus(backward);
                 neighbours = new Place[] {
                         onTheCarrier(above, carrier), onTheCarrier(below, carrier)};
             } catch (ExactFailure failure) {

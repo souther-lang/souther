@@ -50,7 +50,7 @@ class AnExactRatioIsOneValueHoweverItArrivedTest {
     @Test
     void arithmeticIsExactWhereDecimalsWouldRound() {
         ExactRatio third = ratio(1, 3);
-        assertEquals(ExactRatio.ONE, third.plus(third).plus(third),
+        assertEquals(ExactRatio.ONE, third.plus(third).orNull().plus(third).orNull(),
                 "three thirds are one, which is what rounding a third at any scale loses");
         assertEquals(ratio(1, 9), third.times(third));
         assertEquals(ExactRatio.ONE, third.dividedBy(third));
@@ -92,18 +92,18 @@ class AnExactRatioIsOneValueHoweverItArrivedTest {
 
     @Test
     void roundingIsTheCallersDirection() {
-        assertEquals(new BigDecimal("0.34"), ratio(1, 3).asDecimal(RoundingMode.CEILING, 2));
-        assertEquals(new BigDecimal("0.33"), ratio(1, 3).asDecimal(RoundingMode.FLOOR, 2));
+        assertEquals(new BigDecimal("0.34"), ratio(1, 3).asDecimal(RoundingMode.CEILING, 2).orNull());
+        assertEquals(new BigDecimal("0.33"), ratio(1, 3).asDecimal(RoundingMode.FLOOR, 2).orNull());
     }
 
     @Test
     void wholeNumbersAreTakenOffEitherEnd() {
-        assertEquals(BigInteger.ZERO, ratio(1, 3).floor());
-        assertEquals(BigInteger.ONE, ratio(1, 3).ceiling());
-        assertEquals(BigInteger.valueOf(-1), ratio(-1, 3).floor());
-        assertEquals(BigInteger.ZERO, ratio(-1, 3).ceiling());
-        assertEquals(BigInteger.TWO, ExactRatio.of(2).floor());
-        assertEquals(BigInteger.TWO, ExactRatio.of(2).ceiling(),
+        assertEquals(BigInteger.ZERO, ratio(1, 3).floor().orNull());
+        assertEquals(BigInteger.ONE, ratio(1, 3).ceiling().orNull());
+        assertEquals(BigInteger.valueOf(-1), ratio(-1, 3).floor().orNull());
+        assertEquals(BigInteger.ZERO, ratio(-1, 3).ceiling().orNull());
+        assertEquals(BigInteger.TWO, ExactRatio.of(2).floor().orNull());
+        assertEquals(BigInteger.TWO, ExactRatio.of(2).ceiling().orNull(),
                 "a whole number is its own floor and its own ceiling");
         assertTrue(ExactRatio.of(2).isWhole());
     }

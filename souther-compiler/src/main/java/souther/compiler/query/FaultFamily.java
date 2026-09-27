@@ -72,7 +72,8 @@ public record FaultFamily(QuantityKey wrote, Set<NumericTerm> weighed) {
     }
 
     /**
-     * Every line one step from the one the model wrote, each named once.
+     * Every line one step from the one the model wrote, each named once, and whether every step this
+     * walked could be composed.
      *
      * <p>A step up and a step down at each position, taken one position at a time. What comes back
      * is what a line <em>is</em> rather than what the step was written as, so two steps landing on
@@ -83,11 +84,30 @@ public record FaultFamily(QuantityKey wrote, Set<NumericTerm> weighed) {
      * <p>A step that leaves nothing weighed at all is no line and is not among these. A step that
      * lands back on the model's own direction is not either: the family is the lines this one is
      * not.
+     *
+     * <p><b>And a step a model's own decimals put out of the exact arithmetic's reach is a third
+     * thing again</b>, told apart from both: a family short one of these is not the whole of what
+     * turning every line away establishes, and a caller reading it as though it were — an empty
+     * family being no fault domain to state, a family that survived every row being a border no
+     * fault this compiler could name touches — would be publishing a settled verdict this walk
+     * could not reach. See {@link #everyStepWasComposed}.
+     *
+     * @param lines               every other line this walk names, none of them the model's own
+     * @param everyStepWasComposed whether the exact arithmetic could hold every step tried, whole
+     *                            family or not
      */
-    public List<QuantityKey> others() {
+    public record Found(List<QuantityKey> lines, boolean everyStepWasComposed) {
+
+        public Found {
+            lines = List.copyOf(lines);
+        }
+    }
+
+    public Found others() {
         Set<String> named = new LinkedHashSet<>();
         named.add(wrote.key());
         List<QuantityKey> out = new ArrayList<>();
+        boolean everyStepWasComposed = true;
         // In an order the terms settle rather than the one a direction happens to be held in. What
         // a quantity is over is a set, and a caller taking the first of these is a report naming one
         // of them — so a walk in the map's own order would name a different line from one run to
@@ -97,31 +117,42 @@ public record FaultFamily(QuantityKey wrote, Set<NumericTerm> weighed) {
             for (ExactRatio step
                     : List.of(ExactRatio.ONE,
                             ExactRatio.ONE.negated())) {
-                QuantityKey other = weighed(term, step);
+                Weighed found = weighed(term, step);
+                if (!found.composed()) {
+                    everyStepWasComposed = false;
+                    continue;
+                }
+                QuantityKey other = found.line();
                 if (other != null && named.add(other.key())) {
                     out.add(other);
                 }
             }
         }
-        return List.copyOf(out);
+        return new Found(out, everyStepWasComposed);
     }
 
-    /** The same direction with {@code term} weighed {@code step} more, as the line it is — or null
-     *  where the step leaves nothing weighed anywhere. */
-    private QuantityKey weighed(NumericTerm term, ExactRatio step) {
+    /** What one step of the walk came to: a line, none because the step left nothing weighed
+     *  anywhere, or the step not composed at all because the exact arithmetic could not hold a
+     *  weight it needed. */
+    private record Weighed(QuantityKey line, boolean composed) {}
+
+    /** The same direction with {@code term} weighed {@code step} more, as the line it is. */
+    private Weighed weighed(NumericTerm term, ExactRatio step) {
         Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
-        wrote.direction().forEach((each, coef) -> {
-            ExactRatio moved =
-                    each.equals(term) ? coef.plus(step) : coef;
+        for (Map.Entry<NumericTerm, ExactRatio> each : NumericTerms.entriesInOrder(wrote.direction())) {
+            ExactRatio moved = each.getKey().equals(term)
+                    ? each.getValue().plus(step).orNull() : each.getValue();
+            if (moved == null) {
+                return new Weighed(null, false);
+            }
             // A position weighed nothing is a position the line is not over, and is left out rather
             // than carried as a zero: what a line is over is what it names, and a direction holding
             // a weight of nothing would be told from the same line without it.
             if (moved.signum() != 0) {
-                coefs.put(each, moved);
+                coefs.put(each.getKey(), moved);
             }
-        });
-        return coefs.isEmpty() ? null
-                : QuantityKey.of(
-                        new LinearForm<>(ExactRatio.ZERO, coefs));
+        }
+        return new Weighed(coefs.isEmpty() ? null
+                : QuantityKey.of(new LinearForm<>(ExactRatio.ZERO, coefs)), true);
     }
 }

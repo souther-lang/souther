@@ -2,10 +2,10 @@ package souther.compiler.report;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.partition.ReadingGap;
-import souther.compiler.partition.UnheldNumber;
 import souther.compiler.publish.WeakeningWord;
 import souther.compiler.query.Weakening;
 

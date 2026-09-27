@@ -179,12 +179,21 @@ public final class AffineReduction {
         if (rest == null) {
             return true;   // some other position runs the wrong way without end, so nothing follows
         }
+        // A model's own decimals can put the rest of the rule and this half-space's own bound far
+        // enough apart in scale that the exact arithmetic cannot sum them. Nothing here follows for
+        // this position then, same as an unbounded rest: derived once bounds only ever tighten, and a
+        // derivation that could not be composed must never be read as `HoldsNever`, which would claim
+        // the rules leave this position nothing.
+        ExactRatio constant = rest.at().minus(half.bound().at()).orNull();
+        if (constant == null) {
+            return true;
+        }
         // `k·a <= w - m`, which as a rule about `a` alone is `k·a + (m - w) <= 0`. Handed back to be
         // read as one, so that what it does with the rounding and with the values `a` can take is
         // what it does everywhere else.
         boolean strict = !half.bound().inclusive() || !rest.reached();
         AffineConstraint.Read<A> read = AffineConstraint.of(
-                Map.of(atom, weight), rest.at().minus(half.bound().at()),
+                Map.of(atom, weight), constant,
                 strict ? Rel.LT : Rel.LE, spacing);
         switch (read) {
             case AffineConstraint.Read.HoldsNever<A> _ -> {

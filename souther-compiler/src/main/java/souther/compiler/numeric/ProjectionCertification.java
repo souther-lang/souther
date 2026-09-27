@@ -53,6 +53,19 @@ public sealed interface ProjectionCertification {
     record PositionsSpacedDifferently() implements ProjectionCertification {}
 
     /**
+     * The closure this certificate would rest on left a hop or a carried bound uncomposed.
+     *
+     * <p>The theorem behind {@link ProjectionCertificate.ByBoxAndClosedDifferences} needs the
+     * difference system fully closed and the box a fixed point of it. A model's own decimals can put
+     * two run ends far enough apart in scale that the exact arithmetic cannot sum them
+     * ({@link DifferenceBounds#everyHopWasComposed}, {@link ClosedState#everyBoundWasComposed}); the
+     * box handed back is still sound — a hop the closure could not compose is one it treats as
+     * absent, which only widens what is left — but it is no longer known to be the whole of what the
+     * rules leave, and this is said instead of a certificate the closure is not entitled to.
+     */
+    record ArithmeticLeftTheClosureIncomplete() implements ProjectionCertification {}
+
+    /**
      * Some rule did not follow from what was derived.
      *
      * <p>Which rule is not said here. What the algebra holds is the rules as it read them, and the

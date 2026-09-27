@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.core.IntNegation;
 import souther.compiler.core.Kernel;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.BinOp;
@@ -268,12 +269,21 @@ final class ConstantAlgebra {
             if (x == null || y == null) {
                 return Optional.empty();
             }
-            return Optional.of(switch (op) {
+            // The sum and the difference are the one exact operation with an operational bound: a
+            // model's own decimals can stand far enough apart in scale that the exact arithmetic has
+            // no representation for the sum, and the language's own rule for `+` and `-` (spec "the
+            // sum and the difference carry an operational bound") is that the operation aborts there
+            // rather than answering — never that it answers a different, rounded number. So the fold
+            // answers nothing rather than embed a value the run time would not compute: a constant
+            // this cannot hold is not a reason to fold to one the model never asked for.
+            ExactAnswer<ExactRatio> summed = switch (op) {
                 case ADD -> x.plus(y);
                 case SUB -> x.minus(y);
-                case MUL -> x.times(y);
+                case MUL -> ExactAnswer.held(x.times(y));
                 default -> throw new IllegalStateException();
-            });
+            };
+            return summed instanceof ExactAnswer.Held<ExactRatio> held
+                    ? Optional.of(held.value()) : Optional.empty();
         }
         if (a instanceof Long x && b instanceof Long y) {
             // The same kernels the operators emit: an Int that overflows aborts rather than wrapping,

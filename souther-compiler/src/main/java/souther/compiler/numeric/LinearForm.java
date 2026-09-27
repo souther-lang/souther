@@ -40,11 +40,36 @@ public record LinearForm<A>(ExactRatio constant, Map<A, ExactRatio> coefs) {
         return new LinearForm<>(ExactRatio.ZERO, Map.of(a, ExactRatio.ONE));
     }
 
+    /**
+     * The sum, or {@code null} where the exact arithmetic could not hold it.
+     *
+     * <p>A model's own decimals can put a constant or a coefficient of one side far enough apart in
+     * scale from the other that the exact sum has no representation. Answered {@code null} rather
+     * than thrown, which is the word this whole file already uses for an expression that is not a
+     * linear form — {@link check.Terms#add} passes it straight through, the same as it does for
+     * either side not being one in the first place. Where every term named is a constant, that is
+     * this compiler declining to fold one, and the model's own arithmetic aborts wherever it runs.
+     */
     public LinearForm<A> plus(LinearForm<A> o) {
         Map<A, ExactRatio> m = new HashMap<>(coefs);
-        o.coefs.forEach((k, v) -> m.merge(k, v, ExactRatio::plus));
+        boolean[] everyTermWasComposed = {true};
+        o.coefs.forEach((k, v) -> m.merge(k, v, (a, b) -> {
+            ExactAnswer<ExactRatio> sum = a.plus(b);
+            if (sum instanceof ExactAnswer.Held<ExactRatio> held) {
+                return held.value();
+            }
+            everyTermWasComposed[0] = false;
+            return a;
+        }));
+        if (!everyTermWasComposed[0]) {
+            return null;
+        }
+        ExactRatio summedConstant = constant.plus(o.constant).orNull();
+        if (summedConstant == null) {
+            return null;
+        }
         m.values().removeIf(ExactRatio::isZero);
-        return new LinearForm<>(constant.plus(o.constant), m);
+        return new LinearForm<>(summedConstant, m);
     }
 
     public LinearForm<A> negate() {
@@ -53,6 +78,8 @@ public record LinearForm<A>(ExactRatio constant, Map<A, ExactRatio> coefs) {
         return new LinearForm<>(constant.negated(), m);
     }
 
+    /** The difference, or {@code null} where the exact arithmetic could not hold it — see
+     *  {@link #plus}, which a difference is the sum of the negation of. */
     public LinearForm<A> minus(LinearForm<A> o) {
         return plus(o.negate());
     }

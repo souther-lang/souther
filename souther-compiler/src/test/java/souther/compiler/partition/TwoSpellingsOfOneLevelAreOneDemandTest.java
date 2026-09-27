@@ -158,7 +158,7 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
             assertEquals(line.key(), new CutPosition(
                             new Level.OfTheQuantity(aMillionth), ExactRatio.of(3)).key(),
                     "and one line, one name");
-            assertTrue(line.digitsToTellApartFrom(beside) > 1_000_000,
+            assertTrue(line.digitsToTellApartFrom(beside).orNull() > 1_000_000,
                     "a sixth of a millionth apart takes about that many places to name");
         });
     }

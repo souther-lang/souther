@@ -111,7 +111,7 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
             assertTrue(term.endsWith("x") || term.endsWith("y"),
                     () -> "the cuts of this model are over its two positions: " + term);
             value = value.plus(each.getValue().times(
-                    ExactRatio.of(term.endsWith("x") ? x : y)));
+                    ExactRatio.of(term.endsWith("x") ? x : y))).orNull();
         }
         int against = value.signum();
         return switch (cut.rel()) {

@@ -103,13 +103,13 @@ class WhatIsDerivedOverDecimalsIsNeverTighterThanTheRationalsAllowTest {
                 Map<String, ExactRatio> coefs = new LinkedHashMap<>();
                 for (String each : namedIn(List.of(upper, lower))) {
                     ExactRatio combined = upper.weightOf(each).dividedBy(up)
-                            .plus(lower.weightOf(each).dividedBy(down));
+                            .plus(lower.weightOf(each).dividedBy(down)).orNull();
                     if (!combined.isZero()) {
                         coefs.put(each, combined);
                     }
                 }
                 without.add(new Row(coefs,
-                        upper.at().dividedBy(up).plus(lower.at().dividedBy(down)),
+                        upper.at().dividedBy(up).plus(lower.at().dividedBy(down)).orNull(),
                         upper.strict() || lower.strict()));
             }
         }

@@ -29,16 +29,26 @@ public record ExactCut(ExactRatio at, boolean inclusive) {
     }
 
     /**
-     * The two cuts added, admitting its own value only where both do.
+     * The two cuts added, admitting its own value only where both do — or which way the arithmetic
+     * could not hold the sum.
      *
      * <p>What composing two hops is: {@code a - b <= c} with {@code b - d <= e} bounds {@code a - d}
      * at {@code c + e}, and the sum is reached only by a pair that reaches both. Written once here
      * rather than at each place a path is walked, because the strictness is the half that gets
      * dropped — a path summing to a bound its hops cannot both reach still bounds, and calling it
      * reachable puts a row at a pair nothing can be.
+     *
+     * <p>Composing two cuts a model's own decimals drew can ask the exact arithmetic for a sum it
+     * cannot hold, so this answers with {@link ExactAnswer} rather than the cut outright. A caller
+     * that cannot compose this hop has one hop fewer to reason with, which only ever widens what it
+     * goes on to conclude — see each caller's own comment for what it does with the unheld case.
      */
-    public static ExactCut meetingBoth(ExactCut a, ExactCut b) {
-        return new ExactCut(a.at.plus(b.at), a.inclusive && b.inclusive);
+    public static ExactAnswer<ExactCut> meetingBoth(ExactCut a, ExactCut b) {
+        return switch (a.at.plus(b.at)) {
+            case ExactAnswer.Held<ExactRatio> held ->
+                    ExactAnswer.held(new ExactCut(held.value(), a.inclusive && b.inclusive));
+            case ExactAnswer.Unheld<ExactRatio> unheld -> ExactAnswer.unheld(unheld.why());
+        };
     }
 
     /**

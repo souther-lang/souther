@@ -175,8 +175,16 @@ final class FormReach<A> {
                 continue;
             }
             for (AffineConstraint.HalfSpace<A> premise : rule.halfSpaces()) {
-                ExactCut residual = fromTheEnds(withoutThe(premise, coefs),
-                        constant.plus(premise.bound().at()));
+                // A model's own decimals can put this premise's bound, or one of its own
+                // coefficients, far enough apart in scale from what it is being merged with that the
+                // exact arithmetic cannot hold the sum. Where that happens this premise composes no
+                // route this round — the same as a premise this form does not name — which costs a
+                // tighter bound this route might have found and claims nothing this route did not.
+                Map<A, ExactRatio> without1 = withoutThe(premise, coefs);
+                ExactRatio residualConstant =
+                        without1 == null ? null : constant.plus(premise.bound().at()).orNull();
+                ExactCut residual = residualConstant == null ? null
+                        : fromTheEnds(without1, residualConstant);
                 if (residual != null) {
                     // The form reaches the sum only where the residual reaches its own end and the
                     // premise reaches its bound.
@@ -189,15 +197,27 @@ final class FormReach<A> {
     }
 
     /** {@code coefs} with {@code premise}'s form taken off it, which is what is left to bound once
-     *  the premise has been used. */
+     *  the premise has been used — or {@code null} where a coefficient the merge combines is one the
+     *  exact arithmetic cannot sum. */
     private Map<A, ExactRatio> withoutThe(AffineConstraint.HalfSpace<A> premise,
                                           Map<A, ExactRatio> coefs) {
         Map<A, ExactRatio> left = new LinkedHashMap<>(coefs);
         // The premise walked in the one order its positions decide. What comes of the merge is the
         // same whichever order it is taken in, and the walk is what would let the next change here
         // start depending on one the premise does not hold.
-        premise.form().entriesIn(order).forEach(each ->
-                left.merge(each.getKey(), each.getValue().negated(), ExactRatio::plus));
+        boolean[] everyMergeWasComposed = {true};
+        premise.form().entriesIn(order).forEach(each -> left.merge(each.getKey(),
+                each.getValue().negated(), (a, b) -> {
+                    ExactAnswer<ExactRatio> sum = a.plus(b);
+                    if (sum instanceof ExactAnswer.Held<ExactRatio> held) {
+                        return held.value();
+                    }
+                    everyMergeWasComposed[0] = false;
+                    return a;
+                }));
+        if (!everyMergeWasComposed[0]) {
+            return null;
+        }
         left.values().removeIf(ExactRatio::isZero);
         return left;
     }
@@ -212,9 +232,12 @@ final class FormReach<A> {
         Apart<A> apart = difference(coefs);
         if (apart != null) {
             ExactCut held = differences.differenceBound(apart.above(), apart.below());
-            if (held != null) {
-                best = ExactCut.tighterUpper(best, new ExactCut(
-                        held.at().times(apart.by()).plus(constant), held.inclusive()));
+            // Where the difference and the constant are too far apart in scale for the exact
+            // arithmetic to sum, this route bounds nothing this round rather than composing a value
+            // it cannot hold.
+            ExactRatio at = held == null ? null : held.at().times(apart.by()).plus(constant).orNull();
+            if (at != null) {
+                best = ExactCut.tighterUpper(best, new ExactCut(at, held.inclusive()));
             }
         }
         return best;

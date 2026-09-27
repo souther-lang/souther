@@ -135,7 +135,7 @@ import souther.compiler.publish.RuleHandleSurface;
 import souther.compiler.publish.WeakeningVocabulary;
 import souther.compiler.publish.WeakeningWord;
 import souther.compiler.partition.ReadingGap;
-import souther.compiler.partition.UnheldNumber;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.partition.UndividedPosition;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.BehaviorEvidence;
@@ -6655,6 +6655,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 case NOTHING_WATCHED_THE_RUNS -> WeakeningWord.A_BORDERS_RUN_NOT_WATCHED;
                 case NO_REACHABLE_DISTINGUISHER ->
                         WeakeningWord.NO_REACHABLE_DISTINGUISHER_FOR_A_BORDER;
+                case ARITHMETIC_COULD_NOT_HOLD_A_FAMILY_MEMBER ->
+                        WeakeningWord.A_BORDERS_FAULT_FAMILY_NOT_WORKED_OUT;
             };
             case Weakening.ModelReadingIncomplete it -> switch (it.cause()) {
                 case ClosureGap.PositionNotReachedInto _ ->

@@ -284,8 +284,14 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
         if (line == null) {
             return null;
         }
+        // Null as well where the exact arithmetic cannot round the line to that many digits: this is
+        // only where to begin looking, and a place nobody can start looking from is no different
+        // from an order with no numbers as far as this method's callers are concerned.
         BigDecimal past = line.asDecimal(towards == Towards.ABOVE
-                ? java.math.RoundingMode.CEILING : java.math.RoundingMode.FLOOR, digits);
+                ? java.math.RoundingMode.CEILING : java.math.RoundingMode.FLOOR, digits).orNull();
+        if (past == null) {
+            return null;
+        }
         // Strictly past, which rounding gives only where the line is not itself a number of that
         // many digits. A line the quantity does stand at rounds to itself, and the run beyond it
         // does not hold it.
@@ -311,18 +317,26 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
      * <p>Read off the distance's size rather than by forming one over it and counting the digits of
      * what came back. A distance of a millionth has an answer of about a million, and the number
      * built to be measured had as many digits as the answer counts.
+     *
+     * @return the count, or which way the exact arithmetic could not hold the distance — the two
+     *         lines a model's own decimals put far enough apart in scale that their difference has
+     *         no representation this host writes
      */
-    public int digitsToTellApartFrom(CutPosition other) {
+    public souther.compiler.numeric.ExactAnswer<Integer> digitsToTellApartFrom(CutPosition other) {
         ExactRatio mine = exactly();
         ExactRatio theirs = other.exactly();
         if (mine == null || theirs == null) {
-            return 0;
+            return souther.compiler.numeric.ExactAnswer.held(0);
         }
-        ExactRatio apart = mine.minus(theirs).abs();
-        if (apart.isZero()) {
-            return 0;
-        }
-        return apart.placesItStandsAbove() + 1;
+        return switch (mine.minus(theirs)) {
+            case souther.compiler.numeric.ExactAnswer.Held<ExactRatio> held -> {
+                ExactRatio apart = held.value().abs();
+                yield souther.compiler.numeric.ExactAnswer.held(
+                        apart.isZero() ? 0 : apart.placesItStandsAbove() + 1);
+            }
+            case souther.compiler.numeric.ExactAnswer.Unheld<ExactRatio> unheld ->
+                    souther.compiler.numeric.ExactAnswer.unheld(unheld.why());
+        };
     }
 
     private static ExactRatio numberOf(Level level) {

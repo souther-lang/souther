@@ -207,7 +207,10 @@ public sealed interface Weakening {
             NOTHING_WATCHED_THE_RUNS,
             /** A line beside it stands after every row, and nothing here could show an input the
              *  two answer differently at that a row still arrives at. */
-            NO_REACHABLE_DISTINGUISHER
+            NO_REACHABLE_DISTINGUISHER,
+            /** A model's own decimals put a step of the fault family out of the exact arithmetic's
+             *  reach, so the family this border is held against is not known whole. */
+            ARITHMETIC_COULD_NOT_HOLD_A_FAMILY_MEMBER
         }
 
         public ABorderNotHeldAgainstTheLinesBesideIt {
@@ -227,7 +230,8 @@ public sealed interface Weakening {
         public RunSensitivity runSensitivity() {
             return switch (why) {
                 case NO_STRATEGY_FOR_THE_RULE, THE_ROWS_ARE_ALL_ON_ONE_SIDE,
-                     NO_REACHABLE_DISTINGUISHER -> RunSensitivity.UNAFFECTED;
+                     NO_REACHABLE_DISTINGUISHER, ARITHMETIC_COULD_NOT_HOLD_A_FAMILY_MEMBER ->
+                        RunSensitivity.UNAFFECTED;
                 case NOTHING_WATCHED_THE_RUNS -> RunSensitivity.MAY_CHANGE;
             };
         }

@@ -1,13 +1,13 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.partition.CompositionAccount;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionCapacity;
 import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.Realization;
-import souther.compiler.partition.UnheldNumber;
 import souther.compiler.partition.WayToTheBorder;
 import souther.compiler.publish.PublicationOrders;
 

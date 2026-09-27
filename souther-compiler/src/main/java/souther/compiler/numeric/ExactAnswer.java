@@ -1,0 +1,75 @@
+package souther.compiler.numeric;
+
+import souther.exact.ExactFailure;
+
+import java.util.function.Supplier;
+
+/**
+ * What an operation of {@link ExactRatio} comes to: a value, or which of the two ways
+ * {@link ExactFailure} left it unheld.
+ *
+ * <p><b>Not an exception, for the operations reachable from a model's own numbers.</b> A model may
+ * write a decimal whose scale sits near the end of the range this compiler holds — squaring a tenth
+ * doubles it — and the exact sum of that value and an ordinary one has no representation this host
+ * writes. That is not a mistake in the model and not a mistake in this compiler: it is what the sum
+ * comes to, and every caller asking the arithmetic for a sum or a difference is asking a question
+ * that may have this answer. A caller with no vocabulary for that would either let it end the compile
+ * as an internal error, which {@code ExactFailure} being an unchecked exception invites, or would
+ * catch it ad hoc at whichever call sites somebody remembered to. This type makes the third answer a
+ * caller has to name to get a value out at all, so the compiler finds every place a value is read
+ * off one of these.
+ *
+ * <p>Held by {@link UnheldNumber} and not by {@link ExactFailure} itself, because the two kinds of
+ * unheld number are what a caller has a word for and the exception's own message is not.
+ */
+public sealed interface ExactAnswer<T> {
+
+    record Held<T>(T value) implements ExactAnswer<T> {
+        public Held {
+            if (value == null) {
+                throw new IllegalArgumentException("a held answer holds a value");
+            }
+        }
+    }
+
+    record Unheld<T>(UnheldNumber why) implements ExactAnswer<T> {
+        public Unheld {
+            if (why == null) {
+                throw new IllegalArgumentException("an unheld answer says which way it was unheld");
+            }
+        }
+    }
+
+    static <T> ExactAnswer<T> held(T value) {
+        return new Held<>(value);
+    }
+
+    static <T> ExactAnswer<T> unheld(UnheldNumber why) {
+        return new Unheld<>(why);
+    }
+
+    /** {@code attempt}, turned into this: the value where it answered, the failure named where it
+     *  did not. */
+    static <T> ExactAnswer<T> of(Supplier<T> attempt) {
+        try {
+            return held(attempt.get());
+        } catch (ExactFailure failure) {
+            return unheld(UnheldNumber.of(failure));
+        }
+    }
+
+    /** This value, or {@code null} where none was held.
+     *
+     *  <p>For a caller whose own sound answer with less is already what {@code null} means there —
+     *  an unbounded end, a candidate not composed, a preimage not narrowed. Reaching for this without
+     *  checking that first drops which of the two ways the number was unheld, which a caller telling
+     *  a reader about it may not be able to spare. */
+    default T orNull() {
+        return this instanceof Held<T> held ? held.value() : null;
+    }
+
+    /** Whether this is a value and not a way the arithmetic left the number unheld. */
+    default boolean isHeld() {
+        return this instanceof Held<T>;
+    }
+}

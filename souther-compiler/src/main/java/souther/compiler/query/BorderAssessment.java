@@ -118,6 +118,12 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
                     WeakeningSet.of(new Weakening.ABorderNotHeldAgainstTheLinesBesideIt(border,
                             Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why
                                     .NOTHING_WATCHED_THE_RUNS));
+            // A model's own decimals put a step of the fault family out of the exact arithmetic's
+            // reach, so the family this border would be held against is not known whole.
+            case AnotherLineTheRowsAllow.Unsettled.AFaultFamilyMemberWasNotComposed _ ->
+                    WeakeningSet.of(new Weakening.ABorderNotHeldAgainstTheLinesBesideIt(border,
+                            Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why
+                                    .ARITHMETIC_COULD_NOT_HOLD_A_FAMILY_MEMBER));
         };
     }
 

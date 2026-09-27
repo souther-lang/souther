@@ -30,17 +30,17 @@ class AnImageNamesTheValuesThatLeaveItSomethingItReachesTest {
                                                ExactRatio target, AffinePreimage answer) {
         for (long step = -3; step <= 3; step++) {
             ExactRatio x = switch (answer) {
-                case AffinePreimage.None ignored -> null;
-                case AffinePreimage.Stepping on -> on.from().plus(on.by().times(at(step)));
+                case AffinePreimage.None _ -> null;
+                case AffinePreimage.Stepping on -> on.from().plus(on.by().times(at(step))).orNull();
                 // A tenth of the generator is a finite decimal, so it is a member and it is not one
                 // a progression would have named.
                 case AffinePreimage.Filling on ->
                         on.from().plus(on.by().times(new ExactRatio(BigInteger.valueOf(step),
-                                BigInteger.TEN)));
+                                BigInteger.TEN))).orNull();
             };
             if (x != null) {
-                assertTrue(image.contains(target.minus(coefficient.times(x))),
-                        "at " + x + " the residue is " + target.minus(coefficient.times(x)));
+                assertTrue(image.contains(target.minus(coefficient.times(x)).orNull()),
+                        "at " + x + " the residue is " + target.minus(coefficient.times(x)).orNull());
             }
         }
     }
@@ -261,8 +261,8 @@ class AnImageNamesTheValuesThatLeaveItSomethingItReachesTest {
         assertEquals(new AffinePreimage.Stepping(at(1), at(3), Granularity.DISCRETE), answer);
         leavesSomethingReached(rest, ExactRatio.ONE, ExactRatio.ONE, answer);
         // Two of the values it leaves out, which is what "every whole number" got wrong.
-        assertTrue(!rest.contains(ExactRatio.ONE.minus(at(0))));
-        assertTrue(!rest.contains(ExactRatio.ONE.minus(at(2))));
+        assertTrue(!rest.contains(ExactRatio.ONE.minus(at(0)).orNull()));
+        assertTrue(!rest.contains(ExactRatio.ONE.minus(at(2)).orNull()));
     }
 
     /**

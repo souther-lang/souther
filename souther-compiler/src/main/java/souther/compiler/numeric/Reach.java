@@ -54,18 +54,14 @@ public record Reach(ExactCut least, ExactCut most) {
             }
             ExactCut low = weight.signum() > 0 ? runs.least() : runs.most();
             ExactCut high = weight.signum() > 0 ? runs.most() : runs.least();
-            if (least != null && low != null) {
-                least = least.plus(weight.times(low.at()));
-                leastReached &= low.inclusive();
-            } else {
-                least = null;
-            }
-            if (most != null && high != null) {
-                most = most.plus(weight.times(high.at()));
-                mostReached &= high.inclusive();
-            } else {
-                most = null;
-            }
+            // A model's own run ends can put a term far enough apart in scale from the sum so far
+            // that the exact arithmetic cannot hold it. Unheld here is the same answer as a position
+            // with nothing for this direction: the sum runs unbounded that way rather than at a value
+            // nothing composed.
+            least = least == null || low == null ? null : least.plus(weight.times(low.at())).orNull();
+            leastReached &= low != null && low.inclusive();
+            most = most == null || high == null ? null : most.plus(weight.times(high.at())).orNull();
+            mostReached &= high != null && high.inclusive();
         }
         return new Reach(least == null ? null : new ExactCut(least, leastReached),
                 most == null ? null : new ExactCut(most, mostReached));

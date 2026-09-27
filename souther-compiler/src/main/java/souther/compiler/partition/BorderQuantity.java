@@ -6,11 +6,11 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
-import souther.exact.ExactFailure;
 
 import java.util.List;
 import java.util.Map;
@@ -366,14 +366,12 @@ public sealed interface BorderQuantity {
             // The distance is a level of the quantity and is never put on a carrier, so it stays the
             // exact number it is. Where this cannot hold that number the pair stands somewhere this
             // did not work out, which is neither at the item nor away from it.
-            ExactRatio apart;
-            try {
-                apart = Count.number(onAt.value()).exactly()
-                        .minus(Count.number(againstAt.value()).exactly());
-            } catch (ExactFailure failure) {
-                return Stands.couldNotTell(ReadingGap.of(UnheldNumber.of(failure)));
+            ExactAnswer<ExactRatio> apart = Count.number(onAt.value()).exactly()
+                    .minus(Count.number(againstAt.value()).exactly());
+            if (apart instanceof ExactAnswer.Unheld<ExactRatio> unheld) {
+                return Stands.couldNotTell(ReadingGap.of(unheld.why()));
             }
-            return where.holds(new Level.OfTheQuantity(apart)) ? Stands.YES : Stands.NO;
+            return where.holds(new Level.OfTheQuantity(apart.orNull())) ? Stands.YES : Stands.NO;
         }
 
         /** Whether a pair standing {@code order} round from where they meet is at the item, for a
@@ -602,8 +600,17 @@ public sealed interface BorderQuantity {
                     case WhatATermRead.CameToNothing(ReadingGap why) -> stopped.add(why);
                     case WhatATermRead.NoNumberOfTheValue _ -> noNumber = true;
                     case WhatATermRead.NothingWrittenThere _ -> wroteNothing = true;
-                    case WhatATermRead.Number(Place value) ->
-                            at = at.plus(Count.number(value).exactly().times(each.getValue()));
+                    case WhatATermRead.Number(Place value) -> {
+                        // A term of the sum a fine decimal makes, weighed against the terms already
+                        // summed, can put the exact sum out of this arithmetic's reach — the same way
+                        // a distance of two row values can (see the try/catch above). Held here as
+                        // one more reason nothing could be said, rather than let it end the compile.
+                        switch (at.plus(Count.number(value).exactly().times(each.getValue()))) {
+                            case ExactAnswer.Held<ExactRatio> held -> at = held.value();
+                            case ExactAnswer.Unheld<ExactRatio> unheld ->
+                                    stopped.add(ReadingGap.of(unheld.why()));
+                        }
+                    }
                 }
             }
             // Every term, and the answer after them. Left as soon as one of these was known, the
