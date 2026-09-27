@@ -39,7 +39,12 @@ public sealed interface ValueOrigin<K> {
 
     /** Every position this names, however deeply, in the order the reader met them. */
     default Set<K> positions() {
-        return positionsIn(new IdentityHashMap<>());
+        // A part with nothing under it has nothing to share, so it is asked without a table.
+        return switch (this) {
+            case IsAPosition<K> it -> Set.of(it.at());
+            case NoValue<K> _, Written<K> _, MadeFromAPosition<K> _, Unnameable<K> _ -> Set.of();
+            default -> positionsIn(new IdentityHashMap<>());
+        };
     }
 
     /**
@@ -272,7 +277,11 @@ public sealed interface ValueOrigin<K> {
      *  the whole rather than of a part: a value made from a position is one value however many
      *  operations stand over it. */
     default K madeFrom() {
-        return madeFromIn(this, new IdentityHashMap<>());
+        return switch (this) {
+            case MadeFromAPosition<K> from -> from.at();
+            case IsAPosition<K> _, Written<K> _, Unnameable<K> _, NoValue<K> _ -> null;
+            default -> madeFromIn(this, new IdentityHashMap<>());
+        };
     }
 
     /** What {@code part} is made from, asked of it the first time it is met and no other

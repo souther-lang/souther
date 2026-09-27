@@ -1559,6 +1559,19 @@ public final class InvariantChecker {
             constrained = Map.copyOf(constrained);
         }
 
+        /**
+         * Hashed by which reading it is, which two that are equal share.
+         *
+         * <p>The clause and what the reading made of it are trees and tables, and hashing them is a
+         * walk of all of them at every lookup of a reading by itself: as long as the clause is,
+         * and the clause of a chain of values is as long as the chain. What tells one reading from
+         * another is its number, and the rest is compared only between two that share one.
+         */
+        @Override
+        public int hashCode() {
+            return opened.hashCode();
+        }
+
         /** The clause {@code authored} was written in, as {@code world} holds it, with what the
          *  reading that built it made of each occurrence of each part it holds. */
         static Written of(ReadingId opened, Core clause, List<Clauses.StatedPart> authored,

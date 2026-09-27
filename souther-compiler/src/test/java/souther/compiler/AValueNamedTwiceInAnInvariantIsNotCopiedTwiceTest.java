@@ -80,7 +80,7 @@ class AValueNamedTwiceInAnInvariantIsNotCopiedTwiceTest {
 
     @Test
     void aBooleanChainMuchLongerThanACopyCouldBeBuiltIsCompiled() {
-        compilesAtTheCostOfTheSource(chain(100, "true", "&&", "Int").replace("value > c100", "c100"));
+        compilesAtTheCostOfTheSource(chain(200, "true", "&&", "Int").replace("value > c200", "c200"));
     }
 
     @Test
