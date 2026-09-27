@@ -28,7 +28,6 @@ import souther.compiler.values.StringMachineAnswers;
 import souther.compiler.values.TextExtents;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
-import souther.exact.ExactFailure;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -732,21 +731,14 @@ public sealed interface Carrier extends ValueOrder {
      * composing nothing — never the range holding nothing.
      */
     private static Count oneFrom(Count at, ExactRatio by) {
-        try {
-            return Count.at(at.exactly().plus(by));
-        } catch (ExactFailure _) {
-            return null;
-        }
+        return at.exactly().plus(by).orNull() instanceof ExactRatio at1 ? Count.at(at1) : null;
     }
 
     /** The count halfway between two, or null where this could not hold it, for the same reason
      *  as {@link #oneFrom}. Exact, since half a decimal is a decimal. */
     private static Count halfway(Count low, Count high) {
-        try {
-            return Count.at(low.exactly().plus(high.exactly()).dividedBy(ExactRatio.of(2)));
-        } catch (ExactFailure _) {
-            return null;
-        }
+        ExactRatio summed = low.exactly().plus(high.exactly()).orNull();
+        return summed == null ? null : Count.at(summed.dividedBy(ExactRatio.of(2)));
     }
 
     /**

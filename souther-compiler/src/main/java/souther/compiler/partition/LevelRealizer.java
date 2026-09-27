@@ -5,6 +5,8 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.numeric.AdditiveImage;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -14,7 +16,6 @@ import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.regex.Meter;
 import souther.compiler.values.ValueSet;
-import souther.exact.ExactFailure;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -230,15 +231,14 @@ public final class LevelRealizer {
                 // composed nothing and the next one is tried. Another place or the other reading
                 // may compose a pair; where none does, the place not held is said with the answer
                 // below, since it is a place this left untried and not one it found empty.
-                Criterion here;
-                try {
-                    here = relativeTo(reading.where(), common, two.of());
-                } catch (ExactFailure failure) {
+                Related related = relativeTo(reading.where(), common, two.of());
+                if (related.unheld() != null) {
                     unheld.add(new CompositionCapacity(
                             CompositionCapacity.Where.PLACES_A_DISTANCE_MOVES_A_POSITION_TO,
-                            UnheldNumber.of(failure)));
+                            related.unheld()));
                     continue;
                 }
+                Criterion here = related.where();
                 Place at = here == null ? null
                         : placeMeeting(here, reading.settles(), two.of(), settled, looking, tried,
                                 Map.of(new RealizationTarget.AtOnePosition(reading.anchors()),
@@ -370,18 +370,30 @@ public final class LevelRealizer {
      * <p>Added exactly and put on the carrier only at the end, so a distance no decimal writes
      * reaches the carrier as the number it is and the carrier says there is no value there.
      *
-     * @throws ExactFailure where this cannot hold the place the distance moves to, which is this
-     *         compiler composing nothing from {@code from} and never the carrier holding nothing
-     *         there. The caller trying one place after another is the one that knows what that means
      */
-    private static Place movedBy(Place from, Level level, Carrier carrier) {
+    private static MovedTo movedBy(Place from, Level level, Carrier carrier) {
         ExactRatio apart = distance(level);
         if (!carrier.counts()) {
-            return apart.isZero() ? from : null;
+            return new MovedTo(apart.isZero() ? from : null, null);
         }
-        Count at = Count.at(Count.number(from).exactly().plus(apart));
-        return at == null ? null : carrier.onTheGrid(at);
+        // Where this cannot hold the place the distance moves to, this compiler composed nothing
+        // from `from` — never the carrier holding nothing there. The caller trying one place after
+        // another is the one that knows what that means, so which of the two this was travels with
+        // the answer rather than being told apart by a caught exception.
+        return switch (Count.number(from).exactly().plus(apart)) {
+            case ExactAnswer.Unheld<ExactRatio> unheld -> new MovedTo(null, unheld.why());
+            case ExactAnswer.Held<ExactRatio> held -> {
+                Count at = Count.at(held.value());
+                yield new MovedTo(at == null ? null : carrier.onTheGrid(at), null);
+            }
+        };
     }
+
+    /** Where a distance moved a place to: the place, or which way the exact arithmetic could not
+     *  hold the sum. Neither set is the carrier holding nothing there — that is a place of
+     *  {@code null} with no reason, which is not an unheld number and is the ordinary answer this
+     *  had before either compose a place or say why not. */
+    private record MovedTo(Place place, UnheldNumber unheld) {}
 
     /**
      * The number a level of the distance between two positions is.
@@ -740,6 +752,15 @@ public final class LevelRealizer {
                                 ? Reached.FOUND : Reached.INCOMPLETE;
                 case CandidateDomain.Walking every -> walking(i, every, owed, coef, here);
                 case CandidateDomain.Outward on -> outward(i, on, owed, coef, here);
+                // Neither a proof nor a set: this position's own coset could not be cut to the run
+                // at all. Never `EXHAUSTED`, which the rules leaving nothing here is not — this
+                // compiler simply could not say what they leave.
+                case CandidateDomain.NotWorkedOut it -> {
+                    unheld.add(new CompositionCapacity(
+                            CompositionCapacity.Where.VALUES_A_POSITION_ON_THE_WAY_IS_WALKED_TO,
+                            it.why()));
+                    yield Reached.INCOMPLETE;
+                }
             };
         }
 
@@ -758,8 +779,19 @@ public final class LevelRealizer {
             if (next == null) {
                 return Reached.EXHAUSTED;
             }
+            // A value tried can put what is owed after it out of the exact arithmetic's reach where
+            // this position's own value is fine enough. That is never a proof the rules leave
+            // nothing here — the walk simply could not go on past this value — so it is the third
+            // vocabulary and `INCOMPLETE`, and this value is neither taken nor refused.
+            ExactAnswer<ExactRatio> remaining = owed.minus(coef.times(ExactRatio.of(x)));
+            if (remaining instanceof ExactAnswer.Unheld<ExactRatio> unheldRest) {
+                unheld.add(new CompositionCapacity(
+                        CompositionCapacity.Where.VALUES_A_POSITION_ON_THE_WAY_IS_WALKED_TO,
+                        unheldRest.why()));
+                return Reached.INCOMPLETE;
+            }
             at[i] = new Count(x);
-            Reached reached = walk(i + 1, owed.minus(coef.times(ExactRatio.of(x))), next);
+            Reached reached = walk(i + 1, remaining.orNull(), next);
             if (reached != Reached.FOUND) {
                 at[i] = null;
             }
@@ -875,7 +907,20 @@ public final class LevelRealizer {
                 if (!quotient.isWhole()) {
                     return Reached.EXHAUSTED;
                 }
-                solved = new java.math.BigDecimal(quotient.truncated());
+                // Whole, and still one the exact arithmetic can meet no room for: a whole quotient
+                // this fine can be one whose digits are past what this host addresses. Not a proof
+                // either way, the same as every other place this walk meets the arithmetic's own
+                // limit — `INCOMPLETE`, with the third vocabulary saying which value it was.
+                switch (quotient.truncated()) {
+                    case ExactAnswer.Held<java.math.BigInteger> held ->
+                            solved = new java.math.BigDecimal(held.value());
+                    case ExactAnswer.Unheld<java.math.BigInteger> unheldQuotient -> {
+                        unheld.add(new CompositionCapacity(
+                                CompositionCapacity.Where.VALUES_A_POSITION_ON_THE_WAY_IS_WALKED_TO,
+                                unheldQuotient.why()));
+                        return Reached.INCOMPLETE;
+                    }
+                }
             } else {
                 solved = quotient.asWrittenDecimal();
                 if (solved == null) {
@@ -978,16 +1023,27 @@ public final class LevelRealizer {
                 return within;
             }
             // owed - coef * x must lie in [reach0, reach1], so coef * x lies in
-            // [owed - reach1, owed - reach0].
-            ExactRatio one = owed.minus(reach[1]).dividedBy(coef);
-            ExactRatio other = owed.minus(reach[0]).dividedBy(coef);
+            // [owed - reach1, owed - reach0]. Where `owed` and a reach a model's own decimals put
+            // far enough apart in scale meet an arithmetic that cannot sum them, this narrows by
+            // nothing rather than by a value it cannot hold — the same answer `reach` itself gives
+            // for an end nothing bounds.
+            ExactRatio oneApart = owed.minus(reach[1]).orNull();
+            ExactRatio otherApart = owed.minus(reach[0]).orNull();
+            if (oneApart == null || otherApart == null) {
+                return within;
+            }
+            ExactRatio one = oneApart.dividedBy(coef);
+            ExactRatio other = otherApart.dividedBy(coef);
             ExactRatio low = one.compareTo(other) <= 0 ? one : other;
             ExactRatio high = one.compareTo(other) <= 0 ? other : one;
+            Count lowWritten = written(low, java.math.RoundingMode.FLOOR);
+            Count highWritten = written(high, java.math.RoundingMode.CEILING);
+            if (lowWritten == null || highWritten == null) {
+                return within;
+            }
             return new NumericDomain.Bounds(
-                    Endpoint.lower(within.min(),
-                            Endpoint.inclusive(written(low, java.math.RoundingMode.FLOOR))),
-                    Endpoint.upper(within.max(),
-                            Endpoint.inclusive(written(high, java.math.RoundingMode.CEILING))));
+                    Endpoint.lower(within.min(), Endpoint.inclusive(lowWritten)),
+                    Endpoint.upper(within.max(), Endpoint.inclusive(highWritten)));
         }
 
         /**
@@ -1006,8 +1062,12 @@ public final class LevelRealizer {
          */
         private static Count written(ExactRatio at, java.math.RoundingMode towards) {
             Count exactly = Count.at(at);
-            return exactly != null ? exactly
-                    : new Count(at.asDecimal(towards, DIGITS_A_DERIVED_END_KEEPS));
+            if (exactly != null) {
+                return exactly;
+            }
+            java.math.BigDecimal outward =
+                    at.asDecimal(towards, DIGITS_A_DERIVED_END_KEEPS).orNull();
+            return outward == null ? null : new Count(outward);
         }
 
         /**
@@ -1027,8 +1087,15 @@ public final class LevelRealizer {
                 }
                 ExactRatio one = coef.times(low);
                 ExactRatio other = coef.times(high);
-                least = least.plus(one.compareTo(other) <= 0 ? one : other);
-                most = most.plus(one.compareTo(other) <= 0 ? other : one);
+                // A model's own ends can be far enough apart in scale, running, that the exact
+                // arithmetic cannot carry the sum this narrowing is built from. Nothing to say is
+                // already this method's own answer for an end nothing bounds, so an unheld sum reads
+                // the same way: `leaving` narrows by nothing rather than by a value this cannot hold.
+                least = least.plus(one.compareTo(other) <= 0 ? one : other).orNull();
+                most = most.plus(one.compareTo(other) <= 0 ? other : one).orNull();
+                if (least == null || most == null) {
+                    return null;
+                }
             }
             return new ExactRatio[] {least, most};
         }
@@ -1039,6 +1106,11 @@ public final class LevelRealizer {
 
     }
 
+    /** Where {@code where} lands relative to {@code common}, or which way the exact arithmetic could
+     *  not hold a level it needed to move — the first such reason met, said instead of the item that
+     *  reason stopped {@link #relativeTo} composing. */
+    private record Related(Criterion where, UnheldNumber unheld) {}
+
     /**
      * The item read as a question about one place of one carrier, given where the other position
      * stands.
@@ -1047,7 +1119,7 @@ public final class LevelRealizer {
      * known. Once it is, an item about the pair is an item about one place — which is why the two
      * are searched for by one procedure rather than by two that agreed by being written alike.
      */
-    private static Criterion relativeTo(Criterion where, Place common, Carrier of) {
+    private static Related relativeTo(Criterion where, Place common, Carrier of) {
         // Every level of the item read as the place it lands on once the other end of the line is
         // known. Mapped one level at a time and not by handing one place to all of them: a run has
         // two ends and a line between them, and a mapping that gave them all the same place left a
@@ -1056,11 +1128,15 @@ public final class LevelRealizer {
         // Null where the carrier's arithmetic puts a level nowhere. Which end that happens at
         // decides what it means: a line with no place is an item this order cannot be read as at
         // all, and a run's far end with no place is a run that reaches as far as the carrier does.
+        UnheldNumber[] unheld = {null};
         java.util.function.UnaryOperator<Level> onto = level -> {
-            Place at = movedBy(common, level, of);
-            return at == null ? null : new Level.OnACarrier(of, at);
+            MovedTo moved = movedBy(common, level, of);
+            if (moved.unheld() != null && unheld[0] == null) {
+                unheld[0] = moved.unheld();
+            }
+            return moved.place() == null ? null : new Level.OnACarrier(of, moved.place());
         };
-        return switch (where) {
+        Criterion mapped = switch (where) {
             case Criterion.AtTheLevel at -> only(new Criterion.AtTheLevel(onto.apply(at.at())),
                     onto.apply(at.at()));
             case Criterion.Within within -> {
@@ -1070,6 +1146,7 @@ public final class LevelRealizer {
                         within.away());
             }
         };
+        return new Related(unheld[0] == null ? mapped : null, unheld[0]);
     }
 
     /** An item, unless the level it is written against has no place on this order. */
@@ -1259,12 +1336,12 @@ public final class LevelRealizer {
         if (end == null || !(end.at() instanceof Count count)) {
             return end;
         }
-        try {
-            Count at = Count.at(count.exactly().plus(by));
-            return at == null ? null : new Endpoint(at, end.inclusive());
-        } catch (ExactFailure _) {
+        ExactRatio moved = count.exactly().plus(by).orNull();
+        if (moved == null) {
             return null;
         }
+        Count at = Count.at(moved);
+        return at == null ? null : new Endpoint(at, end.inclusive());
     }
 
     /**

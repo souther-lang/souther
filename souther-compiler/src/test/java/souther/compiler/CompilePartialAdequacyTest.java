@@ -281,7 +281,8 @@ class CompilePartialAdequacyTest {
         List<BorderAssessment.Point> at = pointsAgainstTheLine(lines).stream()
                 .filter(p -> "0".equals(p.against())).toList();
         assertEquals(1, at.size());
-        assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(at.get(0).item().weakeningSource()));
+        assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(
+                at.get(0).item().weakeningSource(at.get(0).border().border())));
         assertFalse(at.get(0).owed().hasRowWitness(),
                 "nothing was read, so nothing was met either");
     }
@@ -520,7 +521,9 @@ class CompilePartialAdequacyTest {
 
         assertEquals(2, pointsAgainstTheLine(lines).size());
         for (BorderAssessment.Point boundary : pointsAgainstTheLine(lines)) {
-            assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(boundary.item().weakeningSource()), boundary.against());
+            assertEquals(MeasurementStatus.PARTIAL,
+                    AdequacyReport.statusOf(boundary.item().weakeningSource(boundary.border().border())),
+                    boundary.against());
             assertFalse(boundary.owed().hasRowWitness());
         }
     }
@@ -765,11 +768,13 @@ class CompilePartialAdequacyTest {
                 .filter(p -> "100".equals(p.against())).findFirst().orElseThrow();
         assertTrue(line.owed().hasRowWitness(),
                 "a row wrote 100 and went through the comparison");
-        assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(line.item().weakeningSource()));
+        assertEquals(MeasurementStatus.COMPLETE,
+                AdequacyReport.statusOf(line.item().weakeningSource(line.border().border())));
 
         BorderAssessment.Point beyond = pointsAgainstTheLine(lines).stream()
                 .filter(p -> "101".equals(p.against())).findFirst().orElseThrow();
-        assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(beyond.item().weakeningSource()),
+        assertEquals(MeasurementStatus.PARTIAL,
+                AdequacyReport.statusOf(beyond.item().weakeningSource(beyond.border().border())),
                 "and the one nothing was found at is undecided, not missed");
     }
 

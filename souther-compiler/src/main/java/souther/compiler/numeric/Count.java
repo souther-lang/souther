@@ -225,10 +225,12 @@ public record Count(BigDecimal at) implements Place {
     }
 
     /** This count as the number it is. The trailing zeros are gone, so {@code 0.00} and {@code 0}
-     *  are written one way — the same number {@link #key()} names, said in digits. */
+     *  are written one way — the same number {@link #key()} names, said in digits. Past a thousand
+     *  digits, in exponent notation rather than spelled out in full
+     *  ({@link ExactDecimals#spelledBounded}). */
     @Override
     public String spelled() {
-        return ExactDecimals.leastDigits(at).toPlainString();
+        return ExactDecimals.spelledBounded(ExactDecimals.leastDigits(at));
     }
 
     /** The same count with the trailing zeros gone, which is the number {@link #key()} names. */

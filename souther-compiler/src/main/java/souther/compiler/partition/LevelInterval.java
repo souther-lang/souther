@@ -1,6 +1,11 @@
 package souther.compiler.partition;
 
+import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
+import souther.compiler.numeric.UnheldNumber;
 
 import java.util.List;
 
@@ -112,9 +117,47 @@ public record LevelInterval(Bound low, Bound high) {
      *
      * <p>Nothing beyond whole numbers where the run has an end nothing bounds, since there is no
      * distance to read.
+     *
+     * @return the count, or which way the exact arithmetic could not hold the distance between the
+     *         two ends — see {@link CutPosition#digitsToTellApartFrom}
      */
-    public int digitsToLookIn() {
-        return low == null || high == null ? 0 : low.at().digitsToTellApartFrom(high.at());
+    public ExactAnswer<Integer> digitsToLookIn() {
+        return low == null || high == null ? ExactAnswer.held(0)
+                : low.at().digitsToTellApartFrom(high.at());
+    }
+
+    /**
+     * What {@link #toLookIn} came to: an envelope, or which way the exact arithmetic could not
+     * round an end inward.
+     *
+     * <p>Told apart from an end nothing bounds, which stays an envelope with that end absent: a run
+     * this could not read at all is never a run whose digits happened to reach every value, and a
+     * reader of {@link #toLookIn} that ran the two together read "this compiler could not work out
+     * where to look" as "there is nowhere to look" — sound for the {@code witness} the space
+     * {@link LevelSpace#onACarrier} returns, which only ever needs a candidate, and not sound for
+     * that same space's {@code inspect}, whose bound this feeds directly and which an absent end
+     * there widens to the carrier's own extent.
+     */
+    public sealed interface LookedIn {
+
+        /** The envelope, an end of it absent exactly where nothing bounds the run there. */
+        record InBounds(NumericDomain.Bounds envelope) implements LookedIn {
+            public InBounds {
+                if (envelope == null) {
+                    throw new IllegalArgumentException("an envelope is the bounds it is");
+                }
+            }
+        }
+
+        /** A model's own decimals put an end far enough from an ordinary one in scale that the
+         *  exact arithmetic could not round it inward. */
+        record NotWorkedOut(UnheldNumber why) implements LookedIn {
+            public NotWorkedOut {
+                if (why == null) {
+                    throw new IllegalArgumentException("a refusal says why");
+                }
+            }
+        }
     }
 
     /**
@@ -137,15 +180,33 @@ public record LevelInterval(Bound low, Bound high) {
      * {@link LevelSpace.Lattice} reads its runs at the exact places they stop at
      * ({@link CutPosition#exactly}) and comes here only to look for something to write down.
      */
-    public souther.compiler.numeric.NumericDomain.Bounds toLookIn(int digits) {
-        return new souther.compiler.numeric.NumericDomain.Bounds(
-                lookingFrom(low, Towards.ABOVE, digits), lookingFrom(high, Towards.BELOW, digits));
+    public LookedIn toLookIn(int digits) {
+        EndSought lo = lookingFrom(low, Towards.ABOVE, digits);
+        if (lo instanceof EndSought.NotWorkedOut not) {
+            return new LookedIn.NotWorkedOut(not.why());
+        }
+        EndSought hi = lookingFrom(high, Towards.BELOW, digits);
+        if (hi instanceof EndSought.NotWorkedOut not) {
+            return new LookedIn.NotWorkedOut(not.why());
+        }
+        return new LookedIn.InBounds(new NumericDomain.Bounds(
+                lo instanceof EndSought.At(Endpoint endpoint) ? endpoint : null,
+                hi instanceof EndSought.At(Endpoint endpoint) ? endpoint : null));
     }
 
-    private static souther.compiler.numeric.Endpoint lookingFrom(
-            Bound bound, Towards into, int digits) {
+    /** What one end of {@link #toLookIn} came to: nothing bounds the run there, a place, or which
+     *  way the exact arithmetic could not round one inward. */
+    private sealed interface EndSought {
+        record Unbounded() implements EndSought {}
+
+        record At(Endpoint endpoint) implements EndSought {}
+
+        record NotWorkedOut(UnheldNumber why) implements EndSought {}
+    }
+
+    private static EndSought lookingFrom(Bound bound, Towards into, int digits) {
         if (bound == null) {
-            return null;
+            return new EndSought.Unbounded();
         }
         // The end itself where the quantity has a value there and an order counts to it, which is
         // the end the run was named by. Rounded to a number first, an end the run holds became one
@@ -154,13 +215,17 @@ public record LevelInterval(Bound low, Bound high) {
         // writes — and that is an end to narrow inward past, exactly as a line a multiple left
         // between two values is.
         Level itself = bound.at().asALevelOfTheQuantity();
-        souther.compiler.numeric.Place named =
-                itself == null ? null : itself.asAPlaceOrNothing();
+        Place named = itself == null ? null : itself.asAPlaceOrNothing();
         if (named != null) {
-            return new souther.compiler.numeric.Endpoint(named, bound.inclusive());
+            return new EndSought.At(new Endpoint(named, bound.inclusive()));
         }
-        souther.compiler.numeric.Place inside = bound.at().justBeyond(into, digits);
-        return inside == null ? null : souther.compiler.numeric.Endpoint.inclusive(inside);
+        return switch (bound.at().justBeyond(into, digits)) {
+            case CutPosition.JustBeyond.At(Place inside) ->
+                    new EndSought.At(Endpoint.inclusive(inside));
+            case CutPosition.JustBeyond.NoNumericPlace _ -> new EndSought.Unbounded();
+            case CutPosition.JustBeyond.NotWorkedOut(UnheldNumber why) ->
+                    new EndSought.NotWorkedOut(why);
+        };
     }
 
     @Override

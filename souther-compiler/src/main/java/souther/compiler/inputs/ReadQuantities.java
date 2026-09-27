@@ -9,6 +9,7 @@ import souther.compiler.check.RuleKey;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -589,8 +590,12 @@ final class ReadQuantities implements Quantities {
                 }
                 spacing.put(called(term, under), spaced);
             }
-            if (spacing != null) {
-                made = made.taking(over(each.form(), under), each.rel(), spacing);
+            // Where the caller's own form cannot be carried into this input's terms, this rule is one
+            // the state is not narrowed by — an unheld sum is a step short, and the sound answer
+            // with less is not to take a step at all.
+            LinearForm<InputAtom> over = spacing == null ? null : over(each.form(), under);
+            if (over != null) {
+                made = made.taking(over, each.rel(), spacing);
             }
         }
         answered.put(under, made);
@@ -1024,8 +1029,18 @@ final class ReadQuantities implements Quantities {
         // here and goes on saying it: read back as a range with neither end, it would widen whoever
         // met it and the proof would leave with it — and every search downstream would spend what it
         // is allowed on a region these rules already refuse.
-        if (!(rules.numbers().projectionOf(over(form, under))
-                instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds projected))) {
+        // Where this input's own form cannot be carried — a caller's two spellings of one number
+        // weighed by coefficients too far apart in scale for the exact arithmetic to add — nothing
+        // here is refused: an open range is the sound answer with less, and never `NothingIsLeft`,
+        // which this method's own callers already read as a proof.
+        LinearForm<InputAtom> over = over(form, under);
+        NumericDomain.Bounds projected;
+        if (over == null) {
+            projected = NumericDomain.Bounds.OPEN;
+        } else if (rules.numbers().projectionOf(over)
+                instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)) {
+            projected = within;
+        } else {
             return new NumericDomain.FormProjection.NothingIsLeft();
         }
         // One term taken as itself, which is the arithmetic being the identity rather than a second
@@ -1055,9 +1070,21 @@ final class ReadQuantities implements Quantities {
     private LinearForm<InputAtom> over(
             LinearForm<NumericTerm> form, StructuralContext under) {
         Map<InputAtom, ExactRatio> coefs = new LinkedHashMap<>();
-        form.coefs().forEach((term, coef) -> coefs.merge(called(term, under), coef,
-                ExactRatio::plus));
-        return new LinearForm<>(form.constant(), coefs);
+        // A caller's own two spellings of one number can weigh it by two coefficients a model's own
+        // decimals put too far apart in scale for the exact arithmetic to add. Null, then, in the
+        // one word every reader of a `LinearForm` already has for "not a form" — this is a fold and
+        // not a renaming, so there is no single coefficient to fall back on that would not be a
+        // second answer to a question the caller did not ask.
+        boolean[] everyTermWasComposed = {true};
+        form.coefs().forEach((term, coef) -> coefs.merge(called(term, under), coef, (a, b) -> {
+            ExactAnswer<ExactRatio> sum = a.plus(b);
+            if (sum instanceof ExactAnswer.Held<ExactRatio> held) {
+                return held.value();
+            }
+            everyTermWasComposed[0] = false;
+            return a;
+        }));
+        return everyTermWasComposed[0] ? new LinearForm<>(form.constant(), coefs) : null;
     }
 
     @Override

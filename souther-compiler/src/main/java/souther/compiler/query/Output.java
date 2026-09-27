@@ -56,7 +56,9 @@ import souther.compiler.meta.ModuleReadback;
 import souther.compiler.meta.ModulePath;
 
 import souther.compiler.types.ValueName;
+import souther.exact.ExactDecimals;
 
+import java.math.BigDecimal;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -794,13 +796,15 @@ public final class Output {
             return named;
         }
 
-        /** The construction as the source wrote it, for the message that quotes it. */
+        /** The construction as the source wrote it, for the message that quotes it — a decimal in
+         *  exponent notation past a thousand digits ({@link ExactDecimals#spelledBounded}), since
+         *  this is a message a reader reads and not source pasted back. */
         private static String shown(ConstantConstruction written) {
             return written.typeName() + "(" + switch (written.value()) {
                 case WrittenValue.Text(String text) -> "\"" + text + "\"";
                 case WrittenValue.Whole(long whole) -> String.valueOf(whole);
                 case WrittenValue.Truth(boolean truth) -> String.valueOf(truth);
-                case WrittenValue.Decimal(java.math.BigDecimal decimal) -> decimal.toString();
+                case WrittenValue.Decimal(BigDecimal decimal) -> ExactDecimals.spelledBounded(decimal);
             } + ")";
         }
     }

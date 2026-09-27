@@ -493,7 +493,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * which is true of {@code 2 * a + 2 * b == 9} and false of {@code a + b == 10}.
      */
     boolean takesTheValueItNames() {
-        return of.levels().attainable(at);
+        // `.orNull()` and not the refusal further up the chain answers with: this is a boolean
+        // question with nowhere yet to carry "not worked out" to.
+        return Boolean.TRUE.equals(of.levels().attainable(at).orNull());
     }
 
     /**

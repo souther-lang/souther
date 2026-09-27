@@ -129,8 +129,11 @@ public sealed interface AnotherLineTheRowsAllow {
          * are read the same way, and neither is an arrangement of the other.
          */
         public boolean keeps(Map<NumericTerm, Place> values) {
-            return AnotherLineTheRowsAllow.keeps(keptOn, cut,
-                    OrderedAffineBoundary.along(direction.direction(), values));
+            // A row this line's own sum cannot hold is one this cannot say is kept, which is the
+            // same caution `OrderedAffineBoundary.satisfiedBy` reads it with for the line the model
+            // drew: read false rather than a claim this compiler is not entitled to.
+            ExactRatio at = OrderedAffineBoundary.along(direction.direction(), values).orNull();
+            return at != null && AnotherLineTheRowsAllow.keeps(keptOn, cut, at);
         }
 
         /** How a report names the line, which is the direction spelled as an author writes a form. */
@@ -277,6 +280,17 @@ public sealed interface AnotherLineTheRowsAllow {
                 Objects.requireNonNull(which, "a strategy that is missing is named");
             }
         }
+
+        /**
+         * A model's own decimals put a step of the fault family out of the exact arithmetic's reach,
+         * so the family is not known whole.
+         *
+         * <p>Not the same as a family with nothing in it: that is a border every step turned back
+         * onto this line, and this is a step this compiler could not even try. An empty or a
+         * surviving family read either way here would be a settled verdict resting on a walk that
+         * did not finish.
+         */
+        record AFaultFamilyMemberWasNotComposed() implements Unsettled {}
     }
 
     /** Which shape of border this compiler holds against no line beside it. */
@@ -364,7 +378,15 @@ public sealed interface AnotherLineTheRowsAllow {
         if (weighed.isEmpty()) {
             return new NoSuchQuestion(Reason.NO_POSITION_OF_IT_IS_WEIGHED_BY_A_NUMBER);
         }
-        List<QuantityKey> family = new FaultFamily(runs, weighed).others();
+        FaultFamily.Found found = new FaultFamily(runs, weighed).others();
+        // A step a model's own decimals put out of the exact arithmetic's reach is not the same as a
+        // step that landed back on this line: an empty family here is not the whole of what turning
+        // every line away establishes, so it must not be read as the settled fact that reading would
+        // be everywhere else.
+        if (!found.everyStepWasComposed()) {
+            return new CouldNotTell(new Unsettled.AFaultFamilyMemberWasNotComposed());
+        }
+        List<QuantityKey> family = found.lines();
         if (family.isEmpty()) {
             // Weighed every way one step allows and every one of them is this line. There is
             // nothing to be told from, which is the same fact the reasons above are.
@@ -454,13 +476,24 @@ public sealed interface AnotherLineTheRowsAllow {
         if (satisfying.isEmpty()) {
             throw new IllegalArgumentException("a threshold that keeps none of the rows");
         }
+        // A row's sum against `other` can be one a model's own decimals put out of the exact
+        // arithmetic's reach — the same failure `OrderedAffineBoundary.along` answers everywhere
+        // else. There is no threshold to fall back to here, so it is read the way an arithmetic that
+        // "does not come out in whole steps" already is: no threshold found, which the caller already
+        // reports as `Unsettled.NoReachableDistinguisher`.
         ExactRatio furthest = null;
         for (Map<NumericTerm, Place> values : satisfying) {
-            ExactRatio at = OrderedAffineBoundary.along(other.direction(), values);
+            ExactRatio at = OrderedAffineBoundary.along(other.direction(), values).orNull();
+            if (at == null) {
+                return null;
+            }
             furthest = furthest == null ? at : beyond(satisfiedOn, furthest, at);
         }
         for (Map<NumericTerm, Place> values : refusing) {
-            ExactRatio at = OrderedAffineBoundary.along(other.direction(), values);
+            ExactRatio at = OrderedAffineBoundary.along(other.direction(), values).orNull();
+            if (at == null) {
+                return null;
+            }
             // Strictly past the threshold, because the threshold itself is kept: a row the model
             // refuses that lands exactly there would be kept by this line, and the two would not
             // answer alike at it.
@@ -509,7 +542,7 @@ public sealed interface AnotherLineTheRowsAllow {
             return null;
         }
         ExactRatio moves = weighing(other, along);
-        if (moves.signum() == 0) {
+        if (moves == null || moves.signum() == 0) {
             return null;
         }
         // Every row, on whichever side of the line it is: which way a step has to go to cross the
@@ -553,16 +586,26 @@ public sealed interface AnotherLineTheRowsAllow {
                                  boolean kept, Reaches reaches,
                                  List<OrderedAffineBoundary> elsewhere,
                                  List<Parting> found) {
-        ExactRatio at = OrderedAffineBoundary.along(other.direction(), values);
-        ExactRatio crossing = cut.minus(at).dividedBy(moves);
-        // Truncated towards nought, which is what a whole number of steps short of the crossing is.
-        for (ExactRatio steps : stepsAround(crossing.truncated())) {
+        // Wherever a model's own decimals put this row's sum, the cut, or a step along the line out
+        // of the exact arithmetic's reach, this stepping composes no partings for this row — the
+        // same as a row the reduction below already skips for want of one. Fewer candidate inputs is
+        // what every caller here already reads a gap this way, never a claim the model has none.
+        ExactRatio at = OrderedAffineBoundary.along(other.direction(), values).orNull();
+        ExactRatio apart = at == null ? null : cut.minus(at).orNull();
+        ExactRatio crossing = apart == null ? null : apart.dividedBy(moves);
+        java.math.BigInteger truncated =
+                crossing == null ? null : crossing.truncated().orNull();
+        if (truncated == null) {
+            return;
+        }
+        for (ExactRatio steps : stepsAround(truncated)) {
             // Asked by standing at the input rather than by reasoning about which way the
             // arithmetic came out. Which side of its own threshold a value falls on is the same
             // question here as everywhere, and a number of steps worked out from the signs would be
             // a second answer to it, right until one of the four ways the signs can fall was
             // written down wrong.
-            if (kept == keeps(boundary.satisfiedOn(), cut, at.plus(steps.times(moves)))) {
+            ExactRatio movedAt = at.plus(steps.times(moves)).orNull();
+            if (movedAt == null || kept == keeps(boundary.satisfiedOn(), cut, movedAt)) {
                 continue;
             }
             Map<NumericTerm, Place> moved = movedBy(boundary, values, along, steps);
@@ -669,9 +712,14 @@ public sealed interface AnotherLineTheRowsAllow {
                                    Map<NumericTerm, Place> from, Map<NumericTerm, Place> at) {
         if (at.keySet().containsAll(taken.terms())) {
             return switch (taken) {
-                case TakenConstraint.Affine(var form, var rel) ->
-                        rel.holds(OrderedAffineBoundary.along(form.coefs(), at)
-                                .plus(form.constant()).signum());
+                // A model's own decimals can put this row's sum out of the exact arithmetic's reach,
+                // which this method already has a word for: null, the same as any other condition
+                // nothing here can say.
+                case TakenConstraint.Affine(var form, var rel) -> {
+                    ExactRatio sum = OrderedAffineBoundary.along(form.coefs(), at).orNull();
+                    ExactRatio total = sum == null ? null : sum.plus(form.constant()).orNull();
+                    yield total == null ? null : rel.holds(total.signum());
+                }
                 case TakenConstraint.Ordered(
                         var term, var place, var rel) -> rel.holds(at.get(term).compareTo(place));
                 case TakenConstraint.AwayFrom(var term, var place) ->
@@ -688,9 +736,9 @@ public sealed interface AnotherLineTheRowsAllow {
         return whatAStepDoesTo(rel, moves(form.coefs(), from, at));
     }
 
-    /** What a step does to a form: the positions it moves, weighed as the form weighs them. The
-     *  rest are the same at both ends and cancel, which is why the numbers this does not have are
-     *  not needed. */
+    /** What a step does to a form: the positions it moves, weighed as the form weighs them, or null
+     *  where the exact arithmetic could not hold it. The rest are the same at both ends and cancel,
+     *  which is why the numbers this does not have are not needed. */
     private static ExactRatio moves(Map<NumericTerm, ExactRatio> coefs,
                                     Map<NumericTerm, Place> from, Map<NumericTerm, Place> at) {
         ExactRatio by = ExactRatio.ZERO;
@@ -700,15 +748,24 @@ public sealed interface AnotherLineTheRowsAllow {
             if (was == null || now == null) {
                 continue;   // not a position the step moves, so it is the same at both ends
             }
-            by = by.plus(Count.number(now).exactly().minus(Count.number(was).exactly())
-                    .times(each.getValue()));
+            ExactRatio moved = Count.number(now).exactly().minus(Count.number(was).exactly()).orNull();
+            if (moved == null) {
+                return null;
+            }
+            by = by.plus(moved.times(each.getValue())).orNull();
+            if (by == null) {
+                return null;
+            }
         }
         return by;
     }
 
     /** Whether a condition that held still holds once what it is over has moved by {@code by}, or
-     *  null where the move could go either way. */
+     *  null where the move could go either way, or where the exact arithmetic could not hold it. */
     private static Boolean whatAStepDoesTo(Rel rel, ExactRatio by) {
+        if (by == null) {
+            return null;
+        }
         if (by.signum() == 0) {
             return true;   // nothing moved it, so it answers what it answered
         }
@@ -749,11 +806,16 @@ public sealed interface AnotherLineTheRowsAllow {
         return out;
     }
 
-    /** What a direction weighs a step to, where a step names only the positions it moves. */
+    /** What a direction weighs a step to, where a step names only the positions it moves, or null
+     *  where the exact arithmetic could not hold it — a step whose own weights are scaled far
+     *  enough apart that the running sum meets one it cannot add. */
     private static ExactRatio weighing(QuantityKey of, Map<NumericTerm, ExactRatio> step) {
         ExactRatio at = ExactRatio.ZERO;
         for (Map.Entry<NumericTerm, ExactRatio> each : step.entrySet()) {
-            at = at.plus(weight(of, each.getKey()).times(each.getValue()));
+            at = at.plus(weight(of, each.getKey()).times(each.getValue())).orNull();
+            if (at == null) {
+                return null;
+            }
         }
         return at;
     }
@@ -773,9 +835,12 @@ public sealed interface AnotherLineTheRowsAllow {
             for (int j = i + 1; j < terms.size(); j++) {
                 ExactRatio mine = weight(wrote, terms.get(i));
                 ExactRatio ours = weight(wrote, terms.get(j));
+                // Where the two products are too far apart in scale for the exact arithmetic to
+                // hold their difference, this pair of positions is one this cannot turn a step from
+                // — tried the same as a pair whose turned weight comes to nothing.
                 ExactRatio turned = weight(other, terms.get(i)).times(ours)
-                        .minus(weight(other, terms.get(j)).times(mine));
-                if (turned.signum() == 0 || !mine.isWhole() || !ours.isWhole()) {
+                        .minus(weight(other, terms.get(j)).times(mine)).orNull();
+                if (turned == null || turned.signum() == 0 || !mine.isWhole() || !ours.isWhole()) {
                     continue;
                 }
                 Map<NumericTerm, ExactRatio> step = new LinkedHashMap<>();
@@ -796,7 +861,13 @@ public sealed interface AnotherLineTheRowsAllow {
         Map<NumericTerm, Place> moved = new LinkedHashMap<>();
         for (Map.Entry<NumericTerm, Place> each : values.entrySet()) {
             ExactRatio by = step.getOrDefault(each.getKey(), ExactRatio.ZERO);
-            ExactRatio at = Count.number(each.getValue()).exactly().plus(by.times(steps));
+            // A model's own decimals can put this row value and the step out of the exact
+            // arithmetic's reach, which is the same as a place the carrier has no count for: this
+            // input was not composed.
+            ExactRatio at = Count.number(each.getValue()).exactly().plus(by.times(steps)).orNull();
+            if (at == null) {
+                return null;
+            }
             Carrier carrier = boundary.of().carrierOf(each.getKey());
             // Where the step lands is a value of the position or it is nowhere, which is the same
             // edge a row is written at: a place the carrier has no count for is no place at all.

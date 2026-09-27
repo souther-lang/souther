@@ -34,7 +34,7 @@ class AnOrderSaysWhereALineCanBeAtAllTest {
 
         assertTrue(evens.canCutAt(at(9)),
                 "the even numbers part between eight and ten, which is a line at nine");
-        assertFalse(evens.attainable(at(9)),
+        assertFalse(Boolean.TRUE.equals(evens.attainable(at(9)).orNull()),
                 "and nine is not one of them, which is the other question");
     }
 

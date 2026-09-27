@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.MeasureReason;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionCapacity;
@@ -35,6 +36,10 @@ public sealed interface ItemAssessment {
 
     /** No row is owed here, and this is what settles it. */
     record NotOwed(NotOwedReason reason) implements ItemAssessment {}
+
+    /** Neither owed nor refused: the exact arithmetic could not hold what settling this point
+     *  needed. */
+    record NotWorkedOut(UnheldNumber why) implements ItemAssessment {}
 
     /**
      * A row is owed, and this is what became of it.
@@ -915,11 +920,36 @@ public sealed interface ItemAssessment {
 
     }
 
-    /** This point's own measurement of whether a row is at it, or a settled nothing where no row is
-     *  owed here at all. */
-    default Measurement<Coverage> weakeningSource() {
-        return this instanceof Owed owed ? owed.coverage()
-                : new Measurement.Complete<>(new Coverage.NoHit());
+    /**
+     * This point's own measurement of whether a row is at it, or a settled nothing where no row is
+     * owed here at all.
+     *
+     * <p>A settled nothing only for {@link NotOwed}: that is the model's own answer, put and
+     * answered. A point the exact arithmetic could not place on the order ({@link NotWorkedOut}) is
+     * not settled the same way — it was asked and could not be finished, which
+     * {@link Measurement.FailedToMeasure} and not {@link Measurement.Complete} is for.
+     */
+    default Measurement<Coverage> weakeningSource(souther.compiler.partition.Border border) {
+        return switch (this) {
+            case NotOwed _ -> new Measurement.Complete<>(new Coverage.NoHit());
+            case NotWorkedOut not -> new Measurement.FailedToMeasure<>(
+                    PlaceCouldNotBeWorkedOut.PLACE_COULD_NOT_BE_WORKED_OUT,
+                    WeakeningSet.of(new Weakening.ItemsPlaceNotWorkedOut(border, not.why())));
+            case Owed owed -> owed.coverage();
+        };
+    }
+
+    /** Why a point's own measurement could not be finished: the exact arithmetic could not hold
+     *  what settling its place on the order needed. Which of the two ways is the weakening's own,
+     *  not this reason's — a {@link FailureReason} only says that asking stopped, not what stopped
+     *  it. */
+    enum PlaceCouldNotBeWorkedOut implements FailureReason {
+        PLACE_COULD_NOT_BE_WORKED_OUT;
+
+        @Override
+        public souther.compiler.observe.MeasureReason.About about() {
+            return souther.compiler.observe.MeasureReason.About.THE_BEHAVIOR;
+        }
     }
 
     /**
@@ -933,12 +963,14 @@ public sealed interface ItemAssessment {
      * answered it. Read as unmeasured, every bound in a corpus would hold its behavior open for a
      * measurement nobody was ever going to make.
      */
-    default WeakeningSet weakening() {
+    default WeakeningSet weakening(souther.compiler.partition.Border border) {
         return switch (this) {
             // A point nobody is owed a row at went without nothing: the question was put to the
             // model and the model answered it. Counted as unmeasured, every bound in a corpus would
             // hold its behavior open for a measurement nobody was ever going to make.
             case NotOwed _ -> WeakeningSet.none();
+            case NotWorkedOut not ->
+                    WeakeningSet.of(new Weakening.ItemsPlaceNotWorkedOut(border, not.why()));
             case Owed owed -> owed.coverage().weakening();
         };
     }

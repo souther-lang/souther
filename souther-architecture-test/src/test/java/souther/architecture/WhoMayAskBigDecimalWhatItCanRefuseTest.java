@@ -67,10 +67,16 @@ class WhoMayAskBigDecimalWhatItCanRefuseTest {
      * range instead of refusing them. {@code ofDecimalText} is handed only text the
      * decimal-text grammar accepted, which has no exponent to overflow. {@code RationalMath.toInt}
      * reports the refusal itself. {@code Representations.canonicalNumber} rescales to zero only after
-     * counting the digits that asks for and finding them few.
+     * counting the digits that asks for and finding them few. {@code ExactDecimals.spelledBounded}
+     * counts the same way and calls {@code toPlainString} only where the count stays under the same
+     * limit, and calls {@code toString} instead where it does not — which cannot be refused, since
+     * what it writes is bounded by the significant digits an amount carries and not by how far its
+     * scale sits from them.
      */
     private static final List<String> MAY_BE_REFUSED = List.of(
             "souther/exact/ExactDecimals#leastDigits stripTrailingZeros()Ljava/math/BigDecimal;",
+            "souther/exact/ExactDecimals#spelledBounded toPlainString()Ljava/lang/String;",
+            "souther/exact/ExactDecimals#spelledBounded toString()Ljava/lang/String;",
             "souther/runtime/DecimalMath#add add(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
             "souther/runtime/DecimalMath#divide"
                     + " divide(Ljava/math/BigDecimal;ILjava/math/RoundingMode;)Ljava/math/BigDecimal;",

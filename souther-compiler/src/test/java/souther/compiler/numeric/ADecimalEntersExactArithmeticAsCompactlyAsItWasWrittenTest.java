@@ -113,7 +113,7 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
     void theMeaningOfARatioIsWhatItWas() {
         ExactRatio third = ExactRatio.of(BigInteger.ONE, BigInteger.valueOf(3));
         ExactRatio half = ExactRatio.of(new BigDecimal("0.5"));
-        assertEquals(ExactRatio.of(BigInteger.valueOf(5), BigInteger.valueOf(6)), third.plus(half));
+        assertEquals(ExactRatio.of(BigInteger.valueOf(5), BigInteger.valueOf(6)), third.plus(half).orNull());
         assertEquals(ExactRatio.of(BigInteger.ONE, BigInteger.valueOf(6)),
                 ExactRatio.gcd(third, half));
         assertEquals(ExactRatio.of(BigInteger.TWO, BigInteger.valueOf(3)), third.dividedBy(half));
@@ -121,12 +121,12 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
         assertEquals("0.5", half.spelled());
         assertNull(third.asWrittenDecimal());
         assertEquals(new BigDecimal("0.5"), half.asWrittenDecimal().stripTrailingZeros());
-        assertEquals(BigInteger.ZERO, third.floor());
-        assertEquals(BigInteger.ONE, third.ceiling());
-        assertEquals(BigInteger.ZERO, third.truncated());
-        assertEquals(BigInteger.valueOf(-1), third.negated().floor());
-        assertEquals(BigInteger.ZERO, third.negated().truncated());
-        assertEquals(BigInteger.valueOf(3), ExactRatio.of(new BigDecimal("3.0")).truncated());
+        assertEquals(BigInteger.ZERO, third.floor().orNull());
+        assertEquals(BigInteger.ONE, third.ceiling().orNull());
+        assertEquals(BigInteger.ZERO, third.truncated().orNull());
+        assertEquals(BigInteger.valueOf(-1), third.negated().floor().orNull());
+        assertEquals(BigInteger.ZERO, third.negated().truncated().orNull());
+        assertEquals(BigInteger.valueOf(3), ExactRatio.of(new BigDecimal("3.0")).truncated().orNull());
         assertTrue(ExactRatio.of(new BigDecimal("3.0")).isWhole());
         assertTrue(ExactRatio.of(new BigDecimal("30E-1")).isWhole());
     }
@@ -253,8 +253,8 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
                 -1_000_000_000L, -1_000_000_000L);
         for (int bits : new int[] {100, 400, 1600, 3200}) {
             ExactRatio aHair = new ExactRatio(BigInteger.ONE, BigInteger.ONE, -bits, 0);
-            ExactRatio over = ExactRatio.ONE.plus(aHair);
-            ExactRatio under = ExactRatio.ONE.minus(aHair);
+            ExactRatio over = ExactRatio.ONE.plus(aHair).orNull();
+            ExactRatio under = ExactRatio.ONE.minus(aHair).orNull();
             assertTrue(over.compareTo(ExactRatio.ONE) > 0, () -> "over one by a hair of " + bits);
             assertTrue(under.compareTo(ExactRatio.ONE) < 0, () -> "under one by a hair of " + bits);
             assertTrue(over.compareTo(under) > 0);
@@ -337,20 +337,20 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
         assertTrue(justOverOne.compareTo(ExactRatio.ONE) > 0);
         assertTrue(justOverOne.compareTo(ExactRatio.of(2)) < 0);
 
-        assertEquals(BigInteger.ONE, justOverOne.floor());
-        assertEquals(BigInteger.TWO, justOverOne.ceiling());
-        assertEquals(BigInteger.ONE, justOverOne.truncated());
-        assertEquals(BigInteger.valueOf(-2), justOverOne.negated().floor());
-        assertEquals(BigInteger.valueOf(-1), justOverOne.negated().ceiling());
-        assertEquals(BigInteger.valueOf(-1), justOverOne.negated().truncated());
+        assertEquals(BigInteger.ONE, justOverOne.floor().orNull());
+        assertEquals(BigInteger.TWO, justOverOne.ceiling().orNull());
+        assertEquals(BigInteger.ONE, justOverOne.truncated().orNull());
+        assertEquals(BigInteger.valueOf(-2), justOverOne.negated().floor().orNull());
+        assertEquals(BigInteger.valueOf(-1), justOverOne.negated().ceiling().orNull());
+        assertEquals(BigInteger.valueOf(-1), justOverOne.negated().truncated().orNull());
 
         // And rounded to a place, which is the same reading with the value moved by that many tens.
-        assertEquals(new BigDecimal("2"), justOverOne.asDecimal(RoundingMode.CEILING, 0));
-        assertEquals(new BigDecimal("1"), justOverOne.asDecimal(RoundingMode.FLOOR, 0));
-        assertEquals(new BigDecimal("1.36"), justOverOne.asDecimal(RoundingMode.CEILING, 2));
-        assertEquals(new BigDecimal("1.35"), justOverOne.asDecimal(RoundingMode.FLOOR, 2));
-        assertEquals(new BigDecimal("1.352951"), justOverOne.asDecimal(RoundingMode.CEILING, 6));
-        assertEquals(new BigDecimal("1.352950"), justOverOne.asDecimal(RoundingMode.FLOOR, 6));
+        assertEquals(new BigDecimal("2"), justOverOne.asDecimal(RoundingMode.CEILING, 0).orNull());
+        assertEquals(new BigDecimal("1"), justOverOne.asDecimal(RoundingMode.FLOOR, 0).orNull());
+        assertEquals(new BigDecimal("1.36"), justOverOne.asDecimal(RoundingMode.CEILING, 2).orNull());
+        assertEquals(new BigDecimal("1.35"), justOverOne.asDecimal(RoundingMode.FLOOR, 2).orNull());
+        assertEquals(new BigDecimal("1.352951"), justOverOne.asDecimal(RoundingMode.CEILING, 6).orNull());
+        assertEquals(new BigDecimal("1.352950"), justOverOne.asDecimal(RoundingMode.FLOOR, 6).orNull());
     }
 
     /**
@@ -368,11 +368,11 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
         assertTrue(aHalfish.compareTo(ExactRatio.of(BigInteger.ONE, BigInteger.TWO)) > 0);
         assertTrue(aHalfish.compareTo(ExactRatio.ONE) < 0);
 
-        assertEquals(new BigDecimal("0.5"), aHalfish.asDecimal(RoundingMode.FLOOR, 1));
-        assertEquals(new BigDecimal("0.6"), aHalfish.asDecimal(RoundingMode.CEILING, 1));
-        assertEquals(new BigDecimal("0.588"), aHalfish.asDecimal(RoundingMode.HALF_UP, 3));
-        assertEquals(BigInteger.ZERO, aHalfish.floor());
-        assertEquals(BigInteger.ONE, aHalfish.ceiling());
+        assertEquals(new BigDecimal("0.5"), aHalfish.asDecimal(RoundingMode.FLOOR, 1).orNull());
+        assertEquals(new BigDecimal("0.6"), aHalfish.asDecimal(RoundingMode.CEILING, 1).orNull());
+        assertEquals(new BigDecimal("0.588"), aHalfish.asDecimal(RoundingMode.HALF_UP, 3).orNull());
+        assertEquals(BigInteger.ZERO, aHalfish.floor().orNull());
+        assertEquals(BigInteger.ONE, aHalfish.ceiling().orNull());
     }
 
     /**
@@ -409,7 +409,8 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
             // And a sum whose answer is one, which is where the work is not the input's own size.
             ExactRatio summed = ExactRatio.of(
                     BigInteger.ONE.shiftLeft(2_000_000).subtract(BigInteger.ONE))
-                    .plus(ExactRatio.ONE);
+                    .plus(ExactRatio.ONE)
+                    .orNull();
             assertEquals(2_000_000, summed.twos());
         });
     }
@@ -433,7 +434,7 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
                 }
                 for (int scale : new int[] {0, 1, 2, 4}) {
                     assertEquals(0, written.setScale(scale, mode)
-                                    .compareTo(ratio.asDecimal(mode, scale)),
+                                    .compareTo(ratio.asDecimal(mode, scale).orNull()),
                             () -> each + " rounded " + mode + " to " + scale + " places");
                 }
             }
@@ -473,14 +474,14 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
     @Test
     void theWholeNumbersEitherSideOfATinyValueAreNotRefused() {
         ExactRatio tiny = ExactRatio.of(new BigDecimal(BigInteger.ONE, 2_000_000_000));
-        assertEquals(BigInteger.ZERO, tiny.floor());
-        assertEquals(BigInteger.ONE, tiny.ceiling());
-        assertEquals(BigInteger.ZERO, tiny.truncated());
-        assertEquals(BigInteger.valueOf(-1), tiny.negated().floor());
-        assertEquals(BigInteger.ZERO, tiny.negated().ceiling());
-        assertEquals(BigInteger.ZERO, tiny.negated().truncated());
-        assertEquals(new BigDecimal("0.01"), tiny.asDecimal(java.math.RoundingMode.CEILING, 2));
-        assertEquals(new BigDecimal("0.00"), tiny.asDecimal(java.math.RoundingMode.FLOOR, 2));
+        assertEquals(BigInteger.ZERO, tiny.floor().orNull());
+        assertEquals(BigInteger.ONE, tiny.ceiling().orNull());
+        assertEquals(BigInteger.ZERO, tiny.truncated().orNull());
+        assertEquals(BigInteger.valueOf(-1), tiny.negated().floor().orNull());
+        assertEquals(BigInteger.ZERO, tiny.negated().ceiling().orNull());
+        assertEquals(BigInteger.ZERO, tiny.negated().truncated().orNull());
+        assertEquals(new BigDecimal("0.01"), tiny.asDecimal(java.math.RoundingMode.CEILING, 2).orNull());
+        assertEquals(new BigDecimal("0.00"), tiny.asDecimal(java.math.RoundingMode.FLOOR, 2).orNull());
     }
 
     /**

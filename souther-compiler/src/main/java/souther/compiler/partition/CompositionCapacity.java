@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.RunSensitivity;
 
 import java.util.ArrayList;

@@ -20,6 +20,48 @@ public final class ExactDecimals {
     private ExactDecimals() {}
 
     /**
+     * How many digits a plain notation may be spelt out into. It bounds the <em>expansion</em> and
+     * not the output: a value that already carries a thousand significant digits is written with
+     * all of them, here as anywhere, and that is not this rule's business. What this stops is a
+     * compact input asking for an enormous output — {@code 1E+1000000} is eleven characters and a
+     * million and one digits.
+     *
+     * <p>A thousand is where a reader gives up as well ({@code jackson-core}'s
+     * {@code StreamReadConstraints.DEFAULT_MAX_NUM_LEN}), which is where the figure comes from. It is
+     * a reference point and not the definition: a caller past this compiler's own boundary is free
+     * to hold its own limit.
+     */
+    public static final int MAX_SPELT_OUT_DIGITS = 1000;
+
+    /**
+     * The amount, written in plain notation where that is at most {@link #MAX_SPELT_OUT_DIGITS}
+     * digits, or in exponent notation otherwise — {@code toString}'s own form, which switches to it
+     * on the same terms {@code toPlainString} never does.
+     *
+     * <p>For a reader and not for identity: two forms of one amount are not asked to agree here, so
+     * a caller after that reaches {@link #leastDigits} first, the way {@link #plainNotationLength}
+     * already expects to be reached. What this is for is a diagnostic, a report or any other text a
+     * person or a tool reads, where a compact number's plain notation would otherwise be a cost the
+     * number itself never signalled.
+     */
+    public static String spelledBounded(BigDecimal d) {
+        return fitsPlainNotation(d) ? d.toPlainString() : d.toString();
+    }
+
+    /**
+     * Whether {@code d}'s plain notation is at most {@link #MAX_SPELT_OUT_DIGITS} digits, cheaply —
+     * without building the notation to measure it.
+     *
+     * <p>For a caller with no exponent notation to fall back to: a grammar that writes a number only
+     * in plain notation has nothing {@link #spelledBounded} can hand it past this count, and has to
+     * answer with an amount's absence instead of the amount. {@link #spelledBounded} is this same
+     * question asked by a caller that does have somewhere to fall back to.
+     */
+    public static boolean fitsPlainNotation(BigDecimal d) {
+        return plainNotationLength(d) <= MAX_SPELT_OUT_DIGITS;
+    }
+
+    /**
      * The amount {@code d} is, carried by as few digits as a {@code BigDecimal} can carry it: one
      * form for every value the language calls equal, which is what a hash of an amount and a
      * boundary's canonical number are both taken from.

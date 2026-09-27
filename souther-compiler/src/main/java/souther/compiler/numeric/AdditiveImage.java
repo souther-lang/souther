@@ -178,25 +178,41 @@ public sealed interface AdditiveImage {
             java.math.BigInteger at = a.negate().divide(shared).mod(steps)
                     .multiply(b.divide(shared).mod(steps).modInverse(steps))
                     .mod(steps);
-            return new AffinePreimage.Stepping(from.plus(by.times(ExactRatio.of(at))),
-                    by.times(ExactRatio.of(steps)).abs(), Granularity.DENSE);
+            // The move onto a member is itself a sum a model's decimals can put out of the exact
+            // arithmetic's reach, same as the one `Stepping`'s own constructor guards: where it
+            // cannot be held, the widest progression this spacing admits is the sound answer with
+            // less.
+            ExactRatio moved = from.plus(by.times(ExactRatio.of(at))).orNull();
+            return moved == null ? new AffinePreimage.Stepping(ExactRatio.ZERO, ExactRatio.ONE, Granularity.DENSE)
+                    : new AffinePreimage.Stepping(moved, by.times(ExactRatio.of(steps)).abs(), Granularity.DENSE);
         }
 
         @Override
         public ExactCut tightenUpper(ExactCut cut) {
             ExactRatio steps = cut.at().dividedBy(generator);
+            // Where the cut itself stands at a value whose digits are past what this host addresses,
+            // moving it down onto a step costs the same arithmetic asking for it did, and can meet
+            // the same want of room. The sound answer with less is the cut as it was handed over,
+            // untightened: this image only ever narrows it further, so leaving it be still admits
+            // everything the rules admit, and a hair besides.
+            if (!(steps.floor() instanceof ExactAnswer.Held<java.math.BigInteger> held)) {
+                return cut;
+            }
             java.math.BigInteger below = cut.inclusive() || !steps.isWhole()
-                    ? steps.floor()
-                    : steps.floor().subtract(java.math.BigInteger.ONE);
+                    ? held.value()
+                    : held.value().subtract(java.math.BigInteger.ONE);
             return ExactCut.inclusive(generator.times(ExactRatio.of(below)));
         }
 
         @Override
         public ExactCut tightenLower(ExactCut cut) {
             ExactRatio steps = cut.at().dividedBy(generator);
+            if (!(steps.ceiling() instanceof ExactAnswer.Held<java.math.BigInteger> held)) {
+                return cut;
+            }
             java.math.BigInteger above = cut.inclusive() || !steps.isWhole()
-                    ? steps.ceiling()
-                    : steps.ceiling().add(java.math.BigInteger.ONE);
+                    ? held.value()
+                    : held.value().add(java.math.BigInteger.ONE);
             return ExactCut.inclusive(generator.times(ExactRatio.of(above)));
         }
 

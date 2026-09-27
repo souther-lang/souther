@@ -242,7 +242,7 @@ class WhatTheDifferenceBoundsSayIsWhatThePointsSayTest {
     private static boolean holdsAt(Written rule, Map<String, Integer> point) {
         ExactRatio total = rule.constant();
         for (Map.Entry<String, ExactRatio> each : rule.coefs().entrySet()) {
-            total = total.plus(each.getValue().times(ExactRatio.of(point.get(each.getKey()))));
+            total = total.plus(each.getValue().times(ExactRatio.of(point.get(each.getKey())))).orNull();
         }
         int sign = total.signum();
         return switch (rule.rel()) {

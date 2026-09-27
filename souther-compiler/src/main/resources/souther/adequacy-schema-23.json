@@ -235,6 +235,8 @@
           "a_borders_rows_are_all_on_one_side",
           "a_borders_run_not_watched",
           "no_reachable_distinguisher_for_a_border",
+          "a_borders_fault_family_not_worked_out",
+          "items_place_not_worked_out",
           "rule_unread",
           "position_not_read",
           "question_unanswered",
@@ -4266,6 +4268,18 @@
                         "point": {},
                         "location": {},
                         "notOwed": {}
+                      },
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "A point whose own place on the order a model's own decimals put far enough apart in scale that the exact arithmetic could not read: neither owed nor refused, and nothing else here says which it would have been.",
+                      "required": [
+                        "notWorkedOut"
+                      ],
+                      "properties": {
+                        "point": {},
+                        "location": {},
+                        "notWorkedOut": {}
                       },
                       "additionalProperties": false
                     },

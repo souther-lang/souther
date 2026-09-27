@@ -1,10 +1,14 @@
 package souther.compiler.partition;
 
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
+import souther.compiler.numeric.UnheldNumber;
 
 import java.math.BigDecimal;
+import java.util.OptionalInt;
 
 /**
  * Where a rule's line falls on the quantity it cuts, in that quantity's own units.
@@ -270,30 +274,72 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
     }
 
     /**
+     * What {@link #justBeyond} comes to: a whole number of the quantity's units to start looking
+     * from, an order with no numbers to start from at all, or which way the exact arithmetic could
+     * not round the line inward.
+     *
+     * <p>The second and the third told apart, where a collapsed {@code null} once ran them
+     * together: an order with no numbers never needed the rounding in the first place, and a
+     * caller reading both as one absence was reading "this compiler could not work out where to
+     * look" as "there is nowhere to look" — sound for the {@code witness} the space
+     * {@link LevelSpace#onACarrier} returns, which only ever needs a candidate and answers
+     * {@code Witness.NONE} either way, and not sound for that same space's {@code inspect}, whose
+     * bound this feeds directly into and which an absent end there widens to the carrier's own
+     * extent.
+     */
+    public sealed interface JustBeyond {
+
+        /** A place to start looking from. */
+        record At(Place place) implements JustBeyond {
+            public At {
+                if (place == null) {
+                    throw new IllegalArgumentException("a place to start looking from is a place");
+                }
+            }
+        }
+
+        /** An order with no numbers, which is never scaled and so never needed the rounding. */
+        record NoNumericPlace() implements JustBeyond {}
+
+        /** A model's own decimals put the line far enough from an ordinary one in scale that the
+         *  exact arithmetic could not round it to this many digits. */
+        record NotWorkedOut(UnheldNumber why) implements JustBeyond {
+            public NotWorkedOut {
+                if (why == null) {
+                    throw new IllegalArgumentException("a refusal says why");
+                }
+            }
+        }
+    }
+
+    /**
      * A whole number of the quantity's units on one side of this line, for a search to start from.
      *
      * <p>Where the line falls between two of them, the whole number that way is past it — a third
      * rounded up is one and rounded down is nothing, and both are on the side they were rounded to.
      * A bound and never the answer: what is at a run is the run's to say, and this is only where to
      * begin looking.
-     *
-     * <p>Null on an order with no numbers, which is never scaled and so never needs this.
      */
-    public souther.compiler.numeric.Place justBeyond(Towards towards, int digits) {
+    public JustBeyond justBeyond(Towards towards, int digits) {
         ExactRatio line = exactly();
         if (line == null) {
-            return null;
+            return new JustBeyond.NoNumericPlace();
         }
-        BigDecimal past = line.asDecimal(towards == Towards.ABOVE
-                ? java.math.RoundingMode.CEILING : java.math.RoundingMode.FLOOR, digits);
-        // Strictly past, which rounding gives only where the line is not itself a number of that
-        // many digits. A line the quantity does stand at rounds to itself, and the run beyond it
-        // does not hold it.
-        if (ExactRatio.of(past).compareTo(line) == 0) {
-            BigDecimal step = BigDecimal.ONE.movePointLeft(digits);
-            past = towards == Towards.ABOVE ? past.add(step) : past.subtract(step);
-        }
-        return new Count(past);
+        return switch (line.asDecimal(towards == Towards.ABOVE
+                ? java.math.RoundingMode.CEILING : java.math.RoundingMode.FLOOR, digits)) {
+            case ExactAnswer.Unheld<BigDecimal> unheld -> new JustBeyond.NotWorkedOut(unheld.why());
+            case ExactAnswer.Held<BigDecimal> held -> {
+                BigDecimal past = held.value();
+                // Strictly past, which rounding gives only where the line is not itself a number of
+                // that many digits. A line the quantity does stand at rounds to itself, and the run
+                // beyond it does not hold it.
+                if (ExactRatio.of(past).compareTo(line) == 0) {
+                    BigDecimal step = BigDecimal.ONE.movePointLeft(digits);
+                    past = towards == Towards.ABOVE ? past.add(step) : past.subtract(step);
+                }
+                yield new JustBeyond.At(new Count(past));
+            }
+        };
     }
 
     /**
@@ -311,18 +357,36 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
      * <p>Read off the distance's size rather than by forming one over it and counting the digits of
      * what came back. A distance of a millionth has an answer of about a million, and the number
      * built to be measured had as many digits as the answer counts.
+     *
+     * @return the count, or which way this host cannot name it — the two lines a model's own
+     *         decimals put far enough apart in scale that their difference has no representation
+     *         this host writes ({@link UnheldNumber#NO_REPRESENTATION_EXISTS}, the exact
+     *         arithmetic's own answer), or the count itself past what an {@code int} names, which
+     *         is the same word for the same reason: no wider run holds an {@code int} that counts
+     *         higher, so nothing here is short of room either way
      */
-    public int digitsToTellApartFrom(CutPosition other) {
+    public ExactAnswer<Integer> digitsToTellApartFrom(CutPosition other) {
         ExactRatio mine = exactly();
         ExactRatio theirs = other.exactly();
         if (mine == null || theirs == null) {
-            return 0;
+            return ExactAnswer.held(0);
         }
-        ExactRatio apart = mine.minus(theirs).abs();
-        if (apart.isZero()) {
-            return 0;
-        }
-        return apart.placesItStandsAbove() + 1;
+        return switch (mine.minus(theirs)) {
+            case ExactAnswer.Held<ExactRatio> held -> {
+                ExactRatio apart = held.value().abs();
+                if (apart.isZero()) {
+                    yield ExactAnswer.held(0);
+                }
+                OptionalInt places = apart.placesItStandsAbove();
+                // `+ 1` overflows exactly where `places` is already the top of what an `int`
+                // counts, so that one value is folded in with the search finding none at all:
+                // both leave this with a count no `int` here names.
+                yield places.isPresent() && places.getAsInt() < Integer.MAX_VALUE
+                        ? ExactAnswer.held(places.getAsInt() + 1)
+                        : ExactAnswer.unheld(UnheldNumber.NO_REPRESENTATION_EXISTS);
+            }
+            case ExactAnswer.Unheld<ExactRatio> unheld -> ExactAnswer.unheld(unheld.why());
+        };
     }
 
     private static ExactRatio numberOf(Level level) {

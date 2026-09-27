@@ -206,6 +206,17 @@ public sealed interface ProjectionEvidence {
         record PositionsSpacedDifferently() implements Cause {}
 
         /**
+         * The closure this certificate would rest on left a hop or a carried bound uncomposed.
+         *
+         * <p>A model's own decimals can put two run ends far enough apart in scale that the exact
+         * arithmetic cannot sum them — see
+         * {@link souther.compiler.numeric.ProjectionCertification.ArithmeticLeftTheClosureIncomplete}.
+         * Nothing here is wrong about the rules; the closure that would have proven the box is the
+         * whole of what they leave simply could not be finished.
+         */
+        record ArithmeticCouldNotHoldANumber() implements Cause {}
+
+        /**
          * An end the rules put at a value no decimal writes, so the number handed over is a hair
          * outside where they stop.
          *

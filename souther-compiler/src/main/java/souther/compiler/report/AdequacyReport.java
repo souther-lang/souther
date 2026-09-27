@@ -135,7 +135,7 @@ import souther.compiler.publish.RuleHandleSurface;
 import souther.compiler.publish.WeakeningVocabulary;
 import souther.compiler.publish.WeakeningWord;
 import souther.compiler.partition.ReadingGap;
-import souther.compiler.partition.UnheldNumber;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.partition.UndividedPosition;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.BehaviorEvidence;
@@ -5264,6 +5264,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     // Why no row is owed, in the one word that says which of the two settled it.
                     // Absent, neither of them reads as anything but the report being short.
                     case ItemAssessment.NotOwed not -> i.put("notOwed", word(not.reason()));
+                    // Neither owed nor refused: the exact arithmetic could not hold what settling
+                    // this point needed, so nothing here says which of the two it would have been.
+                    case ItemAssessment.NotWorkedOut not -> i.put("notWorkedOut", word(not.why()));
                     case ItemAssessment.Owed owed -> {
                         // What a row here has to do, whole. Two of the four ask for a place and two
                         // ask for a side, so a document carrying a value for all four would name a
@@ -6655,7 +6658,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 case NOTHING_WATCHED_THE_RUNS -> WeakeningWord.A_BORDERS_RUN_NOT_WATCHED;
                 case NO_REACHABLE_DISTINGUISHER ->
                         WeakeningWord.NO_REACHABLE_DISTINGUISHER_FOR_A_BORDER;
+                case ARITHMETIC_COULD_NOT_HOLD_A_FAMILY_MEMBER ->
+                        WeakeningWord.A_BORDERS_FAULT_FAMILY_NOT_WORKED_OUT;
             };
+            // Whether a row is owed here at all, which the arithmetic gave out on before any row
+            // was read against it — apart from `BorderValueUnreadable`, which is a row's value once
+            // a line already known to ask for one.
+            case Weakening.ItemsPlaceNotWorkedOut _ -> WeakeningWord.ITEMS_PLACE_NOT_WORKED_OUT;
             case Weakening.ModelReadingIncomplete it -> switch (it.cause()) {
                 case ClosureGap.PositionNotReachedInto _ ->
                         WeakeningWord.POSITION_NOT_READ;

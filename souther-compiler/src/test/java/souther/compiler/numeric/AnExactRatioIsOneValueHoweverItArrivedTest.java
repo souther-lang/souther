@@ -50,7 +50,7 @@ class AnExactRatioIsOneValueHoweverItArrivedTest {
     @Test
     void arithmeticIsExactWhereDecimalsWouldRound() {
         ExactRatio third = ratio(1, 3);
-        assertEquals(ExactRatio.ONE, third.plus(third).plus(third),
+        assertEquals(ExactRatio.ONE, third.plus(third).orNull().plus(third).orNull(),
                 "three thirds are one, which is what rounding a third at any scale loses");
         assertEquals(ratio(1, 9), third.times(third));
         assertEquals(ExactRatio.ONE, third.dividedBy(third));
@@ -92,18 +92,18 @@ class AnExactRatioIsOneValueHoweverItArrivedTest {
 
     @Test
     void roundingIsTheCallersDirection() {
-        assertEquals(new BigDecimal("0.34"), ratio(1, 3).asDecimal(RoundingMode.CEILING, 2));
-        assertEquals(new BigDecimal("0.33"), ratio(1, 3).asDecimal(RoundingMode.FLOOR, 2));
+        assertEquals(new BigDecimal("0.34"), ratio(1, 3).asDecimal(RoundingMode.CEILING, 2).orNull());
+        assertEquals(new BigDecimal("0.33"), ratio(1, 3).asDecimal(RoundingMode.FLOOR, 2).orNull());
     }
 
     @Test
     void wholeNumbersAreTakenOffEitherEnd() {
-        assertEquals(BigInteger.ZERO, ratio(1, 3).floor());
-        assertEquals(BigInteger.ONE, ratio(1, 3).ceiling());
-        assertEquals(BigInteger.valueOf(-1), ratio(-1, 3).floor());
-        assertEquals(BigInteger.ZERO, ratio(-1, 3).ceiling());
-        assertEquals(BigInteger.TWO, ExactRatio.of(2).floor());
-        assertEquals(BigInteger.TWO, ExactRatio.of(2).ceiling(),
+        assertEquals(BigInteger.ZERO, ratio(1, 3).floor().orNull());
+        assertEquals(BigInteger.ONE, ratio(1, 3).ceiling().orNull());
+        assertEquals(BigInteger.valueOf(-1), ratio(-1, 3).floor().orNull());
+        assertEquals(BigInteger.ZERO, ratio(-1, 3).ceiling().orNull());
+        assertEquals(BigInteger.TWO, ExactRatio.of(2).floor().orNull());
+        assertEquals(BigInteger.TWO, ExactRatio.of(2).ceiling().orNull(),
                 "a whole number is its own floor and its own ceiling");
         assertTrue(ExactRatio.of(2).isWhole());
     }
@@ -142,5 +142,29 @@ class AnExactRatioIsOneValueHoweverItArrivedTest {
         assertTrue(ExactRatio.of(10_000_000_000L).times(ExactRatio.of(10_000_000_000L))
                 .compareTo(ExactRatio.of(Long.MAX_VALUE)) > 0,
                 "and past where a long stops, since comparing cross-multiplies");
+    }
+
+    /**
+     * The fewest places a value stands above, over the whole range an {@code int} names and not
+     * only where a bound doubled up to it would have looked. A count between where the doubling
+     * gave up and the top of what an {@code int} holds is one this compiler still holds a decimal
+     * at, and used to be answered with an uncaught exception instead of the count.
+     */
+    @Test
+    void placesAValueStandsAboveIsFoundOverTheWholeIntRange() {
+        assertEquals(4, held(new ExactRatio(BigInteger.ONE, BigInteger.ONE, -3, -3)));
+        // Past where a bound doubled up from two would have given up before reaching this far.
+        assertEquals(1_500_000_001,
+                held(new ExactRatio(BigInteger.ONE, BigInteger.ONE, -1_500_000_000L, -1_500_000_000L)));
+        // At the very top of what an int names, which a caller adding one to must not overflow.
+        assertEquals(Integer.MAX_VALUE,
+                held(new ExactRatio(BigInteger.ONE, BigInteger.ONE, -2_147_483_646L, -2_147_483_646L)));
+        // Past what an int names at all: no count here answers, and not an exception.
+        assertTrue(new ExactRatio(BigInteger.ONE, BigInteger.ONE, -2_147_483_747L, -2_147_483_747L)
+                .placesItStandsAbove().isEmpty());
+    }
+
+    private static int held(ExactRatio at) {
+        return at.placesItStandsAbove().getAsInt();
     }
 }

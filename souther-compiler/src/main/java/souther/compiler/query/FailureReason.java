@@ -30,5 +30,6 @@ public sealed interface FailureReason extends MeasureReason
                 BoundaryDerivation.BodyWasNotRead,
                 BoundaryForMeasurement.NotDerived,
                 ItemAssessment.Coverage.CouldNotAsk,
+                ItemAssessment.PlaceCouldNotBeWorkedOut,
                 PartitionEvidence.PairSpace.TooLarge,
                 PartitionDerivation.TheReadingDidNotRunOut {}

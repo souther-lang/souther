@@ -11,6 +11,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
+import souther.exact.ExactDecimals;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -32,11 +33,28 @@ final class ValueClasses {
      * loudly, because a class quietly missing here is a distinction the model states going missing
      * from every measure at once.
      *
+     * <p><b>Apart from a decimal a model's own decimals put too far apart in scale to spell as
+     * source.</b> That is not the two readings disagreeing — the value is exactly what the reading
+     * says it is, and exact arithmetic holds it in an instant — it is a row nothing here can offer
+     * for it, the same as a name nothing here writes. The class still exists and a row already
+     * sitting in it still covers it; what is absent is a new one to complete it with.
+     *
      * @param view the position as it is written, so that a value is classified under the names it
      *             wears and written back under them
      */
     static PartitionClass classAt(Value value, TypeView view, List<TypeSymbol> worn,
                                   RuleReadingSource ruleSource) {
+        Recognition is = Recognition.Under.of(worn,
+                new Recognition.AtAValue(value,
+                        placeOf(value, view.declared(), ruleSource.inners(), ruleSource.symbols(),
+                                ruleSource.kinds(), ruleSource.published())));
+        if (value instanceof Value.Number number && tooFarInScaleToWrite(number, view.shape())) {
+            String named = ExactDecimals.spelledBounded(number.value());
+            return PartitionClass.ungeneratable(named, named, is,
+                            "a model's own decimals put this value's plain notation past what a"
+                                    + " generated row can write")
+                    .holding(ValueSet.just(value));
+        }
         FixtureTemplate bare = written(value, view.shape());
         if (bare == null) {
             throw new IllegalStateException(
@@ -44,10 +62,6 @@ final class ValueClasses {
                             + " value this cannot write; the two readings of one position disagree"
                             + " about what stands at it");
         }
-        Recognition is = Recognition.Under.of(worn,
-                new Recognition.AtAValue(value,
-                        placeOf(value, view.declared(), ruleSource.inners(), ruleSource.symbols(),
-                                ruleSource.kinds(), ruleSource.published())));
         FixtureTemplate stands = WornNames.under(view.wrappers(), bare, ruleSource);
         return (stands == null
                 // A name the position wears that nothing here writes. The class is the position's
@@ -59,6 +73,14 @@ final class ValueClasses {
                         RepresentativeSource.of(stands)))
                 // The one value it was made from, which is the whole of what it holds.
                 .holding(ValueSet.just(value));
+    }
+
+    /** Whether {@code number} is a {@code Decimal}-shaped value whose plain notation
+     *  {@link FixtureTemplate#decimal} refuses to write out, and not any other reason {@code
+     *  written} might answer null for. */
+    private static boolean tooFarInScaleToWrite(Value.Number number, Shape shape) {
+        return shape instanceof Shape.Scalar scalar && scalar.prim() == Type.Prim.DECIMAL
+                && !ExactDecimals.fitsPlainNotation(number.value());
     }
 
     /**

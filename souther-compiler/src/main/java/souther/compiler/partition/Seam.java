@@ -3,6 +3,8 @@ package souther.compiler.partition;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Towards;
 
+import java.util.Optional;
+
 /**
  * Where a rule parts one quantity's values: the last value on one side and the first on the other.
  *
@@ -60,7 +62,10 @@ public record Seam(CutPosition at, Level below, Level above) {
             throw new IllegalArgumentException(
                     "this order has no place at " + cut + " for a line to be");
         }
-        boolean attains = space.attainable(cut);
+        // `.orNull()` and not the refusal Border carries up to a report: a Seam has no arm for
+        // "not worked out" yet, so a run the exact arithmetic could not read here still answers as
+        // an order with no room for the line does, until Seam itself is widened the same way.
+        boolean attains = Boolean.TRUE.equals(space.attainable(cut).orNull());
         Level below = attains && belongsTo == Towards.BELOW ? cut
                 : beside(space, cut, Towards.BELOW);
         Level above = attains && belongsTo == Towards.ABOVE ? cut
@@ -380,7 +385,9 @@ public record Seam(CutPosition at, Level below, Level above) {
      * not one step from anything.
      */
     private static Level beside(LevelSpace space, Level cut, Towards towards) {
-        return (space.attainable(cut) ? space.neighbour(cut, towards)
-                : space.nearestAtOrBeyond(cut, towards)).orElse(null);
+        boolean attains = Boolean.TRUE.equals(space.attainable(cut).orNull());
+        Optional<Level> found = (attains ? space.neighbour(cut, towards)
+                : space.nearestAtOrBeyond(cut, towards)).orNull();
+        return found == null ? null : found.orElse(null);
     }
 }

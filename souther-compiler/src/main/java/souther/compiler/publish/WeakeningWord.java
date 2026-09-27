@@ -127,6 +127,27 @@ public enum WeakeningWord {
      */
     NO_REACHABLE_DISTINGUISHER_FOR_A_BORDER,
 
+    /**
+     * The lines a border would be held against were not all found, because a model's own decimals
+     * put a step between them out of the exact arithmetic's reach.
+     *
+     * <p>Apart from {@link #NO_REACHABLE_DISTINGUISHER_FOR_A_BORDER}: there, every line beside this
+     * one was found and none had a row telling it apart; here, this compiler does not know the
+     * whole of what the lines beside it are. No wider run finds the rest, since no allowance
+     * stopped the working out.
+     */
+    A_BORDERS_FAULT_FAMILY_NOT_WORKED_OUT,
+
+    /**
+     * A coverage item's own place on the order — whether a row is owed there at all — is one a
+     * model's own decimals put far enough apart in scale that the exact arithmetic could not read.
+     *
+     * <p>Apart from {@link #BORDER_VALUE_NOT_WORKED_OUT}: there every value was read and the
+     * arithmetic gave out totalling what they come to; here whether the line asks for a row here at
+     * all is itself what the arithmetic could not settle, before any row was read against it.
+     */
+    ITEMS_PLACE_NOT_WORKED_OUT,
+
     /** A rule of the model that a reader set aside. */
     RULE_UNREAD,
 

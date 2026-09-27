@@ -341,6 +341,9 @@ public final class NumericDomain<A> {
         if (isBottom()) {
             return new ProjectionCertification.NothingIsLeft();
         }
+        if (!closed().everyBoundWasComposed()) {
+            return new ProjectionCertification.ArithmeticLeftTheClosureIncomplete();
+        }
         if (!everyRelatedPositionIsSpacedAlike()) {
             return new ProjectionCertification.PositionsSpacedDifferently();
         }
@@ -732,11 +735,15 @@ public final class NumericDomain<A> {
         if (exactly != null) {
             return new Endpoint(new Count(exactly), cut.inclusive());
         }
+        // Rounded outward, so that what is handed over admits everything the rules admit and a hair
+        // besides. Where the exact arithmetic cannot hold that rounding either — an end this compiler
+        // derived standing at the far side of the scale range from where it rounds to — the sound
+        // answer with less is no end here rather than a number that does not exist: null is what an
+        // unbounded end already means to every reader of one.
         BigDecimal outward = cut.at().asDecimal(
                 upper ? RoundingMode.CEILING : RoundingMode.FLOOR,
-                DIGITS_WHEN_IT_IS_NOT_A_DECIMAL);
-        // Rounded outward, the number itself is past where the rules stop, so it is admitted.
-        return new Endpoint(new Count(outward), true);
+                DIGITS_WHEN_IT_IS_NOT_A_DECIMAL).orNull();
+        return outward == null ? null : new Endpoint(new Count(outward), true);
     }
 
     /**

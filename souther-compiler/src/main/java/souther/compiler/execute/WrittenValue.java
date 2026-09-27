@@ -1,6 +1,7 @@
 package souther.compiler.execute;
 
 import souther.compiler.partition.FixtureTemplate;
+import souther.exact.ExactDecimals;
 
 import java.math.BigDecimal;
 
@@ -18,13 +19,15 @@ import java.math.BigDecimal;
  */
 public sealed interface WrittenValue {
 
-    /** The constant as a source writes it: a text quoted and escaped, a decimal at its scale. */
+    /** The constant as a source writes it: a text quoted and escaped, a decimal at its scale — in
+     *  exponent notation past a thousand digits ({@link ExactDecimals#spelledBounded}), since this
+     *  is an identity a copy is kept by and not code that has to compile again. */
     default String written() {
         return switch (this) {
             case Text(String text) -> FixtureTemplate.quoted(text);
             case Whole(long whole) -> String.valueOf(whole);
             case Truth(boolean truth) -> String.valueOf(truth);
-            case Decimal(BigDecimal decimal) -> decimal.toPlainString();
+            case Decimal(BigDecimal decimal) -> ExactDecimals.spelledBounded(decimal);
         };
     }
 

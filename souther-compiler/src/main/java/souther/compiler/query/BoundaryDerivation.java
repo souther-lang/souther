@@ -154,11 +154,12 @@ public final class BoundaryDerivation {
      * What holding these lines against the lines beside them went without.
      *
      * <p>Part of this measure and not a measure of its own, because it is the same value: an
-     * assessment of a line answers what a row stands at each of its points and what the rows leave
-     * standing beside it, and a reading that came back short of the second is a reading of these
-     * lines that came back short. What is missing is said in words of its own
-     * ({@link Weakening.ABorderNotHeldAgainstTheLinesBesideIt}), so a reader is told which of the
-     * two questions fell short rather than being left to read it off the measure's name.
+     * assessment of a line answers what a row stands at each of its points, whether that could be
+     * decided at all, and what the rows leave standing beside it — and a reading that came back
+     * short of any of those is a reading of these lines that came back short. What is missing is
+     * said in words of its own ({@link Weakening.ABorderNotHeldAgainstTheLinesBesideIt},
+     * {@link Weakening.ItemsPlaceNotWorkedOut}), so a reader is told which of the questions fell
+     * short rather than being left to read it off the measure's name.
      *
      * <p>Empty for every settled answer, whichever way it settled and however few rows it took. A
      * walk short of a row that left no line standing has established that, because reading more
@@ -169,7 +170,7 @@ public final class BoundaryDerivation {
             List<BorderAssessment> at) {
         WeakeningSet out = WeakeningSet.none();
         for (BorderAssessment line : at) {
-            out = out.union(line.besideWeakening());
+            out = out.union(line.besideWeakening()).union(line.itemsWeakening());
         }
         return out;
     }

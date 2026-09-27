@@ -6,6 +6,7 @@ import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.values.ValueSet;
 

@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.numeric.UnheldNumber;
+
 /**
  * What a border asks of the rows in one of its four roles: a row to write, or a reason there is none
  * to ask for.
@@ -14,6 +16,12 @@ package souther.compiler.partition;
  * <p>Sealed, and the border answers with one of these for every role. What that buys is that a role
  * cannot go missing: an item nobody built is a compile error at the place that builds them, where a
  * missing entry in a list is nothing at all.
+ *
+ * <p><b>And apart from {@link NotWorkedOut}</b>, read off {@link PointAnswer.NotWorkedOut} the same
+ * way {@link NotOwed} is read off {@link PointAnswer.NotOwed}: a point whose own place on the order
+ * the exact arithmetic could not read is neither a row to ask for nor a fact about the model that
+ * settles there is none, and answering with one of those two would say more than this compiler
+ * found out.
  */
 public sealed interface Demand {
 
@@ -22,6 +30,10 @@ public sealed interface Demand {
 
     /** No row is asked for here, and this is what settles it. */
     record NotOwed(NotOwedReason reason) implements Demand {}
+
+    /** Neither owed nor refused: the exact arithmetic could not hold what settling this point
+     *  needed. */
+    record NotWorkedOut(UnheldNumber why) implements Demand {}
 
     /** The criterion where one is asked for, or null where none is. */
     default Criterion criterion() {
@@ -39,6 +51,7 @@ public sealed interface Demand {
     default boolean sameAs(Demand other) {
         return switch (this) {
             case NotOwed not -> other instanceof NotOwed also && not.reason() == also.reason();
+            case NotWorkedOut _ -> other instanceof NotWorkedOut;
             case Owed owed -> other instanceof Owed also
                     && owed.criterion().sameAs(also.criterion());
         };

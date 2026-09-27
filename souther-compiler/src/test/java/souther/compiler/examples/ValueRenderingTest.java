@@ -84,6 +84,18 @@ class ValueRenderingTest {
                 List.of(new ObservedValue.Entry(n(1), new ObservedValue.Text("a"))))));
     }
 
+    /**
+     * A decimal of extreme scale is written in exponent notation rather than spelled out in full —
+     * this is a diagnostic a reader reads and never source pasted back, so a model's own decimals
+     * scaled far enough apart do not cost a message its bound.
+     */
+    @Test
+    void aDecimalOfExtremeScaleIsWrittenInExponentNotation() {
+        BigDecimal tiny = new BigDecimal(java.math.BigInteger.ONE, 1_000_000);
+        String written = show(new ObservedValue.Decimal(tiny));
+        assertEquals("1E-1000000", written);
+    }
+
     @Test
     void whatAValueIsNamedIsWhatAMismatchSays() {
         assertEquals("Int", type(n(1)));

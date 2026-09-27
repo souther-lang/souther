@@ -133,7 +133,8 @@ class CompileAdequacyShapesTest {
         assertEquals(2, branch.arms().counted(), "the guard's two arms, and none of the helper's");
 
         assertTrue(BorderAssessment.pointsOf(lines(compilation, "check")).stream()
-                        .anyMatch(p -> p.item().weakeningSource() instanceof Measurement.Complete<?>),
+                        .anyMatch(p -> p.item().weakeningSource(p.border().border())
+                                instanceof Measurement.Complete<?>),
                 "and the guard's boundary is decided rather than unavailable");
     }
 

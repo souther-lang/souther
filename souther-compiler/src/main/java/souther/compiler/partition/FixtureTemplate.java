@@ -13,6 +13,7 @@ import souther.compiler.types.ReachName;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.TypeReachName;
 import souther.compiler.types.ValueName;
+import souther.exact.ExactDecimals;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -67,8 +68,23 @@ public record FixtureTemplate(String text, Hir.Expr value) {
                 value < 0 ? new Hir.Neg(magnitude, NOWHERE, NO_SOURCE) : magnitude);
     }
 
+    /**
+     * A decimal, written at its own scale — or {@code null} where a model's own decimals put it far
+     * enough from an ordinary one that plain notation would cost more than building it did.
+     *
+     * <p>Exponent notation is not the answer here the way it is in a report: this language's grammar
+     * has none for a {@code Decimal} literal, so a row written that way would not be one a reader
+     * could paste back. Refusing it is the sound answer with less — the same one a candidate the
+     * rules admit nothing at already gets ({@link Generator.UnresolvedCombination.Reason#NOTHING_COMPOSES_ONE}) —
+     * rather than the cost every other place that writes such a value is already held to answering
+     * for.
+     */
     public static FixtureTemplate decimal(BigDecimal value) {
-        String written = value.stripTrailingZeros().toPlainString();
+        BigDecimal stripped = value.stripTrailingZeros();
+        if (!ExactDecimals.fitsPlainNotation(stripped)) {
+            return null;
+        }
+        String written = stripped.toPlainString();
         BigDecimal magnitude = value.abs();
         Hir.Expr literal = new Hir.DecimalLit(magnitude, NOWHERE, NO_SOURCE);
         return new FixtureTemplate(written + "m",

@@ -159,7 +159,7 @@ class WhatAFormAddsUpToIsNotWhatItsOrderHoldsTest {
         kinds.put("y", Granularity.DENSE);
         AdditiveImage image = AdditiveImage.of(form("x", 1, "y", 3), kinds::get);
         assertTrue(image.contains(ratio(1, 10)), "at x = -2, y = 0.7");
-        assertEquals(ExactRatio.of(-2).plus(ExactRatio.of(3).times(ratio(7, 10))), ratio(1, 10),
+        assertEquals(ExactRatio.of(-2).plus(ExactRatio.of(3).times(ratio(7, 10))).orNull(), ratio(1, 10),
                 "which is not a claim about the image but arithmetic anyone can do");
         assertFalse(over(form("x", 1, "y", 3), Granularity.DISCRETE).contains(ratio(1, 10)),
                 "where the exact answer over whole numbers refuses it");

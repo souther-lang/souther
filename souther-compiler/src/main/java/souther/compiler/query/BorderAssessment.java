@@ -69,6 +69,29 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
     }
 
     /**
+     * What deciding whether a row is owed at each of this border's points went without.
+     *
+     * <p>Apart from {@link #besideWeakening}, which is the lines beside this one and not this one's
+     * own points. A point whose own place on the order the exact arithmetic could not read is
+     * neither owed nor refused ({@link ItemAssessment.NotWorkedOut}), and what a reader is told is
+     * this border's — an item carries no behavior or position of its own to be told by.
+     *
+     * <p>Only that fact, and not an owed item's own coverage weakening: that one already reaches
+     * whichever of the declaration or behavior accounts this border belongs to
+     * ({@code ArmAccount}), and unioning it again here, into a set built the same way for both
+     * accounts, would answer it into both — the same leak this fact was added to stop.
+     */
+    public WeakeningSet itemsWeakening() {
+        WeakeningSet out = WeakeningSet.none();
+        for (ItemAssessment item : items.values()) {
+            if (item instanceof ItemAssessment.NotWorkedOut not) {
+                out = out.union(WeakeningSet.of(new Weakening.ItemsPlaceNotWorkedOut(border, not.why())));
+            }
+        }
+        return out;
+    }
+
+    /**
      * What holding this line against the lines beside it went without, where it came back unsettled.
      *
      * <p>Empty for every settled answer, whichever way it settled and however few rows it took. A
@@ -118,6 +141,12 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
                     WeakeningSet.of(new Weakening.ABorderNotHeldAgainstTheLinesBesideIt(border,
                             Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why
                                     .NOTHING_WATCHED_THE_RUNS));
+            // A model's own decimals put a step of the fault family out of the exact arithmetic's
+            // reach, so the family this border would be held against is not known whole.
+            case AnotherLineTheRowsAllow.Unsettled.AFaultFamilyMemberWasNotComposed _ ->
+                    WeakeningSet.of(new Weakening.ABorderNotHeldAgainstTheLinesBesideIt(border,
+                            Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why
+                                    .ARITHMETIC_COULD_NOT_HOLD_A_FAMILY_MEMBER));
         };
     }
 
@@ -162,6 +191,13 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
                 if (!(demand instanceof Demand.NotOwed owed) || owed.reason() != not.reason()) {
                     throw new IllegalArgumentException("the " + point + " of " + border.label()
                             + " is assessed as not owed for " + not.reason()
+                            + ", and its border says " + demand);
+                }
+            }
+            case ItemAssessment.NotWorkedOut not -> {
+                if (!(demand instanceof Demand.NotWorkedOut)) {
+                    throw new IllegalArgumentException("the " + point + " of " + border.label()
+                            + " is assessed as not worked out for " + not.why()
                             + ", and its border says " + demand);
                 }
             }

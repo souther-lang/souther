@@ -1211,7 +1211,12 @@ class EverySchemaWordIsAccountedForTest {
             // is short of it, and the document leaves those sections out rather than writing each
             // of them a reason: `behavior_boundary_not_derived` is a `weakening` word, and is held
             // as one above.
-            souther.compiler.query.BoundaryForMeasurement.NotDerived.class);
+            souther.compiler.query.BoundaryForMeasurement.NotDerived.class,
+            // A coverage item's own place on the order the exact arithmetic could not read. What a
+            // document carries for this is `items_place_not_worked_out`, a `weakening` word held as
+            // one above; this reason is `weakeningSource()`'s own, for a reader asking one point's
+            // status directly rather than reading a border's weakening set.
+            souther.compiler.query.ItemAssessment.PlaceCouldNotBeWorkedOut.class);
     }
 
     /**

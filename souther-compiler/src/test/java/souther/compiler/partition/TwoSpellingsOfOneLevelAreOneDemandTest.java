@@ -158,7 +158,7 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
             assertEquals(line.key(), new CutPosition(
                             new Level.OfTheQuantity(aMillionth), ExactRatio.of(3)).key(),
                     "and one line, one name");
-            assertTrue(line.digitsToTellApartFrom(beside) > 1_000_000,
+            assertTrue(line.digitsToTellApartFrom(beside).orNull() > 1_000_000,
                     "a sixth of a millionth apart takes about that many places to name");
         });
     }
@@ -172,9 +172,9 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
      * already held as answer. Built by writing the number instead, a name is a character per place,
      * and a name is wanted wherever two lines meet.
      *
-     * <p>What a reader is shown is the other question, and it still writes every place. Asserted
-     * here, because a name that stopped costing them by no longer being able to say them is not what
-     * this asks for.
+     * <p>What a reader is shown is the other question, and past a thousand digits it is the exponent
+     * rather than every place: writing such a number out in full is what exhausts a report, and the
+     * form that answers with less is asserted here as well as the name.
      */
     @Test
     void aLineAtADecimalWrittenAtAWideScaleIsNamedWithoutBeingWrittenOut() {
@@ -193,8 +193,63 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
                         .key().length() < 128,
                 "and the division that line makes is named from the same parts");
 
-        assertEquals(1_000_002, line.spelled().length(),
-                "while what a reader is shown is the number, every place of it");
+        assertEquals("1E-1000000", line.spelled(),
+                "past a thousand digits, a reader is shown the exponent and not every place of it");
+    }
+
+    /**
+     * Two lines apart by a count of places at the very top of what an {@code int} names answer no
+     * count at all, rather than one that overflowed silently past it.
+     *
+     * <p>The places between the two ask for one more than {@link ExactRatio#placesItStandsAbove}
+     * answers, and asked at the top of what an {@code int} holds that sum has nowhere to land —
+     * which used to wrap to a negative count instead of saying so.
+     */
+    @Test
+    void twoLinesAtTheTopOfWhatAnIntNamesAnswerNoCountRatherThanOneThatOverflowed() {
+        ExactRatio atTheTop = new ExactRatio(BigInteger.ONE, BigInteger.ONE,
+                -2_147_483_646L, -2_147_483_646L);
+        CutPosition line = CutPosition.at(new Level.OfTheQuantity(atTheTop));
+        CutPosition beside = CutPosition.at(new Level.OfTheQuantity(ExactRatio.ZERO));
+
+        assertFalse(line.digitsToTellApartFrom(beside).isHeld(),
+                "the count itself is past what an int names, not merely the arithmetic behind it");
+    }
+
+    /**
+     * A line a model's own decimals put far enough from an ordinary one in scale that rounding it
+     * inward has no representation this host writes answers that it could not work the place out,
+     * rather than an order with no numbers — the two used to be one {@code null} and a reader could
+     * not tell a refusal from a line that never needed rounding at all.
+     */
+    @Test
+    void aLineTheArithmeticCannotRoundInwardAnswersItCouldNotWorkItOutRatherThanNoNumericPlace() {
+        ExactRatio huge = new ExactRatio(BigInteger.ONE, BigInteger.ONE, 2_000_000_000L, 2_000_000_000L);
+        // `per` is not one, so the position is a multiple of the quantity and not the quantity's
+        // own value — which is what sends `justBeyond` past the shortcut that reads a value off the
+        // quantity directly and into the rounding this is about.
+        CutPosition line = new CutPosition(new Level.OfTheQuantity(huge), ExactRatio.of(2));
+
+        assertTrue(line.justBeyond(Towards.ABOVE, 2) instanceof CutPosition.JustBeyond.NotWorkedOut,
+                "the exact arithmetic could not round this line inward, and not an order with no"
+                        + " numbers to round");
+    }
+
+    /**
+     * The same refusal, read from a run: an end the exact arithmetic cannot round inward is a run
+     * this could not narrow at all, and not a run whose narrowing happened to reach every value —
+     * the distinction {@link LevelSpace.Lattice#inspect} depends on, since the second widens to the
+     * carrier's own extent and the first must not.
+     */
+    @Test
+    void aRunWithAnEndTheArithmeticCannotRoundInwardAnswersItCouldNotLookThereRatherThanUnbounded() {
+        ExactRatio huge = new ExactRatio(BigInteger.ONE, BigInteger.ONE, 2_000_000_000L, 2_000_000_000L);
+        CutPosition line = new CutPosition(new Level.OfTheQuantity(huge), ExactRatio.of(2));
+        LevelInterval run = new LevelInterval(new Bound(line, true), null);
+
+        assertTrue(run.toLookIn(2) instanceof LevelInterval.LookedIn.NotWorkedOut,
+                "the exact arithmetic could not round an end of this run inward, which this could"
+                        + " not narrow rather than reached wide open");
     }
 
     /** Two spellings of one number are one name, which is the whole of what a name is for here. */

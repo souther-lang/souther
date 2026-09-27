@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.query.EstablishmentGap;
 import souther.exact.ExactFailures;

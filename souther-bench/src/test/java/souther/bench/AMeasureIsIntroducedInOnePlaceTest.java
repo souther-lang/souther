@@ -68,8 +68,10 @@ class AMeasureIsIntroducedInOnePlaceTest {
      *
      * <p>{@code PairSpace}'s static initialiser makes the one space that is measured in full and
      * holds nothing — a behavior with no pair of positions — and {@code ItemAssessment} makes the
-     * answer a point nobody is owed a row at has. Both are answers about the model rather than
-     * readings of it, which is why neither goes through a reading.
+     * two answers a point nobody is owed a row at can have: settled, where the rules decided it,
+     * and not worked out, where the exact arithmetic could not say where the point's own place on
+     * the order is. Both are answers about the model rather than readings of it, which is why
+     * neither goes through a reading.
      */
     private static final Map<String, Integer> INTRODUCED_BY = new LinkedHashMap<>(
             Map.ofEntries(
@@ -154,7 +156,7 @@ class AMeasureIsIntroducedInOnePlaceTest {
             Map.entry("souther.compiler.query.Adequacy$SignatureEvidence#notAsked(Lsouther/compiler/query/OutputCaseEvidence;Ljava/util/List;Lsouther/compiler/query/InputPositions;)Lsouther/compiler/query/Adequacy$SignatureEvidence;", 1),
             Map.entry("souther.compiler.query.PartitionEvidence$AxisCoverage#notAsked(Lsouther/compiler/partition/AxisId;Ljava/lang/String;Ljava/util/List;Ljava/util/List;ZLsouther/compiler/query/PartitionEvidence$AxisCoverage$Reading;)Lsouther/compiler/query/PartitionEvidence$AxisCoverage;", 1),
             Map.entry("souther.compiler.query.PartitionEvidence$PairSpace#notAsked(Ljava/util/List;)Lsouther/compiler/query/PartitionEvidence$PairSpace;", 1),
-            Map.entry("souther.compiler.query.ItemAssessment#weakeningSource()Lsouther/compiler/query/Measurement;", 1),
+            Map.entry("souther.compiler.query.ItemAssessment#weakeningSource(Lsouther/compiler/partition/Border;)Lsouther/compiler/query/Measurement;", 2),
             // A behavior missing something its boundary is made of — its signature, or the reading
             // of what it takes. Every measure of it is short of the same one thing, so the state is
             // made here and each of them hands its own type parameter to it — five factories and

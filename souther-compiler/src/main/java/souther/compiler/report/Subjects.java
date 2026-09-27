@@ -55,6 +55,10 @@ final class Subjects {
             // run; what a reader acts on is which border was not held against them.
             case Weakening.ABorderNotHeldAgainstTheLinesBesideIt it ->
                     new Subject.AtABorder(it.border());
+            // The border, and not the point within it: which point could not be worked out is
+            // carried in the words a report writes about the border's own items, not in a second
+            // place to send a reader.
+            case Weakening.ItemsPlaceNotWorkedOut it -> new Subject.AtABorder(it.border());
             case Weakening.ModelReadingIncomplete it -> of(it.cause());
             // Named by the behavior, which is what this answer is of.
             case Weakening.BodyNotInEvaluation it ->

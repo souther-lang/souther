@@ -63,10 +63,13 @@ public final class DifferenceBounds<A> {
 
     private final Map<Node<A>, Map<Node<A>, ExactCut>> closed;
     private final boolean holdsNothing;
+    private final boolean everyHopWasComposed;
 
-    private DifferenceBounds(Map<Node<A>, Map<Node<A>, ExactCut>> closed, boolean holdsNothing) {
+    private DifferenceBounds(Map<Node<A>, Map<Node<A>, ExactCut>> closed, boolean holdsNothing,
+                             boolean everyHopWasComposed) {
         this.closed = closed;
         this.holdsNothing = holdsNothing;
+        this.everyHopWasComposed = everyHopWasComposed;
     }
 
     /**
@@ -175,6 +178,7 @@ public final class DifferenceBounds<A> {
         edges.values().forEach(row -> nodes.addAll(row.keySet()));
         Map<Node<A>, Map<Node<A>, ExactCut>> shortest = new LinkedHashMap<>();
         edges.forEach((from, row) -> shortest.put(from, new LinkedHashMap<>(row)));
+        boolean everyHopWasComposed = true;
         for (Node<A> through : nodes) {
             Map<Node<A>, ExactCut> onwards = shortest.get(through);
             if (onwards == null) {
@@ -190,7 +194,16 @@ public final class DifferenceBounds<A> {
                     continue;
                 }
                 for (Map.Entry<Node<A>, ExactCut> hop : hops) {
-                    ExactCut round = ExactCut.meetingBoth(reaching, hop.getValue());
+                    // A hop the exact arithmetic cannot sum is a hop this round does not compose,
+                    // same as one that was never an edge: the closure is looser than the true one by
+                    // exactly this hop, which is sound for every reading that asks whether something
+                    // is left, and is why `everyHopWasComposed` is carried rather than thrown past.
+                    if (!(ExactCut.meetingBoth(reaching, hop.getValue())
+                            instanceof ExactAnswer.Held<ExactCut> composed)) {
+                        everyHopWasComposed = false;
+                        continue;
+                    }
+                    ExactCut round = composed.value();
                     ExactCut known = at(shortest, from, hop.getKey());
                     if (ExactCut.tighterUpper(known, round) == round) {
                         shortest.computeIfAbsent(from, k -> new LinkedHashMap<>())
@@ -210,7 +223,7 @@ public final class DifferenceBounds<A> {
                 break;
             }
         }
-        return new DifferenceBounds<>(shortest, nothing);
+        return new DifferenceBounds<>(shortest, nothing, everyHopWasComposed);
     }
 
     private static <A> ExactCut at(Map<Node<A>, Map<Node<A>, ExactCut>> table,
@@ -228,6 +241,20 @@ public final class DifferenceBounds<A> {
      */
     public boolean holdsNothing() {
         return holdsNothing;
+    }
+
+    /**
+     * Whether every hop the closure tried to sum was one the exact arithmetic could hold.
+     *
+     * <p>A model's own numbers can put two run ends far enough apart in scale that their sum has no
+     * representation this host writes ({@link ExactCut#meetingBoth}). Where that happens the closure
+     * still closes — a hop it could not sum is one it treats as absent, which only ever widens what
+     * is left — but it is then no longer complete for this fragment, and a reader depending on
+     * completeness ({@link souther.compiler.numeric.ProjectionCertificate}) has to be told rather
+     * than shown a closure that looks whole.
+     */
+    public boolean everyHopWasComposed() {
+        return everyHopWasComposed;
     }
 
     /** The tightest {@code atom <= …} this proves, or {@code null} where it proves none. */

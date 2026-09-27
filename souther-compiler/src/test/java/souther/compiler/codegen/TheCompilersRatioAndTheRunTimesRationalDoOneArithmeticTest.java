@@ -81,6 +81,11 @@ class TheCompilersRatioAndTheRunTimesRationalDoOneArithmeticTest {
         }
     }
 
+    private static Came ofRatio(ExactRatio r) {
+        return r == null ? Came.failed() : new Came(List.of(r.numeratorWithoutUnits(),
+                r.denominatorWithoutUnits(), r.twos(), r.fives()));
+    }
+
     private static Came ofRational(Supplier<Rational> operation) {
         try {
             Rational r = operation.get();
@@ -98,7 +103,7 @@ class TheCompilersRatioAndTheRunTimesRationalDoOneArithmeticTest {
         int failed = 0;
         for (Pair a : values) {
             for (Pair b : values) {
-                Came plus = ofRatio(() -> a.ratio().plus(b.ratio()));
+                Came plus = ofRatio(a.ratio().plus(b.ratio()).orNull());
                 assertEquals(plus, ofRational(() -> a.rational().plus(b.rational())), a + " + " + b);
                 Came times = ofRatio(() -> a.ratio().times(b.ratio()));
                 assertEquals(times, ofRational(() -> a.rational().times(b.rational())), a + " * " + b);
@@ -126,7 +131,7 @@ class TheCompilersRatioAndTheRunTimesRationalDoOneArithmeticTest {
         for (Pair each : values()) {
             for (RoundingMode towards : POLICIES) {
                 for (int scale : new int[] {-2, 0, 3}) {
-                    BigDecimal fromRatio = decimalOf(() -> each.ratio().asDecimal(towards, scale));
+                    BigDecimal fromRatio = each.ratio().asDecimal(towards, scale).orNull();
                     BigDecimal fromRational = decimalOf(
                             () -> each.rational().asDecimal(scale, towards));
                     assertEquals(fromRatio, fromRational, each + " at " + scale + " " + towards);
