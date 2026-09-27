@@ -17,6 +17,7 @@ import souther.compiler.check.SpecChecker;
 import souther.compiler.check.SpecImplementation;
 import souther.compiler.check.CheckSurface;
 import souther.compiler.check.InvariantSettled;
+import souther.compiler.check.GoverningInvariant;
 import souther.compiler.check.SettledInvariant;
 import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.CheckedEnsures;
@@ -2816,7 +2817,7 @@ public final class Bodies {
             Answer<Expanding.Of> against = db.ask(new Expanding(name, InliningPolicy.FULL));
             Answer<Hir.Module> settled = db.ask(new Settled(name));
             Answer<InvariantSettled> settling = db.ask(new Shapes.Settling(name));
-            Answer<Map<TypeSymbol.AtModule, List<SettledInvariant>>> governing =
+            Answer<Map<TypeSymbol.AtModule, List<GoverningInvariant>>> governing =
                     db.ask(new Shapes.SettledInvariantsGoverning(name));
             Answer<Set<String>> rows = db.ask(new RowMethods(name));
             if (!against.present() || !settled.present() || !settling.present()
@@ -2847,9 +2848,9 @@ public final class Bodies {
             // not off this module's settling: a clause a spread brings in was settled by the module
             // that wrote it, and what it left standing is run here, under the route this module has
             // to it.
-            for (List<SettledInvariant> clauses : governing.value().values()) {
-                for (SettledInvariant clause : clauses) {
-                    for (ReachName.Declaration standing : clause.callsLeftStanding()) {
+            for (List<GoverningInvariant> clauses : governing.value().values()) {
+                for (GoverningInvariant clause : clauses) {
+                    for (ReachName.Declaration standing : clause.settled().callsLeftStanding()) {
                         require(db, name, graph, required, pending, standing);
                     }
                 }

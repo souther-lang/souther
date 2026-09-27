@@ -1,15 +1,15 @@
 package souther.compiler.codegen;
 
-import souther.compiler.check.AuthoredShape;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.Elaborator;
 import souther.compiler.check.Lower;
 import souther.compiler.check.Derived;
 import souther.compiler.check.DerivedSymbols;
-import souther.compiler.check.InvariantStatement;
-import souther.compiler.check.PartId;
-import souther.compiler.check.RuleRef;
 import souther.compiler.ast.Hir;
+import souther.compiler.core.BoundaryConstraint;
+import souther.compiler.core.ConstraintProjection;
+import souther.compiler.core.ValueShape;
+import souther.compiler.regex.PatternMeaning;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.CaseShape;
@@ -126,6 +126,10 @@ final class CodecGen {
      *  predicates a refined constraint reaches for, and asking for that class by the type it belongs
      *  to is what keeps the two from being named apart. Set beside {@link #decoderClass}. */
     private GeneratedClass.Value decodedValue;
+
+    /** The patterns the decoder being generated holds a value to, and the fields they are kept in
+     *  ({@link #patternFieldsOf}). Set beside {@link #decoderClass}. */
+    private Map<PatternMeaning, PatternField> patternFields = Map.of();
 
     CodecGen(CodegenContext ctx) {
         this.ctx = ctx;
@@ -715,7 +719,8 @@ final class CodecGen {
         ClassDesc cdDec = cd(decoderOf(data, src));
         decoderClass = cdDec;
         decodedValue = valueOf(data);
-        Invariants invariants = invariantsOf(data, fields);
+        List<ValueShape.Invariant> invariants = invariantsOf(data);
+        patternFields = patternFieldsOf(invariants);
         return buildDecoder(cdDec, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_RDecoder);
@@ -738,175 +743,41 @@ final class CodecGen {
             for (MapKeyRepresentation key : keyTypes.values()) {
                 emitRekeyHelper(cb, key);
             }
-            emitSharedInstance(cb, cdDec, ClassFile.ACC_PUBLIC, emitPatternFields(cb, invariants));
-            if (invariants.hasRefined()) {
+            emitSharedInstance(cb, cdDec, ClassFile.ACC_PUBLIC, emitPatternFields(cb));
+            if (invariants.stream().anyMatch(c -> !c.projection().complete())) {
                 emitInvariantFailureHelper(cb, data.name());
             }
-            if (invariants.constraints().stream()
-                    .anyMatch(InvariantConstraints.Pattern.class::isInstance)) {
+            if (!patternFields.isEmpty()) {
                 emitPatternFailureHelper(cb);
+            }
+            if (constraintsOf(invariants).stream()
+                    .anyMatch(BoundaryConstraint.OfMap.class::isInstance)) {
+                RaohMapSizes.emitHelpers(cb);
             }
         });
     }
 
     /**
-     * A newtype's invariant as seen by its decoder (issue #83): each declared clause, in the order it
-     * is declared, as what the decoder does about it.
+     * The clauses a decoder checks as the value it decodes: a newtype's, each in the order it is
+     * declared, with what it is as constraints — the checker's answer and not this emitter's
+     * ({@link ValueShape.Invariant#projection()}).
+     *
+     * <p>None for a product, which crosses as an object: its fields are decoded one by one and its
+     * clauses run whole, as the rules they are, where it is constructed — one field or many, whatever
+     * they are as constraints. That is the form a data was declared in deciding how it crosses, and
+     * it is asked here, where the crossing is written, and not in the answer.
      */
-    private record Invariants(List<ClauseEmit> clauses) {
-
-        static final Invariants NONE = new Invariants(List.of());
-
-        boolean hasRefined() {
-            return clauses.stream().anyMatch(ClauseEmit::refined);
-        }
-
-        /** Every mapped constraint, for the static fields a pattern constraint needs. */
-        List<InvariantConstraints.Constraint> constraints() {
-            List<InvariantConstraints.Constraint> out = new ArrayList<>();
-            for (ClauseEmit c : clauses) {
-                out.addAll(c.constraints());
-            }
-            return out;
-        }
+    private List<ValueShape.Invariant> invariantsOf(Hir.Data data) {
+        return data.newtype() ? ctx.shapeOf(data.declares()).invariants() : List.of();
     }
 
-    /**
-     * What the decoder does about one declared clause: the Raoh constraints its conjuncts map onto, and
-     * whether a conjunct is left for the clause's own check to report.
-     *
-     * <p>Both may hold at once. {@code invariant a && b} with only {@code a} mapped states {@code a} as
-     * the constraint it is — so what breaks {@code a} is reported in Raoh's terms — and refines the
-     * clause behind it for what breaks {@code b}. That is not an ordering question: the two conjuncts
-     * are one rule, and one rule is what an arm and an issue name.
-     */
-    private record ClauseEmit(int index, Optional<String> name,
-                              List<InvariantConstraints.Constraint> constraints, boolean refined) {}
-
-    /**
-     * How each clause reaches the decoder: its conjuncts become the Raoh constraints they map onto, and
-     * the clause is refined for whatever is left. From the first clause that needs a refine, every later
-     * clause is refined whole.
-     *
-     * <p>That cut is what keeps the reporting order the declaration order. Raoh chains a constraint with
-     * {@code flatMap} and a {@code refine} answers the plain {@code Decoder}, so a typed constraint
-     * cannot follow a refine in the chain: were the later mapped clauses hoisted in front of it, a value
-     * breaking an earlier unmapped clause and a later mapped one would be reported as the later one, and
-     * the boundary and an attempted construction would name different rules for the same value. A mapped
-     * clause declared after an unmapped one therefore trades Raoh's code for its place in the order.
-     */
-    private Invariants invariantsOf(Hir.Data data, Map<String, Type> fields) {
-        if (!data.newtype()) {
-            return Invariants.NONE;   // an object's invariant has no single value to constrain
+    /** Every constraint the clauses are stated as, for what the decoder class has to carry. */
+    private static List<BoundaryConstraint> constraintsOf(List<ValueShape.Invariant> clauses) {
+        List<BoundaryConstraint> out = new ArrayList<>();
+        for (ValueShape.Invariant clause : clauses) {
+            out.addAll(clause.projection().constraints());
         }
-        List<TypeOps.Declared> declared = dischargeForm(data);
-        if (declared.isEmpty()) {
-            return Invariants.NONE;
-        }
-        Type base = fields.get("value");
-        List<ClauseEmit> out = new ArrayList<>();
-        boolean refining = false;
-        for (int i = 0; i < declared.size(); i++) {
-            List<InvariantConstraints.Constraint> mapped = new ArrayList<>();
-            boolean refine = true;
-            if (!refining) {
-                refine = false;
-                // The parts the clause was split into, with the tree the expansion made of each.
-                // Split again here, this would be a second answer to which parts a clause has,
-                // taken off a tree an expansion left.
-                for (AuthoredShape.Written conjunct : declared.get(i).parts()) {
-                    List<InvariantConstraints.Constraint> states =
-                            constraintsOf(conjunct.id(), base);
-                    if (states == null) {
-                        refine = true;
-                    } else {
-                        mapped.addAll(states);
-                    }
-                }
-            }
-            refining |= refine;
-            out.add(new ClauseEmit(i, declared.get(i).clause().name(), List.copyOf(mapped),
-                    refine));
-        }
-        return new Invariants(out);
-    }
-
-    /**
-     * The constraints one conjunct maps onto, or null where it keeps its own check.
-     *
-     * <p><b>Recognised statement by statement and committed conjunct by conjunct.</b> A conjunct
-     * states as many rules as the reading arrives at — a denied choice states one per branch — and
-     * each of them is mapped on its own. What is emitted is all of them or none: a conjunct half of
-     * whose rules became constraints would report one of its own statements as {@code too_short} and
-     * the other as {@code invariant_violation}, so one thing an author wrote would break in two
-     * different words depending on which half the value broke.
-     *
-     * <p>Null where the reading has no form for the clause, which is not a conjunct that constrains
-     * nothing: the rule still runs, and what it reaches the boundary as is the fallback.
-     */
-    private List<InvariantConstraints.Constraint> constraintsOf(
-            PartId<RuleRef.Invariant> conjunct, Type base) {
-        List<InvariantStatement> statements = ctx.invariantStatements().of(conjunct);
-        if (statements == null) {
-            return null;
-        }
-        InvariantConstraints mapping =
-                InvariantConstraints.against(symbols);
-        List<InvariantConstraints.Constraint> out = new ArrayList<>();
-        for (InvariantStatement each : statements) {
-            Optional<InvariantConstraints.Constraint> c = mapping.of(each, base);
-            if (c.isEmpty()) {
-                return null;
-            }
-            out.add(c.get());
-        }
-        return List.copyOf(out);
-    }
-
-    /**
-     * The clauses of {@code data} in the representation the constraint mapping reads: this module's own
-     * helpers expanded, the language's own operations left standing
-     * ({@link souther.compiler.check.InliningPolicy#DISCHARGE}).
-     *
-     * <p>The mapping is written against the operations an author wrote — {@code List.length},
-     * {@code List.allDistinctBy} — and by the time the backend emits, a prelude helper has become the
-     * fold it is derived from. Reading the settled form instead would leave every collection rule
-     * unrecognised.
-     *
-     * <p><b>Every rule or none.</b> A decoder is what the boundary holds a value to, so one built
-     * from the rules that happened to be readable holds it to less than the model says and carries
-     * no word for having done so — a value the model refuses would cross. Where a rule was not
-     * reached this refuses instead, and the module emits nothing.
-     *
-     * <p>Refused as a disagreement and not reported to an author, because nothing an author writes
-     * reaches it: a module that spreads a declaration nothing expanded is already short of an input
-     * the emission takes and stops before here. What holds that is a dependency of the emission
-     * rather than anything this reads, so it is said here rather than assumed — reaching this line
-     * is the emitter having run past its own precondition, and the answer at it is the difference
-     * between a boundary that holds and one that quietly does not.
-     */
-    private List<TypeOps.Declared> dischargeForm(Hir.Data data) {
-        return TypeOps.expandedInvariants(data.declares(), symbols,
-                ctx.dischargeInvariants()).whole()
-                .orElseThrow(() -> new RulesWereNotAllRead(data.declares().name()));
-    }
-
-    /**
-     * Raised where a decoder was to be built and a rule about the value had not been read.
-     *
-     * <p>Not a limit and not an author's mistake: the emission does not begin where a rule it reads
-     * could not be worked out, so arriving here is this compiler having gone past its own
-     * precondition. What a decoder built from the rules that happened to be readable holds a value
-     * to is less than the model says, and it carries no word for having done so.
-     */
-    static final class RulesWereNotAllRead extends IllegalStateException {
-
-        private static final long serialVersionUID = 1L;
-
-        RulesWereNotAllRead(String declaration) {
-            super("a decoder for `" + declaration + "` was to be built from rules this compiler had"
-                    + " not all read");
-        }
+        return out;
     }
 
     /** Collects the named types used as map keys anywhere in a derived decoder. */
@@ -1462,9 +1333,16 @@ final class CodecGen {
     }
 
     private void emitPrimDecode(CodeBuilder code, AstExpressions gen, Hir.PrimDecoder prim,
-                                SequencedMap<String, Type> fields, Src src, Invariants invariants) {
+                                SequencedMap<String, Type> fields, Src src,
+                                List<ValueShape.Invariant> invariants) {
         Type inputType = TypeOps.primType(prim.from());
         ClassDesc leaf = srcLeafOwner(src);
+        Carrier carrier = switch (prim.from()) {
+            case TEXT -> Carrier.STRING;
+            case INT -> Carrier.LONG;
+            case DECIMAL -> Carrier.DECIMAL;
+            case BOOL, DATE, TIME, DATETIME, INSTANT -> Carrier.PLAIN;
+        };
         switch (prim.from()) {
             // Canonicalized before the constraints below read it, as a field's string is — a newtype
             // over Text is the other place text enters, and the two must agree or the same value
@@ -1480,7 +1358,7 @@ final class CodecGen {
             case DATETIME -> emitTemporalLeaf(code, src, Type.Prim.DATETIME);
             case INSTANT -> emitTemporalLeaf(code, src, Type.Prim.INSTANT);
         }
-        emitInvariantConstraints(code, inputType, invariants);
+        emitInvariantConstraints(code, inputType, carrier, invariants);
         code.aload(1);                                                 // in (bare value)
         code.aload(2);                                                 // path
         code.invokeinterface(CD_RDecoder, "decode", MTD_Rdecode);      // Result
@@ -1508,26 +1386,26 @@ final class CodecGen {
      * Y's decoder rather than a primitive one.
      */
     private void emitNewtypeDecode(CodeBuilder code, AstExpressions gen, Hir.NewtypeDecoder dec,
-                                   SequencedMap<String, Type> fields, Src src, Invariants invariants) {
+                                   SequencedMap<String, Type> fields, Src src,
+                                   List<ValueShape.Invariant> invariants) {
         if (dec.inner() instanceof Hir.MapDecRef mp) {
-            // The map's own decoder, then its two halves of invariant either side of the key remap.
-            // A mapped constraint is one of Raoh's and needs the typed leaf, which is only before the
-            // remap; size is the same either way on the success path, since a remap that collided has
-            // already failed (see emitRekeyHelper). A refined clause is the model's own predicate and
-            // needs the map the model declared — the keys converted and canonical — so it goes after.
+            // The map's own decoder and its keys decoded, and then the clauses. What a clause is
+            // about is the map the model declared — its keys converted and canonical — and every
+            // clause is about that one value, so they run in the order they are declared on it. A
+            // key that does not decode is no map of the model's yet, and is reported as that before
+            // any clause is asked.
             emitDecoderObject(code, mp.value(), src);
             code.invokestatic(srcListOwner(src), "map", MTD_mapDec);
-            emitInvariantConstraints(code, bindType(dec.inner()), invariants,
-                    ConstraintPhase.MAPPED);
             code.invokedynamic(rekeyCallSite(decoderClass, mp.key()));
             code.invokeinterface(CD_RDecoder, "flatMapWithPath", MTD_flatMapWithPath);
-            emitInvariantConstraints(code, bindType(dec.inner()), invariants,
-                    ConstraintPhase.REFINED);
+            emitInvariantConstraints(code, bindType(dec.inner()), Carrier.MAP, invariants);
         } else {
             emitDecoderObject(code, dec.inner(), src);                // Y's decoder (for this source)
-            // Y's decoder is a plain Decoder, so no typed constraint applies here; whatever the
-            // invariant says is checked through refine (and again by __construct).
-            emitInvariantConstraints(code, bindType(dec.inner()), invariants);
+            // A list is decoded by Raoh's list decoder, whose constraints a clause can be stated
+            // as. Anything else is a plain Decoder, on which a clause is checked as itself (and
+            // again by __construct).
+            Carrier carrier = dec.inner() instanceof Hir.ListDecRef ? Carrier.LIST : Carrier.PLAIN;
+            emitInvariantConstraints(code, bindType(dec.inner()), carrier, invariants);
         }
         code.aload(1);                                               // in
         code.aload(2);                                               // path
@@ -1769,42 +1647,55 @@ final class CodecGen {
     }
 
     /**
-     * Which half of the invariant to emit. A map's keys are converted between the two: a mapped
-     * constraint is one of Raoh's own and has to reach the typed leaf, which is before the
-     * conversion, while a refined clause is the model's own predicate and has to read the map the
-     * model declared — {@code Map<UserId, V>} with canonical keys, not the {@code Map<String, V>} the
-     * object decoded to. Splitting them keeps declaration order, because a clause that needs refining
-     * makes every later clause refined too ({@link #invariantsOf}), so the mapped ones are a prefix.
+     * The decoder a newtype's clauses are chained onto, which is what decides the methods a
+     * constraint and a clause's own check are chained through.
+     *
+     * <p>A typed decoder keeps its type through its own {@code refine}, so a constraint can follow a
+     * clause's check and the clauses go on in the order they are declared.
      */
-    private enum ConstraintPhase { MAPPED, REFINED, BOTH }
+    private enum Carrier {
+        STRING(CD_StringDecoder),
+        LONG(CD_LongDecoder),
+        DECIMAL(CD_DecimalDecoder),
+        LIST(CD_ListDecoder),
+        /** The map the model declares, its keys decoded: a plain decoder, onto which a map's size
+         *  constraints are lowered ({@link RaohMapSizes}). */
+        MAP(null),
+        /** Any other decoder, on which nothing but a clause's own check is chained. */
+        PLAIN(null);
+
+        /** The typed decoder's class, or null where the chain is on the plain {@code Decoder}. */
+        final ClassDesc typed;
+
+        Carrier(ClassDesc typed) {
+            this.typed = typed;
+        }
+    }
 
     /**
-     * Constrains the leaf decoder on the stack with the newtype's invariant, clause by clause in the
-     * order they are declared (issue #83). A clause the mapping recognises becomes the Raoh constraint
-     * that says the same thing, so the failure carries that constraint's code, metadata and default
-     * message at the value's path — {@code too_short} with {@code min}, not one
-     * {@code invariant_violation} for every rule in the model. A clause it does not recognise gets a
-     * {@code refine} over that clause's own check, under the shared code with the rejecting type and,
-     * where the clause has one, its name in the metadata. That failure is built here rather than through
-     * {@code refine}'s message overload, which mints a custom-message issue a resolver refuses to touch
-     * — an invariant's text must stay replaceable.
+     * Constrains the decoder on the stack with the newtype's invariant, clause by clause in the order
+     * they are declared. What the checker found a clause to be as constraints
+     * ({@link ConstraintProjection}) is chained as those constraints, so the failure carries the
+     * constraint's code, metadata and default message at the value's path — {@code too_short} with
+     * {@code min}, not one {@code invariant_violation} for every rule in the model. Where they are
+     * not the whole clause, the clause's own check follows them, under the shared code with the rejecting type and, where the clause has one, its
+     * name in the metadata. That failure is built here rather than through {@code refine}'s message
+     * overload, which mints a custom-message issue a resolver refuses to touch — an invariant's text
+     * must stay replaceable.
      *
      * <p>Raoh chains with {@code flatMap}, so the first failure stops the rest and the chain's order is
      * the order a failure is reported in — the same order {@code __construct} decides in, so the
      * boundary and an attempted construction name the same clause for the same value.
      */
-    private void emitInvariantConstraints(CodeBuilder code, Type base, Invariants invariants) {
-        emitInvariantConstraints(code, base, invariants, ConstraintPhase.BOTH);
-    }
-
-    private void emitInvariantConstraints(CodeBuilder code, Type base,
-                                          Invariants invariants, ConstraintPhase phase) {
-        for (ClauseEmit clause : invariants.clauses()) {
-            if (phase != ConstraintPhase.REFINED) {
-                clause.constraints().forEach(c -> emitConstraint(code, c));
+    private void emitInvariantConstraints(CodeBuilder code, Type base, Carrier carrier,
+                                          List<ValueShape.Invariant> clauses) {
+        for (int i = 0; i < clauses.size(); i++) {
+            ValueShape.Invariant clause = clauses.get(i);
+            for (BoundaryConstraint c : clause.projection().constraints()) {
+                emitConstraint(code, carrier, c);
             }
-            if (clause.refined() && phase != ConstraintPhase.MAPPED) {
-                code.invokedynamic(invariantPredicateCallSite(base, clause.index()));
+            if (!clause.projection().complete()) {
+                code.invokedynamic(invariantPredicateCallSite(base, i));
                 // The clause is captured off the stack, so a clause with no name captures null —
                 // a constant-pool entry could not have been one.
                 if (clause.name().isPresent()) {
@@ -1813,83 +1704,97 @@ final class CodecGen {
                     code.aconst_null();
                 }
                 code.invokedynamic(invariantFailureCallSite());
-                code.invokeinterface(CD_RDecoder, "refine", MTD_Rrefine);
+                if (carrier.typed != null) {
+                    code.invokevirtual(carrier.typed, "refine",
+                            MethodTypeDesc.of(carrier.typed, CD_Predicate, CD_BiFunction));
+                } else {
+                    code.invokeinterface(CD_RDecoder, "refine", MTD_Rrefine);
+                }
             }
         }
     }
 
-    private void emitConstraint(CodeBuilder code, InvariantConstraints.Constraint c) {
+    private void emitConstraint(CodeBuilder code, Carrier carrier, BoundaryConstraint c) {
+        Carrier about = switch (c) {
+            case BoundaryConstraint.OfString _ -> Carrier.STRING;
+            case BoundaryConstraint.OfInt _ -> Carrier.LONG;
+            case BoundaryConstraint.OfDecimal _ -> Carrier.DECIMAL;
+            case BoundaryConstraint.OfList _ -> Carrier.LIST;
+            case BoundaryConstraint.OfMap _ -> Carrier.MAP;
+        };
+        if (about != carrier) {
+            throw new IllegalStateException("a constraint on a value decoded by " + about
+                    + " was stated of one decoded by " + carrier + ": " + c);
+        }
         switch (c) {
-            case InvariantConstraints.MinLength m -> {
+            case BoundaryConstraint.MinLength m -> {
                 pushInt(code, m.n());
                 code.invokevirtual(CD_StringDecoder, "minLength", MTD_strLengthBound);
             }
-            case InvariantConstraints.MaxLength m -> {
+            case BoundaryConstraint.MaxLength m -> {
                 pushInt(code, m.n());
                 code.invokevirtual(CD_StringDecoder, "maxLength", MTD_strLengthBound);
             }
-            case InvariantConstraints.FixedLength f -> {
+            case BoundaryConstraint.FixedLength f -> {
                 pushInt(code, f.n());
                 code.invokevirtual(CD_StringDecoder, "fixedLength", MTD_strLengthBound);
             }
-            case InvariantConstraints.Pattern p -> {
+            case BoundaryConstraint.Pattern p -> {
                 // Compiled once into a static field, not on every decode. Run as a predicate rather
                 // than handed to `pattern`, which would quote the pattern the matcher runs: what a
                 // failure quotes is the pattern the call was given, built by `__patternFailure`.
-                code.getstatic(decoderClass, patternField(p.regex()), CD_Pattern);
+                PatternField field = patternFields.get(p.meaning());
+                if (field == null) {
+                    throw new IllegalStateException(
+                            "a pattern the decoder class keeps no field for: " + p);
+                }
+                code.getstatic(decoderClass, field.name(), CD_Pattern);
                 code.invokevirtual(CD_Pattern, "asMatchPredicate", MTD_asMatchPredicate);
                 code.loadConstant(p.written());
                 code.invokedynamic(patternFailureCallSite());
                 code.invokevirtual(CD_StringDecoder, "refine", MTD_refineStringFailing);
             }
-            case InvariantConstraints.Min m -> {
+            case BoundaryConstraint.Min m -> {
                 code.loadConstant(m.n());
                 code.invokevirtual(CD_LongDecoder, "min", MTD_longBound);
             }
-            case InvariantConstraints.Max m -> {
+            case BoundaryConstraint.Max m -> {
                 code.loadConstant(m.n());
                 code.invokevirtual(CD_LongDecoder, "max", MTD_longBound);
             }
-            case InvariantConstraints.Positive _ ->
+            case BoundaryConstraint.Positive _ ->
                     code.invokevirtual(CD_LongDecoder, "positive", MTD_longSign);
-            case InvariantConstraints.NonNegative _ ->
+            case BoundaryConstraint.NonNegative _ ->
                     code.invokevirtual(CD_LongDecoder, "nonNegative", MTD_longSign);
-            case InvariantConstraints.DecimalMin m -> {
+            case BoundaryConstraint.DecimalMin m -> {
                 emitBigDecimal(code, m.n());
                 code.invokevirtual(CD_DecimalDecoder, "min", MTD_decBound);
             }
-            case InvariantConstraints.DecimalMax m -> {
+            case BoundaryConstraint.DecimalMax m -> {
                 emitBigDecimal(code, m.n());
                 code.invokevirtual(CD_DecimalDecoder, "max", MTD_decBound);
             }
-            case InvariantConstraints.DecimalPositive _ ->
+            case BoundaryConstraint.DecimalPositive _ ->
                     code.invokevirtual(CD_DecimalDecoder, "positive", MTD_decSign);
-            case InvariantConstraints.DecimalNonNegative _ ->
+            case BoundaryConstraint.DecimalNonNegative _ ->
                     code.invokevirtual(CD_DecimalDecoder, "nonNegative", MTD_decSign);
-            case InvariantConstraints.NonEmpty _ ->
+            case BoundaryConstraint.NonEmpty _ ->
                     code.invokevirtual(CD_ListDecoder, "nonempty", MTD_listSign);
-            case InvariantConstraints.MinSize m -> {
+            case BoundaryConstraint.MinSize m -> {
                 pushInt(code, m.n());
                 code.invokevirtual(CD_ListDecoder, "minSize", MTD_listSizeBound);
             }
-            case InvariantConstraints.MaxSize m -> {
+            case BoundaryConstraint.MaxSize m -> {
                 pushInt(code, m.n());
                 code.invokevirtual(CD_ListDecoder, "maxSize", MTD_listSizeBound);
             }
-            case InvariantConstraints.FixedSize f -> {
+            case BoundaryConstraint.FixedSize f -> {
                 pushInt(code, f.n());
                 code.invokevirtual(CD_ListDecoder, "fixedSize", MTD_listSizeBound);
             }
-            case InvariantConstraints.Unique _ ->
+            case BoundaryConstraint.Unique _ ->
                     code.invokevirtual(CD_ListDecoder, "unique", MTD_listSign);
-            case InvariantConstraints.MapMinSize m -> {
-                pushInt(code, m.n());
-                code.invokevirtual(CD_RecordDecoder, "minSize", MTD_recordSizeBound);
-            }
-            case InvariantConstraints.MapMaxSize m -> {
-                pushInt(code, m.n());
-                code.invokevirtual(CD_RecordDecoder, "maxSize", MTD_recordSizeBound);
-            }
+            case BoundaryConstraint.OfMap m -> RaohMapSizes.emit(code, decoderClass, m);
         }
     }
 
@@ -1999,9 +1904,30 @@ final class CodecGen {
         });
     }
 
-    /** The static field holding a pattern constraint's compiled regex. */
-    private static String patternField(String regex) {
-        return "__pattern$" + Integer.toHexString(regex.hashCode());
+    /**
+     * A pattern the decoder being generated holds a value to: the static field its compiled regex
+     * is kept in, and the regex this backend's matcher runs.
+     */
+    private record PatternField(String name, String regex) {}
+
+    /**
+     * Each pattern the clauses are stated as, by what it matches, with the field it is kept in.
+     *
+     * <p>Worked out once per decoder class and before its decode method is written, because that
+     * method reads the fields the class declares afterwards: one table, so the field a constraint
+     * reads is the field the class declares, and a pattern's regex is written once. The fields are
+     * numbered by their place here, so two patterns are two fields whatever their texts are.
+     */
+    private static Map<PatternMeaning, PatternField> patternFieldsOf(
+            List<ValueShape.Invariant> invariants) {
+        Map<PatternMeaning, PatternField> out = new LinkedHashMap<>();
+        for (BoundaryConstraint c : constraintsOf(invariants)) {
+            if (c instanceof BoundaryConstraint.Pattern p && !out.containsKey(p.meaning())) {
+                out.put(p.meaning(), new PatternField("__pattern$" + out.size(),
+                        JavaPatterns.of(p.meaning())));
+            }
+        }
+        return out;
     }
 
     /**
@@ -2013,26 +1939,21 @@ final class CodecGen {
      * rather than writing a {@code <clinit>} of its own — a class carries at most one, and
      * {@code emitSharedInstance} is what writes it.
      */
-    private Consumer<CodeBuilder> emitPatternFields(ClassBuilder cb, Invariants invariants) {
-        List<String> regexes = new ArrayList<>();
-        for (InvariantConstraints.Constraint c : invariants.constraints()) {
-            if (c instanceof InvariantConstraints.Pattern p && !regexes.contains(p.regex())) {
-                regexes.add(p.regex());
-            }
-        }
-        if (regexes.isEmpty()) {
+    private Consumer<CodeBuilder> emitPatternFields(ClassBuilder cb) {
+        if (patternFields.isEmpty()) {
             return null;
         }
-        for (String regex : regexes) {
-            cb.withField(patternField(regex), CD_Pattern,
+        List<PatternField> fields = List.copyOf(patternFields.values());
+        for (PatternField field : fields) {
+            cb.withField(field.name(), CD_Pattern,
                     ClassFile.ACC_PRIVATE | ClassFile.ACC_STATIC | ClassFile.ACC_FINAL);
         }
         ClassDesc owner = decoderClass;
         return code -> {
-            for (String regex : regexes) {
-                code.loadConstant(regex);
+            for (PatternField field : fields) {
+                code.loadConstant(field.regex());
                 code.invokestatic(CD_Pattern, "compile", MTD_patternCompile);
-                code.putstatic(owner, patternField(regex), CD_Pattern);
+                code.putstatic(owner, field.name(), CD_Pattern);
             }
         };
     }

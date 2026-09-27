@@ -39,11 +39,11 @@ import java.util.Set;
  * written there is one of these; answered from two places, adding a measure would be read by one of
  * them and not the other — the same drift one size down.
  *
- * <p>Not what the codec reads. {@code InvariantConstraints} maps a clause onto a decoder constraint,
- * which is a question about what Raoh can enforce rather than about what is a number: it has no
- * entry for {@code Set.size}, because a set crosses the boundary as a list and a constraint chained
- * after the mapping that drops duplicates would count the wrong things. That absence is a fact about
- * the decoder and would be wrong to take from here.
+ * <p>Not what the boundary reads. {@link BoundaryConstraints} states a clause as a decoder
+ * constraint, which is a question about what the boundary can check of a decoded value rather than
+ * about what is a number: it has no entry for {@code Set.size}, because a set crosses the boundary as
+ * a list and a constraint on the decoded list would count the duplicates the set does not have. That
+ * absence is a fact about the boundary and would be wrong to take from here.
  *
  * <p>Held as the names they resolve to rather than as spellings. Two ways of writing a call that
  * reach one operation are one operation, and comparing {@code "String.length"} against a rendering

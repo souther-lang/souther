@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.core.ConstraintProjection;
 import souther.compiler.core.Core;
 import souther.compiler.core.ValueShape;
 import souther.compiler.diag.CompileException;
@@ -12,6 +13,7 @@ import souther.compiler.types.Type;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * What a value of a declared data is made of and what must hold of one, elaborated once.
@@ -50,13 +52,16 @@ public final class ExecutableInvariants {
      *     reaches what they name — the answer the module's emitted methods are read off too
      * @param helpers the signatures of the recursive helpers a clause may reach — the same table the
      *     body check reads, because a clause naming a total helper names the same one a body does
+     * @param form the clauses in the representation the boundary's constraints are read from
+     * @param statements what each part of a clause states in that representation
      * @throws CompileException where a clause is not a condition
      */
-    public static ValueShape of(Hir.Data data, List<SettledInvariant> governing,
+    public static ValueShape of(Hir.Data data, List<GoverningInvariant> governing,
                                 DerivedSymbols symbols,
                                 PublishedDeclarations published, DeclarationKinds kinds,
                                 NewtypeInners inners, EffectiveFieldTypes fieldTypes,
-                                Map<String, Type> helpers) {
+                                Map<String, Type> helpers, ExpandedClauseLookup form,
+                                InvariantStatements statements) {
         Map<String, Type> types = TypeOps.fieldTypes(data, symbols);
         Map<String, BindingId> bindings =
                 TypeOps.fieldBindings(data.declares(), symbols);
@@ -74,9 +79,17 @@ public final class ExecutableInvariants {
         CheckContext ctx =
                 CheckContext.executableInvariant(symbols, new DeclarationAccess(published, kinds,
                         inners, fieldTypes, FieldLayout.asWritten(symbols)), data);
+        // A constraint is about the value of a data made of one field, whichever form it was
+        // declared in: a newtype and a product of one field hold the same clauses of that field. A
+        // data of more fields has no one field for a constraint to be about, and each of its clauses
+        // is none.
+        Optional<BoundaryConstraints.Projections> projected = fields.size() == 1
+                ? Optional.of(BoundaryConstraints.of(symbols, data.declares(), fields.get(0), form,
+                        statements))
+                : Optional.empty();
         List<ValueShape.Invariant> invariants = new ArrayList<>();
-        for (SettledInvariant settled : governing) {
-            Hir.InvariantClause clause = settled.clause();
+        for (GoverningInvariant governed : governing) {
+            Hir.InvariantClause clause = governed.settled().clause();
             // Desugared first, the way a body is: a clause writing a comprehension states the same
             // condition as the `if` it is derived from, and one of the two reaching the check and
             // the other reaching what runs is the shape this exists to stop.
@@ -86,7 +99,9 @@ public final class ExecutableInvariants {
                         .say(new DeclarationMessage.AnInvariantExpressionIsBool(
                                 Type.show(condition.type()))).build());
             }
-            invariants.add(new ValueShape.Invariant(clause.name(), condition));
+            invariants.add(new ValueShape.Invariant(clause.name(), condition,
+                    projected.map(projections -> projections.of(governed.id()))
+                            .orElseGet(ConstraintProjection::none)));
         }
         return new ValueShape(data.declares(), fields, invariants);
     }

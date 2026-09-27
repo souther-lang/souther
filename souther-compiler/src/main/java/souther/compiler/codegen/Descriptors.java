@@ -482,9 +482,6 @@ final class Descriptors {
     static final MethodTypeDesc MTD_listSizeBound =
             MethodTypeDesc.of(CD_ListDecoder, ConstantDescs.CD_int);
     static final MethodTypeDesc MTD_listSign = MethodTypeDesc.of(CD_ListDecoder);
-    /** A map's entry-count bound: Raoh decodes a map as a record of its values. */
-    static final MethodTypeDesc MTD_recordSizeBound =
-            MethodTypeDesc.of(CD_RecordDecoder, ConstantDescs.CD_int);
     /** {@code Decoder.refine(Predicate, BiFunction)}: the failure is built by the caller, so it is a
      *  {@code Result.fail} (resolvable) rather than the {@code failCustom} the message overload makes. */
     static final MethodTypeDesc MTD_Rrefine = MethodTypeDesc.of(CD_RDecoder, CD_Predicate, CD_BiFunction);

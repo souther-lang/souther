@@ -94,8 +94,8 @@ class AnImplementedBehaviorMustHaveTheImplementationItWasClassifiedAsHavingTest 
                 Linkages.reading(compilation.db()), own.read());
         return Backend.generate(in.lowered(), in.scope(), in.published(), in.kinds(),
                 in.scope().library().kernelSignatures(), in.typePackages(), in.sigs(),
-                in.requirements(), in.checked(), in.compositions(), in.dischargeClauses(),
-                in.invariantStatements(), in.shapes(), in.checks(), in.standingCalls(),
+                in.requirements(), in.checked(), in.compositions(),
+                in.shapes(), in.checks(), in.standingCalls(),
                 new TheTextsThisCompileHolds(compilation.db()), linkage);
     }
 
