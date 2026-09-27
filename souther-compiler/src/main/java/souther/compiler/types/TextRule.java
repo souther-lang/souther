@@ -18,7 +18,7 @@ public final class TextRule {
 
     /** Raoh's code for text whose shape is wrong, the one a temporal's text is refused with too
      *  ({@link TemporalRule#REFUSED}): what arrived is a string, and it does not denote a
-     *  {@code String} on this carrier. A value that is not a string at all is Raoh's
+     *  {@code String}. A value that is not a string at all is Raoh's
      *  {@code type_mismatch}, and this is not that. */
     public static final String REFUSED = "invalid_format";
 

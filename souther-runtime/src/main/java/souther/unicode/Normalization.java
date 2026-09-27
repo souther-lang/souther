@@ -41,7 +41,7 @@ public final class Normalization {
 
     /**
      * {@link #nfc}, or null where the answer is longer than {@code longest} code points — which is
-     * found out before that much is built, so a caller whose carrier has a bound on a text's length
+     * found out before that much is built, so a caller that has a bound on a text's length
      * can ask for the answer without asking for more than the bound.
      *
      * <p>Text made only of code points below {@link NormalizationTables#NFC_TRIVIAL_LIMIT} is its own

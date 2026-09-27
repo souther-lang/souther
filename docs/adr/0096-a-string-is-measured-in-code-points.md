@@ -2,7 +2,50 @@
 
 Status: Accepted. Revised 2026-09-26 and 2026-09-27 — see *Revision*.
 
+## Revision (2026-09-27, who owns the bound)
+
+The Revision below keeps one decision and replaces another. Kept: whether text has a place is part
+of whether it is a `String`, so every `String` has one and no operation over a `String` the program
+holds can end for want of a place. Replaced: the bound is no longer the carrier's. It is the
+language's, and `[#what-a-string-holds]` states it.
+
+A `String` holds at most 2^28 − 1 code points, counted in what `String.length` counts. The bound
+was the carrier's, in the units the carrier keeps text in, and that made the language's own value
+domain depend on a host's array limit. Every carrier that was not the JVM had two choices: declare
+its own bound, so that a program ended in one place on one carrier and in another on the next, or
+copy the JVM's number, so that the language's answer was a JVM constant by another route. The second
+is what the native compiler did. A carrier now represents a `String` of that length or is not an
+implementation of the language; that is the same rule that keeps `Int` 64 bits wide wherever it is
+carried.
+
+Two refusals are kept apart. Text or an answer past the bound has no place, and that is a refusal
+of the language, said the same on every carrier. A `String` within the bound that the host cannot
+allocate is the host's resource failing, like a `String` of one character when the heap is full; it
+is not an answer with no place, and the language does not promise against it.
+
+What is bounded is a `String` and not the numbers an operation is given. `repeat(n, "")` builds
+nothing for any `n`, and a pad that is empty, or a `String` already as wide as the width, builds
+nothing for any width. `repeat` and the pads refuse where what they would build is past the bound,
+before they build it.
+
+Why 2^28 − 1 and not another number. The value is a choice and is not derived from a host. The
+constraints it has to meet are these. It has to be well inside what the JVM holds in one array in
+either of its encodings even when every code point is outside the basic plane, which takes two
+units, so that whether a text has a place never depends on which characters it holds or on how the
+JVM was started; the largest bound that meets that is 2^29 − 3, and choosing it would make the
+language's number the JVM's again. It has to be below the largest `Int` a host
+array index takes, so that a count that passes the check narrows without loss. And it should be a
+number no domain text comes near: two hundred and sixty-eight million code points is far past any
+name, code or message this language writes. It is a power of two less one, so it can be said and
+checked without a table. Because it is now a value of the language, changing it changes what a
+program answers. Raising it turns an abort into an answer and lowers no program that answered;
+lowering it aborts programs that answered. The change is an ADR, and `Strings.LONGEST_TEXT` and the
+specification move together, which `TheStringBoundTheSpecificationStatesIsTheOneTheRuntimeHoldsTest`
+holds.
+
 ## Revision (2026-09-27)
+
+The bound this Revision speaks of as the carrier's is the language's now; see the Revision above.
 
 Admission decided whether text is a sequence of scalar values and canonical, and stopped there. A
 `String` also holds no more text than the carrier declares one to hold

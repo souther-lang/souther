@@ -36,9 +36,13 @@ public final class Strings {
      * {@code String} of this length or it is not an implementation of the language. On the JVM it is
      * at most {@code 2 * LONGEST_TEXT} UTF-16 units, which a {@code java.lang.String} holds in either
      * of its encodings. A text within it is an ordinary allocation, which the heap may still refuse,
-     * as it may any other.
+     * as it may any other; that refusal is the host's and is not an answer with no place.
+     *
+     * <p>The specification states the same number (spec §what-a-string-holds), and
+     * {@code TheStringBoundTheSpecificationStatesIsTheOneTheRuntimeHoldsTest} keeps the two equal.
+     * Why it is this number is in ADR-0096.
      */
-    static final long LONGEST_TEXT = (1L << 28) - 1;
+    public static final long LONGEST_TEXT = (1L << 28) - 1;
 
     private Strings() {}
 
