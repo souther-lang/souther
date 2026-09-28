@@ -1779,40 +1779,36 @@ public final class Bodies {
     }
 
     /**
-     * What a name this module imports denotes, read directly off the module that declares it — the
-     * module's own settled definition, keyed the way a call inside this module's own body reaches
-     * it once {@link HelperNames#qualifyImportsIn} has respelled it ({@link
-     * HelperNames#qualified}), and not the bare name this module wrote at the import line.
+     * What a name this module imports denotes, closed over every helper its own body reaches in
+     * turn — {@link ImportedDefinitions}'s own closure, over this module's direct leaves alone and
+     * none of what {@link Shapes.ClausesTakenIn} of this module would add.
      *
-     * <p>Not {@link ImportedDefinitions}. That answer closes a published body over every helper it
-     * calls in turn, which is what a call this module carries out of its own body needs and what
-     * takes {@link Shapes.ClausesTakenIn} of this module to work out — asking for it from inside
-     * this same module's own {@link Shapes.CheckSurface} cycles back into that assembly. A reader
-     * that only asks what a name denotes needs none of that: the declaring module's own settled
-     * definition already says what it takes and, where it declares no return type, what its own
-     * body builds — which is exactly what {@code check.DeclaredTypeReading.declaredTypeOf} reads a
-     * definition for, one call deep. A definition whose own body reaches past the one call this
-     * does not resolve is read the same as one this module never imported: {@code
-     * DeclaredTypeReading} states nothing for it, the same answer it already gives a name it cannot
-     * resolve.
-     *
-     * <p>Cycle-free the same way {@link Names#resolvedSymbols} is: {@link Settled} of the module
-     * that declares a name, never of this one.
+     * <p>{@link ImportedDefinitions} closes a leaf's published body the same way and is the answer
+     * this would be if it could be asked for from inside this module's own {@link
+     * Shapes.CheckSurface} — its {@code standingIn}, built from {@code ClausesTakenIn(name)} of
+     * this same module, is what cycles back into that assembly, not the closing itself: {@link
+     * Settled} and {@link Expanding} below are both asked of the module that {@link #leaves}
+     * already says declares a name, never of this one. So this is that same closure with the
+     * standing-clause modules left out of {@code modules} — the leaves a direct import line admits,
+     * each closed against the table its own declaring module expands its own body against, exactly
+     * {@link ImportedDefinitions}'s {@code bodiesOf}/{@code carriedClosure} step and no other.
+     * {@code check.DeclaredTypeReading.declaredTypeOf} reads a call as deep as this closure goes —
+     * as deep as {@link ImportedDefinitions} itself would have read it for the same name.
      */
     public static Map<String, Hir.FnDef> publishedByQualifiedName(Db db, String module) {
+        Map<String, List<PublishedHelper>> byModule = new LinkedHashMap<>();
+        leaves(db, module).values().forEach(leave -> byModule
+                .computeIfAbsent(leave.module(), k -> new ArrayList<>()).add(leave));
         Map<String, Hir.FnDef> out = new LinkedHashMap<>();
-        for (PublishedHelper leaf : leaves(db, module).values()) {
-            Answer<Hir.Module> from = db.ask(new Settled(leaf.module()));
-            if (!from.present()) {
+        for (Map.Entry<String, List<PublishedHelper>> declaring : byModule.entrySet()) {
+            Answer<Hir.Module> from = db.ask(new Settled(declaring.getKey()));
+            Answer<Expanding.Of> against =
+                    db.ask(new Expanding(declaring.getKey(), InliningPolicy.FULL));
+            if (!from.present() || !against.present()) {
                 continue;
             }
-            Hir.FnDef fn = HelperInliner.helpersOf(from.value()).get(leaf.name());
-            // Qualified, as HelperNames.qualifyImportsIn respells a call to it once the body that
-            // makes it leaves the module it was written in — the bare name this module wrote at
-            // the import is not the spelling a call site inside this module's own body carries.
-            if (fn != null) {
-                out.put(HelperNames.qualified(leaf.module(), leaf.name()), fn);
-            }
+            carriedClosure(from.value(), bodiesOf(from.value(), declaring.getValue()),
+                    against.value()).forEach(out::putIfAbsent);
         }
         return out;
     }

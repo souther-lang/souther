@@ -146,6 +146,44 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
                         "example.calls"), List.of()));
     }
 
+    private static final String HELPER_LIB_A_CHAIN_DEEP = """
+            module example.lib exposing ( Grade, Customer, Gold, of )
+
+            data Bronze
+            data Gold
+            data Grade = Bronze | Gold
+            data Customer = { grade: Grade }
+
+            let make (g: Grade) = Customer { grade = g }
+            let of (g: Grade) = make(g)
+            """;
+
+    /**
+     * An own value calling an imported helper whose own body calls a second, unexposed helper of
+     * the same module is a candidate too — {@code make} is never named in an import line, only
+     * reached through {@code of}'s own body, the way {@link Bodies#ImportedDefinitions}'s own
+     * closure reaches a helper a published body calls in turn.
+     *
+     * <p>{@link Bodies#publishedByQualifiedName} closes {@code of}'s body against {@code
+     * example.lib}'s own expansion table the same way {@link Bodies#ImportedDefinitions} would —
+     * {@code Settled}/{@code Expanding} of {@code example.lib}, never of {@code example.calls} —
+     * so {@code DeclaredTypeReading} reads past {@code make(g)} the same as it reads past a call
+     * this module makes of its own helper.
+     */
+    @Test
+    void anOwnValueCallingAnImportedHelperThatCallsAFurtherHelperIsACandidate() {
+        Compilation compilation = Compilation.ofSources(
+                List.of(HELPER_LIB_A_CHAIN_DEEP, CALLED_AN_IMPORTED_HELPER), ModulePath.EMPTY);
+        compilation.answerEverything();
+        CheckSurface surface = compilation.db()
+                .ask(new Shapes.CheckSurface("example.calls")).value();
+        assertNotNull(surface, "the module under test does not get as far as being assembled");
+
+        assertEquals(List.of(new ReachName.Own(new ValueName.Helper("example.calls", "vip"))),
+                surface.typedFixtureValues().getOrDefault(customerType(compilation,
+                        "example.calls"), List.of()));
+    }
+
     /**
      * An imported value is not a candidate yet — {@link TypedFixtureValues#of} is handed no
      * imports to read.
