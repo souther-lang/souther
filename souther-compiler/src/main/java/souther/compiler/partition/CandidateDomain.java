@@ -9,7 +9,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.UnheldNumber;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
+import java.math.BigInteger;
 
 /**
  * The values one position of a form may stand at, and whether they can be walked to the end.
@@ -161,10 +161,14 @@ sealed interface CandidateDomain {
      *
      * <p>The division is asked for a whole number and never for a quotient, so a step that does not
      * divide the distance is no reason to lose the end. An end the rules exclude that falls exactly
-     * on a step is one step further in. Read off the written decimals rather than the ratios once
-     * the distance is in hand: a scale fixed at nought never asks the division for more room than a
-     * whole number takes, so it is the divisor being nought alone this could refuse, and {@code by}
-     * is never that.
+     * on a step is one step further in.
+     *
+     * <p>Divided in ratios throughout, and never narrowed to a written decimal first: a distance the
+     * exact arithmetic held is not thereby one a decimal of any particular scale holds, and dividing
+     * two such decimals directly is the same scale-difference hazard this file exists to keep out of
+     * a model's own sums. {@link ExactRatio#dividedBy} refuses only a divisor of nought, which
+     * {@code by} is never; {@link ExactRatio#floor}/{@link ExactRatio#ceiling} are where the
+     * quotient's own room to be held is actually asked.
      */
     private static Multiplied stepsTo(Endpoint end, ExactRatio from, ExactRatio by, boolean low) {
         if (end == null || !(end.at() instanceof Count count)) {
@@ -177,11 +181,20 @@ sealed interface CandidateDomain {
         if (away.unheld() != null) {
             return away;
         }
-        BigDecimal steps = away.at().asWrittenDecimal()
-                .divide(by.asWrittenDecimal(), 0, low ? RoundingMode.CEILING : RoundingMode.FLOOR);
-        boolean onIt = by.times(ExactRatio.of(steps)).compareTo(away.at()) == 0;
-        BigDecimal adjusted = end.inclusive() || !onIt ? steps : steps.add(BigDecimal.valueOf(low ? 1 : -1));
-        return new Multiplied(ExactRatio.of(adjusted), null);
+        ExactRatio quotient = away.at().dividedBy(by);
+        ExactAnswer<BigInteger> rounded = low ? quotient.ceiling() : quotient.floor();
+        if (!(rounded instanceof ExactAnswer.Held<BigInteger> heldSteps)) {
+            return new Multiplied(null, ((ExactAnswer.Unheld<BigInteger>) rounded).why());
+        }
+        ExactRatio steps = ExactRatio.of(heldSteps.value());
+        boolean onIt = by.times(steps).compareTo(away.at()) == 0;
+        if (end.inclusive() || !onIt) {
+            return new Multiplied(steps, null);
+        }
+        return switch (steps.plus(ExactRatio.of(low ? 1 : -1))) {
+            case ExactAnswer.Unheld<ExactRatio> unheld -> new Multiplied(null, unheld.why());
+            case ExactAnswer.Held<ExactRatio> held -> new Multiplied(held.value(), null);
+        };
     }
 
     /**
