@@ -1789,7 +1789,7 @@ public final class Bodies {
      * this same module, is what cycles back into that assembly, not the closing itself: {@link
      * Settled} and {@link Expanding} below are both asked of the module that {@link #leaves}
      * already says declares a name, never of this one. So this is that same closure with the
-     * standing-clause modules left out of {@code modules} — the leaves a direct import line admits,
+     * standing-clause modules left out of the set closed over — the leaves a direct import line admits,
      * each closed against the table its own declaring module expands its own body against, exactly
      * {@link ImportedDefinitions}'s {@code bodiesOf}/{@code carriedClosure} step and no other.
      * {@code check.DeclaredTypeReading.declaredTypeOf} reads a call as deep as this closure goes —
