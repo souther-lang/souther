@@ -185,22 +185,16 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
     }
 
     /**
-     * An imported value is not a candidate yet — {@link TypedFixtureValues#of} is handed no
-     * imports to read.
-     *
-     * <p>This records the current wiring, not the intended language semantics: an imported value
-     * of a parameter's own type is as much a stated origin as one this module writes itself, the
-     * same way a row naming an imported value bare is read no differently from one naming its own.
-     * What stops it today is that reading {@code Bodies.ImportedDefinitions} of this same module
-     * from inside {@code Shapes.CheckSurface}'s own producer cycles back into this same {@code
-     * CheckSurface}: that key's own closure needs {@code Shapes.ClausesTakenIn}, and asking it here
-     * is the shape of cycle {@code DeclaredTypeReading}'s checked-world {@code FieldTypes} already
-     * refuses, just reached by a different route. A reader who closes that gap turns this
-     * assertion around rather than deleting it quietly — the empty list below is exactly what
-     * should stop being empty.
+     * An imported value of a parameter's own type is as much a stated origin as one this module
+     * writes itself — the same way a row naming an imported value bare is read no differently from
+     * one naming its own. {@link TypedFixtureValues#of} reads {@code importedForEvidence} — a
+     * cycle-safe stand-in for {@code Bodies.ImportedDefinitions} ({@link Bodies#publishedByQualifiedName})
+     * — as {@link HelperTable}'s own imported map rather than only as evidence for reading an own
+     * candidate's body, so {@code vip} reaches this module under {@code example.other}'s own {@link
+     * Hir.FnDef#takenOnAs()} the same way any other imported name would.
      */
     @Test
-    void anImportedValueIsNotACandidateYet() {
+    void anImportedValueIsACandidate() {
         Compilation compilation = Compilation.ofSources(List.of(IMPORTED, IMPORTING),
                 ModulePath.EMPTY);
         compilation.answerEverything();
@@ -209,7 +203,8 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
         assertNotNull(surface, "the module under test does not get as far as being assembled");
 
         TypeSymbol customer = customerType(compilation, "example.member");
-        assertEquals(List.of(), surface.typedFixtureValues().getOrDefault(customer, List.of()));
+        assertEquals(List.of(new ReachName.OfModule(new ValueName.Helper("example.other", "vip"))),
+                surface.typedFixtureValues().getOrDefault(customer, List.of()));
     }
 
     /**

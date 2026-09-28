@@ -60,6 +60,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.ValueName;
 import souther.compiler.types.WrittenOwner;
 
 import java.util.ArrayList;
@@ -67,6 +68,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * What each declaration becomes before anything is checked against it, one achievement to a rung:
@@ -787,8 +789,13 @@ public final class Shapes {
             // closure needs ClausesTakenIn of this same module and cycles back into this same
             // CheckSurface, the same shape of cycle DeclaredTypeReading's checked-world FieldTypes
             // already refuses. publishedByQualifiedName reads each import directly off the module that
-            // declares it instead, one call deep and never through this assembly.
+            // declares it instead, closed as deep as that module's own body reaches and never through
+            // this assembly.
             Map<String, Hir.FnDef> importedForEvidence = Bodies.publishedByQualifiedName(db, name);
+            // What a candidate offered from the imported half may actually be: the leaves this
+            // module's own import lines admit, never a further definition importedForEvidence
+            // carries only so a call past one can be read (Bodies.importedLeaves's own doc).
+            Set<ValueName.Helper> importedLeaves = Bodies.importedLeaves(db, name);
             Answer<Stdlib> stdlib = db.ask(new Front.Library());
             if (!settling.present() || !normalized.present() || !resolved.present()
                     || !scope.present() || !fns.present() || !declared.present()
@@ -802,8 +809,8 @@ public final class Shapes {
                                 declarationNewtypes(db),
                                 signatures.present() ? signatures.value() : Map.of(),
                                 declared.value(), bodies.value(), importedForEvidence,
-                                stdlib.value(), scope.value(), publishedDeclarations(db),
-                                declarationKinds(db), newtypeInners(db));
+                                importedLeaves, stdlib.value(), scope.value(),
+                                publishedDeclarations(db), declarationKinds(db), newtypeInners(db));
                 // A definition that did not desugar is missing from what was handed in, and a
                 // surface without it would be this module read as one that does not write it.
                 return assembled == null ? Answer.absent() : Answer.of(assembled);

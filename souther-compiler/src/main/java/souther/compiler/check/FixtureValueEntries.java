@@ -31,10 +31,10 @@ import java.util.Set;
  * hands a helper is not this — {@code applyTo(inc, 1)} names no value by this reading, it is a row's
  * own operand and runs as generated code already — and a private value that stood at one, being
  * one nothing outside its own module ever reaches, has no type to write for a caller nothing gives
- * it one. Not every value the module happens to declare, either: which values a search composing a
- * further row may still ask for by name, among those no row here names this way, is a wider question
- * this does not answer, and {@code FixtureReader} still reads such a value by its template where this
- * finds it no entry.
+ * it one. Not every value the module happens to declare, either — {@code typed}, below, is the
+ * answer to which further ones: {@link TypedFixtureValues} finds a value a search composing a
+ * further row may ask for by name before any row here names it, and this mints for those too, so
+ * {@code FixtureReader} never falls back to reading a value by its own written body a second time.
  *
  * <p>{@link #bareValueReference} is the one place this question is asked, so that a reader of it and
  * this do not keep two copies of the same predicate to drift apart. {@link

@@ -747,7 +747,7 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
             }
         }
         assertEquals(List.of("CheckSurface.assemble(InvariantSettled, Map, Map,"
-                                + " DeclarationNewtypes, Map, FakeTables, BehaviorBodies, Map,"
+                                + " DeclarationNewtypes, Map, FakeTables, BehaviorBodies, Map, Set,"
                                 + " Stdlib, Symbols, PublishedDeclarations, DeclarationKinds,"
                                 + " NewtypeInners)",
                         "CheckSurface.<init>(InvariantSettled, List, List, List, List, FakeTables,"
