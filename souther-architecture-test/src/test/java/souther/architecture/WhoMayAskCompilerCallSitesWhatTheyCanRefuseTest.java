@@ -54,6 +54,8 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
     private record Permission(String call, Reason reason, String why) {
 
         Permission {
+            java.util.Objects.requireNonNull(call, "a permission says which call it is of");
+            java.util.Objects.requireNonNull(reason, "a permission says which of the two it is");
             if (why == null || why.isBlank()) {
                 throw new IllegalArgumentException(
                         "a permission says why, and " + call + " does not");

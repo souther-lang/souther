@@ -122,6 +122,10 @@ final class Reasons {
             case VALUE_TRUNCATED -> String.format(
                     "the observation at `%s` was stopped by a limit, so which class it is in is"
                             + " unknown", subject);
+            case VALUE_NOT_WORKED_OUT -> String.format(
+                    "a row's value at `%s` was read, and the number it comes to is one the exact"
+                            + " arithmetic could not hold, so which class it is in is unknown",
+                    subject);
         };
     }
 

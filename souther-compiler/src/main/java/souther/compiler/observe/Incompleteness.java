@@ -140,7 +140,20 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
          * side of it in one source were run and answered, and a reading that said none of them was
          * would be giving this one's reason to all of them.
          */
-        IMPLEMENTATION_NOT_MADE(false);
+        IMPLEMENTATION_NOT_MADE(false),
+        /**
+         * Every value a term reads arrived, and the number they come to is one the exact arithmetic
+         * could not hold.
+         *
+         * <p>Not {@link #VALUE_UNREADABLE}: the values were read back whole, and what stopped is a
+         * sum, a difference or a product of them standing far enough apart in scale for this host to
+         * hold. {@link souther.compiler.partition.ReadingGap.CouldNotWorkOut} is the same fact met
+         * on the way to a border rather than to a class, so the two travel to one report word each,
+         * in their own vocabulary — one word covers both ways the arithmetic went unheld, since a
+         * reader of either already knows a wider run meets it again exactly the same
+         * ({@link #runSensitivity}).
+         */
+        VALUE_NOT_WORKED_OUT(false);
 
         private final boolean leftNoRowRead;
 
@@ -191,6 +204,10 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
                 case VALUE_UNREADABLE, ROW_UNDECIDED, ANSWERER_NOT_ESTABLISHED, LINKAGE_FAILED,
                      OBSERVATION_ABSENT, INSTRUMENTATION_ABSENT, IMPLEMENTATION_NOT_MADE ->
                         RunSensitivity.UNAFFECTED;
+                // The room that ran out, where it was room, is the host's and not a figure this
+                // compiler compared anything against; where no representation exists, no host has
+                // more of one to offer. Either way a wider run meets it again.
+                case VALUE_NOT_WORKED_OUT -> RunSensitivity.UNAFFECTED;
             };
         }
     }
