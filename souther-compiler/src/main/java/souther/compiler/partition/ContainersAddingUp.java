@@ -682,20 +682,19 @@ final class ContainersAddingUp {
         // {@link Split.NotWorkedOut} rather than {@link Split.None}: a shape the exact arithmetic
         // could not finish is not a shape this compiler has ruled out, and reading the two alike is
         // exactly the confusion {@link ExactAnswer} exists to keep a caller from making by accident.
-        ExactAnswer<ExactRatio> started =
-                ExactRatio.of(total).minus(ends.from().times(ExactRatio.of(many)));
+        ExactRatio from = ends.from().exactly();
+        ExactAnswer<ExactRatio> started = ExactRatio.of(total).minus(from.times(ExactRatio.of(many)));
         if (started instanceof ExactAnswer.Unheld<ExactRatio> unheldStart) {
             return new Split.NotWorkedOut(unheldStart.why());
         }
         ExactRatio owed = ((ExactAnswer.Held<ExactRatio>) started).value();
-        // How many places a dense share is rounded to, starting from what this decomposition's own
-        // total and starting point were written to — not read back off `owed` at each step, which
-        // would ask a canonical value for a precision it no longer carries once a subtraction lands
-        // on a round number. Widened, never narrowed, exactly where the loop below actually clips a
-        // share to an end: that is the one place the old chain of raw decimal subtracts widened it
-        // too, by folding the end's own scale in through the subtraction that read it. An end never
-        // clipped to never widens this, the same as it never entered that chain at all.
-        int scale = Math.max(total.scale(), Math.max(sharedScaleOf(ends.from()), 1));
+        // How many places a dense share is rounded to: the most the numbers taking part in the
+        // sharing were written to, and at least one. Read off the written numbers themselves — the
+        // total and the counts the ends hold — and never off `owed`, which as an exact ratio holds
+        // the number and not the places. It starts at the total and the start, and an end joins it
+        // only where the loop below actually moves a share to that end: an end nothing reaches
+        // takes no part in the sharing, so its places are not the sharing's.
+        int scale = Math.max(Math.max(total.scale(), ends.from().at().scale()), 1);
         List<BigDecimal> split = new ArrayList<>();
         for (int i = 0; i < many; i++) {
             ExactRatio wanted;
@@ -713,15 +712,14 @@ final class ContainersAddingUp {
                 return new Split.NotWorkedOut(unheldAdd.why());
             }
             ExactRatio add = ((ExactAnswer.Held<ExactRatio>) addAnswer).value();
-            // Clipped to the end it moved toward exactly where `add` is not the share it asked for,
-            // which is the one place a decimal this decomposition did not itself state — the end's
-            // own — enters the width a share is rounded to from here on.
+            // Moved to the end it was heading for exactly where `add` is not the share it asked
+            // for, and only then is that end one of the numbers the sharing is made of. Never null
+            // here: an end that names no value never holds a share back.
             if (add.compareTo(wanted) != 0) {
-                ExactRatio boundary = wanted.signum() >= 0 ? ends.upTo() : ends.downTo();
-                int boundaryScale = boundary == null ? 0 : sharedScaleOf(boundary);
-                scale = Math.max(scale, Math.max(boundaryScale, sharedScaleOf(ends.from())));
+                Count reached = wanted.signum() >= 0 ? ends.upTo() : ends.downTo();
+                scale = Math.max(scale, reached.at().scale());
             }
-            ExactAnswer<ExactRatio> atAnswer = ends.from().plus(add);
+            ExactAnswer<ExactRatio> atAnswer = from.plus(add);
             if (atAnswer instanceof ExactAnswer.Unheld<ExactRatio> unheldAt) {
                 return new Split.NotWorkedOut(unheldAt.why());
             }
@@ -748,14 +746,6 @@ final class ContainersAddingUp {
             owed = ((ExactAnswer.Held<ExactRatio>) nextOwed).value();
         }
         return owed.isZero() ? new Split.Some(List.copyOf(split)) : new Split.None();
-    }
-
-    /** The scale a ratio taking part in a decomposition was written at, or nought where it is not
-     *  one a decimal holds — which the decomposition's own arithmetic answers for elsewhere, and is
-     *  never this method's to refuse over. */
-    private static int sharedScaleOf(ExactRatio value) {
-        BigDecimal written = value.asWrittenDecimal();
-        return written == null ? 0 : written.scale();
     }
 
     /**
@@ -804,7 +794,7 @@ final class ContainersAddingUp {
             if (ends.upTo() == null) {
                 return ExactAnswer.held(wanted);
             }
-            return switch (ends.upTo().minus(ends.from())) {
+            return switch (ends.upTo().exactly().minus(ends.from().exactly())) {
                 case ExactAnswer.Unheld<ExactRatio> unheld -> unheld;
                 case ExactAnswer.Held<ExactRatio> held ->
                         ExactAnswer.held(wanted.compareTo(held.value()) <= 0 ? wanted : held.value());
@@ -813,7 +803,7 @@ final class ContainersAddingUp {
         if (ends.downTo() == null) {
             return ExactAnswer.held(wanted);
         }
-        return switch (ends.downTo().minus(ends.from())) {
+        return switch (ends.downTo().exactly().minus(ends.from().exactly())) {
             case ExactAnswer.Unheld<ExactRatio> unheld -> unheld;
             case ExactAnswer.Held<ExactRatio> held ->
                     ExactAnswer.held(wanted.compareTo(held.value()) >= 0 ? wanted : held.value());
@@ -1103,12 +1093,19 @@ final class ContainersAddingUp {
      * held to the distance to the top while moving down is one that walks out of the range and is
      * caught by it — which is a decomposition lost for a reason about this reader.
      *
+     * <p>Held as the counts the carrier and the rules name, not as exact ratios. A count is the
+     * number and the places it was written to, and a level share is rounded to the places the
+     * numbers taking part in it were written to — a start written {@code 0.00} shares a total out
+     * to two places where one written {@code 0} would not. An exact ratio holds only the number,
+     * so once an end has become one there is nothing left to ask for its places. Every sum and
+     * difference of the ends is still worked out exactly, through {@link Count#exactly}, which
+     * loses nothing.
+     *
      * @param downTo null where nothing floors an element, or where the floor is a value the order
      *               has no value beside
      * @param upTo   the same at the other end
      */
-    record Ends(ExactRatio from, ExactRatio downTo, ExactRatio upTo,
-                NumericDomain.Bounds runs) {
+    record Ends(Count from, Count downTo, Count upTo, NumericDomain.Bounds runs) {
 
         /**
          * Whether {@code many} elements standing on these ends can come to {@code total} at all.
@@ -1131,7 +1128,7 @@ final class ContainersAddingUp {
          */
         boolean reaches(BigDecimal total, int many) {
             ExactRatio manyTimes = ExactRatio.of(many);
-            if (!(ExactRatio.of(total).minus(from.times(manyTimes))
+            if (!(ExactRatio.of(total).minus(from.exactly().times(manyTimes))
                     instanceof ExactAnswer.Held<ExactRatio> heldOwed)) {
                 return true;
             }
@@ -1139,14 +1136,14 @@ final class ContainersAddingUp {
             if (owed.isZero()) {
                 return true;
             }
-            ExactRatio end = owed.signum() > 0 ? upTo : downTo;
+            Count end = owed.signum() > 0 ? upTo : downTo;
             if (end == null) {
                 return true;
             }
             // True as well where the exact arithmetic could not hold this distance, for the same
             // reason as every other one above: false is the claim that nothing further is worth
             // trying, and an unheld distance never establishes that.
-            return switch (end.minus(from)) {
+            return switch (end.exactly().minus(from.exactly())) {
                 case ExactAnswer.Unheld<ExactRatio> _ -> true;
                 case ExactAnswer.Held<ExactRatio> distance ->
                         owed.abs().compareTo(distance.value().abs().times(manyTimes)) <= 0;
@@ -1160,7 +1157,7 @@ final class ContainersAddingUp {
             if (!(elements.somethingInside(runs.min(), runs.max()) instanceof Count from)) {
                 return null;
             }
-            return new Ends(from.exactly(), inward(runs.min(), elements, true),
+            return new Ends(from, inward(runs.min(), elements, true),
                     inward(runs.max(), elements, false), runs);
         }
 
@@ -1171,17 +1168,17 @@ final class ContainersAddingUp {
          * is the carrier's to name — asked of {@link BoundaryDomain}, which is where that question
          * has its answer and where a carrier with no smallest step says it has none.
          */
-        private static ExactRatio inward(Endpoint end, Carrier elements, boolean upward) {
+        private static Count inward(Endpoint end, Carrier elements, boolean upward) {
             if (end == null || !(end.at() instanceof Count at)) {
                 return null;
             }
             if (end.inclusive()) {
-                return at.exactly();
+                return at;
             }
             BoundaryDomain beside = BoundaryDomain.on(elements);
             Optional<Place> next =
                     upward ? beside.successor(at) : beside.predecessor(at);
-            return next.orElse(null) instanceof Count on ? on.exactly() : null;
+            return next.orElse(null) instanceof Count on ? on : null;
         }
     }
 

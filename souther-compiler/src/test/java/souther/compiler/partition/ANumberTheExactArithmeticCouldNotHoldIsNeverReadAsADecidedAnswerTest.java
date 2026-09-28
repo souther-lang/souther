@@ -5,7 +5,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
 import souther.compiler.inputs.Membership;
-import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Classification;
@@ -35,14 +35,14 @@ class ANumberTheExactArithmeticCouldNotHoldIsNeverReadAsADecidedAnswerTest {
      */
     @Test
     void anEndTheExactArithmeticCannotHoldTheDistanceToNeverProvesNoArrangementReachesIt() {
-        ExactRatio from = ExactRatio.ONE;
-        // A value so far apart from `from` in scale that computing their difference needs more
-        // room than a long exponent leaves, which is what stands for the two decimals a model wrote
-        // near opposite ends of the scale range this compiler holds.
-        ExactRatio farBeyondWhatALongExponentBridges =
-                new ExactRatio(BigInteger.ONE, BigInteger.ONE, Long.MIN_VALUE + 1, 0);
+        Count from = Count.of(1);
+        // A decimal a model can write, so far above `from` that their exact difference is a whole
+        // number with more digits than any whole number the host holds — which is what stands for
+        // two decimals a model wrote near opposite ends of the scale range.
+        Count farBeyondWhatAWholeNumberHolds =
+                Count.of(new BigDecimal(BigInteger.ONE, -2_000_000_000));
         ContainersAddingUp.Ends ends = new ContainersAddingUp.Ends(
-                from, null, farBeyondWhatALongExponentBridges, NumericDomain.Bounds.OPEN);
+                from, null, farBeyondWhatAWholeNumberHolds, NumericDomain.Bounds.OPEN);
 
         assertTrue(ends.reaches(BigDecimal.valueOf(2), 1),
                 "the exact arithmetic could not hold the distance to the end, and that is never a"
