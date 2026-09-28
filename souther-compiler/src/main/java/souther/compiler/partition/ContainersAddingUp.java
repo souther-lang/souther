@@ -17,6 +17,8 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
@@ -627,26 +629,56 @@ final class ContainersAddingUp {
         if (many == 0) {
             return total.signum() == 0 ? List.of() : null;
         }
-        BigDecimal owed = total.subtract(ends.from().multiply(BigDecimal.valueOf(many)));
+        // Held in ratios throughout the sharing out, and narrowed to a written decimal only where an
+        // element's own value is built: the difference asked of two of a model's own decimals here is
+        // no smaller a distance than any other this compiler declines to let throw, and a shape this
+        // cannot hold is one this shape reaches none of ({@code null}), the same as every other reason
+        // that is.
+        ExactAnswer<ExactRatio> started =
+                ExactRatio.of(total).minus(ends.from().times(ExactRatio.of(many)));
+        if (!(started instanceof ExactAnswer.Held<ExactRatio> heldStart)) {
+            return null;
+        }
+        ExactRatio owed = heldStart.value();
         List<BigDecimal> split = new ArrayList<>();
         for (int i = 0; i < many; i++) {
-            BigDecimal wanted = how == Spread.MASSED ? owed : shared(owed, many - i, elements);
-            BigDecimal add = toward(wanted, ends);
-            BigDecimal at = ends.from().add(add);
+            ExactRatio wanted;
+            if (how == Spread.MASSED) {
+                wanted = owed;
+            } else {
+                BigDecimal owedWritten = owed.asWrittenDecimal();
+                if (owedWritten == null) {
+                    return null;
+                }
+                wanted = ExactRatio.of(shared(owedWritten, many - i, elements));
+            }
+            ExactRatio add = toward(wanted, ends);
+            if (add == null) {
+                return null;
+            }
+            ExactAnswer<ExactRatio> atAnswer = ends.from().plus(add);
+            if (!(atAnswer instanceof ExactAnswer.Held<ExactRatio> heldAt)) {
+                return null;
+            }
+            BigDecimal at = heldAt.value().asWrittenDecimal();
             // Put back to the rules and to the carrier, which are the two things a number has to be
             // to be a value here. Where an element starts and how far it may be moved are worked out
             // from the ends and are this reader's arithmetic; whether what came of them is a value
             // is not, and a decomposition that reads its own workings back would be sound only for
             // as long as the workings are.
-            if (!ends.runs().admits(Count.of(at))
+            if (at == null || !ends.runs().admits(Count.of(at))
                     || !(elements.onTheGrid(Count.of(at)) instanceof Count on)
                     || on.at().compareTo(at) != 0) {
                 return null;
             }
             split.add(at);
-            owed = owed.subtract(add);
+            ExactAnswer<ExactRatio> nextOwed = owed.minus(add);
+            if (!(nextOwed instanceof ExactAnswer.Held<ExactRatio> heldNext)) {
+                return null;
+            }
+            owed = heldNext.value();
         }
-        return owed.signum() == 0 ? List.copyOf(split) : null;
+        return owed.isZero() ? List.copyOf(split) : null;
     }
 
     /**
@@ -668,19 +700,32 @@ final class ContainersAddingUp {
     }
 
     /**
-     * As much of {@code wanted} as one element may move, in the direction it is asking to move.
+     * As much of {@code wanted} as one element may move, in the direction it is asking to move, or
+     * null where the exact arithmetic could not hold the distance to the end it is moving toward.
      *
      * <p>The end an element is moving toward is the one that bounds it, and the other says nothing
      * about the move. Bounded by whichever end happened to be named, an element moving down was held
      * to how far it could go up.
      */
-    private static BigDecimal toward(BigDecimal wanted, Ends ends) {
+    private static ExactRatio toward(ExactRatio wanted, Ends ends) {
         if (wanted.signum() >= 0) {
-            return ends.upTo() == null ? wanted
-                    : wanted.min(ends.upTo().subtract(ends.from()));
+            if (ends.upTo() == null) {
+                return wanted;
+            }
+            return switch (ends.upTo().minus(ends.from())) {
+                case ExactAnswer.Unheld<ExactRatio> _ -> null;
+                case ExactAnswer.Held<ExactRatio> held ->
+                        wanted.compareTo(held.value()) <= 0 ? wanted : held.value();
+            };
         }
-        return ends.downTo() == null ? wanted
-                : wanted.max(ends.downTo().subtract(ends.from()));
+        if (ends.downTo() == null) {
+            return wanted;
+        }
+        return switch (ends.downTo().minus(ends.from())) {
+            case ExactAnswer.Unheld<ExactRatio> _ -> null;
+            case ExactAnswer.Held<ExactRatio> held ->
+                    wanted.compareTo(held.value()) >= 0 ? wanted : held.value();
+        };
     }
 
     /**
@@ -970,7 +1015,7 @@ final class ContainersAddingUp {
      *               has no value beside
      * @param upTo   the same at the other end
      */
-    record Ends(BigDecimal from, BigDecimal downTo, BigDecimal upTo,
+    record Ends(ExactRatio from, ExactRatio downTo, ExactRatio upTo,
                 NumericDomain.Bounds runs) {
 
         /**
@@ -987,16 +1032,27 @@ final class ContainersAddingUp {
          * whether there is nothing to reach, so admitting a total the carrier turns out to refuse
          * costs a claim of completeness nobody had to make, and denying one it admits would be a
          * claim of completeness nothing showed.
+         *
+         * <p>True as well where the exact arithmetic could not hold a distance this needed: the
+         * claim this makes when it answers false is that nothing further is worth trying, and that
+         * is the one direction an unheld difference must never be read as.
          */
         boolean reaches(BigDecimal total, int many) {
-            BigDecimal owed = total.subtract(from.multiply(BigDecimal.valueOf(many)));
-            if (owed.signum() == 0) {
+            ExactRatio manyTimes = ExactRatio.of(many);
+            if (!(ExactRatio.of(total).minus(from.times(manyTimes))
+                    instanceof ExactAnswer.Held<ExactRatio> heldOwed)) {
                 return true;
             }
-            BigDecimal end = owed.signum() > 0 ? upTo : downTo;
-            return end == null
-                    || owed.abs().compareTo(
-                            end.subtract(from).abs().multiply(BigDecimal.valueOf(many))) <= 0;
+            ExactRatio owed = heldOwed.value();
+            if (owed.isZero()) {
+                return true;
+            }
+            ExactRatio end = owed.signum() > 0 ? upTo : downTo;
+            if (end == null) {
+                return true;
+            }
+            return end.minus(from) instanceof ExactAnswer.Held<ExactRatio> heldDistance
+                    && owed.abs().compareTo(heldDistance.value().abs().times(manyTimes)) <= 0;
         }
 
         static Ends of(NumericDomain.Bounds runs, Carrier elements) {
@@ -1006,7 +1062,7 @@ final class ContainersAddingUp {
             if (!(elements.somethingInside(runs.min(), runs.max()) instanceof Count from)) {
                 return null;
             }
-            return new Ends(from.at(), inward(runs.min(), elements, true),
+            return new Ends(from.exactly(), inward(runs.min(), elements, true),
                     inward(runs.max(), elements, false), runs);
         }
 
@@ -1017,17 +1073,17 @@ final class ContainersAddingUp {
          * is the carrier's to name — asked of {@link BoundaryDomain}, which is where that question
          * has its answer and where a carrier with no smallest step says it has none.
          */
-        private static BigDecimal inward(Endpoint end, Carrier elements, boolean upward) {
+        private static ExactRatio inward(Endpoint end, Carrier elements, boolean upward) {
             if (end == null || !(end.at() instanceof Count at)) {
                 return null;
             }
             if (end.inclusive()) {
-                return at.at();
+                return at.exactly();
             }
             BoundaryDomain beside = BoundaryDomain.on(elements);
             Optional<Place> next =
                     upward ? beside.successor(at) : beside.predecessor(at);
-            return next.orElse(null) instanceof Count on ? on.at() : null;
+            return next.orElse(null) instanceof Count on ? on.exactly() : null;
         }
     }
 
