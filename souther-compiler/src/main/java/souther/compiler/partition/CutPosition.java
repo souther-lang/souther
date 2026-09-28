@@ -98,21 +98,21 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
     }
 
     /**
-     * This line in the one representation {@link #key()} names: the fraction reduced, and the place
-     * in the form the order holds it.
+     * This line in the one representation {@link #key()} names: the line in its terms
+     * ({@link #asARule}), and the place in the form the order holds it.
      *
      * <p>So that a value holding a position and compared as a value answers what {@link #key()}
      * would. A third and two sixths come back the same, and so do a line at {@code 0} and one at
-     * {@code 0.00}.
+     * {@code 0.00}. The terms answer for every line a ratio holds, so this does too.
      *
      * <p>An order with no numbers has no fraction to reduce, and its place is its own value.
      */
     public CutPosition canonical() {
-        ExactRatio at = exactly();
-        if (at == null) {
+        ExactRatio.Terms rule = asARule();
+        if (rule == null) {
             return new CutPosition(written.canonical(), per);
         }
-        return new CutPosition(reduced(written, at.numeratorAsRatio()), at.denominatorAsRatio());
+        return new CutPosition(reduced(written, rule.comesTo()), rule.per());
     }
 
     /**
@@ -128,9 +128,10 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
     }
 
     /**
-     * The reduced numerator, put back on whatever order the line was written on.
+     * What the line's terms say it comes to, put back on whatever order the line was written on.
      *
-     * <p>A whole number, so a carrier's order has a count at it wherever it has counts at all.
+     * <p>A whole number wherever the terms are in lowest terms, so a carrier's order has a count at
+     * it wherever it has counts at all.
      */
     private static Level reduced(Level written, ExactRatio to) {
         return switch (written) {
@@ -243,13 +244,15 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
      * no value at the line: {@code 3 * d <= 1} says exactly where the values part and says it in
      * numbers this language has, which dividing them out would not.
      *
-     * <p>The denominator is how much of the quantity and the numerator is what it comes to, which
-     * is what a ratio in lowest terms already holds.
+     * <p>The one decomposition of a line into a rule. The name a report gives the line, the multiple
+     * two ends of a run share and the position the line is compared as are all read off it, so what
+     * one of them can write the others can compare ({@link ExactRatio#asTerms}).
      *
-     * @return where the line falls, or null on an order with no numbers
+     * @return the line's terms, or null on an order with no numbers
      */
-    public ExactRatio asARule() {
-        return exactly();
+    public ExactRatio.Terms asARule() {
+        ExactRatio at = exactly();
+        return at == null ? null : at.asTerms();
     }
 
     /**

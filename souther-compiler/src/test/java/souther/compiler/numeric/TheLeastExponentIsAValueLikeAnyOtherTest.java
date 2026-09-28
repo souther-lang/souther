@@ -70,6 +70,30 @@ class TheLeastExponentIsAValueLikeAnyOtherTest {
         assertThrows(ArithmeticException.class, at::asFraction);
     }
 
+    /**
+     * A rule writes it all the same: per the greatest power there is, coming to the one two left
+     * over. The terms are the value, and what it is written per is whole and above nought.
+     */
+    @Test
+    void aValueAtTheLeastExponentHasTermsARuleWritesItIn() {
+        ExactRatio at = atTheLeastTwos();
+        ExactRatio.Terms terms = at.asTerms();
+
+        assertEquals(new ExactRatio(BigInteger.ONE, BigInteger.ONE, Long.MAX_VALUE, 0), terms.per());
+        assertEquals(new ExactRatio(BigInteger.ONE, BigInteger.ONE, -1, 0), terms.comesTo());
+        assertEquals(at, terms.comesTo().dividedBy(terms.per()));
+    }
+
+    /** Anywhere else the terms are the lowest ones, both whole. */
+    @Test
+    void aValueAwayFromTheLeastExponentHasItsLowestTerms() {
+        ExactRatio.Terms twoSixths = ExactRatio.of(BigInteger.TWO, BigInteger.valueOf(6)).asTerms();
+        ExactRatio.Terms fiveHalves = ExactRatio.of(BigInteger.valueOf(5), BigInteger.TWO).asTerms();
+
+        assertEquals(new ExactRatio.Terms(ExactRatio.ONE, ExactRatio.of(3)), twoSixths);
+        assertEquals(new ExactRatio.Terms(ExactRatio.of(5), ExactRatio.of(2)), fiveHalves);
+    }
+
     /** A decimal's scale is thirty-two bits, so a value this far below it is no decimal a model writes. */
     @Test
     void aValueAtTheLeastExponentIsNoDecimalAModelWrites() {

@@ -138,7 +138,7 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
 
     /** The number above this ratio's line, as a ratio — so that a caller going on to compute with it
      *  is handed the factors rather than the digits. */
-    public ExactRatio numeratorAsRatio() {
+    ExactRatio numeratorAsRatio() {
         return new ExactRatio(numeratorWithoutUnits, BigInteger.ONE,
                 Math.max(twos, 0), Math.max(fives, 0));
     }
@@ -146,24 +146,53 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
     /**
      * What this ratio stands over, as a ratio.
      *
+     * <p>Partial, and so for this package's own arithmetic, which refuses where its answer is not
+     * held. A value is written as a rule with {@link #asTerms}, which answers for every value.
+     *
      * @throws ArithmeticException where an exponent is the least long, whose negation is no exponent
-     *         ({@link #hasItsDenominatorAsARatio} is false)
      */
-    public ExactRatio denominatorAsRatio() {
+    ExactRatio denominatorAsRatio() {
         return new ExactRatio(denominatorWithoutUnits, BigInteger.ONE,
                 twos >= 0 ? 0 : ExactArithmetic.negated(twos),
                 fives >= 0 ? 0 : ExactArithmetic.negated(fives));
     }
 
     /**
-     * Whether what this ratio stands over is itself a ratio this type holds, which is whether
-     * {@link #denominatorAsRatio} answers.
+     * This value as so much of a quantity coming to so much, which is how a rule writes a line:
+     * {@code 3 * x <= 1} puts the line at a third.
      *
-     * <p>False exactly where an exponent is the least long. The value is held; the power of two or
-     * five it stands over is one more than any exponent here reaches.
+     * @param comesTo what that much of the quantity comes to
+     * @param per     how much of the quantity, which is whole and above nought
      */
-    public boolean hasItsDenominatorAsARatio() {
-        return twos != Long.MIN_VALUE && fives != Long.MIN_VALUE;
+    public record Terms(ExactRatio comesTo, ExactRatio per) {}
+
+    /**
+     * This value in the one pair of terms that writes it.
+     *
+     * <p>Lowest terms, both whole, wherever lowest terms are numbers this type holds — which is
+     * everywhere but the least exponent. A value at the least exponent stands over a power one past
+     * any exponent there is, so what it is written per stops at the greatest one, and the one two or
+     * five left over stays with what it comes to. Either way the pair follows from the value alone,
+     * so two rules drawing one line write it one way, and a position built from the pair is one
+     * position however the line was reached.
+     *
+     * <p>Total, and built from the exponents alone.
+     */
+    public Terms asTerms() {
+        long perTwos = perOf(twos);
+        long perFives = perOf(fives);
+        return new Terms(
+                new ExactRatio(numeratorWithoutUnits, BigInteger.ONE, twos + perTwos, fives + perFives),
+                new ExactRatio(denominatorWithoutUnits, BigInteger.ONE, perTwos, perFives));
+    }
+
+    /** How much of one prime a value written per so much stands over: none for an exponent at or
+     *  above nought, its negation below, and the greatest exponent where the negation is none. */
+    private static long perOf(long exponent) {
+        if (exponent >= 0) {
+            return 0;
+        }
+        return exponent == Long.MIN_VALUE ? Long.MAX_VALUE : -exponent;
     }
 
     /**

@@ -1,10 +1,12 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.check.Carrier;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Towards;
 
 import java.math.BigInteger;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -16,9 +18,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Reduced, because two rules drawing one line are one place and the class they part is named
  * once, by whichever of them was read first. Written from the value's parts, because the value is
- * held compactly and its powers can be past what any number the host builds. And where what the
- * line stands over is past what a ratio holds, the line is written against the quantity itself at
- * the value it is — which follows from the value alone, so it too is one spelling per line.
+ * held compactly and its powers can be past what any number the host builds. And read off the same
+ * terms the position is compared as, so a line that can be named is one the arrangement can hold.
  */
 class ALineIsWrittenAsARuleWithoutWritingItsPowersTest {
 
@@ -58,13 +59,39 @@ class ALineIsWrittenAsARuleWithoutWritingItsPowersTest {
         assertEquals("1 < 1E+4294967296 * x", ruleAbout(fine, Towards.ABOVE));
     }
 
-    /** No ratio holds what this line stands over, so it has no multiple to be written with. */
+    /**
+     * A line at the least exponent stands over a power one past any exponent, so its multiple stops
+     * at the greatest one and what it comes to keeps the tenth left over.
+     */
     @Test
-    void aLineOverMoreThanARatioHoldsIsWrittenAgainstTheQuantityItself() {
+    void aLineAtTheLeastExponentIsWrittenInTheTermsARatioHolds() {
         Seam least = lineAt(tenTo(Long.MIN_VALUE), ExactRatio.ONE);
 
-        assertEquals("x <= 1E-9223372036854775808", ruleAbout(least, Towards.BELOW));
-        assertEquals("1E-9223372036854775808 < x", ruleAbout(least, Towards.ABOVE));
+        assertEquals("1E+9223372036854775807 * x <= 0.1", ruleAbout(least, Towards.BELOW));
+        assertEquals("0.1 < 1E+9223372036854775807 * x", ruleAbout(least, Towards.ABOVE));
+    }
+
+    /**
+     * The same line through the arrangement, which holds every end the way a report compares it
+     * before any of them is named — so a line that could be named but not compared would never reach
+     * its name.
+     */
+    @Test
+    void anArrangementOverALineAtTheLeastExponentIsBuiltAndItsRunsNamed() {
+        Carrier dense = new Carrier.Dense();
+        Seam least = Seam.of(
+                LevelSpace.overFiniteDecimals(LevelSpace.generatorOverFiniteDecimals(ExactRatio.ONE)),
+                new Level.OfTheQuantity(tenTo(Long.MIN_VALUE)), Towards.BELOW,
+                new Seam.Scale(ExactRatio.ONE, dense));
+
+        QuantityArrangement arranged = QuantityArrangement.of(LevelSpace.onACarrier(dense),
+                List.of(Parting.by(least, WhatTheRulesTogetherLeaveAQuantityTest.aLine(0))));
+
+        assertEquals(2, arranged.runs().size(), "one line, a run either side of it");
+        Seam parted = arranged.partings().get(0).geometry();
+        assertEquals(ruleAbout(least, Towards.BELOW), ruleAbout(parted, Towards.BELOW));
+        assertEquals(ruleAbout(parted.canonical(), Towards.BELOW), ruleAbout(parted, Towards.BELOW),
+                "and the line it is compared as is named as the line it is");
     }
 
     @Test
@@ -75,12 +102,21 @@ class ALineIsWrittenAsARuleWithoutWritingItsPowersTest {
         assertEquals(ExactRatio.of(3), between.sharedMultiple());
     }
 
-    /** Written against the quantity itself, such a line has no multiple for the run to share. */
+    /** Two lines at the least exponent are written per the same multiple, and a run between them
+     *  says it once. */
     @Test
-    void aLineOverMoreThanARatioHoldsSharesNoMultiple() {
+    void twoLinesAtTheLeastExponentShareTheirMultiple() {
         Band between = runBetween(lineAt(tenTo(Long.MIN_VALUE), ExactRatio.ONE),
                 lineAt(new ExactRatio(BigInteger.valueOf(3), BigInteger.ONE,
                         Long.MIN_VALUE, Long.MIN_VALUE), ExactRatio.ONE));
+
+        assertEquals(tenTo(Long.MAX_VALUE), between.sharedMultiple());
+    }
+
+    @Test
+    void twoLinesDrawnInDifferentMultiplesShareNone() {
+        Band between = runBetween(lineAt(ExactRatio.of(1), ExactRatio.of(3)),
+                lineAt(ExactRatio.of(1), ExactRatio.of(7)));
 
         assertNull(between.sharedMultiple());
     }
