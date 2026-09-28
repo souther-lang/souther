@@ -992,6 +992,13 @@ public final class FixtureReader {
                 }
                 yield out;
             }
+            // Never a fixture's own text: a written row or fake's operand runs as the method
+            // RowFixtures.emitted mints for it, and a named value's as the entry FixtureValueEntries
+            // mints — both generated code, neither this interpreter. A binary reaching here is that
+            // correspondence broken, not an author's fixture to refuse.
+            case Hir.Binary _ -> throw new IllegalStateException(
+                    "a binary reached FixtureReader.raw; a fixture reads a computed value by"
+                            + " running its generated code, never by interpreting an operator here");
             // A field taken off another value is one of the forms this does not read, and it is
             // refused here as they all are. Reading it would be a second reading of what a `.`
             // names, answering beside the one the language is checked by: a row's operand is

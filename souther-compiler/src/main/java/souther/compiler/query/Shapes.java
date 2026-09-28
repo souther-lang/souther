@@ -789,7 +789,8 @@ public final class Shapes {
             // closure needs ClausesTakenIn of this same module and cycles back into this same
             // CheckSurface, the same shape of cycle DeclaredTypeReading's checked-world FieldTypes
             // already refuses. publishedByQualifiedName reads each import directly off the module that
-            // declares it instead, one call deep and never through this assembly.
+            // declares it instead, closed as deep as that module's own body reaches and never through
+            // this assembly.
             Map<String, Hir.FnDef> importedForEvidence = Bodies.publishedByQualifiedName(db, name);
             // What a candidate offered from the imported half may actually be: the leaves this
             // module's own import lines admit, never a further definition importedForEvidence
