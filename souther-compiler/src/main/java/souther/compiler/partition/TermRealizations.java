@@ -121,11 +121,11 @@ final class TermRealizations {
          * <p><b>So a figure is here only where a candidate was in front of the walk and this figure
          * left no room for it.</b> Raise it and that candidate gets tried — which is what makes the
          * word one an author can act on. A population this compiler walks some of stopped nothing
-         * and is never a figure: it travels beside them ({@code notAllOf}) where a figure was met as
+         * and is never a figure: it travels beside them in {@code met} where a figure was met as
          * well, and where none was it is {@link Unexhausted} rather than anything here.
          *
          * <p>Never where a value was built. A budget that cut an offering short after something was
-         * composed is {@link Built#heldBack()}: what it stopped is the rest of the offer, and the
+         * composed is in {@link Built#rest()}: what it stopped is the rest of the offer, and the
          * point it was composed for has a value at it either way.
          */
         record Stopped(CompositionShortfall met) implements Realization {

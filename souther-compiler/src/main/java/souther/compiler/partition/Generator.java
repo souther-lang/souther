@@ -6139,26 +6139,6 @@ public final class Generator {
                     ? built.values() : List.of();
         }
 
-        /** Which budgets of this compiler's stopped this edge offering more than it did, and empty
-         *  where none did. The same set whether or not anything was offered: what a budget is, is
-         *  what this compiler declined to do, and that does not turn on what came of the rest. */
-        java.util.Set<CompositionBudget> stoppedBy() {
-            return came.shortfall().figures();
-        }
-
-        /**
-         * What this edge holds some of rather than all of, and empty where it holds all of what
-         * there is.
-         *
-         * <p>Beside {@link #stoppedBy()} and never folded into it. Both say the edge is not
-         * everything there is, and only one of them is a number somebody could raise — so a reader
-         * handed one set would raise what it could of it and read the rest as work it had already
-         * asked for.
-         */
-        java.util.Set<CompositionRepertoire> notAllOf() {
-            return came.shortfall().populations();
-        }
-
         /**
          * What this edge found, beside the word, or null where it has nothing to add.
          *
