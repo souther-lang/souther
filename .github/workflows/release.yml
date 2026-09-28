@@ -220,7 +220,7 @@ jobs:
       # The Windows distributions are built on a runner of their own, and the checksums below cover
       # whatever this directory holds, so they are fetched into it before those are written.
       - name: Collect the Windows distributions
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: souther-windows
           path: artifacts/

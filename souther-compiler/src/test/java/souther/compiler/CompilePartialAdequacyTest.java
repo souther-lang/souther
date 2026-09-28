@@ -281,7 +281,8 @@ class CompilePartialAdequacyTest {
         List<BorderAssessment.Point> at = pointsAgainstTheLine(lines).stream()
                 .filter(p -> "0".equals(p.against())).toList();
         assertEquals(1, at.size());
-        assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(at.get(0).item().weakeningSource()));
+        assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(
+                at.get(0).item().weakeningSource(at.get(0).border().border())));
         assertFalse(at.get(0).owed().hasRowWitness(),
                 "nothing was read, so nothing was met either");
     }
@@ -321,7 +322,7 @@ class CompilePartialAdequacyTest {
             assertEquals(souther.compiler.partition.Generator.UnresolvedCombination.Reason
                             .THE_POSITION_WAS_WITHHELD,
                     ((souther.compiler.partition.GenerationOutcome.CannotGenerate) each.outcome())
-                            .why().get(0).reason(),
+                            .why().get(0).why().reason(),
                     each.finding()::toString);
         }
     }
@@ -390,7 +391,7 @@ class CompilePartialAdequacyTest {
                 .findings();
 
         List<Adequacy.Finding> undecided = findings.stream()
-                .filter(f -> f.kind().isAboutAnObligation()).toList();
+                .filter(f -> f.about() instanceof About.OfAnObligation).toList();
 
         assertFalse(undecided.isEmpty(), () -> "the model has a kind a build gates on: " + findings);
         for (Adequacy.Finding f : undecided) {
@@ -520,7 +521,9 @@ class CompilePartialAdequacyTest {
 
         assertEquals(2, pointsAgainstTheLine(lines).size());
         for (BorderAssessment.Point boundary : pointsAgainstTheLine(lines)) {
-            assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(boundary.item().weakeningSource()), boundary.against());
+            assertEquals(MeasurementStatus.PARTIAL,
+                    AdequacyReport.statusOf(boundary.item().weakeningSource(boundary.border().border())),
+                    boundary.against());
             assertFalse(boundary.owed().hasRowWitness());
         }
     }
@@ -550,20 +553,24 @@ class CompilePartialAdequacyTest {
     }
 
     /**
-     * A reason that names no behavior belongs to every behavior.
+     * Filtering to one behavior keeps what that behavior went without.
      *
-     * <p>Filtering to one behavior drops the reasons about the others. A whole source that could not
-     * be evaluated is not about another behavior — it is missing rows for whatever it held, this one
-     * included — so it stays, and the status with it.
+     * <p>Filtering drops the reasons about the others, and a source that could not be evaluated
+     * costs this one every row it wrote there — so those stay, and the status with them. That a
+     * reason larger than any behavior is carried by every behavior shown is the reason's own answer
+     * and is asked of it in {@code aReasonAboutASourceCountsAgainstTheBehaviorsInIt}.
      */
     @Test
-    void filteringKeepsAReasonThatIsAboutNoOneBehavior() {
+    void filteringKeepsWhatTheBehaviorShownWentWithout() {
         AdequacyReport one = AdequacyReport.of(split()).only(null, "take");
 
         assertEquals(MeasurementStatus.PARTIAL, one.status());
-        assertEquals(1, one.modules().get(0).incompleteness().written().size());
-        assertEquals(Incompleteness.Code.OBSERVATION_ABSENT,
-                one.modules().get(0).incompleteness().written().iterator().next().fact().code());
+        List<PublishedIncompleteness> kept = one.modules().get(0).incompleteness().written();
+        assertEquals(2, kept.size(), () -> "one per row the attached file wrote: " + kept);
+        for (PublishedIncompleteness gap : kept) {
+            assertEquals(Incompleteness.Code.OBSERVATION_ABSENT, gap.fact().code());
+            assertEquals("take", gap.fact().behavior().orElseThrow());
+        }
     }
 
     /**
@@ -689,10 +696,9 @@ class CompilePartialAdequacyTest {
 
                 partial let spin (n: Int): Int = spin(n)
 
+                // Injected, so that both positions are in the space whatever the body decides
+                // on: what this is about is a count over rows that did not come back.
                 behavior pick : (a: Flag, b: Flag) -> Ok
-                    constructs Ok
-
-                let pick (a, b) = Ok { n = spin(1) }
 
                 example pick
                     | (Yes, Yes) -> Ok { n = 0 }
@@ -704,7 +710,7 @@ class CompilePartialAdequacyTest {
         assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(partition.pairs().counted()),
                 "the one row could not be placed at either position");
         String human = AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
-        assertTrue(human.contains("unknown of the rows that were read"),
+        assertTrue(human.contains("uncovered of the rows that were read"),
                 () -> "the count is over the rows that came back, and the line says so: " + human);
     }
 
@@ -729,10 +735,9 @@ class CompilePartialAdequacyTest {
 
                 partial let spin (n: Int): Int = spin(n)
 
+                // Injected, so the space is over both positions: what this holds to each other is
+                // two readings of one row that did not come back.
                 behavior pick : (a: Flag, b: Flag) -> Ok
-                    constructs Ok
-
-                let pick (a, b) = Ok { n = spin(1) }
 
                 example pick
                     | (Yes, Yes) -> Ok { n = 0 }
@@ -763,11 +768,13 @@ class CompilePartialAdequacyTest {
                 .filter(p -> "100".equals(p.against())).findFirst().orElseThrow();
         assertTrue(line.owed().hasRowWitness(),
                 "a row wrote 100 and went through the comparison");
-        assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.statusOf(line.item().weakeningSource()));
+        assertEquals(MeasurementStatus.COMPLETE,
+                AdequacyReport.statusOf(line.item().weakeningSource(line.border().border())));
 
         BorderAssessment.Point beyond = pointsAgainstTheLine(lines).stream()
                 .filter(p -> "101".equals(p.against())).findFirst().orElseThrow();
-        assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(beyond.item().weakeningSource()),
+        assertEquals(MeasurementStatus.PARTIAL,
+                AdequacyReport.statusOf(beyond.item().weakeningSource(beyond.border().border())),
                 "and the one nothing was found at is undecided, not missed");
     }
 

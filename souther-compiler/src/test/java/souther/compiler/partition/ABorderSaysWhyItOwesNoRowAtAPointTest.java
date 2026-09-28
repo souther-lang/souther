@@ -250,6 +250,7 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
         String where = "beside " + (side == Towards.BELOW ? "below" : "above") + " = ";
         return switch (line.answer(at)) {
             case PointAnswer.NotOwed not -> where + not.reason();
+            case PointAnswer.NotWorkedOut not -> where + "not worked out: " + not.why();
             case PointAnswer.AtLine _ -> where + line.against(at) + " (" + line.roleOf(at) + ")";
             case PointAnswer.InRegion in -> where + in;
         };

@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /**
  * An evaluation no run carries a value on from is one nothing is written after.
  *
- * <p>A primitive is defined on some of what its type admits and not on the rest: {@code Int.divide}
+ * <p>A primitive is defined on some of what its type admits and not on the rest: {@code Int.truncatingDivide}
  * answers no number for the one pair whose quotient no {@code Int} holds, and aborts (spec
  * §stdlib-int). Where the operands here are only such pairs, every run that reaches the operation
  * stops at it — so a construction written below it is one no run reaches, and judging it answers a
@@ -69,7 +69,7 @@ class AConstructionAfterAnEvaluationThatAnswersNothingIsNotJudgedTest {
                 behavior 割る : (a: Int, x: Int) -> Negative | Nothing
                     constructs Negative
                 let 割る (a, x) = {
-                %s    match Int.divide(a, %s) with
+                %s    match Int.truncatingDivide(a, %s) with
                         | Int as q -> Negative(%s)
                         | DivisionByZero -> Nothing
                 }
@@ -319,31 +319,22 @@ class AConstructionAfterAnEvaluationThatAnswersNothingIsNotJudgedTest {
     }
 
     /**
-     * A divide by nought, which answers no number whichever way it is spelled — and the two
-     * spellings, which do not answer alike.
+     * A divide by nought answers no number, and {@code Int.truncatingDivide} says so as a case rather
+     * than by aborting.
      *
-     * <p>The operator aborts on a zero divisor; {@code Int.divide} comes back as
-     * {@code DivisionByZero}, which is a case an arm is reached at (spec §stdlib-int). So the same
-     * divisor settles the question one way for one of them and does not settle it at all for the
-     * other, and what tells them apart is the operation's own cases and not the divisor.
+     * <p>{@code DivisionByZero} is a case an arm is reached at (spec §stdlib-int), so the divisor that
+     * settles nothing about the value settles nothing about the place either: the construction under
+     * that arm is judged like any other. What decides it is the operation's own cases and not the
+     * divisor.
      */
     @Test
-    void aDivideByNoughtIsAnAbortForTheOperatorAndACaseForTheFunction() {
-        assertEquals(List.of(), reported(DECLARATIONS + """
-                behavior 割る : (x: Int) -> Negative | Nothing
-                    constructs Negative
-                let 割る (x) = {
-                    guard x >= 0 else Nothing
-                    guard x / 0 > 1 else Nothing
-                    Negative(x)
-                }
-                """), "the operator aborts on nought, so nothing after it is reached");
+    void aDivideByNoughtIsACaseTheFunctionAnswersAndThatArmIsReached() {
         assertEquals(List.of("E2010"), reported(DECLARATIONS + """
                 behavior 割る : (x: Int) -> Negative | Nothing
                     constructs Negative
                 let 割る (x) = {
                     guard x >= 0 else Nothing
-                    match Int.divide(x, 0) with
+                    match Int.truncatingDivide(x, 0) with
                         | Int as q -> Nothing
                         | DivisionByZero -> Negative(x)
                 }
@@ -429,7 +420,7 @@ class AConstructionAfterAnEvaluationThatAnswersNothingIsNotJudgedTest {
                     guard a == %s else Nothing
                     guard x >= 0 else Nothing
                     let 先に = Negative(x)
-                    match Int.divide(a, 0 - 1) with
+                    match Int.truncatingDivide(a, 0 - 1) with
                         | Int as q -> 先に
                         | DivisionByZero -> Nothing
                 }

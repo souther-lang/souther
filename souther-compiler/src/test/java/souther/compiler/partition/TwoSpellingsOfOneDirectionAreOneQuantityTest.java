@@ -2,16 +2,19 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.LinearForm;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What a rule cuts, told from how much of it the rule happened to write.
@@ -34,11 +37,12 @@ class TwoSpellingsOfOneDirectionAreOneQuantityTest {
 
     /** The form {@code c1 * t1 + c2 * t2 ...}, written as the pairs an author would read. */
     private static LinearForm<NumericTerm> form(Object... pairs) {
-        Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
+        Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
         for (int i = 0; i < pairs.length; i += 2) {
-            coefs.put(term((String) pairs[i]), new BigDecimal((String) pairs[i + 1]));
+            coefs.put(term((String) pairs[i]),
+                    ExactRatio.of(new BigDecimal((String) pairs[i + 1])));
         }
-        return new LinearForm<>(BigDecimal.ZERO, coefs);
+        return new LinearForm<>(ExactRatio.ZERO, coefs);
     }
 
     /**
@@ -74,6 +78,26 @@ class TwoSpellingsOfOneDirectionAreOneQuantityTest {
     }
 
     /**
+     * A quantity is named from the parts of its coefficients and never from their digits.
+     *
+     * <p>A form whose two coefficients stand a million places apart keeps that ratio however it is
+     * scaled, and a name that wrote it out was a character per place for telling two quantities
+     * apart.
+     */
+    @Test
+    void aQuantityWhoseCoefficientsStandFarApartIsNamedWithoutWritingThemOut() {
+        BigDecimal far = new BigDecimal(BigInteger.ONE, 1_000_000);
+        LinearForm<NumericTerm> wide = new LinearForm<>(ExactRatio.ZERO, new LinkedHashMap<>(
+                Map.of(term("a"), ExactRatio.ONE, term("b"), ExactRatio.of(far))));
+
+        String key = QuantityKey.of(wide).key();
+
+        assertTrue(key.length() < 256, () -> "a name of " + key.length());
+        assertNotEquals(key, QuantityKey.of(form("a", "1", "b", "1")).key(),
+                "and it is still not the quantity it would be at a coefficient of one");
+    }
+
+    /**
      * How much of the quantity a rule wrote, which is what a level written in its terms divides by.
      *
      * <p>Carried rather than worked out again where a cut is turned into the canonical quantity's
@@ -82,8 +106,10 @@ class TwoSpellingsOfOneDirectionAreOneQuantityTest {
      */
     @Test
     void aQuantitySaysHowMuchOfItAFormWrote() {
-        assertEquals(new BigDecimal("2"), QuantityKey.per(form("n", "2")));
-        assertEquals(new BigDecimal("3"), QuantityKey.per(form("a", "3", "b", "6")));
-        assertEquals(new BigDecimal("1"), QuantityKey.per(form("a", "1", "b", "2")));
+        assertEquals(ExactRatio.of(2), QuantityKey.per(form("n", "2")));
+        assertEquals(ExactRatio.of(3),
+                QuantityKey.per(form("a", "3", "b", "6")));
+        assertEquals(ExactRatio.of(1),
+                QuantityKey.per(form("a", "1", "b", "2")));
     }
 }

@@ -32,9 +32,10 @@ import static souther.compiler.codegen.Descriptors.*;
  *   KernelSignature -> slotsOf -> descriptorOf
  * }</pre>
  *
- * <p>The declaration belongs to the callee, and a descriptor built from the types observed at a call
- * agrees with it only while no value can arrive narrower than the parameter it goes into. A
- * sum-typed parameter ends that, so nothing here reads the call for the shape of what it is calling.
+ * <p>The declaration belongs to the callee. A runtime method has one descriptor, and one built from
+ * what a call takes ({@link Core.CallSettlement.AtKernel#takes}) would differ between calls to it
+ * wherever a parameter is a type variable the call settles, so nothing here reads the call for the
+ * shape of what it is calling.
  *
  * <p>What a row carries is what the declaration cannot say: which runtime class and method answer
  * the kernel, and the order that method takes the arguments in — Souther puts the subject last for
@@ -85,10 +86,9 @@ final class Intrinsics {
      * gives: each parameter is the boundary form of the declared parameter type, the return the
      * boundary form of the declared result.
      *
-     * <p>A descriptor belongs to the callee. Built from the types observed at the call it agrees
-     * with the declaration only while no value can arrive narrower than the parameter it goes into,
-     * and a sum-typed parameter ends that — the argument's type is the case it happens to be, while
-     * the declaration names the sum.
+     * <p>A descriptor belongs to the callee. The runtime method has one, and one built from what a
+     * call takes would differ between calls to it wherever a parameter is a type variable that call
+     * settles.
      *
      * <p>Everything a row carries is something the declaration does not settle. Which class and
      * method answer the kernel is one; the order is another — Souther puts the subject last for pipe
@@ -200,22 +200,38 @@ final class Intrinsics {
      * <p>The list argument alone cannot say which: over the empty-list literal its element is the
      * bottom, and the answer came from the position the call was written in.
      */
-    record NumericFold(String intMethod, String decimalMethod) implements Emit {
+    record NumericFold(String intMethod, String decimalMethod, String rationalMethod)
+            implements Emit {
         @Override
         public void emit(BodyGen g, Kernel kernel, Core.Call call) {
             Type result = call.type();
-            if (result != Type.INT && result != Type.DECIMAL) {
-                // the checker admits these two and nothing else; anything here is this compiler
-                // disagreeing with itself, and emitting the Int kernel for it would answer a wrong
-                // number rather than say so
-                throw new IllegalStateException("`" + call.fn() + "` reached the backend answering "
-                        + Type.show(result) + ", which is neither Int nor Decimal");
-            }
             KernelSignature declared = g.kernelSignature(kernel);
             g.genExpr(call.args().get(0));
-            String method = result == Type.DECIMAL ? decimalMethod : intMethod;
-            g.emitInvokeStatic(CD_Lists, method, MethodTypeDesc.of(boundaryDesc(result),
-                    boundaryDesc(declared.parameters().get(0))));
+            g.emitInvokeStatic(CD_Lists, methodFor(result, call), MethodTypeDesc.of(
+                    boundaryDesc(result), boundaryDesc(declared.parameters().get(0))));
+        }
+
+        /** Which implementation answers the fold, by the type the checker settled. Written out over
+         *  the primitives so that a numeric type admitted as an element says which runtime method
+         *  folds it; anything else here is this compiler disagreeing with itself, and emitting the
+         *  Int kernel for it would answer a wrong number rather than say so. */
+        private String methodFor(Type result, Core.Call call) {
+            if (result instanceof Type.Prim p) {
+                switch (p) {
+                    case INT -> {
+                        return intMethod;
+                    }
+                    case DECIMAL -> {
+                        return decimalMethod;
+                    }
+                    case RATIONAL -> {
+                        return rationalMethod;
+                    }
+                    default -> { }
+                }
+            }
+            throw new IllegalStateException("`" + call.fn() + "` reached the backend answering "
+                    + Type.show(result) + ", which is no number a fold takes");
         }
     }
 
@@ -288,7 +304,9 @@ final class Intrinsics {
             g.emitFn(argument, takes.paramTypes().apply(call.args().get(takes.container()).type()));
             return argument.type();
         }
-        return g.genExpr(argument);
+        // What a kernel is handed it may keep, as `Map.insert` keeps its value, so a function
+        // handed to a parameter that is not one it applies is a value of its own too.
+        return g.emitValue(argument, null);
     }
 
     private static int[] identity(int n) {
@@ -306,18 +324,11 @@ final class Intrinsics {
      * <p>The one reading of a declared type this backend has. What a kernel is called at is built
      * out of it in {@link #slotsOf} and nowhere else, so nothing outside needs it. */
     private static ClassDesc boundaryDesc(Type t) {
+        // A primitive is handed over in the form a body computes it in, which is what makes the
+        // descriptor true of what is on the stack.
         if (t instanceof Type.Prim p) {
-            return switch (p) {
-                case INT -> ConstantDescs.CD_long;
-                case BOOL -> ConstantDescs.CD_boolean;
-                case DECIMAL -> CD_BigDecimal;
-                case STRING -> CD_String;
-                case DATE -> CD_LocalDate;
-                case TIME -> CD_LocalTime;
-                case DATETIME -> CD_LocalDateTime;
-                case INSTANT -> CD_Instant;
-                case RAW -> CD_Object;
-            };
+            ClassDesc carrier = JvmTypes.primCarrier(p);
+            return carrier == null ? CD_Object : carrier;
         }
         if (t instanceof Type.ListOf) {
             return CD_List;
@@ -359,9 +370,19 @@ final class Intrinsics {
         return TABLE.keySet();
     }
 
+    /** The kernels whose runtime method has a second overload taking a comparator ahead of what the
+     *  declaration names — the runtime ABI fact {@link #descriptorWithComparator} and {@link
+     *  #emitWithComparator} answer for. Which call actually reaches it is a checker fact ({@link
+     *  Core.KernelFact.OrderingSubject}), settled once in {@code CallElaborator} and read off the
+     *  call in {@code BodyGen}; this set says only which runtime methods exist to be reached that
+     *  way, and does not decide that any particular call does. */
+    static final Set<Kernel> COMPARATOR_OVERLOADS = Set.of(
+            Kernel.LIST_SORT, Kernel.LIST_MAX, Kernel.LIST_MIN, Kernel.LIST_SORT_BY);
+
     /**
-     * A kernel of the ordered family, over an element whose order lives on its sum: the runtime call
-     * this table already holds for it, taking a comparator ahead of what it was already taking.
+     * A kernel of the ordered family, over an element whose order its own {@code compareTo} does not
+     * answer — an enumeration's case, whose order lives on its sum, or text: the runtime call this
+     * table already holds for it, taking a comparator ahead of what it was already taking.
      *
      * <p>The one place a runtime method takes an argument the declaration does not name. Everything
      * else is the same walk every kernel goes through — the arguments go on the stack where the row
@@ -372,6 +393,16 @@ final class Intrinsics {
      * one applying a function takes the function too, as an {@code Fn}.
      */
     static void emitWithComparator(BodyGen g, Kernel kernel, Core.Call call) {
+        if (!COMPARATOR_OVERLOADS.contains(kernel)) {
+            // The caller read an OrderingSubject settlement and a comparator off it, which only
+            // means the checker requires order of some Type for this call — never that this
+            // runtime has a comparator overload to reach for it. That is this set's fact, asked
+            // here rather than trusted, so a kernel gaining the settlement without gaining the
+            // overload fails at the call it would otherwise reach, not at bytecode verification.
+            throw new IllegalStateException("`" + kernel.key() + "` carries an ordering settlement"
+                    + " but is not in COMPARATOR_OVERLOADS — the runtime has no comparator overload"
+                    + " for it, or this set was not updated to say it does");
+        }
         KernelSignature declared = g.kernelSignature(kernel);
         ClassDesc owner;
         String method;
@@ -423,13 +454,12 @@ final class Intrinsics {
         t.put(Kernel.STRING_TO_INT, rt(CD_Strings, "toInt", order(0)));
         t.put(Kernel.STRING_TO_DECIMAL, rt(CD_Strings, "toDecimal", order(0)));
         t.put(Kernel.STRING_LENGTH, rt(CD_Strings, "length", order(0)));
-        t.put(Kernel.STRING_TRIM, jdk(CD_String, "trim", mtd(CD_String), order(0)));
-        t.put(Kernel.STRING_LOWERCASE, jdk(CD_String, "toLowerCase", mtd(CD_String), order(0)));
-        t.put(Kernel.STRING_UPPERCASE, jdk(CD_String, "toUpperCase", mtd(CD_String), order(0)));
+        t.put(Kernel.STRING_LOWERCASE, rt(CD_Strings, "lowercase", order(0)));
+        t.put(Kernel.STRING_UPPERCASE, rt(CD_Strings, "uppercase", order(0)));
         t.put(Kernel.STRING_CONTAINS, jdk(CD_String, "contains", mtd(bool, CD_CharSequence), order(1, 0)));
         t.put(Kernel.STRING_STARTS_WITH, jdk(CD_String, "startsWith", mtd(bool, CD_String), order(1, 0)));
         t.put(Kernel.STRING_ENDS_WITH, jdk(CD_String, "endsWith", mtd(bool, CD_String), order(1, 0)));
-        t.put(Kernel.STRING_APPEND, jdk(CD_String, "concat", mtd(CD_String, CD_String), order(0, 1)));
+        t.put(Kernel.STRING_APPEND, rt(CD_Strings, "append", order(0, 1)));
         // String — Strings runtime statics.
         // `slice` left the JDK's `substring` when the language settled on code points: the JDK method
         // indexes UTF-16 units, so the conversion — and the abort for an index the string has not
@@ -438,8 +468,10 @@ final class Intrinsics {
         t.put(Kernel.STRING_SPLIT, rt(CD_Strings, "split", order(1, 0)));
         t.put(Kernel.STRING_JOIN, rt(CD_Strings, "join", order(1, 0)));
         t.put(Kernel.STRING_REPLACE, rt(CD_Strings, "replace", order(2, 0, 1)));
+        // `trim` and `words` share one whitespace predicate (spec §string-whitespace), so both stay
+        // on the runtime rather than the JDK's own `trim`, whose whitespace set does not agree.
+        t.put(Kernel.STRING_TRIM, rt(CD_Strings, "trim", order(0)));
         t.put(Kernel.STRING_WORDS, rt(CD_Strings, "words", order(0)));
-        t.put(Kernel.STRING_MATCHES, rt(CD_Strings, "matches", order(1, 0)));
         t.put(Kernel.STRING_CHARACTERS, rt(CD_Strings, "characters", order(0)));
         t.put(Kernel.STRING_CODE_POINTS, rt(CD_Strings, "codePoints", order(0)));
         t.put(Kernel.STRING_FROM_INT, rt(CD_Strings, "fromInt", order(0)));
@@ -468,8 +500,9 @@ final class Intrinsics {
         t.put(Kernel.LIST_SORT, rt(CD_Lists, "sort", order(0)));
         t.put(Kernel.LIST_REVERSE, rt(CD_Lists, "reverse", order(0)));
         t.put(Kernel.LIST_RANGE_INCLUSIVE, rt(CD_Lists, "rangeInclusive", order(0, 1)));
-        t.put(Kernel.LIST_SUM, new NumericFold("sumInt", "sumDecimal"));
-        t.put(Kernel.LIST_PRODUCT, new NumericFold("productInt", "productDecimal"));
+        t.put(Kernel.LIST_SUM, new NumericFold("sumInt", "sumDecimal", "sumRational"));
+        t.put(Kernel.LIST_PRODUCT,
+                new NumericFold("productInt", "productDecimal", "productRational"));
 
         // Map
         t.put(Kernel.MAP_GET, rt(CD_Maps, "get", order(1, 0)));
@@ -550,6 +583,21 @@ final class Intrinsics {
         t.put(Kernel.DECIMAL_DIVIDE, rt(CD_DecimalMath, "divide", order(0, 1, 2, 3)));
         t.put(Kernel.DECIMAL_COMPARE, rt(CD_DecimalMath, "compare", order(0, 1)));
         t.put(Kernel.DECIMAL_FROM_INT, rt(CD_DecimalMath, "fromInt", order(0)));
+
+        // Rational — every one of them a RationalMath static, for the same reason: what the exact
+        // arithmetic of the language means is the runtime's, and the exponent range it aborts at is
+        // part of the operation rather than of whoever emitted the call.
+        t.put(Kernel.RATIONAL_ADD, rt(CD_RationalMath, "add", order(0, 1)));
+        t.put(Kernel.RATIONAL_SUBTRACT, rt(CD_RationalMath, "subtract", order(0, 1)));
+        t.put(Kernel.RATIONAL_MULTIPLY, rt(CD_RationalMath, "multiply", order(0, 1)));
+        t.put(Kernel.RATIONAL_DIVIDE, rt(CD_RationalMath, "divide", order(0, 1)));
+        t.put(Kernel.RATIONAL_COMPARE, rt(CD_RationalMath, "compare", order(0, 1)));
+        t.put(Kernel.RATIONAL_FROM_INT, rt(CD_RationalMath, "fromInt", order(0)));
+        t.put(Kernel.RATIONAL_FROM_DECIMAL, rt(CD_RationalMath, "fromDecimal", order(0)));
+        t.put(Kernel.RATIONAL_TO_WHOLE_NUMBER, rt(CD_RationalMath, "toWholeNumber", order(0)));
+        t.put(Kernel.RATIONAL_TO_FINITE_DECIMAL, rt(CD_RationalMath, "toFiniteDecimal", order(0)));
+        t.put(Kernel.RATIONAL_TO_INT, rt(CD_RationalMath, "toInt", order(0, 1)));
+        t.put(Kernel.RATIONAL_TO_DECIMAL, rt(CD_RationalMath, "toDecimal", order(0, 1, 2)));
 
         // Not a copy: the map is a local nothing else holds, and read back through an EnumMap it
         // answers in the order the kernels are declared in rather than in whatever order a copy

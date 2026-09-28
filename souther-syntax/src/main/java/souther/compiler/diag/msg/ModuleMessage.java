@@ -51,6 +51,62 @@ public sealed interface ModuleMessage extends Message {
     @Code(DiagnosticCode.E1506)
     record TheModuleDeclaresNoSuchName(String name, String module) implements ModuleMessage, Reported {}
 
+    /** A module off the path was built requiring {@code name} of {@code declaredIn} injected, and
+     * the {@code declaredIn} this compilation reads — compiled here or on the path — does not
+     * declare it. A name the module reaches as much as one its text writes, carried beside the text
+     * because the stages that reach it are not. */
+    @Code(DiagnosticCode.E1506)
+    record ItWasBuiltRequiringWhatTheModuleDoesNotDeclare(String module, String name, String declaredIn)
+            implements ModuleMessage, Reported {}
+
+    record RebuildItAgainstTheModuleThisCompilationReads(String module, String dependency)
+            implements ModuleMessage, Supporting {}
+
+    /** A module off the path was built linking against the {@code kind} {@code name} of
+     * {@code declaredIn}, and the {@code declaredIn} this compilation reads declares nothing of that
+     * kind and name. */
+    @Code(DiagnosticCode.E1510)
+    record ItLinksAgainstWhatTheModuleDoesNotProvide(String module, String kind, String name,
+                                                     String declaredIn)
+            implements ModuleMessage, Reported {}
+
+    /** A module off the path was built against the {@code kind} {@code name} of
+     * {@code declaredIn} with {@code fact} being {@code built}, and the {@code declaredIn} this
+     * compilation reads offers it with {@code fact} being {@code now}: its classes link to
+     * something else, or to nothing, against this one. The first fact that moved, in the order a
+     * projection lists them. */
+    @Code(DiagnosticCode.E1510)
+    record ItWasBuiltAgainstAnotherLinkage(String module, String kind, String name,
+                                           String declaredIn, String fact, String built,
+                                           String now)
+            implements ModuleMessage, Reported {}
+
+    /** A module off the path carries a copy of the {@code kind} {@code name} of
+     * {@code declaredIn}, and the {@code declaredIn} this compilation reads offers nothing of that
+     * kind and name to copy. */
+    @Code(DiagnosticCode.E1510)
+    record ItCopiedWhatTheModuleDoesNotProvide(String module, String kind, String name,
+                                               String declaredIn)
+            implements ModuleMessage, Reported {}
+
+    /** A module off the path carries the constant {@code built} the value {@code name} of
+     * {@code declaredIn} folded to, and the {@code declaredIn} this compilation reads folds it to
+     * {@code now}: its classes answer with the old constant where the rest of the program answers
+     * with the new one. */
+    @Code(DiagnosticCode.E1510)
+    record ItCopiedAnotherConstant(String module, String name, String declaredIn, String built,
+                                   String now)
+            implements ModuleMessage, Reported {}
+
+    /** A module off the path carries a copy of the {@code kind} {@code name} of {@code declaredIn}
+     * as {@code form}, and the {@code declaredIn} this compilation reads offers another. What a body
+     * is copied as is not something a reader could hold against the source, so the form is named
+     * and the content is not. */
+    @Code(DiagnosticCode.E1510)
+    record ItCopiedAnotherVersion(String module, String kind, String name, String declaredIn,
+                                  String form)
+            implements ModuleMessage, Reported {}
+
     @Code(DiagnosticCode.E1507)
     record TheModuleDoesNotExposeIt(String name, String module) implements ModuleMessage, Reported {}
 
@@ -156,6 +212,12 @@ public sealed interface ModuleMessage extends Message {
 
     @Code(DiagnosticCode.E1611)
     record AnExposedValueRestsOnWhatIsKept(String exposed, String stands) implements ModuleMessage, Reported {}
+
+    @Code(DiagnosticCode.E1628)
+    record APublishedHelperBuildsWhatIsKept(String helper, String kept) implements ModuleMessage, Reported {}
+
+    @Code(DiagnosticCode.E1628)
+    record ACarriedHelperBuildsWhatIsKept(String helper, String kept) implements ModuleMessage, Reported {}
 
     record WhatReachesOutMayNotRestOnWhatIsKept(String kept, String exposed) implements ModuleMessage, Supporting {}
 }

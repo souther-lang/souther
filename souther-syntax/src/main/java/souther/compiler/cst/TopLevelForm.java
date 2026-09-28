@@ -23,13 +23,15 @@ import java.util.Optional;
 public enum TopLevelForm {
 
     MODULE_HEADER(Region.FILE_HEADER, Word.of(SyntaxKind.MODULE_KW)),
-    EXAMPLES_FILE_HEADER(Region.FILE_HEADER, Word.of("examples"), Word.of("for")),
+    EXAMPLES_FILE_HEADER(Region.FILE_HEADER,
+            Word.of(ContextualWord.EXAMPLES), Word.of(ContextualWord.FOR)),
     IMPORT(Region.PRELUDE, Word.of(SyntaxKind.IMPORT_KW)),
     DATA(Region.BODY, Word.of(SyntaxKind.DATA_KW)),
     BEHAVIOR(Region.BODY, Word.of(SyntaxKind.BEHAVIOR_KW)),
-    FN(Region.BODY, List.of(Word.of("private"), Word.of("partial")), Word.of(SyntaxKind.LET_KW)),
-    EXAMPLE(Region.BODY, Word.of("example")),
-    FAKE(Region.BODY, Word.of("fake"));
+    FN(Region.BODY, List.of(Word.of(ContextualWord.PRIVATE), Word.of(ContextualWord.PARTIAL)),
+            Word.of(SyntaxKind.LET_KW)),
+    EXAMPLE(Region.BODY, Word.of(ContextualWord.EXAMPLE)),
+    FAKE(Region.BODY, Word.of(ContextualWord.FAKE));
 
     /**
      * Where in a file a form may open something.
@@ -51,12 +53,15 @@ public enum TopLevelForm {
     }
 
     /**
-     * One word a form is opened with, however the lexer happens to treat it.
+     * One word a form is opened with, as the lexer hands it over.
      *
      * <p>A reserved word is matched by its kind and spells itself through {@link
-     * SyntaxKind#fixedSpelling()}; a contextual one lexes as an identifier and is matched by its
-     * text. Either way the spelling is held once, so what recognises a form and what an editor shows
-     * for it cannot come apart.
+     * SyntaxKind#fixedSpelling()}; a {@link ContextualWord} lexes as an identifier and is matched by
+     * its text. Either way the spelling is held once, so what recognises a form and what an editor
+     * shows for it cannot come apart.
+     *
+     * <p>The kind is the lexer's and not the tree's. What these are matched against is the tokens
+     * ahead of the parse, before it has read any of them as anything.
      */
     public record Word(SyntaxKind kind, String spelling) {
 
@@ -65,9 +70,9 @@ public enum TopLevelForm {
                     () -> new IllegalArgumentException(kind + " does not spell itself")));
         }
 
-        /** A contextual word: an ordinary identifier that opens a form only where it stands. */
-        public static Word of(String contextual) {
-            return new Word(SyntaxKind.IDENT, contextual);
+        /** A contextual word, which opens a form only where it stands. */
+        public static Word of(ContextualWord contextual) {
+            return new Word(SyntaxKind.IDENT, contextual.spelling());
         }
 
         private boolean matchesAt(Lookahead ahead, int i) {

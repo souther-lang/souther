@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.check.RuleKey;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -119,6 +120,63 @@ public record TermPath(String head, List<Step> steps) {
 
     public static TermPath of(String head) {
         return new TermPath(head, List.of());
+    }
+
+    /**
+     * One order for paths that ties no two that are not equal.
+     *
+     * <p>Every part is compared and none is spelled: two paths written alike can hold narrowings
+     * that are not equal, and an order by the words leaves those two where the walk found them.
+     * The head, then each step in turn — a field by its name, a narrowing by which kind it is and
+     * then by what it narrows to — and a path that is a prefix of another before it.
+     */
+    public static Comparator<TermPath> structuralOrder() {
+        return STRUCTURAL;
+    }
+
+    private static final Comparator<TermPath> STRUCTURAL = (one, other) -> {
+        int byHead = one.head.compareTo(other.head);
+        if (byHead != 0) {
+            return byHead;
+        }
+        int common = Math.min(one.steps.size(), other.steps.size());
+        for (int at = 0; at < common; at++) {
+            int byStep = compareSteps(one.steps.get(at), other.steps.get(at));
+            if (byStep != 0) {
+                return byStep;
+            }
+        }
+        return Integer.compare(one.steps.size(), other.steps.size());
+    };
+
+    private static int compareSteps(Step one, Step other) {
+        int byKind = Integer.compare(kindOf(one), kindOf(other));
+        if (byKind != 0) {
+            return byKind;
+        }
+        return switch (one) {
+            case Step.Field field -> field.name().compareTo(((Step.Field) other).name());
+            case Step.Element _ -> 0;
+            case Step.Refine refine -> compareNarrowings(refine.refinement(),
+                    ((Step.Refine) other).refinement());
+        };
+    }
+
+    private static int kindOf(Step step) {
+        return switch (step) {
+            case Step.Field _ -> 0;
+            case Step.Element _ -> 1;
+            case Step.Refine _ -> 2;
+        };
+    }
+
+    private static int compareNarrowings(Refinement one, Refinement other) {
+        return switch (one) {
+            case Refinement.SumCase sum -> other instanceof Refinement.SumCase that
+                    ? sum.leaf().compareTo(that.leaf()) : -1;
+            case Refinement.Presence presence -> other instanceof Refinement.Presence that
+                    ? Boolean.compare(presence.present(), that.present()) : 1;
+        };
     }
 
     /** The same path, one field further in. */

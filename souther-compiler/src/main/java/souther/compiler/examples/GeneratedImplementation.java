@@ -53,8 +53,14 @@ final class GeneratedImplementation implements Answerer {
      */
     @Override
     public Answer of(String behavior) {
-        if (!generated.has(behavior)) {
-            return new Answer.Nothing();
+        switch (generated.standingOf(behavior)) {
+            case ELSEWHERE -> {
+                return new Answer.Nothing();
+            }
+            case OWED_BUT_NOT_MADE -> {
+                return new Answer.Unavailable();
+            }
+            case GENERATED -> { }
         }
         return new Answer.Something() {
 

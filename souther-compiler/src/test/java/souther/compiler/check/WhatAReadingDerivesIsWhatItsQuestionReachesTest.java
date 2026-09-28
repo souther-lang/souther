@@ -147,8 +147,8 @@ class WhatAReadingDerivesIsWhatItsQuestionReachesTest {
      *
      * <p>Not the graph's own edges, which do carry: a recipe's operands are derived and read where
      * its form is read, which is what
-     * {@link AProductIsHeldToWhatThePathKnowsOfItsFactorsTest#aQuotientOverAProductReadsWhatTheProductWasDerivedTo}
-     * holds of {@code a * b / 100}. What is asked here is the sideways route.
+     * {@link AProductIsBoundedByWhatThePathBoundsItsFactorsToTest#aQuotientOfAProductByAValueReadsBoth}
+     * holds of a product under a quotient. What is asked here is the sideways route.
      *
      * <p>{@code q == a * b} relates {@code q} to the product through a difference, and
      * {@code NonNeg(q)} is discharged by it — the product's derived bound reaches {@code q} through

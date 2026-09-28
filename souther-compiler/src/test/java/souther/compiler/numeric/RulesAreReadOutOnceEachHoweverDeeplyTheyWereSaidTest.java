@@ -39,7 +39,7 @@ class RulesAreReadOutOnceEachHoweverDeeplyTheyWereSaidTest {
 
     private static AffineConstraint<String> rule(String atom, long at) {
         return new AffineConstraint.Disequality<>(
-                new CanonicalForm<>(Map.of(atom, Rational.of(1))), Rational.of(at));
+                new CanonicalForm<>(Map.of(atom, ExactRatio.of(1))), ExactRatio.of(at));
     }
 
     private static StatedRules<String> said(List<AffineConstraint<String>> these) {

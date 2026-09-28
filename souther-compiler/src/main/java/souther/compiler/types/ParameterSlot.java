@@ -1,5 +1,7 @@
 package souther.compiler.types;
 
+import souther.compiler.SettledAnswer;
+
 /**
  * Which parameter of a declaration, counted along the parameters it declares.
  *
@@ -14,7 +16,7 @@ package souther.compiler.types;
  * everything it wrote. The two may agree; a value that took the second and called it the first
  * would be an identity that agrees with the declaration until something else is minted first.
  */
-public record ParameterSlot(int index) {
+public record ParameterSlot(int index) implements SettledAnswer {
 
     public ParameterSlot {
         if (index < 0) {

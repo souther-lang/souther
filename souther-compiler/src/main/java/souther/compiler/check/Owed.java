@@ -80,7 +80,7 @@ public sealed interface Owed {
             return switch (on.of()) {
                 case NumberAt.OfWhatNumber.OfItsOwnValue _ -> where;
                 case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers taken ->
-                        taken.operation() + "(" + where + ")";
+                        taken.operation() + taken.arguments().writtenWith(where);
             };
         }
     }

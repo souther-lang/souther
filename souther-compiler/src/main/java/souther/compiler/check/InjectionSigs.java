@@ -5,7 +5,6 @@ import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,47 +21,14 @@ public final class InjectionSigs {
     private InjectionSigs() {}
 
     /**
-     * Builds the map. Where a behavior's body comes from is decided the same way in both callers,
-     * by {@link BehaviorImplementation}, and what lands here is every behavior whose requirement set
-     * is not empty: one Java supplies requires itself, and one that writes {@code depends on}
-     * requires what it writes — whether or not its {@code let} has been written yet.
-     *
-     * <p>Keyed by the declaration each signature belongs to. A behavior this module declares and one
-     * it borrows may share a name, and they are two behaviors: under the spelling, one of them
-     * silently answered for the other and which it was fell to the order the two were written in.
-     */
-    public static Map<ValueName.Behavior, ReqSig> of(String module, List<Hir.BehaviorDef> behaviors,
-                                                     List<Hir.FnDef> fns,
-                                                     Symbols symbols,
-                                                     Map<ValueName.Behavior, Sig> importedSigs,
-                                                     Set<ValueName.Behavior> importedInjected) {
-        Set<String> own = new HashSet<>();
-        Set<String> defined = definedNames(fns);
-        for (Hir.BehaviorDef b : behaviors) {
-            if (b instanceof Hir.SpecBehavior spec
-                    && (Requirements.implementationOf(b, defined).isInjectionTarget()
-                            || !spec.dependsOn().isEmpty())) {
-                own.add(spec.name());
-            }
-        }
-        return dependencies(module, behaviors, symbols, own, importedSigs, importedInjected);
-    }
-
-    /** The names the definitions handed in are written under, which is what
-     *  {@link Requirements#implementationOf(Hir.BehaviorDef, Set)} reads. */
-    private static Set<String> definedNames(List<Hir.FnDef> fns) {
-        Set<String> names = new HashSet<>();
-        for (Hir.FnDef fn : fns) {
-            names.add(fn.name());
-        }
-        return names;
-    }
-
-    /**
      * The signatures of the behaviors a {@code depends on} clause may name — the ones whose
      * requirement set is not empty. {@code dependencies} names this module's own, computed by the
      * caller so a module read from the path, which publishes no {@code let}, is decided the same way
      * as one being compiled.
+     *
+     * <p>Keyed by the declaration each signature belongs to. A behavior this module declares and one
+     * it borrows may share a name, and they are two behaviors: under the spelling, one of them
+     * silently answered for the other and which it was fell to the order the two were written in.
      */
     public static Map<ValueName.Behavior, ReqSig> dependencies(
             String module, List<Hir.BehaviorDef> behaviors, Symbols symbols,
@@ -74,7 +40,7 @@ public final class InjectionSigs {
 
     /**
      * The signatures of the behaviors a body may call by name — the ones whose requirement set is
-     * empty (spec {@code [#calling-a-behavior]}). Built the same way as {@link #of}, from the same
+     * empty (spec {@code [#calling-a-behavior]}). Built the same way as {@link #dependencies}, from the same
      * material, because a call is typed against a declaration either way: what differs is how the
      * behavior is reached at run time, not what the call site has to agree with.
      *

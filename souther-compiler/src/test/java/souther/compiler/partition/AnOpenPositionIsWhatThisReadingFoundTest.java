@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.RuleReadingContext;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputDomain;
@@ -69,7 +70,8 @@ class AnOpenPositionIsWhatThisReadingFoundTest {
     private Position read(String type) {
         return InputDomain.of(
                         List.of(new InputDomain.Parameter("x", null, Type.ref(named(type)))),
-                        rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
+                        RuleReadingContext.unshared(rules,
+                                souther.compiler.query.ReadAs.THE_COMPILATION_DOES))
                 .at(TermPath.of("x"));
     }
 

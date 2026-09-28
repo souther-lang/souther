@@ -4,9 +4,13 @@ import souther.compiler.DefaultStdlib;
 import souther.compiler.Compiler;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.ExposingClause;
 import souther.compiler.codegen.Backend;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.jvm.ClassFileImage;
+import souther.compiler.jvm.LinkageRecord;
+import souther.compiler.jvm.LinkageTarget;
+import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
@@ -17,6 +21,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -69,6 +74,26 @@ class ModuleReadbackTest {
         assertEquals(List.of("withinCap"), back.fns().stream().map(Ast.FnDef::name).toList());
     }
 
+    /** A module writing no clause and one writing {@code exposing ()} publish different things, and
+     *  each comes back as the one it was, with what it publishes. */
+    @Test
+    void whetherAClauseIsWrittenComesBack() {
+        ReadableModule open = readBack("shared.open", Compiler.compile("""
+                module shared.open
+                data Amount = Int
+                let doubled (a: Amount) : Amount = Amount(a.value * 2)
+                """));
+        ReadableModule closed = readBack("shared.closed", Compiler.compile("""
+                module shared.closed exposing ()
+                data Amount = Int
+                """));
+
+        assertEquals(ExposingClause.Omitted.INSTANCE, open.module().exposing());
+        assertEquals(Set.of("Amount", "doubled"), open.module().published());
+        assertEquals(new ExposingClause.Written(List.of()), closed.module().exposing());
+        assertEquals(Set.of(), closed.module().published());
+    }
+
     /** The declaration is the same declaration, invariant and all — that is what the discharge
      * analysis reads on the importing side. */
     @Test
@@ -108,6 +133,49 @@ class ModuleReadbackTest {
                 read.module().imports().stream().map(Ast.Import::module).toList());
     }
 
+    /**
+     * The parameter names a composition's signature is written with to reach the parser are no word
+     * of any declaration, so an import that only such a name spells is not needed — and the same word
+     * written in a declaration still is.
+     *
+     * <p>Both ways, because the two are one word. A reading that passed over every occurrence of it
+     * would drop the second import, and one that read the made-up names as words would keep the
+     * first.
+     */
+    @Test
+    void aNameWrittenOnlyToCarryACompositionNeedsNoImport() {
+        String dependency = """
+                module private.dep exposing ( in0 )
+                let in0 = 1
+                """;
+        String bodyOnly = """
+                module lib.pub exposing ( double, twice : Int )
+                import private.dep ( in0 )
+                behavior double : (n: Int) -> Int
+                let double (n) = n + in0
+                behavior twice = double >-> double
+                """;
+        String declared = """
+                module lib.pub exposing ( Floor, double, twice : Int )
+                import private.dep ( in0 )
+                data Floor = Int
+                    invariant value >= in0
+                behavior double : (n: Int) -> Int
+                let double (n) = n
+                behavior twice = double >-> double
+                """;
+
+        assertEquals(List.of(), importsReadBack(dependency, bodyOnly),
+                "only a `let` names it, and the composition's signature names nothing");
+        assertEquals(List.of("private.dep"), importsReadBack(dependency, declared),
+                "an invariant names it");
+    }
+
+    private static List<String> importsReadBack(String dependency, String published) {
+        return readBack("lib.pub", Compiler.compileModules(List.of(dependency, published)))
+                .module().imports().stream().map(Ast.Import::module).toList();
+    }
+
     /** No `let` comes back for any behavior, so where each one's body comes from cannot be read off
      * the module; it is carried beside it. Three states and not two: a behavior Souther is to
      * implement and nobody has would arrive as one Java supplies if a reader worked it out again,
@@ -129,17 +197,205 @@ class ModuleReadbackTest {
                         "double", BehaviorImplementation.IMPLEMENTED,
                         "audited", BehaviorImplementation.UNIMPLEMENTED),
                 read.behaviorImplementations());
-        assertEquals(Set.of("record"), read.injectedBehaviors());
-        assertEquals(Set.of("audited"), read.unwrittenBehaviors());
     }
 
-    /** A composition declares stages; what comes back is the signature it computes to, written in
-     * the names the module that published it has. It is read back as that module's own source, under
-     * the import lines that travelled with it, so {@code Cart} here means what it meant there —
-     * which is why it is not written out with its module
+    /** What constructing each behavior requires comes back beside it, for every behavior the module
+     *  declares — one supplied from outside Souther requiring nothing. A composition's is carried
+     *  because the stages it comes from are not. */
+    @Test
+    void whatEachBehaviorRequiresIsCarried() {
+        ReadableModule read = readBack("shared.q", Compiler.compile("""
+                module shared.q exposing ( rate, double, priced : Int, charged )
+                behavior rate : (n: Int) -> Int
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                behavior priced = rate >-> double
+                behavior charged : (n: Int) -> Int depends on rate
+                let charged (n, rate) = rate(n)
+                """));
+
+        ValueName.Behavior rate = new ValueName.Behavior("shared.q", "rate");
+        assertEquals(Map.of("rate", List.of(), "double", List.of(), "priced", List.of(rate),
+                        "charged", List.of(rate)),
+                read.behaviorRequirements());
+    }
+
+    /**
+     * A class saying its behavior is supplied from outside Souther and that constructing it
+     * requires something says two things, and is not read as either of them.
+     *
+     * <p>Every behavior of the module is written as requiring the same entry, so what tells the
+     * refused module from the read one is only that one of its behaviors is injected.
+     */
+    @Test
+    void anInjectedBehaviorSaidToRequireSomethingIsNotRead() {
+        List<String> requiresDouble = List.of("8:shared.q6:double");
+        PublishedClasses withInjected = requirementsWritten(Compiler.compile("""
+                module shared.q exposing ( rate, double )
+                behavior rate : (n: Int) -> Int
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                """), requiresDouble);
+        PublishedClasses withoutInjected = requirementsWritten(Compiler.compile("""
+                module shared.q exposing ( double )
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                """), requiresDouble);
+
+        assertInstanceOf(Readback.Failure.UnreadableMetadata.class,
+                refusalOf("shared.q", withInjected));
+        assertEquals(Map.of("double", List.of(new ValueName.Behavior("shared.q", "double"))),
+                assertInstanceOf(ReadableModule.class, assertInstanceOf(Readback.Ready.class,
+                        ModuleReadback.read("shared.q", withoutInjected,
+                                DefaultStdlib.get().names())).value()).behaviorRequirements());
+    }
+
+    /** A behavior annotation at this boundary that says nothing of what the behavior requires was
+     *  not written by this compiler, and is not read as requiring nothing. */
+    @Test
+    void aBehaviorThatSaysNothingOfWhatItRequiresIsNotReadAsRequiringNothing() {
+        PublishedClasses silent = requirementsWritten(Compiler.compile("""
+                module shared.q exposing ( double )
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                """), null);
+
+        assertInstanceOf(Readback.Failure.UnreadableMetadata.class,
+                refusalOf("shared.q", silent));
+    }
+
+    /** An entry that is not a module and a name, each counted, is not one this compiler wrote. */
+    @Test
+    void aRequirementThatDoesNotCountOutIsNotRead() {
+        PublishedClasses garbled = requirementsWritten(Compiler.compile("""
+                module shared.q exposing ( double )
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                """), List.of("8:shared.q4:rat"));
+
+        assertInstanceOf(Readback.Failure.UnreadableMetadata.class,
+                refusalOf("shared.q", garbled));
+    }
+
+    /** What a module's classes assumed about another module's declarations comes back with it, and
+     *  so does what its own declarations offer: a stage it builds, with what the stage is handed and
+     *  the constructor linked against, and the composition it declares. */
+    @Test
+    void whatItsClassesLinkAgainstAndWhatItOffersAreCarried() {
+        ReadableModule read = readBack("shared.b", Compiler.compileModules(List.of("""
+                module shared.c exposing ( rate, step : Int )
+                behavior rate : (n: Int) -> Int
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                behavior step = rate >-> double
+                """, """
+                module shared.b exposing ( priced : Int )
+                import shared.c ( step )
+                behavior inc : (n: Int) -> Int
+                let inc (n) = n + 1
+                behavior priced = step >-> inc
+                """)));
+
+        LinkageRecord step = read.requires().get(
+                new LinkageTarget.Behavior(new ValueName.Behavior("shared.c", "step")));
+        assertNotNull(step, "shared.b builds shared.c's step: " + read.requires().keySet());
+        String built = factOf(step, "built with");
+        assertTrue(built.startsWith("(shared.c.rate) through ")
+                        && built.endsWith("(Lsouther/runtime/Behavior;)V"), built);
+        assertNotNull(read.provides().get(
+                        new LinkageTarget.Behavior(new ValueName.Behavior("shared.b", "priced"))),
+                "shared.b offers its own composition: " + read.provides().keySet());
+    }
+
+    private static String factOf(LinkageRecord record, String label) {
+        String value = record.facts().get(label);
+        if (value == null) {
+            throw new AssertionError("no `" + label + "` in " + record);
+        }
+        return value;
+    }
+
+    /** A module at this boundary that says nothing of what its declarations offer, or of what its
+     *  classes were built against, was not written by this compiler, and is not read as offering
+     *  or linking against nothing. */
+    @Test
+    void aModuleThatSaysNothingOfItsLinkageIsNotReadAsHavingNone() {
+        Map<String, ClassFileImage> classes = Compiler.compile("""
+                module shared.q exposing ( double )
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                """);
+
+        assertInstanceOf(Readback.Failure.UnreadableMetadata.class,
+                refusalOf("shared.q", viewing(classes,
+                        m -> withLinkages(m, m.compat(), null, m.requiredLinkages()))));
+        assertInstanceOf(Readback.Failure.UnreadableMetadata.class,
+                refusalOf("shared.q", viewing(classes,
+                        m -> withLinkages(m, m.compat(), m.providedLinkages(), null))));
+        assertInstanceOf(Readback.Failure.Incompatible.class,
+                refusalOf("shared.q", viewing(classes,
+                        m -> withLinkages(m, Backend.BOUNDARY_VERSION - 1, null, null))),
+                "an older writer left them out, which is the boundary the two do not share");
+    }
+
+    /** The same of what a module offers to be copied and what its classes copied, the other half of
+     *  what it was built against. */
+    @Test
+    void aModuleThatSaysNothingOfItsCopiesIsNotReadAsHavingNone() {
+        Map<String, ClassFileImage> classes = Compiler.compile("""
+                module shared.q exposing ( double )
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                """);
+
+        assertInstanceOf(Readback.Failure.UnreadableMetadata.class,
+                refusalOf("shared.q", viewing(classes,
+                        m -> withCopies(m, null, m.requiredCopies()))));
+        assertInstanceOf(Readback.Failure.UnreadableMetadata.class,
+                refusalOf("shared.q", viewing(classes,
+                        m -> withCopies(m, m.providedCopies(), null))));
+    }
+
+    private static PublishedClasses.SoutherModuleView withLinkages(
+            PublishedClasses.SoutherModuleView m, int compat, List<String> provided,
+            List<String> required) {
+        return new PublishedClasses.SoutherModuleView(compat, m.compiler(), m.header(),
+                m.imports(), m.types(), m.behaviors(), m.invariantHelpers(), m.valueAnswers(),
+                provided, required, m.providedCopies(), m.requiredCopies());
+    }
+
+    private static PublishedClasses.SoutherModuleView withCopies(
+            PublishedClasses.SoutherModuleView m, List<String> provided, List<String> required) {
+        return new PublishedClasses.SoutherModuleView(m.compat(), m.compiler(), m.header(),
+                m.imports(), m.types(), m.behaviors(), m.invariantHelpers(), m.valueAnswers(),
+                m.providedLinkages(), m.requiredLinkages(), provided, required);
+    }
+
+    /** {@code classes} with every behavior's requirement list replaced by {@code requirements}. */
+    private static PublishedClasses requirementsWritten(Map<String, ClassFileImage> classes,
+                                                        List<String> requirements) {
+        PublishedClasses read = ModulePath.of(classes).declarations();
+        return binaryName -> {
+            if (!(read.of(binaryName)
+                    instanceof PublishedClasses.Carried.Declared(
+                            PublishedClasses.Declarations d))
+                    || d.behaviorSignature() == null) {
+                return read.of(binaryName);
+            }
+            return new PublishedClasses.Carried.Declared(new PublishedClasses.Declarations(
+                    d.module(), d.data(), d.behaviorSignature(), d.behaviorSignatureFrom(),
+                    d.behaviorImplementation(), requirements));
+        };
+    }
+
+    /** A composition declares stages; what comes back is a composition taking and answering what
+     * its stages compute, with no stages and no parameter names. The types are written in the names
+     * the module that published it has. It is read back as that module's own source, under the
+     * import lines that travelled with it, so {@code Cart} here means what it meant there — which
+     * is why it is not written out with its module
      * (spec {@code [#a-published-signature-is-written-in-names-its-module-has]}). */
     @Test
-    void aCompositionComesBackAsASignature() {
+    void aCompositionComesBackAsACompositionOfWhatItsStagesCompute() {
         Map<String, ClassFileImage> classes = Compiler.compileModules(List.of("""
                 module shop.pricing exposing ( Cart, Priced, quote )
                 data Cart = { n: Int }
@@ -157,11 +413,15 @@ class ModuleReadbackTest {
 
         ReadableModule read = readBack("shop.checkout", classes);
 
-        Ast.SpecBehavior checkout = (Ast.SpecBehavior) read.module().behaviors().stream()
-                .filter(b -> b.name().equals("checkout")).findFirst().orElseThrow();
-        assertEquals("Cart", refName(checkout.params().get(0).type()),
+        Ast.PipeBehavior checkout = assertInstanceOf(Ast.PipeBehavior.class,
+                read.module().behaviors().stream()
+                        .filter(b -> b.name().equals("checkout")).findFirst().orElseThrow());
+        Ast.Composition.Elsewhere published =
+                assertInstanceOf(Ast.Composition.Elsewhere.class, checkout.composition());
+        assertEquals(1, published.takes().size());
+        assertEquals("Cart", refName(published.takes().get(0)),
                 "imported bare there, so bare here");
-        assertEquals("Done", refName(checkout.ret()), "the module's own declaration");
+        assertEquals("Done", refName(published.answers()), "the module's own declaration");
     }
 
     /** The name of a written type's single reference case. */
@@ -269,7 +529,7 @@ class ModuleReadbackTest {
         Map<String, ClassFileImage> classes = Compiler.compile("""
                 module shared.money exposing ( Amount, taxed )
                 data Amount = Int
-                let taxed (a: Amount) = Amount(a.value * 110 / 100)
+                let taxed (a: Amount) = Amount(Rational.toInt(DOWN, a.value * 110 / 100))
                 """);
         PublishedClasses older = viewing(classes, m -> new PublishedClasses.SoutherModuleView(
                 m.compat() - 1, "0.0.1-older", m.header(), m.imports(), m.types(),
@@ -289,7 +549,7 @@ class ModuleReadbackTest {
         Map<String, ClassFileImage> classes = Compiler.compile("""
                 module shared.money exposing ( Amount, taxed )
                 data Amount = Int
-                let taxed (a: Amount) = Amount(a.value * 110 / 100)
+                let taxed (a: Amount) = Amount(Rational.toInt(DOWN, a.value * 110 / 100))
                 """);
         assertEquals(List.of("taxed"),
                 readBack("shared.money", classes).module().fns().stream()
@@ -350,7 +610,7 @@ class ModuleReadbackTest {
                         new PublishedClasses.SoutherModuleView(Backend.BOUNDARY_VERSION,
                                 "another build", "module lib.two exposing ( Held )", List.of(),
                                 List.of("Held", "Twice", "Some"), List.of(), List.of()),
-                        null, null, null),
+                        null, null, null, null, null),
                 "lib.two.Held", declaring("data Held = String"),
                 "lib.two.Twice", declaring("data Held = Int"),
                 "lib.two.Some", declaring("data Some = String"));
@@ -367,7 +627,7 @@ class ModuleReadbackTest {
 
     /** The class one declaration was stamped on. */
     private static PublishedClasses.Declarations declaring(String declaration) {
-        return new PublishedClasses.Declarations(null, declaration, null, null);
+        return new PublishedClasses.Declarations(null, declaration, null, null, null, null);
     }
 
     /**
@@ -412,10 +672,10 @@ class ModuleReadbackTest {
                     m == null ? null : new PublishedClasses.SoutherModuleView(
                             boundary, "0.0.1-before", m.header(), m.imports(), m.types(),
                             m.behaviors(), m.invariantHelpers()),
-                    d.data(), d.behaviorSignature(),
+                    d.data(), d.behaviorSignature(), d.behaviorSignatureFrom(),
                     // What the older compiler wrote in its place is a flag, and no word of ours
                     // reads as one.
-                    d.behaviorSignature() == null ? null : "true"));
+                    d.behaviorSignature() == null ? null : "true", d.behaviorRequirements()));
         };
     }
 
@@ -432,7 +692,8 @@ class ModuleReadbackTest {
             }
             return new PublishedClasses.Carried.Declared(new PublishedClasses.Declarations(
                     as.apply(d.module()), d.data(), d.behaviorSignature(),
-                    d.behaviorImplementation()));
+                    d.behaviorSignatureFrom(), d.behaviorImplementation(),
+                    d.behaviorRequirements()));
         };
     }
 

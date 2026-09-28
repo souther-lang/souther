@@ -20,15 +20,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * repeating and joining them — and the ones that would have caught it come out whether anybody
  * expected them or not.
  *
- * <p><b>Two things are checked and they are different promises.</b> A pattern this says it read has
- * to accept the strings {@code java.util.regex} accepts and no others, which is the promise every
- * measure downstream rests on. And a pattern the engine refuses to compile may not be one this says
- * it read: there is no language to agree with, and reading it would be this compiler answering for a
- * pattern its author cannot run.
+ * <p><b>Two things are checked, and neither is what defines the language.</b> The specification
+ * does that, and what the JVM runs is written from the meaning rather than from this text. What is
+ * held here is that the language agrees with {@code java.util.regex}'s reading of the same text
+ * wherever both read it: a pattern the language reads accepts the strings the engine accepts, and
+ * text the engine refuses to compile is no pattern of the language either. So a format an author
+ * tried against a Java tool means the same here.
  *
- * <p>Not read is always allowed. What this reads is a subset, and a pattern outside it leaves the
- * position wider than the rules are — true, and short of what was written. So the generator says
- * nothing about how much has to be read; it says that what is read is right.
+ * <p>Refused is always allowed. The language has fewer constructs than the engine, and text using
+ * one it lacks is refused where it is checked. So the generator says nothing about how much is
+ * read; it says that what is read agrees.
  */
 class EveryShapeTheGrammarWritesIsReadAsTheEngineReadsItTest {
 
@@ -62,7 +63,7 @@ class EveryShapeTheGrammarWritesIsReadAsTheEngineReadsItTest {
                 "", "a", "b", "aa", "ab", "ba", "bb", "aaa", "abc", "c", "1", "12", "a1",
                 "{", "{}", "a{", "*", "a*", "[", ".", "aab", "\n", " "));
         out.add(new String(Character.toChars(0x10330)));
-        out.add("\ud800");
+        out.add(String.valueOf((char) 0xE000));
         return List.copyOf(out);
     }
 
@@ -113,7 +114,7 @@ class EveryShapeTheGrammarWritesIsReadAsTheEngineReadsItTest {
                 apart.add(written(regex) + " is read here and refused by the engine");
                 continue;
             }
-            Automaton machine = Automaton.of(it.syntax(), plenty());
+            Automaton machine = Automaton.of(it.meaning(), plenty());
             if (machine == null) {
                 apart.add(written(regex) + " is read and not built");
                 continue;
@@ -135,8 +136,7 @@ class EveryShapeTheGrammarWritesIsReadAsTheEngineReadsItTest {
     /**
      * And a string this hands back is one it holds.
      *
-     * <p>A language that names a string and refuses it is not a set — which is what a machine
-     * stepping over half a surrogate pair is, whatever spelling put it there.
+     * <p>A language that names a string and refuses it is not a set, whatever spelling put it there.
      */
     @Test
     void whatItHandsBackIsWhatItHolds() {
@@ -144,7 +144,7 @@ class EveryShapeTheGrammarWritesIsReadAsTheEngineReadsItTest {
             if (!(PatternParser.read(regex) instanceof PatternRead.Read it)) {
                 continue;
             }
-            Automaton machine = Automaton.of(it.syntax(), plenty());
+            Automaton machine = Automaton.of(it.meaning(), plenty());
             String one = machine == null ? null : machine.shortest();
             if (one != null) {
                 assertTrue(machine.accepts(one),

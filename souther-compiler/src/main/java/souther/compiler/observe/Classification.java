@@ -1,5 +1,8 @@
 package souther.compiler.observe;
 
+import java.util.List;
+import java.util.Objects;
+
 /**
  * Which equivalence classes a row's values at one position fell in, or why that could not be
  * decided.
@@ -85,30 +88,18 @@ public sealed interface Classification {
      * @param occurrence the elements taken, outermost first. Empty where the position is inside no
      *                   sequence, which is one value and stands with every other
      */
-    record At(java.util.Map<souther.compiler.inputs.TermPath, Integer> occurrence, String classId) {
+    record At(ElementsTaken occurrence, String classId) {
 
         public At {
-            occurrence = java.util.Map.copyOf(occurrence);
+            Objects.requireNonNull(occurrence, "a class is reached through some elements");
         }
 
         /**
-         * Whether this and {@code other} can be one reading of the row.
-         *
-         * <p>Every step inside a sequence the two took together was taken at the same element, and
-         * the steps they did not take together are free. Keyed by the step rather than counted: two
-         * positions under one person agree about the person and, where each goes on into a
-         * collection of its own, about nothing below it — counted, the two collections would be
-         * zipped, which is a relation neither the row nor the model states.
+         * Whether this and {@code other} can be one reading of the row: the elements taken agree
+         * ({@link ElementsTaken#agreesWith}).
          */
         public boolean agreesWith(At other) {
-            for (java.util.Map.Entry<souther.compiler.inputs.TermPath, Integer> each
-                    : occurrence.entrySet()) {
-                Integer beside = other.occurrence().get(each.getKey());
-                if (beside != null && !beside.equals(each.getValue())) {
-                    return false;
-                }
-            }
-            return true;
+            return occurrence.agreesWith(other.occurrence());
         }
     }
 
@@ -121,7 +112,7 @@ public sealed interface Classification {
     }
 
     static Classification in(String classId) {
-        return new Classified(java.util.List.of(new At(java.util.Map.of(), classId)), null);
+        return new Classified(List.of(new At(ElementsTaken.NONE, classId)), null);
     }
 
     /**

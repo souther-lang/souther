@@ -1,8 +1,13 @@
 package souther.compiler.query;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.BehaviorBodies;
+import souther.compiler.check.Boundary;
+import souther.compiler.check.BoundaryConstraints;
+import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseDischarge;
 import souther.compiler.check.ClauseLocations;
+import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclarationCitations;
 import souther.compiler.check.DeclarationKind;
 import souther.compiler.check.DeclarationKinds;
@@ -11,18 +16,27 @@ import souther.compiler.check.DeclarationMeaning;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.Normalized;
+import souther.compiler.check.ProductSpreads;
+import souther.compiler.check.PublishedDeclarationResult;
 import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.check.EffectiveFieldTypes;
 import souther.compiler.check.FieldBindings;
-import souther.compiler.check.TypeOps;
+import souther.compiler.check.FieldExpansion;
+import souther.compiler.check.FieldLayout;
 import souther.compiler.check.ExpandedClauseLookup;
 import souther.compiler.check.ExpandedClauseResult;
 import souther.compiler.check.ExpandedClauses;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.GoverningInvariant;
 import souther.compiler.check.InvariantSettled;
-import souther.compiler.check.Lower;
+import souther.compiler.check.InvariantStatements;
+import souther.compiler.check.SettledInvariant;
+import souther.compiler.check.TypeOps;
+import souther.compiler.check.Cardinality;
+import souther.compiler.check.CardinalityPremise;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.check.UninhabitableTypes;
 import souther.compiler.check.ClauseHelpers;
 import souther.compiler.check.ClausesForDischarge;
@@ -35,18 +49,23 @@ import souther.compiler.check.ResolvedSymbols;
 import souther.compiler.core.ValueShape;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticPlace;
+import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.Region;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.MaterialisationSite;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.ValueName;
+import souther.compiler.types.WrittenOwner;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -203,6 +222,29 @@ public final class Shapes {
     }
 
     /**
+     * How the alternatives {@code type} names travel at a boundary: which cases the boundary
+     * descends to, and whether the set of them is a bare tag or a discriminated object.
+     * {@code type} is a named sum's own reference or a behavior's answer union — the two are one
+     * question asked of two spellings (spec §sum-discrimination) and answered by one call either
+     * way, {@link Boundary#of}.
+     *
+     * <p>Asked here rather than by whoever wants the answer, so that the call is made once for a
+     * type however many readers ask about it — a program's assembler among them, which reads this
+     * rather than calling {@link Boundary#of} itself.
+     */
+    public record TypeAlternatives(String moduleName, Type type) implements Key<Boundary.Alternatives> {
+        @Override
+        public String module() {
+            return moduleName;
+        }
+
+        @Override
+        public Answer<Boundary.Alternatives> compute(Db db) {
+            return Answer.of(Boundary.of(type, declarationKinds(db), publishedDeclarations(db)));
+        }
+    }
+
+    /**
      * A module's declarations by name, each with the constructions in its clauses written as
      * constructions.
      *
@@ -237,7 +279,8 @@ public final class Shapes {
             }
             Map<String, souther.compiler.check.Normalized.Def> out = new LinkedHashMap<>();
             for (InvariantSettled.Def def : settling.value().defs()) {
-                out.put(def.name(), souther.compiler.check.Normalized.Def.of(def, scope.value()));
+                out.put(def.name(),
+                        souther.compiler.check.Normalized.Def.of(def, declarationNewtypes(db)));
             }
             return Answer.of(Map.copyOf(out));
         }
@@ -344,8 +387,18 @@ public final class Shapes {
      * together here.
      *
      * <p>Nothing of what a field holds. A binding is an owner and which field of that owner it is, so
-     * an edit that changes a field's type leaves this answer alone; one that reorders the fields, or
-     * changes what is spread, does not.
+     * an edit that changes a field's type leaves this answer alone.
+     *
+     * <p><b>A mapping, and the precedence it is built by is not an order it answers.</b> Which field
+     * a name means is decided by reading a declaration's own fields before the ones its spreads
+     * bring in — the nearer binding is the one kept — and that is a rule for settling a name rather
+     * than a sequence anything may read off the answer. It is not the order a value lays its fields
+     * out in and could not be: that one takes in what is spread before what is written, which is the
+     * other way round. A reader of the layout asks {@link FieldLayoutOf}.
+     *
+     * <p>So an edit that moves a field among the ones its own declaration writes moves this, because
+     * the field is numbered where it is written and the numbers are what this answers. One that
+     * moves a whole spread does not.
      */
     public record FieldBindingsOf(TypeKey named) implements Key<Map<String, BindingId>> {
         @Override
@@ -355,51 +408,71 @@ public final class Shapes {
 
         @Override
         public Answer<Map<String, BindingId>> compute(Db db) {
-            Map<String, BindingId> bindings = new LinkedHashMap<>();
-            if (declaredAt(db, named) instanceof Hir.Data data) {
-                // The identity the declaration carries, which is what its own clauses resolve
-                // against — not one built here out of the address this was asked under.
-                walk(db, data, data.declares(), new LinkedHashSet<>(), bindings);
-            }
-            // Kept in the order the walk reached them. A reader lists what a declaration binds and
-            // reports it in that order, so an answer that came back in whatever order a hash gave
-            // would move a sentence about a program nothing had changed.
-            return Answer.of(Collections.unmodifiableMap(bindings));
+            return Answer.of(declaredAt(db, named) instanceof Hir.Data data
+                    ? Collections.unmodifiableMap(
+                            FieldExpansion.bindings(expansionOf(db, data)))
+                    : Map.of());
+        }
+    }
+
+    /**
+     * What a declaration reaches, read off the store.
+     *
+     * <p>Every declaration the spreads reach is asked for on its own, so that an answer built from
+     * this depends on the declarations it walked and on nothing else — and an edit to one of them
+     * reaches exactly the answers that walked it. Null where nothing declares the name, or where
+     * what it declares is not something fields are taken out of.
+     *
+     * <p>Asked under the identity the declaration carries rather than the address it was reached
+     * by, which is what its own clauses resolve against.
+     */
+    private static FieldExpansion.Of expansionOf(Db db, Hir.Data data) {
+        return FieldExpansion.of(data.declares(), data, at -> declaredAt(db, at.key()));
+    }
+
+    /** The declaration at {@code address} with its names resolved, or null where none is. */
+    private static Hir.Def declaredAt(Db db, TypeKey address) {
+        Answer<Hir.Def> declared = db.ask(new Names.ResolvedDeclaration(address));
+        return declared.present() ? declared.value() : null;
+    }
+
+    /**
+     * The order a value of a declaration lays its fields out in: what each spread brings in, spread
+     * by spread as they are written, and then what the declaration writes itself.
+     *
+     * <p><b>A sequence, and it is what this answers.</b> Two of these holding the same names in
+     * another order are two different answers, so a declaration whose spreads are written the other
+     * way round reaches every reader of this — which is what a reader of an order needs and what a
+     * mapping cannot give it. {@link EffectiveFieldTypesOf} answers what stands at each name and
+     * says nothing about their order; this says the order and nothing about what is in them. The
+     * two move at different times and a reader takes the one it means.
+     *
+     * <p>What is laid out here is what a constructor of the type takes, in the order it takes them,
+     * and what a value written out is read back in.
+     *
+     * <p>An edit that changes only where the fields stand is a change to this and to neither of the
+     * mappings — reordering two spreads that bring in different fields, say. Not every edit that
+     * moves a field is one: a declaration's own fields moved among themselves are numbered the other
+     * way round, so {@link FieldBindingsOf} moves too, because a binding is which field of its owner
+     * it is. What this alone answers is where a field stands, not that a field moved.
+     *
+     * <p>Absent where nothing declares the name, and empty where what it declares reaches no field.
+     */
+    public record FieldLayoutOf(TypeKey named) implements Key<List<String>> {
+        @Override
+        public String module() {
+            return named.module();
         }
 
-        /**
-         * {@code data}'s own fields, then what it spreads — the walk {@code TypeOps.fieldBindings}
-         * makes, reading each declaration it reaches off the store.
-         *
-         * <p>Carried over as it stands, {@code seen} and all: which include is walked and which
-         * binding a repeated name keeps are decided by the order this goes in, and an edit to that
-         * order here would be a change to what a clause resolves to made under cover of a change to
-         * where the answer comes from.
-         */
-        private static void walk(Db db, Hir.Data data, TypeSymbol.AtModule declared,
-                                 Set<TypeSymbol> seen, Map<String, BindingId> out) {
-            BindingOwner owner = new BindingOwner.OfFields(declared);
-            int ordinal = 0;
-            for (Hir.Field field : data.fields()) {
-                out.putIfAbsent(field.name(), new BindingId(owner, ordinal++));
+        @Override
+        public Answer<List<String>> compute(Db db) {
+            Hir.Def declared = declaredAt(db, named);
+            if (declared == null) {
+                return Answer.absent();
             }
-            for (Hir.Name include : data.includes()) {
-                TypeSymbol source = switch (include) {
-                    case Hir.Name.Denoting denoting -> denoting.type();
-                    // Reported where it is written, and bringing in no fields.
-                    case Hir.Name.Unanswered _ -> null;
-                };
-                if (source instanceof TypeSymbol.AtModule at && seen.add(at)
-                        && declaredAt(db, at.key()) instanceof Hir.Data included) {
-                    walk(db, included, at, seen, out);
-                }
-            }
-        }
-
-        /** The declaration at {@code address} with its names resolved, or null where none is. */
-        private static Hir.Def declaredAt(Db db, TypeKey address) {
-            Answer<Hir.Def> declared = db.ask(new Names.ResolvedDeclaration(address));
-            return declared.present() ? declared.value() : null;
+            return Answer.of(declared instanceof Hir.Data data
+                    ? FieldExpansion.layout(expansionOf(db, data), FieldExpansion.Refusing.NOTHING)
+                    : List.of());
         }
     }
 
@@ -415,9 +488,9 @@ public final class Shapes {
      * nothing that read it. A reader taking the order off it would be reading something the store
      * does not watch, and would go stale with nothing to say so.
      *
-     * <p>A reader that needs the order asks something that answers it. {@link FieldBindingsOf}
-     * numbers a declaration's own fields as it writes them, and what a value is laid out as is
-     * {@code ValueShape}'s — which reads the order off the walk that builds it and is not this.
+     * <p>A reader that needs the order asks {@link FieldLayoutOf}, which answers it and is moved by
+     * an edit that only moves a field. Said here rather than left to whoever looks: the order is a
+     * real question about a declaration, and the answer to it is somewhere.
      *
      * <p>Which is what keeps this answer as narrow as the question it is for. What type a field
      * holds and what order the fields come in move at different times: put together, every reader
@@ -443,43 +516,13 @@ public final class Shapes {
             if (declared == null) {
                 return Answer.absent();
             }
-            Map<String, Type> types = new LinkedHashMap<>();
-            if (declared instanceof Hir.Data data) {
-                walk(db, data, types);
-            }
-            // Kept in a map that iterates, because the walk fills one — and not because the order
-            // it iterates in says anything. What this answers is which type stands at each name.
-            return Answer.of(Collections.unmodifiableMap(types));
-        }
-
-        /**
-         * What {@code data} spreads, then its own fields — the walk {@code TypeOps.fieldTypes}
-         * makes, reading each declaration it reaches off the store.
-         *
-         * <p>Carried over as it stands. Which order the walk goes in decides which type a name
-         * holds where two fields carry one spelling, and that is content: an edit to the order
-         * here would change what a field means under cover of a change to where the answer comes
-         * from. It is not the order the answer iterates in, which nothing may read.
-         */
-        private static void walk(Db db, Hir.Data data, Map<String, Type> out) {
-            for (Hir.Name include : data.includes()) {
-                // A name nothing declares, or one that declares something no field can be taken
-                // out of. Both bring in nothing here and are reported where the spread is written.
-                if (include instanceof Hir.Name.Denoting denoting
-                        && denoting.type() instanceof TypeSymbol.AtModule at
-                        && declaredAt(db, at.key()) instanceof Hir.Data included) {
-                    walk(db, included, out);
-                }
-            }
-            for (Hir.Field field : data.fields()) {
-                out.put(field.name(), TypeOps.fieldType(field));
-            }
-        }
-
-        /** The declaration at {@code address} with its names resolved, or null where none is. */
-        private static Hir.Def declaredAt(Db db, TypeKey address) {
-            Answer<Hir.Def> declared = db.ask(new Names.ResolvedDeclaration(address));
-            return declared.present() ? declared.value() : null;
+            // Kept in a map that iterates, because the projection fills one — and not because the
+            // order it iterates in says anything. What this answers is which type stands at each
+            // name; the order a value lays them out in is {@link FieldLayoutOf}.
+            return Answer.of(declared instanceof Hir.Data data
+                    ? Collections.unmodifiableMap(FieldExpansion.types(
+                            expansionOf(db, data), FieldExpansion.Refusing.NOTHING))
+                    : Map.of());
         }
     }
 
@@ -492,6 +535,22 @@ public final class Shapes {
         return declared -> {
             Answer<Map<String, Type>> types = db.ask(new EffectiveFieldTypesOf(declared.key()));
             return types.present() ? types.value() : Map.of();
+        };
+    }
+
+    /**
+     * The order any declaration lays its fields out in, for a reader that emits or lines up a value
+     * of one.
+     *
+     * <p>One of these for the whole compilation, for the reason {@link #expandedClauses} gives. A
+     * reader taking one depends on where the fields of the declarations it asks about stand and on
+     * nothing else about them — not on what any of them holds, and not on where any of it is
+     * written.
+     */
+    public static FieldLayout fieldLayout(Db db) {
+        return declared -> {
+            Answer<List<String>> layout = db.ask(new FieldLayoutOf(declared.key()));
+            return layout.present() ? layout.value() : List.of();
         };
     }
 
@@ -523,31 +582,42 @@ public final class Shapes {
      * are asking one question — which is what an answer keyed by a declaration has to be, and what
      * {@code WhatADeclarationsClausesStateIsOneAnswerWhicheverModuleAsksTest} holds the reading to.
      *
-     * <p>Absent where nothing declares it. A declaration the language declares is answered for like
+     * <p>Answered either way where it says nothing, and saying which way it is
+     * ({@link PublishedDeclarationResult}). A declaration the language declares is answered for like
      * any other: it is normal as it stands, having no construction in its clauses left to write out.
      */
-    public record MeaningOf(TypeKey named) implements Key<DeclarationMeaning> {
+    public record MeaningOf(TypeKey named) implements Key<PublishedDeclarationResult> {
         @Override
         public String module() {
             return named.module();
         }
 
         @Override
-        public Answer<DeclarationMeaning> compute(Db db) {
+        public Answer<PublishedDeclarationResult> compute(Db db) {
             // Which of the two answered decides how the meaning is read, and not only which
             // declaration came back. A module's own is read in that module's reading of its
             // declarations; what the language declares is written in no module a compilation holds,
             // so there is no such reading to make and nothing it would answer.
             Answer<Normalized.Def> mine = db.ask(new NormalizedDef(named));
             if (mine.present()) {
-                return Answer.of(DeclarationMeaning.of(mine.value().node(),
-                        db.ruleReadingFor(named.module())));
+                return Answer.of(new PublishedDeclarationResult.Found(DeclarationMeaning.of(
+                        mine.value().node(), db.ruleReadingFor(named.module()))));
             }
             Answer<Stdlib> library = db.ask(new Front.Library());
             Hir.Def declared =
                     library.present() ? library.value().languageDeclaration(named) : null;
-            return declared == null ? Answer.absent()
-                    : Answer.of(DeclarationMeaning.ofLanguage(declared));
+            if (declared != null) {
+                return Answer.of(new PublishedDeclarationResult.Found(
+                        DeclarationMeaning.ofLanguage(declared)));
+            }
+            // Which of the two absences it is, asked of whether a module writes the declaration at
+            // all. Asked of anything that resolves, this would answer that a declaration nobody
+            // could read is one nobody wrote — and a value of it would be held to no rule, with
+            // nothing saying so. The same question tells the two apart on the expanded side, so a
+            // reader meeting either is told the same about which of them it is.
+            return Front.somethingDeclares(db, named)
+                    ? Answer.of(new PublishedDeclarationResult.Unavailable(named))
+                    : Answer.of(new PublishedDeclarationResult.NotDeclared(named));
         }
     }
 
@@ -674,7 +744,8 @@ public final class Shapes {
             Map<String, souther.compiler.check.Desugared.Fn> out = new LinkedHashMap<>();
             for (Hir.FnDef fn : settling.value().fns()) {
                 out.put(fn.name(),
-                        souther.compiler.check.Desugared.Fn.desugar(fn, scope.value()));
+                        souther.compiler.check.Desugared.Fn.desugar(fn,
+                                declarationNewtypes(db)));
             }
             return Answer.of(Map.copyOf(out));
         }
@@ -712,16 +783,34 @@ public final class Shapes {
                     signatures = db.ask(new Bodies.Reachable(name));
             Answer<souther.compiler.check.FakeTables> declared =
                     db.ask(new Names.FakeTables(name));
+            Answer<BehaviorBodies> bodies = db.ask(new Bodies.Implementation(name));
+            // What TypedFixtureValues.of reads a candidate's declared type against beyond this
+            // module's own definitions — not Bodies.ImportedDefinitions(name), whose published-body
+            // closure needs ClausesTakenIn of this same module and cycles back into this same
+            // CheckSurface, the same shape of cycle DeclaredTypeReading's checked-world FieldTypes
+            // already refuses. publishedByQualifiedName reads each import directly off the module that
+            // declares it instead, closed as deep as that module's own body reaches and never through
+            // this assembly.
+            Map<String, Hir.FnDef> importedForEvidence = Bodies.publishedByQualifiedName(db, name);
+            // What a candidate offered from the imported half may actually be: the leaves this
+            // module's own import lines admit, never a further definition importedForEvidence
+            // carries only so a call past one can be read (Bodies.importedLeaves's own doc).
+            Set<ValueName.Helper> importedLeaves = Bodies.importedLeaves(db, name);
+            Answer<Stdlib> stdlib = db.ask(new Front.Library());
             if (!settling.present() || !normalized.present() || !resolved.present()
-                    || !scope.present() || !fns.present() || !declared.present()) {
+                    || !scope.present() || !fns.present() || !declared.present()
+                    || !bodies.present() || !stdlib.present()) {
                 return Answer.absent();
             }
             try {
                 souther.compiler.check.CheckSurface assembled =
                         souther.compiler.check.CheckSurface.assemble(
-                                settling.value(), normalized.value(), fns.value(), scope.value(),
+                                settling.value(), normalized.value(), fns.value(),
+                                declarationNewtypes(db),
                                 signatures.present() ? signatures.value() : Map.of(),
-                                declared.value());
+                                declared.value(), bodies.value(), importedForEvidence,
+                                importedLeaves, stdlib.value(), scope.value(),
+                                publishedDeclarations(db), declarationKinds(db), newtypeInners(db));
                 // A definition that did not desugar is missing from what was handed in, and a
                 // surface without it would be this module read as one that does not write it.
                 return assembled == null ? Answer.absent() : Answer.of(assembled);
@@ -804,9 +893,12 @@ public final class Shapes {
                     // A declared clause is one rule to depart by and may still be several conjuncts to
                     // discharge, so `a && b` under one name is classified twice under that name: what
                     // discharges each half is what an author needs, and the name is what a caller reads.
-                    for (Hir.InvariantClause declared : data.invariants()) {
+                    WrittenOwner.Declaration writer = new WrittenOwner.Declaration(named.key());
+                    for (int ordinal = 0; ordinal < data.invariants().size(); ordinal++) {
+                        Hir.InvariantClause declared = data.invariants().get(ordinal);
                         for (ClausesForDischarge.ClauseReading written
-                                : declaring.conjunctsOf(declared.expr(), new BindingOwner.OfData(named))) {
+                                : declaring.conjunctsOf(declared.expr(), new BindingOwner.OfData(named),
+                                        new MaterialisationSite.Invariant(writer, ordinal))) {
                             clauses.add(InvariantChecker.capabilityOf(written, named, ruleReading)
                                     .named(declared.name()));
                         }
@@ -817,6 +909,246 @@ public final class Shapes {
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
+        }
+    }
+
+    /**
+     * What one declaration settles before a count of the types around it begins.
+     *
+     * <p>An answer of its own because it is where a count pays. Reading a declaration's rules is
+     * the whole of what a count costs per declaration, and the counts a count has to tell apart
+     * have to be in hand before it starts — so gathered while it walks, every count taken anywhere
+     * in the module read every declaration of it, whatever the edit that led to the count.
+     * Answered here, a declaration is read again when its own rules move and not otherwise.
+     *
+     * <p>Under the declaration's own module, which is what makes the reading it is made by the
+     * declaration's canonical one: a count of a module that reaches a type of another is handed
+     * what that module's own reading came to, rather than reading the type again under the scope of
+     * whoever reached it.
+     *
+     * <p>What it says and not what it is for. Two counts over different sets of declarations ask
+     * this the same way, and the answer is the same both times — which is what a set of counts and
+     * a yes-or-no can be compared as, and what a reading could not.
+     */
+    public record CardinalityPremiseOf(TypeKey named) implements Key<CardinalityPremise> {
+        @Override
+        public String module() {
+            return named.module();
+        }
+
+        @Override
+        public Answer<CardinalityPremise> compute(Db db) {
+            Answer<RuleReadingSource> reading = ruleReading(db, named.module());
+            Answer<souther.compiler.check.ReadingPolicy> policy = db.ask(new Front.Reading());
+            if (!reading.present() || !policy.present()) {
+                return Answer.absent();
+            }
+            Answer<Hir.Def> declared = db.ask(new Names.ResolvedDeclaration(named));
+            return Answer.of(declared.present()
+                    ? CardinalityPremise.of(declared.value().declares(), declared.value(),
+                            RuleReadingContext.of(reading.value(), policy.value(), db.readings()))
+                    : CardinalityPremise.NOTHING);
+        }
+    }
+
+    /**
+     * Where a count gets those: from this store for every declaration it reads, and for itself for
+     * a declaration of a module this compilation does not read.
+     *
+     * <p>The second is not a fallback to a lesser answer. A module this compilation has no scope
+     * for has nothing to be edited either, so what is read there is read once and asked for
+     * afterwards; what the store answers is every declaration an author is typing in.
+     */
+    public static TypeCardinality.Premises cardinalityPremises(Db db, RuleReadingContext reading) {
+        TypeCardinality.Premises here = TypeCardinality.Premises.read(reading);
+        return named -> {
+            if (!(named instanceof TypeSymbol.AtModule at)) {
+                return CardinalityPremise.NOTHING;
+            }
+            Answer<CardinalityPremise> answer = db.ask(new CardinalityPremiseOf(at.key()));
+            return answer.present() ? answer.value() : here.of(named);
+        };
+    }
+
+    /**
+     * The declarations answered together with this one, which is one of them.
+     *
+     * <p>An answer of its own because it is what says where a count is cut, and because it is
+     * settled by the shapes alone: what a declaration reads is written in its fields and in the
+     * names those are written in terms of, so an author changing what a rule allows leaves this
+     * where it was and every count built on it stands.
+     */
+    public record CardinalityComponentOf(TypeKey named) implements Key<List<TypeSymbol>> {
+        @Override
+        public String module() {
+            return named.module();
+        }
+
+        @Override
+        public Answer<List<TypeSymbol>> compute(Db db) {
+            Answer<RuleReadingSource> reading = ruleReading(db, named.module());
+            if (!reading.present()) {
+                return Answer.absent();
+            }
+            TypeSymbol self = TypeSymbols.declared(named);
+            // Read off the module's, because which declarations are one answer is a fact about the
+            // graph and not about any declaration in it: worked out here, every declaration of a
+            // module would walk everything it reaches to be told what one walk tells all of them.
+            Answer<Map<TypeSymbol, List<TypeSymbol>>> module =
+                    db.ask(new CardinalityComponentsOf(named.module()));
+            if (module.present() && module.value().containsKey(self)) {
+                return Answer.of(module.value().get(self));
+            }
+            // And worked out here for a declaration no module of this compilation indexes, which a
+            // count reaches where it walks into a module nobody is editing.
+            try {
+                return Answer.of(TypeCardinality.componentOf(self, reading.value()));
+            } catch (CompileException e) {
+                return Answer.of(List.of(), Report.of(e));
+            }
+        }
+    }
+
+    /**
+     * Which declarations have to be answered together, for every declaration this module writes and
+     * everything they reach.
+     *
+     * <p>One walk for the module rather than one per declaration. What it answers is read off the
+     * shapes, so an author changing what a rule allows leaves it where it was, and a declaration
+     * written beside the others changes it without changing what it says about any of them — which
+     * is what keeps the counts built on it where they are.
+     */
+    public record CardinalityComponentsOf(String name)
+            implements Key<Map<TypeSymbol, List<TypeSymbol>>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<TypeSymbol, List<TypeSymbol>>> compute(Db db) {
+            Answer<List<TypeSymbol.AtModule>> written = db.ask(new Front.DeclaredTypes(name));
+            Answer<RuleReadingSource> reading = ruleReading(db, name);
+            if (!written.present() || !reading.present()) {
+                return Answer.absent();
+            }
+            try {
+                return Answer.of(TypeCardinality.componentsOf(written.value(), reading.value()));
+            } catch (CompileException e) {
+                return Answer.of(Map.of(), Report.of(e));
+            }
+        }
+    }
+
+    /**
+     * How many values every declaration answered together with this one has at most.
+     *
+     * <p>One answer per component and not per declaration, because a component is what a count
+     * answers at once: declarations written in terms of each other are risen through together, and
+     * an answer for one of them alone would be an answer resting on an assumption about the others.
+     * A count of anything that reads this component is handed what this came to rather than reading
+     * these declarations again, so an edit to a declaration reaches the counts that read it and
+     * stops.
+     *
+     * <p>Under the declarations' own module. What a count of a component comes to is settled by the
+     * component's rules and by what it reads, and asking it under the scope of whoever reached it
+     * would make two readers of one component hold two answers.
+     */
+    public record CardinalityOf(TypeKey named) implements Key<Map<TypeSymbol, Cardinality>> {
+        @Override
+        public String module() {
+            return named.module();
+        }
+
+        @Override
+        public Answer<Map<TypeSymbol, Cardinality>> compute(Db db) {
+            Answer<List<TypeSymbol>> component = db.ask(new CardinalityComponentOf(named));
+            Answer<RuleReadingSource> reading = ruleReading(db, named.module());
+            Answer<souther.compiler.check.ReadingPolicy> policy = db.ask(new Front.Reading());
+            if (!component.present() || !reading.present() || !policy.present()) {
+                return Answer.absent();
+            }
+            List<TypeSymbol> members = component.value();
+            if (members.isEmpty()) {
+                return Answer.of(Map.of());
+            }
+            // Asked where the component is named and not wherever a member of it was reached, so
+            // that the declarations are risen through once however many of them a reader asks about.
+            if (members.get(0) instanceof TypeSymbol.AtModule first
+                    && !first.key().equals(named)) {
+                return db.ask(new CardinalityOf(first.key()));
+            }
+            try {
+                RuleReadingContext world =
+                        RuleReadingContext.of(reading.value(), policy.value(), db.readings());
+                return Answer.of(TypeCardinality.ofComponent(members, world,
+                        cardinalityPremises(db, world), name -> countOf(db, name)));
+            } catch (CompileException e) {
+                return Answer.absent(Report.of(e));
+            }
+        }
+    }
+
+    /** What a count of one component is handed about a declaration outside it: the answer for the
+     *  component that one is a member of, which is a reading of its own. */
+    private static Cardinality countOf(Db db, TypeSymbol name) {
+        if (!(name instanceof TypeSymbol.AtModule at)) {
+            return null;
+        }
+        Answer<Map<TypeSymbol, Cardinality>> counted = db.ask(new CardinalityOf(at.key()));
+        return counted.present() ? counted.value().get(name) : null;
+    }
+
+    /**
+     * That no product this module declares reaches itself through its spreads, and no product those
+     * reach does either.
+     *
+     * <p>Read from the declarations as resolution left them and from nothing else. What a value of a
+     * product holds, what rules govern it and how many values it has are each worked out by walking
+     * the spreads, and each of those walks is finite only over a graph with no ring in it — so the
+     * question is settled here, once, and the walks are asked afterwards. Asked of every declaration
+     * the spreads reach and not only of this module's, because a walk started here goes wherever the
+     * spreads go.
+     *
+     * <p>Absent where a ring is found, which is what keeps the readers below from being started on a
+     * graph they have no end in. What the report points at is the first spread of the ring, written
+     * on the declaration the ring closes on — a {@code ...} the author can take out, and the one
+     * their eye goes to when they are told which declaration is made of itself.
+     *
+     * <p><b>Found here, said where it is written.</b> The walk crosses into whatever the spreads
+     * name, so a module that spreads a declaration of a ring finds that ring and has no reading to
+     * give — and the ring is not its author's to take apart. Every declaration of a ring is written
+     * in one module, since a spread crossing out and back would be two modules importing each other;
+     * that module asks this of itself and says it there. Reported by whoever found it, one mistake
+     * would be said once for every module downstream of it
+     * ({@code ADataThatSpreadsItsWayBackToItselfIsRefusedTest}).
+     */
+    public record WellFoundedSpreads(String name) implements Key<ProductSpreads.WellFounded> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<ProductSpreads.WellFounded> compute(Db db) {
+            Answer<List<TypeSymbol.AtModule>> declared = db.ask(new Front.DeclaredTypes(name));
+            if (!declared.present()) {
+                return Answer.absent();
+            }
+            ProductSpreads.Of found = ProductSpreads.of(declared.value(), named -> {
+                Answer<Hir.Def> def = db.ask(new Names.ResolvedDeclaration(named.key()));
+                return def.present() ? def.value() : null;
+            });
+            return switch (found) {
+                case ProductSpreads.WellFounded wellFounded -> Answer.of(wellFounded);
+                case ProductSpreads.ReachesItself ring -> ring.writtenIn(name)
+                        ? Answer.absent(Report.of(Diagnostic
+                                .at(ring.written().name().reportedAt())
+                                .say(new DataMessage.ADataSpreadsItself(
+                                        ring.declaration().name(), ring.through()))
+                                .build()))
+                        : Answer.absent();
+            };
         }
     }
 
@@ -841,10 +1173,15 @@ public final class Shapes {
 
         @Override
         public Answer<UninhabitableTypes.WithNoValue> compute(Db db) {
-            Answer<Lower.Lowered> lowering = db.ask(new Bodies.Lowering(name));
+            Answer<List<TypeSymbol.AtModule>> written = db.ask(new Front.DeclaredTypes(name));
             Answer<RuleReadingSource> reading = ruleReading(db, name);
             Answer<souther.compiler.check.ReadingPolicy> policy = db.ask(new Front.Reading());
-            if (!lowering.present() || !policy.present()) {
+            // What a count walks is the spreads, and the walk ends because the graph does. Asked
+            // before anything is counted rather than guarded inside the walk: a declaration that
+            // reaches itself has no count to be given, and the refusal is one sentence about the
+            // declaration rather than one per reader that met it.
+            Answer<ProductSpreads.WellFounded> spreads = db.ask(new WellFoundedSpreads(name));
+            if (!written.present() || !policy.present() || !spreads.present()) {
                 return Answer.absent();
             }
             // Answered either way, because what a reader of this does about a count it has not been
@@ -853,11 +1190,17 @@ public final class Shapes {
             if (!reading.present()) {
                 return Answer.of(new UninhabitableTypes.WithNoValue.NotCounted());
             }
-            List<Hir.Def> declarations = lowering.value().settled().defs();
+            List<TypeSymbol.AtModule> declarations = written.value();
             try {
-                souther.compiler.check.TypeCardinality.Cardinalities counted =
-                        souther.compiler.check.TypeCardinality.solve(
-                                declarations, reading.value(), policy.value(), db.readings());
+                // The counts are read from the answer each component has and not worked out here.
+                // What is left to do is what a count is beside the counts: which declarations had to
+                // be answered together, what each reads, and what their rules ask a collection to
+                // hold, which is what the question about who is at fault for a lack is asked of.
+                RuleReadingContext world =
+                        RuleReadingContext.of(reading.value(), policy.value(), db.readings());
+                TypeCardinality.Cardinalities counted = TypeCardinality.assembled(
+                        declarations, world, cardinalityPremises(db, world),
+                        name -> countOf(db, name));
                 // Not counted where a rule the count read could not be read at all. What makes a
                 // type have no value is what its rules leave, so a count short of one of them may
                 // have missed the rule that empties a type — and would report it as inhabited.
@@ -945,7 +1288,7 @@ public final class Shapes {
             try {
                 return Answer.of(ClauseHelpers.expandedClausesOf(
                         expandable.value(), scope.value(), publishedDeclarations(db),
-                        declarationKinds(db), published));
+                        declarationKinds(db), declarationNewtypes(db), published));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -983,7 +1326,13 @@ public final class Shapes {
             // module wrote, would come back as clauses nobody could work out.
             Hir.Def declared = declarationOf(db, named);
             if (declared == null) {
-                return Answer.of(new ExpandedClauseResult.NotDeclared(named));
+                // Whether there is such a declaration is not what resolution answers: a module cut
+                // out of it writes what it writes, and read from resolution its declarations would
+                // come back as declarations nobody wrote. So the clauses of one are unavailable,
+                // which is what a reader turns into a rule about the position that went unreached.
+                return Answer.of(Front.somethingDeclares(db, named)
+                        ? new ExpandedClauseResult.Unavailable(named)
+                        : new ExpandedClauseResult.NotDeclared(named));
             }
             if (!(declared instanceof Hir.Data)) {
                 return Answer.of(new ExpandedClauseResult.Found(
@@ -1206,12 +1555,13 @@ public final class Shapes {
      * which declaration is being asked about is the only input there is. What a reader that takes
      * one depends on is the declarations it asks about, so a reader asking about none depends on
      * nothing.
+     *
+     * <p>Answered for every name, the answer saying which of the three it is, so that a reader
+     * needing to tell a name nothing declares from a declaration whose module could not be read has
+     * it here and asks nobody else.
      */
     public static PublishedDeclarations publishedDeclarations(Db db) {
-        return declaration -> {
-            Answer<DeclarationMeaning> said = db.ask(new MeaningOf(declaration));
-            return said.present() ? said.value() : null;
-        };
+        return declaration -> db.ask(new MeaningOf(declaration)).value();
     }
 
     /**
@@ -1227,6 +1577,18 @@ public final class Shapes {
             Answer<DeclarationKind> kind = db.ask(new Names.DeclarationKindOf(declaration));
             return kind.present() ? kind.value() : null;
         };
+    }
+
+    /**
+     * What a check asks of a declaration it did not write, each question answered by the
+     * compilation.
+     *
+     * <p>Each is the one this class hands out for that question on its own, so a reader taking this
+     * depends on the questions it asks and on nothing it does not.
+     */
+    public static DeclarationAccess declarationAccess(Db db) {
+        return new DeclarationAccess(publishedDeclarations(db), declarationKinds(db),
+                newtypeInners(db), effectiveFieldTypes(db), fieldLayout(db));
     }
 
     /**
@@ -1296,6 +1658,137 @@ public final class Shapes {
     }
 
     /**
+     * The settled clauses that govern each data this module declares, as this module reaches what
+     * they name: the clauses of every declaration its spreads take in, first and in turn, and then
+     * its own.
+     *
+     * <p>What runs here, and one answer for both of the things that need it. A construction of a
+     * data checks these trees, and the calls the settling left standing in them are to helpers this
+     * module emits as methods — a helper another module declared among them, where a spread brought
+     * in a clause of that module's. The two are read off one value ({@link SettledInvariant}), so
+     * the tree a check types and the calls the module emits come from the same expansion.
+     *
+     * <p>A clause another module wrote is the one {@link ClausesTakenIn} hands over, which is the
+     * clause that module settled reaching what it names as this module does.
+     *
+     * <p>Each with which clause it is ({@link GoverningInvariant}). The list is the clauses of
+     * several declarations run together, and which declaration asked for a clause is known here and
+     * nowhere after.
+     *
+     * <p>Every data, whether or not a meaning was settled for it: what a module has to emit does not
+     * turn on whether one of its declarations came out. Absent where a declaration a spread takes
+     * in has no normalized form, which is a module whose settling failed and said so.
+     */
+    public record SettledInvariantsGoverning(String name)
+            implements Key<Map<TypeSymbol.AtModule, List<GoverningInvariant>>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<TypeSymbol.AtModule, List<GoverningInvariant>>> compute(Db db) {
+            Answer<InvariantSettled> settling = db.ask(new Settling(name));
+            Answer<ResolvedSymbols> scope = Names.resolvedSymbols(db, name);
+            Answer<Map<TypeSymbol.AtModule, List<SettledInvariant>>> takenIn =
+                    db.ask(new ClausesTakenIn(name));
+            if (!settling.present() || !scope.present() || !takenIn.present()) {
+                return Answer.absent();
+            }
+            Map<TypeSymbol.AtModule, List<GoverningInvariant>> out = new LinkedHashMap<>();
+            // In the order the module writes its declarations, which is the order the table of
+            // normalized ones does not keep.
+            for (InvariantSettled.Def def : settling.value().defs()) {
+                if (!(db.ask(new NormalizedDef(def.declaredKey())).value()
+                        instanceof Normalized.Data data)) {
+                    continue;
+                }
+                List<GoverningInvariant> governing = new ArrayList<>();
+                for (TypeSymbol.AtModule declaration
+                        : TypeOps.declarationsGoverning(data.node().declares(), scope.value())) {
+                    List<SettledInvariant> clauses = declaration.module().equals(name)
+                            ? ownClauses(db, declaration) : takenIn.value().get(declaration);
+                    if (clauses == null) {
+                        return Answer.absent();
+                    }
+                    // A declaration's clauses in the order it writes them, which is what a clause's
+                    // ordinal counts.
+                    for (int ordinal = 0; ordinal < clauses.size(); ordinal++) {
+                        governing.add(new GoverningInvariant(
+                                new Clause.Id(declaration, ordinal), clauses.get(ordinal)));
+                    }
+                }
+                out.put(data.node().declares(), List.copyOf(governing));
+            }
+            return Answer.of(Ordered.map(out));
+        }
+
+        private static List<SettledInvariant> ownClauses(Db db, TypeSymbol.AtModule declaration) {
+            return db.ask(new NormalizedDef(declaration.key())).value() instanceof Normalized.Data d
+                    ? d.settledInvariants() : null;
+        }
+    }
+
+    /**
+     * The settled clauses of every declaration of another module that governs a data this module
+     * declares, as this module reaches what they name.
+     *
+     * <p>A clause is the declaring module's, settled there, and it is read here. What it names it
+     * names by the routes that module has, and a module's own helper is another module's once the
+     * clause is read by a module that includes it. So each is handed over as this module reaches
+     * what it names ({@link SettledInvariant#reachedFrom}); what it denotes, and what it says, is
+     * what the declaring module settled.
+     *
+     * <p>Its own question, apart from {@link SettledInvariantsGoverning}, because it is asked from
+     * below this module's settling. A helper the calls left standing is one this module emits, so its
+     * body is among the definitions this module is handed ({@code Bodies.ImportedDefinitions}) — and
+     * those are what this module's own clauses are settled against. Nothing here reads that
+     * settling: the declarations are what a spread takes in, and their clauses are their own
+     * modules'.
+     *
+     * <p>Absent where one of those declarations has no normalized form, which is a module whose
+     * settling failed and said so.
+     */
+    public record ClausesTakenIn(String name)
+            implements Key<Map<TypeSymbol.AtModule, List<SettledInvariant>>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<TypeSymbol.AtModule, List<SettledInvariant>>> compute(Db db) {
+            Answer<Hir.Module> resolved = db.ask(new Names.Resolved(name));
+            Answer<ResolvedSymbols> scope = Names.resolvedSymbols(db, name);
+            if (!resolved.present() || !scope.present()) {
+                return Answer.absent();
+            }
+            Map<TypeSymbol.AtModule, List<SettledInvariant>> out = new LinkedHashMap<>();
+            for (Hir.Def def : resolved.value().defs()) {
+                if (!(def instanceof Hir.Data data)) {
+                    continue;
+                }
+                for (TypeSymbol.AtModule declaration
+                        : TypeOps.declarationsGoverning(data.declares(), scope.value())) {
+                    if (declaration.module().equals(name) || out.containsKey(declaration)) {
+                        continue;
+                    }
+                    if (!(db.ask(new NormalizedDef(declaration.key())).value()
+                            instanceof Normalized.Data wrote)) {
+                        return Answer.absent();
+                    }
+                    List<SettledInvariant> clauses = new ArrayList<>();
+                    for (SettledInvariant clause : wrote.settledInvariants()) {
+                        clauses.add(clause.reachedFrom(name));
+                    }
+                    out.put(declaration, List.copyOf(clauses));
+                }
+            }
+            return Answer.of(Ordered.map(out));
+        }
+    }
+
+    /**
      * What a value of each of this module's declared data is made of, and what must hold of one.
      *
      * <p>The reading that runs, made where the check is. A clause is elaborated once here and read
@@ -1305,6 +1798,10 @@ public final class Shapes {
      * <p>Both halves together ({@link ValueShape}): the fields a clause reads and the clauses that
      * read them. Handed over apart, whoever ran a clause would work out where a field is read
      * through, and that walk and this one would have to be kept answering alike.
+     *
+     * <p>Each clause with how the boundary checks it ({@link BoundaryConstraints}): the other
+     * question about a clause that every output asks, answered here so that no output answers it
+     * from the condition a second time.
      *
      * <p>Only the declarations that have a meaning. What could not be settled is not here and
      * nothing here asks why — the same reading the module check makes of the same key, so a
@@ -1325,9 +1822,23 @@ public final class Shapes {
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, souther.compiler.types.Type>> helpers =
                     db.ask(new Bodies.RecursiveCallSigs(name, InliningPolicy.FULL));
-            if (!settled.present() || !scope.present() || !helpers.present()) {
+            // Elaborating a clause reads the rules of everything a declaration spreads, which is a
+            // walk of the spreads. Asked here for the same reason the count asks it: the graph is
+            // held to having an end before anything is read over it.
+            Answer<ProductSpreads.WellFounded> spreads = db.ask(new WellFoundedSpreads(name));
+            if (!settled.present() || !scope.present() || !helpers.present()
+                    || !spreads.present()) {
                 return Answer.absent();
             }
+            Answer<Map<TypeSymbol.AtModule, List<GoverningInvariant>>> governing =
+                    db.ask(new SettledInvariantsGoverning(name));
+            // What each part of a clause states, which is what says whether the boundary can state
+            // it as a constraint.
+            Answer<RuleReadingSource> reading = ruleReading(db, name);
+            if (!governing.present() || !reading.present()) {
+                return Answer.absent();
+            }
+            InvariantStatements statements = InvariantStatements.of(reading.value());
             Map<TypeSymbol.AtModule, ValueShape> shapes = new LinkedHashMap<>();
             List<Report> reports = new ArrayList<>();
             for (Hir.Def def : settled.value().defs()) {
@@ -1337,10 +1848,10 @@ public final class Shapes {
                 }
                 try {
                     shapes.put(data.declares(),
-                            ExecutableInvariants.of(data, scope.value(),
-                                    publishedDeclarations(db), declarationKinds(db),
-                                    newtypeInners(db),
-                                    helpers.value()));
+                            ExecutableInvariants.of(data, governing.value().get(data.declares()),
+                                    scope.value(), publishedDeclarations(db), declarationKinds(db),
+                                    newtypeInners(db), effectiveFieldTypes(db),
+                                    helpers.value(), expandedClauses(db), statements));
                 } catch (Unanswerable _) {
                     // Rests on something already reported where it went wrong.
                 } catch (CompileException e) {

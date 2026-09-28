@@ -133,7 +133,8 @@ class CompileAdequacyShapesTest {
         assertEquals(2, branch.arms().counted(), "the guard's two arms, and none of the helper's");
 
         assertTrue(BorderAssessment.pointsOf(lines(compilation, "check")).stream()
-                        .anyMatch(p -> p.item().weakeningSource() instanceof Measurement.Complete<?>),
+                        .anyMatch(p -> p.item().weakeningSource(p.border().border())
+                                instanceof Measurement.Complete<?>),
                 "and the guard's boundary is decided rather than unavailable");
     }
 
@@ -202,10 +203,10 @@ class CompileAdequacyShapesTest {
 
                 data Picked = { n: Int }
 
+                // Injected, so the space is over all three positions: what this counts is how
+                // many combinations one row sits in, and a behavior with a body has its space
+                // over the positions its decisions are about.
                 behavior pick : (a: Flag, b: Flag, c: Flag) -> Picked
-                    constructs Picked
-
-                let pick (a, b, c) = Picked { n = 0 }
 
                 example pick
                     | (Yes, Yes, Yes) -> Picked { n = 0 }

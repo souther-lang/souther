@@ -65,8 +65,9 @@ class AValueNothingSatisfiesHasNoRangeToBeExactAboutTest {
         assertNotNull(symbols);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Length"));
         assertNotNull(symbols.declaredNode(named.key()), "no `Length` declared");
-        FieldDomains domains = FieldDomains.of(named, RuleReadings.of(compilation, module),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        FieldDomains domains = FieldDomains.of(named,
+                RuleReadingContext.unshared(RuleReadings.of(compilation, module),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
         return domains.projection().causes().stream()
                 .map(cause -> cause.getClass().getSimpleName())
                 .toList();

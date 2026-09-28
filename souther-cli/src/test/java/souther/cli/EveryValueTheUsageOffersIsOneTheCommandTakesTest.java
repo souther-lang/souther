@@ -57,7 +57,7 @@ class EveryValueTheUsageOffersIsOneTheCommandTakesTest {
                 if (!Main.optionOwners(option.spelling()).contains(command.spelling())) {
                     continue;
                 }
-                for (String value : command.valueSpelling(option).split("\\|")) {
+                for (String value : option.valueSpelling().split("\\|")) {
                     List<String> line = new ArrayList<>(
                             List.of(command.spelling(), file.toString(), option.spelling(), value));
                     if (command == CliCommand.COMPILE) {

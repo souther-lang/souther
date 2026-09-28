@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionCapacity;
 import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
@@ -9,6 +10,7 @@ import souther.compiler.publish.PublicationOrders;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -22,18 +24,25 @@ import java.util.Set;
  * than evidence of absence — and leaves the reader of the empty set with one answer for two
  * situations. Nothing has been shown, and nothing was tried, are alike only in what they lack.
  *
- * <p>So this is the projection an account reads: whether there are grounds, whether a budget of
- * this compiler's stopped the establishing of any, or whether there is simply nothing. The middle
- * one is the whole of what {@link #of} adds, and it is narrow — a value was composed and the
- * reading that would have placed it did not come back. A search that ran and found nothing, a
- * search nobody could run, and a point nobody asked about are all the third case: none of them met
- * a budget on the way to an answer, and calling them prevented would say this compiler was stopped
- * where it was not.
+ * <p>So this is the projection an account reads, and it answers two questions at once. What the
+ * model says — a row can be written here ({@link Established}), or no row can ({@link Refuted}) —
+ * and, where the model has said neither, how far this compiler got: a budget of its own stopped the
+ * establishing ({@link Prevented}), or there is simply nothing ({@link NoEvidence}). A search that
+ * ran and found nothing, a search nobody could run, and a point nobody asked about are all the
+ * last: none of them met a budget on the way to an answer, and calling them prevented would say
+ * this compiler was stopped where it was not.
  *
- * <p><b>Nothing here says a row can be written.</b> {@link Prevented} is the question left open and
- * never the answer yes — a reader that took it for one would be turning an observation this
- * compiler cut short into the model admitting a row, which is the mistake it exists to name, made
- * backwards.
+ * <p><b>The two model answers are the two halves of one question and neither is a shade of the
+ * epistemic pair.</b> The states were three, and what they sorted was how much this compiler had
+ * managed — so a proof that the rules leave no value at the point came in as the residue, which is
+ * the word for a point nothing was shown about. The question "can a row be written here" then had
+ * a yes, two kinds of open, and no way to say no; and the no was read downstream as the second kind
+ * of open, where it was counted as a question nobody could answer.
+ *
+ * <p><b>{@link Prevented} is not the answer no.</b> It is the question left open — a reader that
+ * took it for one would be turning an observation this compiler cut short into the model refusing a
+ * row, which is the mistake this exists to name. What says no is a proof about the model and
+ * arrives only as one.
  */
 public sealed interface WritabilityKnowledge {
 
@@ -54,6 +63,24 @@ public sealed interface WritabilityKnowledge {
             }
         }
     }
+
+    /**
+     * The rules leave no value at the point, and every search made of it says so.
+     *
+     * <p>The one state here that is the model's own no, and it is the other half of
+     * {@link Established} rather than a third kind of open. A point that reaches this is one no row
+     * can be written at whatever anybody builds afterwards, so nothing a later search comes to
+     * takes it back and nothing a reader raises reaches it.
+     *
+     * <p>Holds no word of its own. What proved it is the searches' to say and they still hold it,
+     * a sentence per reading; a copy kept here would be the same fact written twice, free to differ
+     * from the one a reader is shown under the point.
+     *
+     * <p>Established over the whole of what was searched ({@link SearchOutcomes#provesInfeasible()})
+     * and never over one search of it. A proof is about the region the search that made it was
+     * composed in, and a point is searched once per way of standing the dependencies in.
+     */
+    record Refuted() implements WritabilityKnowledge {}
 
     /**
      * Budgets of this compiler's stopped the establishing, and these are which.
@@ -95,12 +122,14 @@ public sealed interface WritabilityKnowledge {
             // each of them would take to close stays its own, and a fold that put them in one set
             // would have to lose one of the two.
             Set<CompositionRepertoire> repertoires = EnumSet.noneOf(CompositionRepertoire.class);
+            Set<CompositionCapacity> capacities = new HashSet<>();
             for (EstablishmentGap each : gaps) {
                 switch (each) {
                     case EstablishmentGap.Observation it -> observed.addAll(it.causes().written());
                     case EstablishmentGap.Composition it -> {
                         budgets.addAll(it.budgets().written());
                         repertoires.addAll(it.repertoires().written());
+                        capacities.addAll(it.capacities().written());
                     }
                 }
             }
@@ -108,8 +137,8 @@ public sealed interface WritabilityKnowledge {
             if (!observed.isEmpty()) {
                 kinds.add(EstablishmentGap.Observation.of(observed));
             }
-            if (!budgets.isEmpty() || !repertoires.isEmpty()) {
-                kinds.add(EstablishmentGap.Composition.of(budgets, repertoires));
+            if (!budgets.isEmpty() || !repertoires.isEmpty() || !capacities.isEmpty()) {
+                kinds.add(EstablishmentGap.Composition.of(budgets, repertoires, capacities));
             }
             return new Prevented(PublicationOrders.ESTABLISHMENT_GAPS.keep(kinds));
         }
@@ -133,11 +162,19 @@ public sealed interface WritabilityKnowledge {
      * <p>Grounds first. A point something has shown writable is established whatever a later search
      * made of it — a value built and not read back does not take back what the rules already prove,
      * and the order says so rather than leaving it to whichever the caller looked at.
+     *
+     * <p>Then the model's other answer, and only then how far this compiler got. What the searches
+     * prove about the model settles the point, so a figure one of them met on the way is not what a
+     * reader is told about it — and a point where one search proved and another was stopped is not
+     * proved at all, which is the quantifier's answer and not this order's.
      */
     static WritabilityKnowledge of(ItemAssessment.WritabilityEvidence evidence,
                                    SearchOutcomes searches) {
         if (evidence.known()) {
             return new Established(evidence);
+        }
+        if (searches.provesInfeasible()) {
+            return new Refuted();
         }
         // Asked of the outcome's own case and never of the reason inside it: a search that came
         // back with nothing has already lost what it fell short by, so a reader rebuilding that

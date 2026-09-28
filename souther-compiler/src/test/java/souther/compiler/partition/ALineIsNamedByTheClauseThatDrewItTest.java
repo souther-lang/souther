@@ -4,6 +4,7 @@ import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputDomain;
@@ -156,7 +157,7 @@ class ALineIsNamedByTheClauseThatDrewItTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         assertNotNull(sigs);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
-        return Partitions.of("price", InputDomain.of(sigs.get("price"), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
+        return Partitions.of("price", InputDomain.of(sigs.get("price"), RuleReadingContext.unshared(rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
                 .axes().stream().filter(a -> a.path().toString().equals("length"))
                 .findFirst().orElseThrow();
     }

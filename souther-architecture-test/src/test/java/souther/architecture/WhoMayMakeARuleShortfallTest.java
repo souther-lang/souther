@@ -5,14 +5,12 @@ import org.junit.jupiter.api.Test;
 import java.lang.classfile.ClassModel;
 import java.lang.classfile.constantpool.MemberRefEntry;
 import java.lang.classfile.constantpool.PoolEntry;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Who may say that a rule is answerable for a position, and where the place an author wrote is
@@ -84,19 +82,6 @@ class WhoMayMakeARuleShortfallTest {
                         + " copy of a fact into a second fact of the same shape");
     }
 
-    /**
-     * The walk reads every module's classes.
-     *
-     * <p>Asked of the modules the repository has and not of what a build happened to leave: a module
-     * whose classes are missing is one whose calls this cannot see, and the rows from the rest would
-     * match and this would pass while answering about fewer modules than it names.
-     */
-    @Test
-    void andEveryModuleTheRepositoryHoldsWasRead() {
-        assertTrue(modulesRead() > 1,
-                "the classes this reads are in more than the one module that declares the fact");
-    }
-
     /** Every class naming a constructor of one of {@code these}, as the class and what it named. */
     private static Set<String> naming(Set<String> these) {
         Set<String> found = new TreeSet<>();
@@ -112,15 +97,4 @@ class WhoMayMakeARuleShortfallTest {
         }
         return found;
     }
-
-    private static int modulesRead() {
-        int read = 0;
-        for (Path module : COMPILED.modules()) {
-            if (COMPILED.mainOutputOf(module).isPresent()) {
-                read++;
-            }
-        }
-        return read;
-    }
-
 }

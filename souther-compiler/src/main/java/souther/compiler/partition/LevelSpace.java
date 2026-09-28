@@ -4,17 +4,19 @@ import souther.compiler.check.Carrier;
 import souther.compiler.inputs.BoundaryDomain;
 import souther.compiler.numeric.AdditiveImage;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
-import souther.compiler.numeric.Rational;
 import souther.compiler.numeric.Towards;
 
-import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.util.Optional;
+import java.util.OptionalInt;
 
 /**
  * How one {@link BorderQuantity}'s own values are ordered, and which of them the quantity can take.
@@ -31,6 +33,14 @@ import java.util.Optional;
  * every string with that one as a prefix and this names none of them; a run between one and two on
  * an order counting by threes has nothing at all. Answered as one, the second reads like the first
  * and a coverage item goes away (ADR-0091).
+ *
+ * <p><b>What a quantity has is answered in exact ratios.</b> An order counting by thirds has a value
+ * at a third, and a run written against one is not a run narrowed to the decimals either side of it.
+ * Read through the numbers a model writes, the run {@code [1/3, 1/3]} closes on a place no decimal
+ * is and comes back holding nothing — a false answer about the order rather than a search that gave
+ * up, and one nothing downstream can recover, since an exact reading afterwards can only take
+ * values out of the set. So the ends of a run are read as the exact places they are, and the
+ * decimals come in where a value of a carrier is being looked for.
  *
  * <p>And a run and its extrema are two answers as well, which is what {@link Occupancy} carries.
  * A decimal difference is attainable everywhere, has a first value nowhere, and has values on both
@@ -92,9 +102,21 @@ public interface LevelSpace {
      */
     Witness witness(LevelInterval run, Towards from);
 
-    /** Whether the quantity can take this level at all. */
-    default boolean attainable(Level level) {
-        return inspect(LevelInterval.point(level)).any();
+    /**
+     * Whether the quantity can take this level at all — or which way the exact arithmetic could
+     * not tell.
+     *
+     * <p>{@link ExactAnswer} and not a plain {@code boolean}, because {@link Occupancy#any} folds
+     * a run this could not read into the same {@code false} an order that genuinely has nothing
+     * there answers with, and a caller that read {@code false} as a proof — that a level is not
+     * one the quantity takes, and not merely that this could not show it is — would be the mistake
+     * {@link Occupancy} exists to stop, one layer up from where it is already stopped.
+     */
+    default ExactAnswer<Boolean> attainable(Level level) {
+        return switch (inspect(LevelInterval.point(level))) {
+            case Occupancy.NotWorkedOut not -> ExactAnswer.unheld(not.why());
+            case Occupancy other -> ExactAnswer.held(other.any());
+        };
     }
 
     /**
@@ -118,38 +140,49 @@ public interface LevelSpace {
 
     /**
      * The nearest level the quantity can take at or past {@code from}, the way {@code towards} says,
-     * or empty where the order names none there.
+     * or empty where the order names none there — or which way the exact arithmetic could not tell.
      *
      * <p>What both points of a border are found with: the threshold itself where the quantity takes
      * it, and the first value it does take otherwise.
      */
-    default Optional<Level> nearestAtOrBeyond(Level from, Towards towards) {
-        return Optional.ofNullable(inspect(runFrom(from, towards, true)).end(towards));
+    default ExactAnswer<Optional<Level>> nearestAtOrBeyond(Level from, Towards towards) {
+        return endAnswer(runFrom(from, towards, true), towards);
     }
 
     /**
      * The nearest level this quantity can take strictly past {@code from}, the way {@code towards}
-     * says, or empty where the order names no single value there.
+     * says, or empty where the order names no single value there — or which way the exact
+     * arithmetic could not tell.
      *
      * <p>Adjacency, and nothing else. Empty says the run past this level has no end, which is not a
      * statement that it is empty: a decimal difference has no successor and has every larger
      * difference. That other question is {@link #anythingBeyond}, and both are read off the one
      * {@link Occupancy} so they cannot disagree.
      */
-    default Optional<Level> neighbour(Level from, Towards towards) {
-        return Optional.ofNullable(inspect(runFrom(from, towards, false)).end(towards));
+    default ExactAnswer<Optional<Level>> neighbour(Level from, Towards towards) {
+        return endAnswer(runFrom(from, towards, false), towards);
+    }
+
+    private ExactAnswer<Optional<Level>> endAnswer(LevelInterval run, Towards towards) {
+        return switch (inspect(run)) {
+            case Occupancy.NotWorkedOut not -> ExactAnswer.unheld(not.why());
+            case Occupancy other -> ExactAnswer.held(Optional.ofNullable(other.end(towards)));
+        };
     }
 
     /**
      * Whether this quantity takes any value at all strictly past {@code from}, the way
-     * {@code towards} says.
+     * {@code towards} says — or which way the exact arithmetic could not tell.
      *
      * <p>What decides whether a border has a side there. False only where the order itself stops —
      * an enumeration at its last case, a string a rule holds another string apart from — and never
      * because the step between two values has no name.
      */
-    default boolean anythingBeyond(Level from, Towards towards) {
-        return inspect(runFrom(from, towards, false)).any();
+    default ExactAnswer<Boolean> anythingBeyond(Level from, Towards towards) {
+        return switch (inspect(runFrom(from, towards, false))) {
+            case Occupancy.NotWorkedOut not -> ExactAnswer.unheld(not.why());
+            case Occupancy other -> ExactAnswer.held(other.any());
+        };
     }
 
     /** Everything one way of a level, which is what the three questions above are asked about. */
@@ -166,6 +199,10 @@ public interface LevelSpace {
      * ({@link BoundaryDomain}), so a date steps a day and a decimal steps nowhere; what it can take
      * is what the carrier holds on its grid, since not every number between two of a carrier's
      * counts is one of them; and its ends are the carrier's extent.
+     *
+     * <p>The one space that reads a run through the numbers a carrier writes, because its levels are
+     * those numbers. A line the carrier has no value at is looked past rather than looked at, which
+     * is what {@link LevelInterval#toLookIn} narrows a run to.
      */
     static LevelSpace onACarrier(Carrier carrier) {
         BoundaryDomain steps = BoundaryDomain.on(carrier);
@@ -189,7 +226,22 @@ public interface LevelSpace {
                 if (carrier == null) {
                     return new Occupancy.Empty();
                 }
-                NumericDomain.Bounds look = run.toLookIn(run.digitsToLookIn());
+                // A run whose ends a model's own decimals put far enough apart in scale that the
+                // exact arithmetic cannot say how many digits separate them is a run this could not
+                // read at all — never a run the digits happened to hold nothing.
+                ExactAnswer<Integer> digits = run.digitsToLookIn();
+                if (digits instanceof ExactAnswer.Unheld<Integer> unheld) {
+                    return new Occupancy.NotWorkedOut(unheld.why());
+                }
+                // The digit count held, and rounding an end inward by that many is its own
+                // arithmetic and can still give out — a run this could not narrow an end of is,
+                // again, a run this could not read and never one the narrowing happened to leave
+                // wide open.
+                LevelInterval.LookedIn looked = run.toLookIn(digits.orNull());
+                if (looked instanceof LevelInterval.LookedIn.NotWorkedOut notWorkedOut) {
+                    return new Occupancy.NotWorkedOut(notWorkedOut.why());
+                }
+                NumericDomain.Bounds look = ((LevelInterval.LookedIn.InBounds) looked).envelope();
                 Endpoint lo = Endpoint.lower(look.min(), extent.low());
                 Endpoint hi = Endpoint.upper(look.max(), extent.high());
                 if (!Endpoint.someValueLiesBetween(lo, hi)) {
@@ -203,7 +255,7 @@ public interface LevelSpace {
                 // values fill has none above a strict bound and has every value past it. Read as one
                 // question, a rule holding one string above another lost the whole of the side above
                 // it, because a string has no successor.
-                if (carrier.spacing() == souther.compiler.numeric.Granularity.DISCRETE) {
+                if (carrier.spacing() == Granularity.DISCRETE) {
                     return (lo != null && least == null) || (hi != null && greatest == null)
                             || (least != null && greatest != null
                                     && compare(least, greatest) > 0)
@@ -261,8 +313,21 @@ public interface LevelSpace {
                 if (carrier == null) {
                     return Witness.NONE;
                 }
-                for (int digits : new int[] {0, run.digitsToLookIn()}) {
-                    NumericDomain.Bounds look = run.toLookIn(digits);
+                // Tried at nought first regardless, and at the run's own digit count only where the
+                // exact arithmetic could hold it — where it could not, nought is the whole of what
+                // this tries, which is `Witness.NONE`'s own answer and not a claim the run is empty.
+                java.util.List<Integer> tries = run.digitsToLookIn()
+                        instanceof ExactAnswer.Held<Integer> held
+                        ? java.util.List.of(0, held.value()) : java.util.List.of(0);
+                for (int digits : tries) {
+                    // A round nothing bounds the run this way is not a witness this tries: a
+                    // candidate is all this needs, and the next scale in `tries`, or nought's own
+                    // answer, is as sound a place to look as this one would have been.
+                    if (!(run.toLookIn(digits)
+                            instanceof LevelInterval.LookedIn.InBounds inBounds)) {
+                        continue;
+                    }
+                    NumericDomain.Bounds look = inBounds.envelope();
                     // Handed the run's own ends and not ends held to the carrier's extent. Which end
                     // a range gives up is the range's own answer and the carrier holds it inside
                     // what it reaches itself; narrowed here first, a run nothing bounds below was
@@ -297,21 +362,46 @@ public interface LevelSpace {
      * coordinates comes to. The step is the quantity's and not any position's: two positions on a
      * carrier that steps stand one apart and one apart is the whole of the difference, while
      * {@code 300x + 600y} moves in three hundreds however small a step {@code x} takes.
+     *
+     * <p>The step need not be a number a model writes. {@code 1 / 3 * x} over the whole numbers
+     * takes the thirds and nothing between them, and the lattice is that of thirds — which is a
+     * different quantity from one whose values are the whole numbers cut at a third, and the two
+     * have to be told apart for either to be right.
      */
-    static LevelSpace steppingBy(BigDecimal step) {
-        return new Lattice(step, new AdditiveImage.OverWholeNumbers(Rational.of(step))) {
+    static LevelSpace steppingBy(ExactRatio step) {
+        return new Lattice(step, new AdditiveImage.OverWholeNumbers(step)) {
 
             /** Every multiple of the step, so a run has a first value and a last wherever it is
              *  bounded. */
             @Override
-            Level generated(BigDecimal at, Towards into, boolean strictly) {
-                BigDecimal steps = at.divide(step, 0,
-                        into == Towards.ABOVE ? RoundingMode.CEILING : RoundingMode.FLOOR);
-                BigDecimal on = steps.multiply(step);
-                if (strictly && on.compareTo(at) == 0) {
-                    on = into == Towards.ABOVE ? on.add(step) : on.subtract(step);
+            Extremum generated(ExactRatio at, Towards into, boolean strictly) {
+                // Membership is cheaper than the multiplier below and can answer where that cannot:
+                // a value's own place among the multiples is one division and a check the quotient
+                // is whole, and a model's own decimals can put `at` and the step far enough apart in
+                // scale that rounding the quotient goes Unheld even where `at` sits on the lattice
+                // exactly. Asked first, this is never wrong where the multiplier would have agreed,
+                // and is the whole of the answer where the multiplier could not have been worked out.
+                if (!strictly && reaches(at)) {
+                    return new Extremum.At(new Level.OfTheQuantity(at));
                 }
-                return new Level.ACount(new Count(on));
+                ExactRatio steps = at.dividedBy(generator);
+                ExactAnswer<java.math.BigInteger> rounded =
+                        into == Towards.ABOVE ? steps.ceiling() : steps.floor();
+                if (!(rounded instanceof ExactAnswer.Held<java.math.BigInteger> held)) {
+                    return new Extremum.NotWorkedOut(
+                            ((ExactAnswer.Unheld<java.math.BigInteger>) rounded).why());
+                }
+                ExactRatio on = generator.times(ExactRatio.of(held.value()));
+                if (strictly && on.compareTo(at) == 0) {
+                    ExactAnswer<ExactRatio> moved =
+                            into == Towards.ABOVE ? on.plus(generator) : on.minus(generator);
+                    if (!(moved instanceof ExactAnswer.Held<ExactRatio> movedHeld)) {
+                        return new Extremum.NotWorkedOut(
+                                ((ExactAnswer.Unheld<ExactRatio>) moved).why());
+                    }
+                    on = movedHeld.value();
+                }
+                return new Extremum.At(new Level.OfTheQuantity(on));
             }
         };
     }
@@ -331,9 +421,8 @@ public interface LevelSpace {
      * five are too: {@code 2 * a} takes every decimal ({@code a = 4.5} makes nine) while
      * {@code 3 * a} takes a third of them.
      */
-    static LevelSpace overFiniteDecimals(BigDecimal generator) {
-        return new Lattice(generator,
-                new AdditiveImage.OverFiniteDecimals(Rational.of(generator))) {
+    static LevelSpace overFiniteDecimals(ExactRatio generator) {
+        return new Lattice(generator, new AdditiveImage.OverFiniteDecimals(generator)) {
 
             /**
              * The level itself where this takes it, and no first value past it where it does not.
@@ -344,8 +433,9 @@ public interface LevelSpace {
              * asking for its neighbour.
              */
             @Override
-            Level generated(BigDecimal at, Towards into, boolean strictly) {
-                return !strictly && reaches(at) ? new Level.ACount(new Count(at)) : null;
+            Extremum generated(ExactRatio at, Towards into, boolean strictly) {
+                return !strictly && reaches(at)
+                        ? new Extremum.At(new Level.OfTheQuantity(at)) : new Extremum.Fills();
             }
 
             /**
@@ -365,16 +455,16 @@ public interface LevelSpace {
              * about — the point inside a partition exists to be beside its boundary.
              */
             @Override
-            Witness inside(BigDecimal low, boolean lowIn, BigDecimal high, boolean highIn,
-                           int digits, Towards from) {
+            Witness inside(ExactRatio low, boolean lowIn, ExactRatio high, boolean highIn,
+                           Towards from) {
                 // The end itself where the run holds it and this reaches it, which is the value
                 // beside the line and the row an author would write.
-                BigDecimal end = from == Towards.ABOVE ? low : high;
+                ExactRatio end = from == Towards.ABOVE ? low : high;
                 boolean endHeld = from == Towards.ABOVE ? lowIn : highIn;
                 if (end != null && endHeld && reaches(end)) {
-                    return new Witness.Found(new Level.ACount(new Count(end)));
+                    return new Witness.Found(new Level.OfTheQuantity(end));
                 }
-                Witness whole = super.inside(low, lowIn, high, highIn, 0, from);
+                Witness whole = super.inside(low, lowIn, high, highIn, from);
                 if (whole instanceof Witness.Found) {
                     return whole;   // the plainest value the run has, where it has one
                 }
@@ -382,39 +472,94 @@ public interface LevelSpace {
                     // With an end nothing bounds, a whole multiple of the generator is always in
                     // reach that way, so the answer above is the whole of what there is to say.
                     return low == null && high == null
-                            ? new Witness.Found(new Level.ACount(Count.ZERO)) : Witness.NONE;
+                            ? new Witness.Found(new Level.OfTheQuantity(ExactRatio.ZERO))
+                            : Witness.NONE;
                 }
-                BigDecimal apart = high.subtract(low);
+                // A model's own decimals can put the two ends, or an end and the step this divides
+                // the generator down to, far enough apart in scale that the exact arithmetic cannot
+                // hold the sum or the difference. `Witness.NONE` is already this method's own answer
+                // for a run it found nothing to name in, and never a claim the run is empty — the
+                // sound answer with less where the arithmetic gives out partway through.
+                if (!(high.minus(low) instanceof ExactAnswer.Held<ExactRatio> heldApart)) {
+                    return Witness.NONE;
+                }
+                ExactRatio apart = heldApart.value();
                 if (apart.signum() <= 0) {
                     return Witness.NONE;
                 }
-                BigDecimal step = generator.movePointLeft(scaleToOpen(generator, apart));
-                BigDecimal on = from == Towards.ABOVE
-                        ? low.divide(step, 0, RoundingMode.FLOOR).add(BigDecimal.ONE).multiply(step)
-                        : high.divide(step, 0, RoundingMode.CEILING)
-                                .subtract(BigDecimal.ONE).multiply(step);
+                OptionalInt scale = scaleToOpen(generator, apart);
+                if (scale.isEmpty()) {
+                    // No scale an int names opens this run against a generator this fine — the
+                    // sound answer with less, the same one a scale the exact arithmetic cannot
+                    // reach is already answered with above.
+                    return Witness.NONE;
+                }
+                ExactRatio step = generator.dividedBy(tenToThe(scale.getAsInt()));
+                ExactAnswer<java.math.BigInteger> steps = from == Towards.ABOVE
+                        ? low.dividedBy(step).floor() : high.dividedBy(step).ceiling();
+                if (!(steps instanceof ExactAnswer.Held<java.math.BigInteger> heldSteps)) {
+                    return Witness.NONE;
+                }
+                ExactRatio on = from == Towards.ABOVE
+                        ? step.times(ExactRatio.of(heldSteps.value().add(BigInteger.ONE)))
+                        : step.times(ExactRatio.of(heldSteps.value().subtract(BigInteger.ONE)));
                 return (lowIn ? on.compareTo(low) >= 0 : on.compareTo(low) > 0)
                         && (highIn ? on.compareTo(high) <= 0 : on.compareTo(high) < 0)
-                        ? new Witness.Found(new Level.ACount(new Count(on)))
+                        ? new Witness.Found(new Level.OfTheQuantity(on))
                         : Witness.NONE;
             }
 
             /**
              * How far the generator has to be divided down for its multiples to land inside a run
-             * {@code apart} wide: the smallest {@code s} with {@code 10^s · apart > g}.
+             * {@code apart} wide: the smallest {@code s} with {@code 10^s · apart > g} — or empty
+             * where no scale an {@code int} names opens it.
              *
              * <p>Worked out and not guessed, the way {@link CutPosition#digitsToTellApartFrom} works
-             * out the digits between two lines. A handful of scales tried instead is a bound on how
-             * large a generator this can answer for, and nothing says what that bound is.
+             * out the digits between two lines: a comparison against {@code 10^s} held as an
+             * exponent rather than a multiple of ten tried at every step between none and the
+             * answer, or built at the answer once it is found — a generator a model's own decimals
+             * put near the end of the scale range asks for an {@code s} in the hundreds of millions,
+             * and {@code 10^s} built as digits at that scale is the same cost the scale was worked
+             * out to avoid.
+             *
+             * <p>Binary search over the whole of what an {@code int} holds and not a bound doubled
+             * up to it: a search that gives up once its own doubling passes half of
+             * {@link Integer#MAX_VALUE} answers nothing for a scale between there and the top of the
+             * range, though one may open the run — the range is one comparison to ask about outright
+             * and thirty-one more to place the answer inside it, so nothing is bought by doubling up
+             * to it first.
              */
-            private int scaleToOpen(BigDecimal generator, BigDecimal apart) {
-                int scale = 0;
-                BigDecimal reach = apart;
-                while (reach.compareTo(generator) <= 0) {
-                    reach = reach.movePointRight(1);
-                    scale++;
+            private OptionalInt scaleToOpen(ExactRatio generator, ExactRatio apart) {
+                if (apart.compareTo(generator) > 0) {
+                    return OptionalInt.of(0);
                 }
-                return scale;
+                ExactRatio ratio = generator.dividedBy(apart);
+                if (!opensAt(ratio, Integer.MAX_VALUE)) {
+                    return OptionalInt.empty();
+                }
+                int under = 0;
+                int over = Integer.MAX_VALUE;
+                while (over - under > 1) {
+                    int between = under + (over - under) / 2;
+                    if (opensAt(ratio, between)) {
+                        over = between;
+                    } else {
+                        under = between;
+                    }
+                }
+                return OptionalInt.of(over);
+            }
+
+            /** Whether {@code generator} divided down by {@code s} places lands inside a run the
+             *  ratio of generator to width names — {@code ratio < 10^s} — which is a comparison and
+             *  builds neither side. */
+            private static boolean opensAt(ExactRatio ratio, int s) {
+                return ratio.compareTo(tenToThe(s)) < 0;
+            }
+
+            /** {@code 10^s}, held as an exponent and not built as digits, whatever {@code s} is. */
+            private static ExactRatio tenToThe(int s) {
+                return new ExactRatio(BigInteger.ONE, BigInteger.ONE, s, s);
             }
         };
     }
@@ -426,17 +571,8 @@ public interface LevelSpace {
      * <p>Ten is a unit among the finite decimals, so two and five are: dividing by either lands on
      * one again. What is left over is what a level has to be a multiple of.
      */
-    static BigDecimal generatorOverFiniteDecimals(BigDecimal step) {
-        if (step.signum() == 0) {
-            return BigDecimal.ONE;
-        }
-        Rational left = new AdditiveImage.OverFiniteDecimals(Rational.of(step.abs())).generator();
-        BigDecimal written = left.asWrittenDecimal();
-        if (written == null) {
-            throw new IllegalStateException(
-                    "a divisor of written coefficients is written: " + left);
-        }
-        return written;
+    static ExactRatio generatorOverFiniteDecimals(ExactRatio step) {
+        return step.isZero() ? ExactRatio.ONE : step.abs().unitsRemoved();
     }
 
     /**
@@ -447,7 +583,7 @@ public interface LevelSpace {
      * further apart than the line is one it does.
      */
     static LevelSpace dense() {
-        return overFiniteDecimals(BigDecimal.ONE);
+        return overFiniteDecimals(ExactRatio.ONE);
     }
 
     /**
@@ -464,7 +600,7 @@ public interface LevelSpace {
 
             @Override
             public int compare(Level l, Level r) {
-                return Counting.countOf(l).compareTo(Counting.countOf(r));
+                return Counting.numberOf(l).compareTo(Counting.numberOf(r));
             }
 
             /**
@@ -479,9 +615,8 @@ public interface LevelSpace {
              */
             @Override
             public Occupancy inspect(LevelInterval run) {
-                Level meeting = new Level.ACount(Count.ZERO);
-                if (run.contains(meeting)) {
-                    return new Occupancy.Inhabited(meeting, meeting);
+                if (run.contains(Level.WHERE_THEY_MEET)) {
+                    return new Occupancy.Inhabited(Level.WHERE_THEY_MEET, Level.WHERE_THEY_MEET);
                 }
                 return run.crossed() || run.onePlace()
                         ? new Occupancy.Empty() : new Occupancy.Inhabited(null, null);
@@ -501,7 +636,7 @@ public interface LevelSpace {
              */
             @Override
             public boolean canCutAt(Level level) {
-                return Counting.countOf(level).at().signum() == 0;
+                return Counting.numberOf(level).isZero();
             }
         };
     }
@@ -534,26 +669,15 @@ public interface LevelSpace {
     /**
      * The step a lattice made by these coefficients moves in: their greatest common divisor.
      *
-     * <p>Bézout's, and exact rather than a guess: what {@code Σ cᵢ·xᵢ} takes over the whole numbers
-     * is exactly the multiples of {@code gcd(cᵢ)}. Taken over them as whole numbers at their common
-     * scale, so a decimal coefficient answers the way a whole one does.
+     * <p>Bézout's, and exact: what {@code Σ cᵢ·xᵢ} takes over the whole numbers is exactly the
+     * multiples of {@code gcd(cᵢ)}. A third and a half are both whole multiples of a sixth and of
+     * nothing larger, which is an answer no decimal writes and the reason the divisor is a ratio.
      *
      * <p>Here rather than on the quantity, because it is what makes the space and a search prunes by
      * it as well: a residue that is not one of these multiples is one no assignment lands on.
      */
-    static BigDecimal stepOf(java.util.Collection<BigDecimal> coefs) {
-        Rational divisor = AdditiveImage.divisorOf(
-                coefs.stream().map(Rational::of).toList());
-        // Spelled at the scale the coefficients were written at, which is what it was spelled at
-        // before this asked somewhere else for the number. A divisor of the written coefficients
-        // divides each of them, so writing it out at their scale never rounds — and the scale is
-        // not decoration: a level is a `Count`, two counts are equal by their decimals, and a step
-        // written `2` where it used to be `2.0` is a different key in every map that holds one.
-        int scale = 0;
-        for (BigDecimal coef : coefs) {
-            scale = Math.max(scale, Math.max(coef.scale(), 0));
-        }
-        return divisor.asDecimal(RoundingMode.UNNECESSARY, scale);
+    static ExactRatio stepOf(java.util.Collection<ExactRatio> coefs) {
+        return AdditiveImage.divisorOf(coefs);
     }
 
     /**
@@ -568,32 +692,80 @@ public interface LevelSpace {
      */
     abstract class Lattice extends Counting {
 
-        final BigDecimal generator;
+        final ExactRatio generator;
         private final AdditiveImage image;
 
-        Lattice(BigDecimal generator, AdditiveImage image) {
+        Lattice(ExactRatio generator, AdditiveImage image) {
             this.generator = generator;
             this.image = image;
         }
 
-        /** The first value this takes at or past {@code at} the way {@code into} says, or null where
-         *  it has none there because its values fill. */
-        abstract Level generated(BigDecimal at, Towards into, boolean strictly);
+        /** The first value this takes at or past {@code at} the way {@code into} says; none, because
+         *  its values fill; or which way the exact arithmetic could not say. */
+        abstract Extremum generated(ExactRatio at, Towards into, boolean strictly);
 
-        /** Whether this takes a number at all, which is what its multiplier is allowed to be. */
-        boolean reaches(BigDecimal at) {
-            return image.contains(Rational.of(at));
+        /** What {@link #generated} found. Three answers and not two, because "no value" the values
+         *  fill and "no value" the arithmetic could not read look the same shape and mean opposite
+         *  things: one is what every reader downstream of {@link #inspect} rests on, and the other is
+         *  this compiler having nothing to say. */
+        sealed interface Extremum {
+
+            /** The value. */
+            record At(Level level) implements Extremum {
+
+                public At {
+                    if (level == null) {
+                        throw new IllegalArgumentException("a value is a value");
+                    }
+                }
+            }
+
+            /** None, because this lattice's values fill and there is no first one that way. */
+            record Fills() implements Extremum {}
+
+            /** Which way the exact arithmetic could not hold the answer. */
+            record NotWorkedOut(souther.compiler.numeric.UnheldNumber why) implements Extremum {
+
+                public NotWorkedOut {
+                    if (why == null) {
+                        throw new IllegalArgumentException(
+                                "not worked out, in one of the two ways it is not");
+                    }
+                }
+            }
         }
 
+        /** Whether this takes a number at all, which is what its multiplier is allowed to be. */
+        boolean reaches(ExactRatio at) {
+            return image.contains(at);
+        }
+
+        /**
+         * What this takes in the run, read at the places the run actually stops at.
+         *
+         * <p>The ends as they are and not as a decimal near them. A run written against a line the
+         * quantity stands at — {@code [1/3, 1/3]} on an order counting by thirds — holds that line,
+         * and an end moved inward to the nearest decimal closes it onto nothing. That is the one
+         * direction this may not err in: a level taken out of the set here is one no later reading
+         * puts back, since everything downstream can only narrow.
+         */
         @Override
         public Occupancy inspect(LevelInterval run) {
-            NumericDomain.Bounds look = run.toLookIn(run.digitsToLookIn());
-            BigDecimal low = numberOf(look.min());
-            BigDecimal high = numberOf(look.max());
-            Level least = low == null ? null
-                    : generated(low, Towards.ABOVE, !look.min().inclusive());
-            Level greatest = high == null ? null
-                    : generated(high, Towards.BELOW, !look.max().inclusive());
+            ExactRatio low = endOf(run.low());
+            ExactRatio high = endOf(run.high());
+            boolean lowIn = run.low() == null || run.low().inclusive();
+            boolean highIn = run.high() == null || run.high().inclusive();
+            Extremum leastX = low == null ? new Extremum.Fills() : generated(low, Towards.ABOVE, !lowIn);
+            Extremum greatestX =
+                    high == null ? new Extremum.Fills() : generated(high, Towards.BELOW, !highIn);
+            if (leastX instanceof Extremum.NotWorkedOut it) {
+                return new Occupancy.NotWorkedOut(it.why());
+            }
+            if (greatestX instanceof Extremum.NotWorkedOut it) {
+                return new Occupancy.NotWorkedOut(it.why());
+            }
+            Level least = leastX instanceof Extremum.At it ? it.level() : null;
+            Level greatest = greatestX instanceof Extremum.At it ? it.level() : null;
             if ((least != null && !run.contains(least))
                     || (greatest != null && !run.contains(greatest))) {
                 return new Occupancy.Empty();
@@ -602,8 +774,9 @@ public interface LevelSpace {
             // whether anything at all lies between its ends: every number between two of them is
             // arbitrarily close to a multiple of the generator, and one of those multiples is inside.
             if (least == null && greatest == null && low != null && high != null) {
-                return Endpoint.someValueLiesBetween(look.min(), look.max())
-                        && !(low.compareTo(high) == 0 && !reaches(low))
+                int order = low.compareTo(high);
+                boolean between = order < 0 || (order == 0 && lowIn && highIn);
+                return between && !(order == 0 && !reaches(low))
                         ? new Occupancy.Inhabited(null, null) : new Occupancy.Empty();
             }
             return new Occupancy.Inhabited(least, greatest);
@@ -611,47 +784,70 @@ public interface LevelSpace {
 
         @Override
         public Witness witness(LevelInterval run, Towards from) {
-            int digits = run.digitsToLookIn();
-            NumericDomain.Bounds look = run.toLookIn(digits);
-            Witness found = inside(numberOf(look.min()),
-                    look.min() == null || look.min().inclusive(), numberOf(look.max()),
-                    look.max() == null || look.max().inclusive(), digits, from);
+            Witness found = inside(endOf(run.low()),
+                    run.low() == null || run.low().inclusive(), endOf(run.high()),
+                    run.high() == null || run.high().inclusive(), from);
             return found.level() != null && run.contains(found.level()) ? found : Witness.NONE;
         }
 
         /**
-         * A multiple of the generator between two plain numbers, taken from the {@code from} end.
+         * A multiple of the generator between two exact places, taken from the {@code from} end.
          *
          * <p>The first multiple at or past that end, which is the value beside it where this order
          * has one. A run measured from the other end offers a value as far from the line as the run
          * is wide, and the point it is offered for exists to be beside the line.
          */
-        Witness inside(BigDecimal low, boolean lowIn, BigDecimal high, boolean highIn, int digits,
+        Witness inside(ExactRatio low, boolean lowIn, ExactRatio high, boolean highIn,
                        Towards from) {
             Towards into = from == Towards.ABOVE
                     ? (low != null || high == null ? Towards.ABOVE : Towards.BELOW)
                     : (high != null || low == null ? Towards.BELOW : Towards.ABOVE);
-            BigDecimal at = into == Towards.ABOVE ? low : high;
+            ExactRatio at = into == Towards.ABOVE ? low : high;
             if (at == null) {
-                at = BigDecimal.ZERO;
+                at = ExactRatio.ZERO;
             }
-            BigDecimal steps = at.divide(generator, 0, into == Towards.ABOVE
-                    ? RoundingMode.CEILING : RoundingMode.FLOOR);
-            BigDecimal on = steps.multiply(generator);
+            ExactRatio steps = at.dividedBy(generator);
+            // A model's own decimals can put this end far enough apart in scale from the generator,
+            // or from the step this moves by, that the exact arithmetic gives out. `Witness.NONE` is
+            // already what this method answers for a run it names nothing in, so that is the sound
+            // answer with less here as well — never a claim the run holds nothing.
+            ExactAnswer<java.math.BigInteger> rounded =
+                    into == Towards.ABOVE ? steps.ceiling() : steps.floor();
+            if (!(rounded instanceof ExactAnswer.Held<java.math.BigInteger> held)) {
+                return Witness.NONE;
+            }
+            ExactRatio on = generator.times(ExactRatio.of(held.value()));
             boolean strict = into == Towards.ABOVE ? !lowIn && low != null : !highIn && high != null;
             if (strict && on.compareTo(at) == 0) {
-                on = into == Towards.ABOVE ? on.add(generator) : on.subtract(generator);
+                ExactRatio moved =
+                        (into == Towards.ABOVE ? on.plus(generator) : on.minus(generator)).orNull();
+                if (moved == null) {
+                    return Witness.NONE;
+                }
+                on = moved;
             }
             if ((low != null && (lowIn ? on.compareTo(low) < 0 : on.compareTo(low) <= 0))
                     || (high != null && (highIn ? on.compareTo(high) > 0
                             : on.compareTo(high) >= 0))) {
                 return Witness.NONE;
             }
-            return new Witness.Found(new Level.ACount(new Count(on)));
+            return new Witness.Found(new Level.OfTheQuantity(on));
         }
 
-        private static BigDecimal numberOf(Endpoint end) {
-            return end == null ? null : Count.number(end.at()).at();
+        /** Where one end of a run stops, as the exact number it is, or null where nothing stops it
+         *  that way. A line the quantity takes no value at is still where the run stops, which is
+         *  what {@link CutPosition#exactly} answers and what makes this reading exact. */
+        private static ExactRatio endOf(Bound bound) {
+            if (bound == null) {
+                return null;
+            }
+            ExactRatio at = bound.at().exactly();
+            if (at == null) {
+                throw new IllegalStateException(
+                        "a counted order was asked about a run stopping at a place with no number: "
+                                + bound);
+            }
+            return at;
         }
     }
 
@@ -662,15 +858,15 @@ public interface LevelSpace {
 
         @Override
         public int compare(Level l, Level r) {
-            return countOf(l).compareTo(countOf(r));
+            return numberOf(l).compareTo(numberOf(r));
         }
 
-        static Count countOf(Level level) {
-            if (!(level instanceof Level.ACount count)) {
+        static ExactRatio numberOf(Level level) {
+            if (!(level instanceof Level.OfTheQuantity counted)) {
                 throw new IllegalStateException(
                         "a counted order was asked about a level that is not a number: " + level);
             }
-            return count.at();
+            return counted.at();
         }
     }
 }

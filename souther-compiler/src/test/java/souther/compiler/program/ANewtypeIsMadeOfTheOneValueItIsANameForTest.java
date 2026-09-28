@@ -63,7 +63,7 @@ class ANewtypeIsMadeOfTheOneValueItIsANameForTest {
         ValueShape common = shapeOf("Common");
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> new CheckedData.Newtype(common));
+                () -> new CheckedData.Newtype(common, List.of()));
 
         assertTrue(refused.getMessage().contains("Common"), refused::getMessage);
     }
@@ -72,7 +72,7 @@ class ANewtypeIsMadeOfTheOneValueItIsANameForTest {
      *  about the arm. */
     @Test
     void andTheOneItIsDeclaredWithIsTaken() {
-        CheckedData.Newtype amount = new CheckedData.Newtype(shapeOf("Amount"));
+        CheckedData.Newtype amount = new CheckedData.Newtype(shapeOf("Amount"), List.of());
 
         assertEquals(shapeOf("Amount").fields().getFirst().type(), amount.wrapped());
     }

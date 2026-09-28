@@ -315,10 +315,15 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
                 behavior take : (request: Draft) -> Ok | Big
                     constructs Ok, Big
 
-                let take (request) = {
-                    guard request.cost.value <= 100 else Big { n = 0 }
-                    Ok { n = request.cost.value }
-                }
+                // Both positions are told apart by the body, so its combinations are among the
+                // gaps this model has: a behavior that decides on one of them would be in the pair
+                // space over that one alone and have none.
+                let take (request) = match request.flag with
+                    | Yes -> {
+                        guard request.cost.value <= 100 else Big { n = 0 }
+                        Ok { n = request.cost.value }
+                    }
+                    | No -> Big { n = 0 }
 
                 example take
                     | (Draft { flag = Yes, cost = Amount(50) }) -> Ok { n = 50 }

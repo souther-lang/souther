@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.Numberings;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Symbols;
@@ -45,13 +46,13 @@ class TwoRunsOfOnePlanThatDisagreeAboutWhatTheyReadAreRefusedTest {
     private static final ClassOfAPosition A_CLASS =
             new ClassOfAPosition(new AxisId("fee", "days"), "days/low");
 
-    private static final Generator.UnresolvedCombination NO_CANDIDATE =
-            new Generator.UnresolvedCombination(List.of("days=low"),
-                    Generator.UnresolvedCombination.Reason.NO_CANDIDATE_WAS_OFFERED);
+    private static final CameToNothing NO_CANDIDATE =
+            CameToNothing.metNothing(new Generator.UnresolvedCombination(List.of("days=low"),
+                    Generator.UnresolvedCombination.Reason.NO_CANDIDATE_WAS_OFFERED));
 
-    private static final Generator.UnresolvedCombination NOTHING_COMPOSES_ONE =
-            new Generator.UnresolvedCombination(List.of("days=low"),
-                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+    private static final CameToNothing NOTHING_COMPOSES_ONE =
+            CameToNothing.metNothing(new Generator.UnresolvedCombination(List.of("days=low"),
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE));
 
     private static final PathAccess NOTHING_ARRIVES = new PathAccess.Unreachable(
             PathAccess.Unreachable.Why.THE_CONDITION_NEVER_COMES_OUT_THAT_WAY);
@@ -156,8 +157,8 @@ class TwoRunsOfOnePlanThatDisagreeAboutWhatTheyReadAreRefusedTest {
     @Test
     void twoPlansOfOneValueAreOneQuestion() {
         GenerationPlan asked = planOver(List.of(A_CLASS), 1);
-        GenerationPlan same = new GenerationPlan(asked.subject(), asked.classesOwed(),
-                asked.armsOwed());
+        GenerationPlan same = GenerationPlan.of(asked.subject(), asked.classesOwed(),
+                asked.armsOwed(), asked.pairsOwed(), asked.meetingsOwed());
 
         assertNotSame(asked, same);
         assertEquals(asked, same);
@@ -175,9 +176,9 @@ class TwoRunsOfOnePlanThatDisagreeAboutWhatTheyReadAreRefusedTest {
      */
     @Test
     void twoRunsGivingAClassOneReasonAgree() {
-        Generator.UnresolvedCombination said = new Generator.UnresolvedCombination(
+        CameToNothing said = CameToNothing.metNothing(new Generator.UnresolvedCombination(
                 List.of("days=low"),
-                Generator.UnresolvedCombination.Reason.NO_CANDIDATE_WAS_OFFERED);
+                Generator.UnresolvedCombination.Reason.NO_CANDIDATE_WAS_OFFERED));
 
         assertNotSame(NO_CANDIDATE, said);
         assertEquals(new ClassDisposition.AcrossRuns.Unresolved(NO_CANDIDATE),
@@ -200,9 +201,11 @@ class TwoRunsOfOnePlanThatDisagreeAboutWhatTheyReadAreRefusedTest {
 
     /** A run of a plan owing one class, which composed nothing for it. */
     private static FillResult nothingCameOfIt(GenerationPlan asked) {
-        return new FillResult(asked, new LinkedHashMap<>(), List.of(), List.of(),
-                new Discharge(Map.of(asked.classesOwed().getFirst(),
-                        new ClassDisposition.Unresolved(NO_CANDIDATE)), Map.of()));
+        ClassOfAPosition owed = asked.classesOwed().getFirst();
+        return new FillResult(new LinkedHashMap<>(), List.of(), List.of(),
+                Discharge.of(asked, List.of(new GenerationAnswer.Class(
+                        new GenerationObligation.Class(owed),
+                        new ClassDisposition.Unresolved(NO_CANDIDATE)))));
     }
 
     /**
@@ -220,9 +223,10 @@ class TwoRunsOfOnePlanThatDisagreeAboutWhatTheyReadAreRefusedTest {
                 List.of());
         MeasuredInput subject = MeasuredInput.of("fee",
                 InputDomain.of(List.of(new InputDomain.Parameter("days", null, Type.INT)),
-                        SYMBOLS, ReadAs.THE_COMPILATION_DOES).reading(SYMBOLS),
+                        RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES))
+                        .reading(SYMBOLS),
                 AxesATestWrote.asAMeasurement("fee", List.of(days)));
-        return new GenerationPlan(subject, classes, List.of());
+        return GenerationPlan.of(subject, classes, List.of(), List.of(), List.of());
     }
 
     private static PartitionClass divided(String id, long value) {

@@ -5,14 +5,14 @@ import souther.compiler.check.DischargeRules.Carrying;
 import souther.compiler.check.DischargeRules.Projection;
 import souther.compiler.semantics.ElementShape;
 import souther.compiler.check.DischargeRules.Source;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
-
-import java.math.BigDecimal;
+import souther.compiler.types.Type;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -60,7 +60,7 @@ final class Predicates {
                     }
                 }
             }
-            if (!(source instanceof Core.PreservedCall call)) {
+            if (!(Core.withoutStanding(source) instanceof Core.PreservedCall call)) {
                 return found;
             }
             Source built = DischargeRules.builtFrom(call);
@@ -146,7 +146,7 @@ final class Predicates {
      * check can name, so a denied quantifier states nothing here.
      */
     private List<Quantified> quantifierStatedBy(Core e, boolean positive, Denotations at) {
-        if (!positive || !(e instanceof Core.PreservedCall call)
+        if (!positive || !(Core.withoutStanding(e) instanceof Core.PreservedCall call)
                 || !DischargeRules.isQuantifier(call.operation())) {
             return List.of();
         }
@@ -331,7 +331,9 @@ final class Predicates {
 
     /** A clause that cannot hold, said in the language the domain reads: {@code -1 >= 0}. */
     static final Clause VIOLATED = new Clause(
-            new NumericConstraint(LinearForm.constant(BigDecimal.ONE.negate()), Rel.GE), null, List.of(),
+            new NumericConstraint(
+                    LinearForm.constant(ExactRatio.ONE.negated()), Rel.GE),
+            null, List.of(),
             null);
 
     /**
@@ -1343,14 +1345,17 @@ final class Predicates {
      */
     private Piecewise piecewiseOf(NumericConstraint owed, Core left, Core right, Denotations at) {
         Map<FactSubject, Choice> choosing = new LinkedHashMap<>();
-        chosenCalls(left, at, choosing);
-        chosenCalls(right, at, choosing);
+        // One account of the names followed, over both sides: a name is the same value whichever
+        // side of the comparison read it, so following it again would put nothing new in the map.
+        Set<BindingId> following = new HashSet<>();
+        chosenCalls(left, at, choosing, following);
+        chosenCalls(right, at, choosing, following);
         choosing.keySet().retainAll(owed.form().coefs().keySet());
         if (choosing.size() != 1) {
             return null;
         }
         FactSubject atom = choosing.keySet().iterator().next();
-        BigDecimal coefficient = owed.form().coefs().get(atom);
+        ExactRatio coefficient = owed.form().coefs().get(atom);
         List<Case> cases = new ArrayList<>();
         for (Choice.Arm arm : choosing.get(atom).arms()) {
             LinearForm<FactSubject> answered = terms.affineOf(arm.answers(), at);
@@ -1387,9 +1392,15 @@ final class Predicates {
      * <p>Which calls those are is asked of {@link Choice} and not of the table it reads. A reader
      * here that knew the table would be a second interpretation of it, and the two would come apart
      * the day the library changed which argument a case answers. */
-    private void chosenCalls(Core e, Denotations at, Map<FactSubject, Choice> out) {
+    private void chosenCalls(Core e, Denotations at, Map<FactSubject, Choice> out,
+                             Set<BindingId> following) {
         if (e instanceof Core.Read r && at.valueOf(r.binding()) != null) {
-            chosenCalls(at.valueOf(r.binding()), at, out);
+            // A name followed once. What it was given is one value, so everything it holds is in
+            // the map after the first read of it; following it per occurrence walks what the names
+            // below it multiply out to, over a body that names them one more time.
+            if (following.add(r.binding())) {
+                chosenCalls(at.valueOf(r.binding()), at, out, following);
+            }
             return;
         }
         if (e instanceof Core.PreservedCall call) {
@@ -1399,7 +1410,7 @@ final class Predicates {
                 out.put(atom, choice);
             }
         }
-        Core.forEachChild(e, child -> chosenCalls(child, at, out));
+        Core.forEachChild(e, child -> chosenCalls(child, at, out, following));
     }
 
 
@@ -1413,7 +1424,7 @@ final class Predicates {
         }
         List<FactSubject> keys = new ArrayList<>();
         keys.add(written);
-        if (!(inv instanceof Core.PreservedCall call)) {
+        if (!(Core.withoutStanding(inv) instanceof Core.PreservedCall call)) {
             return keys;
         }
         Carrying carried = DischargeRules.carried(call);
@@ -1424,7 +1435,7 @@ final class Predicates {
         // construction's own expression, so the operations peeled off are the ones the body wrote.
         Core container = carried.container();
         Core.PreservedCall stated = call;
-        while (container instanceof Core.PreservedCall inner) {
+        while (Core.withoutStanding(container) instanceof Core.PreservedCall inner) {
             Source built = DischargeRules.builtFrom(inner);
             if (built == null) {
                 break;
@@ -1516,11 +1527,12 @@ final class Predicates {
         if (traced == null) {
             return null;
         }
-        Core on = Terms.read(element, Terms.elementType(step.type()), step.pos());
+        Type elementType = step.paramTypes().getFirst();
+        Core on = Terms.read(element, elementType, step.pos());
         for (String field : traced) {
             on = new Core.FieldAccess(on, field, terms.fieldType(on.type(), field), step.pos());
         }
-        return new Core.Block(List.of(element), on, step.type(), step.pos());
+        return new Core.Block(List.of(element), List.of(elementType), on, step.pos());
     }
 
     /**
@@ -1540,17 +1552,17 @@ final class Predicates {
 
         /** The expression the body produces, with what the bindings on the way there read taken in. */
         Core produced(Core body) {
-            Core cur = body;
+            Core cur = Core.withoutStanding(body);
             while (cur instanceof Core.LetIn li) {
                 chains.put(li.binder().binding(), chain(li.value()));
-                cur = li.body();
+                cur = Core.withoutStanding(li.body());
             }
             return cur;
         }
 
         /** The chain {@code e} reads off the element, or {@code null} if it reads anything else. */
         List<String> chain(Core e) {
-            return switch (e) {
+            return switch (Core.withoutStanding(e)) {
                 case Core.LetIn li -> {
                     Reads inner = new Reads(element);
                     inner.chains.putAll(chains);

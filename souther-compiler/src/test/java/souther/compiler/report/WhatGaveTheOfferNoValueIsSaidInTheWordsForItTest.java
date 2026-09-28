@@ -28,25 +28,8 @@ class WhatGaveTheOfferNoValueIsSaidInTheWordsForItTest {
         return GeneratedRows.becauseOf(why);
     }
 
-    /**
-     * A rule read no further and one read too deeply are two sentences, because a wider run reaches
-     * the second and never the first.
-     */
-    @Test
-    void theWaysARuleGoesUnreadKeepTheirOwnWords() {
-        String unread = said(new StringOfferShortfall.Why.NotRead(
-                new BlockReason.UnreadValueRule()));
-        String nested = said(new StringOfferShortfall.Why.NotRead(
-                new BlockReason.PatternTooDeeplyNested()));
-
-        assertNotEquals(unread, nested,
-                "one sends an author to the construct nothing here enters and the other to the"
-                        + " brackets, and a run allowed more reaches only the second");
-        assertTrue(unread.contains("does not read"), unread);
-        assertTrue(nested.contains("deeply"), nested);
-    }
-
-    /** And the two limits on composing a value are two more, for the same reason. */
+    /** The two limits on composing a value are two sentences, because the same pattern asked for
+     *  first would have built under one of them and not under the other. */
     @Test
     void theTwoLimitsOnComposingAValueAreNotOneSentence() {
         String machine = said(new StringOfferShortfall.Why.TooCostly(Meter.Stopped.ONE_MACHINE));

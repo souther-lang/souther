@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.msg.TypeMessage;
 
 import org.junit.jupiter.api.Test;
 
@@ -8,6 +9,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -174,6 +176,7 @@ class AValueIsCheckedAgainstWhatTheOnesItNamesSettledTest {
                 behavior check : (i: In) -> Out constructs Out
                 let check (i) = Out(broken)
                 """));
-        assertTrue(e.getMessage().contains("not a valid regular expression"), e.getMessage());
+        assertInstanceOf(TypeMessage.ThePatternEndsBeforeItIsWhole.class, e.diagnostic().said(),
+                e.getMessage());
     }
 }

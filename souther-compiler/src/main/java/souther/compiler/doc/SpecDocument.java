@@ -113,11 +113,22 @@ public final class SpecDocument {
 
     /** The same specification, with what it sends a reader to spelled the way {@code caller} asks. */
     static SpecDocument bundled(Caller caller) {
-        try (InputStream in = SpecDocument.class.getResourceAsStream(RESOURCE)) {
+        return of(SpecIncludes.resolved(bundledText(RESOURCE), SpecDocument::bundledBeside), caller);
+    }
+
+    /** A file the specification includes, bundled where it stands to the specification. The
+     *  syntax contract rides in souther-syntax under the same directory, so the path the document
+     *  writes is the path it is read from. */
+    private static String bundledBeside(String relative) {
+        return bundledText(RESOURCE.substring(0, RESOURCE.lastIndexOf('/') + 1) + relative);
+    }
+
+    private static String bundledText(String resource) {
+        try (InputStream in = SpecDocument.class.getResourceAsStream(resource)) {
             if (in == null) {
-                throw new IllegalStateException("the bundled specification is missing: " + RESOURCE);
+                throw new IllegalStateException("the bundled specification is missing: " + resource);
             }
-            return of(new String(in.readAllBytes(), StandardCharsets.UTF_8), caller);
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

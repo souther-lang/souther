@@ -1,0 +1,821 @@
+package souther.compiler.check;
+
+import souther.compiler.stdlib.Stdlib;
+import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
+
+import java.util.List;
+import java.util.Set;
+
+/**
+ * Everything the checks ask of a standard-library operation, each with the operations it is asked
+ * of.
+ *
+ * <p>A table with no row for an operation says two things at once: that nothing is true of it, and
+ * that nobody looked. That is how {@code List.distinctBy} came to be credited by neither the
+ * totality check nor the discharge one — a valid recursive helper rejected, a guard that stopped
+ * discharging, and nothing said about a missing row. What settles which of the two an absence is, is
+ * the range: what an operation is declared to be puts it in range of a question, and an operation in
+ * range is settled — with a rule, or by being named as deliberately unanswered, with the reason. So
+ * the library gaining an operation is the library asking these questions, and each is open until
+ * someone settles it.
+ *
+ * <p>One of the two and not either. Each operation in range is one thing to settle, and these are the
+ * two ways it can be: a rule was written, or the question was considered and closed without one. A
+ * name among the closed ones beside a rule is a record the rule has overtaken. Read as "a rule or a
+ * closing", a stale closing covers the range as well as anything and stays where it is.
+ *
+ * <p>A range is read off the declaration and nothing else, so it holds an operation nobody thought
+ * of. Where the answer too is read off the declaration the rule is derived rather than written
+ * ({@link Combinators}), and the range is still stated here: a signature the derivation gets nothing
+ * out of is a decision, not a gap, and is written down as one.
+ *
+ * <p>{@code AnOperationTheLibraryGainsIsAnsweredForTest} holds every question to its range, both
+ * ways round.
+ */
+enum Question {
+
+    /** What it hands its closure ({@link Combinators}). Asked of an operation that takes a function:
+     * the closure is handed the contents of a container argument, or it is handed nothing a
+     * container holds and that is said. */
+    COMBINATOR("what it hands its closure") {
+        @Override
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
+            return signature.params().stream().anyMatch(t -> t instanceof Type.FnOf);
+        }
+
+        @Override
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
+            return Combinators.answered().contains(operation);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return Combinators.answered();
+        }
+
+        @Override
+        Set<ValueName> deliberatelyUnanswered() {
+            // The operations that take a function and hand it nothing a container holds. The
+            // library has none: every function it takes is applied to what a container argument
+            // holds, which is why the rules can be read off the signatures at all. A signature the
+            // derivation gets no rule out of is not a gap it left — it is an operation whose
+            // closure is handed something else, and saying so here is what tells the next reader
+            // which of the two a missing rule is.
+            return Set.of();
+        }
+    },
+
+    /**
+     * Whether it walks a container from a seed through its closure, and where the seed arrives
+     * ({@link Reductions}). Asked of an operation given a container, taking a closure that answers
+     * what the operation answers and takes a value of that type, beside a plain argument of it —
+     * which is the shape a walk from a seed has and is not what makes an operation one. A closure
+     * applied once, or applied to something the operation built rather than to the accumulator it
+     * carries, is declared the same way.
+     *
+     * <p>The container is part of the range and not only of the answer. This asks whether an
+     * operation walks <em>a container</em>, so one given none is outside it rather than in it and
+     * deliberately unanswered — an operation declared {@code ((A) -> A, A) -> A} repeats a step over no
+     * elements and is a different question, which nobody has had to ask yet.
+     *
+     * <p>Beside {@link #COMBINATOR} and not folded into it. What an operation hands its closure is
+     * read off the declaration; that it hands it the same closure again with what came back is not,
+     * and a range that took the first as an answer for the second would let the second go missing in
+     * silence.
+     */
+    REDUCTION("whether it reduces a container from a seed through its closure") {
+        @Override
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
+            Type result = signature.result();
+            if (result == null || signature.params().stream().noneMatch(
+                    t -> Type.elementOfAContainer(t) != null)) {
+                return false;
+            }
+            boolean carriesItBack = signature.params().stream().anyMatch(
+                    t -> t instanceof Type.FnOf fn && result.equals(fn.result())
+                            && fn.params().contains(result));
+            return carriesItBack && signature.params().stream().anyMatch(
+                    t -> !(t instanceof Type.FnOf) && result.equals(t));
+        }
+
+        @Override
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
+            // Asked of the rule and not of the key set: a name that is no library operation is not
+            // among them, and asking a set of operations whether it holds one says so only because
+            // nothing in it is equal to it.
+            return Reductions.of(operation) != null;
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return Set.copyOf(Reductions.answered());
+        }
+
+        @Override
+        Set<ValueName> deliberatelyUnanswered() {
+            // The operations that take a container, a seed of the type they answer, and a closure
+            // answering that type, and are not a walk from the seed through the closure. The
+            // library has none, and that is a decision rather than an oversight: every operation
+            // the range holds today is a fold under some name. An operation that took this shape
+            // and applied its closure once, or answered without consulting the seed, would be
+            // named here with what it does instead.
+            return Set.of();
+        }
+    },
+
+    /**
+     * Whether it accumulates what its container holds ({@link Accumulations}). Asked of an operation
+     * answering a value of the type one of its container arguments holds: the question is whether
+     * that answer is the elements started from an identity and carried through one binary combine
+     * over the accumulator and an element, both of the type it answers.
+     *
+     * <p>The range is read off the shape of the declaration and not off what the answer could be
+     * used for. {@code (List<'a>) -> 'a} says of {@code List.sum} exactly what it says of
+     * {@code String.concat}: an operation that answers one of the thing it was given many of. Which
+     * of those a check can carry as a number is asked after the answer, by the check that needs one
+     * — a range drawn where the numeric domain stops would put the library's own reading of
+     * {@code concat} out of reach of the question it is an answer to.
+     *
+     * <p>Beside {@link #REDUCTION} and not folded into it. A reduction is handed its step and its
+     * seed as arguments, so what it walks is read off the call; an accumulation is handed neither,
+     * and a range that took the one for the other would ask nothing of an operation whose whole
+     * meaning is what it does not take.
+     */
+    ACCUMULATION("whether it accumulates what its container holds, and from what through what") {
+        @Override
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
+            // Some argument, which is what a range is: an operation is asked this where any of its
+            // arguments could be the one it walks. Which one it does walk is the fact's to name,
+            // and whether the signature bears that out is asked of the same relation where the
+            // declaration is bound ({@link DischargeRules#resultIsElementOf}).
+            for (int i = 0; i < signature.params().size(); i++) {
+                if (DischargeRules.resultIsElementOf(signature, i)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        @Override
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
+            return Accumulations.of(operation) != null;
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return Set.copyOf(Accumulations.answered());
+        }
+
+        @Override
+        Set<ValueName> deliberatelyUnanswered() {
+            // `String.join` accumulates from no identity through no single step, and not because
+            // it answers a string. A separator stands between elements and not before the first,
+            // so what the walk does at each element depends on whether anything came before it —
+            // and an identity with a combine over two values of one type has nowhere to keep that.
+            // Written as `join(sep, xs)` it is a walk carrying more than the answer so far, which
+            // is a different question from this one.
+            return Set.of(op("String", "join"));
+        }
+    },
+
+    /** What it keeps of the container it was built from ({@link DischargeRules#builtFrom}). Asked of
+     * an operation that answers a container and is given one. A string is not in range: a shape says
+     * what became of a container's elements, and of a string this names only its length. */
+    BUILT("what it keeps of the container it is built from") {
+        @Override
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
+            return Type.elementOfAContainer(signature.result()) != null
+                    && signature.params().stream().anyMatch(
+                            t -> Type.elementOfAContainer(t) != null);
+        }
+
+        @Override
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
+            return DischargeRules.builtOperations().contains(operation);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return DischargeRules.builtOperations();
+        }
+
+        @Override
+        Set<ValueName> deliberatelyUnanswered() {
+            // What a construction keeps of what it read, where the answer is nothing. Each group
+            // is a reason about what a shape can say, not about the operation being uninteresting.
+            //
+            // They answer something other than what they read. A map's keys and its entry pairs
+            // are not its values, `fromList` takes the values out of pairs, `groupBy` answers lists
+            // of the elements rather than the elements, `concat` reads the lists inside its
+            // argument, `zipShortest` pairs two lists, and `flatMap` makes any number of elements
+            // from each.
+            //
+            // They put in what the container they read did not hold. Nothing that held of every
+            // element still does. How many there are is said instead by the bound on the result.
+            //
+            // They answer the same elements in a container of another kind. That is true and
+            // unsayable: every statement names the kind it is about, so nothing said of a list is
+            // a statement about a set, and a rule between them would carry nothing.
+            return Set.of(op("Map", "keys"), op("Map", "toList"), op("Map", "fromList"),
+                    op("List", "groupBy"), op("List", "concat"), op("List", "zipShortest"),
+                    op("List", "flatMap"), op("Map", "insert"), op("Set", "insert"),
+                    op("Map", "union"), op("Set", "union"), op("List", "append"),
+                    op("Map", "updateOrInsert"), op("Map", "values"), op("Set", "toList"),
+                    op("Set", "fromList"), op("List", "indexBy"));
+        }
+    },
+
+    /** Where a predicate reads its container and how far its statement travels
+     * ({@link DischargeRules#carried}). Asked of an operation that answers a {@code Bool} about a
+     * container or a string. */
+    PREDICATE_CARRY("where the predicate it states reads its container, and how far that travels") {
+        @Override
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
+            return signature.result() == Type.Prim.BOOL
+                    && signature.params().stream().anyMatch(Question::hasASize);
+        }
+
+        @Override
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
+            return DischargeRules.carryingOperations().contains(operation);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return DischargeRules.carryingOperations();
+        }
+
+        @Override
+        Set<ValueName> deliberatelyUnanswered() {
+            // A predicate over a string states something of the characters it holds in the order
+            // it holds them, and what would carry such a statement is a construction of a container
+            // from a container, which a string is not one of. An emptiness check is carried by what
+            // its size does and not as a property of elements.
+            return Set.of(op("String", "contains"), op("String", "startsWith"),
+                    op("String", "endsWith"), op("String", "matches"), op("List", "isEmpty"),
+                    op("Set", "isEmpty"), op("Map", "isEmpty"), op("String", "isEmpty"));
+        }
+    },
+
+    /** Which size call a predicate over one container means, where it means one
+     * ({@link DischargeRules#emptinessChecks}). Asked of a predicate of a single container or
+     * string: that is the shape an emptiness check has, and the question is whether this one is
+     * that. */
+    EMPTINESS("which size call it means") {
+        @Override
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
+            return signature.result() == Type.Prim.BOOL && signature.params().size() == 1
+                    && hasASize(signature.params().get(0));
+        }
+
+        @Override
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
+            return DischargeRules.emptinessChecks().contains(operation);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return DischargeRules.emptinessChecks();
+        }
+
+        @Override
+        Set<ValueName> deliberatelyUnanswered() {
+            return Set.of();
+        }
+    },
+
+    /** Whether it states its predicate of <em>every</em> element ({@link DischargeRules#isQuantifier}).
+     * Asked of an operation that answers a {@code Bool} about a container by applying a predicate to
+     * what the container holds — which says nothing yet about how many elements it has to hold of. */
+    QUANTIFICATION("whether it states its predicate of every element") {
+        @Override
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
+            return signature.result() == Type.Prim.BOOL
+                    && signature.params().stream().anyMatch(Question::hasASize)
+                    && signature.params().stream().anyMatch(
+                            t -> t instanceof Type.FnOf fn && fn.result() == Type.Prim.BOOL);
+        }
+
+        @Override
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
+            return DischargeRules.isQuantifier(operation);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return DischargeRules.quantifiers();
+        }
+
+        @Override
+        Set<ValueName> deliberatelyUnanswered() {
+            // `List.any` states its predicate of some element and not of every one.
+            return Set.of(op("List", "any"));
+        }
+    },
+
+    /** Which argument is the projection its predicate is stated over
+     * ({@link DischargeRules#projectionOf}). Asked of an operation that answers a {@code Bool} about
+     * a container by computing something other than a truth value from each element — which is what
+     * a projection is. */
+    PROJECTION("which argument is the projection it is stated over") {
+        @Override
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
+            return signature.result() == Type.Prim.BOOL
+                    && signature.params().stream().anyMatch(Question::hasASize)
+                    && signature.params().stream().anyMatch(
+                            t -> t instanceof Type.FnOf fn && fn.result() != Type.Prim.BOOL);
+        }
+
+        @Override
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
+            return DischargeRules.projections().contains(operation);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return DischargeRules.projections();
+        }
+
+        @Override
+        Set<ValueName> deliberatelyUnanswered() {
+            return Set.of();
+        }
+    },
+
+    /** Whether the number it answers is a size the domain can name ({@link DischargeRules#isSize}). */
+    SIZE("whether the number it answers is a size") {
+        @Override
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
+            return signature.result() == Type.Prim.INT
+                    && signature.params().stream().anyMatch(Question::hasASize);
+        }
+
+        @Override
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
+            return DischargeRules.isSize(operation);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return DischargeRules.sizeCalls();
+        }
+
+        @Override
+        Set<ValueName> deliberatelyUnanswered() {
+            return Set.of();
+        }
+    },
+
+    /**
+     * Whether it answers the order of its two arguments ({@link DischargeRules#decidesOrder}). Asked
+     * of an operation answering an {@code Int} from two values of one type — which is what an order
+     * is answered from, whatever the values are ordered by.
+     */
+    ORDER("whether it answers the order of its two arguments") {
+        @Override
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
+            return signature.result() == Type.Prim.INT
+                    && signature.params().size() == 2
+                    && signature.params().get(0).equals(signature.params().get(1));
+        }
+
+        @Override
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
+            return DischargeRules.decidesOrder(operation);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return DischargeRules.orderings();
+        }
+
+        @Override
+        Set<ValueName> deliberatelyUnanswered() {
+            // Arithmetic and a choice between two values are not orders at all: what
+            // `Int.subtract` answers has the sign of one and says how far apart they are as well,
+            // and `min` answers one of the two rather than anything about the pair.
+            // `DateTime.minutesBetween` counts whole minutes, so a zero says the two are less than
+            // a minute apart rather than that they are equal, and a non-negative count does not say
+            // the second is not the earlier.
+            return Set.of(op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
+                    op("Int", "min"), op("Int", "max"), op("Int", "floorMod"),
+                    op("DateTime", "minutesBetween"));
+        }
+    },
+
+    /**
+     * What holds of the number it answers wherever it is called ({@link DischargeRules#boundsOn}).
+     * Asked of every operation answering a number.
+     *
+     * <p>Of the result and not of the arguments. This once asked only where an argument was a number
+     * too, on the reasoning that a bound is stated against the arguments and an operation given none
+     * has nothing to bound its result against. {@code Int.abs} is the counter-example standing in
+     * the same table: its bound names no argument, and a constant end is as much a bound as one an
+     * argument decides. What the narrower range cost was every operation counting or reading a value
+     * of another kind — a size, the hour of a time — which could then be asked nothing here, so what
+     * was true of one was written wherever a reader happened to want it (#1016).
+     *
+     * <p>A bound that does name an argument is still held to a signature that has one:
+     * {@link OperationFactBinder} reads the argument it names, so an operation given no number
+     * cannot declare one — which is where that requirement belongs, since it is about a fact and a
+     * declaration agreeing rather than about which operations are asked.
+     */
+    BOUNDS("what bounds the number it answers") {
+        @Override
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
+            return NumericAnswers.isANumber(signature.result());
+        }
+
+        @Override
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
+            return DischargeRules.boundedOperations().contains(operation);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return DischargeRules.boundedOperations();
+        }
+
+        @Override
+        Set<ValueName> deliberatelyUnanswered() {
+            // Nothing bounds their result, for three reasons.
+            //
+            // The arithmetic and its function forms answer a number that may be anywhere, and a
+            // choice answers one of two values, which is what its cases bound.
+            //
+            // Two have their number whole in another fact. `Decimal.fromInt` answers the number it
+            // was given and `Date.daysBetween` the two day counts subtracted, and each says so as
+            // the form it answers (`AnswersAFormOfItsArguments`), which puts the result wherever
+            // what it is a form of stands. A bound written beside such a form would be a second,
+            // weaker answer to a question that has one, and which of them was read would be
+            // whichever reader arrived.
+            //
+            // And the narrowings of an exact value. What they are given is a Rational, which is on
+            // no carrier and has no counts for anything to be read in, so a bound relating what
+            // they answer to what they were handed has nothing to relate: `Decimal.toInt` states
+            // one because both sides of it are counted, and these have only one side that is.
+            return Set.of(op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
+                    op("Decimal", "add"), op("Decimal", "subtract"), op("Decimal", "multiply"),
+                    op("Int", "min"), op("Int", "max"), op("Int", "clamp"), op("Decimal", "min"),
+                    op("Decimal", "max"), op("Decimal", "clamp"), op("Decimal", "fromInt"),
+                    op("Decimal", "round"), op("Date", "daysBetween"),
+                    op("Rational", "toInt"), op("Rational", "toDecimal"));
+        }
+    },
+
+    /**
+     * What it states through the measure that counts what it shifted and what it answered apart
+     * ({@link DischargeRules#shiftBy}). Asked of an operation answering a value of the kind one of
+     * its arguments is, given a number — which is the shape moving a value by an amount has.
+     */
+    MEASURE("what it states through the measure counting the two apart") {
+        @Override
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
+            return signature.result() != null && !NumericAnswers.isANumber(signature.result())
+                    && signature.params().contains(signature.result())
+                    && signature.params().stream().anyMatch(NumericAnswers::isANumber)
+                    && hasAMeasureCountingTwoApart(stdlib, signature.result());
+        }
+
+        @Override
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
+            return DischargeRules.shiftingOperations().contains(operation);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return DischargeRules.shiftingOperations();
+        }
+
+        @Override
+        Set<ValueName> deliberatelyUnanswered() {
+            // Months and years hold different numbers of days, so neither states a count of the
+            // one measure a pair of dates has.
+            return Set.of(op("Date", "addMonths"), op("Date", "addYears"));
+        }
+    },
+
+    /**
+     * Whether it answers one of the values it was given, and in which cases
+     * ({@link DischargeRules#chosenBy}). Asked of an operation answering a number from a number: what
+     * such an operation answers may be one of its arguments, decided by the arguments.
+     */
+    CHOICE("whether it answers one of its arguments, and in which cases") {
+        @Override
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
+            return NumericAnswers.isANumber(signature.result())
+                    && signature.params().stream().anyMatch(NumericAnswers::isANumber);
+        }
+
+        @Override
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
+            return DischargeRules.choosingOperations().contains(operation);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return DischargeRules.choosingOperations();
+        }
+
+        @Override
+        Set<ValueName> deliberatelyUnanswered() {
+            // They compute a new number rather than answering one they were given: what `a + b`
+            // answers is neither `a` nor `b`, `compare` answers a sign, `floorMod` a remainder,
+            // `abs` a distance, `toInt` a whole number, `round` and `Rational.toDecimal` a value at
+            // another scale. `Decimal.fromInt` answers the number it was given unconditionally,
+            // which is a statement of its own rather than a case.
+            return Set.of(op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
+                    op("Decimal", "add"), op("Decimal", "subtract"), op("Decimal", "multiply"),
+                    op("Int", "compare"), op("Decimal", "compare"), op("Int", "floorMod"),
+                    op("Int", "abs"), op("Decimal", "abs"), op("Decimal", "toInt"),
+                    op("Decimal", "round"), op("Decimal", "fromInt"), op("Rational", "toDecimal"));
+        }
+    },
+
+    /**
+     * What it answers, counted, in what its arguments are counted as
+     * ({@link DischargeRules#answersAFormOf}). Asked of an operation whose result counts and that
+     * was given something that counts, which is the shape a value re-expressed has — the result may
+     * be arithmetic over what it was given rather than a number of its own.
+     *
+     * <p>Counted and not a number, so the dates are in range. {@code Date.daysBetween} answers a
+     * number from two values that are not numbers, and {@code Date.addDays} a value that is not one
+     * — asked of numbers alone, neither is even a question, and the operations this exists for
+     * would have been out of range of it.
+     */
+    FORM("what it answers, counted, in what its arguments are counted as") {
+        @Override
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
+            return Carrier.countsToANumber(signature.result())
+                    && signature.params().stream().anyMatch(Carrier::countsToANumber);
+        }
+
+        @Override
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
+            return DischargeRules.formOperations().contains(operation);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return DischargeRules.formOperations();
+        }
+
+        @Override
+        Set<ValueName> deliberatelyUnanswered() {
+            // What they answer is no form of what they were given, for three reasons.
+            //
+            // A product is one only where an operand is written down: `Int.multiply(a, b)` is
+            // arithmetic over `a` and `b` and is a form of neither, since what multiplies each is
+            // the other. A sum and a difference are not here at all — what they answer is a form
+            // of what they were given, and they say so by being the arithmetic they are — the
+            // operator a call to them is read as, which `ComputesANumber` records. So this question
+            // is answered for them and is not closed.
+            //
+            // A number of their own: `compare` answers a sign, `floorMod` a remainder, `abs` a
+            // distance with the sign dropped, `toInt` a whole number, `round` and
+            // `Rational.toDecimal` a value at another scale. What such a result is bounded by is a
+            // different statement from its being a value that was already there; and `min`, `max`
+            // and `clamp` answer one of their arguments, which one depending on the arguments, and
+            // that is what their cases say.
+            //
+            // And, among the temporal ones, a count that is not arithmetic over the counts it was
+            // given. Months and years hold different numbers of days, so neither shift moves a date
+            // by any number of them. `DateTime.minutesBetween` counts whole minutes over a carrier
+            // counting seconds and drops the remainder toward zero, so it is not the difference of
+            // the two counts — which is why it is the operation an author of the next such fact
+            // would reach for, and why the refusal is written down beside the ones that are
+            // accepted. A component of a value is no arithmetic over its count either, and is said
+            // as the representation that reads it rather than as a form: the parts of a day divide
+            // and take a remainder, and the parts of a date are the calendar's, which no step over a
+            // day count answers.
+            return Set.of(op("Int", "multiply"), op("Decimal", "multiply"), op("Int", "compare"),
+                    op("Decimal", "compare"), op("Int", "floorMod"), op("Int", "abs"),
+                    op("Decimal", "abs"), op("Decimal", "toInt"), op("Decimal", "round"),
+                    op("Int", "min"), op("Int", "max"), op("Int", "clamp"), op("Decimal", "min"),
+                    op("Decimal", "max"), op("Decimal", "clamp"), op("Date", "addMonths"),
+                    op("Date", "addYears"), op("DateTime", "minutesBetween"), op("Date", "year"),
+                    op("Date", "month"), op("Date", "day"), op("Time", "hour"),
+                    op("Time", "minute"), op("Time", "second"), op("DateTime", "toDate"),
+                    op("DateTime", "toTime"), op("Rational", "toDecimal"));
+        }
+    },
+
+    /**
+     * What number it computes, and at which result it answers it
+     * ({@link DischargeRules#numericResult}). Asked of an operation whose first two arguments are
+     * numbers and which answers a number of that kind — as its result, or as one case of the union
+     * its result is.
+     *
+     * <p>The case is in range for the reason the result is. An operation answering {@code Int |
+     * DivisionByZero} computes exactly the arithmetic its {@code Int}-answering counterpart does,
+     * and the shape of the result says which inputs it declines rather than what it computes; asked
+     * only of a bare numeric result, every such operation fell out of range and the arithmetic it
+     * computes was readable through no surface (#959).
+     */
+    NUMERIC_RESULT("what number it computes, and where it answers it") {
+        @Override
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
+            Type number = NumericAnswers.in(signature.result());
+            return number != null && signature.params().size() >= 2
+                    && number.equals(signature.params().get(0))
+                    && number.equals(signature.params().get(1));
+        }
+
+        @Override
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
+            return DischargeRules.numericResult(operation) != null;
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return DischargeRules.numericResultOperations();
+        }
+
+        @Override
+        Set<ValueName> deliberatelyUnanswered() {
+            // They answer one of the values they were given, which is which case they are in and
+            // not arithmetic of their own.
+            return Set.of(op("Int", "min"), op("Int", "max"), op("Int", "clamp"),
+                    op("Int", "floorMod"), op("Int", "compare"), op("Decimal", "min"),
+                    op("Decimal", "max"), op("Decimal", "clamp"));
+        }
+    },
+
+    /**
+     * Which representation understands the number it answers ({@link NumericReadings}). Asked of an
+     * operation given one value and answering a number.
+     *
+     * <p>Not "is this a term". That would put the answer in the range and make the question ask
+     * itself: {@code Decimal.fromInt} meets every condition here and is answered by the form it
+     * declares, so a range drawn where the terms are would leave it out for being answered.
+     *
+     * <p>Read off the signature and no further. Whether the language writes the operation's body out
+     * is how it is answered — the body is one of the representations — so a range that required an
+     * intrinsic would be a range drawn around one of its own answers, and {@code Int.abs} would have
+     * no reader named anywhere. Every unary operation answering a number is asked, and the four
+     * accounts between them say which reads it.
+     *
+     * <p>Counted at one case of a union too, as {@link #NUMERIC_RESULT} counts it: what the shape of
+     * a result says is which inputs an operation declines, not what it answers where it answers
+     * anything. {@code String.toInt} answers a number and is asked which representation reads it,
+     * and the answer is that none does.
+     *
+     * <p>Wider than what may be declared. A term is held to a result that is a bare number
+     * (held by {@link OperationFactBinder}), because what stands at the path a term names is the
+     * union and which case it is in is not something such an account has room for. The two ranges
+     * are different on purpose: an operation may be asked a question whose only available answer is
+     * that nothing reads it.
+     */
+    READING("which representation reads the number it answers") {
+        @Override
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
+            // Or one whose answer is what its argument holds and is left open by the declaration.
+            // Drawn on the result alone, an operation declared as `(List<'a>) -> 'a` was asked
+            // nothing — and it answers a number wherever its elements are numbers, so a rule
+            // written on one had no reading named anywhere. Drawn without the second half, a walk
+            // declared to answer a string is asked which representation reads the number it
+            // answers, and the range picks up operations the subject is not about.
+            return signature.params().size() == 1
+                    && (NumericAnswers.in(signature.result()) != null
+                            || (DischargeRules.resultIsElementOf(signature, 0)
+                                    && NumericAnswers.answerIsLeftToTheCall(signature.result())));
+        }
+
+        @Override
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
+            return NumericReadings.resolve(stdlib, DefaultBoundOperationFacts.get(), operation)
+                    instanceof NumericReadings.Resolution.One;
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return DefaultBoundOperationFacts.get().answersANumberTakenOfItsArgument();
+        }
+
+        @Override
+        Set<ValueName> deliberatelyUnanswered() {
+            // The number each of the first four answers arrives at one case of what it answers,
+            // and the other case says the text named no number at all. So the number exists and no
+            // representation reads the call: what a reading is applied to is one location, and the
+            // value standing there is the union. Which case it is in is settled where the union is
+            // taken apart, and what stands at the arm is a value with a name of its own rather than
+            // something this operation answered.
+            //
+            // Not "no conversion is ever read". `Decimal.fromInt` is a conversion and answers a
+            // form of its argument, because what it answers is a number at every call. The
+            // difference is the union and nothing else.
+            //
+            // And the walk that multiplies what its container holds. It answers a number at every
+            // call its elements are numbers at, and what reads a number is one account at a time:
+            // the account for a walk that adds is read off that walk, and a walk that multiplies
+            // would need its own — how a total is read off a row and what containers come to a
+            // given one are not the sum's answers with the step changed.
+            //
+            // The joins are not here, and are not in range either. What `String.concat` answers is
+            // declared to be a string, so there is no number for a representation to read;
+            // `List.concat` answers a list and is read by the body the language writes out, which
+            // is about that list.
+            return Set.of(op("String", "toInt"), op("String", "toDecimal"),
+                    op("Rational", "toWholeNumber"), op("Rational", "toFiniteDecimal"),
+                    op("List", "product"));
+        }
+    };
+
+    private final String asked;
+
+    Question(String asked) {
+        this.asked = asked;
+    }
+
+    /** Whether an operation declared with {@code signature} is one this is asked of. */
+    abstract boolean asksOf(Stdlib stdlib, Stdlib.Signature signature);
+
+    /** Whether {@code operation} has a rule answering this.
+     *
+     * <p>The library comes with it, since what answers a question is not always a table keyed by the
+     * operation: it may be the declaration itself, read against what the library says the operation
+     * is. */
+    abstract boolean answeredFor(Stdlib stdlib, ValueName operation);
+
+    /** The operations there is a rule about, for the check that a rule answers a question its
+     * operation is asked — a rule under a name nothing asks is a rule nothing reaches. */
+    abstract Set<ValueName> answeredOperations();
+
+    /**
+     * The operations this is asked of and answers nothing for, each named with the reason.
+     *
+     * <p>Held by the question and not by the facts the compiler reads. What a name here records is
+     * that the question was considered for that operation and closed; the reason is about the
+     * operation, but nothing in the compiler reads a closed question as a proposition, and what
+     * would have to be true for one of these to gain a rule is argued in the comment beside it.
+     */
+    abstract Set<ValueName> deliberatelyUnanswered();
+
+    /**
+     * The questions an operation declared with {@code signature} is in range of.
+     *
+     * <p>Each reads the declaration for what it asks about and no more. A declaration that leaves
+     * its result to its body — which the library allows a helper with parameters to do — has said
+     * nothing about what it answers, so the questions about that are not asked of it; what it hands
+     * its closure is a question about its arguments, and is.
+     */
+    static List<Question> askedOf(Stdlib stdlib, Stdlib.Signature signature) {
+        return List.of(values()).stream().filter(q -> q.asksOf(stdlib, signature)).toList();
+    }
+
+    /** Whether this is asked of {@code operation}. A sugar has no declaration of its own and is
+     * asked what the call it becomes is asked: it is that call, with some of its arguments already
+     * supplied. */
+    boolean asksOfOperation(Stdlib stdlib, ValueName operation) {
+        // A name that is no library operation is not one this is asked of, which the arm says
+        // rather than a lookup under a spelling of it that finds nothing.
+        if (!(operation instanceof ValueName.Stdlib.Operation library)) {
+            return false;
+        }
+        Stdlib.Rewrite rewrite = stdlib.rewriteOf(library);
+        Stdlib.Entry entry = stdlib.entry(rewrite == null ? library : rewrite.target());
+        return entry != null && asksOf(stdlib, entry.signature());
+    }
+
+    /**
+     * Whether the library counts two values of {@code t} apart as a number.
+     *
+     * <p>What makes moving a value by an amount a question with an answer. A list shortened by three
+     * and a string padded to a width are shifts as much as a date a day on is, and neither says
+     * anything <em>through a measure</em>, because the library has none that counts two lists or two
+     * strings apart — a size counts one of them. So the range is read off the declarations, and the
+     * day the library gains such a measure the operations of that kind come into range and are asked.
+     */
+    private static boolean hasAMeasureCountingTwoApart(Stdlib stdlib, Type t) {
+        return stdlib.entries().values().stream().anyMatch(entry -> {
+            List<Type> counted = entry.signature().params();
+            return NumericAnswers.isANumber(entry.signature().result()) && counted.size() == 2
+                    && counted.get(0).equals(t) && counted.get(1).equals(t);
+        });
+    }
+
+    /**
+     * Whether {@code t} is something these questions can name the size of — a container, or a
+     * string.
+     *
+     * <p>A policy of this range and not a classification of the type. Nothing here says a string is
+     * a container or that either is intrinsically sized: it says which types a question about a size
+     * call is asked of, which is this enum's own business and is why it is answered here. Should a
+     * reader outside these ranges need the same set for a reason of its own, whether that is one
+     * proposition or two sets that happen to agree is the question to settle then — the same set is
+     * not the same statement.
+     */
+    private static boolean hasASize(Type t) {
+        return Type.elementOfAContainer(t) != null || t == Type.Prim.STRING;
+    }
+
+    private static ValueName op(String alias, String name) {
+        return ValueName.Stdlib.operation(alias, name);
+    }
+
+    @Override
+    public String toString() {
+        return asked;
+    }
+}

@@ -4,8 +4,9 @@ import souther.compiler.ast.Hir;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ConstructOccurrence;
-import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.ExpansionSite;
+import souther.compiler.types.MaterialisationSite;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.ValueName;
 
@@ -23,49 +24,58 @@ import java.util.Map;
  * as separate parameters threaded through every method. What does change — the variable environment and
  * the expected type pushed down from the surrounding context — is passed separately.
  *
- * <p>Two of them are declaration authorities and neither is read off the other. {@link Symbols} is
- * what a name written here means and what this module's world holds; {@link PublishedDeclarations}
- * is what a declaration says about itself, wherever it was written. Held side by side because one
- * check needs both and because a carrier that answered the second through the first would be
- * answering what a declaration says out of the tree it was written in.
+ * <p>Two of them are what a check reads about names and neither is read off the other.
+ * {@link Symbols} is what a name written here means and what this module's world holds;
+ * {@link DeclarationAccess} is what a check asks of a declaration it did not write, wherever it was
+ * written. Held side by side because one check needs both and because a carrier that answered the
+ * second through the first would be answering what a declaration says out of the tree it was
+ * written in.
  */
-public record CheckContext(Symbols symbols, PublishedDeclarations published, DeclarationKinds kinds,
-                           NewtypeInners inners,
+public record CheckContext(Symbols symbols, DeclarationAccess declarations,
                            Hir.Data data,
                            Map<ValueName.Behavior, ReqSig> reqs,
                            Map<ValueName.Behavior, ReqSig> callees, boolean makingAnOptional,
                            Preserved preserved,
                            Map<BindingId, ValueName.Behavior> dependencies,
                            List<BindingOwner> within,
-                           ExpansionLineage lineage) {
+                           OccurrenceLineage lineage) {
 
     public CheckContext {
-        if (published == null || kinds == null || inners == null) {
-            throw new IllegalArgumentException("a check reads what the declarations it is written"
-                    + " against say and which form each of them is, so it is handed somewhere to"
-                    + " read both");
+        if (symbols == null || declarations == null) {
+            throw new IllegalArgumentException("a check reads what a name written here means and"
+                    + " what the declarations it is written against answer, so it is handed"
+                    + " somewhere to read both");
         }
     }
 
-    public CheckContext(Symbols symbols, PublishedDeclarations published, DeclarationKinds kinds,
-                        NewtypeInners inners,
-                        Hir.Data data,
-                        Map<ValueName.Behavior, ReqSig> reqs,
-                        Map<ValueName.Behavior, ReqSig> callees, boolean makingAnOptional,
-                        Preserved preserved) {
-        this(symbols, published, kinds, inners, data, reqs, callees, makingAnOptional, preserved,
-                Map.of(), List.of(), ExpansionLineage.ORIGINAL);
+    /** A context with no behavior callable by name — every position where only injected behaviors
+     *  are in sight — that makes no optional and keeps no call standing. */
+    public CheckContext(Symbols symbols, DeclarationAccess declarations, Hir.Data data,
+                        Map<ValueName.Behavior, ReqSig> reqs) {
+        this(symbols, declarations, data, reqs, Map.of(), false, Preserved.NONE, Map.of(),
+                List.of(), OccurrenceLineage.ORIGINAL);
     }
 
-    public CheckContext(Symbols symbols, PublishedDeclarations published, DeclarationKinds kinds,
-                        NewtypeInners inners,
-                        Hir.Data data,
-                        Map<ValueName.Behavior, ReqSig> reqs,
-                        Map<ValueName.Behavior, ReqSig> callees, boolean makingAnOptional,
-                        Preserved preserved,
-                        Map<BindingId, ValueName.Behavior> dependencies) {
-        this(symbols, published, kinds, inners, data, reqs, callees, makingAnOptional, preserved,
-                dependencies, List.of(), ExpansionLineage.ORIGINAL);
+    // Each question asked of the declarations, for a reader that asks one of them.
+
+    public PublishedDeclarations published() {
+        return declarations.published();
+    }
+
+    public DeclarationKinds kinds() {
+        return declarations.kinds();
+    }
+
+    public NewtypeInners inners() {
+        return declarations.inners();
+    }
+
+    public EffectiveFieldTypes fieldTypes() {
+        return declarations.fieldTypes();
+    }
+
+    public FieldLayout layout() {
+        return declarations.layout();
     }
 
     /**
@@ -90,6 +100,17 @@ public record CheckContext(Symbols symbols, PublishedDeclarations published, Dec
     }
 
     /**
+     * The same, elaborating the build of {@code value} that was made for the region {@code at}.
+     *
+     * <p>A build adds one step to which copy a construct stands in and nothing to what its bindings
+     * belong to: the value's body is written into the body it is built for, and only the copy is
+     * different.
+     */
+    public CheckContext building(ValueName value, MaterialisationSite at) {
+        return same().within(within, lineage.builtFor(value, at));
+    }
+
+    /**
      * Which construct of the model {@code origin} is, here.
      *
      * <p>The two halves put together where both are in hand: the construct is the node's, and the
@@ -109,27 +130,22 @@ public record CheckContext(Symbols symbols, PublishedDeclarations published, Dec
      * helper stopped saying so as soon as the value it was in reached a field.
      */
     private Same same() {
-        return new Same(symbols, published, kinds, inners, data, reqs, callees, makingAnOptional,
+        return new Same(symbols, declarations, data, reqs, callees, makingAnOptional,
                 preserved, dependencies, within, lineage);
     }
 
     /** One context being written out of another. */
-    private record Same(Symbols symbols, PublishedDeclarations published, DeclarationKinds kinds,
-                        NewtypeInners inners,
+    private record Same(Symbols symbols, DeclarationAccess declarations,
                         Hir.Data data,
                         Map<ValueName.Behavior, ReqSig> reqs,
                         Map<ValueName.Behavior, ReqSig> callees, boolean makingAnOptional,
                         Preserved preserved,
                         Map<BindingId, ValueName.Behavior> dependencies,
                         List<BindingOwner> within,
-                        ExpansionLineage lineage) {
+                        OccurrenceLineage lineage) {
 
         CheckContext data(Hir.Data other) {
             return built(other, reqs, callees, makingAnOptional, preserved, dependencies, within, lineage);
-        }
-
-        CheckContext reqs(Map<ValueName.Behavior, ReqSig> required) {
-            return built(data, required, callees, makingAnOptional, preserved, dependencies, within, lineage);
         }
 
         CheckContext callees(Map<ValueName.Behavior, ReqSig> callable) {
@@ -148,7 +164,7 @@ public record CheckContext(Symbols symbols, PublishedDeclarations published, Dec
             return built(data, reqs, callees, makingAnOptional, preserved, bound, within, lineage);
         }
 
-        CheckContext within(List<BindingOwner> expansion, ExpansionLineage copy) {
+        CheckContext within(List<BindingOwner> expansion, OccurrenceLineage copy) {
             return built(data, reqs, callees, makingAnOptional, preserved, dependencies, expansion,
                     copy);
         }
@@ -157,8 +173,8 @@ public record CheckContext(Symbols symbols, PublishedDeclarations published, Dec
                                    Map<ValueName.Behavior, ReqSig> callees,
                                    boolean makingAnOptional, Preserved preserved,
                                    Map<BindingId, ValueName.Behavior> deps,
-                                   List<BindingOwner> within, ExpansionLineage lineage) {
-            return new CheckContext(symbols, published, kinds, inners, data, reqs, callees,
+                                   List<BindingOwner> within, OccurrenceLineage lineage) {
+            return new CheckContext(symbols, declarations, data, reqs, callees,
                     makingAnOptional, preserved, deps, within, lineage);
         }
     }
@@ -182,57 +198,18 @@ public record CheckContext(Symbols symbols, PublishedDeclarations published, Dec
         return same().dependencies(bound);
     }
 
-    public CheckContext(Symbols symbols, PublishedDeclarations published, DeclarationKinds kinds,
-                        NewtypeInners inners,
-                        Hir.Data data,
-                        Map<ValueName.Behavior, ReqSig> reqs,
-                        Map<ValueName.Behavior, ReqSig> callees, boolean makingAnOptional) {
-        this(symbols, published, kinds, inners, data, reqs, callees, makingAnOptional,
-                Preserved.NONE);
-    }
-
-    /** A context with no behavior callable by name — every construction that predates the
-     *  distinction, and every position where only injected behaviors are in sight. */
-    public CheckContext(Symbols symbols, PublishedDeclarations published, DeclarationKinds kinds,
-                        NewtypeInners inners,
-                        Hir.Data data,
-                        Map<ValueName.Behavior, ReqSig> reqs) {
-        this(symbols, published, kinds, inners, data, reqs, Map.of());
-    }
-
-    /** The same, for a reader that has not been handed what the declarations wrap — read off
-     *  {@code symbols} instead, for the reason {@link #of(Symbols, PublishedDeclarations,
-     *  DeclarationKinds)} gives. */
-    public CheckContext(Symbols symbols, PublishedDeclarations published, DeclarationKinds kinds,
-                        Hir.Data data,
-                        Map<ValueName.Behavior, ReqSig> reqs) {
-        this(symbols, published, kinds, NewtypeInners.asWritten(symbols), data, reqs, Map.of());
-    }
-
-    public CheckContext(Symbols symbols, PublishedDeclarations published, DeclarationKinds kinds,
-                        NewtypeInners inners,
-                        Hir.Data data,
-                        Map<ValueName.Behavior, ReqSig> reqs,
-                        Map<ValueName.Behavior, ReqSig> callees) {
-        this(symbols, published, kinds, inners, data, reqs, callees, false);
-    }
-
     /** No {@code data} in scope and no behaviors — the context an invariant-free, injection-free
      *  expression is checked in. */
-    public static CheckContext of(Symbols symbols, PublishedDeclarations published,
-                                  DeclarationKinds kinds, NewtypeInners inners) {
-        return new CheckContext(symbols, published, kinds, inners, null, Map.of(), Map.of());
+    public static CheckContext of(Symbols symbols, DeclarationAccess declarations) {
+        return new CheckContext(symbols, declarations, null, Map.of());
     }
 
-    /**
-     * The same, for a reader that has not been handed what the declarations wrap.
-     *
-     * <p>Read off {@code symbols} instead. Every caller of this is a check that has not crossed the
-     * cut, and a test counts them.
-     */
+    /** The same, for a reader that has not been handed the compilation's answers to what the
+     *  declarations wrap and what their fields hold, as {@link DeclarationAccess#asWritten} reads
+     *  them. */
     public static CheckContext of(Symbols symbols, PublishedDeclarations published,
                                   DeclarationKinds kinds) {
-        return of(symbols, published, kinds, NewtypeInners.asWritten(symbols));
+        return of(symbols, DeclarationAccess.asWritten(symbols, published, kinds));
     }
 
     /**
@@ -249,24 +226,9 @@ public record CheckContext(Symbols symbols, PublishedDeclarations published, Dec
      * what a clause means; assembled twice they were assembled differently, which is what put a
      * behavior table on the emitter's reading and left it off the checker's.
      */
-    public static CheckContext executableInvariant(Symbols symbols, PublishedDeclarations published,
-                                                   DeclarationKinds kinds, NewtypeInners inners,
+    public static CheckContext executableInvariant(Symbols symbols, DeclarationAccess declarations,
                                                    Hir.Data data) {
-        return new CheckContext(symbols, published, kinds, inners, data, Map.of(), Map.of(), false,
-                Preserved.NONE);
-    }
-
-    /** The same, for a reader that has not been handed what the declarations wrap. */
-    public static CheckContext executableInvariant(Symbols symbols, PublishedDeclarations published,
-                                                   DeclarationKinds kinds, Hir.Data data) {
-        return executableInvariant(symbols, published, kinds, NewtypeInners.asWritten(symbols),
-                data);
-    }
-
-    /** The same, for a reader that has not been handed what the declarations wrap. */
-    public static CheckContext executableEnsures(Symbols symbols, PublishedDeclarations published,
-                                                 DeclarationKinds kinds) {
-        return executableEnsures(symbols, published, kinds, NewtypeInners.asWritten(symbols));
+        return new CheckContext(symbols, declarations, data, Map.of());
     }
 
     /**
@@ -276,21 +238,13 @@ public record CheckContext(Symbols symbols, PublishedDeclarations published, Dec
      * the fields it reaches it reaches through them. Otherwise the invariant fragment unchanged
      * (spec §ensures), so the rest is what {@link #executableInvariant} says.
      */
-    public static CheckContext executableEnsures(Symbols symbols,
-                                                 PublishedDeclarations published,
-                                                 DeclarationKinds kinds, NewtypeInners inners) {
-        return new CheckContext(symbols, published, kinds, inners, null, Map.of(), Map.of(), false,
-                Preserved.NONE);
+    public static CheckContext executableEnsures(Symbols symbols, DeclarationAccess declarations) {
+        return new CheckContext(symbols, declarations, null, Map.of());
     }
 
     /** The same context checking a different {@code data}'s invariant, decoder, or encoder. */
     public CheckContext forData(Hir.Data other) {
         return same().data(other);
-    }
-
-    /** The same context with the behaviors a body may call in scope. */
-    public CheckContext withReqs(Map<ValueName.Behavior, ReqSig> required) {
-        return same().reqs(required);
     }
 
     /** The same context with the behaviors a body may call by name in scope — the ones that require
@@ -333,6 +287,16 @@ public record CheckContext(Symbols symbols, PublishedDeclarations published, Dec
      */
     public CheckContext forDischarge() {
         return preserving(Preserved.byTheLanguagesOwnOperations());
+    }
+
+    /**
+     * The same, where a value of the module is built and means what its template is.
+     *
+     * <p>Typed by what the value's own check settled, which is what a build is held to.
+     */
+    public CheckContext forDischarge(Preserved.SettledValues settledValues) {
+        return preserving(Preserved.byTheLanguagesOwnOperations()
+                .withValuesBuiltAsTemplates(settledValues));
     }
 
 }

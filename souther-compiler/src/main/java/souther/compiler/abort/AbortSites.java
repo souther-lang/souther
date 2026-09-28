@@ -1,0 +1,398 @@
+package souther.compiler.abort;
+
+import souther.compiler.core.Core;
+import souther.compiler.core.KernelContracts;
+import souther.compiler.types.BinOp;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
+
+import java.util.HashMap;
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Every {@link Core} site of a program, classified by which {@link AbortKind} a run reaching it can
+ * end without a value for.
+ *
+ * <p>Read by identity and not by structural equality: {@code Core} is a record, and two occurrences
+ * that happen to be built the same way — {@code x + 1} written twice — are equal without being the
+ * one site this classified. What this answers is a fact about the occurrence a checked program holds,
+ * so a lookup that collapsed equal-but-distinct occurrences together would answer one of them for
+ * both, and get it right only where the two happened to agree.
+ *
+ * <p>Built once, over every {@code Core} a program hands out, by whoever assembles the
+ * {@code CheckedProgram}; that is where the roots are listed —
+ * never by a backend re-walking {@code Core} to ask the same question a second time, which is the
+ * shape this whole issue exists to end. A site not among {@link #at} is refused rather than answered
+ * with {@link AbortSet#NONE}: those are not the same fact, and confusing "nobody classified this" for
+ * "this cannot abort" is the exact drift a hand-kept table cannot be told apart from a considered
+ * answer.
+ *
+ * <p><b>Context-sensitive, not a per-node-kind table.</b> {@link Core.Construct} aborts on an
+ * unheld invariant only where nothing catches the failure first: one written directly as
+ * {@link Core.IfConstructed#construct} takes its else arm instead, and never reaches an abort at
+ * all. So classifying a site asks what stands over it as well as what it is — the same reason a
+ * reader of what a body's arms declare cannot arrive at cannot switch on one node's own kind
+ * either, and reads the body's evaluation structure instead.
+ */
+public final class AbortSites {
+
+    private final IdentityHashMap<Core, AbortSet> local;
+    private final Map<TypeSymbol.AtModule, Constructible> constructible;
+
+    private AbortSites(IdentityHashMap<Core, AbortSet> local,
+                       Map<TypeSymbol.AtModule, Constructible> constructible) {
+        this.local = local;
+        this.constructible = constructible;
+    }
+
+    /**
+     * Every reason a run reaching {@code site} can end without a value for.
+     *
+     * @throws IllegalArgumentException where {@code site} is not one this classified — never
+     *     answered as {@link AbortSet#NONE}, which would read as "considered and found total"
+     *     rather than as "not part of what this was built over"
+     */
+    public AbortSet at(Core site) {
+        AbortSet found = local.get(site);
+        if (found == null) {
+            throw new IllegalArgumentException(
+                    "this site is not one a program's AbortSites classified: " + site);
+        }
+        return found;
+    }
+
+    /**
+     * Classifies every site under every {@code Core} in {@code roots}, in whatever order a caller
+     * holds them in; order carries no meaning here. Which {@code Core} a program's roots are is
+     * the caller's to say, and nothing here assumes they are bodies.
+     *
+     * @param constructible every declared type a construction can build, each with whether it
+     *     holds its values to an invariant, read off the program's own declarations rather than
+     *     collected from the constructions the roots happen to hold
+     * @throws IllegalArgumentException where {@code constructible} names one type twice
+     * @throws IllegalStateException where a root constructs a type {@code constructible} does not
+     *     name
+     */
+    public static AbortSites of(List<Core> roots, KernelContracts kernels,
+                                List<Constructible> constructible) {
+        Map<TypeSymbol.AtModule, Constructible> byType = new HashMap<>();
+        for (Constructible each : constructible) {
+            if (byType.putIfAbsent(each.type(), each) != null) {
+                throw new IllegalArgumentException(
+                        "`" + each.type() + "` is named as constructible twice");
+            }
+        }
+        Map<TypeSymbol.AtModule, Constructible> held = Map.copyOf(byType);
+        IdentityHashMap<Core, AbortSet> local = new IdentityHashMap<>();
+        for (Core root : roots) {
+            walk(root, kernels, held, local);
+        }
+        return new AbortSites(local, held);
+    }
+
+    /**
+     * Every reason an ordinary construction of {@code type} can end without a value for: a
+     * {@link Core.Construct} of it standing where nothing catches an unheld invariant first.
+     *
+     * <p>For a construction no program holds as a site — a value an output builds out of what a row
+     * states, say — and so one {@link #at} cannot be asked of. Answered by the same classification
+     * every ordinary {@code Core.Construct} this walked was filed with, so the two cannot come apart.
+     * Not the answer for {@link Core.IfConstructed#construct}, which takes its else arm instead and
+     * ends nothing.
+     *
+     * @throws IllegalArgumentException where {@code type} is not one this was told a construction
+     *     builds — never answered as {@link AbortSet#NONE}, for the reason {@link #at} is not
+     */
+    public AbortSet ordinaryConstructionOf(TypeSymbol.AtModule type) {
+        Constructible found = constructible.get(type);
+        if (found == null) {
+            throw new IllegalArgumentException(
+                    "`" + type + "` is not a type a program's AbortSites was told is constructible");
+        }
+        return ordinaryConstruction(found);
+    }
+
+    /**
+     * What {@code construct} builds, among the types this was told a construction can build.
+     *
+     * @throws IllegalStateException where it is not among them: a construction the checker wrote
+     *     of a type the program's declarations do not list, which no answer here would be right for
+     */
+    private static Constructible declared(Core.Construct construct,
+                                          Map<TypeSymbol.AtModule, Constructible> constructible) {
+        Constructible found = constructible.get(construct.typeName());
+        if (found == null) {
+            throw new IllegalStateException("a construction of `" + construct.typeName()
+                    + "`, which the program was not told is constructible: " + construct);
+        }
+        return found;
+    }
+
+    /** The one place a construction's abort is decided, for a site this walks and for one it does not. */
+    private static AbortSet ordinaryConstruction(Constructible type) {
+        return type.holdsInvariants()
+                ? AbortSet.of(AbortKind.INVARIANT_NOT_HELD)
+                : AbortSet.NONE;
+    }
+
+    /**
+     * Files {@code node}'s own local answer and recurses into its children — every child at the
+     * same site's own local reading, except {@link Core.IfConstructed#construct}, which
+     * {@link #walkGuarded} answers for.
+     *
+     * <p>A node already filed is not walked into a second time; {@link #file} says whether this is
+     * the first time.
+     */
+    private static void walk(Core node, KernelContracts kernels,
+                             Map<TypeSymbol.AtModule, Constructible> constructible,
+                             IdentityHashMap<Core, AbortSet> into) {
+        if (!file(node, localAbortOf(node, kernels, constructible), into)) {
+            return;
+        }
+        if (node instanceof Core.IfConstructed ic) {
+            walkGuarded(ic.construct(), kernels, constructible, into);
+            walk(ic.then(), kernels, constructible, into);
+            for (Core.ElseArm arm : ic.els()) {
+                walk(arm.body(), kernels, constructible, into);
+            }
+            return;
+        }
+        Core.forEachChild(node, child -> walk(child, kernels, constructible, into));
+    }
+
+    /**
+     * {@code construct} as the one construction slot an {@link Core.IfConstructed} tests: an unheld
+     * invariant takes the else arm rather than aborting, so this site's own answer is
+     * {@link AbortSet#NONE} whatever {@link #localAbortOf} would have said for the same node stood
+     * anywhere else. Its own children — the field initializers — are not guarded by anything and
+     * walk the ordinary way: an initializer that itself divides by zero still aborts on the way to
+     * building the value the attempt goes on to test.
+     */
+    private static void walkGuarded(Core.Construct construct, KernelContracts kernels,
+                                    Map<TypeSymbol.AtModule, Constructible> constructible,
+                                    IdentityHashMap<Core, AbortSet> into) {
+        // Asked for the same reason an unguarded one is: a construction of a type nothing lists is
+        // refused here too, rather than filed as ending nothing because a guard stands over it.
+        declared(construct, constructible);
+        if (!file(construct, AbortSet.NONE, into)) {
+            return;
+        }
+        Core.forEachChild(construct,
+                child -> walk(child, kernels, constructible, into));
+    }
+
+    /**
+     * Files {@code node}'s answer, and says whether this is the first time — a caller recurses into
+     * a node's children exactly where this answers {@code true}.
+     *
+     * <p>One map access on the common path ({@link IdentityHashMap#putIfAbsent}), not a
+     * {@code containsKey} ahead of a {@code put}. But a second filing of the same node is not
+     * silently accepted merely because it is cheap to detect: {@code Core} is immutable and this
+     * walker's own {@link Core.IfConstructed} handling proves a node's context changes what it
+     * means, so nothing here may assume {@code Core} bodies stay trees rather than becoming graphs
+     * a future rewrite shares nodes across. A second filing that disagrees with the first is refused
+     * outright — silently keeping whichever answer got there first would let the order two callers
+     * happen to walk in decide what a shared site's own answer is, which is not a fact about the
+     * site at all.
+     *
+     * @throws IllegalStateException where {@code node} was already filed with a different answer
+     */
+    private static boolean file(Core node, AbortSet answer, IdentityHashMap<Core, AbortSet> into) {
+        AbortSet already = into.putIfAbsent(node, answer);
+        if (already == null) {
+            return true;
+        }
+        if (!already.equals(answer)) {
+            throw new IllegalStateException("one Core instance is classified " + already
+                    + " under one context and " + answer + " under another: " + node);
+        }
+        return false;
+    }
+
+    /**
+     * What {@code node} itself — independent of any child — can end a run without a value for.
+     *
+     * <p>Exhaustive over {@link Core}. A node kind added later stops the build here, the same way
+     * {@link Core#mapChildren} and {@link Core#forEachChild} are stopped by {@code Core}'s own
+     * exhaustive switch.
+     */
+    private static AbortSet localAbortOf(Core node, KernelContracts kernels,
+                                         Map<TypeSymbol.AtModule, Constructible> constructible) {
+        return switch (node) {
+            case Core.Unreachable _ -> AbortSet.of(AbortKind.UNREACHABLE_REACHED);
+            case Core.Binary b -> arithmetic(b);
+            case Core.Neg n -> negation(n);
+            case Core.Call c -> callAborts(c, kernels);
+            case Core.Construct c -> ordinaryConstruction(declared(c, constructible));
+            // A node the checker never lets carry a clause of its own to break, and never a
+            // representation to run past the end of: a literal, a read, a unit or materialised
+            // value, an already-tagged construction slot's parent, a fold, a tuple. What any of
+            // these can end without a value for is answered by a child's own site, not by this one.
+            case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _,
+                    Core.Temporal _, Core.Read _, Core.UnitValue _,
+                    Core.MaterialisedValue _, Core.OptionNone _,
+                    Core.FieldAccess _, Core.PreservedCall _, Core.Apply _,
+                    Core.If _, Core.IfConstructed _, Core.LetIn _,
+                    Core.Block _, Core.ListLit _, Core.OptionSome _,
+                    Core.Tuple _, Core.TupleGet _, Core.Match _, Core.Widen _ ->
+                    AbortSet.NONE;
+        };
+    }
+
+    /**
+     * What a call reaching {@code call.fn()} can end without a value for.
+     *
+     * <p>A kernel call reads {@link KernelContracts}, the one place that answer is authored, rather
+     * than a second reading of it here. A call to a declared behavior or a published value answers
+     * {@link AbortSet#NONE} at this site: what the callee itself can end without a value for is a
+     * fact about walking into that behavior's body, which is not this site's own — the same
+     * distinction that keeps a subtree's abort set from being copied onto every node above it. A
+     * value this module builds answers the same, for the same reason: its body is a root of its own.
+     */
+    private static AbortSet callAborts(Core.Call call, KernelContracts kernels) {
+        return switch (call.fn()) {
+            case Core.Reached.OfKernel kernel -> kernels.contractOf(kernel.kernel()).aborts();
+            case Core.Reached.OfDeclaration _ -> AbortSet.NONE;
+            case Core.Reached.OfValue _ -> AbortSet.NONE;
+            case Core.Reached.OfPublishedValue _ -> AbortSet.NONE;
+            // Minted by a Core-to-Core pass for a fold the backend lowers as a whole. The walk
+            // itself ends with nothing of its own; the write its step makes into the builder is
+            // where a collection grows, and a fold can write more than one element per step, so
+            // that write can reach the most elements a collection holds (`Capacity`).
+            case Core.Emitted emitted -> switch (emitted) {
+                case BUILD_LIST, BUILD_MAP -> AbortSet.NONE;
+                case GROW_LIST, PUT_MAP -> AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
+            };
+        };
+    }
+
+    /**
+     * What {@code binary} — one of {@code + - * /} — can end a run without a value for, read off
+     * {@link Core.Binary#type} rather than off an operand's: an answer of {@code Rational} is one
+     * {@code BodyGen} computes through {@code RationalMath}, whether the operator read its operands
+     * at their exact values or they were Rationals already, and an operand can name a different
+     * runtime operation than the answer does — {@code Int / Int} runs {@code
+     * RationalMath.divideWholeNumbers}, where both operands are {@code Int} and the answer, and the
+     * operation, are {@code Rational}.
+     *
+     * <p>{@code +}, {@code -}, {@code *} abort only on {@link AbortKind#REQUIRED_FORM_HAS_NO_PLACE}:
+     * an {@code Int} or a {@code Decimal} sum, difference or product outside what its type holds
+     * ({@code souther.runtime.IntMath}, {@code souther.runtime.DecimalMath}), or a {@code Rational}
+     * one whose required exact form asks for more exponent than {@code Rational} holds
+     * ({@code souther.runtime.Rational#noRoomForIt}). Never both at one site: {@code Int + Int} and
+     * {@code Decimal + Decimal} stay {@code Int} and {@code Decimal} (ADR-0116's homogeneous rule),
+     * so a {@code +}/{@code -}/{@code *} whose answer is {@code Rational} already has a
+     * {@code Rational}-typed operand feeding it — the same fact {@link #divide} reads directly for
+     * {@code /}, which does not get that guarantee for free.
+     */
+    private static AbortSet arithmetic(Core.Binary binary) {
+        return switch (binary.op()) {
+            case BinOp.ADD, BinOp.SUB, BinOp.MUL -> arithmeticType(binary);
+            case BinOp.DIV -> divide(binary);
+            // `++` joins two strings or two lists, and the join can be longer than a `String` or a
+            // `List` holds though neither side is (`Strings.append`, `Capacity`).
+            case BinOp.CONCAT -> AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
+            case BinOp.EQ, BinOp.NE, BinOp.LT, BinOp.LE, BinOp.GT, BinOp.GE, BinOp.AND, BinOp.OR ->
+                    AbortSet.NONE;
+        };
+    }
+
+    /** {@link AbortKind#REQUIRED_FORM_HAS_NO_PLACE} for every type {@code +}, {@code -} and
+     *  {@code *} answer with, or a compiler invariant failure for a type none of them do — refused
+     *  rather than answered with {@link AbortSet#NONE}, so a primitive the checker admits to
+     *  arithmetic later and this has not been told about fails loudly instead of silently reading
+     *  as total. */
+    private static AbortSet arithmeticType(Core.Binary binary) {
+        if (!(binary.type() instanceof Type.Prim prim)) {
+            throw new IllegalStateException(
+                    "`" + binary.op() + "` answers " + Type.show(binary.type())
+                            + ", which no arithmetic the checker admits answers with");
+        }
+        return switch (prim) {
+            case INT, DECIMAL, RATIONAL -> AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
+            case STRING, BOOL, DATE, TIME, DATETIME, INSTANT -> throw new IllegalStateException(
+                    "`" + binary.op() + "` answers " + prim.shown()
+                            + ", which no arithmetic the checker admits answers with");
+        };
+    }
+
+    /**
+     * Unary minus, read off {@link Core.Neg#type} the same way {@link #arithmeticType} reads
+     * {@link Core.Binary#type} — the checked fact, not a re-derivation from what the backend happens
+     * to emit. The specification states unary minus as answering the type it is given
+     * (spec §an-operator-takes-the-types-it-is-defined-for) and states {@code Int}'s own case
+     * explicitly: {@code abs} negates with {@code -}, and the smallest {@code Int} — the one value
+     * with no positive counterpart — aborts on overflow like any other overflow (spec §stdlib-int).
+     * {@code Decimal} and {@code Rational} negation only flip a sign; neither changes the scale or
+     * the exponent a {@code +}/{@code -}/{@code *} on either type can push out of range, so neither
+     * is a case {@link AbortKind#REQUIRED_FORM_HAS_NO_PLACE} names.
+     *
+     * <p>A checked {@code Core.Neg} answers only {@code Int}, {@code Decimal} or {@code Rational}
+     * (spec §an-operator-takes-the-types-it-is-defined-for); a fourth reaching here is a malformed
+     * checked {@code Core} and is refused the same way {@link #arithmeticType} refuses one, rather
+     * than answered with {@link AbortSet#NONE}.
+     */
+    private static AbortSet negation(Core.Neg neg) {
+        if (!(neg.type() instanceof Type.Prim prim)) {
+            throw new IllegalStateException(
+                    "unary minus answers " + Type.show(neg.type())
+                            + ", which no negation the checker admits answers with");
+        }
+        return switch (prim) {
+            case INT -> AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE);
+            case DECIMAL, RATIONAL -> AbortSet.NONE;
+            case STRING, BOOL, DATE, TIME, DATETIME, INSTANT -> throw new IllegalStateException(
+                    "unary minus answers " + prim.shown()
+                            + ", which no negation the checker admits answers with");
+        };
+    }
+
+    /**
+     * {@code /}'s own answer is exact, and the exact quotient of any two of {@code Int},
+     * {@code Decimal} and {@code Rational} is {@code Rational} (ADR-0116) — never {@code Int} or
+     * {@code Decimal}, the way {@code +}, {@code -} and {@code *} can answer. {@code BodyGen} itself
+     * has no kernel to reach for a {@code /} whose answer is not {@code Rational}: {@code
+     * arithmetic(bin, null, null)} passes null for both, so a malformed one reaches the checker's
+     * own "no kernel for this number" failure there. A {@code Core} the checker could not have
+     * produced is refused here the same way, rather than answered as though it were an ordinary
+     * {@code Int} or {@code Decimal} division — the one thing that would let a future checker
+     * change quietly agree with a stale reading here.
+     *
+     * <p>{@code /} always answers {@code Rational}, but unlike {@code +}/{@code -}/{@code *} that
+     * does not by itself mean a {@code Rational}-typed operand is already in play — {@code Int / Int}
+     * and {@code Decimal / Decimal} answer {@code Rational} too. So this reads both operand types
+     * directly, the one place in this walker an operand's own type decides the answer rather than
+     * the node's. {@code BodyGen.pushExact} is why: {@code Int} and {@code Decimal} operands are
+     * widened through {@code RationalMath.fromInt}/{@code fromDecimal} — exact and total, building a
+     * fresh, compact {@code Rational} with no prior exponent history — while an operand already
+     * {@code Rational}-typed is pushed as it stands, whatever exponents it already carries.
+     * {@code Int / Int} is emitted through {@code RationalMath.divideWholeNumbers} specifically
+     * (never the general path), but the same fact holds there too: two {@code long}s make a fresh,
+     * compact pair.
+     *
+     * <p>So a zero divisor is the only reason where neither operand was already {@code Rational}:
+     * {@code Int / Int} runs {@code divideWholeNumbers}, {@code Decimal / Decimal} runs
+     * {@code RationalMath.divide} on two freshly-widened operands, and
+     * {@code Rational#dividedBy}'s own exponent subtraction ({@code lessened}) cannot overflow a
+     * {@code long} for exponents that both trace back to a 32-bit {@code Decimal} scale or a
+     * {@code long} {@code Int} — traced directly against {@code Rational#dividedBy} rather than
+     * assumed from the type alone. Where either operand is already {@code Rational}, it may carry
+     * exponents from arithmetic earlier in the program, and dividing can still ask for more than
+     * {@code Rational} holds.
+     */
+    private static AbortSet divide(Core.Binary binary) {
+        if (binary.type() != Type.RATIONAL) {
+            throw new IllegalStateException(
+                    "`/` answers " + Type.show(binary.type()) + ", and the exact operator's answer"
+                            + " is always Rational (spec §stdlib-rational)");
+        }
+        AbortSet zeroDivisor = AbortSet.of(AbortKind.DIVISION_BY_ZERO);
+        boolean anOperandIsAlreadyRational =
+                binary.left().type() == Type.RATIONAL || binary.right().type() == Type.RATIONAL;
+        return anOperandIsAlreadyRational
+                ? zeroDivisor.union(AbortSet.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE))
+                : zeroDivisor;
+    }
+}

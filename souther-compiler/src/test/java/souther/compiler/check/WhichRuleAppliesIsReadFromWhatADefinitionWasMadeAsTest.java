@@ -8,6 +8,7 @@ import souther.compiler.query.Answer;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
 import souther.compiler.query.Shapes;
+import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
@@ -80,7 +81,7 @@ class WhichRuleAppliesIsReadFromWhatADefinitionWasMadeAsTest {
      * took on, or a value minted for one of its rows. */
     private static Hir.FnDef definition(Prepared state, String name) {
         List<List<Hir.FnDef>> families =
-                List.of(state.tree().takenOn(), state.tree().fns(), state.rowDefs());
+                List.of(state.tree().takenOn(), state.tree().fns(), state.mintedDefs());
         for (List<Hir.FnDef> family : families) {
             for (Hir.FnDef fn : family) {
                 if (fn.name().equals(name)) {
@@ -89,6 +90,28 @@ class WhichRuleAppliesIsReadFromWhatADefinitionWasMadeAsTest {
             }
         }
         throw new AssertionError("`" + name + "` is not a definition of " + state.name());
+    }
+
+    /** The entry a module publishes for a value is minted beside a row's operand and is not one:
+     * it says which value it enters, and no position stands behind it. */
+    @Test
+    void aDefinitionMintedForAPublishedValueSaysWhichValueItEnters() {
+        Db up = Compilation.ofDocuments(Map.of("up.sou", """
+                module up exposing ( Amount, cap )
+
+                data Amount = Int
+
+                let cap = Amount(1000)
+                """), Set.of(), ModulePath.EMPTY).db();
+        Answer<Prepared> answer = up.ask(new Shapes.Prepared("up"));
+        assertTrue(answer.present(), "prepared of up: " + answer.reports());
+
+        List<Hir.FnDef> minted = answer.value().mintedDefs();
+
+        assertEquals(1, minted.size(), minted.toString());
+        assertEquals(new DefinitionRole.PublishedValueEntry(new ValueName.Helper("up", "cap")),
+                minted.getFirst().role());
+        assertTrue(minted.getFirst().standsAt() == null);
     }
 
     @Test

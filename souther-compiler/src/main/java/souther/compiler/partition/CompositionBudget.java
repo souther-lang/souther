@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.observe.RunSensitivity;
+
 /**
  * A figure this compiler holds a piece of its own work to.
  *
@@ -70,10 +72,20 @@ public enum CompositionBudget {
      *  nothing. What multiplies here is the cases of every sum the way down crosses. */
     WAYS_DOWN_TO_A_TOTAL_TRIED(8),
 
-    /** How many places along a line a pair is tried at. What a range cannot say is that one of its
-     *  values is missing, so what stepping past this walks over is holes, and there are as many of
-     *  those as the rules state. */
+    /** How many places along a line a pair is tried at, which is places the walk offered and not
+     *  places it went past. What it costs to step over a place the anchored position may not stand
+     *  at is {@link #PLACES_A_PAIR_IS_LOOKED_AT}. */
     PLACES_A_PAIR_IS_TRIED_AT(64),
+
+    /**
+     * How many places of that line are looked at to find those.
+     *
+     * <p>The walking beside the trying, held apart from {@link #PLACES_A_PAIR_IS_TRIED_AT} for the
+     * reason {@link #PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT} is held apart from its own: a place
+     * the line holds that the declarations refuse the anchored position, or that a rule holds it
+     * away from, is walked through and is no pair to try.
+     */
+    PLACES_A_PAIR_IS_LOOKED_AT(512),
 
     /** How many steps a walk over the positions of a form may take. A run without an end is not
      *  walked to the end at any length. */
@@ -109,6 +121,26 @@ public enum CompositionBudget {
      *  composing that stopped: the row is composed, and what was not composed against is one
      *  condition on the way ({@link ReachabilityGap}). */
     VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT(8),
+
+    /**
+     * How many places of the run such a position stands on are looked at to find those values.
+     *
+     * <p><b>Beside the one above and not the same figure.</b> That one bounds the values put to the
+     * rest of the question; this one bounds the walking done to reach them. They were one number
+     * while every place the run held was a value to try — and they are not, because what the
+     * declarations leave the position and what a rule holds it away from take places out of the
+     * middle of a run without ending it.
+     *
+     * <p>Raising them does different things. Raising the first tries more of what was found;
+     * raising this one looks further for something to find. A reader told the first where this one
+     * stopped the walk is sent to raise a number that changes nothing, which is what one figure
+     * standing for both comes to.
+     *
+     * <p>Wider than the first for the same reason: a stretch every narrowing refuses is walked
+     * through and costs this and not that. Needed at all because a run with no end whose values are
+     * all refused is otherwise a walk nothing stops.
+     */
+    PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT(64),
 
     /**
      * How many values a point is tried with after a row composed for one of them does not stand
@@ -166,7 +198,27 @@ public enum CompositionBudget {
      * all: a row composed against such a plan is one the caller's own value is missing from, and
      * the plan says so instead of handing one back.
      */
-    DEPTH_A_CONSTRUCTION_PLAN_DESCENDS(8);
+    DEPTH_A_CONSTRUCTION_PLAN_DESCENDS(8),
+
+    /**
+     * How many of the numbers a set admits are tried before one of them is built for.
+     *
+     * <p>A set of numbers is what a class of a number asks a value to read as, and one number of it
+     * failing says nothing about the rest: the second of February is a date nothing writes and the
+     * thirtieth of a month is one that is written, and both are in the set a rule about months at
+     * or after February leaves. So an account walks the numbers it can build for and stops at the
+     * first that builds.
+     *
+     * <p><b>This is what it says when it ran out.</b> Raise it and the numbers past it get tried,
+     * which is what makes the word one an author can act on — and what it must never become is the
+     * sentence that nothing writes a value in the set, which is a claim about the model that a walk
+     * stopped short of the set cannot make.
+     *
+     * <p>Not spent where the set was walked to its end. A set whose numbers were all tried is one
+     * this compiler gave nothing up on, and a figure named there is a number an author raises to be
+     * told the same thing.
+     */
+    NUMBERS_OF_A_SET_TRIED(8);
 
     private final int maximum;
 
@@ -177,5 +229,46 @@ public enum CompositionBudget {
     /** The figure itself. What is done on reaching it is the member's to say. */
     public int maximum() {
         return maximum;
+    }
+
+    /**
+     * Whether a wider run could go past it: always, since every member is a figure this compiler
+     * compared something against and stopped on, which is what a wider run widens.
+     */
+    public RunSensitivity runSensitivity() {
+        return RunSensitivity.MAY_CHANGE;
+    }
+
+    /**
+     * The figure this one was split off, or null where it was not split off any.
+     *
+     * <p><b>Because a split figure does not get a word of its own.</b> What a stopped walk says is
+     * the walk's answer and the figures are what stopped it, so two figures bounding two halves of
+     * one walk come back saying the same thing — one walk cannot say two things depending on which
+     * of its own numbers ran out first, and an answer carrying both could not be assembled at all.
+     *
+     * <p>Said here as data rather than remembered at the place the words are chosen. A figure is
+     * split because two things that were one number stopped being one, and the moment after that is
+     * exactly when nobody is thinking about which word the new one inherits.
+     *
+     * <p>Every member answers, so a figure added has to say whether it is one half of another. Read
+     * off a default instead, the answer for a new figure would be the one nobody chose.
+     */
+    public CompositionBudget splitFrom() {
+        return switch (this) {
+            // The walking beside the trying. Both halves of one walk over a line, and of one walk
+            // over the run a position on the way stands on.
+            case PLACES_A_PAIR_IS_LOOKED_AT -> PLACES_A_PAIR_IS_TRIED_AT;
+            case PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT ->
+                    VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT;
+            case ELEMENTS_A_PROPOSAL_HOLDS, CHARACTERS_A_PROPOSAL_HOLDS, PAIRINGS_BUILT_AT_ONCE,
+                 ELEMENTS_A_TOTAL_IS_SPREAD_OVER, SHAPES_OF_A_TOTAL_OFFERED,
+                 WAYS_DOWN_TO_A_TOTAL_TRIED, PLACES_A_PAIR_IS_TRIED_AT, STEPS_A_SEARCH_MAY_TAKE,
+                 ASSIGNMENTS_A_SEARCH_COMPOSES, VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
+                 LEVELS_A_SIDE_IS_ASKED_AT, TIMES_THE_RULES_ARE_ASKED_AGAIN,
+                 VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT, VALUES_A_POINT_IS_TRIED_WITH,
+                 PATHS_OF_A_DECISION_READ, DEPTH_A_CONSTRUCTION_PLAN_DESCENDS,
+                 NUMBERS_OF_A_SET_TRIED -> null;
+        };
     }
 }

@@ -4,6 +4,7 @@ import souther.compiler.DefaultStdlib;
 import souther.compiler.KeptCalls;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
@@ -201,7 +202,7 @@ class WhatAValueCarriesBelongsToTheAtomTest {
 
         assertThrows(Terms.OneTermTwoDerivations.class, () -> terms.computedBy(atom,
                 new AtomKnowledge.Computation.Reduction(new InductiveBounds.Walk(
-                        LinearForm.constant(java.math.BigDecimal.ZERO), other,
+                        LinearForm.constant(ExactRatio.ZERO), other,
                         LinearForm.atom(other), StepInputFacts.none()))));
     }
 

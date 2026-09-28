@@ -2,7 +2,6 @@ package souther.lsp.analysis;
 
 import souther.compiler.cst.SourceLayout;
 import org.junit.jupiter.api.Test;
-import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Abandonment;
 import souther.compiler.sites.Evidence;
 import souther.compiler.sites.MemberReceiver;
@@ -366,7 +365,7 @@ class WhatIsLeftOfADotIsSaidByTheSnapshotAndNotGuessedTest {
         Map<String, String> joining = new LinkedHashMap<>();
         joining.put(LIB_URI, LIB);
         int cursor = text.lastIndexOf(".\n") + 1;
-        SemanticProbe.Reading reading = new SemanticProbe().of(joining, Set.of(), ModulePath.EMPTY,
+        SemanticProbe.Reading reading = new SemanticProbe().of(joining, Set.of(), ModulesOnThePath.NONE,
                 MODEL_URI, text, cursor, Abandonment.NEVER);
         if (reading == null) {
             throw new AssertionError("the half-written line is one the probe finishes off");

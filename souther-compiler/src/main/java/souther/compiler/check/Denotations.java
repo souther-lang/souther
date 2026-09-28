@@ -4,7 +4,6 @@ import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
 
@@ -70,6 +69,10 @@ record Denotations(Map<BindingId, Means> bound) {
             // — so one value read twice would be two subjects, which is what a subject is for.
             java.util.Objects.requireNonNull(subject, "a binding entered is a binding to be about");
         }
+    }
+
+    Denotations {
+        bound = BindingMap.from(bound);
     }
 
     static Denotations none() {
@@ -161,8 +164,6 @@ record Denotations(Map<BindingId, Means> bound) {
     }
 
     private Denotations with(BindingId binding, Means means) {
-        Map<BindingId, Means> next = new HashMap<>(bound);
-        next.put(binding, means);
-        return new Denotations(Map.copyOf(next));
+        return new Denotations(BindingMap.from(bound).with(binding, means));
     }
 }

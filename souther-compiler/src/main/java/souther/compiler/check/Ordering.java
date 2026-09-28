@@ -1,7 +1,10 @@
 package souther.compiler.check;
 
+import souther.compiler.core.Core;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+
+import java.util.Objects;
 
 /**
  * How the values of a type are ordered: whether they are ordered at all, and by what.
@@ -24,7 +27,7 @@ import souther.compiler.types.TypeSymbol;
  * asks a second time whether something was a newtype.
  *
  * <p><b>Sealed, so an order added is one every reader has to answer for.</b> The switches over these
- * four are what makes a fifth a build failure rather than a comparison emitted as an equality test.
+ * are what makes one more a build failure rather than a comparison emitted as an equality test.
  *
  * <p>The rules are ADR-0047 (a single-value newtype is compared by the value it wraps) and ADR-0069
  * (an enumeration is ordered by the order its cases are declared in, and that order lives on the sum
@@ -38,12 +41,31 @@ public sealed interface Ordering {
     record Longs() implements Ordering {}
 
     /**
-     * The JVM value is {@link Comparable} and its {@code compareTo} is the order: a {@code String},
-     * a {@code BigDecimal}, a {@code LocalDate}, a {@code LocalTime}, a {@code LocalDateTime} or an
-     * {@code Instant} — and a single-value newtype as it is held, which carries a {@code compareTo}
-     * of its own (ADR-0047).
+     * The JVM value is {@link Comparable} and its {@code compareTo} is exactly the language's order:
+     * a {@code BigDecimal}, a {@code Rational}, a {@code LocalDate}, a {@code LocalTime}, a
+     * {@code LocalDateTime} or an {@code Instant} — and a single-value newtype as it is held, which
+     * carries a {@code compareTo} of its own (ADR-0047).
+     *
+     * <p>Which way round that is matters. The language says what the order is and a carrier's
+     * {@code compareTo} is used where it answers the same; being {@code Comparable} is not a reason
+     * for a type to be here, which is why {@link Strings} is not.
+     *
+     * @param basis the type whose order this is: the primitive itself, or the one a newtype held as
+     *              its own {@code Comparable} wraps
      */
-    record Natural() implements Ordering {}
+    record Natural(Type basis) implements Ordering {
+
+        public Natural {
+            Objects.requireNonNull(basis, "a natural order is the order of some type");
+        }
+    }
+
+    /**
+     * Text, ordered by scalar value ({@code Strings.compare}). A {@code java.lang.String} is
+     * {@link Comparable}, and its {@code compareTo} orders UTF-16 code units, which is another order
+     * wherever a character past the basic plane meets one in {@code U+E000..U+FFFF}.
+     */
+    record Strings() implements Ordering {}
 
     /**
      * A value of an enumeration: the sum answers where a case stands in its declaration, through the
@@ -73,14 +95,62 @@ public sealed interface Ordering {
     }
 
     Ordering LONGS = new Longs();
-    Ordering NATURAL = new Natural();
+    Ordering STRINGS = new Strings();
+
+    /**
+     * The type whose order this is, which is what the checker hands a backend in place of this: a
+     * {@link Core.OrderingBasis}. What is a representation here — that an {@code Int} is a
+     * {@code long}, that a newtype held as itself carries a {@code compareTo} — is left behind.
+     */
+    default Type basis() {
+        return switch (this) {
+            case Longs _ -> Type.INT;
+            case Strings _ -> Type.STRING;
+            case Natural natural -> natural.basis();
+            case Places places -> Type.ref(places.enumeration());
+            case Wrapped wrapped -> wrapped.inner().basis();
+        };
+    }
+
+    /**
+     * The sum that answers for the values of a sort over {@code subject}, or null where no
+     * generated sum does: the class a sort over them names, for whatever asks which classes an
+     * emitted call names.
+     *
+     * <p>Read off {@link #held}, which the emitter switches over, so the two cannot disagree about
+     * which sort takes its comparator from a sum. A newtype over an enumeration answers null and
+     * sorts by the {@code compareTo} its own class carries — the sum's {@code __order} would be
+     * handed the wrapper and not the case.
+     */
+    static TypeSymbol enumerationOfHeld(Type subject, Core.OrderingBasis basis,
+                                        NewtypeInners inners) {
+        return held(subject, basis, inners) instanceof Places places ? places.enumeration() : null;
+    }
+
+    /**
+     * How the values of a sort over {@code subject} are ordered as the runtime is handed them,
+     * given what the checker settled orders them. What the sort family reads, since it hands each
+     * value over as it stands.
+     *
+     * <p>The basis says which order it is, and the subject says only whether a name is worn over the
+     * value: a newtype is handed over as itself and by the {@code compareTo} its own class carries,
+     * so it is {@link Natural} whatever the basis is. Nothing here asks what orders a type; that was
+     * the checker's, and is on the call.
+     *
+     * <p>Never {@link Wrapped}.
+     */
+    static Ordering held(Type subject, Core.OrderingBasis basis, NewtypeInners inners) {
+        return TypeOps.newtypeSpine(subject, inners).layers().isEmpty()
+                ? ofBasis(basis) : new Natural(basis.type());
+    }
 
     /**
      * How a value of this type, as the JVM holds it, is ordered — or null where it has no order.
      *
-     * <p>Whether a type is ordered is this answer existing, which is what {@link
-     * TypeOps#supportsOrdering} reports. Asking here and reporting there is one question and not
-     * two: a reader that admits a value it cannot emit a comparison for is what #856 was.
+     * <p>Whether a type is ordered is this answer existing, and what orders it is the answer itself.
+     * A reader that asks only whether a type is ordered has dropped what the checker then has to
+     * put on the tree, so admission takes this answer and keeps it: a reader that admits a value it
+     * cannot emit a comparison for is what #856 was.
      */
     static Ordering of(Type type, NewtypeInners inners, Symbols symbols, DeclarationKinds kinds,
                        PublishedDeclarations published) {
@@ -93,39 +163,47 @@ public sealed interface Ordering {
     }
 
     /**
-     * How a comparison of two operands is emitted, once each has been opened to the value it wraps.
+     * How a value of the type a basis names is compared, once its names are off.
      *
-     * <p><b>This does not decide whether the operands may be compared.</b> That is {@code
-     * BinaryElaborator.orderedComparable}, and it is asked of the types as written, because the
-     * nominal boundary is the type and not its base: two different newtypes over one enumeration
-     * open to the same order and are still not comparable (ADR-0047). Asked here of the opened
-     * types, this answers for a pair that rule has already admitted.
+     * <p>A translation and not a second resolution: it reads the basis and no declaration, so it
+     * cannot answer differently from the checker that named it. A basis is the terminal of a
+     * newtype spine and is never a newtype, and one that has no order — which the checker never
+     * names — is a checker and an emitter disagreeing.
      */
-    static Ordering ofComparison(Type lt, Type rt, NewtypeInners inners, Symbols symbols,
-                                 DeclarationKinds kinds,
-                                 PublishedDeclarations published) {
-        Type lb = TypeOps.base(lt, inners);
-        Type rb = TypeOps.base(rt, inners);
-        // A case value, a union of cases and the sum itself are all comparable on the sum's order
-        // without ranging over it, and either side may be the one that names the sum — so the
-        // enumeration is read off the pair rather than off one operand.
-        TypeSymbol enumeration = TypeOps.comparisonEnumeration(lb, rb, symbols, kinds, published);
-        if (enumeration != null) {
-            return new Places(enumeration);
+    static Ordering ofBasis(Core.OrderingBasis basis) {
+        Ordering how = switch (basis.type()) {
+            case Type.Prim p -> ofPrimitive(p);
+            case Type.Ref r -> new Places(r.name());
+            default -> null;
+        };
+        if (how == null) {
+            throw new IllegalStateException(
+                    "an order the checker named is one that has none: " + Type.show(basis.type()));
         }
-        // Otherwise both operands open to one type, which the admissibility rule established and
-        // this states rather than assumes: every route that admits a pair short of the enumeration
-        // one leaves them with equal bases. Answering off the left alone would give an order for a
-        // pair that has none — and the backend's "a comparison the checker admitted has no order"
-        // is only an assertion about the checker while nothing here can fail.
-        return lb.equals(rb) ? ofTerminal(lb, symbols, kinds, published) : null;
+        return how;
+    }
+
+    /** The order of a primitive, or null where it has none. */
+    private static Ordering ofPrimitive(Type.Prim p) {
+        return switch (p) {
+            case INT -> LONGS;
+            case STRING -> STRINGS;
+            // Each of these is carried by a Comparable whose compareTo is the order the language
+            // gives it (spec §equality).
+            case DECIMAL, DATE, TIME, DATETIME, INSTANT -> new Natural(p);
+            // A Rational is ordered by its exact mathematical value (ADR-0116), and the runtime
+            // value that carries one compares by exactly that — one representation per value, so
+            // the order it carries and the equality it answers are the same reading of it.
+            case RATIONAL -> new Natural(p);
+            case BOOL -> null;
+        };
     }
 
     /** How a value still held as the type it was asked of is ordered: a newtype by the {@code
      *  compareTo} its own class carries, everything else by itself. What the sort family reads,
      *  since it hands the value to the runtime as it stands. */
     default Ordering asHeld() {
-        return this instanceof Wrapped ? NATURAL : this;
+        return this instanceof Wrapped ? new Natural(basis()) : this;
     }
 
     /** How a value is ordered once the newtype spine has been opened to its terminal value. What the
@@ -139,13 +217,7 @@ public sealed interface Ordering {
     private static Ordering ofTerminal(Type terminal, Symbols symbols, DeclarationKinds kinds,
                                        PublishedDeclarations published) {
         return switch (terminal) {
-            case Type.Prim p -> switch (p) {
-                case INT -> LONGS;
-                // The JVM carries each of these as Comparable, which is why they are the ordered
-                // ones (spec §primitives).
-                case STRING, DECIMAL, DATE, TIME, DATETIME, INSTANT -> NATURAL;
-                case BOOL, RAW -> null;
-            };
+            case Type.Prim p -> ofPrimitive(p);
             // A sum every one of whose cases is a unit data, one of its cases, or a union of them.
             // Null where more than one enumeration lists the case: the order belongs to the sum, so
             // a value two sums place differently has none of its own, and that is refused rather

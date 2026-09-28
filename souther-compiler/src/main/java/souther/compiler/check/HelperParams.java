@@ -67,7 +67,10 @@ final class HelperParams {
         if (!hasOpenParam(m)) {
             return m;   // nothing to settle: don't build the inliner (it scans the whole prelude)
         }
-        HelperInliner inliner = HelperInliner.forModule(m, symbols.library());
+        // What settles a parameter is the type of the body it is used in, which is read off a tree
+        // that shares each value it names as the tree a body is checked as does.
+        HelperInliner inliner = HelperInliner.forModule(m, symbols.library(),
+                ValueAtAReference.SHARED_PER_REGION);
         // The addresses this module holds its own recursions at, which is what the loop below has:
         // it walks the definitions and asks whether each is one of them.
         Set<String> recursive = new LinkedHashSet<>();
@@ -211,10 +214,10 @@ final class HelperParams {
             Type t = found.get(i);
             params.add(t == null ? p
                     : new Hir.FnParam(p.binder(),
-                            new Hir.RetType(
+                            Hir.RetType.of(
                                     List.of(Hir.TypeRef.of(generalize(t, generalized), p.pos())),
                                     p.pos()),
-                            p.typeFromPattern()));
+                            Hir.ParameterTypeFrom.INFERRED));
         }
         return new Hir.FnDef(h.written(), h.declaredIn(), params, h.declaredReturn(), h.body(),
                 h.modifiers(), h.role(), h.pos());
@@ -438,8 +441,8 @@ final class HelperParams {
             this.symbols = symbols;
             this.published = published;
             this.kinds = kinds;
-            this.ctx = new CheckContext(symbols, published, kinds,
-                    NewtypeInners.asWritten(symbols), null, reqSigs);
+            this.ctx = new CheckContext(symbols,
+                    DeclarationAccess.asWritten(symbols, published, kinds), null, reqSigs);
             this.reqSigs = reqSigs;
             this.recursiveHelperFns = recursiveHelperFns;
         }
@@ -519,6 +522,9 @@ final class HelperParams {
                 }
                 case Hir.LetIn li -> visitLet(li, env, target, expected);
                 case Hir.Expansion ex -> visitExpansion(ex, env, target, expected);
+                case Hir.Materialised m -> visit(m.body(), env, target, expected);
+                // A value takes no parameter, so a build of one uses none.
+                case Hir.ValueBuild _, Hir.ValueInvocation _ -> { }
                 case Hir.Binary bin -> {
                     visitOperand(bin.left(), bin.right(), bin.op(), false, env, target);
                     visitOperand(bin.right(), bin.left(), bin.op(), true, env, target);

@@ -1,6 +1,6 @@
 package souther.compiler.ast;
 
-import souther.compiler.Reserved;
+import souther.compiler.CanonicalNames;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 
@@ -47,14 +47,14 @@ import java.util.List;
  * replaced.
  */
 public record WrittenName(String canonical, String spelling, List<Region> segments,
-                          SourcePos anchor) {
+                          SourcePos anchor) implements Hir.Shape {
 
     public WrittenName {
         if (canonical == null) {
             throw new IllegalArgumentException("a name has a canonical form");
         }
         segments = segments == null ? List.of() : List.copyOf(segments);
-        if (spelling != null && !canonical.equals(Reserved.name(spelling))) {
+        if (spelling != null && !canonical.equals(CanonicalNames.name(spelling))) {
             throw new IllegalArgumentException(
                     "`" + spelling + "` is not a spelling of `" + canonical + "`");
         }
@@ -90,7 +90,7 @@ public record WrittenName(String canonical, String spelling, List<Region> segmen
      * and the place it was written come from one place and cannot be given separately.
      */
     public static WrittenName of(String spelling, SourcePos pos) {
-        return new WrittenName(Reserved.name(spelling), spelling,
+        return new WrittenName(CanonicalNames.name(spelling), spelling,
                 pos == null ? List.of() : List.of(Region.ofWidth(pos, spelling.length())), null);
     }
 
@@ -100,7 +100,7 @@ public record WrittenName(String canonical, String spelling, List<Region> segmen
      * there being no characters here that spell this name.
      */
     public static WrittenName synthetic(String name, SourcePos anchor) {
-        return new WrittenName(Reserved.name(name), null, List.of(), anchor);
+        return new WrittenName(CanonicalNames.name(name), null, List.of(), anchor);
     }
 
     /** Whether the source spells this name — false for one a pass minted. */

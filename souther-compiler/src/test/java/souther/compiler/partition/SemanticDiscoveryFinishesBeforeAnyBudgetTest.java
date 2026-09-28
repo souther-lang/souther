@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.HowALineIsRead;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Measurement;
 import souther.compiler.query.PartitionEvidence;
@@ -167,7 +168,8 @@ class SemanticDiscoveryFinishesBeforeAnyBudgetTest {
     private static souther.compiler.query.Measure<
             java.util.List<souther.compiler.query.BorderAssessment>> readingOf(
             Compilation compilation) {
-        return compilation.db().ask(new Adequacy.BoundaryReadings(compilation.modules().get(0)))
+        return compilation.db().ask(new Adequacy.BoundaryReadings(compilation.modules().get(0),
+                        HowALineIsRead.VALUES_COMPOSED))
                 .value().get("calc");
     }
 }

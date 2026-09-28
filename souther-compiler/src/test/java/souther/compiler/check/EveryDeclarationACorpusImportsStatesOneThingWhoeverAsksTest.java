@@ -3,8 +3,8 @@ package souther.compiler.check;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
+import souther.test.ClosedWorldContract;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -32,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * over a source written to reach it: a corpus is a model somebody wrote to work, and a clause the
  * discharge reader has no form for is not something to put in one.
  */
-@Tag("population")
+@ClosedWorldContract
 class EveryDeclarationACorpusImportsStatesOneThingWhoeverAsksTest {
 
     @Test

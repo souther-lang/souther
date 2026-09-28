@@ -930,7 +930,8 @@ let isWon (opp: ClosedOpportunity): Bool =
 let winRateOf (closed) = {
     guard List.length(closed) >= 1 else NoClosedDeals
     let (won, lost) = List.partition(opp -> isWon(opp), closed)
-    WinRate { rate = Probability(List.length(won) * 100 / List.length(closed))
+    WinRate { rate = Probability(Rational.toInt(DOWN,
+                  List.length(won) * 100 / List.length(closed)))
             , won = List.length(won)
             , lost = List.length(lost)
             }

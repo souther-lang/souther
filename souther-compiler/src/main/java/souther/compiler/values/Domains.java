@@ -1,7 +1,8 @@
 package souther.compiler.values;
 
 import java.util.Collections;
-import java.util.LinkedHashMap;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -31,14 +32,27 @@ import java.util.Set;
 public record Domains<A>(Map<Sameness.Block<A>, Admits> byBlock) {
 
     public Domains {
-        byBlock = Collections.unmodifiableMap(new LinkedHashMap<>(byBlock));
+        // Held in no order at all. What this is equal to is which block is left what, and a walk of
+        // it — numbering the blocks so a narrowing can hold what they are left as an array — has no
+        // order to take but the one it decides for itself. Written out, it is written sorted
+        // ({@link #toString}).
+        byBlock = Collections.unmodifiableMap(new HashMap<>(byBlock));
+        // Every block left nothing, and not the first one met. What is handed in holds no order
+        // this promises anything about, so a refusal that stopped at the first would name whichever
+        // block the walk reached first and tell two callers holding one reading two different
+        // things about the same mistake.
+        Set<Sameness.Block<A>> nothingLeft = new HashSet<>();
         byBlock.forEach((block, admits) -> {
             if (admits.isNone()) {
-                throw new IllegalArgumentException(
-                        "a block left no value at all is that block's own answer and is reached"
-                                + " before a relation is asked what its denials come to: " + block);
+                nothingLeft.add(block);
             }
         });
+        if (!nothingLeft.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "a block left no value at all is that block's own answer and is reached before"
+                            + " a relation is asked what its denials come to: "
+                            + InOneOrder.of(nothingLeft));
+        }
     }
 
     /**
@@ -48,7 +62,7 @@ public record Domains<A>(Map<Sameness.Block<A>, Admits> byBlock) {
      */
     static <A> Domains<A> of(Set<Sameness.Block<A>> blocks,
                              Apartness.WhatABlockAdmits<A> asked, int atMost) {
-        Map<Sameness.Block<A>, Admits> out = new LinkedHashMap<>();
+        Map<Sameness.Block<A>, Admits> out = new HashMap<>();
         blocks.forEach(block -> out.put(block, asked.of(block, atMost)));
         return new Domains<>(out);
     }

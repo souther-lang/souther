@@ -302,7 +302,7 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> CoverageSites.of(
-                        new ModuleBodies("demo", new java.util.LinkedHashMap<>(Map.of("b", fork))),
+                        HandBuiltBodies.ofBehaviors("demo", Map.of("b", fork)),
                         souther.compiler.coverage.DecisionSources.NONE,
                         souther.compiler.coverage.SuppliedRules.NONE));
 
@@ -380,7 +380,7 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
 
     private static CoverageSites.Plan planOf(String source) {
         return CoverageSites.of(
-                new ModuleBodies("demo", new java.util.LinkedHashMap<>(bodiesOf(source))),
+                HandBuiltBodies.ofBehaviors("demo", bodiesOf(source)),
                 souther.compiler.coverage.DecisionSources.NONE,
                 souther.compiler.coverage.SuppliedRules.NONE);
     }

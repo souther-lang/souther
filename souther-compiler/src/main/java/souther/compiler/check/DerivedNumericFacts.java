@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.Intervals;
 import souther.compiler.numeric.NumericDomain;
@@ -134,7 +135,7 @@ final class DerivedNumericFacts {
      * comes back saying nothing when what it has is the strongest thing it could say.
      *
      * <p>What the operand settles is about the operation's <em>normal</em> answer and no more, as
-     * {@link Says.NoValueCameOfIt} is. {@code Int.divide(x, 0)} produces no number and comes back as
+     * {@link Says.NoValueCameOfIt} is. {@code Int.truncatingDivide(x, 0)} produces no number and comes back as
      * {@code DivisionByZero} all the same, and which of the two that is belongs to the reader that
      * knows the operation's other cases.
      */
@@ -161,9 +162,9 @@ final class DerivedNumericFacts {
          */
         default Says saying(FactSubject atom) {
             return switch (this) {
-                case AndSoNoValueCameOfIt<T> ignored -> new Says.NoValueCameOfIt(atom);
-                case AndNotEnoughIsKnown<T> ignored -> Says.NOTHING;
-                case Usable<T> ignored -> throw new IllegalStateException(
+                case AndSoNoValueCameOfIt<T> _ -> new Says.NoValueCameOfIt(atom);
+                case AndNotEnoughIsKnown<T> _ -> Says.NOTHING;
+                case Usable<T> _ -> throw new IllegalStateException(
                         "a rule was asked what it answers over an operand it can fire on");
             };
         }
@@ -587,7 +588,7 @@ final class DerivedNumericFacts {
             // What the value carries is not derived. It holds in every reading and is already in
             // this one, so putting it through here would count a value nothing computes as a recipe
             // evaluated and would say a second time what the reading was made with.
-            case AtomKnowledge.Computation.None ignored -> Says.NOTHING;
+            case AtomKnowledge.Computation.None _ -> Says.NOTHING;
             case AtomKnowledge.Computation.Reduction(InductiveBounds.Walk walk) ->
                     reduced(atom, walk, base, terms, done.asked, deriving, copies);
             case AtomKnowledge.Computation.Derived(Derivation recipe) ->
@@ -871,7 +872,8 @@ final class DerivedNumericFacts {
         BigDecimal by = theOneValueOf(divisor);
         if (by != null) {
             facts.addAll(leftOver(
-                    quotient.numerator().minus(LinearForm.<FactSubject>atom(atom).times(by)),
+                    quotient.numerator().minus(LinearForm.<FactSubject>atom(atom)
+                            .times(ExactRatio.of(by))),
                     divisor, numerator));
         }
         return new Says.These(List.copyOf(facts));
@@ -931,8 +933,10 @@ final class DerivedNumericFacts {
         if (dividend.liesWithin(AT_OR_BELOW_NOUGHT)) {
             facts.add(new NumericConstraint(left, Rel.LE));
         }
-        BigDecimal magnitude = noFurtherFromNoughtThan(divisor);
-        if (magnitude != null) {
+        BigDecimal written = noFurtherFromNoughtThan(divisor);
+        if (written != null) {
+            ExactRatio magnitude =
+                    ExactRatio.of(written);
             facts.add(new NumericConstraint(left.minus(LinearForm.constant(magnitude)), Rel.LT));
             facts.add(new NumericConstraint(left.plus(LinearForm.constant(magnitude)), Rel.GT));
         }

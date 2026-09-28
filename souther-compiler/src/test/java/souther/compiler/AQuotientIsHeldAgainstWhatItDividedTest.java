@@ -18,11 +18,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * is built on: the first denomination discharged and the second did not, because what the first left
  * was unknown and so was the quotient taken of it.
  *
- * <p>What holds is not {@code 0 <= a - b * (a / b) < b} in general. {@code /} truncates toward zero
- * (spec §stdlib-int), so what is left keeps the sign of the <em>dividend</em> and is smaller than
- * the <em>magnitude</em> of the divisor: {@code -7 / 2} is {@code -3} and {@code -7 - 2 * -3} is
- * {@code -1}, and {@code 7 / -10} is nought and leaves seven. Which side the dividend is on is what
+ * <p>What holds is not {@code 0 <= a - b * 商(a, b) < b} in general. The quotient is truncated toward
+ * zero (spec §stdlib-int), so what is left keeps the sign of the <em>dividend</em> and is smaller than
+ * the <em>magnitude</em> of the divisor: {@code 商(-7, 2)} is {@code -3} and {@code -7 - 2 * -3} is
+ * {@code -1}, and {@code 商(7, -10)} is nought and leaves seven. Which side the dividend is on is what
  * the path establishes, and it is read where the clause is read, as a product's bound is.
+ *
+ * <p>Written through a helper over {@code Int.truncatingDivide}, which is the whole of this quotient:
+ * the {@code /} operator answers an exact one of another type (spec §stdlib-rational), and what holds
+ * of a truncated value is not read of it.
  */
 class AQuotientIsHeldAgainstWhatItDividedTest {
 
@@ -32,6 +36,11 @@ class AQuotientIsHeldAgainstWhatItDividedTest {
 
                 data 硬貨枚数 = Int
                     invariant value >= 0
+
+                let 商 (a: Int, b: Int): Int =
+                    match Int.truncatingDivide(a, b) with
+                        | Int as n -> n
+                        | DivisionByZero -> unreachable "除数は書かれた数で、0にならない"
 
                 behavior 買う : (額: Int) -> 硬貨枚数
                     constructs 硬貨枚数
@@ -53,14 +62,14 @@ class AQuotientIsHeldAgainstWhatItDividedTest {
     /** The quotient's own range, which came off its operands before any of this. */
     @Test
     void theQuotientsOwnRangeIsStillRead() {
-        assertEquals(List.of(), reported("額 >= 0", "硬貨枚数(額 / 10)"));
-        assertEquals(List.of(), reported("額 >= 0", "硬貨枚数(額 / 10 * 10)"));
+        assertEquals(List.of(), reported("額 >= 0", "硬貨枚数(商(額, 10))"));
+        assertEquals(List.of(), reported("額 >= 0", "硬貨枚数(商(額, 10) * 10)"));
     }
 
     /** What the divide left, which is the quotient held against the very value it was taken of. */
     @Test
     void whatTheDivideLeftIsAtOrAboveNought() {
-        assertEquals(List.of(), reported("額 >= 0", "硬貨枚数(額 - 額 / 10 * 10)"));
+        assertEquals(List.of(), reported("額 >= 0", "硬貨枚数(額 - 商(額, 10) * 10)"));
     }
 
     /**
@@ -72,9 +81,9 @@ class AQuotientIsHeldAgainstWhatItDividedTest {
     void whatTheDivideLeftIsBelowTheDivisor() {
         assertEquals(List.of(), reported("額 >= 0", """
                 {
-                        let k0 = 額 / 100
+                        let k0 = 商(額, 100)
                         let r0 = 額 - k0 * 100
-                        let k1 = r0 / 10
+                        let k1 = 商(r0, 10)
                         硬貨枚数(k0 + k1)
                     }"""));
     }
@@ -84,7 +93,7 @@ class AQuotientIsHeldAgainstWhatItDividedTest {
     @Test
     void theSameHoldsOfTheValueCaseOfADivide() {
         assertEquals(List.of(), reported("額 >= 0", """
-                match Int.divide(額, 10) with
+                match Int.truncatingDivide(額, 10) with
                         | Int as k -> 硬貨枚数(額 - k * 10)
                         | DivisionByZero -> 硬貨枚数(0)"""));
     }
@@ -108,14 +117,14 @@ class AQuotientIsHeldAgainstWhatItDividedTest {
      */
     @Test
     void withTheDividendOnNeitherSideOfNoughtNothingFollows() {
-        assertEquals(List.of("E2011"), reported("額 <= 1000", "硬貨枚数(額 - 額 / 10 * 10)"));
+        assertEquals(List.of("E2011"), reported("額 <= 1000", "硬貨枚数(額 - 商(額, 10) * 10)"));
     }
 
     /** And with the dividend at or below nought, what is left is at or below nought — which the
      * construction owing {@code value >= 0} is refused by, not discharged. */
     @Test
     void aDividendAtOrBelowNoughtLeavesSomethingAtOrBelowIt() {
-        assertEquals(List.of(), reported("額 <= 0", "硬貨枚数(額 / 10 * 10 - 額)"));
+        assertEquals(List.of(), reported("額 <= 0", "硬貨枚数(商(額, 10) * 10 - 額)"));
     }
 
     /**
@@ -127,7 +136,7 @@ class AQuotientIsHeldAgainstWhatItDividedTest {
      */
     @Test
     void aNegativeDivisorLeavesSomethingOfTheDividendsSign() {
-        assertEquals(List.of(), reported("額 >= 0", "硬貨枚数(額 - 額 / (0 - 10) * (0 - 10))"));
+        assertEquals(List.of(), reported("額 >= 0", "硬貨枚数(額 - 商(額, 0 - 10) * (0 - 10))"));
     }
 
     /**
@@ -158,7 +167,7 @@ class AQuotientIsHeldAgainstWhatItDividedTest {
      */
     @Test
     void aQuotientOverADivisorAGuardPinsIsHeldAgainstItToo() {
-        assertEquals(List.of(), pinned("硬貨枚数(額 - 額 / 額面 * 100)"));
+        assertEquals(List.of(), pinned("硬貨枚数(額 - 商(額, 額面) * 100)"));
     }
 
     /** The two above, under a guard that pins the divisor to one number. */
@@ -168,6 +177,11 @@ class AQuotientIsHeldAgainstWhatItDividedTest {
 
                 data 硬貨枚数 = Int
                     invariant value >= 0
+
+                let 商 (a: Int, b: Int): Int =
+                    match Int.truncatingDivide(a, b) with
+                        | Int as n -> n
+                        | DivisionByZero -> unreachable "除数はガードが押さえた数で、0にならない"
 
                 behavior 買う : (額: Int, 額面: Int) -> 硬貨枚数
                     constructs 硬貨枚数
@@ -187,7 +201,7 @@ class AQuotientIsHeldAgainstWhatItDividedTest {
     @Test
     void theFailureArmEstablishesThatTheDivisorWasZero() {
         assertEquals(List.of(), reported("額 <= 100", """
-                match Int.divide(100, 額) with
+                match Int.truncatingDivide(100, 額) with
                         | Int as k -> 硬貨枚数(0)
                         | DivisionByZero -> 硬貨枚数(額)"""));
     }
@@ -209,7 +223,7 @@ class AQuotientIsHeldAgainstWhatItDividedTest {
                 behavior 割る : (d: Int) -> NonZero | Nothing
                     constructs NonZero
                 let 割る (d) =
-                    match Int.divide(100, d) with
+                    match Int.truncatingDivide(100, d) with
                         | Int as k -> NonZero(d)
                         | DivisionByZero -> Nothing
                 """;
@@ -222,7 +236,7 @@ class AQuotientIsHeldAgainstWhatItDividedTest {
     @Test
     void theValueArmOnlyEstablishesThatTheDivisorIsNotZero() {
         assertEquals(List.of("E2011"), reported("額 <= 100", """
-                match Int.divide(100, 額) with
+                match Int.truncatingDivide(100, 額) with
                         | Int as k -> 硬貨枚数(額)
                         | DivisionByZero -> 硬貨枚数(0)"""));
     }

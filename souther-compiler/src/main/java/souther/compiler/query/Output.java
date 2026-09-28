@@ -1,6 +1,10 @@
 package souther.compiler.query;
 
 import souther.compiler.execute.ExampleExecution;
+import souther.compiler.observe.ObservedValue;
+import souther.compiler.observe.RowOutcome;
+import souther.compiler.observe.RowStatement;
+import souther.compiler.observe.StoodIn;
 import souther.compiler.observe.WrittenStatements;
 import souther.compiler.observe.Observations;
 import souther.compiler.observe.ArmObservation;
@@ -15,16 +19,18 @@ import souther.compiler.execute.ConstantOutcome;
 import souther.compiler.execute.ProgramExecution;
 import souther.compiler.execute.WrittenValue;
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.DefinitionRole;
 import souther.compiler.ast.Hir;
-import souther.compiler.check.ExpandedClauseLookup;
-import souther.compiler.check.InvariantStatements;
-import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.FakeTables;
+import souther.compiler.check.Prepared;
 import souther.compiler.check.ExpandedClauses;
 import souther.compiler.types.TypeKey;
+import souther.compiler.check.BehaviorBodies;
 import souther.compiler.check.BehaviorRequirement;
+import souther.compiler.check.Requirements;
+import souther.compiler.check.ConstEval;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.Lower;
-import souther.compiler.check.ReqSig;
 import souther.compiler.check.Sig;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.InvariantHeader;
@@ -33,7 +39,12 @@ import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.codegen.Backend;
 import souther.compiler.codegen.Emissions;
 import souther.compiler.codegen.Instrumentation;
+import souther.compiler.codegen.LinkageReader;
+import souther.compiler.copied.CopyContract;
+import souther.compiler.copied.CopyRecord;
+import souther.compiler.copied.CopyTarget;
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.ExampleMessage;
@@ -45,15 +56,19 @@ import souther.compiler.meta.ModuleReadback;
 import souther.compiler.meta.ModulePath;
 
 import souther.compiler.types.ValueName;
+import souther.exact.ExactDecimals;
 
+import java.math.BigDecimal;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.SortedMap;
 
 /**
  * The bytecode a module comes to, and the two things that can only be asked once it exists: whether
@@ -84,19 +99,41 @@ public final class Output {
 
         @Override
         public Answer<Map<String, ClassFileImage>> compute(Db db) {
-            Inputs in = inputs(db, name);
+            Inputs in = inputs(db, name, Elaboration.WHOLE);
             if (in == null) {
+                return Answer.absent();
+            }
+            // What this module hands over to run in another has to be runnable there. Asked before
+            // the classes are made, because what a reader is given is stamped onto them.
+            Answer<Boolean> runnable = db.ask(new Bodies.PublishedBodiesRunElsewhere(name));
+            if (!runnable.present()) {
+                return Answer.absent(runnable.reports());
+            }
+            // A module that imports one that failed is not emitted: the bodies it would expand from
+            // it are ones that were not settled, and emitting them would reach the emitter's own
+            // refusal, which says less than the failure already reported.
+            List<String> reached = db.ask(new Reaches(name)).value();
+            for (String imported : reached == null ? List.<String>of() : reached) {
+                if (!imported.equals(name) && failed(db, imported)) {
+                    return Answer.absent();
+                }
+            }
+            // What these classes offer another module to copy, and what they copied: worked out where
+            // the bodies were expanded, and stamped with the declarations.
+            Answer<Copies.Of> offers = db.ask(new Copies.Provided(name));
+            Answer<SortedMap<CopyTarget, CopyRecord>> copied = db.ask(new Copies.Required(name));
+            if (!offers.present() || !copied.present()) {
                 return Answer.absent();
             }
             try {
                 Emissions emitted = Backend.generate(
                         shipped(in), in.scope(), in.published(), in.kinds(),
                         in.scope().library().kernelSignatures(),
-                        in.typePackages(), in.sigs(), in.imported(),
-                        in.injected(),
-                        in.callees(), in.requirements(), in.checked(), in.compositions(),
-                        in.dischargeClauses(), in.invariantStatements(), in.shapes(), in.checks(),
-                        in.standingCalls(), new TheTextsThisCompileHolds(db));
+                        in.typePackages(), in.sigs(),
+                        in.requirements(), in.checked(), in.compositions(),
+                        in.shapes(), in.checks(),
+                        in.standingCalls(), new TheTextsThisCompileHolds(db), in.linkage());
+                emitted.copied(new CopyContract(offers.value().provides(), copied.value()));
                 publishDeclarations(db, emitted);
                 return Answer.of(emitted.seal());
             } catch (CompileException e) {
@@ -104,21 +141,38 @@ public final class Output {
             }
         }
 
+        /** Whether {@code module}, one this compilation is making, did not come out. A module read
+         *  off the path was made elsewhere and is not asked. */
+        private static boolean failed(Db db, String module) {
+            List<String> declared = db.ask(new Front.Declared()).value();
+            return declared != null && declared.contains(module)
+                    && (!db.ask(new Bodies.Sound(module)).present()
+                    || !db.ask(new Bodies.PublishedBodiesRunElsewhere(module)).present());
+        }
+
         /**
-         * The module as what ships carries it: without the methods emitted for its rows' operands.
+         * The module as what ships carries it: without the methods emitted for its rows' operands or
+         * for a fixture's own entries.
          *
          * <p>A row runs against {@link Evaluated}'s classes, which keep them; what is written out is
          * the same program less definitions nothing it holds references — an operand's method is
          * reached from a row and from nothing else. Which definitions those are is read off the
          * correspondence the preparation constructed, not off the shape of a name.
+         *
+         * <p>A fixture's own entry is the same kind of definition for the same reason: {@code
+         * OperandRunner} is the only caller, whether the entry is a private baseline's own or a
+         * current-module relay to a value another module publishes. A published value's own entry is
+         * not this — {@link Bodies.Elaborated} carries it under {@link
+         * souther.compiler.check.ValueEntries}, and another module's classes call it, so it ships.
          */
         private static Hir.Module shipped(Inputs in) {
-            if (in.rowMethods().isEmpty()) {
+            if (in.rowMethods().isEmpty() && in.fixtureOnlyMethods().isEmpty()) {
                 return in.lowered();
             }
             List<Hir.FnDef> kept = new ArrayList<>();
             for (Hir.FnDef fn : in.lowered().takenOn()) {
-                if (!in.rowMethods().contains(fn.name())) {
+                if (!in.rowMethods().contains(fn.name())
+                        && !in.fixtureOnlyMethods().contains(fn.name())) {
                     kept.add(fn);
                 }
             }
@@ -128,67 +182,98 @@ public final class Output {
         /**
          * The parts of a generation both {@link Classes} and {@link Evaluated} need, asked once.
          *
-         * <p>Both answer with a module's bytecode and differ only in whether each arm records that it
-         * ran. Two copies of this would be two chances for the measured classes and the shipped ones to
-         * stop being the same program, which is the one thing a measurement of them may not do.
+         * <p>Both answer with a module's bytecode. Where the module came out whole and every
+         * implementation it owns may be run they are one program and differ only in whether each
+         * arm records that it ran, and two copies of this would be two chances for the measured
+         * classes and the shipped ones to stop being that. Short of either they are not: a module
+         * that did not come out whole has nothing to ship, and one whose caller of another module's
+         * unmade implementation may not be run is measured against what is left of it. So the
+         * sameness is a property of a module whose implementations are all runnable rather than of
+         * every compile, and which of the two elaborations an artifact reads is the one thing asked
+         * apart ({@link Elaboration}).
          */
         record Inputs(Hir.Module lowered, DerivedSymbols scope,
                       souther.compiler.check.PublishedDeclarations published,
                       souther.compiler.check.DeclarationKinds kinds,
                       Map<String, String> typePackages,
-                      Map<ValueName.Behavior, Sig> sigs, Map<ValueName.Behavior, Sig> imported,
-                      Set<ValueName.Behavior> injected,
-                      Map<ValueName.Behavior, ReqSig> callees,
+                      Map<ValueName.Behavior, Sig> sigs,
                       Map<String, List<BehaviorRequirement>> requirements,
                       Bodies.Elaborated checked,
                       Map<ValueName.Behavior, souther.compiler.core.Composition> compositions,
-                      ExpandedClauseLookup dischargeClauses,
-                      InvariantStatements invariantStatements,
                       Map<souther.compiler.types.TypeSymbol.AtModule,
                               souther.compiler.core.ValueShape> shapes,
                       Map<ValueName.Behavior, EnsuresEnforcement> checks,
                       Set<String> rowMethods,
-                      Map<String, souther.compiler.types.Type> standingCalls) {}
+                      Set<String> fixtureOnlyMethods,
+                      Map<String, souther.compiler.types.Type> standingCalls,
+                      LinkageReader linkage) {
 
-        static Inputs inputs(Db db, String name) {
-            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Checked(name));
+            Inputs {
+                if (published == null || kinds == null) {
+                    throw new IllegalArgumentException("emitting a module asks the declarations"
+                            + " what they say and which form each of them is, so it is handed"
+                            + " somewhere to read every one of them");
+                }
+            }
+        }
+
+        /**
+         * Which of a module's bodies an artifact is entitled to run.
+         *
+         * <p>An argument and not two copies of the reading below. What a generation reads of a
+         * module — its names, its signatures, what its declarations say, what its rules state — is
+         * one answer whichever artifact is being made; the artifacts differ in which implementations
+         * they may hold, and in nothing else. Asked twice instead, the shipped classes and the
+         * measured ones would be two programs told apart by nobody.
+         */
+        enum Elaboration {
+            /**
+             * Every body of the module, which is the only thing there is to publish. A module one
+             * of whose bodies did not come out has no whole to ship, so this is absent for it.
+             */
+            WHOLE,
+            /**
+             * The bodies that may be run. Where the module came out whole this is that same answer,
+             * so what a row is observed against is the program that ships; where it did not, it is
+             * what is left after taking away what cannot be run.
+             */
+            OBSERVABLE
+        }
+
+        static Inputs inputs(Db db, String name, Elaboration of) {
+            Answer<Bodies.Elaborated> checked = switch (of) {
+                case WHOLE -> db.ask(new Bodies.Checked(name));
+                case OBSERVABLE -> db.ask(new Bodies.Observable(name));
+            };
             // What each composed behavior routes, settled where the composition was checked. The
             // emitter used to walk the declaration for it a second time.
             Answer<Map<ValueName.Behavior, souther.compiler.core.Composition>> compositions =
                     db.ask(new Compositions.Of(name));
             Answer<Lower.Lowered> lowering = db.ask(new Bodies.Lowering(name));
-            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             // The same answer the check read. The backend replays the composition walk and emits
             // the codecs a signature says are needed, so building its own would be the boundary's
             // question answered a third time.
             // The behaviors this module can name, each under the declaration it belongs to: what
             // the check typed the compositions against, so the emitter routes over the same ones.
             Answer<Map<ValueName.Behavior, Sig>> signatures = db.ask(new Bodies.Reachable(name));
-            Answer<Map<ValueName.Behavior, Sig>> imported = db.ask(new Bodies.Imported(name));
-            Answer<Set<ValueName.Behavior>> injected =
-                    db.ask(new Bodies.ImportedInjected(name));
-            Answer<Map<ValueName.Behavior, ReqSig>> callees = db.ask(new Bodies.CalleeSigs(name));
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Map<String, List<BehaviorRequirement>>> requirements =
                     db.ask(new Bodies.Requirements(name));
-            // A derived decoder maps a clause onto the Raoh constraint that says the same thing, and it
-            // is written against the operations an author wrote — which the lowered module no longer has.
+            // Whether this module's clauses could be expanded into the representation their rules
+            // are read in. A precondition of emitting the module and not something the emitter
+            // reads: where the expansion was refused it said why, and a module short of that reading
+            // emits nothing.
+            Answer<Map<TypeKey, ExpandedClauses>> expandable =
+                    db.ask(new Shapes.ExpandedDeclarationClauses(name));
             // Where each behavior of this module has its clause checked. A decision of the
             // language's, so it is asked for rather than made here: the emitter and the checked
             // program are two readers of it, and each making it from the contracts and the injected
             // set would be two answers to one question.
-            // Whether this module's clauses could be expanded at all. A precondition of emitting
-            // the module and not something the emitter reads: a decoder is what the boundary holds
-            // a value to, so one built where a rule could not be read holds it to less than the
-            // model says and carries no word for having done so. What a clause of a declaration is
-            // still comes from the lookup below, one declaration at a time.
-            Answer<Map<TypeKey, ExpandedClauses>> expandable =
-                    db.ask(new Shapes.ExpandedDeclarationClauses(name));
             Answer<Map<ValueName.Behavior, EnsuresEnforcement>> checks =
                     db.ask(new Bodies.EnsuresChecks(name));
-            // What must hold of a value of each declared data, and the binding each field is read
-            // through. Both are the check's answer; the emitter used to elaborate the clauses again
-            // and work the bindings out a second time.
+            // What must hold of a value of each declared data, the binding each field is read
+            // through, and how the boundary checks each clause. All three are the check's answer,
+            // so the emitter decides none of them.
             Answer<Map<souther.compiler.types.TypeSymbol.AtModule, souther.compiler.core.ValueShape>>
                     shapes = db.ask(new Shapes.ValueShapes(name));
             // What a call left standing is typed against — the same answer the check typed it
@@ -197,26 +282,54 @@ public final class Output {
             // would agree only until one of them was edited.
             Answer<Map<String, souther.compiler.types.Type>> standing =
                     db.ask(new Bodies.RecursiveCallSigs(name, souther.compiler.check.InliningPolicy.FULL));
-            // What each conjunct of a declaration's rules states. The mapping onto a decoder's
-            // constraints is about what a rule says, and reading that off the tree recognises a rule
-            // written out and declines the same rule named through a helper.
-            Answer<RuleReadingSource> reading = Shapes.ruleReading(db, name);
             if (!checked.present() || !compositions.present()
-                    || !lowering.present() || !scope.present() || !imported.present()
-                    || !signatures.present() || !injected.present() || !callees.present()
+                    || !lowering.present()
+                    || !signatures.present()
                     || !prepared.present() || !requirements.present() || !expandable.present()
-                    || !checks.present() || !standing.present() || !shapes.present()
-                    || !reading.present()) {
+                    || !checks.present() || !standing.present() || !shapes.present()) {
                 return null;
             }
+            // What every behavior, type and value these classes may link against offers, this
+            // module's own among them, and where reading another module's is recorded. What working
+            // out this module's own projections read is part of what its classes are built against.
+            Answer<Linkages.Of> own = db.ask(new Linkages.Provided(name));
+            if (!own.present() || !Linkages.everyModuleInSightOffers(db, name)) {
+                return null;
+            }
+            LinkageReader linkage = new LinkageReader(name, own.value().provides(),
+                    Linkages.reading(db), own.value().read());
+            // Every declaration these classes are built from is read through this, so what they
+            // read of another module's is recorded where it is read.
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name, linkage);
+            if (!scope.present()) {
+                return null;
+            }
+            // This module's own behaviors and nothing of another's: what a class here reads of a
+            // behavior declared elsewhere is that behavior's projection, handed out by the reader.
+            Map<ValueName.Behavior, Sig> ownSignatures = new LinkedHashMap<>();
+            signatures.value().forEach((behavior, sig) -> {
+                if (behavior.module().equals(name)) {
+                    ownSignatures.put(behavior, sig);
+                }
+            });
+            // A fixture's own entry, never one reused from a value's published one: the definitions
+            // this compilation minted for it, told apart by role rather than by the shape of a name.
+            Set<String> fixtureOnlyMethods = new LinkedHashSet<>();
+            for (Hir.FnDef fn : prepared.value().mintedDefs()) {
+                if (fn.role() instanceof DefinitionRole.FixtureValueEntry) {
+                    fixtureOnlyMethods.add(fn.name());
+                }
+            }
             return new Inputs(lowering.value().lowered(), scope.value(),
-                    Shapes.publishedDeclarations(db), Shapes.declarationKinds(db),
-                    prepared.value().importedFrom(), signatures.value(), imported.value(),
-                    injected.value(),
-                    callees.value(), requirements.value(), checked.value(), compositions.value(),
-                    Shapes.expandedClauses(db), InvariantStatements.of(reading.value()),
+                    linkage.readingPublished(Shapes.publishedDeclarations(db)),
+                    linkage.readingKinds(Shapes.declarationKinds(db)),
+                    prepared.value().importedFrom(), Map.copyOf(ownSignatures),
+                    requirements.value(), checked.value(),
+                    compositions.value(),
                     shapes.value(), checks.value(),
-                    Set.copyOf(prepared.value().operandMethods().values()), standing.value());
+                    Set.copyOf(prepared.value().operandMethods().values()),
+                    Set.copyOf(fixtureOnlyMethods), standing.value(),
+                    linkage);
         }
 
         /**
@@ -247,8 +360,7 @@ public final class Output {
             }
             CstFrontend.Parsed written = db.ask(new Front.Parsed(id)).value();
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
-            Map<String, souther.compiler.check.BehaviorImplementation> implementations =
-                    db.ask(new Bodies.Implementation(name)).value();
+            BehaviorBodies implementations = db.ask(new Bodies.Implementation(name)).value();
             // The resolved module beside the written one. What a declaration reaches is read off
             // the names it resolved to, a clause being written among bindings that may be spelled
             // like a helper; and it is read before the invariants are settled, since settling
@@ -258,13 +370,25 @@ public final class Output {
             // in. Asked of the module rather than taken off the type: what a declaration is and
             // what this module calls it are two things, and only the second may be published.
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
+            // What each value this module declares was settled as, by its own check: the answer a
+            // reader of the value is given, so it is the same one the readers in this compilation
+            // are given.
+            Answer<Bodies.ModuleCheck.Of> checked = db.ask(new Bodies.ModuleCheck(name));
+            // What each behavior requires injected: the same answer this module's constructors were
+            // emitted from, published so a reader constructs one of its compositions the same way.
+            Answer<Map<String, List<BehaviorRequirement>>> requirements =
+                    db.ask(new Bodies.Requirements(name));
             if (written == null || !sigs.present() || implementations == null
-                    || !resolved.present() || !scope.present()) {
+                    || !resolved.present() || !scope.present() || !checked.present()
+                    || !requirements.present()) {
                 return;
             }
+            Map<String, List<ValueName.Behavior>> required = new LinkedHashMap<>();
+            requirements.value().forEach((behavior, each) ->
+                    required.put(behavior, Requirements.names(each)));
             ModuleMetadata.stamp(classes, written.module(), resolved.value(),
-                    written.slices(), sigs.value(), implementations,
-                    scope.value().scope()::reach);
+                    written.slices(), sigs.value(), implementations.states(), required,
+                    scope.value().scope()::reach, checked.value().settledValues());
         }
 
     }
@@ -393,7 +517,7 @@ public final class Output {
 
         @Override
         public Answer<EvaluationArtifact> compute(Db db) {
-            Classes.Inputs in = Classes.inputs(db, name);
+            Classes.Inputs in = Classes.inputs(db, name, Classes.Elaboration.OBSERVABLE);
             if (in == null) {
                 return Answer.absent();
             }
@@ -403,11 +527,11 @@ public final class Output {
                 Emissions emitted = Backend.generate(
                         in.lowered(), in.scope(), in.published(), in.kinds(),
                         in.scope().library().kernelSignatures(),
-                        in.typePackages(), in.sigs(), in.imported(),
-                        in.injected(),
-                        in.callees(), in.requirements(), in.checked(), in.compositions(),
-                        in.dischargeClauses(), in.invariantStatements(), in.shapes(), in.checks(),
-                        in.standingCalls(), new TheTextsThisCompileHolds(db), instrumentation);
+                        in.typePackages(), in.sigs(),
+                        in.requirements(), in.checked(), in.compositions(),
+                        in.shapes(), in.checks(),
+                        in.standingCalls(), new TheTextsThisCompileHolds(db), in.linkage(),
+                        instrumentation);
                 // The classes, what they implement and whose numbers a run through them leaves,
                 // from the one emission that decided all three.
                 return Answer.of(new EvaluationArtifact(emitted.seal(), emitted.implemented(),
@@ -639,6 +763,21 @@ public final class Output {
                     writtenValue(check.value()), clausesOf(db, check), check.pos());
         }
 
+        /**
+         * The constant in the four a source can write it as. A construction's argument is one a
+         * source wrote, so anything else is this compiler having folded to something no source
+         * states, which is not a fact about the program being compiled.
+         */
+        private static WrittenValue writtenValue(Object value) {
+            WrittenValue written = ConstEval.asWritten(value);
+            if (written == null) {
+                throw new IllegalStateException("a constant folded to "
+                        + value.getClass().getName()
+                        + ", which is not one of the four a source can write");
+            }
+            return written;
+        }
+
         /** What the type is declared to hold of its values, in declaration order — the names, which
          *  are what a report of a constant that broke one quotes, and which every representation of
          *  the declaration agrees on. None where the declaring module has no scope here, which is a
@@ -657,32 +796,15 @@ public final class Output {
             return named;
         }
 
-        /**
-         * The constant in the four a source can write it as.
-         *
-         * <p>A fold answers with the object it happened to make, and which of them it is is what
-         * the language wrote. Anything else is this compiler having folded to something no source
-         * states, which is not a fact about the program being compiled.
-         */
-        private static WrittenValue writtenValue(Object value) {
-            return switch (value) {
-                case Long whole -> new WrittenValue.Whole(whole);
-                case Boolean truth -> new WrittenValue.Truth(truth);
-                case String text -> new WrittenValue.Text(text);
-                case java.math.BigDecimal decimal -> new WrittenValue.Decimal(decimal);
-                default -> throw new IllegalStateException("a constant folded to "
-                        + value.getClass().getName()
-                        + ", which is not one of the four a source can write");
-            };
-        }
-
-        /** The construction as the source wrote it, for the message that quotes it. */
+        /** The construction as the source wrote it, for the message that quotes it — a decimal in
+         *  exponent notation past a thousand digits ({@link ExactDecimals#spelledBounded}), since
+         *  this is a message a reader reads and not source pasted back. */
         private static String shown(ConstantConstruction written) {
             return written.typeName() + "(" + switch (written.value()) {
                 case WrittenValue.Text(String text) -> "\"" + text + "\"";
                 case WrittenValue.Whole(long whole) -> String.valueOf(whole);
                 case WrittenValue.Truth(boolean truth) -> String.valueOf(truth);
-                case WrittenValue.Decimal(java.math.BigDecimal decimal) -> decimal.toString();
+                case WrittenValue.Decimal(BigDecimal decimal) -> ExactDecimals.spelledBounded(decimal);
             } + ")";
         }
     }
@@ -841,8 +963,8 @@ public final class Output {
      * <p>The one place a module's sources are gathered. A behavior's rows are written across its own
      * file and any number of attached {@code examples for} files, so which rows it has is an answer
      * over all of them together — and a caller assembling that again decides for itself what a
-     * source that did not answer means, which is a decision made here once: it counts against every
-     * behavior, because which behaviors it wrote rows for is exactly what could not be read.
+     * source that did not answer means, which is a decision made here once: it is said of each row
+     * it left unread, and of the source itself only where nothing says which rows those are.
      *
      * <p>What is here are the rows as they were read and the reasons a reading fell short, and
      * nothing made of either. What a measurement makes of them is {@link Adequacy.RowReadings},
@@ -861,9 +983,15 @@ public final class Output {
          *
          * @param everywhere what stopped a reading in a way larger than one behavior, which counts
          *     against every behavior of the module, including the ones no entry names
+         * @param arms whether the classes these rows ran against recorded where each row went.
+         *     Carried with the rows rather than asked of the build again: what a reader of them may
+         *     say about the arms is a fact about the run they came from, and a reader that asked
+         *     the build would answer about a run it is not holding wherever somebody asked for the
+         *     instrumented classes without the build having been measuring
          */
         public record Of(Map<String, ReadRows> byBehavior,
-                         List<souther.compiler.observe.Incompleteness> everywhere) {
+                         List<souther.compiler.observe.Incompleteness> everywhere,
+                         ArmObservation arms) {
 
             /** What counts against {@code behavior}: what stopped a reading of its own rows, and
              *  what stopped one larger than any behavior. */
@@ -878,11 +1006,14 @@ public final class Output {
             }
 
             public Of {
-                // Ordered, because what is read out of it is read in an order: a module's behaviors
-                // are shown in the order they were gathered, and a map keyed by a hash would show
-                // one nothing decided, which can differ between two runs of one compiler.
+                // Walked by the names, because what is read out of it is read in an order and two
+                // of these are one value by what stands at each name. Kept in the order they were
+                // gathered, a module whose behaviors were reached another way showed the same
+                // answer in another order, with nothing about the two telling them apart — and
+                // keyed by a hash it showed one nothing decided at all, which two runs of one
+                // compiler need not agree on.
                 byBehavior = java.util.Collections.unmodifiableMap(
-                        new java.util.LinkedHashMap<>(byBehavior));
+                        new java.util.TreeMap<>(byBehavior));
                 everywhere = List.copyOf(everywhere);
             }
         }
@@ -896,9 +1027,10 @@ public final class Output {
          * are still rows someone wrote: listed as what was read, a reader would be handed a
          * behavior that says nothing about an input that is written down in front of it.
          *
-         * <p>{@code gaps} is its own, and not everything that counts against it. What stopped a
-         * reading of the whole source is larger than any behavior in it and is said once, beside
-         * these; a reader that wants both asks {@link Of#gapsFor}.
+         * <p>{@code gaps} is its own, and not everything that counts against it. A reason nothing
+         * here could place under a behavior — what a module's classes cost every one of them, or a
+         * source nothing could read the contents of — is larger than any behavior in it and is said
+         * once, beside these; a reader that wants both asks {@link Of#gapsFor}.
          */
         public record ReadRows(List<ReadRow> rows,
                                List<souther.compiler.observe.Incompleteness> gaps) {
@@ -912,8 +1044,8 @@ public final class Output {
             public List<souther.compiler.observe.RowOutcome> ran() {
                 List<souther.compiler.observe.RowOutcome> out = new ArrayList<>();
                 for (ReadRow row : rows) {
-                    if (row instanceof ReadRow.Ran(souther.compiler.observe.RowOutcome outcome)) {
-                        out.add(outcome);
+                    if (row instanceof ReadRow.Ran ran) {
+                        out.add(ran.outcome());
                     }
                 }
                 return out;
@@ -936,13 +1068,36 @@ public final class Output {
             /** Where it is written. */
             souther.compiler.diag.SourcePos at();
 
-            /** The row ran, and this is what it came to. */
-            record Ran(souther.compiler.observe.RowOutcome outcome) implements ReadRow {
+            /**
+             * The row ran, and this is what it came to; and the definition each of its inputs is
+             * computed by.
+             *
+             * <p>The second is not something the row came to. It is which definition of the module
+             * the operand the row writes was emitted as, which the preparation decided before
+             * anything ran, and it is carried beside the outcome rather than inside it so that what
+             * an evaluation observed stays that and nothing else. It is read here, where the written
+             * row and what came back for it are joined, off the correspondence the preparation
+             * constructed — never counted out again.
+             *
+             * @param inputDefinitions the name of the definition computing each input, in order;
+             *     empty where the source's declarations were not read, so no written row was in
+             *     hand to read it off
+             * @param standInDefinitions what computes each value the row states a dependency
+             *     answers, by the dependency; empty where the row states no stand-in, and where the
+             *     source's declarations were not read
+             */
+            record Ran(souther.compiler.observe.RowOutcome outcome, List<String> inputDefinitions,
+                       Map<ValueName.Behavior, StandInDefinitions> standInDefinitions)
+                    implements ReadRow {
 
                 public Ran {
                     if (outcome == null) {
                         throw new IllegalArgumentException("a row that ran came to something");
                     }
+                    inputDefinitions = inputDefinitions == null ? List.of()
+                            : List.copyOf(inputDefinitions);
+                    standInDefinitions = standInDefinitions == null ? Map.of()
+                            : Collections.unmodifiableMap(new LinkedHashMap<>(standInDefinitions));
                 }
 
                 @Override
@@ -980,6 +1135,67 @@ public final class Output {
             }
         }
 
+        /**
+         * What computes each value a row states one dependency answers, by the name each was
+         * emitted under.
+         *
+         * <p>In the shape of the {@link StoodIn} it is about: an entry for each of its entries, the
+         * arguments before the answer, and what computes the answer for the rest where it states
+         * one. So which entries there are is what the evaluation found the table can answer with,
+         * and nothing here decides it again.
+         *
+         * <p>Each entry, and the answer for the rest, carries where the stand-in says it is
+         * written, which is what it was found among the module's tables by. A reader putting these
+         * beside the stand-in's own entries holds each to that rather than to where it sits in a
+         * list.
+         */
+        public record StandInDefinitions(List<EntryDefinitions> entries, Otherwise otherwise) {
+
+            public StandInDefinitions {
+                entries = List.copyOf(entries);
+                if (otherwise == null) {
+                    throw new IllegalArgumentException("what a stand-in answers for the rest is"
+                            + " computed by something, or stated by nothing");
+                }
+            }
+
+            /** What computes one entry's arguments, in the order the dependency takes them, and
+             *  its answer; {@code at} is where the entry is written, as {@link StoodIn.Entry#at}
+             *  says. */
+            public record EntryDefinitions(SourcePos at, List<String> arguments, String answer) {
+
+                public EntryDefinitions {
+                    arguments = List.copyOf(arguments);
+                    if (at == null || answer == null) {
+                        throw new IllegalArgumentException("an entry is written somewhere, and its"
+                                + " answer is computed by something");
+                    }
+                }
+            }
+
+            /**
+             * What computes the answer for the rest, as {@link StoodIn.Otherwise} says whether
+             * there is one.
+             */
+            public sealed interface Otherwise {
+
+                /** The answer for the rest, written at {@code at} as
+                 *  {@link StoodIn.Otherwise.Answer#at} says, is computed by this. */
+                record Computed(SourcePos at, String definition) implements Otherwise {
+
+                    public Computed {
+                        if (at == null || definition == null) {
+                            throw new IllegalArgumentException("an answer is written somewhere and"
+                                    + " computed by something");
+                        }
+                    }
+                }
+
+                /** The stand-in states no answer for the rest, so nothing computes one. */
+                record NothingStated() implements Otherwise {}
+            }
+        }
+
         @Override
         public String module() {
             return name;
@@ -987,31 +1203,44 @@ public final class Output {
 
         @Override
         public Answer<RowsRead.Of> compute(Db db) {
+            // Which classes the rows below are run against, settled once and carried out with them.
+            // Every source of this module is read the one way this compilation runs them, so this
+            // is the run's own answer rather than a question a reader of the rows puts again.
+            ArmObservation arms = Adequacy.armsAsked(db);
             java.util.SequencedSet<SourceId> origins =
                     db.ask(new Front.ExampleSources(name)).value();
             if (origins == null) {
-                return Answer.of(new RowsRead.Of(Map.of(), List.of()));
+                return Answer.of(new RowsRead.Of(Map.of(), List.of(), arms));
             }
-            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<souther.compiler.check.Prepared> asked = db.ask(new Shapes.Prepared(name));
+            // What says which behavior each written row is of, or null where nothing does. Read
+            // once: whether the blocks of a source are known decides both what its rows are read
+            // off and what the scope of a reason about it can be, and asked twice the two answers
+            // could disagree.
+            souther.compiler.check.Prepared prepared = asked.present() ? asked.value() : null;
             Map<String, List<ReadRow>> written = new LinkedHashMap<>();
             Map<String, List<souther.compiler.observe.Incompleteness>> stopped =
                     new LinkedHashMap<>();
             List<souther.compiler.observe.Incompleteness> everywhere = new ArrayList<>();
             Set<String> named = new LinkedHashSet<>();
             for (SourceId sourceId : origins) {
-                Examples.Of observed = db.ask(Examples.asked(db, name, sourceId)).value();
+                Examples.Of observed = db.ask(new Examples(name, sourceId, arms)).value();
                 // What this source wrote and what became of reading it, put together here — where
                 // both are still this source's. Flattened first and matched afterwards, a row of
                 // one source takes a reason that happened in another: two sources exampling one
                 // behavior leave two reasons under its name, and nothing in either says which row
                 // it is about.
-                readOneSource(prepared, sourceId, observed, written, named);
+                readOneSource(prepared, sourceId, observed, written, stopped, named);
                 if (observed == null) {
-                    // The source was not evaluated at all. Which behaviors it wrote rows for is
-                    // exactly what cannot be read, so it counts against every one of them.
-                    everywhere.add(souther.compiler.observe.Incompleteness.ofSource(
-                            souther.compiler.observe.Incompleteness.Code.OBSERVATION_ABSENT,
-                            sourceId));
+                    if (prepared == null) {
+                        // Nothing says what this source wrote, so which rows it holds is exactly
+                        // what cannot be read, and it counts against every behavior of the module.
+                        // Where the blocks are known, `readOneSource` has just written the same
+                        // absence of each row it left unread.
+                        everywhere.add(souther.compiler.observe.Incompleteness.ofSource(
+                                souther.compiler.observe.Incompleteness.Code.OBSERVATION_ABSENT,
+                                sourceId));
+                    }
                     continue;
                 }
                 for (souther.compiler.observe.Incompleteness gap : observed.incompleteness()) {
@@ -1026,18 +1255,18 @@ public final class Output {
             // Every behavior of the module, and not only the ones something was seen of. A gap
             // larger than a behavior counts against all of them, and keying this on what was seen
             // gave it to exactly the behaviors it was least about: one with no row at all is the
-            // case a source nobody could evaluate matters most for, and it was the one that got
+            // case a reading nobody could finish matters most for, and it was the one that got
             // nothing.
             named.addAll(stopped.keySet());
-            if (prepared.present() && prepared.value() != null) {
-                prepared.value().behaviors().forEach(each -> named.add(each.name()));
+            if (prepared != null) {
+                prepared.behaviors().forEach(each -> named.add(each.name()));
             }
             Map<String, ReadRows> out = new LinkedHashMap<>();
             for (String behavior : named) {
                 out.put(behavior, new ReadRows(written.getOrDefault(behavior, List.of()),
                         stopped.getOrDefault(behavior, List.of())));
             }
-            return Answer.of(new RowsRead.Of(out, distinct(everywhere)));
+            return Answer.of(new RowsRead.Of(out, distinct(everywhere), arms));
         }
 
         /**
@@ -1053,25 +1282,37 @@ public final class Output {
          * names itself and where it is written, which is what an outcome is made with. A row with
          * none takes the reason its reading fell short for: whatever stopped that behavior's rows,
          * or what stopped the whole reading where nothing was said of the behavior.
+         *
+         * <p>Where nothing was observed of the source at all, the reason that leaves is written
+         * here too, of each row it leaves unread. Which rows those are is in front of us: the
+         * blocks written in this source are known, each says which behavior it is of, and every row
+         * in them is one this reading is short of. Said of the source instead, the same absence
+         * would count against every behavior of the module — including the ones this source wrote
+         * nothing in, whose rows were read wherever they are written — and two rows of one behavior
+         * that were not read would arrive as one thing to go and look at.
+         *
+         * @param stopped where the reasons that count against one behavior are collected, which is
+         *     where a reason about a row of it goes
          */
-        static void readOneSource(Answer<souther.compiler.check.Prepared> prepared,
+        static void readOneSource(souther.compiler.check.Prepared prepared,
                 SourceId sourceId, Examples.Of observed, Map<String, List<ReadRow>> into,
+                Map<String, List<souther.compiler.observe.Incompleteness>> stopped,
                 Set<String> named) {
-            if (!prepared.present() || prepared.value() == null) {
+            if (prepared == null) {
                 // Nothing says what this source wrote, so what came back is all there is to say —
                 // and a module whose declarations could not be read is one every reader is already
                 // told about.
                 if (observed != null) {
                     for (souther.compiler.observe.RowOutcome row : observed.rows()) {
                         into.computeIfAbsent(row.target(), _ -> new ArrayList<>())
-                                .add(new ReadRow.Ran(row));
+                                .add(new ReadRow.Ran(row, List.of(), Map.of()));
                         named.add(row.target());
                     }
                 }
                 return;
             }
             for (souther.compiler.check.Prepared.Example block
-                    : prepared.value().forExamplesWrittenIn(sourceId).examples()) {
+                    : prepared.forExamplesWrittenIn(sourceId).examples()) {
                 souther.compiler.ast.Hir.Example written = block.read();
                 List<ReadRow> mine = into.computeIfAbsent(written.target(),
                         _ -> new ArrayList<>());
@@ -1079,11 +1320,158 @@ public final class Output {
                 for (souther.compiler.ast.Hir.ExampleRow row : written.rows()) {
                     souther.compiler.observe.RowOutcome came = observed == null ? null
                             : among(observed.rows(), written.target(), row);
-                    mine.add(came != null ? new ReadRow.Ran(came)
-                            : new ReadRow.NotRun(row.identity(), row.pos(),
-                                    whyNothingCameBack(written.target(), row, observed, sourceId)));
+                    if (came != null) {
+                        mine.add(new ReadRow.Ran(came, inputDefinitions(prepared, row),
+                                standInDefinitions(prepared, row, came)));
+                        continue;
+                    }
+                    mine.add(new ReadRow.NotRun(row.identity(), row.pos(),
+                            whyNothingCameBack(written.target(), row, observed, sourceId)));
+                    if (observed == null) {
+                        // Nothing came back for this row and the row is known, so what the measure
+                        // is short of is this row. The reason its reading recorded is elsewhere in
+                        // the observation and is filed by the caller; this one the observation
+                        // never said, because there was no observation to say it.
+                        stopped.computeIfAbsent(written.target(), _ -> new ArrayList<>())
+                                .add(souther.compiler.observe.Incompleteness.ofRow(
+                                        souther.compiler.observe.Incompleteness.Code
+                                                .OBSERVATION_ABSENT,
+                                        written.target(), row.identity(), row.pos()));
+                    }
                 }
             }
+        }
+
+        /**
+         * The definition each input of {@code row} is computed by, in order: the operand as written,
+         * which the preparation emitted as a definition of its own answering as the parameter it is
+         * handed to. An input the preparation emitted nothing for is an operand its walk over the
+         * rows did not reach, which is that walk and this reading having come apart.
+         */
+        private static List<String> inputDefinitions(souther.compiler.check.Prepared prepared,
+                                                     souther.compiler.ast.Hir.ExampleRow row) {
+            List<String> names = new ArrayList<>();
+            for (souther.compiler.ast.Hir.Expr input : row.inputs()) {
+                names.add(emittedFor(prepared, input, "an input of the row at " + row.pos()));
+            }
+            return names;
+        }
+
+        /**
+         * What computes each value {@code row} states a dependency answers, by the dependency.
+         *
+         * <p>Joined, as {@link #among} joins a row to what came back for it: each stand-in the
+         * evaluation read is found among what the module wrote by where it says it is written, and
+         * each of its entries among that table's rows the same way. Which stand-in a row runs
+         * against and which of a table's rows it can answer with were decided by the evaluation,
+         * and are read off what it came back with rather than decided again here.
+         */
+        private static Map<ValueName.Behavior, StandInDefinitions> standInDefinitions(
+                Prepared prepared, Hir.ExampleRow row, RowOutcome came) {
+            if (!(came.statement() instanceof RowStatement.Stated stated)) {
+                return Map.of();
+            }
+            Map<ValueName.Behavior, StandInDefinitions> byDependency = new LinkedHashMap<>();
+            for (StoodIn stoodIn : stated.standIns()) {
+                byDependency.put(stoodIn.dependency(), definitionsOf(prepared, row, stoodIn));
+            }
+            return byDependency;
+        }
+
+        /** What computes each value {@code stoodIn} states: a {@code with} on the row, or a table
+         *  the module writes. */
+        private static StandInDefinitions definitionsOf(Prepared prepared, Hir.ExampleRow row,
+                                                        StoodIn stoodIn) {
+            for (Hir.With with : row.withs()) {
+                if (with.pos().equals(stoodIn.at())) {
+                    // A `with` lists nothing and answers everything, which is how the evaluation
+                    // states it.
+                    if (!stoodIn.entries().isEmpty()
+                            || !(stoodIn.otherwise() instanceof StoodIn.Otherwise.Answer)) {
+                        throw new IllegalStateException("the `with` at " + with.pos()
+                                + " is read as a stand-in that lists entries or answers nothing");
+                    }
+                    return new StandInDefinitions(List.of(),
+                            new StandInDefinitions.Otherwise.Computed(with.value().pos(),
+                                    emittedFor(prepared, with.value(), "what the `with` at "
+                                            + with.pos() + " answers")));
+                }
+            }
+            for (FakeTables.Occurrence written : prepared.forExamples().fakes().written()) {
+                if (written.read().pos().equals(stoodIn.at())) {
+                    return definitionsOf(prepared, written.read(), stoodIn);
+                }
+            }
+            throw new IllegalStateException("what stands in for `" + stoodIn.dependency()
+                    + "` is read as written at " + stoodIn.at() + ", where the module writes"
+                    + " neither a `with` of the row at " + row.pos() + " nor a table");
+        }
+
+        private static StandInDefinitions definitionsOf(Prepared prepared, Hir.Fake table,
+                                                        StoodIn stoodIn) {
+            List<StandInDefinitions.EntryDefinitions> entries = new ArrayList<>();
+            for (StoodIn.Entry entry : stoodIn.entries()) {
+                Hir.FakeRow written = rowOf(table, entry.at());
+                if (!(written.matched() instanceof Hir.Matched.Arguments(List<Hir.Expr> stated))) {
+                    throw new IllegalStateException("the entry at " + entry.at() + " is read as"
+                            + " stating arguments, and the row there states none");
+                }
+                List<String> arguments = new ArrayList<>();
+                for (Hir.Expr argument : stated) {
+                    arguments.add(emittedFor(prepared, argument,
+                            "an argument of the entry at " + entry.at()));
+                }
+                entries.add(new StandInDefinitions.EntryDefinitions(written.pos(), arguments,
+                        emittedFor(prepared, written.output(),
+                                "the answer of the entry at " + entry.at())));
+            }
+            StandInDefinitions.Otherwise otherwise = switch (stoodIn.otherwise()) {
+                case StoodIn.Otherwise.Answer(ObservedValue _, SourcePos at) -> {
+                    Hir.Expr answer = answerForTheRestAt(table, at);
+                    yield new StandInDefinitions.Otherwise.Computed(answer.pos(),
+                            emittedFor(prepared, answer, "the answer for the rest at " + at));
+                }
+                case StoodIn.Otherwise.NothingStated _ ->
+                        new StandInDefinitions.Otherwise.NothingStated();
+            };
+            return new StandInDefinitions(entries, otherwise);
+        }
+
+        /** The row of {@code table} written at {@code at}. */
+        private static Hir.FakeRow rowOf(Hir.Fake table, SourcePos at) {
+            for (Hir.FakeRow row : table.rows()) {
+                if (row.pos().equals(at)) {
+                    return row;
+                }
+            }
+            throw new IllegalStateException("an entry is read as written at " + at + ", where the"
+                    + " table at " + table.pos() + " writes no row");
+        }
+
+        /** The answer of {@code table}'s {@code _} row, which the evaluation quotes where the answer
+         *  is written. */
+        private static Hir.Expr answerForTheRestAt(Hir.Fake table, SourcePos at) {
+            for (Hir.FakeRow row : table.rows()) {
+                if (row.matched() instanceof Hir.Matched.Anything && row.output().pos().equals(at)) {
+                    return row.output();
+                }
+            }
+            throw new IllegalStateException("the answer for the rest is read as written at " + at
+                    + ", where the table at " + table.pos() + " writes no `_` row's answer");
+        }
+
+        /**
+         * The definition {@code operand} was emitted as, off the correspondence the preparation
+         * constructed. An operand it emitted nothing for is one its walk over the rows and tables
+         * did not reach, which is that walk and this reading having come apart.
+         */
+        private static String emittedFor(Prepared prepared, Hir.Expr operand, String what) {
+            String emitted = prepared.operandMethods().get(operand);
+            if (emitted == null) {
+                throw new IllegalStateException(what + " is computed by nothing the module"
+                        + " emitted");
+            }
+            return emitted;
         }
 
         /** The outcome recorded for {@code row} of {@code behavior}, or null where nothing came
@@ -1110,10 +1498,11 @@ public final class Output {
          * told about a file it is not in.
          *
          * <p>Where nothing was observed of the source at all, that is the reason and it is the
-         * source's. Otherwise it is what this source recorded of this behavior, and a reading is
-         * only ever short of a row for a reason it recorded — so a row with neither an outcome nor
-         * a reason is this compiler having lost one, which is the thing a reader must never be
-         * handed as a row that was never written.
+         * row's: nothing came back for it because nothing came back at all, which is as true of
+         * this row as of the source it sits in. Otherwise it is what this source recorded of this
+         * behavior, and a reading is only ever short of a row for a reason it recorded — so a row
+         * with neither an outcome nor a reason is this compiler having lost one, which is the thing
+         * a reader must never be handed as a row that was never written.
          */
         private static souther.compiler.observe.Incompleteness.Code whyNothingCameBack(
                 String behavior, souther.compiler.ast.Hir.ExampleRow row, Examples.Of observed,

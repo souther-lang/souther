@@ -554,15 +554,13 @@ public final class CstParser {
         finish();
     }
 
-    /** A {@code depends on} clause. {@code on} is a contextual soft-keyword (a bare identifier), so
-     * a field or a parameter may still be named on; only the position right after {@code depends}
-     * reads it as the second half of the keyword. */
+    /** A {@code depends on} clause. {@code on} is a contextual word, so a field or a parameter may
+     * still be named on; only the position right after {@code depends} reads it as the second half
+     * of the keyword. */
     private void dependsClause() {
         start(SyntaxKind.DEPENDS_CLAUSE);
         bump();   // depends
-        if (atContextual("on")) {
-            bump();   // on
-        } else {
+        if (!eat(ContextualWord.ON)) {
             error(new ParseMessage.ADependencyClauseIsTwoWords());
         }
         nameList();
@@ -608,14 +606,14 @@ public final class CstParser {
      * {@code let} (or before the other modifier and then a {@code let}) is read as one. */
     private void fnDef() {
         start(SyntaxKind.FN_DEF);
-        if (atContextual("private")) {
+        if (at(ContextualWord.PRIVATE)) {
             start(SyntaxKind.PRIVATE_MODIFIER);
-            bump();   // private (a contextual soft-keyword, kept out of the fn name)
+            expect(ContextualWord.PRIVATE, Reading.A_DECLARATION);
             finish();
         }
-        if (atContextual("partial")) {
+        if (at(ContextualWord.PARTIAL)) {
             start(SyntaxKind.PARTIAL_MODIFIER);
-            bump();   // partial (a contextual soft-keyword, kept out of the fn name)
+            expect(ContextualWord.PARTIAL, Reading.A_DECLARATION);
             finish();
         }
         bump();   // let
@@ -628,10 +626,9 @@ public final class CstParser {
             retType();
         }
         expect(SyntaxKind.ASSIGN, Reading.A_DECLARATION);
-        if (at(SyntaxKind.IDENT) && current() == SyntaxKind.IDENT
-                && tokenText(mi(0)).equals("intrinsic") && nth(1) == SyntaxKind.STRING_LIT) {
+        if (at(ContextualWord.INTRINSIC) && nth(1) == SyntaxKind.STRING_LIT) {
             start(SyntaxKind.INTRINSIC_BODY);
-            bump();   // intrinsic
+            expect(ContextualWord.INTRINSIC, Reading.A_DECLARATION);
             bump();   // "key"
             finish();
         } else if (at(SyntaxKind.LBRACE)) {
@@ -708,15 +705,12 @@ public final class CstParser {
 
     // --- example ---
 
-    /** {@code examples for <module.path>} — the header of an attached example-only file. {@code for}
-     * is a contextual soft-keyword (a bare identifier), so the {@code example.*} module namespace is
-     * unaffected. */
+    /** {@code examples for <module.path>} — the header of an attached example-only file. Both words
+     * are contextual, so the {@code example.*} module namespace is unaffected. */
     private void examplesFileHeader() {
         start(SyntaxKind.EXAMPLES_FILE_HEADER);
-        bump();   // examples
-        if (atContextual("for")) {
-            bump();   // for
-        } else {
+        expect(ContextualWord.EXAMPLES, Reading.A_DECLARATION);
+        if (!eat(ContextualWord.FOR)) {
             error(new ParseMessage.AnExampleOnlyFileStartsWithItsModule());
         }
         qualifiedName();   // target module path
@@ -727,7 +721,7 @@ public final class CstParser {
      * soft-keyword; the target names a behavior or a pure helper in this module. */
     private void exampleDef() {
         start(SyntaxKind.EXAMPLE_DEF);
-        bump();   // example
+        expect(ContextualWord.EXAMPLE, Reading.AN_EXAMPLE);
         expect(SyntaxKind.IDENT, Reading.AN_EXAMPLE);   // target name
         if (!at(SyntaxKind.PIPE)) {
             error(new ParseMessage.AnExampleNeedsAtLeastOneRow());
@@ -802,7 +796,7 @@ public final class CstParser {
      * is written anywhere else — bare, or qualified through the module that declares it. */
     private void fakeDef() {
         start(SyntaxKind.FAKE_DEF);
-        bump();   // fake
+        expect(ContextualWord.FAKE, Reading.AN_EXAMPLE);
         expect(SyntaxKind.IDENT, Reading.AN_EXAMPLE);   // target injected behavior
         dottedTail();
         if (!at(SyntaxKind.PIPE)) {
@@ -944,11 +938,16 @@ public final class CstParser {
 
     /** A brace-delimited block: {@code let}/{@code guard} statements then a result expression. */
     private void blockExpr() {
-        start(SyntaxKind.BLOCK_EXPR);
-        expect(SyntaxKind.LBRACE, Reading.AN_EXPRESSION);
-        blockStatements();
-        expect(SyntaxKind.RBRACE, Reading.AN_EXPRESSION);
-        finish();
+        boolean saved = admitLambda();
+        try {
+            start(SyntaxKind.BLOCK_EXPR);
+            expect(SyntaxKind.LBRACE, Reading.AN_EXPRESSION);
+            blockStatements();
+            expect(SyntaxKind.RBRACE, Reading.AN_EXPRESSION);
+            finish();
+        } finally {
+            noLambda = saved;
+        }
     }
 
     /** The statement sequence a behavior body is: {@code let}/{@code guard} lines then one result. */
@@ -1151,11 +1150,22 @@ public final class CstParser {
 
     // --- expressions (precedence ladder; left-associative via wrap) ---
 
-    private boolean noConstruct = false;
     /** Set where an expression is followed by a `->` that belongs to the enclosing form rather than
      * to the expression: an example row's `with` value. A parenthesised value there has exactly the
-     * shape of a lambda's parameter list, and the enclosing form has the prior claim. */
+     * shape of a lambda's parameter list, and the enclosing form has the prior claim. An expression
+     * a bracket encloses cannot end the one the flag was set for, so every production that reads
+     * a bracket pair clears it for what is inside, through {@link #admitLambda}. */
     private boolean noLambda = false;
+
+    /** Admits a lambda for what a bracket pair encloses, and answers what to put back when the
+     * pair is closed. What is inside ends at the closing bracket, so no `->` after it can be taken
+     * for a lambda's. The production reading the pair does this itself rather than its callers,
+     * so a caller added later cannot leave it out. */
+    private boolean admitLambda() {
+        boolean saved = noLambda;
+        noLambda = false;
+        return saved;
+    }
 
     private void expr() {
         pipeExpr();
@@ -1357,38 +1367,56 @@ public final class CstParser {
 
     /** {@code ( e )} or {@code ( e1, e2, ... )} — a parenthesised expression or a tuple. */
     private void parenOrTuple() {
-        start(SyntaxKind.PAREN_EXPR);
-        bump();   // (
-        expr();
-        if (at(SyntaxKind.COMMA)) {
-            // a tuple: retag the just-opened PAREN_EXPR as a TUPLE_EXPR
-            while (eat(SyntaxKind.COMMA)) {
-                if (at(SyntaxKind.RPAREN)) {
-                    break;
+        boolean saved = admitLambda();
+        try {
+            start(SyntaxKind.PAREN_EXPR);
+            bump();   // (
+            expr();
+            if (at(SyntaxKind.COMMA)) {
+                // a tuple: retag the just-opened PAREN_EXPR as a TUPLE_EXPR
+                while (eat(SyntaxKind.COMMA)) {
+                    if (at(SyntaxKind.RPAREN)) {
+                        break;
+                    }
+                    expr();
                 }
-                expr();
+                expect(SyntaxKind.RPAREN, Reading.AN_EXPRESSION);
+                retagTop(SyntaxKind.TUPLE_EXPR);
+                finish();
+                return;
             }
             expect(SyntaxKind.RPAREN, Reading.AN_EXPRESSION);
-            retagTop(SyntaxKind.TUPLE_EXPR);
             finish();
-            return;
+        } finally {
+            noLambda = saved;
         }
-        expect(SyntaxKind.RPAREN, Reading.AN_EXPRESSION);
-        finish();
     }
 
     /** {@code [e, ...]} (a literal) or {@code [element | guard, ...]} (a guard comprehension). */
     private void listExpr() {
-        start(SyntaxKind.LIST_EXPR);
-        bump();   // [
-        if (at(SyntaxKind.RBRACKET)) {
-            bump();
-            finish();
-            return;
-        }
-        expr();
-        if (eat(SyntaxKind.PIPE)) {
+        boolean saved = admitLambda();
+        try {
+            start(SyntaxKind.LIST_EXPR);
+            bump();   // [
+            if (at(SyntaxKind.RBRACKET)) {
+                bump();
+                finish();
+                return;
+            }
             expr();
+            if (eat(SyntaxKind.PIPE)) {
+                expr();
+                while (eat(SyntaxKind.COMMA)) {
+                    if (at(SyntaxKind.RBRACKET)) {
+                        break;
+                    }
+                    expr();
+                }
+                expect(SyntaxKind.RBRACKET, Reading.AN_EXPRESSION);
+                retagTop(SyntaxKind.LIST_COMP);
+                finish();
+                return;
+            }
             while (eat(SyntaxKind.COMMA)) {
                 if (at(SyntaxKind.RBRACKET)) {
                     break;
@@ -1396,18 +1424,10 @@ public final class CstParser {
                 expr();
             }
             expect(SyntaxKind.RBRACKET, Reading.AN_EXPRESSION);
-            retagTop(SyntaxKind.LIST_COMP);
             finish();
-            return;
+        } finally {
+            noLambda = saved;
         }
-        while (eat(SyntaxKind.COMMA)) {
-            if (at(SyntaxKind.RBRACKET)) {
-                break;
-            }
-            expr();
-        }
-        expect(SyntaxKind.RBRACKET, Reading.AN_EXPRESSION);
-        finish();
     }
 
     private void ifExpr() {
@@ -1444,10 +1464,7 @@ public final class CstParser {
     private void matchExpr() {
         start(SyntaxKind.MATCH_EXPR);
         bump();   // match
-        boolean saved = noConstruct;
-        noConstruct = true;
         expr();   // scrutinee
-        noConstruct = saved;
         expect(SyntaxKind.WITH_KW, Reading.AN_EXPRESSION);
         int enclosing = matchArmColumns.isEmpty() ? -1 : matchArmColumns.peek();
         // this match's arm column: the leading `|` when written, else the first case's own column
@@ -1463,17 +1480,18 @@ public final class CstParser {
         finish();
     }
 
-    /** The 0-based column of the token at {@code index}, walking back to the last newline in the
-     * trivia. A match arm's column is what decides which match it belongs to. */
+    /** The 0-based column of the token at {@code index}: the code points written between the last
+     * line terminator before it and the token. A match arm's column is what decides which match it
+     * belongs to. */
     private int columnOf(int index) {
         int column = 0;
         for (int i = index - 1; i >= 0; i--) {
             String text = tokens.get(i).text();
-            int newline = text.lastIndexOf('\n');
-            if (newline >= 0) {
-                return column + (text.length() - newline - 1);
+            int lineStart = CstLexer.endOfLastLineTerminator(text);
+            if (lineStart >= 0) {
+                return column + text.codePointCount(lineStart, text.length());
             }
-            column += text.length();
+            column += text.codePointCount(0, text.length());
         }
         return column;
     }
@@ -1588,8 +1606,12 @@ public final class CstParser {
      * left to resolution, which knows the bindings in force.
      */
     private void identExpr() {
-        if (!noConstruct && nth(1) == SyntaxKind.LBRACE) {
-            // construction `Type { ... }` (unless suppressed, as in a match scrutinee)
+        if (nth(pastDottedName(0)) == SyntaxKind.LBRACE) {
+            // construction `Type { ... }`. The type is named the way a type is named anywhere —
+            // bare, through an alias, or through the module that declares it — so the name is read
+            // past its dots before the brace decides what this is. Whether the name reaches a type
+            // is resolution's answer: a dotted name here is read as one name and not as a field
+            // taken of something.
             newDataExpr();
         } else {
             start(SyntaxKind.VAR_EXPR);
@@ -1599,20 +1621,26 @@ public final class CstParser {
     }
 
     private void newDataExpr() {
-        start(SyntaxKind.NEW_DATA_EXPR);
-        bump();   // Type
-        expect(SyntaxKind.LBRACE, Reading.AN_EXPRESSION);
-        if (!at(SyntaxKind.RBRACE)) {
-            initElem();
-            while (eat(SyntaxKind.COMMA)) {
-                if (at(SyntaxKind.RBRACE)) {
-                    break;
-                }
+        boolean saved = admitLambda();
+        try {
+            start(SyntaxKind.NEW_DATA_EXPR);
+            bump();   // Type
+            dottedTail();   // written through its module or an alias, as a type is named anywhere
+            expect(SyntaxKind.LBRACE, Reading.AN_EXPRESSION);
+            if (!at(SyntaxKind.RBRACE)) {
                 initElem();
+                while (eat(SyntaxKind.COMMA)) {
+                    if (at(SyntaxKind.RBRACE)) {
+                        break;
+                    }
+                    initElem();
+                }
             }
+            expect(SyntaxKind.RBRACE, Reading.AN_EXPRESSION);
+            finish();
+        } finally {
+            noLambda = saved;
         }
-        expect(SyntaxKind.RBRACE, Reading.AN_EXPRESSION);
-        finish();
     }
 
     private void initElem() {
@@ -1637,19 +1665,24 @@ public final class CstParser {
     }
 
     private void argList() {
-        start(SyntaxKind.ARG_LIST);
-        expect(SyntaxKind.LPAREN, Reading.AN_EXPRESSION);
-        if (!at(SyntaxKind.RPAREN)) {
-            arg();
-            while (eat(SyntaxKind.COMMA)) {
-                if (at(SyntaxKind.RPAREN)) {
-                    break;
-                }
+        boolean saved = admitLambda();
+        try {
+            start(SyntaxKind.ARG_LIST);
+            expect(SyntaxKind.LPAREN, Reading.AN_EXPRESSION);
+            if (!at(SyntaxKind.RPAREN)) {
                 arg();
+                while (eat(SyntaxKind.COMMA)) {
+                    if (at(SyntaxKind.RPAREN)) {
+                        break;
+                    }
+                    arg();
+                }
             }
+            expect(SyntaxKind.RPAREN, Reading.AN_EXPRESSION);
+            finish();
+        } finally {
+            noLambda = saved;
         }
-        expect(SyntaxKind.RPAREN, Reading.AN_EXPRESSION);
-        finish();
     }
 
     /** An argument is an expression, including a bare lambda {@code x -> e} / {@code (a, b) -> e}. */
@@ -1736,10 +1769,7 @@ public final class CstParser {
 
     /** Flushes trivia preceding the next meaningful token, then emits that token. */
     private void bump() {
-        while (pos < tokens.size() && tokens.get(pos).kind().isTrivia()) {
-            stack.peek().children.add(tokens.get(pos));
-            pos++;
-        }
+        flushTrivia();
         if (pos < tokens.size()) {
             stack.peek().children.add(tokens.get(pos));
             if (tokens.get(pos).kind() != SyntaxKind.EOF) {
@@ -1748,12 +1778,24 @@ public final class CstParser {
         }
     }
 
-    /** Flushes trailing trivia and the final EOF token into the (root) frame. */
-    private void bumpEof() {
+    /** The same, emitting the token as {@code kind} with its text unchanged. Only for a word the
+     *  caller has seen is next, so it is never the end of input. */
+    private void bumpAs(SyntaxKind kind) {
+        flushTrivia();
+        stack.peek().children.add(new GreenToken(kind, tokens.get(pos).text()));
+        pos++;
+    }
+
+    private void flushTrivia() {
         while (pos < tokens.size() && tokens.get(pos).kind().isTrivia()) {
             stack.peek().children.add(tokens.get(pos));
             pos++;
         }
+    }
+
+    /** Flushes trailing trivia and the final EOF token into the (root) frame. */
+    private void bumpEof() {
+        flushTrivia();
         if (pos < tokens.size() && tokens.get(pos).kind() == SyntaxKind.EOF) {
             stack.peek().children.add(tokens.get(pos));
             pos++;
@@ -1764,17 +1806,30 @@ public final class CstParser {
         return current() == kind;
     }
 
-    /** True when the current meaningful token is an identifier with the given text — used for the
-     * contextual soft-keywords {@code example} / {@code examples} / {@code for}, which stay ordinary
-     * identifiers everywhere else. */
-    private boolean atContextual(String text) {
-        return contextualAt(0, text);
+    /** Whether the next meaningful token is {@code word}, which the lexer hands over as a name. */
+    private boolean at(ContextualWord word) {
+        return at(SyntaxKind.IDENT) && tokenText(mi(0)).equals(word.spelling());
     }
 
-    /** The same question about the {@code n}th meaningful token ahead, for a modifier that may be
-     * followed by another one. */
-    private boolean contextualAt(int n, String text) {
-        return nth(n) == SyntaxKind.IDENT && tokenText(mi(n)).equals(text);
+    /**
+     * Reads {@code word} as the keyword it is here, if it is next.
+     *
+     * <p>Reading one and recording what it was read as are one step, so the tree cannot hold a word
+     * the parse took for a keyword as the name the lexer said it was.
+     */
+    private boolean eat(ContextualWord word) {
+        if (!at(word)) {
+            return false;
+        }
+        bumpAs(SyntaxKind.CONTEXTUAL_KW);
+        return true;
+    }
+
+    /** Reads {@code word} as the keyword it is here, or says it was wanted. */
+    private void expect(ContextualWord word, Reading reading) {
+        if (!eat(word)) {
+            expected("`" + word.spelling() + "`", reading);
+        }
     }
 
     private boolean eat(SyntaxKind kind) {
@@ -1798,7 +1853,10 @@ public final class CstParser {
             bump();
             return;
         }
-        Object wanted = kind.display();
+        expected(kind.display(), reading);
+    }
+
+    private void expected(Object wanted, Reading reading) {
         Object found = current().display();
         error(switch (reading) {
             case A_DECLARATION -> new ParseMessage.ADeclarationExpectedSomethingElse(wanted, found);
@@ -1843,7 +1901,7 @@ public final class CstParser {
             if (!tokens.get(i).kind().isTrivia()) {
                 return false;
             }
-            if (tokens.get(i).text().indexOf('\n') >= 0) {
+            if (CstLexer.holdsALineTerminator(tokens.get(i).text())) {
                 return true;
             }
         }

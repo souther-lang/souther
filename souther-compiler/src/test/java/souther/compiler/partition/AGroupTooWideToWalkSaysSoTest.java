@@ -135,7 +135,7 @@ class AGroupTooWideToWalkSaysSoTest {
     void aGroupPastTheLimitIsHeldBackAndSaidSo() {
         Model model = Model.of(THIRTEEN);
         InteractionCells.Offered offered =
-                InteractionCells.of(model.groups(), model.subject().axes().axes(), Budgets.generation());
+                InteractionCells.of(model.groups(), model.subject().axes().axes(), Budgets.generation().cellsPerGroup());
 
         assertEquals(List.of(), offered.groups(),
                 "the group is not offered, which is what the limit is for");
@@ -150,7 +150,7 @@ class AGroupTooWideToWalkSaysSoTest {
     void andUnderTheLimitTheGroupIsOffered() {
         Model model = Model.of(TWELVE);
         InteractionCells.Offered offered =
-                InteractionCells.of(model.groups(), model.subject().axes().axes(), Budgets.generation());
+                InteractionCells.of(model.groups(), model.subject().axes().axes(), Budgets.generation().cellsPerGroup());
 
         assertEquals(List.of(), offered.notOffered(),
                 "nothing is held back");
@@ -177,14 +177,14 @@ class AGroupTooWideToWalkSaysSoTest {
     void aGroupOfExactlyTheBudgetIsOffered() {
         Model model = Model.of(TWO);
         assertEquals(4, InteractionCells.of(model.groups(), model.subject().axes().axes(),
-                        atMost(4)).groups().get(0).size(),
+                        atMost(4).cellsPerGroup()).groups().get(0).size(),
                 "two decisions of two outcomes are four choices");
 
         assertEquals(List.of(), InteractionCells.of(model.groups(), model.subject().axes().axes(),
-                        atMost(4)).notOffered(),
+                        atMost(4).cellsPerGroup()).notOffered(),
                 "a group of exactly the budget is offered");
         assertEquals(1, InteractionCells.of(model.groups(), model.subject().axes().axes(),
-                        atMost(3)).notOffered().size(),
+                        atMost(3).cellsPerGroup()).notOffered().size(),
                 "and one choice past it is not");
     }
 
@@ -206,9 +206,9 @@ class AGroupTooWideToWalkSaysSoTest {
         Model narrow = Model.of(TWELVE);
 
         Set<ArmProbe> fromWide =
-                Generator.everyArmACombinationMayTake(wide.subject(), wide.groups(), Budgets.generation());
+                GenerationFixtures.everyArmACombinationMayTake(wide.subject(), wide.groups(), Budgets.generation());
         Set<ArmProbe> fromNarrow =
-                Generator.everyArmACombinationMayTake(narrow.subject(), narrow.groups(), Budgets.generation());
+                GenerationFixtures.everyArmACombinationMayTake(narrow.subject(), narrow.groups(), Budgets.generation());
 
         assertFalse(fromWide.isEmpty(),
                 "the arms behind the group the limit held back are still named");
@@ -233,12 +233,12 @@ class AGroupTooWideToWalkSaysSoTest {
     void anArmBehindTheHeldGroupIsAnsweredFromTheWayIntoIt() {
         Model model = Model.of(THIRTEEN);
 
-        FillResult composed = Generator.fill(model.subject(), List.of(),
+        FillResult composed = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(), Generator.Trial.NOTHING_RUNS, Budgets.generation());
 
-        assertFalse(composed.discharge().arms().values().isEmpty(), () -> "the arms are answered: " + composed.discharge().arms().values());
-        assertTrue(composed.discharge().arms().values().stream().allMatch(ArmDisposition.Built.class::isInstance),
-                () -> "each of them with a row through it: " + composed.discharge().arms().values());
+        assertFalse(GenerationFixtures.arms(composed.discharge()).values().isEmpty(), () -> "the arms are answered: " + GenerationFixtures.arms(composed.discharge()).values());
+        assertTrue(GenerationFixtures.arms(composed.discharge()).values().stream().allMatch(ArmDisposition.Built.class::isInstance),
+                () -> "each of them with a row through it: " + GenerationFixtures.arms(composed.discharge()).values());
 
         List<GenerationReason.GroupsNotOffered> said = composed.reasons().stream()
                 .filter(GenerationReason.GroupsNotOffered.class::isInstance)
@@ -263,14 +263,15 @@ class AGroupTooWideToWalkSaysSoTest {
     void aGroupNothingWasAskedForBehindIsNotReported() {
         Model model = Model.of(THIRTEEN);
 
-        FillResult asked = Generator.fill(model.subject(), List.of(),
+        FillResult asked = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(), Generator.Trial.NOTHING_RUNS,
                 List.of(), List.of(), List.of(), Budgets.generation());
 
         assertEquals(List.of(), asked.reasons().stream()
                         .filter(GenerationReason.GroupsNotOffered.class::isInstance).toList(),
                 () -> "nothing was owed behind it: " + asked.reasons());
-        assertEquals(Map.of(), asked.discharge().arms(), "and no arm was answered for");
+        assertEquals(Map.of(), GenerationFixtures.arms(asked.discharge()),
+                "and no arm was answered for");
     }
 
     /**
@@ -300,7 +301,8 @@ class AGroupTooWideToWalkSaysSoTest {
 
     /** What the compilation's own generation came to at each arm it was owed one at. */
     private static List<ArmDisposition> armsFor(String source) {
-        return List.copyOf(fillingFor(source).composed().discharge().arms().values());
+        return List.copyOf(
+                GenerationFixtures.arms(fillingFor(source).composed().discharge()).values());
     }
 
     private static List<GenerationReason.GroupsNotOffered> groupsNotOfferedFor(String source) {
@@ -381,24 +383,24 @@ class AGroupTooWideToWalkSaysSoTest {
         AdequacyPolicy.OfTheGeneration budget = atMost(8);
 
         InteractionCells.Offered offered =
-                InteractionCells.of(model.groups(), model.subject().axes().axes(), budget);
+                InteractionCells.of(model.groups(), model.subject().axes().axes(), budget.cellsPerGroup());
         assertEquals(1, offered.notOffered().size(), "the outer group is past the budget");
         assertEquals(3, offered.groups().size(), "and the three inner ones are offered");
 
-        FillResult composed = Generator.fill(model.subject(), List.of(),
+        FillResult composed = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(), Generator.Trial.NOTHING_RUNS, budget);
 
         // The held group is one arms were owed behind: without this, the answer below would hold of
         // a group that claimed nothing and would say nothing about when a group is named.
-        Set<ArmProbe> owed = Generator.everyArmACombinationMayTake(
+        Set<ArmProbe> owed = GenerationFixtures.everyArmACombinationMayTake(
                 model.subject(), model.groups(), budget);
         Set<ArmProbe> behindTheHeldGroup = new LinkedHashSet<>(armsIn(offered.notOffered().get(0)));
         behindTheHeldGroup.retainAll(owed);
         assertFalse(behindTheHeldGroup.isEmpty(),
                 "arms were owed behind the group that was held back");
 
-        assertTrue(composed.discharge().arms().values().stream().allMatch(ArmDisposition.Built.class::isInstance),
-                () -> "every arm behind it has a row through it: " + composed.discharge().arms().values());
+        assertTrue(GenerationFixtures.arms(composed.discharge()).values().stream().allMatch(ArmDisposition.Built.class::isInstance),
+                () -> "every arm behind it has a row through it: " + GenerationFixtures.arms(composed.discharge()).values());
         assertEquals(1, composed.reasons().stream()
                         .filter(GenerationReason.GroupsNotOffered.class::isInstance).count(),
                 () -> "and the walk that was not made is still said: " + composed.reasons());

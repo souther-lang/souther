@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "initializationOptions.souther",
+  "description": "What a client may ask of the Souther language server in the `souther` member of `initializationOptions`. A member this schema does not name is ignored, so a client may send what a later server reads. A member it names with a value it does not allow is read as absent, and the server says so in a `window/showMessage` once the client has sent `initialized`.",
+  "type": "object",
+  "properties": {
+    "adequacy": {
+      "description": "How much of what the rows cover the server measures and reports beside each behavior. `witness` reads what the compile already ran; `all` also generates a second set of classes and runs every row again, on every save.",
+      "enum": ["off", "witness", "all"],
+      "default": "off"
+    }
+  }
+}

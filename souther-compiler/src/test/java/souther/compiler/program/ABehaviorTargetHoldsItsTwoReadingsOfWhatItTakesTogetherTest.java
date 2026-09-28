@@ -3,10 +3,12 @@ package souther.compiler.program;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -36,7 +38,7 @@ class ABehaviorTargetHoldsItsTwoReadingsOfWhatItTakesTogetherTest {
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> target(List.of(INT, INT), body(binder("only"))));
 
-        assertEquals("a behavior declared [INT, INT] -> INT has a body binding [only]",
+        assertEquals("a behavior declared [p0: INT, p1: INT] -> INT has a body binding [only]",
                 refused.getMessage());
     }
 
@@ -75,7 +77,15 @@ class ABehaviorTargetHoldsItsTwoReadingsOfWhatItTakesTogetherTest {
     }
 
     private static BehaviorTarget target(List<Type> takes, CheckedImplementation implementation) {
-        return new BehaviorTarget(new CheckedSignature(takes, INT), implementation);
+        List<CheckedSignature.Parameter> parameters = new ArrayList<>(takes.size());
+        for (Type type : takes) {
+            parameters.add(new CheckedSignature.Parameter("p" + parameters.size(),
+                    new CheckedBoundaryInput.Scalar(LeafScalar.of((Type.Prim) type))));
+        }
+        return new BehaviorTarget(
+                CheckedSignature.declared(parameters,
+                        new CheckedBoundaryOutput.Scalar(LeafScalar.INT)),
+                implementation, List.of());
     }
 
     private static CheckedImplementation.Body body(Core.Binder... parameters) {

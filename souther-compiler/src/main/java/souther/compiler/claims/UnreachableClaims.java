@@ -2,6 +2,7 @@ package souther.compiler.claims;
 
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.ElementBindings;
+import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ControlPlace;
@@ -103,32 +104,21 @@ public final class UnreachableClaims {
         if (e == null) {
             return;
         }
-        InputReads names = e instanceof Core.LetIn let ? reads.and(let.binder(), let.value())
-                : reads;
         // Whether a run gets here, which is about the way in and not about this. A body every arm of
         // which aborts arrives nowhere and is still where its claims are written; what is inside such
         // a part is what nothing reaches, so a claim found further in would be one about a fork
         // behind an abort — a case nobody can be asked for a row at and a gap that would stay open
         // for ever. The same rule, and the same reading, the numbering stops on.
         if (reachable && e instanceof Core.Match match) {
-            claimedIn(match, names, newtypes, plan, answering, found);
+            claimedIn(match, reads, newtypes, plan, answering, found);
         }
         boolean inside = reachable && answering.at(e);
-        // Each arm under what it says the value it matched turned out to be: the name it binds
-        // stands for the scrutinee's position narrowed to that case, so a claim written about a
-        // position inside the arm is about a position of the input. Every other child is walked as
-        // it was.
-        if (e instanceof Core.Match match) {
-            claimedUnder(match.scrutinee(), names, symbols, newtypes, plan, answering, inside,
-                    found);
-            for (Core.Case arm : match.cases()) {
-                claimedUnder(arm.body(), names.insideArm(match, arm, symbols, newtypes), symbols,
-                        newtypes, plan, answering, inside, found);
-            }
-            return;
-        }
-        Core.forEachChild(e, child ->
-                claimedUnder(child, names, symbols, newtypes, plan, answering, inside, found));
+        // Each child under what the step into it binds: an arm's name stands for the scrutinee's
+        // position narrowed to that case, and an attempt's for what it built, so a claim written
+        // about a position inside either is about a position of the input.
+        ScopeStep.forEachChild(e, (child, step) ->
+                claimedUnder(child, reads.entering(step, symbols, newtypes), symbols, newtypes,
+                        plan, answering, inside, found));
     }
 
     /**

@@ -25,7 +25,7 @@ class WhatAnAnswerNeedsIsAdmittedAtOnceTest {
 
     private static PatternPlan plan(String regex) {
         return PatternPlan.of(assertInstanceOf(PatternRead.Read.class,
-                PatternParser.read(regex), regex).syntax());
+                PatternParser.read(regex), regex).meaning());
     }
 
     /** What one answer of a declaration is allowed, unspent. */
@@ -171,6 +171,6 @@ class WhatAnAnswerNeedsIsAdmittedAtOnceTest {
     /** A pattern outside the subset never reaches a plan, since a plan is made of what was read. */
     @Test
     void whatWasNotReadIsNotPlanned() {
-        assertInstanceOf(PatternRead.NotRead.class, PatternParser.read("\\p{Alpha}"));
+        assertInstanceOf(PatternRead.Refused.class, PatternParser.read("\\p{Alpha}"));
     }
 }

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.DeclaredSig;
@@ -82,7 +83,7 @@ class ARowAtAnotherCaseStandsNowhereBelowItTest {
                         compilation.sourceIds().get(0))).value();
         assertNotNull(observed);
         souther.compiler.inputs.InputDomain domain = souther.compiler.inputs.InputDomain.of(
-                sigs.get("read"), rules, ReadAs.THE_COMPILATION_DOES);
+                sigs.get("read"), RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES));
         Partitions.Partitioning partitioning = Partitions.of("read", domain,
                 rules, ReadAs.THE_COMPILATION_DOES);
         return new Read(MeasuredInput.of("read", domain.reading(rules), partitioning),

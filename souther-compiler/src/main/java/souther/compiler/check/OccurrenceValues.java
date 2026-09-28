@@ -1,6 +1,8 @@
 package souther.compiler.check;
 
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.TypeSymbol;
@@ -40,22 +42,8 @@ public final class OccurrenceValues {
     }
 
     /** What the declaration {@code named} is leaves the values at each of its names. */
-    public static OccurrenceValues of(TypeSymbol.AtModule named, RuleReadingSource source,
-                                      ReadingPolicy policy, DeclarationReadings machines) {
-        return of(named, source, policy, Set.of(), machines);
-    }
-
-    /** The same, reading for itself. */
-    public static OccurrenceValues of(TypeSymbol.AtModule named, RuleReadingSource source,
-                                      ReadingPolicy policy) {
-        return of(named, source, policy, Set.of(), DeclarationReadings.NONE);
-    }
-
-    /** The same, with the declarations {@code granted} names supposed to hold values, reading for
-     *  itself. */
-    static OccurrenceValues of(TypeSymbol.AtModule named, RuleReadingSource source,
-                                 ReadingPolicy policy, Set<TypeSymbol> granted) {
-        return of(named, source, policy, granted, DeclarationReadings.NONE);
+    public static OccurrenceValues of(TypeSymbol.AtModule named, RuleReadingContext reading) {
+        return of(named, reading, Set.of());
     }
 
     /**
@@ -65,13 +53,11 @@ public final class OccurrenceValues {
      * rules are what say it has none — its own, and the ones under whatever it wraps — so supposing
      * it has a value is not reading it at all.
      */
-    static OccurrenceValues of(TypeSymbol.AtModule named, RuleReadingSource source,
-                                 ReadingPolicy policy,
-                                 Set<TypeSymbol> granted,
-                                 DeclarationReadings machines) {
+    static OccurrenceValues of(TypeSymbol.AtModule named, RuleReadingContext reading,
+                               Set<TypeSymbol> granted) {
         return new OccurrenceValues(
-                InvariantChecker.seedFields(named, source, policy, java.util.Map.of(),
-                        InvariantChecker.Reach.stoppingAt(granted), machines));
+                InvariantChecker.seedFields(named, reading, java.util.Map.of(),
+                        InvariantChecker.Reach.stoppingAt(granted)));
     }
 
     /**
@@ -102,7 +88,15 @@ public final class OccurrenceValues {
         if (least == null || most == null) {
             return Cardinality.UNKNOWN;
         }
-        BigDecimal span = most.subtract(least).add(BigDecimal.ONE);
+        // A count of values is a fact about how many there are, and never about whether this host
+        // has room to hold the two ends apart — an end near either edge of the scale a model may
+        // write is a rule as countable as any other, so a span the exact arithmetic could not hold
+        // is left as unknown rather than let a difference or a sum of two decimals throw.
+        if (!(ExactRatio.of(most).minus(ExactRatio.of(least)) instanceof ExactAnswer.Held<ExactRatio> apart)
+                || !(apart.value().plus(ExactRatio.ONE) instanceof ExactAnswer.Held<ExactRatio> held)) {
+            return Cardinality.UNKNOWN;
+        }
+        BigDecimal span = held.value().asWrittenDecimal();
         if (span.signum() <= 0) {
             return Cardinality.none(new Emptiness.EmptyNumericInterval());
         }

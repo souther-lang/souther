@@ -40,7 +40,9 @@ class WhatAFindingIsAboutIsHeldByTheTypeTest {
      */
     @Test
     void aSubjectThatIsNotThereIsRefusedWhereTheFindingIsMade() {
-        assertThrows(NullPointerException.class, () -> new About.ACaseNoRowExpects(null));
+        assertThrows(NullPointerException.class, () -> new About.ACaseNoRowExpects("b", null));
+        assertThrows(NullPointerException.class, () -> new About.ACaseNoRowExpects(null,
+                TypeSymbols.declared(new TypeKey("souther.decimal", "Kept"))));
         assertThrows(NullPointerException.class, () -> new About.AClassNoRowIsIn(null));
         assertThrows(NullPointerException.class, () -> new About.APointOfABorder(null));
         assertThrows(NullPointerException.class, () -> new About.AQuestionNothingAnswered(null));

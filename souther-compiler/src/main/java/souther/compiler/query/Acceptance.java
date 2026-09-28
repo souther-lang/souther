@@ -83,6 +83,16 @@ public final class Acceptance {
         if (failed != null) {
             throw failed;
         }
+        // Nothing was refused, so every module has classes. The same question `Output.All` asks of
+        // each module, asked here where an answer it leaves out would be a program taken as checked
+        // with nothing reported against it. A check that gives up on a unit counts on a report made
+        // elsewhere, and this is where that is held.
+        for (String module : compilation.modules()) {
+            if (!db.ask(new Output.Classes(module)).present()) {
+                throw new IllegalStateException("`" + module + "` has no classes and nothing was"
+                        + " reported against it");
+            }
+        }
 
         // Every module's classes are now present, so a constant construction and an example can
         // resolve a cross-module reference — including into a dependency, whose classes come off the

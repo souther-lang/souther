@@ -6,6 +6,7 @@ import souther.compiler.coverage.Numberings;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Symbols;
@@ -50,7 +51,7 @@ class NoAxesByItselfIsNotAGenerationReasonTest {
     private static souther.compiler.inputs.InputReading readingOf(String parameter, Type type) {
         return souther.compiler.inputs.InputDomain.of(
                 List.of(new souther.compiler.inputs.InputDomain.Parameter(parameter, null, type)),
-                SYMBOLS, ReadAs.THE_COMPILATION_DOES).reading(SYMBOLS);
+                RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES)).reading(SYMBOLS);
     }
 
     @Test
@@ -58,7 +59,7 @@ class NoAxesByItselfIsNotAGenerationReasonTest {
         FillResult filled = filledOverOneArm();
 
         assertEquals(Map.of(new Generator.ArmOwed(ARM), new ArmDisposition.NoWayIn(NOT_ENUMERABLE)),
-                filled.discharge().arms(),
+                GenerationFixtures.arms(filled.discharge()),
                 "the arm's own entry, in the words the reading of the body used");
     }
 
@@ -78,7 +79,7 @@ class NoAxesByItselfIsNotAGenerationReasonTest {
         ways.put(ARM, NOT_ENUMERABLE);
         CoverageRead.Read read = new CoverageRead.Read(List.of(), ways);
 
-        return Generator.fill(subject, List.of(), Generator.CandidateCheck.ANY, read,
+        return GenerationFixtures.fill(subject, List.of(), Generator.CandidateCheck.ANY, read,
                 Generator.Trial.NOTHING_RUNS, List.of(), List.of(), List.of(ARM),
                 Budgets.generation());
     }

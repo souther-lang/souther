@@ -95,26 +95,6 @@ class CompileFunctionBindingTest {
         assertEquals(11L, out.get("m"));
     }
 
-    @Test
-    void aChoiceBetweenTwoLibraryFunctionsIsBoundAndApplied() throws Exception {
-        String src = """
-                module demo
-
-                data In = { s: String, flag: Bool }
-                data Out = { t: String }
-
-                behavior go : (i: In) -> Out constructs Out
-
-                let go (i) = {
-                    let f = if i.flag then String.trim else String.lowercase
-                    Out { t = f(i.s) }
-                }
-                """;
-
-        assertEquals("a", run(src, Map.of("s", " a ", "flag", true)).get("t"));
-        assertEquals(" ab ", run(src, Map.of("s", " AB ", "flag", false)).get("t"));
-    }
-
     /** A helper answering a function, applied where it stands. */
     @Test
     void aHelperAnswersAFunction() throws Exception {
@@ -158,12 +138,10 @@ class CompileFunctionBindingTest {
      * A recursive helper is a static method, reached by the name it is declared under. Bound and
      * applied that is still what happens.
      *
-     * <p>The pair below is here to say which rule refuses the second half. Neither recursion nor
-     * storing is it: a lambda the author wrote is refused in the same place, and both are refused
-     * because nothing settled the function's type ([#blocks]).
+     * <p>Stored it is the same function, at the type its declaration gives ([#blocks]).
      */
     @Test
-    void aFunctionWhoseTypeNothingSettledCannotBeStored() throws Exception {
+    void aRecursiveHelperIsTheSameFunctionBoundAndStored() throws Exception {
         String bound = """
                 module demo
 
@@ -185,7 +163,7 @@ class CompileFunctionBindingTest {
         assertEquals(2L, run(bound, Map.of("root",
                 Map.of("child", Map.of("child", Map.of())))).get("depth"));
 
-        assertThrows(CompileException.class, () -> Compiler.compile("""
+        assertEquals(1L, run("""
                 module demo
 
                 data Tree = { child: Option<Tree> }
@@ -202,7 +180,7 @@ class CompileFunctionBindingTest {
                     let d = depthOf
                     Out { n = List.length([d]) }
                 }
-                """));
+                """, Map.of("root", Map.of())).get("n"));
     }
 
     /**
@@ -248,12 +226,12 @@ class CompileFunctionBindingTest {
     }
 
     /**
-     * Storing a function whose type nothing states is refused for that — not for being stored, and
-     * not for being recursive. A lambda and a library name are refused identically, so neither what
-     * it was written as nor recursion is what decides it.
+     * Storing a function whose type nothing states is refused for that. A lambda states none where
+     * it is bound and never applied; a name is the function it names, and its declaration states
+     * the type, so storing one is no different from applying it.
      */
     @Test
-    void storingAFunctionIsRefusedWhateverItWasWrittenAs() {
+    void storingAFunctionIsRefusedWhereNothingStatesItsType() throws Exception {
         String lambda = """
                 module demo
 
@@ -267,6 +245,10 @@ class CompileFunctionBindingTest {
                     Out { m = List.length([w]) }
                 }
                 """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(lambda));
+        assertInstanceOf(HelperMessage.TheFunctionsTypeCannotBeRead.class, e.diagnostic().said(),
+                e.getMessage());
+
         String libraryName = """
                 module demo
 
@@ -280,10 +262,6 @@ class CompileFunctionBindingTest {
                     Out { m = List.length([w]) }
                 }
                 """;
-
-        for (String src : List.of(lambda, libraryName)) {
-            CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-            assertInstanceOf(HelperMessage.TheFunctionsTypeCannotBeRead.class, e.diagnostic().said(), e.getMessage());
-        }
+        assertEquals(1L, run(libraryName, Map.of("n", 0L)).get("m"));
     }
 }

@@ -53,16 +53,16 @@ class ATermThatReadsAnotherHoldsItsNameAndNotItsShapeTest {
         List<Term> along = new java.util.ArrayList<>();
         Denotations at = Denotations.none();
         Core value = new Core.Binary(BinOp.ADD, new Core.Int(1, Type.INT, NOWHERE),
-                new Core.Int(1, Type.INT, NOWHERE), ConstructOccurrence.unwritten(), Type.INT,
-                NOWHERE);
+                new Core.Int(1, Type.INT, NOWHERE), Core.BinaryReading.AS_THEY_STAND,
+                ConstructOccurrence.unwritten(), Type.INT, NOWHERE);
         Term term = terms.bodyKey(value, at);
         along.add(term);
         for (int i = 0; i < links; i++) {
             BindingId id = new BindingId(OWNER, i);
             at = at.binding(id, value, FactSubject.of(term), null, term, null);
             Core read = new Core.Read("v" + i, id, Type.INT, NOWHERE);
-            value = new Core.Binary(BinOp.ADD, read, read, ConstructOccurrence.unwritten(),
-                    Type.INT, NOWHERE);
+            value = new Core.Binary(BinOp.ADD, read, read, Core.BinaryReading.AS_THEY_STAND,
+                    ConstructOccurrence.unwritten(), Type.INT, NOWHERE);
             term = terms.bodyKey(value, at);
             along.add(term);
         }

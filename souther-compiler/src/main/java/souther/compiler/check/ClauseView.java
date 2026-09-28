@@ -136,12 +136,6 @@ final class ClauseView {
         return present;
     }
 
-    /** Whether every part of the clause is a rule of this world, which almost every reading is made
-     *  in. Asked where working out the shape of a clause would be the cost of finding out. */
-    boolean omitsNothing() {
-        return omitted.isEmpty();
-    }
-
     /**
      * Whether no rule of this world is anywhere under {@code shape}.
      *

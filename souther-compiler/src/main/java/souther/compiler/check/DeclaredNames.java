@@ -2,9 +2,12 @@ package souther.compiler.check;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.Function;
 
 /**
@@ -41,11 +44,50 @@ public final class DeclaredNames {
      * with nowhere to report has an index it may not use at all unless {@link #refusals()} is empty,
      * and that is the reader's own rule rather than something read off this.
      */
-    public record Index<D>(Map<String, D> declarations, List<Refusal<D>> refusals) {
+    public record Index<D>(Map<String, D> declarations, List<String> asDeclared,
+                           List<Refusal<D>> refusals) {
 
         public Index {
-            declarations = Collections.unmodifiableMap(new LinkedHashMap<>(declarations));
+            // Two answers and not one. Which declaration is written under a name is a lookup, and
+            // what a lookup is equal to says nothing about an order; the order the module writes
+            // them in is an answer of its own, and a reader that took it off the lookup was
+            // reading whichever order the mapping happened to have. So the lookup is walked by
+            // the names and the order is carried beside it, where the equality sees it.
+            declarations = Collections.unmodifiableMap(new TreeMap<>(declarations));
+            asDeclared = List.copyOf(asDeclared);
             refusals = List.copyOf(refusals);
+            if (!Set.copyOf(asDeclared).equals(declarations.keySet())
+                    || asDeclared.size() != declarations.size()) {
+                throw new IllegalArgumentException("an index writes down the declarations it has,"
+                        + " each once: " + asDeclared + " against " + declarations.keySet());
+            }
+        }
+
+        /**
+         * What this module declares, in the order it writes them.
+         *
+         * <p>What a reader showing several of them at once reads. The lookup answers which
+         * declaration stands under a name and is walked by the names, so a reader taking the order
+         * off it would be shown the names' order wearing the shape of the author's.
+         */
+        public List<D> inDeclarationOrder() {
+            return asDeclared.stream().map(declarations::get).toList();
+        }
+
+        /**
+         * What each declaration this kept comes to, under the name it is written by.
+         *
+         * <p>Asked here rather than by walking the declarations, because what comes back is keyed
+         * by the same names and the walk reaches nothing else: every entry is written under the
+         * name the walk handed over, so no turn can overwrite another's and the answer is the same
+         * whichever way the walk went. Written as a loop at each reader, what settled that was that
+         * none of them happened to read the order — which is a fact about today's readers and not
+         * about the answer.
+         */
+        public <R> Map<String, R> byName(Function<D, R> of) {
+            Map<String, R> out = new HashMap<>();
+            declarations.forEach((name, declared) -> out.put(name, of.apply(declared)));
+            return out;
         }
     }
 
@@ -77,6 +119,7 @@ public final class DeclaredNames {
     /** What {@code defs} declares, by the name each is written under. */
     public static <D> Index<D> index(List<D> defs, Function<D, String> name) {
         Map<String, D> declared = new LinkedHashMap<>();
+        List<String> asDeclared = new ArrayList<>();
         List<Refusal<D>> refused = new ArrayList<>();
         for (D def : defs) {
             String bare = name.apply(def);
@@ -89,7 +132,8 @@ public final class DeclaredNames {
                 continue;
             }
             declared.put(bare, def);
+            asDeclared.add(bare);
         }
-        return new Index<>(declared, refused);
+        return new Index<>(declared, asDeclared, refused);
     }
 }

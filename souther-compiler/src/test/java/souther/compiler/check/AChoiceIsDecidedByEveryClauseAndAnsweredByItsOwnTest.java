@@ -481,7 +481,7 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
     private static souther.compiler.regex.PatternPlan aPattern(String regex) {
         return souther.compiler.regex.PatternPlan.of(
                 ((souther.compiler.regex.PatternRead.Read)
-                        souther.compiler.regex.PatternParser.read(regex)).syntax());
+                        souther.compiler.regex.PatternParser.read(regex)).meaning());
     }
 
     /** Every question of every rule that nothing answered, and what stopped this reading of it. */
@@ -509,7 +509,7 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule at = TypeSymbols.declared(new TypeKey(symbols.module(), name));
         return FieldDomains.of(at,
-                RuleReadings.of(compilation, "demo"),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
     }
 }

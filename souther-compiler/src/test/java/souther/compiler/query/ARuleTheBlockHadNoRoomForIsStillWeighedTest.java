@@ -93,7 +93,7 @@ class ARuleTheBlockHadNoRoomForIsStillWeighedTest {
                 .filter(GenerationOutcome.CannotGenerate.class::isInstance)
                 .map(GenerationOutcome.CannotGenerate.class::cast)
                 .flatMap(each -> each.why().stream())
-                .map(Generator.UnresolvedCombination::reason)
+                .map(each -> each.why().reason())
                 .distinct().toList();
         assertEquals(List.of(
                         Generator.UnresolvedCombination.Reason.THE_BLOCK_IS_AS_LONG_AS_IT_MAY_BE),

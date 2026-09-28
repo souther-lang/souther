@@ -51,11 +51,14 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
                 "the model this reads has to be one somebody could write");
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeCardinality.Cardinalities solved =
-                TypeCardinality.solve(compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList(), RuleReadings.of(compilation, "demo"),
+                CountsByComponent.of(compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList(), RuleReadings.of(compilation, "demo"),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         assertTrue(solved.of(TypeSymbols.declared(new TypeKey(symbols.module(), reader))).none(),
                 "`" + reader + "` has no value while nothing is granted");
-        assertFalse(solved.granting(Set.of(TypeSymbols.declared(new TypeKey(symbols.module(), granted))))
+        assertFalse(solved.granting(
+                                List.of(TypeSymbols.declared(new TypeKey(symbols.module(), reader))),
+                                Set.of(TypeSymbols.declared(
+                                        new TypeKey(symbols.module(), granted))))
                         .get(TypeSymbols.declared(new TypeKey(symbols.module(), reader))).none(),
                 "`" + reader + "` reaches `" + granted + "` and was granted it has values");
     }
@@ -135,9 +138,15 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
-        assertTrue(TypeCardinality.solve(compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList(), RuleReadings.of(compilation, "demo"),
+        assertTrue(CountsByComponent.of(compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList(), RuleReadings.of(compilation, "demo"),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
-                        .granting(Set.of(TypeSymbols.declared(new TypeKey(symbols.module(), "Granted")))).get(TypeSymbols.declared(new TypeKey(symbols.module(), "Bad"))).none(),
+                        .granting(
+                                // Asked of the holder, so that what it reaches is read: the name
+                                // granted is one of those, and the one this is about is under it.
+                                List.of(TypeSymbols.declared(new TypeKey(symbols.module(), "Holder"))),
+                                Set.of(TypeSymbols.declared(
+                                        new TypeKey(symbols.module(), "Granted"))))
+                        .get(TypeSymbols.declared(new TypeKey(symbols.module(), "Bad"))).none(),
                 "and what it wraps was not granted anything");
     }
 
@@ -169,7 +178,7 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
         compilation.answerEverything();
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeCardinality.Cardinalities solved =
-                TypeCardinality.solve(compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList(), RuleReadings.of(compilation, "demo"),
+                CountsByComponent.of(compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList(), RuleReadings.of(compilation, "demo"),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
         assertEquals(List.of(true, true),

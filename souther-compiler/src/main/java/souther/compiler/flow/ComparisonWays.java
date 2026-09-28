@@ -1,5 +1,6 @@
 package souther.compiler.flow;
 
+import souther.compiler.check.ScopeStep;
 import souther.compiler.core.Core;
 
 import java.util.function.Function;
@@ -33,7 +34,7 @@ public interface ComparisonWays {
     boolean comesOut(Core e, boolean want, Function<Core.Read, Core> settledBy);
 
     /**
-     * The same, inside a body that binds {@code binder} to {@code value}.
+     * The same, in a child of the node being read, {@code step} being the way into it.
      *
      * <p>Scoped like the naming and for the same reason: what a name reads is not a fact about the
      * node that reads it. A comparison written under {@code let len = String.length(c)} is about the
@@ -41,11 +42,7 @@ public interface ComparisonWays {
      * leaving the way unheld under a binding and held without one, which is a {@code let} changing
      * what the body does.
      */
-    ComparisonWays under(Core.Binder binder, Core value);
-
-    /** The same, inside {@code arm} of {@code match}. The other place what a name means changes,
-     *  and a reading that has one of the two and not the other is scoped like nothing else here. */
-    ComparisonWays insideArm(Core.Match match, Core.Case arm);
+    ComparisonWays entering(ScopeStep step);
 
     /**
      * What the body's own text says, for a reading with no input to ask about.
@@ -62,12 +59,7 @@ public interface ComparisonWays {
         }
 
         @Override
-        public ComparisonWays under(Core.Binder binder, Core value) {
-            return this;
-        }
-
-        @Override
-        public ComparisonWays insideArm(Core.Match match, Core.Case arm) {
+        public ComparisonWays entering(ScopeStep step) {
             return this;
         }
     };

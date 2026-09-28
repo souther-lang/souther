@@ -76,10 +76,12 @@ public record FieldRead(Symbols symbols, PublishedDeclarations published, Declar
     }
 
     public FieldRead {
-        if (symbols == null || world == null || unreadable == null) {
+        if (symbols == null || published == null || kinds == null || inners == null
+                || world == null || unreadable == null) {
             throw new IllegalArgumentException(
-                    "a field read is made against declarations, a world that says what they hold,"
-                            + " and what it does where they do not read");
+                    "a field read is made against declarations — what they say, which form each of"
+                            + " them is and what each of them wraps — a world that says what they"
+                            + " hold, and what it does where they do not read");
         }
     }
 

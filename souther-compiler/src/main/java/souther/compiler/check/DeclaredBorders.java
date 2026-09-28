@@ -86,15 +86,7 @@ public record DeclaredBorders(souther.compiler.diag.Citation at,
      * asks once per declaration rather than once per line.
      */
     public static DeclaredBorders of(TypeSymbol declaredOn, PublishedDeclarations declarations,
-                                     DeclarationCitations citations, RuleReadingSource source,
-                                     ReadingPolicy policy) {
-        return of(declaredOn, declarations, citations, source, policy, DeclarationReadings.NONE);
-    }
-
-    /** The same, asking {@code machines} for what somebody has already made of the declaration. */
-    public static DeclaredBorders of(TypeSymbol declaredOn, PublishedDeclarations declarations,
-                                     DeclarationCitations citations, RuleReadingSource source,
-                                     ReadingPolicy policy, DeclarationReadings machines) {
+                                     DeclarationCitations citations, RuleReadingContext reading) {
         // One address, and two questions put to it. What kind of declaration this is decides whether
         // there are lines to read at all; where its code is decides what a report calls the place.
         // Neither is looked up by the name a second time, which is what would give one declaration
@@ -103,7 +95,8 @@ public record DeclaredBorders(souther.compiler.diag.Citation at,
             throw new IllegalArgumentException(
                     "there is no declaration of " + declaredOn.name() + " to read");
         }
-        if (!(declarations.of(named.key()) instanceof DeclarationMeaning.Product)) {
+        if (!(declarations.of(named.key())
+                instanceof PublishedDeclarationResult.Found(DeclarationMeaning.Product _))) {
             throw new IllegalArgumentException(
                     "there is no declaration of " + declaredOn.name() + " to read");
         }
@@ -114,7 +107,7 @@ public record DeclaredBorders(souther.compiler.diag.Citation at,
         // the reading of cuts does not draw, and a report would hold words for one of them.
         Map<AnEnd, List<LineProvenance>> byEnd = new LinkedHashMap<>();
         for (FieldDomains.Placed placed
-                : Rules.of(declaredOn, source, policy, machines).bounds().placed()) {
+                : Rules.of(declaredOn, reading).bounds().placed()) {
             // A clause reaching this declaration through a spread is written on another one and is
             // that one's to name, the way a line is named by the rule that drew it (ADR-0090). Its
             // own reading answers for it.
@@ -165,7 +158,7 @@ public record DeclaredBorders(souther.compiler.diag.Citation at,
         // The value a newtype wraps is at no name, and the clause writing about it says `value`.
         String where = at.position().isTheValueItself() ? "value" : at.position().toString();
         return at.of() instanceof NumberAt.OfWhatNumber.OfWhatAnOperationAnswers taken
-                ? taken.operation() + "(" + where + ")" : where;
+                ? taken.operation() + taken.arguments().writtenWith(where) : where;
     }
 
     /** The same, for a caller holding the line as the clause drew it. */

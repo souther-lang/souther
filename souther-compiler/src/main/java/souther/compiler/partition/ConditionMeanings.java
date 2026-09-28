@@ -4,6 +4,7 @@ import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 
@@ -63,5 +64,11 @@ record ConditionMeanings(souther.compiler.inputs.InputReading read) {
     OnTheWay entering(Core.Match match, int part, InputReads reads, ConditionNumbering numbering) {
         return ReachingCuts.entering(match, match.cases().get(part), part, inputs(), reads, rules(),
                 numbering);
+    }
+
+    /** What taking arm {@code part} of {@code attempt}, written at {@code at}, says of the input. */
+    OnTheWay attempting(Core.IfConstructed attempt, int part, SourcePos at,
+                        ConditionNumbering numbering) {
+        return ReachingCuts.attempting(attempt, part, at, numbering);
     }
 }

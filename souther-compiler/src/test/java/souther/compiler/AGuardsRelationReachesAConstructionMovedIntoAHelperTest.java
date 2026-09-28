@@ -48,7 +48,7 @@ class AGuardsRelationReachesAConstructionMovedIntoAHelperTest {
                 data 釣り銭の組み方 = 組めた | 組めない
 
                 let 商 (a: Int, b: Int): Int =
-                    match Int.divide(a, b) with
+                    match Int.truncatingDivide(a, b) with
                         | Int as n -> n
                         | DivisionByZero -> unreachable "額面は定数で、0になることはない"
 

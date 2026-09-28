@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Symbols;
@@ -50,7 +51,7 @@ class EveryQuestionAReadingAnswersIsAboutItsOwnInputTest {
     /** A reading of an input that takes one whole number, and nothing called {@code s}. */
     private static Quantities reading() {
         return InputDomain.of(List.of(new InputDomain.Parameter("n", null, Type.INT)),
-                RULES, ReadAs.THE_COMPILATION_DOES).quantities(RULES);
+                RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES)).quantities(RULES);
     }
 
     /** A term of another input, whose root this reading takes nothing under. */

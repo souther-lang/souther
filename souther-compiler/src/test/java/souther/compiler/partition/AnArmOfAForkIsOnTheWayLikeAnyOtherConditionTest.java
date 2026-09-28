@@ -154,7 +154,7 @@ class AnArmOfAForkIsOnTheWayLikeAnyOtherConditionTest {
     }
 
     /** Everything on the way to any comparison of {@code behavior}, the comparisons in the order the
-     *  walk filed them. */
+     *  body writes them. */
     private static List<OnTheWay> wayOf(String behavior) {
         List<OnTheWay> out = new ArrayList<>();
         ways(behavior).forEach(out::addAll);
@@ -174,8 +174,8 @@ class AnArmOfAForkIsOnTheWayLikeAnyOtherConditionTest {
         Map<String, souther.compiler.inputs.InputDomain> inputs =
                 compilation.db().ask(new Adequacy.Inputs(module)).value();
         GuardThresholds.Guards guards =
-                GuardThresholds.of(behavior, checked.analysisBodies().get(behavior), body, plan,
+                ThresholdFixtures.guardsOf(behavior, checked.analysisBodies().get(behavior), body, plan,
                         inputs.get(behavior), rules);
-        return List.copyOf(guards.reaching().byComparison().values());
+        return ReachingAccounts.filedFor(guards.reaching(), body);
     }
 }

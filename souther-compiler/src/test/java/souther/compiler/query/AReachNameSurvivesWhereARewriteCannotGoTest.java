@@ -61,7 +61,8 @@ class AReachNameSurvivesWhereARewriteCannotGoTest {
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
         Hir.FnDef def =
                 c.db().ask(new Bodies.LoweredBody("app",
-                        new souther.compiler.ast.DefinitionName("lib.flatten"))).value().value();
+                        new souther.compiler.ast.DefinitionName("lib.flatten"))).value().value()
+                        .definition();
         return ((Hir.FnBody.Written) def.body()).expr();
     }
 

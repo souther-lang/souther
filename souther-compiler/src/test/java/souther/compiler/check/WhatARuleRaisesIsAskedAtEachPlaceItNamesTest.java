@@ -135,8 +135,8 @@ class WhatARuleRaisesIsAskedAtEachPlaceItNamesTest {
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Span"));
         assertNotNull(symbols.declaredNode(named.key()), "no `Span` declared");
         Collection<Required> every = FieldDomains
-                .of(named, RuleReadings.of(compilation, module),
-                        ReadAs.THE_COMPILATION_DOES).required().values();
+                .of(named, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
+                        ReadAs.THE_COMPILATION_DOES)).required().values();
         assertEquals(1, every.size(), "one clause, so one answer about what it raises");
         return every.iterator().next();
     }

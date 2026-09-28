@@ -46,7 +46,7 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
 
     /** Enough for the two sides of one of the rules written below, and not for two of them. The
      *  two assertions that say so are beside the one test this is for. */
-    private static final PatternPlan.Budget ONE_RULE = new PatternPlan.Budget(1000, 100);
+    private static final PatternPlan.Budget ONE_RULE = new PatternPlan.Budget(1000, 60);
 
     @Test
     void aRuleAboutTheStringsDividesThePositionIntoWhatItAdmitsAndTheRest() {

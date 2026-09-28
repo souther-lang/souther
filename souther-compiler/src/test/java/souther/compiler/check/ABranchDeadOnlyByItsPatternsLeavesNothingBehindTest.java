@@ -55,8 +55,8 @@ class ABranchDeadOnlyByItsPatternsLeavesNothingBehindTest {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), "Pair"));
         return FieldDomains.of(name,
-                RuleReadings.of(compilation, "demo"),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
     }
 
     /** The choice is the branch anybody can be in, which names one string. */

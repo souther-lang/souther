@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.ImplicitModuleName;
 import souther.compiler.WhereItSits;
 import org.junit.jupiter.api.Test;
 
@@ -131,8 +132,10 @@ class TheFaceReadsWhatAModelIsWrittenAsTest {
     void aKeyCannotBeWrittenForARowNothingAnswersTo() throws Exception {
         BoundExamples examples = bound();
 
-        assertThrows(IllegalArgumentException.class,
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> examples.rowKey("findTodo", "a todo that was never written"));
+        assertTrue(refused.getMessage().contains("a todo that was never written"),
+                refused.getMessage());
         assertEquals(0, RowKey.class.getConstructors().length,
                 "nothing outside the package makes one");
 
@@ -183,6 +186,22 @@ class TheFaceReadsWhatAModelIsWrittenAsTest {
                 "and is called what the file is");
         assertEquals(List.of("Main"), SoutherExamples.ofSource(Files.readString(source)).modules(),
                 "or `Main`, where the caller held the text rather than a file");
+    }
+
+    /**
+     * A lone file is named the way every other door into the compiler names it: up to the first dot
+     * of its file name, so a file with a second extension is named what the command line names it.
+     */
+    @Test
+    void aLoneFileIsNamedUpToTheFirstDotOfItsName(@TempDir Path dir) throws Exception {
+        Path source = dir.resolve("todo.test.sou");
+        Files.writeString(source, """
+                data TodoId = Int
+                """);
+
+        assertEquals(List.of(ImplicitModuleName.ofFileName("todo.test.sou")),
+                SoutherExamples.of(source).modules());
+        assertEquals(List.of("todo"), SoutherExamples.of(source).modules());
     }
 
     /**

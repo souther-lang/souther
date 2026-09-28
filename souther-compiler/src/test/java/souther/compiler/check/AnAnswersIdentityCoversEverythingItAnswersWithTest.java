@@ -3,7 +3,11 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 import souther.compiler.WhatWasCompiled;
 
+import souther.compiler.identity.DecidedByTheRest;
+
+import java.lang.classfile.Attributes;
 import java.lang.classfile.ClassModel;
+import java.lang.classfile.FieldModel;
 import java.lang.classfile.MethodModel;
 import java.lang.classfile.instruction.FieldInstruction;
 import java.lang.classfile.instruction.InvokeInstruction;
@@ -40,15 +44,31 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * comparing what a state hands over as a tree covers everything that tree is built from. A field is
  * uncovered only where nothing {@code equals} reaches ever loads it.
  *
- * <p>Two kinds of field are not part of an identity and are named here rather than guessed at. A
- * {@code volatile} field is a worked-out answer kept beside the state — writing it changes nothing
- * anybody can observe, and it is derived from the fields that are covered. A field a record
- * declares is covered by the identity the record already has, so a record is not asked about at all.
+ * <p>A field outside an identity is one that cannot differ while the rest agrees, and each of the
+ * three ways of being that says so for itself rather than being guessed at. A {@code volatile} field
+ * is an answer worked out later and kept beside the state, and writing it changes nothing anybody
+ * can observe. A field a record declares is covered by the identity the record already has, so a
+ * record is not asked about at all. A final field settled where the state is made, beside the ones
+ * that decide it, says so with {@link DecidedByTheRest}, at the field, where the next writer of that
+ * class meets the claim.
+ *
+ * <p>{@link #ALLOWED} is for what none of the three covers: a field outside an identity for a reason
+ * about that field, which is a reason to read rather than a rule. A reason that would read the same
+ * about a second field is a rule, and a rule written out once per field is a list to keep in step by
+ * hand — so it goes above rather than here twice.
  */
 class AnAnswersIdentityCoversEverythingItAnswersWithTest {
 
-    /** The package whose states the store compares, which is what this rule is about. */
-    private static final String THE_CHECK = "souther.compiler.check";
+    /**
+     * The packages whose states the store compares, which is what this rule is about.
+     *
+     * <p>The tree among them, and not only what is worked out from it. A resolved module is a state
+     * the store hands back ({@code Answer<Hir.Module>}), so a node of it whose identity leaves a
+     * field out is the same silence one level further up: the module compares equal, and everything
+     * that read it keeps what it had.
+     */
+    private static final List<String> THE_STATES =
+            List.of("souther.compiler.check", "souther.compiler.ast");
 
     /** Where a state's identity may leave a field out, and why. Nothing else may. */
     private static final Map<String, String> ALLOWED = Map.of(
@@ -57,6 +77,10 @@ class AnAnswersIdentityCoversEverythingItAnswersWithTest {
             "souther.compiler.check.CheckSurface.operandMethods",
             "keyed on operand identity, over the very nodes the tree hands out — it says nothing"
                     + " the tree and the definitions built from it do not already say",
+            "souther.compiler.check.CheckSurface.fixtureValueMethods",
+            "the address for a value here is a pure function of its name — ValueEntries.methodFor or"
+                    + " FixtureValueEntries.methodFor — so the map says nothing the minted definitions"
+                    + " and the row and fake text they were found in do not already say",
             "souther.compiler.check.DeclaredArgument.stands",
             "the type at a position is a fact the library settled about that position and not a"
                     + " second thing to tell two arguments apart by: two readings of one declaration"
@@ -68,7 +92,11 @@ class AnAnswersIdentityCoversEverythingItAnswersWithTest {
     void everyHandWrittenIdentityReadsEveryFieldItsStateHolds() {
         Map<String, String> uncovered = new TreeMap<>();
         int asked = 0;
-        for (ClassModel model : WhatWasCompiled.compiled().inPackage(THE_CHECK)) {
+        List<ClassModel> states = new ArrayList<>();
+        for (String where : THE_STATES) {
+            states.addAll(WhatWasCompiled.compiled().inPackage(where));
+        }
+        for (ClassModel model : states) {
             if (model.superclass().isPresent()
                     && model.superclass().get().asInternalName().equals("java/lang/Record")) {
                 // A record's identity is written for it out of its components, and what such a one
@@ -145,9 +173,10 @@ class AnAnswersIdentityCoversEverythingItAnswersWithTest {
     }
 
     /**
-     * The instance fields the state holds, less the ones an identity is not made of: a
-     * {@code volatile} answer worked out from the others, and the synthetic references a nested
-     * class carries.
+     * The instance fields the state holds, less the ones an identity is not made of: an answer
+     * worked out from the others — said by {@code volatile} where it is worked out later and by
+     * {@link DecidedByTheRest} where the constructor settled it — and the synthetic references
+     * a nested class carries.
      */
     private static List<String> instanceFieldsOf(ClassModel model) {
         List<String> fields = new ArrayList<>();
@@ -162,12 +191,22 @@ class AnAnswersIdentityCoversEverythingItAnswersWithTest {
                 unstable |= flag == java.lang.reflect.AccessFlag.VOLATILE;
                 synthetic |= flag == java.lang.reflect.AccessFlag.SYNTHETIC;
             }
-            if (!statik && !unstable && !synthetic
+            if (!statik && !unstable && !synthetic && !saysTheRestDecidesIt(field)
                     && !field.fieldName().stringValue().startsWith("this$")) {
                 fields.add(field.fieldName().stringValue());
             }
         });
         return fields;
     }
+
+    /** Whether the field says the fields beside it decide it. */
+    private static boolean saysTheRestDecidesIt(FieldModel field) {
+        return field.findAttribute(Attributes.runtimeVisibleAnnotations())
+                .map(said -> said.annotations().stream()
+                        .anyMatch(one -> one.className().stringValue().equals(DECIDED_BY_THE_REST)))
+                .orElse(false);
+    }
+
+    private static final String DECIDED_BY_THE_REST = DecidedByTheRest.class.descriptorString();
 
 }

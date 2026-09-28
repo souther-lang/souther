@@ -1,8 +1,8 @@
 package souther.compiler.fmt;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import souther.compiler.cst.CstParser;
+import souther.test.ClosedWorldContract;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the record body opening down the page are two decisions on one source line, and they do not
  * disagree about anything — only about which characters they are written in.
  */
-@Tag("population")
+@ClosedWorldContract
 class TwoRulesOnOneLineAreBothWrittenTest {
 
     private static List<Witness> witnesses(String source, Formatter.CanonicalForm canonical) {

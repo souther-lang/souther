@@ -115,18 +115,19 @@ class AnAlternativeAssignmentIsAsCompatibleAsTheFirstTest {
     @Test
     void aCombinationRefusedAtItsFirstAssignmentIsTriedAtAnother() {
         Model model = model();
-        Set<ArmProbe> every = Generator.everyArmACombinationMayTake(model.subject(), model.groups(),
+        Set<ArmProbe> every = GenerationFixtures.everyArmACombinationMayTake(model.subject(), model.groups(),
                 Budgets.generation());
         assertFalse(every.isEmpty(), "the body has arms a combination takes");
 
-        FillResult filled = Generator.fill(model.subject(), List.of(),
+        FillResult filled = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.refusing(AnAlternativeAssignmentIsAsCompatibleAsTheFirstTest::notTheFirst),
                 model.read(), Generator.Trial.NOTHING_RUNS, List.of(), List.of(), List.copyOf(every),
                 Budgets.generation());
 
         assertEquals(List.of(), filled.unresolved().stream()
-                        .filter(each -> each.reason()
-                                == Generator.UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH)
+                        .filter(each -> each.why().reason()
+                                == Generator.UnresolvedCombination.Reason
+                                        .ONE_POSITION_CANNOT_BE_BOTH)
                         .toList(),
                 "no combination is refused for naming positions it does not name");
         assertFalse(filled.rows().isEmpty(),

@@ -132,7 +132,14 @@ final class JvmLimits {
         if (bd instanceof Hir.SpecBehavior spec) {
             return implemented.contains(spec.name()) ? spec.dependsOn().size() : 0;
         }
-        return Requirements.names(requirements.getOrDefault(bd.name(), List.of())).size();
+        List<BehaviorRequirement> required = requirements.get(bd.name());
+        if (required == null) {
+            // An entry for every behavior the module declares, so a missing one is not a
+            // composition holding nothing.
+            throw new IllegalStateException("`" + bd.name() + "` is declared and has no"
+                    + " requirement set");
+        }
+        return Requirements.names(required).size();
     }
 
     /**
@@ -201,7 +208,8 @@ final class JvmLimits {
             case CODE_SIZE -> CompileException.of(said
                     .say(new DeclarationMessage.AMethodIsLargerThanTheJvmHolds(name,
                             exceeded.method(), measured, String.valueOf(CODE_BYTES)))
-                    .hint(new DeclarationMessage.SplitTheWorkOrMoveTheTable()).build());
+                    .hint(new DeclarationMessage.SplitTheWorkOrMoveTheTable())
+                    .hint(new DeclarationMessage.NamingPartsDoesNotDivideTheMethod()).build());
             case CONSTANT_POOL_INDEX -> CompileException.of(said
                     .say(new DeclarationMessage.AClassRefersPastTheConstantPool(name, measured,
                             String.valueOf(POOL_ENTRIES)))

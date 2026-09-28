@@ -1,9 +1,11 @@
 package souther.cli;
 
+import souther.compiler.CompilationSources;
+import souther.compiler.CompilationSources.SourceFile;
 import souther.compiler.Compiler;
 import souther.compiler.generated.GeneratedBehavior;
 import souther.compiler.generated.JsonBoundary;
-import souther.compiler.Reserved;
+import souther.compiler.CanonicalNames;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
@@ -15,6 +17,7 @@ import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.query.Bodies;
+import souther.compiler.types.ValueName;
 import net.unit8.raoh.Issues;
 import net.unit8.raoh.ResourceBundleMessageResolver;
 
@@ -25,6 +28,7 @@ import tools.jackson.core.StreamReadConstraints;
 import tools.jackson.core.StreamWriteConstraints;
 import tools.jackson.core.TokenStreamContext;
 import tools.jackson.core.exc.StreamConstraintsException;
+import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -90,10 +94,6 @@ public final class Runner {
             this.issues = issues;
         }
 
-        RunException(String message) {
-            this(null, message, 1, null);
-        }
-
         /** This failure in {@code locale}. An exit code of 2 is a usage error, which ends with the
          * command's usage line. */
         String localized(java.util.Locale locale) {
@@ -129,10 +129,25 @@ public final class Runner {
         return new RunException(key, message, 1, null, args);
     }
 
-    /** Parses the {@code run} subcommand's arguments (everything after {@code run}) and runs it,
-     *  collecting the compile's warnings into {@code warningsOut} for the caller to render —
-     *  running a module says what compiling it would have said. */
-    static String runCli(String[] args, List<Located> warningsOut) {
+    /**
+     * A {@code run} command line, read.
+     *
+     * @param file the source to run
+     * @param behaviorName the behavior to drive, or null to take the only runnable one
+     * @param inputJson the input, or null for a behavior that takes none
+     * @param path what an import naming no module in the file resolves against
+     */
+    record Invocation(Path file, String behaviorName, String inputJson, ModulePath path) {
+
+        /** The file, read — what the compile is handed and what a report about it quotes. */
+        CompilationSources sources() {
+            return CompilationSources.files(
+                    List.of(new SourceFile(file.toString(), read(file))));
+        }
+    }
+
+    /** Parses the {@code run} subcommand's arguments (everything after {@code run}). */
+    static Invocation parse(String[] args) {
         Path file = null;
         String behaviorName = null;
         String inputJson = null;
@@ -156,7 +171,7 @@ public final class Runner {
         if (file == null) {
             throw usage("run.usage.nofile", "no source file given");
         }
-        return run(file, behaviorName, inputJson, warningsOut, pathOf(classPath));
+        return new Invocation(file, behaviorName, inputJson, pathOf(classPath));
     }
 
     /** A class path as its entries, in the order they are searched. */
@@ -201,13 +216,26 @@ public final class Runner {
      */
     static String run(Path file, String behaviorName, String inputJson, List<Located> warningsOut,
                       ModulePath path) {
-        String source = read(file);
-        String moduleName = moduleName(file);
+        Invocation invocation = new Invocation(file, behaviorName, inputJson, path);
+        return run(invocation, invocation.sources(), warningsOut);
+    }
+
+    /**
+     * Compiles {@code sources} — the invocation's file, as the caller read it — and drives the
+     * behavior it names.
+     *
+     * <p>Handed the sources rather than reading them, so a caller rendering what the compile said
+     * quotes the text that was compiled and not a later reading of the file.
+     */
+    static String run(Invocation invocation, CompilationSources sources,
+                      List<Located> warningsOut) {
+        String behaviorName = invocation.behaviorName();
+        String inputJson = invocation.inputJson();
 
         // One compilation answers all of it. Re-reading the source here to find the behavior and
         // its signature would resolve every name a second time, against a tree this compile has
         // already produced.
-        Compilation compilation = Compiler.compiled(source, moduleName, warningsOut, path);
+        Compilation compilation = Compiler.compiled(sources, invocation.path(), warningsOut);
         // The module this file declares, and not one it reached: what the path holds is read for its
         // declarations and is no part of what this compilation declares.
         Prepared module = compilation.module(compilation.modules().get(0));
@@ -257,10 +285,10 @@ public final class Runner {
      * marks a generated class {@code ACC_PUBLIC} ({@code CodegenContext.pub}), and it is asked here
      * for that reason: the runner reaches the compiled behavior by reflection from another package,
      * which the JVM allows only for a class the module published. A module with no {@code exposing}
-     * list keeps nothing to itself, so a header-less file publishes everything in it.
+     * clause keeps nothing to itself, so a header-less file publishes everything in it.
      */
     private static boolean exposes(Prepared module, String name) {
-        return module.exposing().isEmpty() || module.exposing().contains(name);
+        return module.published().contains(name);
     }
 
     /**
@@ -276,7 +304,7 @@ public final class Runner {
                                                    String requestedSpelling) {
         // What `--behavior` was given is a name arriving from outside, and it is looked up
         // against names the source settled.
-        String requested = Reserved.name(requestedSpelling);
+        String requested = CanonicalNames.name(requestedSpelling);
         Map<String, List<BehaviorRequirement>> requirements = requirementsOf(compilation, module);
         // The ones that can be run, in the order the module declares them. A reader is given this
         // list to pick from, so it is held as something that has an order rather than as a set of
@@ -290,7 +318,9 @@ public final class Runner {
             // is the module's classification; whether anything has to be handed to it is what the
             // declaration says it depends on.
             if (b instanceof Hir.SpecBehavior spec
-                    && module.implementationOf(spec).hasBody() && spec.dependsOn().isEmpty()) {
+                    && module.implementationOf(new ValueName.Behavior(module.name(), spec.name()))
+                            .hasBody()
+                    && spec.dependsOn().isEmpty()) {
                 drivable.put(spec.name(), spec);
             } else if (b instanceof Hir.PipeBehavior pipe
                     && pipelineBlocker(pipe, requirements) == null) {
@@ -332,7 +362,13 @@ public final class Runner {
     private static Blocker pipelineBlocker(Hir.PipeBehavior pipe,
             Map<String, List<BehaviorRequirement>> requirements) {
         List<BehaviorRequirement> requires = requirements.get(pipe.name());
-        if (requires == null || requires.isEmpty()) {
+        if (requires == null) {
+            // An entry for every behavior the module declares, so a missing one is not a pipeline
+            // that needs nothing supplied.
+            throw new IllegalStateException("`" + pipe.name() + "` is declared and has no"
+                    + " requirement set");
+        }
+        if (requires.isEmpty()) {
             return null;
         }
         // What the composition would be handed, and who wanted it. A dependency the composition
@@ -375,7 +411,13 @@ public final class Runner {
                                                                         Prepared module) {
         Map<String, List<BehaviorRequirement>> answered =
                 compilation.db().ask(new Bodies.Requirements(module.name())).value();
-        return answered == null ? Map.of() : answered;
+        if (answered == null) {
+            // The module compiled, so this was answered. Read as no requirements at all, every
+            // composition in it would be offered as one `run` can build.
+            throw new IllegalStateException("`" + module.name() + "` compiled and what its"
+                    + " behaviors require was not answered");
+        }
+        return answered;
     }
 
     /**
@@ -416,7 +458,8 @@ public final class Runner {
                 // Two ways to have no body, and they send an author to different places: one is
                 // supplied from Java and the other is a `let` this model has not written yet. Which
                 // of them this is, is the module's answer and not a table read again here.
-                switch (module.implementationOf(spec)) {
+                switch (module.implementationOf(
+                        new ValueName.Behavior(module.name(), spec.name()))) {
                     case IMPLEMENTED -> { }
                     case INJECTION_TARGET -> {
                         return fail("run.behavior.noimpl",
@@ -600,33 +643,20 @@ public final class Runner {
         }
     }
 
-    /** The module name for a header-less source: the file name without its extension, or {@code main}
-     * when that is not a usable identifier. */
-    static String moduleName(Path file) {
-        String fileName = file.getFileName().toString();
-        int dot = fileName.indexOf('.');
-        // Canonicalized before it is judged, not after: a file delivered by macOS carries its name
-        // decomposed, and a combining mark is not a letter or a digit, so the same file would be
-        // `main` on one machine and its own name on another.
-        String stem = Reserved.name(dot < 0 ? fileName : fileName.substring(0, dot));
-        if (stem.isEmpty() || !Character.isLetter(stem.charAt(0))) {
-            return "main";
-        }
-        for (int i = 1; i < stem.length(); i++) {
-            char ch = stem.charAt(i);
-            if (!Character.isLetterOrDigit(ch) && ch != '_') {
-                return "main";
-            }
-        }
-        return stem;
-    }
-
     private static String jsonPointer(net.unit8.raoh.Path path) {
         String p = path.toJsonPointer();
         return p.isEmpty() ? "(root)" : p;
     }
 
-    private static final JsonMapper JSON = JsonMapper.builder().build();
+    /**
+     * A fraction is kept as the decimal it was written. Left to the default, the mapper parses one as
+     * a {@code double} before any decoder sees it, and a {@code Decimal} would be read from the
+     * nearest binary value instead of the number that was written (spec
+     * §a-boundary-scalar-is-read-not-converted); the decoder refuses that, so a program's input
+     * could not be read at all.
+     */
+    private static final JsonMapper JSON = JsonMapper.builder()
+            .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).build();
 
     /** How deep the mapper reads and writes before it refuses, counted in levels of JSON. */
     private static final int READ_DEPTH_LIMIT =

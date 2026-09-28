@@ -3,6 +3,7 @@ package souther.runtime;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -28,6 +29,18 @@ class DecimalInContainersTest {
         assertEquals(1, s.size());
         assertTrue(Sets.contains(ONE, s));
         assertTrue(Sets.contains(ONE_SCALED, s));
+    }
+
+    /** An amount at the floor of the scale range is an amount like any other: its trailing zero
+     *  cannot be taken off, and the one form of it is where the floor stops the taking. */
+    @Test
+    void aSetHoldsAnAmountAtTheFloorOfTheScaleRangeOnce() {
+        BigDecimal atTheFloor = new BigDecimal(BigInteger.TEN, Integer.MIN_VALUE);
+        BigDecimal oneAbove = new BigDecimal(BigInteger.valueOf(100), Integer.MIN_VALUE + 1);
+        Set<BigDecimal> s = Sets.fromList(List.of(atTheFloor, oneAbove));
+        assertEquals(1, s.size());
+        assertTrue(Sets.contains(oneAbove, s));
+        assertEquals(Values.hash(atTheFloor), Values.hash(oneAbove));
     }
 
     @Test

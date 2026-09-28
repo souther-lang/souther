@@ -2,7 +2,6 @@ package souther.compiler.query;
 
 import souther.compiler.diag.CompileException;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -64,17 +63,6 @@ public record Answer<T>(T value, List<Report> reports) {
      * pass that recovered and went on. */
     public boolean hasError() {
         return reports.stream().anyMatch(Report::isError);
-    }
-
-    /** This answer's reports followed by {@code more} — for a key that says something of its own on
-     * top of what it read. */
-    public List<Report> and(List<Report> more) {
-        if (more.isEmpty()) {
-            return reports;
-        }
-        List<Report> all = new ArrayList<>(reports);
-        all.addAll(more);
-        return List.copyOf(all);
     }
 
     /** The same reports with a different value — for a key that answers from what it read. */

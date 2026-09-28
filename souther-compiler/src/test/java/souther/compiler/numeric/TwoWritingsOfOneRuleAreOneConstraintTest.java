@@ -29,16 +29,16 @@ class TwoWritingsOfOneRuleAreOneConstraintTest {
     private static final String A = "a";
     private static final String B = "b";
 
-    private static Rational num(long whole) {
-        return Rational.of(whole);
+    private static ExactRatio num(long whole) {
+        return ExactRatio.of(whole);
     }
 
-    private static Rational ratio(long numerator, long denominator) {
-        return Rational.of(BigInteger.valueOf(numerator), BigInteger.valueOf(denominator));
+    private static ExactRatio ratio(long numerator, long denominator) {
+        return ExactRatio.of(BigInteger.valueOf(numerator), BigInteger.valueOf(denominator));
     }
 
-    private static Map<String, Rational> weighing(Object... pairs) {
-        Map<String, Rational> out = new LinkedHashMap<>();
+    private static Map<String, ExactRatio> weighing(Object... pairs) {
+        Map<String, ExactRatio> out = new LinkedHashMap<>();
         for (int i = 0; i < pairs.length; i += 2) {
             out.put((String) pairs[i], num((Integer) pairs[i + 1]));
         }
@@ -53,14 +53,14 @@ class TwoWritingsOfOneRuleAreOneConstraintTest {
         return ((Read.Stated<String>) read).constraint();
     }
 
-    private static AffineConstraint<String> whole(Map<String, Rational> coefs, long constant,
+    private static AffineConstraint<String> whole(Map<String, ExactRatio> coefs, long constant,
                                                   Rel rel) {
         Read<String> read = AffineConstraint.of(coefs, num(constant), rel,
                 atom -> Granularity.DISCRETE);
         return stated(read);
     }
 
-    private static Read<String> decimals(Map<String, Rational> coefs, Rational constant, Rel rel) {
+    private static Read<String> decimals(Map<String, ExactRatio> coefs, ExactRatio constant, Rel rel) {
         return AffineConstraint.of(coefs, constant, rel, atom -> Granularity.DENSE);
     }
 
@@ -96,8 +96,8 @@ class TwoWritingsOfOneRuleAreOneConstraintTest {
 
     @Test
     void aPositionTheRuleDoesNotWeighIsNotOneItNames() {
-        Map<String, Rational> withNought = weighing(A, 1, B, 2);
-        withNought.put("c", Rational.ZERO);
+        Map<String, ExactRatio> withNought = weighing(A, 1, B, 2);
+        withNought.put("c", ExactRatio.ZERO);
         assertEquals(whole(weighing(A, 1, B, 2), -16, Rel.LE), whole(withNought, -16, Rel.LE));
     }
 
@@ -145,8 +145,8 @@ class TwoWritingsOfOneRuleAreOneConstraintTest {
     void aBoundBetweenTwoOfTheSumsValuesComesDownOntoOne() {
         AffineConstraint<String> read = whole(weighing(A, 2, B, 2), -3, Rel.LE);
         assertEquals(new AffineConstraint.HalfSpace<>(
-                        new CanonicalForm<>(Map.of(A, Rational.ONE, B, Rational.ONE)),
-                        RationalCut.inclusive(num(1))),
+                        new CanonicalForm<>(Map.of(A, ExactRatio.ONE, B, ExactRatio.ONE)),
+                        ExactCut.inclusive(num(1))),
                 read, "`2x + 2y <= 3` over whole numbers states `x + y <= 1`");
     }
 
@@ -190,8 +190,8 @@ class TwoWritingsOfOneRuleAreOneConstraintTest {
                 "`3a <= 1` and `3a < 1` admit the same decimals");
         AffineConstraint<String> read = stated(decimals(weighing(A, 3), num(-1), Rel.LE));
         assertEquals(new AffineConstraint.HalfSpace<>(
-                        new CanonicalForm<>(Map.of(A, Rational.ONE)),
-                        RationalCut.exclusive(ratio(1, 3))),
+                        new CanonicalForm<>(Map.of(A, ExactRatio.ONE)),
+                        ExactCut.exclusive(ratio(1, 3))),
                 read);
     }
 
@@ -210,9 +210,9 @@ class TwoWritingsOfOneRuleAreOneConstraintTest {
         assertInstanceOf(Read.HoldsNever.class,
                 AffineConstraint.of(Map.of(), num(1), Rel.LE, atom -> Granularity.DISCRETE));
         assertInstanceOf(Read.HoldsAlways.class,
-                AffineConstraint.of(Map.of(), Rational.ZERO, Rel.EQ, atom -> Granularity.DISCRETE));
+                AffineConstraint.of(Map.of(), ExactRatio.ZERO, Rel.EQ, atom -> Granularity.DISCRETE));
         assertInstanceOf(Read.HoldsNever.class,
-                AffineConstraint.of(Map.of(), Rational.ZERO, Rel.NE, atom -> Granularity.DISCRETE));
+                AffineConstraint.of(Map.of(), ExactRatio.ZERO, Rel.NE, atom -> Granularity.DISCRETE));
     }
 
     // --- a disequality stays a hole ----------------------------------------------------------------

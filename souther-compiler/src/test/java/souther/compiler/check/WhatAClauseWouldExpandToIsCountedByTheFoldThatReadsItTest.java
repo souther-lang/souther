@@ -39,13 +39,13 @@ class WhatAClauseWouldExpandToIsCountedByTheFoldThatReadsItTest {
     }
 
     private static Core and(Core left, Core right) {
-        return new Core.Binary(BinOp.AND, left, right, ConstructOccurrence.unwritten(), Type.BOOL,
-                POS);
+        return new Core.Binary(BinOp.AND, left, right, Core.BinaryReading.AS_THEY_STAND,
+                ConstructOccurrence.unwritten(), Type.BOOL, POS);
     }
 
     private static Core or(Core left, Core right) {
-        return new Core.Binary(BinOp.OR, left, right, ConstructOccurrence.unwritten(), Type.BOOL,
-                POS);
+        return new Core.Binary(BinOp.OR, left, right, Core.BinaryReading.AS_THEY_STAND,
+                ConstructOccurrence.unwritten(), Type.BOOL, POS);
     }
 
     /** As the analysis representation spells one, which is what {@link Predicates} reads. */

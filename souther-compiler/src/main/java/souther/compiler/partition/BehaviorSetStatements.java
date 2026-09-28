@@ -35,6 +35,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.SequencedMap;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * What a behavior's rules about the strings at its positions state of those positions.
@@ -337,8 +338,8 @@ public final class BehaviorSetStatements {
                     new Outcome.OfADistinction(new Asked(each.origin(), each.statement(), term,
                             new AdmittedPlan.Pattern(PatternPlan.of(it.accepts())),
                             new AdmittedPlan.Pattern(PatternPlan.notMatching(it.accepts()))));
-            case StringPredicates.Reading.PatternNotRead it ->
-                    new Outcome.NotGot(term, BlockReason.forAPatternNotRead(it.why()));
+            case StringPredicates.Reading.PatternNotRead _ ->
+                    new Outcome.NotGot(term, BlockReason.forAPatternNotRead());
             // A rule whose text this compiler did not work out is a rule it did not read. Said as
             // anything about the values, it would be a distinction reported as absent from the model
             // when what is absent is this compiler's reading of it.
@@ -429,17 +430,23 @@ public final class BehaviorSetStatements {
      * says the provenance of before this compiles.
      */
     private static Set<TermPath> positionsItCameFrom(ValueOrigin<TermPath> origin) {
+        return origin.answered(BehaviorSetStatements::cameFrom);
+    }
+
+    /** Where {@code origin} came from, given where each of its parts did. */
+    private static Set<TermPath> cameFrom(ValueOrigin<TermPath> origin,
+                                          Function<ValueOrigin<TermPath>, Set<TermPath>> part) {
         return switch (origin) {
             case ValueOrigin.IsAPosition<TermPath> it -> Set.of(it.at());
             case ValueOrigin.MadeFromAPosition<TermPath> it -> Set.of(it.at());
             // What an operation answered came from whatever its arguments came from, each of them:
             // a string joined out of two positions is made out of both, and an author who wrote a
             // rule about the joined value is owed the sentence at each.
-            case ValueOrigin.Applied<TermPath> it -> across(it.arguments());
+            case ValueOrigin.Applied<TermPath> it -> across(it.arguments(), part);
             // A value that is one of several came from wherever each of those came from, and from
             // nowhere else: what decided which of them it is holds none of the values the rule is
             // about, and an author sent there is sent to a position the rule says nothing of.
-            case ValueOrigin.OneOf<TermPath> it -> across(it.alternatives());
+            case ValueOrigin.OneOf<TermPath> it -> across(it.alternatives(), part);
             // A value written where it stands came from no position, one nothing here can name came
             // from none this can name, and a path that comes to no value came from nowhere at all.
             case ValueOrigin.Written<TermPath> _, ValueOrigin.Unnameable<TermPath> _,
@@ -447,16 +454,17 @@ public final class BehaviorSetStatements {
             // A constructed value was made out of everything the construction was given, each of
             // them. A field taken back out of one is that field's own value and reaches here as
             // whatever it was given, so this arm answers about the construction itself.
-            case ValueOrigin.Constructed<TermPath> it -> across(it.fields().values());
+            case ValueOrigin.Constructed<TermPath> it -> across(it.fields().values(), part);
             case ValueOrigin.Composed<TermPath> _ -> Set.of();
         };
     }
 
     /** The positions everything in {@code of} came from, in the order they were met. */
-    private static Set<TermPath> across(Collection<ValueOrigin<TermPath>> of) {
+    private static Set<TermPath> across(Collection<ValueOrigin<TermPath>> of,
+                                        Function<ValueOrigin<TermPath>, Set<TermPath>> part) {
         Set<TermPath> out = new LinkedHashSet<>();
         for (ValueOrigin<TermPath> each : of) {
-            out.addAll(positionsItCameFrom(each));
+            out.addAll(part.apply(each));
         }
         return out;
     }

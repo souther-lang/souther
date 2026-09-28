@@ -196,6 +196,13 @@ public final class TermMeaning {
                 out.add(x.value());
                 out.add(x.type());
             }
+            // Which value is built and what it comes to; the region it is built in says where the
+            // node stands and is left out.
+            case Core.MaterialisedValue x -> {
+                out.add(Core.MaterialisedValue.class);
+                out.add(x.value());
+                out.add(x.type());
+            }
             case Core.Decimal x -> {
                 out.add(Core.Decimal.class);
                 out.add(x.value());
@@ -242,6 +249,11 @@ public final class TermMeaning {
                 out.add(x.type());
                 project(x.operand(), out);
             }
+            case Core.Widen x -> {
+                out.add(Core.Widen.class);
+                out.add(x.type());
+                project(x.value(), out);
+            }
             case Core.FieldAccess x -> {
                 out.add(Core.FieldAccess.class);
                 out.add(x.field());
@@ -251,6 +263,8 @@ public final class TermMeaning {
             case Core.Binary x -> {
                 out.add(Core.Binary.class);
                 out.add(x.op());
+                out.add(x.reading());
+                out.add(x.ordering());
                 out.add(x.type());
                 project(x.left(), out);
                 project(x.right(), out);
@@ -258,12 +272,14 @@ public final class TermMeaning {
             case Core.Call x -> {
                 out.add(Core.Call.class);
                 out.add(x.fn());
+                out.add(x.settlement());
                 out.add(x.type());
                 projectAll(x.args(), out);
             }
             case Core.PreservedCall x -> {
                 out.add(Core.PreservedCall.class);
                 out.add(x.declared());
+                out.add(x.settled());
                 out.add(x.type());
                 projectAll(x.args(), out);
             }
@@ -295,6 +311,7 @@ public final class TermMeaning {
             case Core.LetIn x -> {
                 out.add(Core.LetIn.class);
                 out.add(x.binder());
+                out.add(x.bindType());
                 out.add(x.type());
                 project(x.value(), out);
                 project(x.body(), out);
@@ -302,7 +319,7 @@ public final class TermMeaning {
             case Core.Block x -> {
                 out.add(Core.Block.class);
                 out.add(x.params());
-                out.add(x.type());
+                out.add(x.paramTypes());
                 project(x.body(), out);
             }
             case Core.ListLit x -> {
@@ -344,7 +361,7 @@ public final class TermMeaning {
                 out.add(x.cases().size());
                 for (Core.Case arm : x.cases()) {
                     out.add(arm.pattern());
-                    out.add(arm.binder());
+                    out.add(arm.binding());
                     project(arm.body(), out);
                 }
             }

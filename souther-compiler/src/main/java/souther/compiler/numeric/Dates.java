@@ -22,6 +22,10 @@ import java.time.format.DateTimeParseException;
  */
 public final class Dates {
 
+    /** The first and last days the calendar has, as the counts a date's order runs between. */
+    private static final Count FIRST_DAY = Count.of(LocalDate.MIN.toEpochDay());
+    private static final Count LAST_DAY = Count.of(LocalDate.MAX.toEpochDay());
+
     /** The day {@code iso} counts to, or null where it is not a date this reads. */
     public static Count dayOf(String iso) {
         if (iso == null || iso.indexOf('T') >= 0) {
@@ -47,7 +51,13 @@ public final class Dates {
      * this, so a report and a fixture cannot come to different dates from the same day.
      */
     public static LocalDate dateAt(Place day) {
-        return LocalDate.ofEpochDay(Count.number(day).at().longValueExact());
+        Count count = Count.number(day);
+        // Asked here and not left to whoever calls: a count only a date's order holds is a whole
+        // number of days inside the calendar, and what is read off it below is that number.
+        if (!count.whole() || count.compareTo(FIRST_DAY) < 0 || count.compareTo(LAST_DAY) > 0) {
+            throw new IllegalArgumentException("no date is day count " + count.at());
+        }
+        return LocalDate.ofEpochDay(count.at().longValueExact());
     }
 
     /** The date {@code day} counts to, written the way a model writes one. */

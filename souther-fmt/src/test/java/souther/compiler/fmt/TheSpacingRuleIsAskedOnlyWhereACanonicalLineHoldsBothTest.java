@@ -1,12 +1,12 @@
 package souther.compiler.fmt;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import souther.compiler.cst.CstParser;
 import souther.compiler.cst.SyntaxElement;
 import souther.compiler.cst.SyntaxKind;
 import souther.compiler.cst.SyntaxNode;
 import souther.compiler.cst.SyntaxToken;
+import souther.test.ClosedWorldContract;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -39,7 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * What it owes is that every such hole is explained by that and not by a missing row — the domain is
  * total and the expectation is partial, with the break decision above it saying where.
  */
-@Tag("population")
+@ClosedWorldContract
 class TheSpacingRuleIsAskedOnlyWhereACanonicalLineHoldsBothTest {
 
     /** The spacing rule's unit: two token kinds and the construct that joins them. */

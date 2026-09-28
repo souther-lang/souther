@@ -41,7 +41,9 @@ import java.util.List;
  * gathered, which {@link Db} states. Those two rules meet at a projection: a broad answer read
  * whole, cut down to what one consumer means, is a key of its own — the coarse answer may be
  * recomputed as often as it likes, and what the consumer reads stops at the cut.
- * {@link Bodies.CalleeSigsForBody} and {@link Names.Meanings} are the two.
+ * {@link Bodies.CalleeSigsForBody} and {@link Names.Meanings} are two of them, and
+ * {@code EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest} is what holds every such edge to
+ * being one.
  *
  * <p>They meet again at a capability, and there the cut is not needed. A capability that reads this
  * store is built inside a compute, so what it asks for is asked when the consumer reads it — a

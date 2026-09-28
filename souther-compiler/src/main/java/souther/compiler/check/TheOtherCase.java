@@ -41,7 +41,8 @@ final class TheOtherCase {
                 result.unless().argument(), Terms.operationOf(called)));
         return new Core.Binary(result.unless().op(), argument,
                 numberOf(result.unless().than(), argument.type(), argument.pos()),
-                ConstructOccurrence.unwritten(), Type.BOOL, argument.pos());
+                Core.BinaryReading.AS_THEY_STAND, ConstructOccurrence.unwritten(), Type.BOOL,
+                argument.pos());
     }
 
     /** The type the number's case carries, or null where {@code called} answers no number as a

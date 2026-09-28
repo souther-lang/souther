@@ -1,5 +1,9 @@
 package souther.compiler.types;
 
+import souther.compiler.SettledAnswer;
+import souther.compiler.crossing.DelegatedEqualityIsTheCrossingAnswer;
+import souther.compiler.crossing.ObjectEqualityIsTheCrossingAnswer;
+
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.SequencedSet;
@@ -9,7 +13,7 @@ import java.util.Set;
  * The Souther value types. Either a primitive ({@code Int}/{@code String}/{@code Bool})
  * or a reference to a named data type. {@code Type.INT} etc. remain usable as constants.
  */
-public sealed interface Type permits Type.Leaf, Type.Compound {
+public sealed interface Type extends SettledAnswer permits Type.Leaf, Type.Compound {
 
     /**
      * A type that holds no type inside it, where a walk over the tree of types ends. A {@link Ref}
@@ -44,8 +48,9 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
      */
     sealed interface Open extends Leaf permits Var, MetaVar {}
 
-    enum Prim implements Leaf {
-        INT, STRING, BOOL, DECIMAL, DATE, TIME, DATETIME, INSTANT, RAW;
+    enum Prim implements Leaf, DelegatedEqualityIsTheCrossingAnswer,
+            ObjectEqualityIsTheCrossingAnswer {
+        INT, STRING, BOOL, DECIMAL, RATIONAL, DATE, TIME, DATETIME, INSTANT;
 
         /** How this primitive is written. One table, read forwards by everything that shows a type
          *  and backwards by {@link TypeSymbol#primitiveKind()} — a primitive case name is minted from
@@ -56,11 +61,11 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
                 case STRING -> "String";
                 case BOOL -> "Bool";
                 case DECIMAL -> "Decimal";
+                case RATIONAL -> "Rational";
                 case DATE -> "Date";
                 case TIME -> "Time";
                 case DATETIME -> "DateTime";
                 case INSTANT -> "Instant";
-                case RAW -> "Raw";
             };
         }
 
@@ -82,7 +87,7 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
         public boolean temporal() {
             return switch (this) {
                 case DATE, TIME, DATETIME, INSTANT -> true;
-                case INT, STRING, BOOL, DECIMAL, RAW -> false;
+                case INT, STRING, BOOL, DECIMAL, RATIONAL -> false;
             };
         }
     }
@@ -288,6 +293,10 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
     Type STRING = Prim.STRING;
     Type BOOL = Prim.BOOL;
     Type DECIMAL = Prim.DECIMAL;
+    /** The exact quotient {@code /} answers (ADR-0116). A value computation produces and consumes,
+     * and not one a boundary carries: it has no external form, so no field holds one and no
+     * behavior takes or answers one. */
+    Type RATIONAL = Prim.RATIONAL;
     Type DATE = Prim.DATE;
     /** A local time of day, to the second (spec §temporal-literal). What a {@code DateTime} holds
      * beside its {@code Date}, and what a model that names an opening time holds on its own. */
@@ -298,10 +307,6 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
      * zone (spec §primitives). A model compares two, keys by one, and hands one to a behavior with
      * no implementation to get a {@code DateTime} back (spec §injected-behavior). */
     Type INSTANT = Prim.INSTANT;
-    /** The external (encoded) representation type: an encoder's raw output at a railway's edge,
-     * unioned with propagated error cases as the case {@code "Raw"} (spec §case-propagation). Reserved — no stage
-     * produces it yet; {@code >->} composes behaviors, not codecs (spec §sequential-composition). */
-    Type RAW = Prim.RAW;
     /** The bottom element type of the empty-list literal (see {@link Nothing}). */
     Type NOTHING = new Nothing();
     /** The type of the empty-list literal {@code []}: a list whose element type is not yet fixed. */

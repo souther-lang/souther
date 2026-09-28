@@ -37,6 +37,48 @@ class CompileStringLibTest {
         assertEquals("hi ROB!", Codecs.encode(loader, "demo.Greeting", greeting));
     }
 
+    /** A bare combining circumflex (U+0302) — NFC on its own, but not once joined after {@code "a"}.
+     *  Built from its code point rather than an escape typed inline, so what the source file holds
+     *  is unambiguous. */
+    private static final String COMBINING_CIRCUMFLEX = new String(Character.toChars(0x0302));
+
+    /** {@code "a"} composed with {@link #COMBINING_CIRCUMFLEX} — one code point, U+00E2. */
+    private static final String A_CIRCUMFLEX = new String(Character.toChars(0x00E2));
+
+    /** The seam {@code append}/{@code ++} share: {@code "a"} and {@link #COMBINING_CIRCUMFLEX} are
+     *  each NFC on their own, but their join is not until canonicalized. {@code ++} and
+     *  {@code append} must answer alike, since the specification states one as the other
+     *  (spec §stdlib-string). */
+    @Test
+    void concatOperatorAndAppendCanonicalizeTheSeamAlike() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                import String ( append, length )
+
+                data In = { a: String, mark: String }
+                data Out = { operator: String, function: String, operatorLength: Int }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let run (i) = Out {
+                    operator = i.a ++ i.mark,
+                    function = append(i.a, i.mark),
+                    operatorLength = length(i.a ++ i.mark)
+                }
+                """), getClass().getClassLoader());
+
+        Object in = Codecs.decoded(loader, "demo.In",
+                java.util.Map.of("a", "a", "mark", COMBINING_CIRCUMFLEX));
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
+        Object out = Codecs.apply(behavior, in);
+
+        java.util.Map<?, ?> m = (java.util.Map<?, ?>) Codecs.encode(loader, "demo.Out", out);
+        assertEquals(A_CIRCUMFLEX, m.get("operator"), "`++` composes the seam, same as `append`");
+        assertEquals(A_CIRCUMFLEX, m.get("function"));
+        assertEquals(1L, m.get("operatorLength"), "one code point once composed, not two");
+    }
+
     @Test
     void appendFunctionAndConcatOfAList() throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
@@ -362,5 +404,43 @@ class CompileStringLibTest {
                         java.util.Map.of("amount", new java.math.BigDecimal("1000"), "text", "12x"))));
         assertEquals("1000", bad.get("shown"), "a whole number carries no decimal point");
         assertEquals("-", bad.get("parsed"), "text that is not a number takes the NotANumber arm");
+    }
+
+    /** Compiled code reads decimal text (spec §string-decimal-text) through the intrinsic: a few of
+     *  the texts {@code BigDecimal(String)} accepts and the grammar does not take the
+     *  {@code NotANumber} arm. The full list is the runtime's conformance test. A negative scale is
+     *  written as integer zeros, and reading that text back gives the same number at scale 0. */
+    @Test
+    void decimalTextAndANegativeScale() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                import String ( fromDecimal )
+
+                data In = { amount: Decimal, texts: List<String> }
+                data Out = { coarse: String, readBack: String, parsed: List<String> }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let readBack (s: String): String = match String.toDecimal(s) with
+                    | Decimal as d -> fromDecimal(d)
+                    | NotANumber -> "-"
+
+                let run (i) = Out {
+                    coarse = fromDecimal(Decimal.round(-2, HALF_UP, i.amount)),
+                    readBack = readBack(fromDecimal(Decimal.round(-2, HALF_UP, i.amount))),
+                    parsed = List.map(readBack, i.texts)
+                }
+                """), getClass().getClassLoader());
+
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
+        java.util.Map<?, ?> m = (java.util.Map<?, ?>) Codecs.encode(loader, "demo.Out",
+                Codecs.apply(behavior, Codecs.decoded(loader, "demo.In", java.util.Map.of(
+                        "amount", new java.math.BigDecimal("1234"),
+                        "texts", java.util.List.of("1.50", "-007.0", "1e3", "１２３.４５", ".5", "5.")))));
+
+        assertEquals("1200", m.get("coarse"), "a negative scale is written as integer zeros");
+        assertEquals("1200", m.get("readBack"));
+        assertEquals(java.util.List.of("1.50", "-7.0", "-", "-", "-", "-"), m.get("parsed"));
     }
 }

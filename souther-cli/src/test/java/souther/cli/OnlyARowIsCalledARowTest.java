@@ -1,14 +1,6 @@
 package souther.cli;
 
-import org.junit.jupiter.api.Test;
-
-import souther.test.TheBareRowNames;
-import souther.test.WhatAModuleDeclares;
-
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import souther.test.OnlyARowIsCalledARow;
 
 /**
  * Only a row is called a row.
@@ -17,30 +9,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * what a compile answered, rows among it; what it holds of its own is a command's, so the rule has
  * no admitting side to state here and the prohibition is the whole of it.
  */
-class OnlyARowIsCalledARowTest {
+class OnlyARowIsCalledARowTest extends OnlyARowIsCalledARow {
 
-    /** Nothing here is called {@code row} or {@code rows}, because nothing here is a row. */
-    @Test
-    void nothingHereIsCalledARow() {
-        assertEquals(List.of(), TheBareRowNames.takenIn(compiled(), _ -> false),
-                "the command line holds no rows of its own, so a declaration of it named for one is"
-                        + " named for something it is not");
-    }
-
-    /** And no type of it is called {@code Row} or {@code Rows}. */
-    @Test
-    void andNoTypeOfItIsCalledARow() {
-        assertEquals(List.of(), TheBareRowNames.typesIn(compiled()),
-                "a type called Row or Rows is a row, and none of these is");
-    }
-
-    /** And both are over this module's classes rather than over nothing. */
-    @Test
-    void andBothAreOverThisModule() {
-        assertFalse(compiled().classes().isEmpty(), "the walk reads this module's classes");
-    }
-
-    private static WhatAModuleDeclares compiled() {
-        return WhatAModuleDeclares.of(CliCommand.class);
+    OnlyARowIsCalledARowTest() {
+        super(CliCommand.class, "the command line holds no rows of its own");
     }
 }

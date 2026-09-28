@@ -1,6 +1,7 @@
 package souther.compiler.types;
 
 import souther.compiler.Reserved;
+import souther.compiler.SettledAnswer;
 
 /**
  * What a name written in the value namespace denotes — the answer {@link TypeSymbol} gives for the
@@ -16,7 +17,7 @@ import souther.compiler.Reserved;
  * <p>The interface is sealed and the switches over it carry no {@code default}, so a case added here
  * is a compile error at every place that reads one rather than something silently taken for another.
  */
-public sealed interface ValueName {
+public sealed interface ValueName extends SettledAnswer {
 
     /** The bare name, which is what a definition is reached by wherever it was declared. */
     String name();

@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.numeric.Towards;
+import souther.compiler.numeric.UnheldNumber;
 
 /**
  * What a quantity has in one run of its order.
@@ -17,6 +18,12 @@ import souther.compiler.numeric.Towards;
  * value of the run down. The two are independent, and all four of their combinations mean something
  * — a run of strings above a bound is inhabited and has nothing this will name, because naming one
  * means choosing a character the model never wrote.
+ *
+ * <p><b>And apart from {@link NotWorkedOut}</b>, which is neither of the other two: a run whose ends
+ * a model's own decimals put far enough apart in scale that the exact arithmetic cannot tell how
+ * many digits separate them is one this could not read at all, and {@link Empty} is a proof nothing
+ * is there — the one answer this type exists to let a reader lean on. Conflating the two would let a
+ * run this compiler gave up on report as a run the rules refuse.
  */
 public sealed interface Occupancy {
 
@@ -32,7 +39,27 @@ public sealed interface Occupancy {
      */
     record Inhabited(Level least, Level greatest) implements Occupancy {}
 
-    /** Whether the quantity takes any value here, which is what this exists to be asked. */
+    /**
+     * Neither of the above: the exact arithmetic could not hold what this question needed to answer.
+     *
+     * <p>Not a third fact about the run — it is that this compiler did not find out either of the
+     * other two. A run whose ends a model's own decimals put far enough apart in scale has a definite
+     * distance all the same; this is what a reader is told where the host has no room to read it, or
+     * no representation for it at all.
+     */
+    record NotWorkedOut(UnheldNumber why) implements Occupancy {
+
+        public NotWorkedOut {
+            if (why == null) {
+                throw new IllegalArgumentException("not worked out, in one of the two ways it is not");
+            }
+        }
+    }
+
+    /** Whether the quantity can be shown to take a value here, which is what this exists to be
+     *  asked. False where this could not be worked out is the same caution {@link Empty} is a proof
+     *  and {@link NotWorkedOut} is not: nothing here is entitled to conclude a run is empty from an
+     *  arithmetic that gave up on it. */
     default boolean any() {
         return this instanceof Inhabited;
     }

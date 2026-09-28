@@ -40,7 +40,7 @@ import souther.compiler.types.TypeSymbol;
  * recursion open would give this tree an admitted set wider than the boundary has representations
  * for, which is the disagreement the type is here to make unwritable.
  */
-sealed interface CodecShape {
+public sealed interface CodecShape {
 
     /**
      * A shape that is not an optional. Everything but an optional is one, and what the distinction
@@ -131,8 +131,8 @@ sealed interface CodecShape {
         throw noRepresentation(o, d, field, pos);
     }
 
-    /** The scalar a primitive is written as. {@code Raw} is the language's own vocabulary and is
-     *  written as itself nowhere, so it has no leaf codec to be given one. */
+    /** The scalar a primitive is written as. A primitive with no leaf codec, {@code Rational}, is
+     *  written as itself nowhere, so it has none to be given. */
     private static Scalar scalar(Type.Prim prim, Type t, Hir.Data d, String field, SourcePos pos) {
         LeafScalar leaf = LeafScalar.of(prim);
         if (leaf == null) {

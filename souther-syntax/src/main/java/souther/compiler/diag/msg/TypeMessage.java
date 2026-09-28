@@ -70,8 +70,31 @@ public sealed interface TypeMessage extends Message {
     @Code(DiagnosticCode.E1323)
     record ThePatternMustBeWrittenOut() implements TypeMessage, Reported {}
 
+    /** Text that is no pattern at all where {@code construct} begins: something left open, or a
+     *  count or an escape with no meaning. */
     @Code(DiagnosticCode.E1323)
-    record ThePatternIsNotARegularExpression(String why) implements TypeMessage, Reported {}
+    record ThePatternIsNotAPatternAt(String construct) implements TypeMessage, Reported {}
+
+    /** Text that ended before something it began was closed. */
+    @Code(DiagnosticCode.E1323)
+    record ThePatternEndsBeforeItIsWhole() implements TypeMessage, Reported {}
+
+    /** A construct the pattern language's grammar does not have. */
+    @Code(DiagnosticCode.E1323)
+    record ThePatternWritesWhatNoPatternHas(String construct) implements TypeMessage, Reported {}
+
+    /** An anchor standing where whether it is at the start or the end depends on the string. */
+    @Code(DiagnosticCode.E1323)
+    record ThePatternPlacesAnAnchorTheStringDecides() implements TypeMessage, Reported {}
+
+    /** A pattern escape spelling a surrogate on its own, which no {@code String} holds. */
+    @Code(DiagnosticCode.E1323)
+    record ThePatternWritesHalfASurrogatePair(String escape) implements TypeMessage, Reported {}
+
+    /** A pattern whose groups nest deeper than the compiler reads — a limit of the compiler, not a
+     *  construct the language lacks. */
+    @Code(DiagnosticCode.E2104)
+    record ThePatternNestsDeeperThanIsRead(int deepest) implements TypeMessage, Reported {}
 
     @Code(DiagnosticCode.E1815)
     record OverTheEmptyListTheSeedDecides(String call) implements TypeMessage, Reported {}
@@ -182,4 +205,13 @@ public sealed interface TypeMessage extends Message {
 
     @Code(DiagnosticCode.E1325)
     record AnOutputIsATypeTheLanguageDeclares(String behavior, String type) implements TypeMessage, Reported {}
+
+    /** A parameter is, or holds at some depth, a primitive that has no external representation.
+     *  {@code type} is that primitive, which is not always the whole of the parameter's type. */
+    @Code(DiagnosticCode.E1311)
+    record AParameterCarriesAPrimitiveWithNoExternalForm(String parameter, String type) implements TypeMessage, Reported {}
+
+    /** The same of a behavior's answer. */
+    @Code(DiagnosticCode.E1311)
+    record AnOutputCarriesAPrimitiveWithNoExternalForm(String behavior, String type) implements TypeMessage, Reported {}
 }

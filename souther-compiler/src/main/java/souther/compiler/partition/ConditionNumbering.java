@@ -79,8 +79,8 @@ final class ConditionNumbering {
     private final Map<Site, Condition> read = new HashMap<>();
     /** The name each arm of each fork goes by. Beside {@link #read} because an arm is not a fold of
      *  a subtree: what is met is the fork and which of its arms, and there is no node of its own to
-     *  be at. */
-    private final Map<Core.Match, Map<Integer, ConditionOccurrence>> arms = new IdentityHashMap<>();
+     *  be at. A {@code match} and an attempt both, since an arm of either is met the same way. */
+    private final Map<Core, Map<Integer, ConditionOccurrence>> arms = new IdentityHashMap<>();
     private final Map<ConditionOccurrence, Citation> metAt = new LinkedHashMap<>();
     private int next;
 
@@ -115,7 +115,7 @@ final class ConditionNumbering {
      * two ways, and nothing downstream could tell the two apart. So it is raised here rather than
      * resolved by keeping one of them.
      */
-    ConditionOccurrence metEntering(Core.Match fork, int part) {
+    ConditionOccurrence metEntering(Core fork, int part) {
         Map<Integer, ConditionOccurrence> named =
                 arms.computeIfAbsent(fork, _ -> new LinkedHashMap<>());
         ConditionOccurrence already = named.putIfAbsent(part, met());

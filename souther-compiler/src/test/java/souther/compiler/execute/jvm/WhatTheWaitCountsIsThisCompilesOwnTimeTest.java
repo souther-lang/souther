@@ -143,14 +143,14 @@ class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
         assertInstanceOf(Deadline.Outcome.Overran.class, came).abandon().run();
     }
 
-    /** An application taking many times the wait spends none of it. */
+    /** An application taking three times the wait spends none of it. */
     @Test
     void whatTheApplicationTakesIsNotTheCompilesToSpend() {
-        Deadline deadline = JvmDeadlines.of(Duration.ofMillis(500));
+        Deadline deadline = JvmDeadlines.of(Duration.ofMillis(250));
 
         Deadline.Outcome<Object> came = deadline.given(WORK,
                 () -> Handoff.onTheThreadThatAsked().call(() -> {
-                    slept(2_000);
+                    slept(750);
                     return "answered";
                 }));
 

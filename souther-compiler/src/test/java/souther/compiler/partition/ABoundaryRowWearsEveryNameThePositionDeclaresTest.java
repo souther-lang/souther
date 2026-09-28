@@ -91,10 +91,10 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
         InputDomain domain = compilation.db()
                 .ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get(spec.name());
         GuardThresholds.Guards guards =
-                GuardThresholds.of(spec.name(), checked.analysisBodies().get(spec.name()), body,
+                ThresholdFixtures.guardsOf(spec.name(), checked.analysisBodies().get(spec.name()), body,
                         plan, domain, rules);
         souther.compiler.inputs.Quantities reading = domain.quantities(rules);
-        Partitions.Partitioning p = Partitions.withThresholds(
+        Partitions.Partitioning p = ThresholdFixtures.withThresholds(
                 Partitions.of(spec.name(), domain, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 reading,
                 guards.thresholds(),
@@ -120,6 +120,7 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
                                 java.util.Map.of(
                                         new RealizationTarget.AtOnePosition(axis.term()),
                                         ((Level.OnACarrier) each.at()).at()),
+                                NumbersAskedFor.of(LevelRegion.point(each.at())),
                                 Reachability.untouched(domain.quantities(rules).region()),
                                 Generator.CandidateCheck.ANY)
                                 instanceof Generator.BoundaryAttempt.Built built

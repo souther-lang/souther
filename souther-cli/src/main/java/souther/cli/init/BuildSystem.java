@@ -31,11 +31,6 @@ public enum BuildSystem {
         return spelling;
     }
 
-    /** What a build file created from nothing is called. */
-    String buildFile() {
-        return buildFiles.get(0);
-    }
-
     /** The build this text names, or null where it names none. */
     static BuildSystem written(String text) {
         for (BuildSystem build : values()) {

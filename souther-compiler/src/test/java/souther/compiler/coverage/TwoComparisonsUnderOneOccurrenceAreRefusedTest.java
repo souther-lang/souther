@@ -15,6 +15,7 @@ import souther.compiler.types.WrittenOwner;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -57,16 +58,18 @@ class TwoComparisonsUnderOneOccurrenceAreRefusedTest {
     /** One comparison, at {@code occurrence}. A fresh object each call, which is what makes two of
      *  these two nodes. */
     private static Core.Binary comparison(ConstructOccurrence occurrence) {
-        return new Core.Binary(BinOp.GE, read(0), read(1), occurrence, Type.BOOL, POS);
+        return new Core.Binary(BinOp.GE, read(0), read(1), Core.BinaryReading.AS_THEY_STAND,
+                Optional.of(new Core.OrderingBasis(Type.INT)), occurrence, Type.BOOL, POS);
     }
 
     /** Both of them under one {@code &&}, which combines comparisons rather than being one. */
     private static Core both(Core left, Core right) {
-        return new Core.Binary(BinOp.AND, left, right, at(9), Type.BOOL, POS);
+        return new Core.Binary(BinOp.AND, left, right, Core.BinaryReading.AS_THEY_STAND, at(9),
+                Type.BOOL, POS);
     }
 
     private static ComparisonCatalog catalogue(Map<String, Core> bodies) {
-        return ComparisonCatalog.of(new ModuleBodies("demo", new LinkedHashMap<>(bodies)));
+        return ComparisonCatalog.of(HandBuiltBodies.ofBehaviors("demo", bodies));
     }
 
     @Test

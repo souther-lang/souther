@@ -45,7 +45,14 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took) {
         // Only where there is a value to weaken. A measure that was not made says so, and a
         // measure that could not be finished already carries what stopped it; neither claims
         // anything about rules this reading never had.
+        //
+        // And every rule read short, because the measure is of all the rules: a count of the rules
+        // the rows took is short of whatever rule a run could not be placed at. Which rule that
+        // was is each rule's own answer (readShortOf), and not this list's.
         WeakeningSet unread = derivationOf(read);
+        for (DecisionReading.Ruled ruled : read.found()) {
+            unread = unread.union(readShortOf(read, ruled));
+        }
         if (!unread.isEmpty() && took.made().isPresent()) {
             took = new Measurement.Partial<>(took.made().orElseThrow(),
                     took.weakening().union(unread));
@@ -167,8 +174,9 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took) {
          *  put against a rule. */
         THE_ROWS_CARRY_NO_ACCOUNT,
 
-        /** Every rule of the body carries a condition no run through it is recorded at, so no run
-         *  could be placed whatever the rows did. */
+        /** Every rule of the body carries a condition no run through it is recorded at, or was
+         *  read with fewer conditions than its way consults, so no run could be placed whatever
+         *  the rows did. */
         NO_RULE_IS_RECOGNISABLE;
 
         @Override
@@ -189,6 +197,11 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took) {
      * some of them, so an empty list is two different facts — a body that decides nothing, and a
      * body whose ways this compiler would not hold apart. Carried here so that a reader asking the
      * account is told which, rather than reading it off a count that is zero either way.
+     *
+     * <p>About the list and never about an entry of it. A rule read short is a rule this reading
+     * has, described by less than it turns on, and that is the rule's own answer
+     * ({@link #readShortOf}); said here it would read as the list being short, and a reader that
+     * stops at a list it was told it does not have would stop before the rules it does.
      */
     public WeakeningSet derivation() {
         return derivationOf(read);
@@ -200,6 +213,60 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took) {
                         new Weakening.DecisionReadingIncomplete(read.behavior(),
                                 read.enumeration()))
                 : WeakeningSet.none();
+    }
+
+    /**
+     * What the derivation of {@code ruled} went without, which is its way read short or nothing.
+     *
+     * <p>Asked of the rule and not where a run is placed: what a rule is, is settled before any row
+     * runs, and read only where a run meets the rules it would be lost wherever no row ran.
+     */
+    public WeakeningSet readShortOf(DecisionReading.Ruled ruled) {
+        return readShortOf(read, ruled);
+    }
+
+    private static WeakeningSet readShortOf(DecisionReading read, DecisionReading.Ruled ruled) {
+        return ruled.whole() ? WeakeningSet.none()
+                : WeakeningSet.of(new Weakening.DecisionRuleReadShort(read.behavior()));
+    }
+
+    /**
+     * What a finding about {@code ruled} rests on: what the reading of the runs and of the list went
+     * without, and what this rule's own derivation did.
+     *
+     * <p>A rule read short is a shortfall about that rule. A rule read in full beside it is one
+     * whose runs are recognised and whose absence is established the way it would be in a body
+     * with no such neighbour: the ways through a body are exclusive, so a run placed at another
+     * rule did not take this one. Held to the whole measure, a gap the rows established would be
+     * undecided because a different rule was read short.
+     *
+     * <p>So every rule's own shortfall is taken out of the measure and this rule's is put back,
+     * which is the measure's weakening read as one rule's rather than filtered by a guess at which
+     * words are about a rule.
+     *
+     * <p>Its own value rather than a set handed to whoever raises the finding, for the reason
+     * {@link InteractionEvidence#at} is.
+     */
+    public OfOneRule at(DecisionReading.Ruled ruled) {
+        Set<Weakening> ofSomeRule = new LinkedHashSet<>();
+        for (DecisionReading.Ruled each : read.found()) {
+            ofSomeRule.addAll(readShortOf(each).causes());
+        }
+        WeakeningSet bearing = WeakeningSet.none();
+        for (Weakening each : took.weakening().causes()) {
+            if (!ofSomeRule.contains(each)) {
+                bearing = bearing.union(WeakeningSet.of(each));
+            }
+        }
+        return new OfOneRule(bearing.union(readShortOf(ruled)));
+    }
+
+    /** What the reading of one rule went without. */
+    public record OfOneRule(WeakeningSet weakening) {
+
+        public OfOneRule {
+            Objects.requireNonNull(weakening, "what a rule's reading went without, if nothing");
+        }
     }
 
     /**

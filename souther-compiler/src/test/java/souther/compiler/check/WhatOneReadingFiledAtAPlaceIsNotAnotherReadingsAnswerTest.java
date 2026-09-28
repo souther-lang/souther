@@ -40,7 +40,7 @@ class WhatOneReadingFiledAtAPlaceIsNotAnotherReadingsAnswerTest {
 
     /** {@code a == a && b == b}, read into the shape that hands out the places. */
     private static final ClauseExpr.Joined CLAUSE = (ClauseExpr.Joined) ClauseExpr.of(
-            new Core.Binary(BinOp.AND, leaf("a"), leaf("b"),
+            new Core.Binary(BinOp.AND, leaf("a"), leaf("b"), Core.BinaryReading.AS_THEY_STAND,
                     ConstructOccurrence.unwritten(), Type.BOOL, POS), true);
 
     /** What one reading made of the left conjunct, and what another made of the same conjunct.
@@ -96,7 +96,7 @@ class WhatOneReadingFiledAtAPlaceIsNotAnotherReadingsAnswerTest {
     /** A clause of no connective, named by which of them it is. */
     private static Core leaf(String named) {
         return new Core.Binary(BinOp.EQ, new Core.Str(named, Type.STRING, POS),
-                new Core.Str(named, Type.STRING, POS), ConstructOccurrence.unwritten(),
-                Type.BOOL, POS);
+                new Core.Str(named, Type.STRING, POS), Core.BinaryReading.AS_THEY_STAND,
+                ConstructOccurrence.unwritten(), Type.BOOL, POS);
     }
 }

@@ -60,7 +60,7 @@ class ADerivedValueIsOneItsOwnTypeHoldsTest {
                     constructs Negative
                 let 割る (a) = {
                     guard a == (0 - 9223372036854775807) - 1 else Nothing
-                    match Int.divide(a, 0 - 1) with
+                    match Int.truncatingDivide(a, 0 - 1) with
                         | Int as q -> Negative(q)
                         | DivisionByZero -> Nothing
                 }
@@ -90,7 +90,7 @@ class ADerivedValueIsOneItsOwnTypeHoldsTest {
                     constructs Negative
                 let 割る (a) = {
                     guard a <= (0 - 9223372036854775807) - 1 else Nothing
-                    match Int.divide(a, 0 - 1) with
+                    match Int.truncatingDivide(a, 0 - 1) with
                         | Int as q -> Negative(q)
                         | DivisionByZero -> Nothing
                 }
@@ -118,7 +118,7 @@ class ADerivedValueIsOneItsOwnTypeHoldsTest {
                     constructs Negative
                 let 割る (a) = {
                     guard a == 0 - 9223372036854775807 else Nothing
-                    match Int.divide(a, 0 - 1) with
+                    match Int.truncatingDivide(a, 0 - 1) with
                         | Int as q -> Negative(q)
                         | DivisionByZero -> Nothing
                 }

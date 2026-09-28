@@ -3,8 +3,11 @@ package souther.compiler.partition;
 import souther.compiler.WhereItSits;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.AnalysisBody;
+import souther.compiler.check.ElementProvenance;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.ValueTemplates;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.inputs.InputReads;
@@ -75,8 +78,12 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
 
         Map<Integer, BoundaryPolicy.Standing> byLine = new LinkedHashMap<>();
         for (ComparisonReadings.Reading each
-                : ComparisonReadings.of("read", body, inputs.reading(rules),
+                : ComparisonReadings.of("read",
+                        new AnalysisBody(body, ElementProvenance.NONE, ValueTemplates.NONE),
+                        inputs.reading(rules),
                         InputReads.ofParameters(inputs.parameterReads(),
+                                checked.elementBindings().get("read")),
+                        InputReads.ofParameters(Map.of(),
                                 checked.elementBindings().get("read"))).comparisons()) {
             Citation.Written at = assertInstanceOf(
                     Citation.Written.class, each.at(),

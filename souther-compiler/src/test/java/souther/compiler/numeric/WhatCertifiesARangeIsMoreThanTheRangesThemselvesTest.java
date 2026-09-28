@@ -2,8 +2,6 @@ package souther.compiler.numeric;
 
 import org.junit.jupiter.api.Test;
 
-
-import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -121,7 +119,7 @@ class WhatCertifiesARangeIsMoreThanTheRangesThemselvesTest {
     }
 
     private static NumericDomain<String> domainOf(Written rule) {
-        NumericDomain<String> domain = NumericDomain.top();
+        NumericDomain<String> domain = NumericDomain.top(CanonicalOrder.asTheyAreSpelled());
         Map<String, Granularity> whole = Map.of("a", Granularity.DISCRETE,
                 "b", Granularity.DISCRETE);
         for (Written each : systemOf(rule)) {
@@ -131,9 +129,9 @@ class WhatCertifiesARangeIsMoreThanTheRangesThemselvesTest {
     }
 
     private static LinearForm<String> formOf(Written written) {
-        LinearForm<String> form = LinearForm.constant(BigDecimal.valueOf(written.constant()));
+        LinearForm<String> form = LinearForm.constant(ExactRatio.of(written.constant()));
         for (Map.Entry<String, Long> each : written.coefs().entrySet()) {
-            form = form.plus(atom(each.getKey()).times(BigDecimal.valueOf(each.getValue())));
+            form = form.plus(atom(each.getKey()).times(ExactRatio.of(each.getValue())));
         }
         return form;
     }
@@ -193,6 +191,6 @@ class WhatCertifiesARangeIsMoreThanTheRangesThemselvesTest {
     }
 
     private static LinearForm<String> num(long n) {
-        return LinearForm.constant(BigDecimal.valueOf(n));
+        return LinearForm.constant(ExactRatio.of(n));
     }
 }

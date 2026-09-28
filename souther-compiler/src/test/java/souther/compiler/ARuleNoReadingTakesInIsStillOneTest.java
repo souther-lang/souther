@@ -30,6 +30,10 @@ class ARuleNoReadingTakesInIsStillOneTest {
 
     /** A model of one string position, with the clause and nothing else about it. */
     private static String alone() {
+        return alone(ARuleNoReadingTakesIn.about(SUBJECT));
+    }
+
+    private static String alone(String clause) {
         return """
                 module example.unread
 
@@ -43,7 +47,7 @@ class ARuleNoReadingTakesInIsStillOneTest {
                 behavior check : (f: Form) -> Ok
 
                 let check (f) = Ok
-                """.replace("CLAUSE", ARuleNoReadingTakesIn.about(SUBJECT));
+                """.replace("CLAUSE", clause);
     }
 
     /**
@@ -112,6 +116,20 @@ class ARuleNoReadingTakesInIsStillOneTest {
         assertEquals(emptyPlaces(report(besideALine(""))),
                 emptyPlaces(report(besideALine(ARuleNoReadingTakesIn.about(SUBJECT) + " &&"))),
                 "the clause took values away from the position it is about");
+    }
+
+    /** And the narrow one is a clause an author may write, which no reading takes in either. */
+    @Test
+    void theNarrowOneIsAClauseNoReadingTakesIn() {
+        Compilation compilation = Compilation.ofSource(alone(ARuleNoReadingTakesIn.narrowly(SUBJECT)),
+                "Main");
+        compilation.answerEverything();
+        assertTrue(compilation.errors().isEmpty(),
+                () -> "the clause no longer compiles: " + compilation.errors());
+
+        String report = report(alone(ARuleNoReadingTakesIn.narrowly(SUBJECT)));
+        assertTrue(report.contains("written in a form this compiler does not read"),
+                () -> "something now reads the narrow clause:\n" + report);
     }
 
     /** Every place the report says the rules leave nothing, which is what may not move. */

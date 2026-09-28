@@ -1,16 +1,22 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Primary;
+import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -123,6 +129,195 @@ class CompileExposedValueTest {
                 """));
     }
 
+    private static final String BUMP = """
+            module lib.f exposing ( bump )
+            let bump: (Int) -> Int = (n) -> n + 1
+            """;
+
+    /** A value whose written type is a function is a value holding one, and publishing it publishes
+     *  an entry that answers with that function. */
+    @Test
+    void aValueHoldingAFunctionIsPublished() {
+        assertDoesNotThrow(() -> Compiler.compile(BUMP));
+    }
+
+    /** A reader across a jar applies the published function, which copies its block, and holds it,
+     *  which reads it off the entry; both run to what the block computes. */
+    @Test
+    void aPublishedFunctionIsAppliedAndHeldAcrossAJarBoundary() throws Exception {
+        Map<String, ClassFileImage> jar = Compiler.compile(BUMP);
+        Map<String, ClassFileImage> reader = Compiler.compileModules(List.of("""
+                module app exposing ( applied, held )
+                import lib.f ( bump )
+
+                behavior applied : (n: Int) -> Int
+                let applied (n) = bump(n)
+
+                behavior held : (n: Int) -> Int
+                let held (n) = {
+                    let fs = [bump, bump]
+                    List.fold((acc, f) -> f(acc), n, fs)
+                }
+                """), ModulePath.of(jar));
+        Map<String, ClassFileImage> both = new LinkedHashMap<>(jar);
+        both.putAll(reader);
+        BytesClassLoader loader = new BytesClassLoader(both, getClass().getClassLoader());
+
+        Object applied = Emitted.behavior(loader, "app", "applied").getConstructor().newInstance();
+        Object held = Emitted.behavior(loader, "app", "held").getConstructor().newInstance();
+
+        assertEquals(11L, Codecs.apply(applied, 10L));
+        assertEquals(12L, Codecs.apply(held, 10L));
+    }
+
+    /** A published value holding a function with no written type is refused at the value. What a
+     *  reader is handed is the value as it stands, and nothing it wrote says which function it is
+     *  — whether the function comes from a helper's answer, a fork of two blocks or a name. */
+    @Test
+    void aPublishedValueHoldingAFunctionWritesItsType() {
+        String fromAHelper = """
+                module shop exposing ( inc )
+
+                let adder (n: Int) = (x) -> x + n
+
+                let inc = adder(1)
+                """;
+        String fromAFork = """
+                module shop exposing ( inc )
+
+                let inc = if true then (x) -> x + 1 else (x) -> x
+                """;
+        String fromAName = """
+                module shop exposing ( inc )
+
+                let inc = String.trim
+                """;
+        // A module writing no clause publishes everything it declares, so the value is published
+        // without being named.
+        String publishedByWritingNoClause = """
+                module shop
+
+                let adder (n: Int) = (x) -> x + n
+
+                let inc = adder(1)
+                """;
+
+        for (String source : List.of(fromAHelper, fromAFork, fromAName, publishedByWritingNoClause)) {
+            CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(source));
+            assertInstanceOf(HelperMessage.TheValuesFunctionTypeIsNotWritten.class,
+                    e.diagnostic().said(), e.getMessage());
+            assertTrue(e.getMessage().contains("`inc`"), e.getMessage());
+        }
+    }
+
+    /** It is said at the value, where its type is to be written, and not at a body that applies it
+     *  or at the entry the module publishes it by. */
+    @Test
+    void theRefusalIsAtTheValue() {
+        String source = """
+                module shop exposing ( inc, use )
+
+                let adder (n: Int) = (x) -> x + n
+
+                let inc = adder(1)
+
+                behavior use : (n: Int) -> Int
+                let use (n) = inc(n)
+                """;
+
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(source));
+
+        assertEquals(5, WhereItSits.in(source,
+                ((Primary.InSource) e.diagnostic().primary()).place().region()).start().line());
+    }
+
+    /** A top-level definition is not typed from what applies it: `use` applying `inc` types the copy
+     *  substituted into `use`, and the published value is still one nothing typed. */
+    @Test
+    void anApplicationInTheDeclaringModuleDoesNotTypeAPublishedValue() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module shop exposing ( inc, use )
+
+                let adder (n: Int) = (x) -> x + n
+
+                let inc = adder(1)
+
+                behavior use : (n: Int) -> Int
+                let use (n) = inc(n)
+                """));
+
+        assertInstanceOf(HelperMessage.TheValuesFunctionTypeIsNotWritten.class,
+                e.diagnostic().said(), e.getMessage());
+    }
+
+    /**
+     * Asking for a type is decided by whether the module publishes the value, and not by what
+     * lowering goes on to do with it. A value read where an expression's answer is kept, such as an
+     * element of a list or a branch of an `if`, is run as a method of its own, and a value handed to
+     * a function stays a copy; neither is the language's to be asked about.
+     */
+    @Test
+    void anUnpublishedValueIsNotAskedForItsTypeWhateverItIsRunAs() throws Exception {
+        String head = """
+                module shop exposing ( use )
+
+                let adder (n: Int) = (x) -> x + n
+
+                let inc = adder(1)
+
+                let applyTo (f: (Int) -> Int, x: Int) = f(x)
+
+                behavior use : (n: Int) -> Int
+                """;
+
+        for (String kept : List.of(
+                "let use (n) = List.fold((acc, f) -> f(acc), n, [inc, inc])",
+                "let use (n) = (if n > 0 then inc else inc)(n)")) {
+            CompileException e = assertThrows(CompileException.class,
+                    () -> Compiler.compile(head + kept));
+            assertTrue(e.diagnostics().stream().noneMatch(d ->
+                            d.said() instanceof HelperMessage.TheValuesFunctionTypeIsNotWritten),
+                    e.getMessage());
+        }
+
+        BytesClassLoader loader = new BytesClassLoader(
+                Compiler.compile(head + "let use (n) = applyTo(inc, n)"),
+                getClass().getClassLoader());
+        Object use = Emitted.behavior(loader, "shop", "use").getConstructor().newInstance();
+        assertEquals(11L, Codecs.apply(use, 10L));
+    }
+
+    /** Kept to its module, the same value is substituted where it is applied and typed there. */
+    @Test
+    void aValueHoldingAFunctionKeptToItsModuleIsTypedWhereItIsApplied() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module shop exposing ( use )
+
+                let adder (n: Int) = (x) -> x + n
+
+                let inc = adder(1)
+
+                behavior use : (n: Int) -> Int
+                let use (n) = inc(n)
+                """), getClass().getClassLoader());
+
+        Object use = Emitted.behavior(loader, "shop", "use").getConstructor().newInstance();
+
+        assertEquals(11L, Codecs.apply(use, 10L));
+    }
+
+    /** The type is written with `Option<T>` where the function answers an optional. */
+    @Test
+    void aPublishedFunctionAnsweringAnOptionalWritesItsTypeWithOption() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module shop exposing ( pick )
+
+                let picker (n: Int) = (x) -> List.find((y) -> y > n, [x])
+
+                let pick: (Int) -> Option<Int> = picker(1)
+                """));
+    }
+
     /** A value crosses a project boundary too: what is published is the declaration, read back from
      * the jar, and a value is substituted from that like any other. */
     @Test
@@ -140,6 +335,43 @@ class CompileExposedValueTest {
                 behavior bill : (p: Priced) -> Receipt constructs Receipt, Amount
                 let bill (p) = Receipt { total = Amount(p.total.value + cap.value) }
                 """), path));
+    }
+
+    private static final String UPSTREAM_WITH_NO_CLAUSE = """
+            module pricing
+
+            data Amount = Int
+            data Priced = { total: Amount, note: String }
+
+            let cap = Amount(1000)
+            let doubled (a: Amount) : Amount = Amount(a.value * 2)
+            """;
+
+    private static final String READER_OF_NO_CLAUSE = """
+            module order exposing ( Receipt, bill )
+
+            import pricing ( Amount, Priced, cap, doubled )
+
+            data Receipt = { total: Amount }
+
+            behavior bill : (p: Priced) -> Receipt constructs Receipt, Amount
+            let bill (p) = Receipt { total = doubled(Amount(p.total.value + cap.value)) }
+            """;
+
+    /** A module that writes no clause publishes every declaration it makes, its values and helpers
+     *  among them (spec §a-module-publishes-what-it-declares). */
+    @Test
+    void aModuleWritingNoClausePublishesItsValuesAndHelpers() {
+        assertDoesNotThrow(() -> Compiler.compileModules(
+                List.of(UPSTREAM_WITH_NO_CLAUSE, READER_OF_NO_CLAUSE)));
+    }
+
+    /** And the jar it compiles to carries them, as it does for a module whose clause names them. */
+    @Test
+    void whatAModuleWritingNoClausePublishesCrossesAProjectBoundary() throws Exception {
+        ModulePath path = ModulePath.of(Compiler.compile(UPSTREAM_WITH_NO_CLAUSE));
+
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of(READER_OF_NO_CLAUSE), path));
     }
 
     /**
@@ -269,8 +501,8 @@ class CompileExposedValueTest {
         assertTrue(e.getMessage().contains("now"), e.getMessage());
     }
 
-    /** A published value may reach a recursive helper: what closing leaves standing is a call, and the
-     * helper it calls comes along to be emitted as one of the reader's own methods. */
+    /** A published value may reach a recursive helper: what closing leaves standing is a call to the
+     * declaring module's own method, which never becomes the reader's. */
     @Test
     void aPublishedValueMayReachARecursiveHelper() {
         assertDoesNotThrow(() -> Compiler.compile("""
@@ -329,6 +561,326 @@ class CompileExposedValueTest {
         assertTrue(e.getMessage().contains("published"), e.getMessage());
     }
 
+    /** The reader having a value of the name a published value reaches changes nothing: what the
+     * published value names is the declaring module's, so the two never meet. The rows decide it,
+     * since a reader that read its own `base` would answer another number. */
+    @Test
+    void aCarriedValueIsNotTheReadersValueOfThatName() {
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of("""
+                module pricing exposing ( Amount, standard )
+
+                data Amount = Int
+                data Step = Int
+
+                let base = Step(10)
+                let standard = Amount(base.value * 100)
+                """, """
+                module order exposing ( In, Out, bill )
+
+                import pricing ( Amount, standard )
+
+                data In = { n: Int }
+                data Out = { v: Int }
+                data Step = Int
+
+                let base = Step(7)
+
+                behavior bill : (i: In) -> Out constructs Out
+                let bill (i) = Out { v = standard.value + base.value + i.n }
+
+                example bill
+                    | "the published value is the declaring module's" : (In { n = 1 })
+                        -> Out { v = 1008 }
+                """)));
+    }
+
+    /** A value runs in the module that declares it even when that module is only a jar. What it is
+     * built from stays there, so a type the jar does not expose is never named from the reader,
+     * and what the reader types the call by is what the jar recorded the value as. */
+    @Test
+    void aValueBuiltOfAHiddenTypeRunsAcrossAJarBoundary() throws Exception {
+        Map<String, ClassFileImage> jar = Compiler.compile("""
+                module pricing exposing ( Amount, cap )
+
+                data Amount = Int
+                data Step = Int
+
+                let base = Step(10)
+                let cap = Amount(base.value * 100)
+                """);
+        Map<String, ClassFileImage> reader = Compiler.compileModules(List.of("""
+                module order exposing ( In, Out, bill )
+
+                import pricing ( Amount, cap )
+
+                data In = { n: Int }
+                data Out = { v: Int }
+
+                behavior bill : (i: In) -> Out constructs Out
+                let bill (i) = Out { v = cap.value + i.n }
+                """), ModulePath.of(jar));
+        Map<String, ClassFileImage> both = new java.util.LinkedHashMap<>(jar);
+        both.putAll(reader);
+        BytesClassLoader loader = new BytesClassLoader(both, getClass().getClassLoader());
+
+        Object behavior = Emitted.behavior(loader, "order", "bill").getConstructor().newInstance();
+        Object out = Codecs.apply(behavior, Codecs.decoded(loader, "order.In", Map.of("n", 0L)));
+
+        assertEquals(1000L, ((Map<?, ?>) Codecs.encode(loader, "order.Out", out)).get("v"));
+    }
+
+    private static final String CHAINED = """
+            module pricing exposing ( Amount, cap )
+
+            data Amount = Int
+
+            let base = Amount(1000)
+            let middle = base
+            let cap = middle
+            """;
+
+    private static final String CHAIN_READER = """
+            module order exposing ( Out, bill )
+
+            import pricing ( Amount, cap )
+
+            data Out = { v: Int }
+
+            behavior bill : (a: Amount) -> Out constructs Out, Amount
+            let bill (a) = Out { v = cap.value }
+            """;
+
+    /** What a private value the published one rests on builds is still what the reader's
+     * behavior is held to, in the same run. */
+    @Test
+    void aConstructionBehindPrivateValuesIsCountedInTheSameRun() {
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of(CHAINED, CHAIN_READER)));
+    }
+
+    /** And from a jar, where only what the module recorded and carried is there. */
+    @Test
+    void aConstructionBehindPrivateValuesIsCountedAcrossAJar() {
+        ModulePath path = ModulePath.of(Compiler.compile(CHAINED));
+
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of(CHAIN_READER), path));
+    }
+
+    private static final String OPEN = """
+            module pricing
+
+            data Amount = Int
+
+            let cap = Amount(base.value * 100)
+            let base = Amount(10)
+            """;
+
+    private static final String OPEN_READER = """
+            module order exposing ( In, Out, bill )
+
+            import pricing ( cap )
+
+            data In = { n: Int }
+            data Out = { v: Int }
+
+            behavior bill : (i: In) -> Out constructs Out
+            let bill (i) = Out { v = cap.value + i.n }
+            """;
+
+    /** A module that writes no clause publishes its values, so another module calls one through the
+     * entry the module publishes for it. */
+    @Test
+    void aModuleWritingNoClauseOffersItsValuesAndPublishesTheirEntries() {
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of(OPEN, OPEN_READER)));
+
+        assertTrue(Compiler.compile(OPEN).containsKey("pricing.$Values"));
+    }
+
+    /** One writing {@code exposing ()} publishes none of them: an importer is refused, and there is
+     * no entry to call through. */
+    @Test
+    void aModuleWritingAnEmptyClauseOffersNoValueAndPublishesNoEntry() {
+        String closed = OPEN.replace("module pricing\n", "module pricing exposing ()\n");
+
+        CompileException refused = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of(closed, OPEN_READER)));
+        assertTrue(refused.getMessage().contains("not exposed"), refused.getMessage());
+
+        assertFalse(Compiler.compile(closed).containsKey("pricing.$Values"));
+    }
+
+    /** What a module says it settled its values as is what it publishes and nothing more: the
+     * definitions written for an example row are not there, so adding an example does not change
+     * what the artifact declares. */
+    @Test
+    void anExampleRowDoesNotChangeWhatAModuleRecordsOfItsValues() {
+        String base = """
+                module pricing exposing ( Amount, cap, rate )
+
+                data Amount = Int
+
+                let cap = Amount(1000)
+                let rate (a: Amount) = Amount(a.value * 2)
+
+                behavior double : (a: Amount) -> Amount
+                let double (a) = rate(a)
+                """;
+        String withExample = base + """
+
+                example double
+                    | "twice" : (cap) -> Amount(2000)
+                """;
+
+        assertEquals(recorded(Compiler.compile(base)), recorded(Compiler.compile(withExample)));
+    }
+
+    private static String recorded(Map<String, ClassFileImage> classes) {
+        return java.util.Arrays.toString(classes.get("pricing.$Module").bytes());
+    }
+
+    private static final String LIMITS = """
+            module up exposing ( Amount, ceiling, computed )
+
+            data Amount = Int
+
+            let ceiling = 1000
+            let computed = Amount(ceiling * 2)
+            """;
+
+    private static String readerOf(String name) {
+        return """
+                module down exposing ( In, Out, f )
+
+                import up ( %s )
+
+                data In = { n: Int }
+                data Out = { v: Int }
+
+                behavior f : (i: In) -> Out constructs Out
+                let f (i) = Out { v = i.n + %s }
+                """.formatted(name, name.equals("computed") ? "computed.value" : name);
+    }
+
+    private static boolean callsTheEntryOfUp(Map<String, ClassFileImage> classes) {
+        return classes.entrySet().stream()
+                .filter(e -> e.getKey().startsWith("down."))
+                .anyMatch(e -> new String(e.getValue().bytes(), StandardCharsets.ISO_8859_1)
+                        .contains("up/$Values"));
+    }
+
+    /** What a value is read as depends on what it is and never on where it was declared or how
+     * the reader got it. A value that has to be computed is computed where it is declared and
+     * called from there; a constant is known when the reader is compiled, is a literal wherever it
+     * is named — in its own module as in another — and so is called from nowhere. The same in one
+     * run and from a jar. */
+    @Test
+    void aValueIsCalledAndAConstantIsALiteralWhetherOrNotTheModuleIsAJar() {
+        Map<String, ClassFileImage> jar = Compiler.compile(LIMITS);
+
+        for (boolean fromAJar : List.of(false, true)) {
+            Map<String, ClassFileImage> constant = fromAJar
+                    ? Compiler.compileModules(List.of(readerOf("ceiling")), ModulePath.of(jar))
+                    : Compiler.compileModules(List.of(LIMITS, readerOf("ceiling")));
+            Map<String, ClassFileImage> computed = fromAJar
+                    ? Compiler.compileModules(List.of(readerOf("computed")), ModulePath.of(jar))
+                    : Compiler.compileModules(List.of(LIMITS, readerOf("computed")));
+
+            assertTrue(!callsTheEntryOfUp(constant), "a constant is read as a literal, from a jar: " + fromAJar);
+            assertTrue(callsTheEntryOfUp(computed), "a value is called, from a jar: " + fromAJar);
+        }
+    }
+
+    /** A published helper that reaches a private value still runs from another module. */
+    @Test
+    void aPublishedHelperReachingAPrivateValueRunsInAnotherModule() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compileModules(List.of("""
+                module pricing exposing ( Amount, taxed )
+
+                data Amount = Int
+
+                let rate = Amount(3)
+                let taxed (a: Amount) = Amount(a.value * rate.value)
+                """, """
+                module order exposing ( In, Out, bill )
+
+                import pricing ( Amount, taxed )
+
+                data In = { n: Int }
+                data Out = { v: Int }
+
+                behavior bill : (i: In) -> Out constructs Out, Amount
+                let bill (i) = Out { v = taxed(Amount(i.n)).value }
+                """)), getClass().getClassLoader());
+
+        Object behavior = Emitted.behavior(loader, "order", "bill").getConstructor().newInstance();
+        Object out = Codecs.apply(behavior, Codecs.decoded(loader, "order.In", Map.of("n", 2L)));
+
+        assertEquals(6L, ((Map<?, ?>) Codecs.encode(loader, "order.Out", out)).get("v"));
+    }
+
+    /** The JVM surface of `$Values` is the exposed surface: a value the module keeps to itself is
+     * not public. */
+    @Test
+    void onlyAnExposedValueHasAPublicEntry() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compileModules(List.of(CHAINED)),
+                getClass().getClassLoader());
+
+        Class<?> values = loader.loadClass("pricing.$Values");
+
+        assertTrue(java.lang.reflect.Modifier.isPublic(values.getMethod("cap").getModifiers()));
+        assertTrue(java.util.Arrays.stream(values.getDeclaredMethods())
+                .filter(m -> !m.getName().equals("cap"))
+                .noneMatch(m -> java.lang.reflect.Modifier.isPublic(m.getModifiers())));
+    }
+
+    /** A published value is read through a public method of its declaring module that builds it
+     * there, so a type that module does not expose is never named from outside it. */
+    @Test
+    void aPublishedValueIsReadThroughItsDeclaringModulesEntry() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compileModules(List.of("""
+                module pricing exposing ( Amount, cap )
+
+                data Amount = Int
+                data Step = Int
+
+                let base = Step(10)
+                let cap = Amount(base.value * 100)
+                """)), getClass().getClassLoader());
+
+        Class<?> values = loader.loadClass("pricing.$Values");
+        Object cap = values.getMethod("cap").invoke(null);
+
+        assertTrue(java.lang.reflect.Modifier.isPublic(values.getModifiers()));
+        assertEquals(1000L, Codecs.encode(loader, "pricing.Amount", cap));
+    }
+
+    /** A value published by name and also reached by another published value is one definition in
+     * the reader, and both routes to it answer alike. */
+    @Test
+    void aValueReachedByNameAndThroughAnotherPublishedValueIsOneDefinition() {
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of("""
+                module pricing exposing ( Amount, cap, standard )
+
+                data Amount = Int
+
+                let cap = Amount(1000)
+                let standard = Amount(cap.value + 1)
+                """, """
+                module order exposing ( In, Out, bill )
+
+                import pricing ( Amount, cap, standard )
+
+                data In = { n: Int }
+                data Out = { v: Int }
+
+                behavior bill : (i: In) -> Out constructs Out
+                let bill (i) = Out { v = cap.value + standard.value + i.n }
+
+                example bill
+                    | "both routes reach the same value" : (In { n = 1 })
+                        -> Out { v = 2002 }
+                """)));
+    }
+
     /** A value another module keeps to itself has no name here, as any unexposed name has. */
     @Test
     void anUnpublishedValueCannotBeImported() {
@@ -349,5 +901,26 @@ class CompileExposedValueTest {
                         """)));
 
         assertTrue(e.getMessage().contains("cap"), e.getMessage());
+    }
+
+    /** A published value is emitted whether or not anything in its own module names it, so what
+     * it forks on has to be read for it: a module of values alone has no behavior whose check
+     * would have. */
+    @Test
+    void aPublishedValueThatForksIsCompiledInAModuleWithNoBehavior() {
+        String forking = """
+                module limits exposing ( ceiling, floor )
+
+                let inner = List.length([1, 2, 3]) > 2
+
+                let ceiling = if inner then 100 else 10
+
+                let floor = inner && (if List.length([1]) > 0 then inner else false)
+                """;
+
+        Map<String, ClassFileImage> compiled =
+                assertDoesNotThrow(() -> Compiler.compile(forking));
+
+        assertTrue(compiled.containsKey("limits.$Values"), compiled.keySet().toString());
     }
 }

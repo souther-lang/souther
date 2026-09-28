@@ -71,8 +71,12 @@ public final class ExampleExecutions {
         if (!prepared.present() || !scope.present() || !sigs.present()) {
             return null;
         }
-        if (!db.ask(new Bodies.Checked(module)).present()) {
-            return null;   // a module that did not check has nothing to run
+        // What may be observed rather than what may be published. A module one of whose bodies did
+        // not come out has nothing to ship, and the rest of its bodies came out all the same — so
+        // the condition here is that there is an image to run against, and which rows that image
+        // can answer for is each row's own question, asked where the row is run.
+        if (!db.ask(new Bodies.Observable(module)).present()) {
+            return null;   // nothing of this module can be emitted, so nothing of it can be run
         }
         // Asked for as a readiness condition rather than as an input to reading them: a module
         // whose requirements are not settled is not one to read statements off yet.

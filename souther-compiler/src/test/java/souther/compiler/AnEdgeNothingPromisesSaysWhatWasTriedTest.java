@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AnEdgeNothingPromisesSaysWhatWasTriedTest {
 
-    /** A disequality nothing can project, and a sibling whose pattern nothing can write. */
+    /** A disequality nothing can project, and a sibling whose rule nothing can write a value for. */
     private static final String MODEL = """
             module example.d4
 
@@ -33,7 +33,7 @@ class AnEdgeNothingPromisesSaysWhatWasTriedTest {
                 invariant range = value >= 0 && value <= 100
 
             data Tag = String
-                invariant shape = String.matches("(a+)\\\\1", value)
+                invariant shape = UNREAD
 
             data Pair = { low: Amount, high: Amount, tag: Tag }
                 invariant together = low.value /= high.value
@@ -43,8 +43,9 @@ class AnEdgeNothingPromisesSaysWhatWasTriedTest {
             let check (p) = Ok
 
             example check
-                | "a pair" : (Pair { low = Amount(5), high = Amount(7), tag = Tag("aa") }) -> Ok
-            """;
+                | "a pair" : (Pair { low = Amount(5), high = Amount(7), tag = Tag(ADMITTED) }) -> Ok
+            """.replace("UNREAD", ARuleNoReadingTakesIn.narrowly("value"))
+            .replace("ADMITTED", ARuleNoReadingTakesIn.A_VALUE_THE_NARROW_ONE_ADMITS);
 
     private static String report() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");

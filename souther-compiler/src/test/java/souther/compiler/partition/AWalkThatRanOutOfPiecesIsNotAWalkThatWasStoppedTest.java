@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.partition.ContainersAddingUp.Ends;
 import souther.compiler.partition.ContainersAddingUp.Spending;
@@ -127,8 +128,7 @@ class AWalkThatRanOutOfPiecesIsNotAWalkThatWasStoppedTest {
      */
     @Test
     void aTotalPastWhereEveryElementCanReachIsReachedByNoArrangement() {
-        Ends ends = new Ends(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.valueOf(2),
-                NumericDomain.Bounds.OPEN);
+        Ends ends = new Ends(Count.ZERO, Count.ZERO, Count.of(2), NumericDomain.Bounds.OPEN);
 
         assertTrue(ends.reaches(BigDecimal.valueOf(4), 2),
                 "two elements of two come to four, so an arrangement of two reaches it");
@@ -142,7 +142,7 @@ class AWalkThatRanOutOfPiecesIsNotAWalkThatWasStoppedTest {
     /** An order open the way an element would have to move puts nothing in the way of a total. */
     @Test
     void anOrderOpenTheWayAnElementMovesReachesAnything() {
-        Ends open = new Ends(BigDecimal.ZERO, BigDecimal.ZERO, null, NumericDomain.Bounds.OPEN);
+        Ends open = new Ends(Count.ZERO, Count.ZERO, null, NumericDomain.Bounds.OPEN);
 
         assertTrue(open.reaches(BigDecimal.valueOf(1_000_000), 1),
                 "nothing names a value this element cannot be moved up to");

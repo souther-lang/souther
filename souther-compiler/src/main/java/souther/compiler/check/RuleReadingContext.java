@@ -22,7 +22,13 @@ import souther.compiler.values.StringMachineAnswers;
  * difference is orders of magnitude of. So a call that keeps the answer and drops the lender is
  * correct and is not the same call, and nothing in a signature taking the three apart says so.
  *
- * <p>Three accessors and nothing else. A context that answered questions of its own — what a name
+ * <p>What travels down a walk and not what a result of it keeps. A result that outlives the walk
+ * keeps what it needs of this ({@link #retainedReadings}) and not the context: held in a result,
+ * the rules and the budget would be carried into what somebody else compares.
+ *
+ * <p>What it was made of and nothing else: the rules, the budget, and the lender — once for a
+ * reader under the walk that uses it and once for a result that keeps it past the walk. A context
+ * that answered questions of its own — what a name
  * resolves to, what a declaration's fields leave — would be where a reader goes instead of where a
  * reader gets what it was given, and every such answer is one somebody already owns.
  *
@@ -86,12 +92,27 @@ public final class RuleReadingContext {
     /**
      * Where it borrows what has already been made of a declaration.
      *
-     * <p>For whoever still takes the three apart, and for nobody under a walk. A reader below is
-     * handed this and reads in it; reaching past it for the lender is how a reader comes to hand
-     * some other lender down, and {@link #whileTheAnswerIsMade} is what a reader that has to bound
-     * one uses instead.
+     * <p>For a reader that uses the lender itself — borrows a reading or its string machines from
+     * it, or keeps where the revision found sets to stop — and not for handing it on to another step
+     * under the walk. A step below is handed this context and reads in it; handed the lender apart,
+     * it could put some other world together around it, and {@link #whileTheAnswerIsMade} is what a
+     * reader that has to bound one uses instead.
      */
     DeclarationReadings readings() {
+        return readings;
+    }
+
+    /**
+     * What a result of the walk keeps for readers of the same declarations that start after the
+     * walk is over.
+     *
+     * <p>Where this world ends and what outlives it begins. A step under the walk is handed this
+     * context and not the lender taken out of it; a result the walk builds may keep the lender, so
+     * that a reader arriving later borrows what the walk made rather than making it again. Named
+     * for that and not for the lender, so that a caller taking it out to hand to a step below is
+     * visibly doing something else.
+     */
+    public DeclarationReadings retainedReadings() {
         return readings;
     }
 

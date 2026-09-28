@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
 
 import java.util.Map;
@@ -20,10 +21,16 @@ import java.util.Optional;
 record ReadRegion(ReadQuantities within) implements SearchRegion {
 
     @Override
-    public SearchRegion assuming(LinearForm<NumericTerm> form,
-                                 Rel rel) {
-        ReadQuantities taken = within.assuming(form, rel);
-        return taken == within ? this : new ReadRegion(taken);
+    public Assumption assuming(LinearForm<NumericTerm> form,
+                               Rel rel) {
+        return switch (within.assuming(form, rel)) {
+            // The same region where the rules came back as they were, which is a constraint they
+            // already held. A region that took it in is what this says, and it says nothing about
+            // whether anything moved.
+            case ReadQuantities.Taking.Taken(ReadQuantities taken) -> new Assumption.Taken(
+                    taken == within ? this : new ReadRegion(taken));
+            case ReadQuantities.Taking.Refused(Refusal why) -> new Assumption.Refused(why);
+        };
     }
 
     @Override
@@ -41,14 +48,19 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
     }
 
     @Override
+    public PlacesApart apartAt(NumericTerm.FromOnePosition term) {
+        return within.apartAt(term);
+    }
+
+    @Override
     public SearchRegion given(Map<NumericTerm, souther.compiler.numeric.Place> fixed) {
         ReadQuantities taken = within.fixing(fixed);
         return taken == within ? this : new ReadRegion(taken);
     }
 
     @Override
-    public NumericDomain.Bounds runsBetween(LinearForm<NumericTerm> form) {
-        return within.runsBetween(form);
+    public NumericDomain.FormProjection projectionOf(LinearForm<NumericTerm> form) {
+        return within.projectionOf(form);
     }
 
     @Override

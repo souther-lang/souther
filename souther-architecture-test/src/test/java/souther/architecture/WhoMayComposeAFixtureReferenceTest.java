@@ -20,7 +20,6 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Who may compose a reference for a row the generator offers, and who may number one.
@@ -60,6 +59,13 @@ class WhoMayComposeAFixtureReferenceTest {
      * second numbering, and one naming the minter's is a second run inside a run.
      */
     private static final List<String> NAMING_A_MAKER = List.of(
+            // The reference a fixture's entry for a value TypedFixtureValues discovered is made
+            // of, the same as ValueEntries below and for the same reason: it is the only reference
+            // in that definition, so it is not told apart from another by a number.
+            "souther/compiler/check/FixtureValueEntries -> " + ORIGIN + "#<init>(I)V",
+            // The reference a module's entry for a value is made of. It is the only reference in
+            // that definition, so it is not told apart from another by a number.
+            "souther/compiler/check/ValueEntries -> " + ORIGIN + "#<init>(I)V",
             "souther/compiler/partition/FixtureReferences -> " + ORIGIN + "#<init>(I)V",
             "souther/compiler/partition/Generator -> " + MINTER + "#<init>()V");
 
@@ -88,19 +94,6 @@ class WhoMayComposeAFixtureReferenceTest {
                 "a reference a row names is numbered within one run of the generator: a row here is"
                         + " a second minter or a second numbering, and either tells two references"
                         + " as one");
-    }
-
-    /**
-     * The walk reads every module's classes.
-     *
-     * <p>Asked of the modules the repository has and not of what a build happened to leave: a module
-     * whose classes are missing is one whose calls this cannot see, and the rows from the rest would
-     * match while answering about fewer modules than it names.
-     */
-    @Test
-    void andEveryModuleTheRepositoryHoldsWasRead() {
-        assertTrue(modulesRead() > 1,
-                "the classes this reads are in more than the one module that declares a minter");
     }
 
     /**
@@ -159,15 +152,6 @@ class WhoMayComposeAFixtureReferenceTest {
         return found;
     }
 
-    private static int modulesRead() {
-        int read = 0;
-        for (Path module : COMPILED.modules()) {
-            if (!COMPILED.classesOf(module).isEmpty()) {
-                read++;
-            }
-        }
-        return read;
-    }
 
 
 

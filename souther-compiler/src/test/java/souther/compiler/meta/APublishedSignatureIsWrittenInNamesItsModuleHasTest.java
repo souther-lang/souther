@@ -95,13 +95,15 @@ class APublishedSignatureIsWrittenInNamesItsModuleHasTest {
                 """));
 
         // A second project, holding only the classes: it reads shop.bare's declarations back and
-        // types a call against them, which is the round trip the published text exists for.
+        // composes with the composition, typing a stage against what it takes and answers, which
+        // is the round trip the published text exists for.
         Map<String, ClassFileImage> downstream = Compiler.compileModules(List.of("""
-                module app exposing ( run )
+                module app exposing ( Total, run : Total )
                 import shop.bare ( Done, checkout )
-                import shop.pricing ( Cart )
-                behavior run : (c: Cart) -> Done
-                let run (c) = checkout(c)
+                data Total = { n: Int }
+                behavior summed : (d: Done) -> Total constructs Total
+                let summed (d) = Total { n = d.total }
+                behavior run = checkout >-> summed
                 """), ModulePath.of(classes));
 
         assertTrue(downstream.containsKey("app.Run"),

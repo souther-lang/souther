@@ -76,7 +76,7 @@ class WhatARuleLeavesUnrepresentedIsSaidOncePerRuleTest {
         assertNotNull(symbols);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Length"));
         assertNotNull(symbols.declaredNode(named.key()), "no `Length` declared");
-        return FieldDomains.of(named, RuleReadings.of(compilation, module),
-                ReadAs.THE_COMPILATION_DOES).projection().causes();
+        return FieldDomains.of(named, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
+                ReadAs.THE_COMPILATION_DOES)).projection().causes();
     }
 }

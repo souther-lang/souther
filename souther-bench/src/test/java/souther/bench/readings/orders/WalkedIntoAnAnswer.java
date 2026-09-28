@@ -1,0 +1,376 @@
+package souther.bench.readings.orders;
+
+import souther.compiler.partition.ClassOfAPosition;
+import souther.compiler.partition.CompositionBudget;
+
+import tools.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.node.JsonNodeFactory;
+import tools.jackson.databind.node.ObjectNode;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.BitSet;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+/**
+ * Readers that take the order of a copy into an answer, one way apiece.
+ *
+ * <p>Every public method here is one the walk must refuse, and the test that reads this class takes
+ * them off the class rather than from a list: a way of taking an order added here is a way the walk
+ * is asked about without anyone saying so. What each does is the whole of its name — a list made of
+ * the copy, a text that says it, the first one a stream reaches, one at an index.
+ *
+ * <p>Some do not list anything. Where many elements meet in one place the walk's order says which is
+ * left: the element a single step reaches, the value a shared key is left holding, what a sort
+ * leaves first among the things it ties.
+ */
+public final class WalkedIntoAnAnswer {
+
+    private WalkedIntoAnAnswer() {}
+
+    public static List<CompositionBudget> copiedIntoAList(Held held) {
+        return List.copyOf(held.figures());
+    }
+
+    public static List<CompositionBudget> gatheredOneAtATime(Held held) {
+        List<CompositionBudget> out = new ArrayList<>();
+        for (CompositionBudget each : held.figures()) {
+            out.add(each);
+        }
+        return out;
+    }
+
+    public static CompositionBudget theFirstOneThatMatches(Held held) {
+        return held.figures().stream().filter(each -> each.name().length() > 0).findFirst()
+                .orElseThrow();
+    }
+
+    public static String joinedIntoATextByACollector(Held held) {
+        return held.figures().stream().map(Enum::name).collect(Collectors.joining(","));
+    }
+
+    public static String joinedIntoATextByAConcatenation(Held held) {
+        return "figures: " + held.figures();
+    }
+
+    public static String joinedIntoATextByAnAppend(Held held) {
+        StringBuilder out = new StringBuilder();
+        out.append(held.figures());
+        return out.toString();
+    }
+
+    public static List<CompositionBudget> theValuesOfAMapAsAList(Held held) {
+        return held.named().values().stream().toList();
+    }
+
+    public static CompositionBudget theOneAtAnIndexOfACopyOfTheValues(Held held) {
+        return new ArrayList<>(held.named().values()).get(0);
+    }
+
+    public static Object[] anArray(Held held) {
+        return held.figures().toArray();
+    }
+
+    public static List<CompositionBudget> handedToAHelperThatMakesAList(Held held) {
+        return listed(held.figures());
+    }
+
+    private static List<CompositionBudget> listed(Collection<CompositionBudget> these) {
+        return new ArrayList<>(these);
+    }
+
+    public static List<String> filledByAFunctionOfAWalk(Held held) {
+        List<String> out = new ArrayList<>();
+        held.figures().forEach(each -> out.add(each.name()));
+        return out;
+    }
+
+    public static List<CompositionBudget> filledByAHelperThatAddsToItsArgument(Held held) {
+        List<CompositionBudget> out = new ArrayList<>();
+        addEach(out, held.figures());
+        return out;
+    }
+
+    private static void addEach(List<CompositionBudget> into,
+                                Collection<CompositionBudget> these) {
+        for (CompositionBudget each : these) {
+            into.add(each);
+        }
+    }
+
+    public static List<String> theKeysOfAMapAsAList(Held held) {
+        return new ArrayList<>(held.named().keySet());
+    }
+
+    public static Map<String, CompositionBudget> aMapThatKeepsTheOrderItWasFilledIn(Held held) {
+        return new LinkedHashMap<>(held.named());
+    }
+
+    public static Set<CompositionBudget> aSetThatKeepsTheOrderItWasFilledIn(Held held) {
+        return new LinkedHashSet<>(held.figures());
+    }
+
+    public static List<String> namedByAStreamAndKeptAsAList(Held held) {
+        return held.figures().stream().map(Enum::name).toList();
+    }
+
+    public static List<CompositionBudget> namedByAnImpostor(Held held) {
+        return Impostor.keep(held.figures());
+    }
+
+    public static CompositionBudget theFirstOneASingleStepReaches(Held held) {
+        return held.figures().iterator().next();
+    }
+
+    public static Map<String, CompositionBudget> theLastOneLeftUnderAKeyTheyShare(Held held) {
+        Map<String, CompositionBudget> out = new HashMap<>();
+        held.figures().forEach(each -> out.put("same", each));
+        return out;
+    }
+
+    public static Map<String, CompositionBudget> theFirstOneLeftUnderAKeyTheyShare(Held held) {
+        Map<String, CompositionBudget> out = new HashMap<>();
+        for (CompositionBudget each : held.figures()) {
+            out.putIfAbsent("same", each);
+        }
+        return out;
+    }
+
+    public static Map<String, CompositionBudget> mergedByAFunctionThatKeepsTheNewer(Held held) {
+        Map<String, CompositionBudget> out = new HashMap<>();
+        held.figures().forEach(each -> out.merge("same", each, (older, newer) -> newer));
+        return out;
+    }
+
+    public static Map<String, CompositionBudget> collectedByAMergeThatKeepsTheNewer(Held held) {
+        return held.figures().stream().collect(
+                Collectors.toMap(each -> "same", each -> each, (older, newer) -> newer));
+    }
+
+    public static Map<Integer, List<CompositionBudget>> groupedIntoListsByACollector(Held held) {
+        return held.figures().stream().collect(Collectors.groupingBy(each -> each.name().length() % 2));
+    }
+
+    public static Map<Integer, List<CompositionBudget>> groupedIntoListsByHand(Held held) {
+        Map<Integer, List<CompositionBudget>> out = new HashMap<>();
+        for (CompositionBudget each : held.figures()) {
+            out.computeIfAbsent(each.name().length() % 2, _ -> new ArrayList<>()).add(each);
+        }
+        return out;
+    }
+
+    public static List<CompositionBudget> sortedByAKeyTwoOfThemCanShare(Held held) {
+        return held.figures().stream()
+                .sorted(Comparator.comparingInt(each -> each.name().length() / 2)).toList();
+    }
+
+    public static List<CompositionBudget> sortedInPlaceByAKeyTwoOfThemCanShare(Held held) {
+        List<CompositionBudget> out = new ArrayList<>(held.figures());
+        out.sort(Comparator.comparingInt(each -> each.name().length() / 2));
+        return out;
+    }
+
+    public static List<String> sortedByTheNaturalOrderOfNames(Held held) {
+        return held.figures().stream().map(Enum::name).sorted().toList();
+    }
+
+    public static List<CompositionBudget> sortedByTheNaturalOrderOfTheElements(Held held) {
+        return held.figures().stream().sorted().toList();
+    }
+
+    public static List<CompositionBudget> madeAListAndThenSortedItNaturally(Held held) {
+        List<CompositionBudget> out = new ArrayList<>(held.figures());
+        out.sort(Comparator.naturalOrder());
+        return out;
+    }
+
+    public static List<CompositionBudget> sortedByAKeyAndThenByTheNaturalOrder(Held held) {
+        return held.figures().stream()
+                .sorted(Comparator.comparingInt((CompositionBudget each) -> each.name().length() / 2)
+                        .thenComparing(Comparator.naturalOrder()))
+                .toList();
+    }
+
+    public static List<BigDecimal> sortedNaturallyWhereTwoUnequalValuesTie(Held held) {
+        return held.figures().stream()
+                .map(each -> new BigDecimal("1." + "0".repeat(each.name().length())))
+                .sorted().toList();
+    }
+
+    public static List<CompositionBudget> removedFromInTheOrderTheWalkGave(Held held,
+                                                                          Set<CompositionBudget> gone) {
+        List<CompositionBudget> out = new ArrayList<>(held.figures());
+        out.removeAll(gone);
+        return out;
+    }
+
+    public static List<CompositionBudget> reversedInPlaceFromTheOrderTheWalkGave(Held held) {
+        List<CompositionBudget> out = new ArrayList<>(held.figures());
+        Collections.reverse(out);
+        return out;
+    }
+
+    public static CompositionBudget theFirstOfTheDescendingWalk(Held held) {
+        return new ArrayDeque<>(held.figures()).descendingIterator().next();
+    }
+
+    public static String theTextOfTheSetStrippedStillSaysItsOrder(Held held) {
+        return held.figures().toString().stripTrailing();
+    }
+
+    public static LocalDate parsedFromTheTextOfTheSet(Held held) {
+        return LocalDate.parse(held.figures().toString());
+    }
+
+    public static int whereTheOrderPutsOneInAList(Held held, CompositionBudget one) {
+        return new ArrayList<>(held.figures()).indexOf(one);
+    }
+
+    public static void printedInTheOrderTheRunGave(Held held) {
+        System.out.println(held.figures());
+    }
+
+    public static Object[] copiedIntoAnArrayInTheOrderTheWalkGave(Held held) {
+        Object[] out = new Object[held.figures().size()];
+        System.arraycopy(held.figures().toArray(), 0, out, 0, out.length);
+        return out;
+    }
+
+    public static BigDecimal madeOfTheTextOfTheSet(Held held) {
+        return new BigDecimal(held.figures().toString());
+    }
+
+    public static Object[] aCopyOfTheArrayTheSetMade(Held held) {
+        return held.figures().toArray().clone();
+    }
+
+    public static ObjectNode membersInTheOrderTheWalkMetThem(Held held) {
+        ObjectNode out = JsonNodeFactory.instance.objectNode();
+        for (CompositionBudget each : held.figures()) {
+            out.put(each.name(), 1);
+        }
+        return out;
+    }
+
+    public static ArrayNode anArrayInTheOrderTheWalkMetThem(Held held) {
+        ArrayNode out = JsonNodeFactory.instance.arrayNode();
+        for (CompositionBudget each : held.figures()) {
+            out.add(each.name());
+        }
+        return out;
+    }
+
+    public static ObjectNode theLastOneLeftUnderAKeyTheyShareInANode(Held held) {
+        ObjectNode out = JsonNodeFactory.instance.objectNode();
+        for (CompositionBudget each : held.figures()) {
+            out.put("same", each.name());
+        }
+        return out;
+    }
+
+    public static ObjectNode theLastOneLeftInANodeMadeBeforeTheWalk(Held held) {
+        ObjectNode out = JsonNodeFactory.instance.objectNode();
+        held.figures().forEach(each -> out.put("same", each.name()));
+        return out;
+    }
+
+    public static String theOneTheWalkChoseMadeIntoABuilderByAConstructorReference(Held held) {
+        Function<String, StringBuilder> make = StringBuilder::new;
+        CompositionBudget first = held.figures().stream().findFirst().orElseThrow();
+        return make.apply(first.name()).toString();
+    }
+
+    public static BigDecimal aDecimalMadeByAConstructorReferenceOfTheOneTheWalkChose(Held held) {
+        Function<String, BigDecimal> make = BigDecimal::new;
+        return make.apply(held.figures().stream().findFirst().orElseThrow().name());
+    }
+
+    public static ObjectNode theOneTheWalkChoseUnderAKey(Held held) {
+        ObjectNode out = JsonNodeFactory.instance.objectNode();
+        out.put("first", held.figures().stream().findFirst().orElseThrow().name());
+        return out;
+    }
+
+    public static List<CompositionBudget> filledByAMethodReferenceToAdd(Held held) {
+        List<CompositionBudget> out = new ArrayList<>();
+        held.figures().forEach(out::add);
+        return out;
+    }
+
+    public static void writtenByAMethodReferenceToPrintln(Held held) {
+        held.figures().forEach(System.out::println);
+    }
+
+    public static void theFirstOneWrittenStraightToTheOutput(Held held) {
+        System.out.println(held.figures().stream().findFirst().orElseThrow());
+    }
+
+    public static void everyOneWrittenAsTheWalkMeetsIt(Held held) {
+        for (CompositionBudget each : held.figures()) {
+            System.out.println(each);
+        }
+    }
+
+    public static ClassOfAPosition theLeastByADeclaredOrderOfOneTheWalkChose(HeldClasses held) {
+        ClassOfAPosition chosen = held.classes().stream().findFirst().orElseThrow();
+        return Set.of(chosen).stream().min(ClassOfAPosition.steadyOrder()).orElseThrow();
+    }
+
+    public static List<ClassOfAPosition> sortedInPlaceAListOfOneTheWalkChose(HeldClasses held) {
+        List<ClassOfAPosition> out = new ArrayList<>();
+        out.add(held.classes().stream().findFirst().orElseThrow());
+        out.sort(ClassOfAPosition.steadyOrder());
+        return out;
+    }
+
+    public static Set<ClassOfAPosition> keptInATreeOfADeclaredOrderAfterTheWalkChose(
+            HeldClasses held) {
+        Set<ClassOfAPosition> tree = new TreeSet<>(ClassOfAPosition.steadyOrder());
+        tree.add(held.classes().stream().findFirst().orElseThrow());
+        return tree;
+    }
+
+    public static Object[] theOneCopiedFromAPlaceTheOrderChose(Held held, CompositionBudget one,
+                                                              Object[] source) {
+        int from = new ArrayList<>(held.figures()).indexOf(one);
+        Object[] out = new Object[1];
+        System.arraycopy(source, from, out, 0, 1);
+        return out;
+    }
+
+    public static String anOrderWrittenIntoABitSet(Held held, CompositionBudget one) {
+        BitSet bits = new BitSet();
+        bits.set(new ArrayList<>(held.figures()).indexOf(one));
+        return bits.toString();
+    }
+
+    public static CompositionBudget theLeastByAKeyTwoOfThemCanShare(Held held) {
+        return held.figures().stream()
+                .min(Comparator.comparingInt(each -> each.name().length())).orElseThrow();
+    }
+
+    public static List<String> theKeysOfATreeKeptNaturally(Held held) {
+        return new ArrayList<>(new TreeMap<>(held.named()).keySet());
+    }
+
+    public static List<CompositionBudget> keptByATreeThatTiesTwoOfThem(Held held) {
+        Set<CompositionBudget> tree =
+                new TreeSet<>(Comparator.comparingInt(each -> each.name().length() / 2));
+        tree.addAll(held.figures());
+        return new ArrayList<>(tree);
+    }
+}

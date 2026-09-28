@@ -106,6 +106,12 @@ class ExampleMultipleFailuresTest {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(model));
 
         assertEquals(1, e.diagnostics().size());
+        // A fixture that cannot be built has no value to show, so the message the annotation
+        // processor prints is all that says what went wrong.
+        assertNotEquals("example failed", e.getMessage(),
+                "the processor message must not collapse to a bare 'example failed'");
+        assertTrue(e.getMessage().contains("E1903"),
+                "message should carry the code E1903, was: " + e.getMessage());
     }
 
     @Test

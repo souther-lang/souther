@@ -2,11 +2,13 @@ package souther.compiler.inputs;
 
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.regex.CodePoints;
 import souther.compiler.regex.PatternPlan;
-import souther.compiler.regex.PatternSyntax;
+import souther.compiler.regex.PatternMeaning;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
@@ -14,6 +16,7 @@ import souther.compiler.values.AdmittedPlan;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 
 /**
  * The values a rule about a number taken of a position leaves, said as a plan for the values
@@ -73,12 +76,13 @@ final class ProjectionPreimage {
         // Every symbol, repeated within the run. What the rule is about is how many code points
         // stand there, which is what a repetition counts — a plan over what a string is stored as
         // would admit a character written as a pair where the rule asks for one.
-        return new AdmittedPlan.Pattern(PatternPlan.of(new PatternSyntax.Repeated(
-                new PatternSyntax.Symbols(CodePoints.EVERYTHING),
-                least, most == null ? PatternSyntax.Repeated.NO_CEILING : most)));
+        return new AdmittedPlan.Pattern(PatternPlan.of(new PatternMeaning.Repeated(
+                new PatternMeaning.Symbols(CodePoints.EVERYTHING),
+                least, most == null ? PatternMeaning.Repeated.NO_CEILING : most)));
     }
 
-    /** The least the low end admits, or null where it is not a count this can read. */
+    /** The least the low end admits, or null where it is not a count this can read or the exact
+     *  arithmetic could not hold the whole number it rounds to. */
     private static Integer atLeast(Endpoint low) {
         if (low == null) {
             return Integer.valueOf(0);
@@ -90,12 +94,17 @@ final class ProjectionPreimage {
         // How many a value holds is a whole number, so an end between two of them admits the one
         // above it whichever way it is written. Read as the number it names, an exclusive end at a
         // whole number would admit that number too.
-        BigDecimal least = low.inclusive() ? at.setScale(0, java.math.RoundingMode.CEILING)
-                : at.setScale(0, java.math.RoundingMode.FLOOR).add(BigDecimal.ONE);
+        ExactAnswer<BigInteger> rounded =
+                low.inclusive() ? ExactRatio.of(at).ceiling() : ExactRatio.of(at).floor();
+        if (!(rounded instanceof ExactAnswer.Held<BigInteger> held)) {
+            return null;
+        }
+        BigInteger least = low.inclusive() ? held.value() : held.value().add(BigInteger.ONE);
         return least.signum() < 0 ? Integer.valueOf(0) : asALength(least);
     }
 
-    /** The greatest the high end admits, or null where there is no end or none this can read. */
+    /** The greatest the high end admits, or null where there is no end, none this can read, or the
+     *  exact arithmetic could not hold the whole number it rounds to. */
     private static Integer atMost(Endpoint high) {
         if (high == null) {
             return null;
@@ -104,13 +113,17 @@ final class ProjectionPreimage {
         if (at == null) {
             return null;
         }
-        BigDecimal most = high.inclusive() ? at.setScale(0, java.math.RoundingMode.FLOOR)
-                : at.setScale(0, java.math.RoundingMode.CEILING).subtract(BigDecimal.ONE);
+        ExactAnswer<BigInteger> rounded =
+                high.inclusive() ? ExactRatio.of(at).floor() : ExactRatio.of(at).ceiling();
+        if (!(rounded instanceof ExactAnswer.Held<BigInteger> held)) {
+            return null;
+        }
+        BigInteger most = high.inclusive() ? held.value() : held.value().subtract(BigInteger.ONE);
         return most.signum() < 0 ? null : asALength(most);
     }
 
     /** {@code at} as a length, or null where it is further out than a length is counted. */
-    private static Integer asALength(BigDecimal at) {
+    private static Integer asALength(BigInteger at) {
         try {
             return at.intValueExact();
         } catch (ArithmeticException past) {

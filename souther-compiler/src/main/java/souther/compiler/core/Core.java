@@ -4,7 +4,8 @@ import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
 import souther.compiler.types.ConstructOccurrence;
-import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.MaterialisationSite;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.ReferenceOrigin;
 import souther.compiler.types.SourceConstructOrigin;
@@ -15,9 +16,11 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.regex.PatternMeaning;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -30,9 +33,13 @@ import java.util.Optional;
  * shape during emission becomes its own node here, so the backend only emits.
  *
  * <p>Every node carries {@link #type()}: the type the checker decided for it (issue #81). The
- * checker is the only producer of Core — it builds the tree as it types what was written
+ * checker is the only one that decides a type — it builds the tree as it types what was written
  * ({@code Elaborator.elaborate}) — so the backend reads those decisions instead of deciding them a
- * second time. A condition was the exception until #1080, and being the exception meant the last
+ * second time. A pass after checking ({@link GrowingFold}) rebuilds the tree it is handed, and what
+ * it puts there is either a decision it was handed or one its own rewrite determines, such as the
+ * type a binding is in force at once the list it stood for is no longer built. A {@link Widen} such
+ * a pass puts there restates one the checker decided, and never relates two types the checker did
+ * not. A condition was the exception until #1080, and being the exception meant the last
  * step of deciding what a clause meant sat inside a backend.
  *
  * <p>A name in a body is one of two nodes, not one: a read of something the body binds, and a unit
@@ -114,8 +121,11 @@ public sealed interface Core {
     /**
      * A binding this tree makes: a {@code let}, a lambda's parameter, a {@code match} arm's name.
      *
-     * <p>Core's own, and not the resolved tree's binder. What a backend has of a binding is which
-     * one it is and what to call the local — the two here. The rest of a resolved binder is about
+     * <p>Core's own, and not the resolved tree's binder. What the binder itself holds is which
+     * binding it is and what to call the local — the two here. The type the binding is in force at
+     * is not among them: the node that makes the binding answers it ({@link LetIn#bindType}, a
+     * {@link Block}'s {@link Type.FnOf} parameters, a {@link Case}'s pattern), and a binder
+     * carrying it too would state that fact twice. The rest of a resolved binder is about
      * the characters an author typed: the spelling before a desugaring canonicalised it, and where
      * the name was written, which is what a cursor is compared against. A backend has no cursor and
      * emits no spelling, and Core naming that form put {@code souther.compiler.ast} on what a
@@ -177,7 +187,7 @@ public sealed interface Core {
      * the first reader to meet one would be reporting somebody else's mistake.
      */
     record KeptCallPlace(ReferenceOrigin reference, ApplicationOrigin application,
-                         ExpansionLineage lineage) {
+                         OccurrenceLineage lineage) {
 
         public KeptCallPlace {
             if (reference == null || application == null || lineage == null) {
@@ -197,6 +207,22 @@ public sealed interface Core {
      * (spec §unit-data). Which unit is on the node, so nothing resolves a spelling again. */
     record UnitValue(TypeSymbol data, Type type, SourcePos pos) implements Core {}
 
+    /**
+     * A build of a value in the tree an analysis reads: where the value is evaluated, and not what it
+     * means.
+     *
+     * <p>What the value means is its template, held once for the whole of what reads this tree and
+     * asked of it by {@code value}. A tree that held the body at every build would hold a copy per
+     * region that builds it, and values naming one another in several regions would grow with every
+     * link. Nothing here is a call: there is nothing applied and nothing passed, and a reader that
+     * walks a node's children meets no body under it.
+     *
+     * @param value which value, by the name the module reaches it by
+     * @param site  the region this build stands in
+     */
+    record MaterialisedValue(ReachName.Declaration value, MaterialisationSite site, Type type,
+                             SourcePos pos) implements Core {}
+
     record Neg(Core operand, Type type, SourcePos pos) implements Core {}
 
     record FieldAccess(Core target, String field, Type type, SourcePos pos) implements Core {}
@@ -206,11 +232,41 @@ public sealed interface Core {
      * (see {@link souther.compiler.ast.Hir.Binary}) and the copy of the body it stands in. Both,
      * because a helper spliced into two calls holds one written comparison twice, and a reader
      * holding only the first would be reading one of them about the other.
+     *
+     * <p>{@code reading} is what the operator reads its operands as, which the checker settled and
+     * the three types here do not say. {@code type} is what the operator answers, and the two differ:
+     * {@code i / j} over two {@code Int}s reads them as they stand and answers a {@code Rational}.
+     *
+     * <p>{@code ordering} is what the operands are ordered by, which the checker settled for the
+     * operators that place them on an order and which is empty for every other. It is not the
+     * reading: {@code w <= w} for a case {@code w} reads its operands as {@code w} and is ordered by
+     * the enumeration listing it, while {@code stage < w} reads them as that enumeration. A comparison
+     * no source wrote may leave it empty, since only a source-written one is lowered.
      */
-    record Binary(BinOp op, Core left, Core right, ConstructOccurrence occurrence, Type type,
+    record Binary(BinOp op, Core left, Core right, BinaryReading reading,
+                  Optional<OrderingBasis> ordering, ConstructOccurrence occurrence, Type type,
                   SourcePos pos) implements Core {
 
+        /** An operator that orders nothing, or a comparison no source wrote, so with no basis. */
+        public Binary(BinOp op, Core left, Core right, BinaryReading reading,
+                      ConstructOccurrence occurrence, Type type, SourcePos pos) {
+            this(op, left, right, reading, Optional.empty(), occurrence, type, pos);
+        }
+
         public Binary {
+            if (ordering == null) {
+                throw new IllegalArgumentException(
+                        "an operator's ordering is a basis or nothing: " + op);
+            }
+            if (ordering.isPresent() && !op.ordersItsOperands()) {
+                throw new IllegalArgumentException(
+                        "an operator that orders nothing has nothing to be ordered by: " + op);
+            }
+            if (ordering.isEmpty() && op.ordersItsOperands() && occurrence != null
+                    && occurrence.isWritten()) {
+                throw new IllegalArgumentException(
+                        "a written comparison says what its operands are ordered by: " + op);
+            }
             // A comparison is some comparison of the model, in some copy of the body that wrote it.
             // Both halves are the occurrence's to say, and a comparison that is neither is one no
             // reading of coverage can file.
@@ -218,12 +274,89 @@ public sealed interface Core {
                 throw new IllegalArgumentException(
                         "a comparison is some comparison of the model: " + op);
             }
+            if (reading == null) {
+                throw new IllegalArgumentException("an operator reads its operands as something: "
+                        + op);
+            }
+            if (reading instanceof BinaryReading.AsTheyStand
+                    && !left.type().equals(right.type())) {
+                throw new IllegalArgumentException("operands read as they stand stand as one type: "
+                        + left.type() + " " + op + " " + right.type());
+            }
         }
 
         /** What the source wrote, for a reader whose question is about the construct alone. */
         public SourceConstructOrigin origin() {
             return occurrence.origin();
         }
+    }
+
+    /**
+     * The type whose order a comparison or a sort places its values on, as the checker settled it:
+     * {@code Int} for an {@code Int} and for a quantity over one, the enumeration for a case of it,
+     * for a union of its cases and for a newtype over it, {@code Rational} for a pair read at its
+     * exact value.
+     *
+     * <p>A type of the language and never how a backend compares it: the order of a value is what
+     * this names, and a backend lowers it in whatever representation it holds the type in. It is not
+     * the type of an operand, and no operand's type says it — a case of two sums has no order of its
+     * own, and which sum orders it is the checker's answer to a question a backend does not ask.
+     */
+    record OrderingBasis(Type type) {
+
+        public OrderingBasis {
+            if (type == null) {
+                throw new IllegalArgumentException("an order is the order of some type");
+            }
+        }
+    }
+
+    /**
+     * What an operator reads its two operands as, as the checker settled it.
+     *
+     * <p>Not a type of either operand and not a place either stands: an {@code Int} beside a
+     * {@code Rational} is still refused where a Rational is asked for, and a literal beside a
+     * newtype is read as the newtype by this operator and by nothing else. That is why this is not a
+     * {@link Widen}. And not which rule of the checker allowed it: a reading says what the operands
+     * were taken as, which is what a backend lowers, and two rules that settle on one reading are
+     * one reading here.
+     *
+     * <p>Newtype arithmetic has none of its own. The tree already says it — each operand opened to
+     * what it wraps, the operation over those, the result built again — and the operation inside
+     * reads its numbers as they stand.
+     *
+     * <p>Every one of these reads the two sides alike, so a comparison turned round keeps it.
+     */
+    sealed interface BinaryReading {
+
+        /** Each operand as the type it has, which is one type for both. */
+        record AsTheyStand() implements BinaryReading {}
+
+        /**
+         * The pair as values of {@code type}, for this operator only: a literal beside the newtype it
+         * is compared with, a case beside the enumeration that orders it, two values tested for
+         * sameness across one set of cases, a value beside one that states nothing about its own
+         * type.
+         *
+         * <p>Never which side came first: what an operator reads its operands as is the same
+         * written either way round, so the type is one both sides settle and not one of theirs
+         * picked. Where two sides name one set of cases, it is that set as a union.
+         */
+        record In(Type type) implements BinaryReading {
+            public In {
+                if (type == null) {
+                    throw new IllegalArgumentException("a pair is read in some type");
+                }
+            }
+        }
+
+        /** Each operand at its exact mathematical value, which one of them already being a
+         *  {@code Rational} makes of the pair (ADR-0116). No type of the language stands for it. */
+        record ExactNumbers() implements BinaryReading {}
+
+        AsTheyStand AS_THEY_STAND = new AsTheyStand();
+
+        ExactNumbers EXACT_NUMBERS = new ExactNumbers();
     }
 
     /**
@@ -343,6 +476,63 @@ public sealed interface Core {
         }
 
         /**
+         * A value the emitting module declares, built where the tree that runs names it.
+         *
+         * <p>Its own family and not an {@link OfDeclaration}. A value is not a helper: it runs in the
+         * one place its module builds it, and what it answers lives past the call that reads it,
+         * where a helper's method is a copy a call was left standing to. What is emitted for it is a
+         * call to the method the module runs the value as, handed the values its root region
+         * demands.
+         */
+        record OfValue(ReachName.Declaration name) implements Reached {
+
+            public OfValue {
+                if (name == null || !(name.denotes() instanceof ValueName.Helper)) {
+                    throw new IllegalArgumentException(
+                            "a value is a helper of the module that declares it: " + name);
+                }
+            }
+
+            /** What running this call means: the method the value runs as. */
+            public Reaches reaches() {
+                return new Reaches.AValue((ValueName.Helper) name.denotes());
+            }
+
+            @Override
+            public String toString() {
+                return rendered();
+            }
+        }
+
+        /**
+         * A value another module publishes, read where it is named.
+         *
+         * <p>Its own family and not an {@link OfDeclaration}, because what is emitted for it is not a
+         * method this module holds. The value has one place it runs, which is the module that
+         * declares it, and this module calls that module's entry for it — so nothing of the value's
+         * body, and nothing of the types the body is built from, is this module's to know.
+         */
+        record OfPublishedValue(ReachName.OfModule name) implements Reached {
+
+            public OfPublishedValue {
+                if (!(name.denotes() instanceof ValueName.Helper)) {
+                    throw new IllegalArgumentException(
+                            "a published value is a helper of the module that declares it: " + name);
+                }
+            }
+
+            /** What running this call means: the entry its declaring module publishes. */
+            public Reaches reaches() {
+                return new Reaches.APublishedValue((ValueName.Helper) name.denotes());
+            }
+
+            @Override
+            public String toString() {
+                return rendered();
+            }
+        }
+
+        /**
          * A callee whose declaration is a kernel of the standard library, and which kernel it is.
          *
          * <p>Which kernel is the answer to a question this compiler settled: the checker typed the
@@ -377,16 +567,18 @@ public sealed interface Core {
     /**
      * What a call to a declaration runs, for whoever has to emit it.
      *
-     * <p>The two kinds of thing a call that survived to here can reach, and the division an emitter
+     * <p>The kinds of thing a call that survived to here can reach, and the division an emitter
      * writes its arms over. Not provenance: a module's own helper, another module's and a library
      * operation written in Souther are one answer, because one thing is emitted for all three — a
      * call to a method the emitting module holds. What differs between them is where the
-     * declaration came from, which is a different question and is asked of the declaration.
+     * declaration came from, which is a different question and is asked of the declaration. A value
+     * is a different answer and not a different provenance: it runs in the one place its module
+     * builds it, and lives past the call that reads it.
      *
      * <p>Read off a call rather than stored on one ({@link Reached.OfDeclaration#reaches}), so this
      * cannot come to say something the reference does not.
      *
-     * <p>Sealed, and the switches over it carry no {@code default}: a third kind of callee is a
+     * <p>Sealed, and the switches over it carry no {@code default}: another kind of callee is a
      * compile error at every emitter rather than a call one of them quietly does nothing for.
      */
     sealed interface Reaches {
@@ -403,6 +595,30 @@ public sealed interface Core {
          * how the call reaches it, and a reader emitting one works it out from the reference.
          */
         record AHelper(ValueName declaration) implements Reaches { }
+
+        /**
+         * A value the emitting module declares, which runs here and nowhere else. What is emitted is
+         * a call to the method the module runs it as.
+         */
+        record AValue(ValueName.Helper value) implements Reaches {
+
+            @Override
+            public ValueName declaration() {
+                return value;
+            }
+        }
+
+        /**
+         * A value another module declares, which runs there. What is emitted is a call to the
+         * public entry that module publishes for it, and never a method of the emitting module.
+         */
+        record APublishedValue(ValueName.Helper value) implements Reaches {
+
+            @Override
+            public ValueName declaration() {
+                return value;
+            }
+        }
 
         /**
          * A behavior, whose implementation is somewhere else — another module's, or supplied from
@@ -457,6 +673,107 @@ public sealed interface Core {
     }
 
     /**
+     * What the checker settled about one application beyond its type, carried on the {@link Call}
+     * it was settled for rather than derived from its arguments a second time downstream.
+     *
+     * <p>A kernel's signature ({@link KernelSignature}) is declared once with type variables, and
+     * each application settles them: what that application takes each argument as is the checker's
+     * answer, and an output reading it off here does not substitute the signature again under a rule
+     * of its own. A call to anything else may settle variables of its declaration too — a recursive
+     * helper such as {@code List.foldFrom} is declared over {@code 'acc} — but carries nothing
+     * here for it: each argument stands as what the application settled it takes that argument as,
+     * and the call is of what it settled it answers, so the settlement is already in the call's
+     * arguments and type. {@link None} says there is nothing further, not that nothing was settled.
+     *
+     * <p>Sealed on purpose: a fact belongs here because the checker settled it about one application
+     * and it became part of that application's meaning, not because some pass found it convenient to
+     * stash. A {@code Map<String, Object>} would accept whatever a later pass wanted to put there,
+     * and a reader could no longer tell a settlement the checker stands behind from one pass's scratch
+     * space.
+     */
+    sealed interface CallSettlement {
+
+        /** A call that is no kernel's application, so nothing about it is carried beyond what its
+         *  arguments and its type already say. */
+        enum None implements CallSettlement {
+            INSTANCE
+        }
+
+        /**
+         * One application of a kernel: what it takes each of its arguments as, and whatever else the
+         * checker settled about it ({@link KernelFact}).
+         *
+         * <p>{@code takes} is the kernel's declared parameters under the substitution the checker
+         * settled for this application, and never the arguments' own types read back: the call
+         * holds each argument at exactly that type, which is a statement only while the two come
+         * from different places. What the application answers is the call's type, and not held a
+         * second time here.
+         */
+        record AtKernel(List<Type> takes, KernelFact fact) implements CallSettlement {
+
+            public AtKernel {
+                takes = List.copyOf(takes);
+                Objects.requireNonNull(fact, "a kernel's application carries its fact, `None` where"
+                        + " there is none");
+            }
+        }
+    }
+
+    /**
+     * A fact the checker settled about one kernel's application, beside what it takes its arguments
+     * as.
+     */
+    sealed interface KernelFact {
+
+        /** The checker settled nothing about this application beyond what it takes and answers. */
+        enum None implements KernelFact {
+            INSTANCE
+        }
+
+        /**
+         * What the pattern of {@code String.matches} means, read where the call was checked.
+         *
+         * <p>The checker folds the first argument under the bindings in force and reads the text it
+         * comes to as a pattern of the language (spec §string-patterns); the call exists only where
+         * that reading is a pattern. What an output lowers is {@code meaning}, so no output reads
+         * pattern text, and every output answers for the strings the checker read the pattern as.
+         *
+         * @param written the text the argument folds to, as the author wrote it. Provenance only: an
+         *                output may quote it and never reads it as a pattern
+         * @param meaning which strings the pattern accepts
+         */
+        record StringMatches(String written, PatternMeaning meaning) implements KernelFact {
+
+            public StringMatches {
+                Objects.requireNonNull(written, "a settled pattern is settled from some text");
+                Objects.requireNonNull(meaning, "a settled pattern means some set of strings");
+            }
+        }
+
+        /** The {@link Type} an ordering requirement was checked against for one application of
+         * {@code List.sort}, {@code List.max}, {@code List.min}, or {@code List.sortBy} — the list's
+         * element for the first three, the sort key's result for the last. Not always a Type proved
+         * ordered: the requirement holds it just as readily where there was nothing yet to check —
+         * {@code Nothing} for an empty-list literal, a still-open type variable, or bottom — as where
+         * the Type does support ordering. A Type the requirement refused never reaches here; that is
+         * a compile error instead. Never a comparator, method symbol, or other backend
+         * representation: a backend reads {@link #type()} and {@link #ordering()} and decides its
+         * own representation from them.
+         *
+         * <p>{@code ordering} is what the values of {@code type} are ordered by ({@link
+         * OrderingBasis}): the enumeration for a list of one of its cases, {@code Int} for a list of
+         * a quantity over an {@code Int}. It is empty exactly where there was nothing yet to check —
+         * the requirement stood, and no value of any type is there to be ordered. */
+        record OrderingSubject(Type type, Optional<OrderingBasis> ordering) implements KernelFact {
+
+            public OrderingSubject {
+                Objects.requireNonNull(type, "a settled ordering subject is settled to some type");
+                Objects.requireNonNull(ordering, "an ordering is a basis or nothing");
+            }
+        }
+    }
+
+    /**
      * A call to a builtin, an injected behavior, an intrinsic, or a recursive helper emitted as a
      * method — none of them bound by this body. A non-recursive helper is already inlined.
      *
@@ -466,9 +783,21 @@ public sealed interface Core {
      * the method it calls, and what the name denotes to know what kind of thing was called. Where
      * the callee turned out to be a kernel of the standard library, the call says which one
      * ({@link Reached.OfKernel}), so an output emitting it asks the call rather than this compiler.
+     *
+     * <p>{@code settlement} is a fact the checker proved about this one application beyond its type
+     * ({@link CallSettlement}) — never a rewrite of {@code args}. What a body evaluates at run time
+     * and what the checker proved about it at compile time are different questions, and folding the
+     * second into the first would lose the tree a rewrite, an occurrence or a coverage obligation
+     * still reads.
+     *
+     * <p>A kernel's application says what it takes each argument as, and each argument is of
+     * exactly that type — a {@link Widen} where the value is narrower. Held here as equality and not
+     * as whether one may stand as the other: that was decided where the Widen was placed. A rewrite
+     * that changes an argument's type without settling the application again is refused here rather
+     * than carried on to an output that would read the two as disagreeing.
      */
-    record Call(CallTarget fn, List<Core> args, ConstructOccurrence occurrence, Type type,
-                SourcePos pos) implements Core {
+    record Call(CallTarget fn, List<Core> args, ConstructOccurrence occurrence,
+                CallSettlement settlement, Type type, SourcePos pos) implements Core {
 
         public Call {
             // A call is some call of the model, in some copy of the body that wrote it — or one no
@@ -478,6 +807,54 @@ public sealed interface Core {
                 throw new IllegalArgumentException(
                         "a call is some call of the model: " + fn.rendered());
             }
+            // `None` where the checker settled nothing, rather than left unstated: a reader asking
+            // whether this call has a settlement gets one answer either way, never an absent field.
+            if (settlement == null) {
+                throw new IllegalArgumentException(
+                        "a call carries its settlement, `None` where there is none: " + fn.rendered());
+            }
+            // Which kind of call owns a settlement is asked of the settlement, exhaustively and with
+            // no `default`: a case added later to `CallSettlement` or `KernelFact` without a line
+            // here is a compile error at this constructor, not a call this refuses to notice was
+            // ever handed one. An `instanceof` of one arm compared as a boolean would answer the same
+            // for every case this has not been told about yet, which is the failure mode this switch
+            // is here to refuse.
+            boolean agrees = switch (settlement) {
+                case CallSettlement.None _ -> !(fn instanceof Reached.OfKernel);
+                case CallSettlement.AtKernel(_, KernelFact fact) ->
+                        fn instanceof Reached.OfKernel(_, Kernel kernel) && factAgrees(kernel, fact);
+            };
+            if (!agrees) {
+                throw new IllegalArgumentException("`" + fn.rendered() + "` and its settlement "
+                        + settlement + " disagree about what kind of call this is");
+            }
+            if (settlement instanceof CallSettlement.AtKernel(List<Type> takes, _)) {
+                if (takes.size() != args.size()) {
+                    throw new IllegalArgumentException("`" + fn.rendered() + "` takes "
+                            + takes.size() + " argument(s) and is handed " + args.size());
+                }
+                for (int i = 0; i < args.size(); i++) {
+                    if (!takes.get(i).equals(args.get(i).type())) {
+                        throw new IllegalArgumentException("argument " + (i + 1) + " of `"
+                                + fn.rendered() + "` stands as " + Type.show(args.get(i).type())
+                                + " where the application takes it as " + Type.show(takes.get(i)));
+                    }
+                }
+            }
+        }
+
+        /**
+         * Whether {@code fact} is one {@code kernel}'s application can carry. {@code String.matches}
+         * carries its pattern and nothing else, and no other kernel carries a pattern. Which kernels
+         * carry an ordering subject is the checker's to decide and not a second table held here:
+         * this asks only that it is not {@code String.matches}, which has its own.
+         */
+        private static boolean factAgrees(Kernel kernel, KernelFact fact) {
+            return switch (fact) {
+                case KernelFact.None _ -> kernel != Kernel.STRING_MATCHES;
+                case KernelFact.StringMatches _ -> kernel == Kernel.STRING_MATCHES;
+                case KernelFact.OrderingSubject _ -> kernel != Kernel.STRING_MATCHES;
+            };
         }
 
         /** The callee as it renders — the reach name for a call to one, the operation's own
@@ -491,6 +868,86 @@ public sealed interface Core {
         public SourceConstructOrigin origin() {
             return occurrence.origin();
         }
+
+        /** What emitting a call does with a function it is handed. */
+        public enum FunctionArgument {
+            /** Run as the loop body: no class is made for it, and what it closes over is read from
+             *  the frame around it. */
+            RUNS_WHERE_IT_STANDS,
+            /** Never applied, so {@code Fn.NEVER} is handed over in its place and none of it — no
+             *  class, no body — is emitted. */
+            NEVER_APPLIED,
+            /** Handed over as a value: a class with a field for each thing it closes over. */
+            HANDED_OVER
+        }
+
+        /**
+         * What emitting this call does with the function at {@code index}.
+         *
+         * <p>A method is handed a function that is never applied as {@code Fn.NEVER}, and a kernel's
+         * row hands the runtime the function it is given whatever it is. The one answer, read by the
+         * emitter and by whatever asks which classes an emitted call names, so the two do not come to
+         * disagree about which of the three a function is.
+         *
+         * @param theWalk what the standard library's one loop is called
+         */
+        public FunctionArgument functionArgument(int index, ValueName theWalk) {
+            if (!(args.get(index).type() instanceof Type.FnOf fnType)) {
+                throw new IllegalArgumentException("argument " + index + " of `" + fn.rendered()
+                        + "` is not a function");
+            }
+            if (index == 0 && stepRunWhereItStands(theWalk) != null) {
+                return FunctionArgument.RUNS_WHERE_IT_STANDS;
+            }
+            return !(fn instanceof Reached.OfKernel) && neverRuns(fnType)
+                    ? FunctionArgument.NEVER_APPLIED : FunctionArgument.HANDED_OVER;
+        }
+
+        /**
+         * The step this call runs where it stands, as the loop it is, or null where it does not: the
+         * step is handed over as a function, or replaced by {@code Fn.NEVER} because it is never
+         * applied ({@link #functionArgument} says which).
+         *
+         * <p>A walk that starts at the head of the list, and a build of a list or a map, run their
+         * step as the loop body, reading what it closes over from the frame around it: no class is
+         * made for it, and no method is called, so nothing comes back to be cast to the type the
+         * call answers.
+         *
+         * @param theWalk what the standard library's one loop is called
+         */
+        public Block stepRunWhereItStands(ValueName theWalk) {
+            boolean walks = fn == Emitted.BUILD_LIST || fn == Emitted.BUILD_MAP
+                    || (fn instanceof Reached reached && theWalk.equals(reached.denotes())
+                    && args.size() > 3 && withoutStanding(args.get(3)) instanceof Int from
+                    && from.value() == 0);
+            return walks ? runsWhereItStands(args.get(0)) : null;
+        }
+    }
+
+    /**
+     * {@code step} as a block that is run where it stands, or null where it is not one: not a block
+     * at all, or a step that would never be applied because an element of it has no type to be.
+     */
+    static Block runsWhereItStands(Core step) {
+        return withoutStanding(step) instanceof Block block && !neverRuns(block.type())
+                ? block : null;
+    }
+
+    /**
+     * Whether a step closure would never be applied: one of its parameters is the bare bottom, so
+     * it is the element of an empty-literal list and there are no elements — {@code foldFrom} over
+     * {@code []} yields the seed. Such a step is passed as {@code Fn.NEVER} rather than materialised,
+     * since materialising it would unbox the bottom element (as {@code acc + x} does with {@code x})
+     * and crash. An empty *seed* (a {@code List<Nothing>} accumulator) is a reference and still
+     * materialises.
+     */
+    static boolean neverRuns(Type.FnOf step) {
+        for (Type p : step.params()) {
+            if (p instanceof Type.Nothing) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -517,9 +974,17 @@ public sealed interface Core {
      * and the arguments are one component and a list beside it, so that the two cannot be paired
      * from different declarations — what may say that a name has been read against a declaration is
      * {@link CompleteSignature} and nothing else.
+     *
+     * <p><b>And what the checker settled about the application travels with it.</b> A kept call is
+     * typed from what its declaration states and its meaning is left to whoever reads it, but a fact
+     * only the checker can settle — what a {@code String.matches} pattern means — is settled here as
+     * it is for an emitted call, and a reader takes it from {@code settled} rather than working it
+     * out from the arguments a second time. What the application takes its arguments as is not
+     * carried: a reader replaces an argument by another reading of the same value, and a list of
+     * what each was taken as would stop being true of the call the moment it did.
      */
     record PreservedCall(DeclaredOperation declared, List<Core> args, KeptCallPlace place,
-                         Type type, SourcePos pos) implements Core {
+                         KernelFact settled, Type type, SourcePos pos) implements Core {
 
         // Not a construct of the source. A call kept for a reader to quote is not always one an
         // author wrote: a library operation used as a value is expanded into a block, and the
@@ -559,6 +1024,10 @@ public sealed interface Core {
             if (place == null) {
                 throw new IllegalArgumentException("a call kept standing stands somewhere: it"
                         + " applies some occurrence of a name, for some reason: " + declared);
+            }
+            if (settled == null) {
+                throw new IllegalArgumentException("a call kept standing carries what the checker"
+                        + " settled about it, `None` where that is nothing: " + declared);
             }
             // Taken over rather than borrowed. Checking a list the caller goes on holding says what
             // was true when the call was built, and every reader below reads the call afterwards —
@@ -602,8 +1071,8 @@ public sealed interface Core {
     /**
      * {@code occurrence} is which fork of the model this is: the fork the source wrote it as,
      * carried from the AST so that the copies an expansion made of one fork are one coverage
-     * obligation ({@link SourceConstructOrigin}), and the copy of the body it stands in
-     * ({@link souther.compiler.types.ExpansionLineage}).
+     * obligation ({@link SourceConstructOrigin}), and the copy of the body it stands in — a call's,
+     * a build's, or both nested — ({@link souther.compiler.types.OccurrenceLineage}).
      *
      * <p>{@code expansion} is what a copy is called where the rules a call supplied are looked up,
      * innermost first, empty where the fork stands in the body as written. What settles a fork can
@@ -687,10 +1156,20 @@ public sealed interface Core {
      * for any failure) and the value taken. */
     record ElseArm(Optional<String> clause, Core body) {}
 
-    /** A local binding. What the source wrote as its type — {@code let x: T = e} — is already in
-     * {@code value}'s type: the checker pushed the annotation into the value when it typed it, so an
-     * empty collection bound here materialises at the written type rather than a bottom (issue #71). */
-    record LetIn(Binder binder, Core value, Core body, Type type, SourcePos pos) implements Core {
+    /**
+     * A local binding.
+     *
+     * <p>{@code bindType} is the type {@code binder} is in force at in {@code body}: the type the
+     * checker entered it into the environment at. It is the checker's decision and is not
+     * {@code value}'s type: the value may be one case of the sum the binding is read at — an
+     * annotation wider than the value, or a declared sum parameter an expansion binds its argument
+     * at.
+     *
+     * <p>{@code type} is the type of the whole expression, which an expansion may widen past its
+     * body's.
+     */
+    record LetIn(Binder binder, Type bindType, Core value, Core body, Type type, SourcePos pos)
+            implements Core {
 
         public String name() {
             return binder.name();
@@ -699,10 +1178,29 @@ public sealed interface Core {
 
     /** A second-class block: a step passed to a recursive combinator, or an escaping lambda a {@code
      * let} binds (a closure). It has no value of its own: the call it is passed to emits its body
-     * inline, and only a block that escapes into a first-class position becomes a class. Its {@code
-     * type} is the {@link Type.FnOf} the checker gave it — the parameter types the context fixed, and
-     * the body's result type. */
-    record Block(List<Binder> params, Core body, Type type, SourcePos pos) implements Core {
+     * inline, and only a block that escapes into a first-class position becomes a class.
+     *
+     * <p>{@code paramTypes} are the types its body reads its parameters at, and are held because the
+     * body cannot say them. What it answers is its body's type and is not held: a rewrite of the body
+     * changes what the block answers with it. A type the function stands as at a position is not the
+     * block's — that is a {@link Widen} around it.
+     */
+    record Block(List<Binder> params, List<Type> paramTypes, Core body, SourcePos pos)
+            implements Core {
+
+        public Block {
+            params = List.copyOf(params);
+            paramTypes = List.copyOf(paramTypes);
+            if (params.size() != paramTypes.size()) {
+                throw new IllegalArgumentException("a block of " + params.size()
+                        + " parameters reads its body at " + paramTypes.size() + " types");
+            }
+        }
+
+        @Override
+        public Type.FnOf type() {
+            return new Type.FnOf(paramTypes, body.type());
+        }
 
         /** How the parameters were written, in order. */
         public List<String> paramNames() {
@@ -747,12 +1245,13 @@ public sealed interface Core {
                      SourcePos pos) implements Core {}
 
     /**
-     * What an arm selects and what it binds, both decided by the checker.
+     * What an arm selects, as the checker decided it.
      *
      * <p>{@code cases} are the cases the arm answers for, in the order they are written; more than
-     * one is an or-pattern. {@code binding} is what the value is read as once the arm is taken, and
-     * it is the arm's own rather than any one case's: an or-pattern binds the subject, because no
-     * single case type fits all of its alternatives.
+     * one is an or-pattern. What name the arm introduces, and which value that name stands for, is
+     * {@link ArmBinding}'s to say and is not read off this: a selection says which carrier is
+     * tested, and the same selection is bound as the value itself or as what stands under it
+     * depending on what was written.
      *
      * <p><b>As the checker resolved them, and not as they were written.</b> A case is carried here
      * as a {@link ResolvedCase} — what the value is tested and read as, together with the atoms
@@ -764,9 +1263,9 @@ public sealed interface Core {
      * neither how many leaves it reaches nor whether it is an optional's carrier.
      *
      * <p>Nothing here is worked out again downstream. A reader emitting this tests each case's
-     * {@link Refinement} and reads the binding through {@code binding}, and never asks whether the
-     * subject was an optional, whether the arm named one case or several, or whether a case is a
-     * primitive. Those are the questions {@code Core} exists to have answered already.
+     * {@link Refinement}, and never asks whether the subject was an optional, whether the arm named
+     * one case or several, or whether a case is a primitive. Those are the questions {@code Core}
+     * exists to have answered already.
      */
     sealed interface ResolvedPattern {
 
@@ -796,17 +1295,6 @@ public sealed interface Core {
          */
         Optional<ResolvedCase> selectedCase();
 
-        /**
-         * What the value is read as once the arm is taken.
-         *
-         * <p>Derived rather than carried. What an arm binds follows from what it selects — one case
-         * binds what that case's carrier holds, several bind the subject — so holding the two apart
-         * would be holding one fact in two places, and a pattern selecting an optional's absent
-         * carrier while binding its present one would be a Core the emitter has no meaning for: it
-         * would test one carrier and read the value out of the other.
-         */
-        Refinement binding();
-
         /** The cases this answers for. */
         default List<TypeSymbol> caseTypes() {
             List<TypeSymbol> out = new java.util.ArrayList<>();
@@ -816,12 +1304,7 @@ public sealed interface Core {
             return out;
         }
 
-        /** The type the binding takes inside the arm, or null where the arm binds nothing readable. */
-        default Type bindType() {
-            return binding().bound();
-        }
-
-        /** An arm answering for one case, which binds what that case's carrier holds. */
+        /** An arm answering for one case. */
         record Single(ResolvedCase selected) implements ResolvedPattern {
 
             public Single {
@@ -840,15 +1323,11 @@ public sealed interface Core {
                 return Optional.of(selected);
             }
 
-            @Override
-            public Refinement binding() {
-                return selected.refinement();
-            }
         }
 
         /**
-         * An arm answering for several, which binds the subject: no one case type fits all of its
-         * alternatives, and every alternative is already the subject.
+         * An arm answering for several: no one case type fits all of its alternatives, and every
+         * alternative is already the subject, which is the type a name written on it stands as.
          */
         record AnyOf(List<ResolvedCase> cases, Type subject) implements ResolvedPattern {
 
@@ -857,7 +1336,7 @@ public sealed interface Core {
                     throw new IllegalArgumentException("an arm answering for several names several");
                 }
                 if (subject == null) {
-                    throw new IllegalArgumentException("what such an arm binds is the subject");
+                    throw new IllegalArgumentException("what such an arm is over is the subject");
                 }
                 cases = List.copyOf(cases);
             }
@@ -866,25 +1345,157 @@ public sealed interface Core {
             public Optional<ResolvedCase> selectedCase() {
                 return Optional.empty();
             }
+        }
+    }
+
+    /**
+     * The name a {@code match} arm introduces, and which value it stands for.
+     *
+     * <p>Three answers, and a name that stands for a value comes with the type it stands as: an arm
+     * that has a binder has a type for it, and there is no arm that has one without the other.
+     * What an arm selects and what its name stands for are separate facts. The same selection is
+     * named as the value itself ({@code None as n}, {@code Member as m}) or as what stands under its
+     * carrier ({@code Some v}), and only what was written says which.
+     */
+    sealed interface ArmBinding {
+
+        /** The arm's name, or null where the arm introduces none. */
+        Binder binder();
+
+        /** The type the name stands as inside the arm, or null where the arm introduces none. */
+        Type type();
+
+        /** The arm introduces no name. */
+        record Unbound() implements ArmBinding {
 
             @Override
-            public Refinement binding() {
-                return new Refinement.Direct(subject);
+            public Binder binder() {
+                return null;
+            }
+
+            @Override
+            public Type type() {
+                return null;
+            }
+        }
+
+        /**
+         * The name stands for the value that was matched, read as {@code type}: the case a single
+         * case selected, the subject for an or-pattern, and the optional itself for an optional's
+         * absent carrier, which has nothing under it to name instead.
+         */
+        record Selected(Binder binder, Type type) implements ArmBinding {
+
+            public Selected {
+                if (binder == null || type == null) {
+                    throw new IllegalArgumentException("a name for the matched value is read as some type");
+                }
+            }
+        }
+
+        /**
+         * The name stands for what lies under {@code carrier}, the optional's present carrier the
+         * arm selects, and is read as the element that carrier holds. The carrier is what the value
+         * is reached through, so an emitter opens it from here and does not go back to the pattern
+         * to find out which one it was.
+         */
+        record Payload(Binder binder, Refinement.OptionPresent carrier) implements ArmBinding {
+
+            public Payload {
+                if (binder == null || carrier == null) {
+                    throw new IllegalArgumentException("a name for what a carrier holds names the carrier");
+                }
+            }
+
+            @Override
+            public Type type() {
+                return carrier.bound();
             }
         }
     }
 
-    /** One arm of a {@code match}: what it selects, what it calls the value, and what it answers. */
-    record Case(ResolvedPattern pattern, Binder binder, Core body, SourcePos pos) {
+    /**
+     * One arm of a {@code match}: what it selects, what it calls the value, and what it answers.
+     *
+     * <p>The name has to be one the selection can give. A name for what stands under a carrier is
+     * for the carrier that has something under it, and the one the arm tests; a name for the matched
+     * value is read as the type the selection says that value is. Pairs that say otherwise are
+     * refused here, so an emitter reads whichever half it needs and the other cannot contradict it.
+     * What is left to {@link Match} is the one thing this cannot see: an optional's absent carrier
+     * and an or-pattern are read as the value the {@code match} is over.
+     */
+    record Case(ResolvedPattern pattern, ArmBinding binding, Core body, SourcePos pos) {
+
+        public Case {
+            if (binding == null) {
+                throw new IllegalArgumentException("an arm that names nothing says so with Unbound");
+            }
+            if (pattern != null && !nameableBy(pattern, binding)) {
+                throw new IllegalArgumentException("an arm selecting " + pattern.caseTypes()
+                        + " cannot name " + binding);
+            }
+        }
+
+        private static boolean nameableBy(ResolvedPattern pattern, ArmBinding binding) {
+            return switch (binding) {
+                case ArmBinding.Unbound _ -> true;
+                case ArmBinding.Payload payload -> pattern instanceof ResolvedPattern.Single one
+                        && one.selected().refinement().equals(payload.carrier());
+                case ArmBinding.Selected selected -> switch (pattern) {
+                    case ResolvedPattern.Single one -> switch (one.selected().refinement()) {
+                        case Refinement.Direct direct -> selected.type().equals(direct.bound());
+                        // Which optional is the match's to say ({@link Match}).
+                        case Refinement.OptionAbsent _ -> true;
+                        // Its element is what `Some v` names; the carrier itself has no name.
+                        case Refinement.OptionPresent _ -> false;
+                    };
+                    case ResolvedPattern.AnyOf several -> selected.type().equals(several.subject());
+                };
+            };
+        }
+
+        /** Whether the name is for the value the {@code match} is over, whatever it is: the
+         *  optional a {@code None} was found in, or the subject an or-pattern was written on. */
+        boolean namesTheSubject() {
+            return binding instanceof ArmBinding.Selected
+                    && (pattern instanceof ResolvedPattern.AnyOf
+                    || (pattern instanceof ResolvedPattern.Single one
+                            && one.selected().refinement() instanceof Refinement.OptionAbsent));
+        }
+
+        /** The name the arm introduces, or null where it introduces none. */
+        public Binder binder() {
+            return binding.binder();
+        }
 
         /** How the binding was written, or null where the arm binds nothing. */
         public String bindingName() {
-            return binder == null ? null : binder.name();
+            return binder() == null ? null : binder().name();
         }
 
         /** The cases this arm answers for. */
         public List<TypeSymbol> caseTypes() {
             return pattern.caseTypes();
+        }
+
+        /**
+         * The type the value this arm binds is cast to when it is bound, or null where binding it
+         * casts nothing: the arm binds nothing, or what it binds is the subject as it already stands.
+         *
+         * <p>The one answer, read by the emitter and by whatever asks which classes an emitted
+         * {@code match} names, so that they do not come to disagree about which arms cast.
+         *
+         * @param subject the type of the value the {@code match} is over
+         */
+        public Type castOnBinding(Type subject) {
+            return switch (binding) {
+                case ArmBinding.Unbound _ -> null;
+                // What an optional holds is opened and cast to the type it was checked to hold.
+                case ArmBinding.Payload payload -> payload.type();
+                // The value is cast to its own type, unless nothing narrowed it: then it is the subject.
+                case ArmBinding.Selected selected ->
+                        selected.type().equals(subject) ? null : selected.type();
+            };
         }
 
         /** The one case this arm selects, as this compile resolved it, or empty where it selects no
@@ -893,15 +1504,15 @@ public sealed interface Core {
             return pattern.selectedCase();
         }
 
-        /** The type the binding takes inside this arm. */
+        /** The type the binding takes inside this arm, or null where the arm introduces none. */
         public Type bindType() {
-            return pattern.bindType();
+            return binding.type();
         }
 
         /** The same arm answering a rewritten body — what a pass rewriting expressions produces, so
          * a rewrite carries what the arm selects and binds rather than restating it. */
         public Case answering(Core rewritten) {
-            return rewritten == body ? this : new Case(pattern, binder, rewritten, pos);
+            return rewritten == body ? this : new Case(pattern, binding, rewritten, pos);
         }
     }
 
@@ -916,6 +1527,13 @@ public sealed interface Core {
             if (place == null) {
                 throw new IllegalArgumentException("a fork stands somewhere: some fork of the"
                         + " model, in some copy of the body that wrote it");
+            }
+            for (Case arm : cases) {
+                if (arm.namesTheSubject() && !arm.bindType().equals(scrutinee.type())) {
+                    throw new IllegalArgumentException("an arm naming the value this match is over"
+                            + " reads it as " + Type.show(arm.bindType()) + ", and it is "
+                            + Type.show(scrutinee.type()));
+                }
             }
         }
 
@@ -935,14 +1553,108 @@ public sealed interface Core {
         }
     }
 
+    /**
+     * A value standing as a type other than its own, where the checker decided that it may.
+     *
+     * <p>{@code value} is what is evaluated, at the type it was worked out at; {@code type} is what
+     * the position it stands in takes it as. A branch answering one case of the sum its {@code if}
+     * joins at, an argument handed to a wider parameter, a list of a case given where a list of the
+     * sum is asked for, a function taking a sum given where one taking a case of it is asked for:
+     * each is this, the same way, with nothing about why the checker let it stand there. That is the
+     * checker's to answer, and a reader of this reads that it did rather than answering again.
+     *
+     * <p>Only where the two differ. A value standing as its own type is in its position as it is, and
+     * a node saying so would say nothing. So a slot the checker placed a value in at a type holds
+     * something of that type: the value itself where the two are equal, and this where they are not.
+     *
+     * <p>No operation. Whether standing as a wider type costs anything at run time is a question about
+     * how a backend lays the two types out, and not one this answers. A reader asking what a body
+     * does, rather than what it was checked to be, reads through it with {@link #withoutStanding}.
+     *
+     * <p>It has no place of its own: nothing was written for it.
+     */
+    record Widen(Core value, Type type) implements Core {
+
+        public Widen {
+            if (value == null || type == null) {
+                throw new IllegalArgumentException("a value stands as some type");
+            }
+            if (value.type().equals(type)) {
+                throw new IllegalArgumentException(
+                        "a value standing as its own type is not widened: " + type);
+            }
+            if (value instanceof Widen) {
+                throw new IllegalArgumentException(
+                        "a value stands at one position once, as what that position takes it as: "
+                                + value.type() + " as " + type);
+            }
+        }
+
+        @Override
+        public SourcePos pos() {
+            return value.pos();
+        }
+    }
+
+    /**
+     * {@code e} as what it evaluates, with the type it stands as at its position set aside: the value
+     * a {@link Widen} holds, and {@code e} itself where nothing widened it.
+     *
+     * <p>What a reader asking which expression is here asks through: whether it is a read, a call, a
+     * construction. Standing as a wider type changes none of that.
+     */
+    static Core withoutStanding(Core e) {
+        return e instanceof Widen w ? w.value() : e;
+    }
+
+    /**
+     * {@code value} standing as {@code type}: {@code value} itself where it already is of that type,
+     * and a {@link Widen} of it where it is not.
+     *
+     * <p>A {@code value} already standing as {@code type} is that value, the same node. One that is a
+     * {@link Widen} of something else is set aside first, so that a value restated at a new position
+     * stands there as what that position takes it as, once.
+     */
+    static Core standingAs(Core value, Type type) {
+        if (value.type().equals(type)) {
+            return value;
+        }
+        Core bare = withoutStanding(value);
+        return bare.type().equals(type) ? bare : new Widen(bare, type);
+    }
+
     /** {@code unreachable "reason"}: the position it stands in gets no value, and the reason is the
      * message the abort carries. Its type is {@link Type.Never}, which fits whatever was expected. */
-    record Unreachable(String reason, Type type, SourcePos pos) implements Core {}
+    record Unreachable(String reason, Type type, SourcePos pos) implements Core {
+
+        /**
+         * The shape this leaves on the stack where its position asks for {@code expected}: what the
+         * position asked for, or — where it asked for nothing — its own type, which is {@link
+         * Type.Never} and is refused rather than emitted.
+         */
+        public Type shapeAt(Type expected) {
+            return expected != null ? expected : type;
+        }
+    }
+
+    /**
+     * The type the branches of {@code e} leave on the stack: what the position asked for, or — where
+     * it asked for nothing — the one the checker joined the branches at. A branch that answers
+     * {@code unreachable} has no type of its own to merge with the others, so it takes this one.
+     *
+     * <p>The one answer, read by the emitter and by whatever asks which classes an emitted branch
+     * names: the shape is what a value is cast to, so written out in each the two would agree only
+     * until one of them moved.
+     */
+    static Type shapeOf(Core e, Type expected) {
+        return expected != null ? expected : e.type();
+    }
 
     /**
      * {@code e} with each of its slots replaced by what the operator for that slot answers, the
-     * node's own kind, type and position kept — or {@code e} itself where every slot answered what it
-     * was given, so a walk that only reads allocates nothing.
+     * node's own kind, position and the types it holds kept — or {@code e} itself where every slot
+     * answered what it was given, so a walk that only reads allocates nothing. A {@link Block} holds
+     * no type for what it answers, so what it answers follows its rewritten body.
      *
      * <p>The children of a node occupy three kinds of slot, which differ in what may stand there.
      *
@@ -971,8 +1683,15 @@ public sealed interface Core {
             case Temporal x -> x;
             case Read x -> x;
             case UnitValue x -> x;
+            case MaterialisedValue x -> x;
             case OptionNone x -> x;
             case Unreachable x -> x;
+            // What it holds is rewritten like any other value; the type it stands as is kept, and a
+            // rewrite that brings the value to that type leaves nothing to widen.
+            case Widen w -> {
+                Core value = atExpr.apply(w.value());
+                yield value == w.value() ? w : standingAs(value, w.type());
+            }
             case Neg n -> {
                 Core operand = atExpr.apply(n.operand());
                 yield operand == n.operand() ? n : new Neg(operand, n.type(), n.pos());
@@ -986,19 +1705,21 @@ public sealed interface Core {
                 Core left = atExpr.apply(b.left());
                 Core right = atExpr.apply(b.right());
                 yield left == b.left() && right == b.right() ? b
-                        : new Binary(b.op(), left, right, b.occurrence(), b.type(), b.pos());
+                        : new Binary(b.op(), left, right, b.reading(), b.ordering(), b.occurrence(),
+                                b.type(), b.pos());
             }
             case Call c -> {
                 List<Core> args = each(c.args(), atExpr);
                 yield args == c.args() ? c
-                        : new Call(c.fn(), args, c.occurrence(), c.type(), c.pos());
+                        : new Call(c.fn(), args, c.occurrence(), c.settlement(), c.type(), c.pos());
             }
             // Its arguments are children like any other, so a pass that asks what a body reads
             // reaches them without knowing what was kept standing over them.
             case PreservedCall p -> {
                 List<Core> args = each(p.args(), atExpr);
                 yield args == p.args() ? p
-                        : new PreservedCall(p.declared(), args, p.place(), p.type(), p.pos());
+                        : new PreservedCall(p.declared(), args, p.place(), p.settled(), p.type(),
+                                p.pos());
             }
             // what is applied is a binding holding a function, which the backend loads: a name slot
             case Apply a -> {
@@ -1029,11 +1750,11 @@ public sealed interface Core {
                 Core value = atExpr.apply(li.value());
                 Core body = atExpr.apply(li.body());
                 yield value == li.value() && body == li.body() ? li
-                        : new LetIn(li.binder(), value, body, li.type(), li.pos());
+                        : new LetIn(li.binder(), li.bindType(), value, body, li.type(), li.pos());
             }
             case Block b -> {
                 Core body = atExpr.apply(b.body());
-                yield body == b.body() ? b : new Block(b.params(), body, b.type(), b.pos());
+                yield body == b.body() ? b : new Block(b.params(), b.paramTypes(), body, b.pos());
             }
             case ListLit lit -> {
                 List<Core> elements = each(lit.elements(), atExpr);
@@ -1099,11 +1820,17 @@ public sealed interface Core {
 
     /**
      * {@code e} with each of its slots replaced by what the operator for that slot answers, the
-     * node's own kind, type and position kept. A Core-to-Core pass recurses through this rather than
-     * hand-copying every node kind.
+     * node's own kind, position and the types it holds kept, as {@link #atSlots} says. A Core-to-Core
+     * pass recurses through this rather than hand-copying every node kind.
      *
      * <p>An operator per slot kind, so a rewrite cannot put an expression where the backend can only
      * load a binding, or something other than a construction where an attempt tests one.
+     *
+     * <p>A node that carries a fact the checker settled about it — a {@link Call}'s
+     * {@link CallSettlement} — keeps that fact across the rewrite this makes, which is right where
+     * the rewrite preserves what the node means and stale where it does not: a pass that changes what
+     * a slot evaluates to a different meaning owes that fact a rebuild of its own, not a rewrite that
+     * carries the old one forward unasked.
      */
     static Core mapChildren(Core e, java.util.function.UnaryOperator<Core> onExprSlot,
                             java.util.function.UnaryOperator<Read> onNameSlot,

@@ -201,6 +201,9 @@ class ACanonicalPublicationOrderIsCompleteAndOnePerKindTest {
         if (first instanceof Enum<?> constant) {
             return constant.getDeclaringClass();
         }
+        if (!anArm(first.getClass()) && namesOnly(first.getClass())) {
+            return first.getClass();
+        }
         return sealedOver(first.getClass());
     }
 
@@ -212,6 +215,9 @@ class ACanonicalPublicationOrderIsCompleteAndOnePerKindTest {
         }
         if (first instanceof Enum<?> constant) {
             return new LinkedHashSet<>(List.of(constant.getDeclaringClass().getEnumConstants()));
+        }
+        if (!anArm(first.getClass()) && namesOnly(first.getClass())) {
+            return new LinkedHashSet<>(valuesOf(first.getClass()));
         }
         Set<Object> out = new LinkedHashSet<>();
         for (Class<?> arm : sealedOver(first.getClass()).getPermittedSubclasses()) {
@@ -236,15 +242,55 @@ class ACanonicalPublicationOrderIsCompleteAndOnePerKindTest {
         if (held.length == 0) {
             return List.of(arm.getDeclaredConstructor().newInstance());
         }
-        if (held.length == 1 && held[0].getType().isEnum()) {
+        if (namesOnly(arm)) {
+            // Every combination of the names it holds, one component at a time.
+            Class<?>[] types = new Class<?>[held.length];
+            List<List<Object>> combinations = List.of(List.of());
+            for (int i = 0; i < held.length; i++) {
+                types[i] = held[i].getType();
+                List<List<Object>> longer = new ArrayList<>();
+                for (List<Object> prefix : combinations) {
+                    for (Object constant : types[i].getEnumConstants()) {
+                        List<Object> next = new ArrayList<>(prefix);
+                        next.add(constant);
+                        longer.add(next);
+                    }
+                }
+                combinations = longer;
+            }
             List<Object> out = new ArrayList<>();
-            for (Object constant : held[0].getType().getEnumConstants()) {
-                out.add(arm.getDeclaredConstructor(held[0].getType()).newInstance(constant));
+            for (List<Object> each : combinations) {
+                out.add(arm.getDeclaredConstructor(types).newInstance(each.toArray()));
             }
             return out;
         }
-        return fail(arm.getSimpleName() + " holds more than a name of something finite, so the"
+        return fail(arm.getSimpleName() + " holds more than names of something finite, so the"
                 + " values it has are not something this can count: say here how they are");
+    }
+
+    /** Whether a kind is a record of names and nothing else, whose values are every combination
+     *  of them. */
+    private static boolean namesOnly(Class<?> kind) {
+        RecordComponent[] held = kind.getRecordComponents();
+        if (held == null || held.length == 0) {
+            return false;
+        }
+        for (RecordComponent each : held) {
+            if (!each.getType().isEnum()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Whether {@code kind} is one arm of a sum, which is then the kind an order over it is of. */
+    private static boolean anArm(Class<?> kind) {
+        for (Class<?> each : kind.getInterfaces()) {
+            if (each.isSealed()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** The sum {@code arm} is one of. */

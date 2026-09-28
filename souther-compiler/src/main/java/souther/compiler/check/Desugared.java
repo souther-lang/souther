@@ -37,10 +37,12 @@ public final class Desugared {
         /**
          * {@code fn} with its constructions written as constructions.
          *
-         * <p>Of the definition it is handed. What a newtype is comes from the symbols rather than
-         * from anything the definition has been through, so this asks nothing of where it came from
-         * — measured, by rewriting a definition of a settled module and of an unsettled one and
-         * getting the same answer.
+         * <p>Of the definition it is handed. Which names were declared as newtypes is asked of
+         * {@link DeclarationNewtypes} rather than of anything the definition has been through, so
+         * this asks nothing of where it came from — measured, by rewriting a definition of a
+         * settled module and of an unsettled one and getting the same answer. Asked of the
+         * declarations instead, a body writing a newtype of another module would be rewritten
+         * again whenever that declaration moved.
          *
          * <p>Answered for every definition. A rewrite is not a check: what it writes as a
          * construction is a newtype applied to one value, and an application of one to any other
@@ -48,8 +50,8 @@ public final class Desugared {
          * ({@code CallElaborator.noCallee}). A refusal here would make a body nobody could read into
          * a definition nobody could see, and a module is assembled from all of them.
          */
-        public static Fn desugar(Hir.FnDef fn, Symbols scope) {
-            return new Fn(NewtypeDesugar.rewriteOf(fn, scope));
+        public static Fn desugar(Hir.FnDef fn, DeclarationNewtypes newtypes) {
+            return new Fn(NewtypeDesugar.rewriteOf(fn, newtypes));
         }
 
 
@@ -68,8 +70,8 @@ public final class Desugared {
          *
          * @throws IllegalArgumentException where the definition is not one this state holds of
          */
-        public static Fn reestablish(Hir.FnDef rewritten, Symbols scope) {
-            Hir.FnDef again = NewtypeDesugar.rewriteOf(rewritten, scope);
+        public static Fn reestablish(Hir.FnDef rewritten, DeclarationNewtypes newtypes) {
+            Hir.FnDef again = NewtypeDesugar.rewriteOf(rewritten, newtypes);
             if (!again.equals(rewritten)) {
                 throw new IllegalArgumentException("`" + rewritten.name()
                         + "` is not a definition whose constructions are constructions");

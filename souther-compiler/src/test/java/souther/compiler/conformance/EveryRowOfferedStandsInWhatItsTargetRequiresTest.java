@@ -1,6 +1,5 @@
 package souther.compiler.conformance;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import souther.compiler.partition.StoodInAnswer;
 import souther.compiler.query.Adequacy;
@@ -11,6 +10,7 @@ import souther.compiler.query.Offering;
 import souther.compiler.query.OfferingRequest;
 import souther.compiler.query.RequiredDependencies;
 import souther.compiler.types.ValueName;
+import souther.test.ClosedWorldContract;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -37,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * decision reads one, a dependency inside a composition — and a model written for the test would
  * be the shapes somebody remembered.
  */
-@Tag("population")
+@ClosedWorldContract
 class EveryRowOfferedStandsInWhatItsTargetRequiresTest {
 
     @Test

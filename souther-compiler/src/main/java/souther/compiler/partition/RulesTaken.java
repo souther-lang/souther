@@ -9,9 +9,7 @@ import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Which rule of a body's decision each run took.
@@ -29,6 +27,12 @@ import java.util.Map;
  * condition with no construct of the model to be seen at, or one the emitter numbered no site for,
  * is one this compiler cannot tell a run took — so it is set aside rather than answered no, which
  * would report the rules a body has as rules its rows never reach.
+ *
+ * <p>A rule that is not {@link DecisionReading.Ruled#whole} is set aside too. Its path carries fewer
+ * conditions than its way turns on, so a run matching every condition it carries has not been shown
+ * to have taken it — and a path with none left is matched by every run. A path with no conditions
+ * that is whole is another thing: a body that draws no distinction has one rule, and every run
+ * takes it.
  */
 public final class RulesTaken {
 
@@ -51,7 +55,8 @@ public final class RulesTaken {
 
         /** Why a run's rule could not be told. */
         enum Why {
-            /** Every rule of the body carries a condition no run through it is recorded at. */
+            /** Every rule of the body carries a condition no run through it is recorded at, or was
+             *  read with fewer conditions than its way turns on. */
             NO_RULE_IS_RECOGNISABLE,
             /** The rules that can be recognised were each missing something the run did not do. */
             NO_RECOGNISABLE_RULE_MATCHES,
@@ -119,6 +124,9 @@ public final class RulesTaken {
         ArmEmissionIndex arms = ArmEmissionIndex.ofBody(emitted, plan);
         List<Recognised> recognisable = new ArrayList<>();
         for (DecisionReading.Ruled ruled : read.found()) {
+            if (!ruled.whole()) {
+                continue;
+            }
             List<List<ControlClaim>> conditions = new ArrayList<>();
             boolean everyOne = true;
             for (ShownBy each : ruled.shownBy()) {
@@ -187,22 +195,5 @@ public final class RulesTaken {
         return took == null
                 ? new WhichRule.CouldNotTell(WhichRule.Why.NO_RECOGNISABLE_RULE_MATCHES)
                 : new WhichRule.TookThis(took);
-    }
-
-    /**
-     * Which of the body's rules the runs {@code seen} took, and how many runs took each.
-     *
-     * <p>Over the runs and not over the rules: what a rule is owed is settled elsewhere, and this
-     * says only what was seen. A rule nothing took is absent rather than present with nothing, for
-     * the reason a reading answers the absence of a fact rather than a count of zero.
-     */
-    public Map<DecisionRule, List<AlignedObservation>> takenBy(List<AlignedObservation> seen) {
-        Map<DecisionRule, List<AlignedObservation>> out = new LinkedHashMap<>();
-        for (AlignedObservation each : seen) {
-            if (takenBy(each) instanceof WhichRule.TookThis took) {
-                out.computeIfAbsent(took.rule(), _ -> new ArrayList<>()).add(each);
-            }
-        }
-        return out;
     }
 }

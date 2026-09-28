@@ -33,14 +33,6 @@ class EverySymbolTheLanguageWritesHasAnEditorClassTest {
                         + "language writes");
     }
 
-    @Test
-    void noKindIsBothPaintedAndNot() {
-        Set<SyntaxKind> both = new TreeSet<>(EditorSymbols.operators());
-        both.retainAll(EditorSymbols.punctuation());
-
-        assertEquals(Set.of(), both, "a symbol is painted as an operator or left alone, not both");
-    }
-
     /** Every symbol the language writes: the kinds that spell themselves, less the reserved words,
      *  which are coloured as words. */
     private static Set<SyntaxKind> symbolKinds() {

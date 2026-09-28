@@ -29,9 +29,4 @@ public final class FixtureReferences {
     public FixtureReferenceOrigin next() {
         return new FixtureReferenceOrigin(next++);
     }
-
-    /** How many this run has composed, which is what the next one will be numbered. */
-    public int composed() {
-        return next;
-    }
 }

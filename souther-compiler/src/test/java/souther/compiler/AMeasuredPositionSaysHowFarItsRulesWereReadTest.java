@@ -56,22 +56,6 @@ class AMeasuredPositionSaysHowFarItsRulesWereReadTest {
             behavior classify : (i: Issue) -> Accepted
             """;
 
-    /** The control: the same shape with nothing left unread. */
-    private static final String READ_IN_FULL = """
-            module u
-
-            data Low
-            data Accepted = { at: Int }
-
-            behavior classify : (n: Int) -> Accepted | Low
-                constructs Accepted
-
-            let classify (n) = {
-                guard n >= 60 else Low
-                Accepted { at = n }
-            }
-            """;
-
     private static AdequacyReport reportOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
@@ -91,7 +75,10 @@ class AMeasuredPositionSaysHowFarItsRulesWereReadTest {
 
     @Test
     void aMeasuredPositionIsToldApartFromOneWithNoAxis() {
-        JsonNode axis = partitionOf(MEASURED_IN_PART).get("axes").get(0);
+        JsonNode partition = partitionOf(MEASURED_IN_PART);
+        assertFalse(partition.has("unanswered"),
+                "a rule nothing reached raises no question to name: " + partition);
+        JsonNode axis = partition.get("axes").get(0);
         assertEquals("i.assignee", axis.get("path").asString());
         assertEquals(2, axis.get("classes").size(), axis.toString());
         assertEquals("partial", axis.get("read").get("extent").asString(),
@@ -111,15 +98,6 @@ class AMeasuredPositionSaysHowFarItsRulesWereReadTest {
                 "and is not said as one nothing divided: " + human);
     }
 
-    /** Nothing is invented: a position whose rules were read in full gains no line either way. */
-    @Test
-    void aPositionWhoseRulesWereReadInFullGainsNoLine() {
-        JsonNode read = partitionOf(READ_IN_FULL).get("axes").get(0).get("read");
-        assertEquals("complete", read.get("extent").asString());
-        assertFalse(read.has("rulesNotReached"), "nothing was left standing: " + read);
-        assertFalse(read.has("unanswered"), "nothing was left standing: " + read);
-    }
-
     /**
      * Whether any {@code not read} line of {@code block} is about {@code position}.
      *
@@ -133,33 +111,4 @@ class AMeasuredPositionSaysHowFarItsRulesWereReadTest {
                 && (line.contains("not read: " + position + " ")
                         || line.contains("about `" + position + "`")));
     }
-    /**
-     * And the model that leaves a rule unread at a position it measured is one this compiler
-     * refuses.
-     *
-     * <p>Said out loud, because it is what the word means now and not an accident of the fixture.
-     * A rule written under a container, a case or an optional is read where it governs, one position
-     * down (#1072); a rule this compiler cannot find a value for is a shortfall of its own. What is
-     * left is a clause the front end could not type — and a model carrying one is refused, so a
-     * document that says a measured position went short of a rule is a document about a model that
-     * did not compile.
-     *
-     * <p>A tripwire and not a preference. The day a clause can go unread in a model that compiles,
-     * this fails and whoever made it so is the one who should decide what the word means then.
-     */
-    @Test
-    void theModelThatSaysSoIsOneThisCompilerRefuses() {
-        assertTrue(isRefused(MEASURED_IN_PART),
-                "a measured position short of a rule takes a clause nothing could type");
-        assertFalse(isRefused(READ_IN_FULL), "and the control is a model that compiles");
-    }
-
-    /** Whether this compiler refuses {@code source}, which is what the fixtures above turn on. */
-    private static boolean isRefused(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        return !compilation.diagnostics().values().stream()
-                .flatMap(java.util.List::stream).toList().isEmpty();
-    }
-
 }

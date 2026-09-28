@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.AffineForms;
 import souther.compiler.check.Location;
 import souther.compiler.check.DeclarationKinds;
@@ -19,7 +20,6 @@ import souther.compiler.types.ValueName;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Set;
 
 /**
  * What a body's expressions name that a row can control.
@@ -39,10 +39,15 @@ import java.util.Set;
 record DecisionSubjects(InputDomain inputs, Symbols symbols, PublishedDeclarations published,
                         DeclarationKinds kinds, DeclarationNewtypes newtypes,
                         NewtypeInners inners,
-                        Set<ValueName.Behavior> dependencies) {
+                        Membership<ValueName.Behavior> dependencies) {
 
     DecisionSubjects {
-        dependencies = Set.copyOf(dependencies);
+        if (published == null || kinds == null || newtypes == null || inners == null) {
+            throw new IllegalArgumentException("reading what a row controls asks the declarations"
+                    + " what they say, which form each of them is, which of them wrap one value"
+                    + " and what each of those wraps, so it is handed somewhere to read every one"
+                    + " of them");
+        }
     }
 
     /**
@@ -61,6 +66,8 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, PublishedDeclaratio
         Core under = e;
         InputReads reads = at;
         while (true) {
+            // Which answer a value is does not turn on the type it stands as.
+            under = Core.withoutStanding(under);
             // A newtype's value is the value it wraps, which is one subject and not a step inside
             // one. Read as a step, `riskScore(c).value` and `riskScore(c)` would be two columns
             // over one answer.
@@ -96,7 +103,8 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, PublishedDeclaratio
      * things asks about one.
      */
     private InjectedAnswer answerOf(Core e, InputReads at) {
-        if (!(e instanceof Core.Call call && call.fn() instanceof Core.Reached reached
+        if (!(Core.withoutStanding(e) instanceof Core.Call call
+                && call.fn() instanceof Core.Reached reached
                 && reached.denotes() instanceof ValueName.Behavior dependency
                 && dependencies.contains(dependency))) {
             return null;

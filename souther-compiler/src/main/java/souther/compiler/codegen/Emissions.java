@@ -1,10 +1,13 @@
 package souther.compiler.codegen;
 
+import souther.compiler.copied.CopyContract;
 import souther.compiler.generated.GeneratedImplementations;
 import souther.compiler.generated.ProbeImage;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.JvmClassName;
+import souther.compiler.jvm.LinkageRecord;
+import souther.compiler.jvm.LinkageTarget;
 import souther.compiler.jvm.SoutherJvmAbi;
 
 import java.lang.classfile.ClassFile;
@@ -14,6 +17,8 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.SortedMap;
+import java.util.TreeMap;
 
 /**
  * What a module emits: one class under one JVM name, held beside the Souther identity it was emitted
@@ -48,11 +53,20 @@ public final class Emissions {
     private record Emission(GeneratedClass generated, byte[] bytes) {}
 
     private final Map<JvmClassName, Emission> byName = new LinkedHashMap<>();
+    /** The behaviors whose implementation was this emission's to make and was not made. */
+    private final Set<String> leftOut = new LinkedHashSet<>();
     /** Which module these were emitted for, so a set with nothing of a kind in it still says whose
      *  it is. */
     private final String module;
     /** Whose numbers these classes record a run in, where they record one at all. */
     private final ProbeImage probes;
+    /** What these classes offer another module's, once the generation has said so. */
+    private SortedMap<LinkageTarget, LinkageRecord> provides;
+    /** What these classes were built against, once the generation has said so. */
+    private SortedMap<LinkageTarget, LinkageRecord> requires;
+    /** What these classes offer to be copied and what they copied, once the compilation has said
+     *  so. */
+    private CopyContract copies;
     /** What was handed out, once there is such a thing. */
     private Map<String, ClassFileImage> sealed;
 
@@ -184,7 +198,92 @@ public final class Emissions {
                 behaviors.add(impl.behavior());
             }
         }
-        return new GeneratedImplementations(module, behaviors);
+        return new GeneratedImplementations(module, behaviors, leftOut);
+    }
+
+    /**
+     * That this emission had an implementation to make for {@code behavior} and did not make one.
+     *
+     * <p>Said here because it cannot be read off what was emitted. What is absent from the classes
+     * is absent whether this compile never owned the implementation — something outside supplies it,
+     * or nothing does yet — or owned it and could not make one that runs, and those are two
+     * different things for a row about the behavior to be told. A reader deciding between them from
+     * the module's declarations would be making the emitter's decision a second time, which is the
+     * decision that knows more than the declarations do.
+     */
+    void leftOut(String behavior) {
+        stillOpen("recording an implementation this emission did not make");
+        leftOut.add(behavior);
+    }
+
+    /**
+     * That these classes offer {@code provides}, and were built against {@code requires} — what
+     * each declaration of another module they read offered when they read it. Said once, by the
+     * generation, when every class is written.
+     *
+     * <p>The two halves of one contract: what a class of another module may link by, and what a
+     * class of this module links by. A module read off the path is held to both as they are recorded
+     * here, and neither is worked out again from what the module declares.
+     */
+    void linked(SortedMap<LinkageTarget, LinkageRecord> provides,
+                SortedMap<LinkageTarget, LinkageRecord> requires) {
+        stillOpen("recording what the classes link by");
+        if (this.provides != null) {
+            throw new IllegalStateException("what the classes of " + module + " link by is said"
+                    + " once");
+        }
+        this.provides = Collections.unmodifiableSortedMap(new TreeMap<>(provides));
+        this.requires = Collections.unmodifiableSortedMap(new TreeMap<>(requires));
+    }
+
+    /** What each declaration of these classes' module offers another module's classes. */
+    public SortedMap<LinkageTarget, LinkageRecord> provides() {
+        if (provides == null) {
+            throw new IllegalStateException("the generation of " + module
+                    + " has not said what its classes offer");
+        }
+        return provides;
+    }
+
+    /**
+     * What these classes assumed about each declaration of another module they link against.
+     *
+     * <p>What a module published about itself is its declarations; this is what its classes assumed
+     * about somebody else's, which a reader of the module off the path holds those declarations to.
+     */
+    public SortedMap<LinkageTarget, LinkageRecord> requires() {
+        if (requires == null) {
+            throw new IllegalStateException("the generation of " + module
+                    + " has not said what its classes link against");
+        }
+        return requires;
+    }
+
+    /**
+     * That these classes offer {@code copies.provides()} to be copied, and carry {@code
+     * copies.requires()} — what each declaration of another module they copied was when they copied
+     * it. Said once, before the classes are sealed.
+     *
+     * <p>Said by the compilation and not by the generation. What a module copied is decided where
+     * its bodies were expanded, upstream of anything the generation reads, and the generation only
+     * writes out what it was handed.
+     */
+    public void copied(CopyContract copies) {
+        stillOpen("recording what the classes copied");
+        if (this.copies != null) {
+            throw new IllegalStateException("what the classes of " + module + " copied is said"
+                    + " once");
+        }
+        this.copies = Objects.requireNonNull(copies);
+    }
+
+    /** What these classes offer to be copied, and what they copied of other modules' declarations. */
+    public CopyContract copies() {
+        if (copies == null) {
+            throw new IllegalStateException("the compilation of " + module
+                    + " has not said what its classes copied");
+        }
+        return copies;
     }
 
     /**
@@ -214,7 +313,12 @@ public final class Emissions {
      */
     public Map<String, ClassFileImage> seal() {
         if (sealed == null) {
-            Map<String, ClassFileImage> out = new LinkedHashMap<>();
+            // Under the binary name, and walked in it. What order the classes were emitted in is a
+            // fact about how the generation ran and not about what it answered with — two
+            // generations that emitted the same classes in either order answer the same thing, and
+            // a mapping keyed by name cannot tell them apart. So nothing here hands out the one
+            // and lets a reader take the other off it.
+            Map<String, ClassFileImage> out = new TreeMap<>();
             byName.forEach((name, emission) ->
                     out.put(name.binaryName(), ClassFileImage.of(emission.bytes())));
             sealed = Collections.unmodifiableMap(out);

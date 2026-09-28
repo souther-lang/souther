@@ -1,7 +1,9 @@
 package souther.compiler.query;
 
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.MeasureReason;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionCapacity;
 import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.Generator;
@@ -34,6 +36,10 @@ public sealed interface ItemAssessment {
 
     /** No row is owed here, and this is what settles it. */
     record NotOwed(NotOwedReason reason) implements ItemAssessment {}
+
+    /** Neither owed nor refused: the exact arithmetic could not hold what settling this point
+     *  needed. */
+    record NotWorkedOut(UnheldNumber why) implements ItemAssessment {}
 
     /**
      * A row is owed, and this is what became of it.
@@ -451,7 +457,7 @@ public sealed interface ItemAssessment {
              * of the walk's answers. Both halves are put together where a reader wants one list
              * ({@link #unaccountedFor()}).
              */
-            List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed();
+            souther.compiler.partition.CompositionAccount uncomposed();
         }
 
         /**
@@ -483,10 +489,32 @@ public sealed interface ItemAssessment {
             /** The value this search composed, whichever of the two this is. */
             Generator.GeneratedRow row();
 
+            /**
+             * Refuses a row held beside a proof that the way it is on leaves nothing standing.
+             *
+             * <p>Of the shape and not of one of its cases. What a row was not composed against is
+             * this compiler's shortfall wherever a row exists, and both ways of having one rest on
+             * that: the readers of either take the row and leave the list. Held on one case only,
+             * the other is the way the same wrong value gets built — and which of the two a caller
+             * happens to make is not something the invariant should turn on.
+             */
+            static souther.compiler.partition.CompositionAccount withNoProofAmongThem(
+                    souther.compiler.partition.CompositionAccount account) {
+                for (souther.compiler.partition.ReachabilityGap gap : account.onTheWay()) {
+                    if (gap instanceof souther.compiler.partition.ReachabilityGap
+                            .ProvedImpossible) {
+                        throw new IllegalArgumentException("a row stands where the rules leave"
+                                + " nothing standing: " + gap.anchor());
+                    }
+                }
+                return account;
+            }
+
             /** A row composed where the whole way was stated and used. */
             static Certified certified(Generator.GeneratedRow row,
                                        souther.compiler.partition.WayToTheBorder way) {
-                return new Certified(row, way, List.of());
+                return new Certified(row, way,
+                        souther.compiler.partition.CompositionAccount.NOTHING);
             }
         }
 
@@ -526,14 +554,24 @@ public sealed interface ItemAssessment {
             EstablishmentGap by();
         }
 
-        /** Built, and read back standing where it was built for. */
+        /**
+         * Built, and read back standing where it was built for.
+         *
+         * <p>What it was not composed against is this compiler's shortfall and never the model's
+         * word, which is why {@link #unaccountedFor()} answers nothing for one of these: a row that
+         * stands where it was built for settles the point, and what could not be composed on the way
+         * to it is not something a reader has to act on. A proof that the way leaves nothing says
+         * the opposite of standing there, so it cannot be one of these — held as one, the sentence
+         * saying the point is settled and the proof saying no row reaches it would be the same
+         * answer.
+         */
         record Certified(Generator.GeneratedRow row,
                          souther.compiler.partition.WayToTheBorder way,
-                         List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed)
+                         souther.compiler.partition.CompositionAccount uncomposed)
                 implements Attempt, Searched, Built {
 
             public Certified {
-                uncomposed = List.copyOf(uncomposed);
+                uncomposed = Built.withNoProofAmongThem(uncomposed);
             }
         }
 
@@ -552,12 +590,12 @@ public sealed interface ItemAssessment {
          */
         record Unverified(Generator.GeneratedRow row,
                           souther.compiler.partition.WayToTheBorder way,
-                          List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed,
+                          souther.compiler.partition.CompositionAccount uncomposed,
                           EstablishmentGap.Observation why)
                 implements Attempt, Searched, Built, Prevented {
 
             public Unverified {
-                uncomposed = List.copyOf(uncomposed);
+                uncomposed = Built.withNoProofAmongThem(uncomposed);
                 Objects.requireNonNull(why, "a row nothing certified says what stopped it");
             }
 
@@ -585,23 +623,27 @@ public sealed interface ItemAssessment {
          * second's absence and the second is not recoverable from the first, so both are carried.
          *
          * <p><b>What each vocabulary is, rather than the gap they make together.</b> Which arm this
-         * is turns on {@code by} alone; {@code notAllOf} is what was separately known about the same
-         * offer, and a stop that also walked some of a population loses neither by carrying both
-         * under their own names. Held as the gap an account reads, this would be a history saying
-         * one thing and a value able to say another, and the two would have nothing keeping them in
-         * step — which is the arrangement a figure and a population were taken out of.
+         * is turns on {@code by} alone; {@code notAllOf} and {@code unheld} are what was separately
+         * known about the same offer, and a stop that also walked some of a population, or reached
+         * a number it could not hold, loses none of them by carrying each under its own name. Held
+         * as the gap an account reads, this would be a history saying one thing and a value able to
+         * say another, and the two would have nothing keeping them in step — which is the
+         * arrangement a figure and a population were taken out of.
          */
         record Stopped(Generator.UnresolvedCombination why,
                        souther.compiler.partition.WayToTheBorder way,
-                       List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed,
+                       souther.compiler.partition.CompositionAccount uncomposed,
                        CanonicalSelection<CompositionBudget> stoppedBy,
-                       CanonicalSelection<CompositionRepertoire> notAllOf)
+                       CanonicalSelection<CompositionRepertoire> notAllOf,
+                       CanonicalSelection<CompositionCapacity> unheld)
                 implements Attempt, Searched, Prevented {
 
             public Stopped {
-                uncomposed = List.copyOf(uncomposed);
+                Objects.requireNonNull(uncomposed,
+                        "a search says what it was composed without, or that it was nothing");
                 Objects.requireNonNull(why, "a search that came to nothing says so in its own word");
                 Objects.requireNonNull(notAllOf, "a search says what it walked some of, or none");
+                Objects.requireNonNull(unheld, "a search says which numbers it could not hold, or none");
                 if (stoppedBy == null || stoppedBy.isEmpty()) {
                     throw new IllegalArgumentException("a search this compiler stopped says which"
                             + " budget stopped it");
@@ -618,7 +660,7 @@ public sealed interface ItemAssessment {
 
             @Override
             public EstablishmentGap by() {
-                return new EstablishmentGap.Composition(stoppedBy, notAllOf);
+                return new EstablishmentGap.Composition(stoppedBy, notAllOf, unheld);
             }
         }
 
@@ -636,25 +678,32 @@ public sealed interface ItemAssessment {
          * <p>What it licenses is what {@link Stopped} licenses and nothing more: the question is
          * open, and open because this compiler did not look at everything. Which is why the word is
          * the same word and the gap is not.
+         *
+         * <p>And the same where what the search left is a number it could not hold rather than a
+         * population it writes some of, or both. No figure stopped it either way, which is what
+         * puts it here rather than in {@link Stopped}; which of the two it was is each set's to say.
          */
         record Unexhausted(Generator.UnresolvedCombination why,
                            souther.compiler.partition.WayToTheBorder way,
-                           List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed,
-                           CanonicalSelection<CompositionRepertoire> notAllOf)
+                           souther.compiler.partition.CompositionAccount uncomposed,
+                           CanonicalSelection<CompositionRepertoire> notAllOf,
+                           CanonicalSelection<CompositionCapacity> unheld)
                 implements Attempt, Searched, Prevented {
 
             public Unexhausted {
-                uncomposed = List.copyOf(uncomposed);
+                Objects.requireNonNull(uncomposed,
+                        "a search says what it was composed without, or that it was nothing");
                 Objects.requireNonNull(why, "a search that came to nothing says so in its own word");
-                if (notAllOf == null || notAllOf.isEmpty()) {
-                    throw new IllegalArgumentException(
-                            "a search that saw some of them says some of what");
+                if (notAllOf == null || unheld == null || (notAllOf.isEmpty() && unheld.isEmpty())) {
+                    throw new IllegalArgumentException("a search that saw some of them says some of"
+                            + " what, or which number it could not hold");
                 }
             }
 
             @Override
             public EstablishmentGap by() {
-                return EstablishmentGap.Composition.of(List.of(), notAllOf.written());
+                return EstablishmentGap.Composition.of(List.of(), notAllOf.written(),
+                        unheld.written());
             }
         }
 
@@ -672,16 +721,25 @@ public sealed interface ItemAssessment {
          * open, and open for a figure somebody could raise. What it refuses is the reading that the
          * word is the whole story — which is how a point this compiler declined to plan for came to
          * be counted as one the model admits no row at.
+         *
+         * <p>What else made the answer short travels beside the figure in its own vocabulary: a
+         * population the asking wrote some of, a number it could not hold. The figure is what puts
+         * the answer here; the rest are no less part of why it is short.
          */
         record Limited(Generator.UnresolvedCombination why,
                        souther.compiler.partition.WayToTheBorder way,
-                       List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed,
-                       CanonicalSelection<CompositionBudget> limitedBy)
+                       souther.compiler.partition.CompositionAccount uncomposed,
+                       CanonicalSelection<CompositionBudget> limitedBy,
+                       CanonicalSelection<CompositionRepertoire> notAllOf,
+                       CanonicalSelection<CompositionCapacity> unheld)
                 implements Attempt, Searched, Prevented {
 
             public Limited {
-                uncomposed = List.copyOf(uncomposed);
+                Objects.requireNonNull(uncomposed,
+                        "a search says what it was composed without, or that it was nothing");
                 Objects.requireNonNull(why, "a search that came to nothing says so in its own word");
+                Objects.requireNonNull(notAllOf, "an answer says what it walked some of, or none");
+                Objects.requireNonNull(unheld, "an answer says which numbers it could not hold, or none");
                 if (limitedBy == null || limitedBy.isEmpty()) {
                     throw new IllegalArgumentException("an answer short of what the point had says"
                             + " which figure made it short");
@@ -690,7 +748,8 @@ public sealed interface ItemAssessment {
 
             @Override
             public EstablishmentGap by() {
-                return EstablishmentGap.Composition.of(limitedBy.written());
+                return EstablishmentGap.Composition.of(limitedBy.written(), notAllOf.written(),
+                        unheld.written());
             }
         }
 
@@ -717,12 +776,13 @@ public sealed interface ItemAssessment {
          */
         record Unplanned(Generator.UnresolvedCombination why,
                          souther.compiler.partition.WayToTheBorder way,
-                         List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed,
+                         souther.compiler.partition.CompositionAccount uncomposed,
                          CanonicalSelection<CompositionBudget> limitedBy)
                 implements Attempt, Prevented {
 
             public Unplanned {
-                uncomposed = List.copyOf(uncomposed);
+                Objects.requireNonNull(uncomposed,
+                        "a search says what it was composed without, or that it was nothing");
                 Objects.requireNonNull(why, "an attempt says what it came to in its own word");
                 if (limitedBy == null || limitedBy.isEmpty()) {
                     throw new IllegalArgumentException("a point nothing could be planned for says"
@@ -750,17 +810,18 @@ public sealed interface ItemAssessment {
          */
         record Unresolved(Generator.UnresolvedCombination why,
                           souther.compiler.partition.WayToTheBorder way,
-                          List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed)
+                          souther.compiler.partition.CompositionAccount uncomposed)
                 implements Attempt, Searched {
 
             public Unresolved {
-                uncomposed = List.copyOf(uncomposed);
+                Objects.requireNonNull(uncomposed,
+                        "a search says what it was composed without, or that it was nothing");
             }
 
             /** A search that came to nothing where the whole way was stated and used. */
             public Unresolved(Generator.UnresolvedCombination why,
                               souther.compiler.partition.WayToTheBorder way) {
-                this(why, way, List.of());
+                this(why, way, souther.compiler.partition.CompositionAccount.NOTHING);
             }
         }
 
@@ -797,8 +858,13 @@ public sealed interface ItemAssessment {
          *
          * <p>Put together here and kept apart everywhere else. A condition the walk had no words
          * for and one it stated that nothing could compose a value under leave the same gap for a
-         * reader and are different facts to act on, so what comes back is one list of two shapes
-         * rather than one shape that has lost which of them it was.
+         * reader and are different facts to act on, so what comes back is one list of shapes rather
+         * than one shape that has lost which of them it was.
+         *
+         * <p>Which of the way's own declines belong in it is the account's
+         * ({@link souther.compiler.partition.CompositionAccount#reconciledWith}) and is not a
+         * concatenation: a condition about an answer is one the way has no words for however well
+         * the demand reading did with it.
          *
          * <p>Empty where nothing was left out, and empty where the outcome settles the point on its
          * own: a walk of the whole of what the rules leave that reaches no value proves there is
@@ -806,9 +872,9 @@ public sealed interface ItemAssessment {
          * empty box leaves what it contains empty too. Empty for a row that was built, which is a
          * point answered rather than a search to account for, and for a search nobody made.
          */
-        default List<souther.compiler.partition.ReachabilityGap> unaccountedFor() {
+        default List<souther.compiler.partition.ConditionGap> unaccountedFor() {
             souther.compiler.partition.WayToTheBorder way;
-            List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed;
+            souther.compiler.partition.CompositionAccount uncomposed;
             switch (this) {
                 case Unresolved it -> {
                     if (it.why().reason().provesInfeasible()) {
@@ -849,22 +915,41 @@ public sealed interface ItemAssessment {
                     return List.of();
                 }
             }
-            List<souther.compiler.partition.ReachabilityGap> out = new java.util.ArrayList<>();
-            // The walk's, said as the stage it happened at. A condition it had no words for is one
-            // nothing downstream ever saw.
-            way.declined().forEach(each ->
-                    out.add(new souther.compiler.partition.ReachabilityGap.Unstated(each)));
-            out.addAll(uncomposed);
-            return List.copyOf(out);
+            return uncomposed.reconciledWith(way);
         }
 
     }
 
-    /** This point's own measurement of whether a row is at it, or a settled nothing where no row is
-     *  owed here at all. */
-    default Measurement<Coverage> weakeningSource() {
-        return this instanceof Owed owed ? owed.coverage()
-                : new Measurement.Complete<>(new Coverage.NoHit());
+    /**
+     * This point's own measurement of whether a row is at it, or a settled nothing where no row is
+     * owed here at all.
+     *
+     * <p>A settled nothing only for {@link NotOwed}: that is the model's own answer, put and
+     * answered. A point the exact arithmetic could not place on the order ({@link NotWorkedOut}) is
+     * not settled the same way — it was asked and could not be finished, which
+     * {@link Measurement.FailedToMeasure} and not {@link Measurement.Complete} is for.
+     */
+    default Measurement<Coverage> weakeningSource(souther.compiler.partition.Border border) {
+        return switch (this) {
+            case NotOwed _ -> new Measurement.Complete<>(new Coverage.NoHit());
+            case NotWorkedOut not -> new Measurement.FailedToMeasure<>(
+                    PlaceCouldNotBeWorkedOut.PLACE_COULD_NOT_BE_WORKED_OUT,
+                    WeakeningSet.of(new Weakening.ItemsPlaceNotWorkedOut(border, not.why())));
+            case Owed owed -> owed.coverage();
+        };
+    }
+
+    /** Why a point's own measurement could not be finished: the exact arithmetic could not hold
+     *  what settling its place on the order needed. Which of the two ways is the weakening's own,
+     *  not this reason's — a {@link FailureReason} only says that asking stopped, not what stopped
+     *  it. */
+    enum PlaceCouldNotBeWorkedOut implements FailureReason {
+        PLACE_COULD_NOT_BE_WORKED_OUT;
+
+        @Override
+        public souther.compiler.observe.MeasureReason.About about() {
+            return souther.compiler.observe.MeasureReason.About.THE_BEHAVIOR;
+        }
     }
 
     /**
@@ -878,12 +963,14 @@ public sealed interface ItemAssessment {
      * answered it. Read as unmeasured, every bound in a corpus would hold its behavior open for a
      * measurement nobody was ever going to make.
      */
-    default WeakeningSet weakening() {
+    default WeakeningSet weakening(souther.compiler.partition.Border border) {
         return switch (this) {
             // A point nobody is owed a row at went without nothing: the question was put to the
             // model and the model answered it. Counted as unmeasured, every bound in a corpus would
             // hold its behavior open for a measurement nobody was ever going to make.
             case NotOwed _ -> WeakeningSet.none();
+            case NotWorkedOut not ->
+                    WeakeningSet.of(new Weakening.ItemsPlaceNotWorkedOut(border, not.why()));
             case Owed owed -> owed.coverage().weakening();
         };
     }

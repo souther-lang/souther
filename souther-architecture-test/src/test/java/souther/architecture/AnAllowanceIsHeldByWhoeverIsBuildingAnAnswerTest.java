@@ -61,6 +61,11 @@ class AnAllowanceIsHeldByWhoeverIsBuildingAnAnswerTest {
      * builds the sets as they are asked for, so it is a reading that has not finished. The rest hold
      * one of those and reach the purse through it.
      *
+     * <p>One of them is a handover rather than a holder. {@code ReadQuantities$Taking$Taken} is what
+     * comes back from asking the rules to take a constraint in, and it carries the rules that took
+     * it so that the region can put its own face on them — read once by the one caller and never
+     * kept, so there are never two of these to compose and no question of which purse pays.
+     *
      * <p>What is not here is the list's point. A reading's published answers —
      * {@code AdmissibleValues}, {@code ConjoinedAdmissibleValues}, {@code ConstraintState}, and the
      * seeded reading a later reader keeps — carry sets and no way to buy another, so two of them met
@@ -73,6 +78,7 @@ class AnAllowanceIsHeldByWhoeverIsBuildingAnAnswerTest {
             "souther/compiler/inputs/PlacedRules",
             "souther/compiler/inputs/PlacedRules$Reaching",
             "souther/compiler/inputs/ReadQuantities",
+            "souther/compiler/inputs/ReadQuantities$Taking$Taken",
             "souther/compiler/inputs/ReadRegion");
 
     /**
@@ -87,7 +93,9 @@ class AnAllowanceIsHeldByWhoeverIsBuildingAnAnswerTest {
      * one of those having grown a way to spend. A getter is a row too, since what it hands back is
      * the purse itself.
      */
-    private static final List<String> NAMING_AN_ALLOWANCE = List.of("meet");
+    private static final List<String> NAMING_AN_ALLOWANCE = List.of(
+            AMethod.of(CONJUNCTION, "meet",
+                    "(L" + CONJUNCTION + ";L" + ALLOWANCE + ";)L" + CONJUNCTION + ";"));
 
     @Test
     void everyHolderOfAnAllowanceIsBuildingAnAnswer() {
@@ -218,8 +226,9 @@ class AnAllowanceIsHeldByWhoeverIsBuildingAnAnswerTest {
     private static final Pattern NAMED = Pattern.compile("L([^;<>]+)[;<]");
 
     /**
-     * The methods of {@code owner} a caller can reach whose signature mentions an allowance, by
-     * name.
+     * The methods of {@code owner} a caller can reach whose signature mentions an allowance, each
+     * with what it takes ({@link AMethod}), so that a second overload of one of them is a second
+     * row.
      *
      * <p>What a caller can reach, because the rule is about which of a value's questions come with
      * a purse. A private helper is part of how one of them is written and spends what that
@@ -238,11 +247,10 @@ class AnAllowanceIsHeldByWhoeverIsBuildingAnAnswerTest {
                 if (!here.equals(owner) && !here.startsWith(owner + "$")) {
                     continue;
                 }
-                String within = here.equals(owner) ? "" : here.substring(owner.length() + 1) + ".";
                 for (MethodModel method : each.methods()) {
                     if (!method.flags().has(AccessFlag.PRIVATE)
                             && typesIn(declared(method)).contains(ALLOWANCE)) {
-                        out.add(within + method.methodName().stringValue());
+                        out.add(AMethod.of(each, method));
                     }
                 }
             }

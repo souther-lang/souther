@@ -1,10 +1,14 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.AnalysisBody;
+import souther.compiler.check.Choice;
 import souther.compiler.check.Comparison;
 import souther.compiler.diag.Citation;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.ValueTemplates;
 import souther.compiler.core.Core;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.ConstructOccurrence;
@@ -166,7 +170,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * every step and asked of whichever copy a reader happened to hold.
      */
     private record Body(String behavior, InputReading read,
-                        souther.compiler.coverage.Arrivals answering) {
+                        souther.compiler.coverage.Arrivals answering, Templates templates) {
 
         Symbols symbols() {
             return read.symbols();
@@ -194,9 +198,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * are expanded — and this reads where they stand. A reading that took either would be one no
      * tree could make on its own.
      */
-    static ComparisonReadings of(String behavior, Core body, InputReading read, InputReads reads) {
+    static ComparisonReadings of(String behavior, AnalysisBody analysis, InputReading read,
+                                 InputReads reads, InputReads insideATemplate) {
+        Core body = analysis.core();
         List<Reading> readings = new ArrayList<>();
         List<ForkMet> forks = new ArrayList<>();
+        Templates templates = new Templates(analysis.templates());
         // The names the conditions of this body take, handed out as the walk meets them. One of
         // these per body, because what a name is counted within is the body: counted over the
         // module, an edit to one behavior would rename the conditions of every one after it. Whose
@@ -204,10 +211,89 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         // — a condition inside a helper spliced in from elsewhere is still one this reading met.
         ConditionNumbering numbering =
                 new ConditionNumbering(read.symbols().module(), behavior);
-        walk(body, new Body(behavior, read, souther.compiler.coverage.Arrivals.inTheTree(body)),
+        walk(body, new Body(behavior, read,
+                        souther.compiler.coverage.Arrivals.inTheTree(body,
+                                analysis.templates()::bodyOf),
+                        templates),
                 reads,
                 LiveFlow.of(body), List.of(), true, readings, forks, numbering);
+        // What each value the body builds states, read once. A value means the same wherever it is
+        // built, so what is read of it is one reading however many builds there are; what differs
+        // between them is what stood on the way to each, and that is joined into what stood on the
+        // way to all of them before the template is read.
+        for (Core template : analysis.templatesAfterTheirBuilders()) {
+            Entry entry = templates.joined(template);
+            if (entry != null) {
+                walk(template, new Body(behavior, read,
+                                souther.compiler.coverage.Arrivals.inTheTree(template,
+                                        analysis.templates()::bodyOf),
+                        templates),
+                        insideATemplate, LiveFlow.of(template), entry.assumed(), entry.live(),
+                        readings, forks, numbering);
+            }
+        }
         return new ComparisonReadings(readings, forks, numbering.metAt());
+    }
+
+    /** How one build of a value was reached: what stood on the way to it, and whether what it
+     *  computes is read on the way to what the behavior answers with. */
+    private record Entry(List<OnTheWay> assumed, boolean live) { }
+
+    /**
+     * The builds of values this walk met, by the template each is a build of.
+     *
+     * <p>Held so that a template is read after every build of it has been, once, under what those
+     * builds have in common. Nothing is read at a build: it holds no body, and the body is somewhere
+     * every build of it points.
+     */
+    private static final class Templates {
+
+        private final ValueTemplates held;
+        private final Map<Core, List<Entry>> entered = new IdentityHashMap<>();
+
+        Templates(ValueTemplates held) {
+            this.held = held;
+        }
+
+        Core bodyOf(Core.MaterialisedValue build) {
+            return held.bodyOf(build);
+        }
+
+        void entered(Core template, List<OnTheWay> assumed, boolean live) {
+            entered.computeIfAbsent(template, _ -> new ArrayList<>()).add(new Entry(assumed, live));
+        }
+
+        /**
+         * What every build of {@code template} stood under, or null where none was met.
+         *
+         * <p>The conditions every way in agrees on, and a decline from any of them. A row that
+         * reaches the template got there by one of the ways, so only what all of them state is
+         * owed of every row; anything else would narrow a search past rows that arrive. And a
+         * condition that could not be taken in on some way is one the account cannot say it took
+         * in, so it stays.
+         *
+         * <p>A template built once is what that one build stood under, unchanged.
+         */
+        Entry joined(Core template) {
+            List<Entry> ways = entered.get(template);
+            if (ways == null) {
+                return null;
+            }
+            boolean live = false;
+            List<OnTheWay> common = new ArrayList<>(ways.getFirst().assumed());
+            for (Entry way : ways) {
+                live |= way.live();
+                common.retainAll(way.assumed());
+            }
+            for (Entry way : ways) {
+                for (OnTheWay each : way.assumed()) {
+                    if (each instanceof OnTheWay.Declined && !common.contains(each)) {
+                        common.add(each);
+                    }
+                }
+            }
+            return new Entry(List.copyOf(common), live);
+        }
     }
 
     /**
@@ -300,20 +386,33 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     forks.add(new ForkMet(iff.occurrence(), iff.cond(), Citation.of(iff.pos()),
                             reads, atoms, owned));
                 }
-                walk(iff.then(), in, reads, flow,
-                        taking(condition, true, in.read(), assumed),
+                walk(iff.then(), in,
+                        reads.choosing(Choice.Decides.ofCondition(iff, true), symbols,
+                                in.newtypes()),
+                        flow, taking(condition, true, in.read(), assumed),
                         live, out, forks, numbering);
-                walk(iff.els(), in, reads, flow,
-                        taking(condition, false, in.read(), assumed),
+                walk(iff.els(), in,
+                        reads.choosing(Choice.Decides.ofCondition(iff, false), symbols,
+                                in.newtypes()),
+                        flow, taking(condition, false, in.read(), assumed),
                         live, out, forks, numbering);
             }
             // What a `let` computes is read on the way to the answer only where the name is read;
             // everywhere else a value stands in a body it is consumed by what it stands in. And its
             // body is where the name stands for what was bound to it.
             case Core.LetIn let -> {
-                walk(let.value(), in, reads, flow, assumed, live && flow.reads(let), out, forks,
-                        numbering);
-                walk(let.body(), in, reads.and(let.binder(), let.value()), flow, assumed, live,
+                // A build of a value is not read here: it holds no body, and what the value states
+                // is read once, where the template is. What is recorded is how this build was
+                // reached, which is what the template is read under.
+                Core given = let.value();
+                if (Core.withoutStanding(let.value()) instanceof Core.MaterialisedValue build) {
+                    given = in.templates().bodyOf(build);
+                    in.templates().entered(given, assumed, live && flow.reads(let));
+                } else {
+                    walk(let.value(), in, reads, flow, assumed, live && flow.reads(let), out, forks,
+                            numbering);
+                }
+                walk(let.body(), in, reads.and(let.binder(), given), flow, assumed, live,
                         out, forks, numbering);
             }
             // And each arm under what the arm says the value it matched turned out to be. A name
@@ -329,14 +428,23 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 walk(match.scrutinee(), in, reads, flow, assumed, live, out, forks, numbering);
                 for (int part = 0; part < match.cases().size(); part++) {
                     Core.Case arm = match.cases().get(part);
-                    walk(arm.body(), in, reads.insideArm(match, arm, symbols, in.newtypes()), flow,
+                    walk(arm.body(), in,
+                            reads.choosing(Choice.Decides.ofCase(match, arm), symbols,
+                                    in.newtypes()),
+                            flow,
                             entering(match, arm, part, in.read().domain(), reads, assumed,
                                     ruleSource, numbering),
                             live, out, forks, numbering);
                 }
             }
-            default -> Core.forEachChild(e, child ->
-                    walk(child, in, reads, flow, assumed, live, out, forks, numbering));
+            // Every other child under what the step into it binds. An attempt's `then` is where its
+            // name stands for what was built, so a comparison written over that name is one over
+            // the positions the construction was given. That the attempt held puts no line on the
+            // account: which way it went is decided by the type's rules, and a row is not steered
+            // by it.
+            default -> ScopeStep.forEachChild(e, (child, step) ->
+                    walk(child, in, reads.entering(step, symbols, in.newtypes()), flow, assumed,
+                            live, out, forks, numbering));
         }
     }
 
@@ -426,13 +534,6 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             }
         }
         return left;
-    }
-
-    /** Whether the truth of {@code atom} turns on a predicate {@code read} took in, which is the
-     *  same walk a comparison is looked for along and is here so that the two agree about it. */
-    static boolean turnsOnAPredicate(Core atom, PredicateReadings read, InputReads reads,
-                                     Symbols symbols, DeclarationNewtypes newtypes) {
-        return leftUnread(atom, read, reads, symbols, newtypes).isEmpty();
     }
 
     /** The parts of what {@code atom} decides that none of the three readers answers for, which is

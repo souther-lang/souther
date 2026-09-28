@@ -23,6 +23,7 @@ import souther.compiler.partition.Level;
 import souther.compiler.partition.LineFacts;
 import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.ReadingGap;
+import souther.compiler.partition.StandingAtAPoint;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -68,7 +69,8 @@ class AnObligationsExplanationNamesEachReasonOnceTest {
             met.add(new Weakening.BorderValueUnreadable(border("t" + i), ReadingGap.of(A_LIMIT)));
         }
 
-        assertEquals(ReadingReasons.of(List.of(ReadingGap.of(A_LIMIT))), explanationOf(met),
+        assertEquals(ReadingReasons.of(List.of(ReadingGap.of(A_LIMIT)),
+                        StandingAtAPoint.ReadingsTried.EVERY_ONE), explanationOf(met),
                 () -> readings + " readings met one reason, which is one thing to tell an author");
     }
 
@@ -160,7 +162,7 @@ class AnObligationsExplanationNamesEachReasonOnceTest {
         }
 
         assertEquals(ReadingReasons.of(List.of(ReadingGap.of(NOTHING_COULD_READ_IT),
-                        ReadingGap.of(A_LIMIT))),
+                        ReadingGap.of(A_LIMIT)), StandingAtAPoint.ReadingsTried.EVERY_ONE),
                 explanationOf(met),
                 "five readings met two reasons, and what the point says is the two");
     }
@@ -193,7 +195,8 @@ class AnObligationsExplanationNamesEachReasonOnceTest {
     void theOpenQuestionsAreSaidInTheOrderTheyArePublishedIn() {
         ObligationDisposition.Uncertainty there =
                 new ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped(
-                        ReadingReasons.of(List.of(ReadingGap.NO_VALUE)));
+                        ReadingReasons.of(List.of(ReadingGap.NO_VALUE),
+                                StandingAtAPoint.ReadingsTried.EVERY_ONE));
         ObligationDisposition.Uncertainty written =
                 new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped(prevented());
 
@@ -205,7 +208,8 @@ class AnObligationsExplanationNamesEachReasonOnceTest {
                 "and one question is one entry, however many times it arrived");
         ObligationDisposition.Uncertainty alsoThere =
                 new ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped(
-                        ReadingReasons.of(List.of(ReadingGap.of(A_LIMIT))));
+                        ReadingReasons.of(List.of(ReadingGap.of(A_LIMIT)),
+                                StandingAtAPoint.ReadingsTried.EVERY_ONE));
         assertThrows(IllegalArgumentException.class,
                 () -> ObligationDisposition.Undecided.about(List.of(there, alsoThere)),
                 "and one question has one answer: two of them are not something to put in order");

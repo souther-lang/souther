@@ -67,8 +67,13 @@ class AnArmNoCombinationIsOverIsStillOfferedARowTest {
         assertTrue(run.out().contains("! no row goes through `case Running`"), run.out());
 
         assertTrue(run.out().contains("2 rows to fill what nothing covers"), run.out());
-        assertTrue(run.out().contains("| \"case Ready\"   : (Ready, Reset)"), run.out());
-        assertTrue(run.out().contains("| \"case Running\" : (Running, Reset)"), run.out());
+        // Written with what each fills above it rather than under one name: the row that goes
+        // through the arm is the row that sits in the combination of the two classes, and a row
+        // that answers several things is named for all of them.
+        assertTrue(run.out().contains("// fills case Ready"), run.out());
+        assertTrue(run.out().contains("| (Ready, Reset)"), run.out());
+        assertTrue(run.out().contains("// fills case Running"), run.out());
+        assertTrue(run.out().contains("| (Running, Reset)"), run.out());
         assertFalse(run.out().contains("nothing offers a row for `case Ready`"),
                 "and nothing says the body does not reach them: " + run.out());
     }

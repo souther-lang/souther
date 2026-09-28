@@ -5,6 +5,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.BoundaryDerivation;
 import souther.compiler.query.BoundaryForMeasurement;
 import souther.compiler.query.DecisionEvidence;
+import souther.compiler.query.InteractionEvidence;
 import souther.compiler.query.FailureReason;
 import souther.compiler.query.InputCaseEvidence;
 import souther.compiler.query.ItemAssessment;
@@ -154,6 +155,9 @@ record ReasonProse(Introduction introduction, String said) {
             case DecisionEvidence.NotAsked it -> switch (it) {
                 case NOT_ASKED -> "the build did not ask where the rows went";
             };
+            case InteractionEvidence.NotAsked it -> switch (it) {
+                case NOT_ASKED -> "the build did not ask where the rows went";
+            };
             case Adequacy.SignatureEvidence.NoRows it -> switch (it) {
                 case NO_ROWS -> "no row names this behavior";
             };
@@ -184,14 +188,23 @@ record ReasonProse(Introduction introduction, String said) {
         return switch (reason) {
             // The model says this behavior writes a body. What it owes is unknown rather than
             // nothing, which is the difference the line saying this exists to show.
-            case Adequacy.BranchEvidence.Unelaborated it -> switch (it) {
-                case BODIES_NOT_ELABORATED -> "this module's bodies were not elaborated";
+            case Adequacy.BranchEvidence.BodyWasNotRead it -> switch (it) {
+                case BODY_WAS_NOT_READ ->
+                        "nothing read this behavior's body, so what arms it has is unknown";
             };
             case Adequacy.BranchEvidence.Unreadable it -> switch (it) {
                 case UNREADABLE -> "the arms could not be read";
             };
             case Adequacy.RowReading.Unavailable it -> switch (it) {
                 case ROWS_UNAVAILABLE -> "nothing came back from the rows";
+            };
+            case PartitionEvidence.PairSpace.TooLarge it -> switch (it) {
+                case TOO_MANY_COMBINATIONS ->
+                        "this behavior has more combinations of two classes than the build counts";
+            };
+            case InteractionEvidence.Unreadable it -> switch (it) {
+                case NO_ROW_CAME_BACK -> "no row of this behavior came back to be read";
+                case THE_ROWS_CARRY_NO_ACCOUNT -> "the rows carry no account of where they went";
             };
             case DecisionEvidence.Unreadable it -> switch (it) {
                 case THE_BODY_WAS_NOT_READ -> "this behavior's body was not elaborated";
@@ -215,6 +228,22 @@ record ReasonProse(Introduction introduction, String said) {
             };
             case ItemAssessment.Coverage.CouldNotAsk it -> switch (it) {
                 case ARMS_UNREADABLE -> "the arms could not be measured";
+            };
+            case ItemAssessment.PlaceCouldNotBeWorkedOut it -> switch (it) {
+                case PLACE_COULD_NOT_BE_WORKED_OUT ->
+                        "this point's own place on the order could not be read";
+            };
+            // One sentence for both measures. What is missing is the reading of the body, which
+            // is the same fact whichever of the two was asking — and a reader told it twice in two
+            // wordings would go looking for two things.
+            case BoundaryDerivation.BodyWasNotRead it -> switch (it) {
+                case BODY_WAS_NOT_READ ->
+                        "nothing read this behavior's body, so what lines its own rules draw is"
+                                + " unknown";
+            };
+            case PartitionDerivation.BodyWasNotRead it -> switch (it) {
+                case BODY_WAS_NOT_READ ->
+                        "nothing read this behavior's body, so what its own rules divide is unknown";
             };
             case PartitionDerivation.TheReadingDidNotRunOut it -> switch (it) {
                 case THE_READING_DID_NOT_RUN_OUT ->

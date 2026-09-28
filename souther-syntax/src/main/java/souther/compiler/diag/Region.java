@@ -1,5 +1,6 @@
 package souther.compiler.diag;
 
+import souther.compiler.RecordOfTheBuilding;
 
 /**
  * A source range from {@code start} (inclusive) to {@code end} (exclusive), each a
@@ -18,7 +19,7 @@ package souther.compiler.diag;
  * now — {@code SourceLayout.resolve} answers with a {@link PhysicalRegion}, which is what a renderer
  * measures.
  */
-public record Region(SourcePos start, SourcePos end) {
+public record Region(SourcePos start, SourcePos end) implements RecordOfTheBuilding {
 
     /** A zero-width region at a single point. */
     public static Region point(SourcePos p) {

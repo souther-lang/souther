@@ -36,7 +36,7 @@ class EveryKeywordIsHighlightedTest {
 
     /**
      * {@code on} is not reserved — it is read as the second word of {@code depends on} — so the guard
-     * above cannot reach it. It is coloured from its position instead, which is also what keeps a
+     * above cannot reach it. It is coloured as what the parse read it as, which is also what keeps a
      * field named {@code on} an ordinary field.
      */
     @Test
@@ -53,6 +53,33 @@ class EveryKeywordIsHighlightedTest {
 
         assertEquals(List.of(PROPERTY, KEYWORD), typesOf(source, "on"),
                 "the field named `on` stays a field; the `on` of `depends on` is the keyword");
+    }
+
+    /**
+     * The words that open an {@code example} or a {@code fake} are keywords where they open one, and
+     * the same spellings written as names are the names they are.
+     */
+    @Test
+    void theWordThatOpensAnExampleOrAFakeIsAKeywordThereAndANameElsewhere() {
+        String source = """
+                module demo
+                behavior f : (example: Int) -> Int
+                behavior fake : (x: Int) -> Int
+                let f (example) = example
+                example f
+                    | (1) -> 1
+                fake fake
+                    | _ -> 1
+                """;
+
+        List<Integer> example = typesOf(source, "example");
+        assertEquals(KEYWORD, example.getLast(), "the `example` that opens the table");
+        assertEquals(List.of(), example.subList(0, example.size() - 1).stream()
+                .filter(type -> type == KEYWORD).toList(), "a parameter named `example`");
+
+        List<Boolean> fake = typesOf(source, "fake").stream().map(type -> type == KEYWORD).toList();
+        assertEquals(List.of(false, true, false), fake,
+                "a behavior named `fake`, the word that opens the table, and the behavior it fakes");
     }
 
     /** The semantic-token types of every token spelled {@code text}, in source order. */

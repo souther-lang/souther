@@ -23,7 +23,7 @@ class ExampleCallsPublishedHelperTest {
 
             let rate = 11
 
-            let taxed (a: Amount) = Amount(a.value * rate / 10)
+            let taxed (a: Amount) = Amount(Rational.toInt(DOWN, a.value * rate / 10))
 
             partial let steps (n: Int) : Int = if n <= 0 then 0 else n + steps(n - 1)
 

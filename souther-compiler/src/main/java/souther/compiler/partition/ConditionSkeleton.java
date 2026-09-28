@@ -48,7 +48,9 @@ final class ConditionSkeleton {
         return out;
     }
 
-    private static void cut(Core e, List<Core> out) {
+    private static void cut(Core standing, List<Core> out) {
+        // What decides the answer is the value, whatever type it stands as.
+        Core e = Core.withoutStanding(standing);
         switch (e) {
             // Both sides decide the fork: one of them coming out the wrong way is the whole answer,
             // and a rule about either is a rule the fork tests.

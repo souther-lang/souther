@@ -33,7 +33,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * {@link souther.compiler.inputs.ComparedNumber#of} is package-private, which makes
  * {@code ComparedNumbers} the one way to it from outside and a body's binaries the one thing that
  * arrives; a reader holding a comparison takes {@code lineOf} and hands over the claim it already
- * has. {@code ConstEval.binary} is private, and the fold is the one thing that reaches it.
+ * has. {@code ConstantAlgebra.binary} is the arithmetic of a fold and nothing else, and the walks
+ * that fold are the only things that reach it.
  *
  * <p>Read off the compiled classes, because what a method calls is what the class file says. A
  * reading of the sources would answer the same question a second way, and would not see a call
@@ -53,7 +54,7 @@ class AnOperatorIsAskedWhatItPlacesInOnePlaceTest {
             new Licence("souther.compiler.inputs.ComparedNumber.of", 1,
                     "reads any binary a walk met, so an operator that places nothing arrives here"
                             + " and is answered rather than excluded"),
-            new Licence("souther.compiler.check.ConstEval.binary", 1,
+            new Licence("souther.compiler.check.ConstantAlgebra.binary", 1,
                     "folds any binary an expression is written with, so an operator that places"
                             + " nothing arrives here too; what it placed is spent on the relation"
                             + " the fold answers and is handed to nobody"));

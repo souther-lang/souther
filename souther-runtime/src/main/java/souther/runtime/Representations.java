@@ -1,9 +1,9 @@
 package souther.runtime;
 
 import org.jspecify.annotations.Nullable;
+import souther.exact.ExactDecimals;
 
 import java.math.BigDecimal;
-import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
@@ -62,20 +62,6 @@ public final class Representations {
     private static final int ARRAY = 5;
     private static final int OBJECT = 6;
 
-    /**
-     * How many digits an exponent may be spelt out into. It bounds the <em>expansion</em> and not the
-     * output: a value that already carries a thousand significant digits is written with all of them,
-     * here as anywhere, and that is not this rule's business. What this stops is a compact input
-     * asking for an enormous output — {@code 1E+1000000} is eleven characters and a million and one
-     * digits.
-     *
-     * <p>A thousand is where a reader gives up as well ({@code jackson-core}'s
-     * {@code StreamReadConstraints.DEFAULT_MAX_NUM_LEN}), which is where the figure comes from. It is
-     * a reference point and not the definition: that limit is per-factory and configurable, and the
-     * form this class writes is part of the language.
-     */
-    private static final int MAX_SPELT_OUT_DIGITS = 1000;
-
     private Representations() {}
 
     /**
@@ -90,48 +76,18 @@ public final class Representations {
      * <p>Which is bounded, because asking for the digits is what an exponent lets a caller not pay
      * for: {@code 1E+1000000} is eleven characters and a million and one digits, so spelling every
      * amount out would let a small input ask for an arbitrarily large one. The cut is
-     * {@link #MAX_SPELT_OUT_DIGITS}, and it falls on the amount rather than on the value that carried it
-     * — the two forms of one amount reach the same side of it, which is what keeps this a function
-     * of the amount.
+     * {@link ExactDecimals#MAX_SPELT_OUT_DIGITS}, and it falls on the amount rather than on the value
+     * that carried it — the two forms of one amount reach the same side of it, which is what keeps
+     * this a function of the amount.
      */
     public static BigDecimal canonicalNumber(BigDecimal amount) {
-        BigDecimal stripped = strippedAsFarAsTheScaleGoes(amount);
+        BigDecimal stripped = DecimalMath.leastDigits(amount);
         if (stripped.scale() >= 0) {
             return stripped;
         }
         // in long, because a scale at the floor asks for more digits than an int can count
         long spelledOut = (long) stripped.precision() - stripped.scale();
-        return spelledOut <= MAX_SPELT_OUT_DIGITS ? stripped.setScale(0) : stripped;
-    }
-
-    /**
-     * The amount carried by as few digits as a {@code BigDecimal} can carry it.
-     *
-     * <p>{@code stripTrailingZeros} is that, until the scale it would need is one the type cannot
-     * say: a scale is an {@code int}, and taking the zero off {@code (10, MIN_VALUE)} asks for
-     * {@code MIN_VALUE - 1}, which it answers by throwing. Stopping at the floor instead still leaves
-     * one form per amount — {@code (10, MIN_VALUE)} and {@code (100, MIN_VALUE + 1)} are one amount
-     * and both stop at {@code (10, MIN_VALUE)} — because fixing the scale fixes the digits.
-     */
-    private static BigDecimal strippedAsFarAsTheScaleGoes(BigDecimal amount) {
-        if (amount.signum() == 0) {
-            return BigDecimal.ZERO;                  // every way of writing nothing is one amount
-        }
-        long room = (long) amount.scale() - Integer.MIN_VALUE;
-        if (room >= amount.precision()) {
-            return amount.stripTrailingZeros();      // fewer zeros than digits: it cannot fall out
-        }
-        BigInteger digits = amount.unscaledValue();
-        int scale = amount.scale();
-        for (long left = room; left > 0; left--) {
-            BigInteger[] divided = digits.divideAndRemainder(BigInteger.TEN);
-            if (divided[1].signum() != 0) {
-                break;
-            }
-            digits = divided[0];
-            scale--;
-        }
-        return new BigDecimal(digits, scale);
+        return spelledOut <= ExactDecimals.MAX_SPELT_OUT_DIGITS ? stripped.setScale(0) : stripped;
     }
 
     /** The members of an encoded array, in ascending order of their own external representation. */
@@ -153,8 +109,9 @@ public final class Representations {
     /**
      * Where {@code a} is written relative to {@code b}: {@code null} first, then {@code false},
      * {@code true}, numbers, strings, arrays and objects. Numbers compare as amounts and then by the
-     * form they are written in; strings by UTF-16 code unit; arrays element by element with the
-     * shorter one first; objects as their members read in key order.
+     * form they are written in; strings by scalar value, the language's own order on them
+     * ({@link Strings#compare}); arrays element by element with the shorter one first; objects as
+     * their members read in key order.
      */
     public static int compareExternalForms(@Nullable Object a, @Nullable Object b) {
         return compare(a, b, null);
@@ -173,7 +130,7 @@ public final class Representations {
         return switch (form) {
             case NULL, FALSE, TRUE -> 0;
             case NUMBER -> compareNumbers(a, b);
-            case STRING -> ((String) a).compareTo((String) b);
+            case STRING -> Strings.compare((String) a, (String) b);
             case ARRAY -> compareArrays((List<?>) a, (List<?>) b, orders);
             default -> compareObjects((Map<?, ?>) a, (Map<?, ?>) b, orders);
         };
@@ -258,7 +215,7 @@ public final class Representations {
         List<String> xs = keysOf(a, orders);
         List<String> ys = keysOf(b, orders);
         for (int i = 0; i < Math.min(xs.size(), ys.size()); i++) {
-            int byKey = xs.get(i).compareTo(ys.get(i));
+            int byKey = Strings.compare(xs.get(i), ys.get(i));
             if (byKey != 0) {
                 return byKey;
             }
@@ -299,6 +256,9 @@ public final class Representations {
         return true;
     }
 
+    /** The members in order, in a host list: an external form can hold {@code null}, which a
+     *  {@code List} of the language cannot, and the members arrived as one host list already, so a
+     *  copy as long as it has a place wherever it did. */
     private static List<Object> sortedMembers(List<?> members) {
         List<Object> out = new ArrayList<>(members);
         KeyOrders orders = new KeyOrders();
@@ -344,16 +304,15 @@ public final class Representations {
     }
 
     private static List<String> sortedKeys(Map<?, ?> members) {
-        List<String> keys = new ArrayList<>(members.size());
+        PersistentVector.Builder<String> keys = new PersistentVector.Builder<>();
         for (Object key : members.keySet()) {
             keys.add(requireKey(key));
         }
-        keys.sort(null);
-        return keys;
+        return Sorting.stably(keys.build(), Strings::compare);
     }
 
     /** A boundary object is keyed by strings, so a key that is not one means the codec broke. */
-    private static String requireKey(Object key) {
+    private static String requireKey(@Nullable Object key) {
         if (key instanceof String s) {
             return s;
         }

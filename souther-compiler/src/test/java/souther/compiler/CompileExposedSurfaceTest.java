@@ -4,7 +4,6 @@ import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -17,6 +16,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Reported where the module decides it, as Rust's {@code private_interfaces} and F#'s
  * {@code FS0410} do, rather than at each reader that runs into it.
+ *
+ * <p>What the module keeps to itself may rest on what it keeps, and an exposed sum may keep its
+ * cases; {@link CompileVisibilityTest} compiles both and holds what each class is emitted as.
  */
 class CompileExposedSurfaceTest {
 
@@ -98,29 +100,5 @@ class CompileExposedSurfaceTest {
 
         assertTrue(e.getMessage().contains("Id"), e.getMessage());
         assertTrue(e.getMessage().contains("findMember"), e.getMessage());
-    }
-
-    @Test
-    void whatTheModuleKeepsToItselfMayRestOnWhatItKeepsToItself() {
-        assertDoesNotThrow(() -> Compiler.compile("""
-                module demo exposing ( Out )
-
-                data UserId = String
-                data Internal = { by: UserId }
-                data Out = { s: String }
-                """));
-    }
-
-    @Test
-    void anExposedSumMayStillKeepItsCasesToItself() {
-        // A case reaches a reader through the decoder and, for an injected output, through the
-        // generated factory — without being named. That is E1305's allowance and it stands.
-        assertDoesNotThrow(() -> Compiler.compile("""
-                module demo exposing ( Contact )
-
-                data EmailC = { email: String }
-                data PhoneC = { phone: String }
-                data Contact = EmailC | PhoneC
-                """));
     }
 }

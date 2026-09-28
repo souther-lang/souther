@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -47,7 +48,7 @@ class ADemandNothingComposesForIsDeclinedAndNotStatedTest {
                 let decides (at, permits) = if permits(at) then Yes else No
                 """);
 
-        assertTrue(demanded.whole(),
+        assertTrue(demanded.declined().isEmpty(),
                 () -> "every demand of the way was stated: " + demanded);
         assertTrue(demanded.stated().stream().anyMatch(AnswerDemand.ATruth.class::isInstance),
                 () -> "and the truth is one of them: " + demanded);
@@ -71,8 +72,10 @@ class ADemandNothingComposesForIsDeclinedAndNotStatedTest {
                 let decides (at, look) = if look(at).ok then Yes else No
                 """);
 
-        assertFalse(demanded.whole(),
-                () -> "the way asks something of the answer this cannot state: " + demanded);
+        assertEquals(List.of(new DemandGap.WhyNotStated.ATruthOfAPlaceInsideTheAnswer()),
+                demanded.declined().stream().map(DemandGap.Unstated::why).toList(),
+                () -> "the way asks something of the answer this cannot state, and says what"
+                        + " stopped it: " + demanded);
         assertFalse(demanded.stated().stream().anyMatch(AnswerDemand.ATruth.class::isInstance),
                 () -> "and it is not among the demands a value would be composed against: "
                         + demanded);

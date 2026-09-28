@@ -8,6 +8,7 @@ import souther.compiler.query.ReadAs;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
+import souther.compiler.semantics.TakenArguments;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
@@ -47,9 +48,9 @@ class AnEmptinessCheckStatesWhatItMeansAboutTheLengthTest {
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Name"));
         assertNotNull(rules.symbols().declaredNode(named.key()), "no `Name` declared");
         String[] taken = measure.split("\\.");
-        return FieldDomains.of(named, rules, ReadAs.THE_COMPILATION_DOES)
+        return FieldDomains.of(named, RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES))
                 .leftAt(RuleKey.THE_VALUE, new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(
-                        ValueName.Stdlib.operation(taken[0], taken[1])));
+                        ValueName.Stdlib.operation(taken[0], taken[1]), TakenArguments.NONE));
     }
 
     private static void assertLength(NumericDomain.Bounds bounds, long least, long most) {

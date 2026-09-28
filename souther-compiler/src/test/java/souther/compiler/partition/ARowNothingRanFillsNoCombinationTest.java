@@ -91,7 +91,7 @@ class ARowNothingRanFillsNoCombinationTest {
     void aCombinationIsSearchedForAnArmOnTheListAndForNothingElse() {
         Model model = Model.of(SHIPPING, "shippingFee");
         InteractionCells.Offered offered =
-                InteractionCells.of(model.groups(), model.subject().axes().axes(), Budgets.generation());
+                InteractionCells.of(model.groups(), model.subject().axes().axes(), Budgets.generation().cellsPerGroup());
         List<InteractionCells.Group> groups = offered.groups();
         assertEquals(1, groups.size(), "the two decisions meet once");
         assertEquals(List.of(), offered.notOffered(),
@@ -101,7 +101,7 @@ class ARowNothingRanFillsNoCombinationTest {
         assertFalse(first.claims().isEmpty(), "which a run can be held to");
 
         Set<ArmProbe> every =
-                Generator.everyArmACombinationMayTake(model.subject(), model.groups(), Budgets.generation());
+                GenerationFixtures.everyArmACombinationMayTake(model.subject(), model.groups(), Budgets.generation());
         assertTrue(offeredFor(model, every).containsAll(claimedBy(first)),
                 "asked about the arms this combination takes, a row is composed for each of them");
         assertEquals(Set.of(), offeredFor(model, Set.of()),
@@ -118,13 +118,13 @@ class ARowNothingRanFillsNoCombinationTest {
     @Test
     void aRowIsComposedForTheArmsAndNotForWhereTheyWereFound() {
         Model model = Model.of(SHIPPING, "shippingFee");
-        CellSelection first = InteractionCells.of(model.groups(), model.subject().axes().axes(), Budgets.generation())
+        CellSelection first = InteractionCells.of(model.groups(), model.subject().axes().axes(), Budgets.generation().cellsPerGroup())
                 .groups().get(0).at(0);
         assertNotNull(first);
         Set<ArmProbe> takes = claimedBy(first);
         assertTrue(takes.size() > 1, "the combination takes an arm of each decision: " + takes);
 
-        List<Generator.GeneratedRow> composed = Generator.fill(model.subject(), List.of(),
+        List<Generator.GeneratedRow> composed = GenerationFixtures.fill(model.subject(), List.of(),
                         Generator.CandidateCheck.ANY, model.read(),
                         Generator.Trial.NOTHING_RUNS, List.of(), List.of(), List.copyOf(takes), Budgets.generation())
                 .rows();
@@ -151,8 +151,8 @@ class ARowNothingRanFillsNoCombinationTest {
     void anArmKeepsWhatEveryCombinationClaimingItCameTo() {
         Model model = Model.of(SHIPPING, "shippingFee");
         Set<ArmProbe> every =
-                Generator.everyArmACombinationMayTake(model.subject(), model.groups(), Budgets.generation());
-        FillResult filled = Generator.fill(model.subject(), List.of(),
+                GenerationFixtures.everyArmACombinationMayTake(model.subject(), model.groups(), Budgets.generation());
+        FillResult filled = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.refusing((_, _) -> java.util.Optional.of("no")),
                 model.read(), Generator.Trial.NOTHING_RUNS, List.of(), List.of(), List.copyOf(every), Budgets.generation());
 
@@ -178,10 +178,10 @@ class ARowNothingRanFillsNoCombinationTest {
     void oneRowThroughAnArmIsTheAnswerWhateverTheOthersCameTo() {
         Model model = Model.of(SHIPPING, "shippingFee");
         Set<ArmProbe> every =
-                Generator.everyArmACombinationMayTake(model.subject(), model.groups(), Budgets.generation());
+                GenerationFixtures.everyArmACombinationMayTake(model.subject(), model.groups(), Budgets.generation());
         // Refuses the first case of the first position, so the combinations naming it fail and the
         // ones beside them build. Every arm of the second decision is claimed by both.
-        FillResult filled = Generator.fill(model.subject(), List.of(),
+        FillResult filled = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.refusing((_, candidate) ->
                         candidate.text().contains("Premium")
                                 ? java.util.Optional.of("no") : java.util.Optional.empty()),
@@ -193,7 +193,7 @@ class ARowNothingRanFillsNoCombinationTest {
                 .toList();
         assertEquals(3, built.size(),
                 "the arm nothing builds is the refused one; the three beside it are answered: "
-                        + filled.discharge().arms().values());
+                        + GenerationFixtures.arms(filled.discharge()).values());
     }
 
     /**
@@ -249,12 +249,12 @@ class ARowNothingRanFillsNoCombinationTest {
     void anArmTheLimitCutOffSaysSoRatherThanReadingAsUnreachable() {
         Model model = Model.of(wide(), "submit");
         Set<ArmProbe> every =
-                Generator.everyArmACombinationMayTake(model.subject(), model.groups(), Budgets.generation());
+                GenerationFixtures.everyArmACombinationMayTake(model.subject(), model.groups(), Budgets.generation());
         assertFalse(every.isEmpty(), "the body has arms");
 
-        FillResult filled = Generator.fill(model.subject(), List.of(),
+        FillResult filled = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(), Generator.Trial.NOTHING_RUNS,
-                List.of(), Generator.everyClassNoRowSitsIn(model.subject(), List.of()),
+                List.of(), GenerationFixtures.everyClassNoRowSitsIn(model.subject(), List.of()),
                 List.copyOf(every), Budgets.generation());
 
         assertTrue(filled.reasons().stream()
@@ -264,9 +264,11 @@ class ARowNothingRanFillsNoCombinationTest {
             ArmDisposition at = filled.discharge().at(new Generator.ArmOwed(probe));
             assertInstanceOf(ArmDisposition.Unresolved.class, at,
                     "the arm has an entry rather than the silence of one nothing claims: " + probe);
-            assertEquals(List.of(Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED),
+            assertEquals(
+                    List.of(Generator.UnresolvedCombination.Reason
+                            .THE_SEARCH_LEFT_SOMETHING_UNTRIED),
                     ((ArmDisposition.Unresolved) at).why().stream()
-                            .map(Generator.UnresolvedCombination::reason).toList(),
+                            .map(each -> each.why().reason()).toList(),
                     "and says the search stopped, nothing having been tried at it");
         }
     }
@@ -294,7 +296,7 @@ class ARowNothingRanFillsNoCombinationTest {
     void aClassIsComposedForWhenItIsOnTheListAndNotOtherwise() {
         Model model = Model.of(SHIPPING, "shippingFee");
         List<ClassOfAPosition> every =
-                Generator.everyClassNoRowSitsIn(model.subject(), List.of());
+                GenerationFixtures.everyClassNoRowSitsIn(model.subject(), List.of());
         assertFalse(every.isEmpty(), "the model divides its positions");
         ClassOfAPosition one = every.get(0);
 
@@ -307,7 +309,7 @@ class ARowNothingRanFillsNoCombinationTest {
     /** Which classes the generator composes a row for when it is asked about {@code classes}. */
     private static List<ClassOfAPosition> composedFor(Model model,
                                                          List<ClassOfAPosition> classes) {
-        return Generator.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
+        return GenerationFixtures.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
                         model.read(), Generator.Trial.NOTHING_RUNS, List.of(), classes,
                         List.of(), Budgets.generation())
                 .rows().stream().flatMap(row -> row.purposes().stream())
@@ -317,7 +319,7 @@ class ARowNothingRanFillsNoCombinationTest {
 
     /** Which arms the generator composes a row for when it is asked about {@code arms}. */
     private static Set<ArmProbe> offeredFor(Model model, Set<ArmProbe> arms) {
-        return Generator.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
+        return GenerationFixtures.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
                         model.read(), Generator.Trial.NOTHING_RUNS, List.of(), List.of(), List.copyOf(arms), Budgets.generation())
                 .rows().stream().flatMap(row -> row.purposes().stream())
                 .map(Generator.Purpose.ForAnArm.class::cast)

@@ -119,11 +119,16 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.ArithmeticCheck.of",
                     "which operands an operator takes and what it answers, which is a question"
                             + " about the operator itself"),
+            new Held("souther.compiler.abort.AbortSites.arithmetic",
+                    "which AbortKind a Core.Binary can end without a value for, which the operator"
+                            + " alone answers for + - * and needs the answered type for too for /"),
+            new Held("souther.compiler.abort.AbortSites.arithmeticType",
+                    "the same, for the answered type / dispatches on before it asks the operator"),
             new Held("souther.compiler.check.BinaryElaborator.operandBeside",
                     "what the operator asks of one operand, given the one beside it"),
             new Held("souther.compiler.check.HelperParams.BodyTyping.visitOperand",
                     "types an operand under the operator it stands beside"),
-            new Held("souther.compiler.check.ConstEval.arith",
+            new Held("souther.compiler.check.ConstantAlgebra.arith",
                     "what the operator computes of two constants"),
             new Held("souther.compiler.reading.Meetings.run",
                     "walks the operands under the operator they are written with"),
@@ -183,11 +188,18 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             // Rebuilding a tree, which carries the operator across unchanged.
             new Held("souther.compiler.ast.Hir.atSlots",
                     "copies it into the node it is rebuilding"),
-            new Held("souther.compiler.ast.Hir.withRegion", "the same, under a region"),
             new Held("souther.compiler.core.Core.atSlots",
                     "copies it into the node it is rebuilding"),
             new Held("souther.compiler.check.HelperInliner.inline",
                     "copies it into the node a spliced helper becomes"),
+            new Held("souther.compiler.check.ValuePlan.isShortCircuit",
+                    "asks whether what stands on the right of an operator is reached only for some"
+                            + " of what reaches the left, which is what bounds where a value may be"
+                            + " materialised"),
+            new Held("souther.compiler.check.HelperInliner.read",
+                    "copies it into the node it is rebuilding, and asks the question above of a"
+                            + " binary so that the right of a short-circuit is written as a region"
+                            + " of its own"),
             new Held("souther.compiler.check.HelperInliner.rename",
                     "the same, under a renaming of what the body bound"),
             new Held("souther.compiler.check.NewtypeDesugar.go",
@@ -195,8 +207,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.BinaryElaborator.arithmetic",
                     "writes it into the checked node, and into the one inside a construction where"
                             + " the answer is a newtype"),
-            new Held("souther.compiler.check.Terms.asWrittenValue",
-                    "writes it back into the syntax a value is rendered as"),
             new Held("souther.compiler.check.Resolve.expr",
                     "writes what that answered into the node the resolved tree holds"),
 
@@ -211,7 +221,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " no comparison"),
             new Held("souther.compiler.check.Terms.asOperator",
                     "reads the operator an arithmetic meaning was keyed by"),
-            new Held("souther.compiler.check.Terms.theOneOf", "the same, for the meaning it interns"),
             new Held("souther.compiler.check.Terms.openedKey", "the same, for the term it keys"),
             new Held("souther.compiler.check.Terms.recipeFor", "the same, for the recipe it names"),
             new Held("souther.compiler.check.NumericMeanings.of",
@@ -225,6 +234,10 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " thing: two bodies alike but for which way they compare are two"
                             + " bodies, and a run recorded against one says nothing about the"
                             + " other"),
+            new Held("souther.compiler.copied.CopiedIdentity.expr",
+                    "what a comparison or an arithmetic does, written into what a reader copied of"
+                            + " another module's definition: a copy that computes another way is"
+                            + " another copy, and a reader built from the first answers otherwise"),
             new Held("souther.compiler.report.ArmVocabulary.label",
                     "writes the operator into the words a report shows for an arm"),
             new Held("souther.compiler.reading.Meetings.run",
@@ -293,16 +306,24 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.BinaryElaborator.operand",
                     "asks whether the operator joins two conditions, which is the one thing an"
                             + " operand can be held to before the one beside it has been read"),
+            new Held("souther.compiler.check.ConstantAlgebra.binary",
+                    "what the operator computes of two constants, and — for the six that compare —"
+                            + " what it placed, which is what the fold is asked for instead of the"
+                            + " operator"),
             new Held("souther.compiler.check.ConstEval.binary",
-                    "what the operator computes of two constants, which operand it needs to compute"
-                            + " it, and — for the six that compare — what it placed, which is what"
-                            + " the fold is asked for instead of the operator"),
+                    "hands the operator of a written binary to the algebra that folds it — twice,"
+                            + " once to ask whether the left operand settles it and once for what"
+                            + " the two come to. Nothing here asks what the operator means"),
+            new Held("souther.compiler.check.CoreConstantEval.binary",
+                    "the same, on the tree the rules are discharged over: the operator is carried"
+                            + " to the one algebra that folds it, and this reads nothing of it"),
+            new Held("souther.compiler.check.ConstantAlgebra.settledByTheLeft",
+                    "which operators answer from their left operand alone, which is what says"
+                            + " whether the one beside it is read at all"),
             new Held("souther.compiler.check.DischargeRules.noSmallerThan",
                     "which operands a string joined by another is no shorter than"),
             new Held("souther.compiler.core.GrowingFold.appended",
                     "what a fold appends, which is what joining strings is"),
-            new Held("souther.compiler.examples.FixtureReader.fold",
-                    "what the operator computes of two numbers a fixture wrote"),
             new Held("souther.compiler.codegen.BodyGen.binary",
                     "which instructions the operator is emitted as, and — for the six it emits a"
                             + " comparison for — the recognition everything below it holds"),
@@ -330,6 +351,21 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "hands back the operator a library fact states its other case by"),
             new Held("souther.compiler.check.DischargeRules.operator",
                     "reads the operator a library operation is declared to compute"),
+            new Held("souther.compiler.semantics.Arithmetic.writtenAs",
+                    "answers with the operator the language writes an arithmetic as, which is none"
+                            + " for an arithmetic it writes no operator for"),
+            new Held("souther.compiler.semantics.Arithmetic.TheOperator.writtenAs",
+                    "hands back the operator such an arithmetic is: it is the one it computes"),
+            new Held("souther.compiler.check.BoundOperationFacts.writtenAs",
+                    "indexes the operations by the operator each of their arithmetics is written"
+                            + " as, once, where the facts are gathered"),
+            new Held("souther.compiler.check.BoundOperationFacts.computing",
+                    "looks an operator up in that index, for a reader holding an operator and"
+                            + " wanting the operations whose accounts say how such a number is"
+                            + " read"),
+            new Held("souther.compiler.check.NumericMeasures.writing",
+                    "asks which operations compute what that operator computes, and tells them"
+                            + " apart by the number this call answered"),
 
             // Naming a constant, which is the other way to come by one.
             new Held("souther.compiler.check.Resolve.binOp",
@@ -370,6 +406,12 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "names the constants it has rules for, against the operator it was handed"),
             new Held("souther.compiler.check.BinaryElaborator.operandBeside",
                     "names the two that scale a newtype"),
+            new Held("souther.compiler.codegen.BodyGen.arithmetic",
+                    "names the operator whose quotient is exact, which is what decides between a"
+                            + " carrier's kernel and the exact arithmetic's"),
+            new Held("souther.compiler.codegen.BodyGen.exactly",
+                    "names which exact kernel each operator reaches, so an operator with none says"
+                            + " so rather than being emitted as whichever name a caller passed"),
             new Held("souther.compiler.check.Term.Interner.operator",
                     "names the constants the canonical terms are keyed by, which is the"
                             + " six-into-three the reading of a guard now takes from what was"

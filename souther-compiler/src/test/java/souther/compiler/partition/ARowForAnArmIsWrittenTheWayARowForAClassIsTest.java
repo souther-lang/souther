@@ -82,8 +82,14 @@ class ARowForAnArmIsWrittenTheWayARowForAClassIsTest {
         assertEquals(List.of("Request { ...mid, lo = Amount(0) }, On, Off"), rows);
     }
 
-    /** The rows offered for an arm and for nothing else, which are the ones the class search never
-     *  touched. */
+    /**
+     * The rows offered for an arm and not for a class, which are the ones the class search never
+     * touched.
+     *
+     * <p>For an arm, rather than for anything that is not a class. This behavior's decisions meet,
+     * so the search composes rows for its combinations too — and what those are written as is that
+     * search's question and not this one.
+     */
     private static List<String> rowsForArmsAlone() {
         Compilation compilation = Compilation.ofSource(CORRELATED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
@@ -95,7 +101,9 @@ class ARowForAnArmIsWrittenTheWayARowForAClassIsTest {
         assertNotNull(filling, "the behavior under test is generated for");
         return filling.composed().rows().stream()
                 .filter(row -> row.purposes().stream()
-                        .noneMatch(Generator.Purpose.ForAClass.class::isInstance))
+                        .noneMatch(Generator.Purpose.ForAClass.class::isInstance)
+                        && row.purposes().stream()
+                                .anyMatch(Generator.Purpose.ForAnArm.class::isInstance))
                 .map(row -> String.join(", ",
                         row.inputs().stream().map(FixtureTemplate::text).toList()))
                 .toList();

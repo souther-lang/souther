@@ -1,5 +1,6 @@
 package souther.compiler.types;
 
+import souther.compiler.SettledAnswer;
 import souther.compiler.diag.QuotedFrom;
 
 /**
@@ -40,7 +41,7 @@ import souther.compiler.diag.QuotedFrom;
  * {@code Names.Declaration}, {@code Bodies.Stated}, {@code Bodies.LoweredBody} — are answers to
  * their own questions that happen to agree with it.
  */
-public sealed interface WrittenOwner {
+public sealed interface WrittenOwner extends SettledAnswer {
 
     /** The module whose source wrote this — what keeps a prelude helper's constructs apart from
      *  those of the module expanding it. */

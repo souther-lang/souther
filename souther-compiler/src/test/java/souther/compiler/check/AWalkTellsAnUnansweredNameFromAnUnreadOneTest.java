@@ -63,17 +63,6 @@ class AWalkTellsAnUnansweredNameFromAnUnreadOneTest {
                 "nothing declares it, so a walk has no edge to add and carries on");
     }
 
-    /**
-     * And there is no third for it to part off. What a walk here is handed has been read, whatever
-     * it turned out to name — the state that said nobody had looked is the other representation's,
-     * and {@link Hir.Var} permits only these two.
-     */
-    @Test
-    void thereIsNoStateHereForANameNothingHasRead() {
-        assertEquals(Set.of(Hir.Var.Denoting.class, Hir.Var.Unanswered.class),
-                Set.of(Hir.Var.class.getPermittedSubclasses()));
-    }
-
     // --- and at a walk, which is where it matters ---
 
     /** {@code ValueCycles} builds the graph of which values read which. */

@@ -398,6 +398,6 @@ class OneConjunctStatesAsManyLinesAsItHasStatementsTest {
         TypeSymbol named = TypeSymbols.declared(new TypeKey("example.forms", name));
         return DeclaredBorders.of(named, Shapes.publishedDeclarations(compilation.db()),
                 Shapes.declarationCitations(compilation.db()),
-                RuleReadings.of(compilation, module), policy);
+                RuleReadingContext.unshared(RuleReadings.of(compilation, module), policy));
     }
 }

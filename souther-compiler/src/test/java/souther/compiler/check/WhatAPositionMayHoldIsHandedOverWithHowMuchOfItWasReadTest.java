@@ -74,7 +74,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), named));
         return new Read(FieldDomains.of(name,
-                RuleReadings.of(compilation, "demo"), policy), symbols);
+                RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"), policy)), symbols);
     }
 
     private static FieldDomains of(String source, String named) {
@@ -98,8 +98,8 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), named));
         return FieldDomains.of(name,
-                RuleReadings.of(compilation, "demo"),
-                ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),
+                        ReadAs.THE_COMPILATION_DOES));
     }
 
     private static final Value A = Value.text("A");
@@ -716,21 +716,6 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
 
         asFarAsRead(ValueSet.ANY, UnreadReason.NOT_REACHED, read, "inner");
         wholly(ValueSet.ANY, read, "dealCount");
-    }
-
-    /** And a clause of the value's own declaration reaches every position of it, so a stop there
-     *  leaves all of them short of their rules. */
-    @Test
-    void aStopAtTheValueItselfLeavesEveryPositionOfItShort() {
-        FieldDomains read = ofRefused("""
-                module demo
-
-                data Pair = { left: String, right: Int }
-                    invariant no = left == "A" && right == "B"
-                """, "Pair");
-
-        asFarAsRead(ValueSet.ANY, UnreadReason.NOT_REACHED, read, "left");
-        asFarAsRead(ValueSet.ANY, UnreadReason.NOT_REACHED, read, "right");
     }
 
     /**

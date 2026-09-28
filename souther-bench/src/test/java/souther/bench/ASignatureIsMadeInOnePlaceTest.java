@@ -65,7 +65,9 @@ class ASignatureIsMadeInOnePlaceTest {
      * shape is made there, and the declaration that carries them is made there once. The projection
      * to what crosses is the declaration's own, made in its constructor out of the inputs it already
      * holds; a composition's is made where the composition is worked out, out of the stage's shapes
-     * and the answer that walk admitted. The two names — a name a model declared, and a key a map is
+     * and the answer that walk admitted; and a composition another project compiled has its made by
+     * the walk, out of what that project published it taking and answering, since it declares no
+     * parameters to make a declaration of. The two names — a name a model declared, and a key a map is
      * written with — are made by the rule that admits a name, which is asked at every position that
      * crosses.
      *
@@ -78,7 +80,8 @@ class ASignatureIsMadeInOnePlaceTest {
     private static final Map<String, Map<String, Integer>> MADE_BY = Map.of(
             "souther.compiler.check.Sig",
             Map.of("souther.compiler.check.DeclaredSig#<init>", 1,
-                    "souther.compiler.check.PipelineSigs#pipeSig", 1),
+                    "souther.compiler.check.PipelineSigs#pipeSig", 1,
+                    "souther.compiler.check.SignatureBoundary#publishedComposition", 1),
             "souther.compiler.check.DeclaredSig",
             Map.of("souther.compiler.check.SignatureBoundary#of", 1),
             "souther.compiler.check.DeclaredSig$Input",
@@ -122,6 +125,8 @@ class ASignatureIsMadeInOnePlaceTest {
             Map.of("souther.compiler.check.SignatureDeclarations#of", 1),
             "souther.compiler.check.SignatureBoundary#composedOutput",
             Map.of("souther.compiler.check.PipelineSigs#pipeSig", 1),
+            "souther.compiler.check.SignatureBoundary#publishedComposition",
+            Map.of("souther.compiler.check.PipelineSigs#signatures", 1),
             "souther.compiler.check.SignatureDeclarations#of",
             Map.of("souther.compiler.query.Bodies$DeclaredSignatures#compute", 1),
             "souther.compiler.check.PipelineSigs#signatures",

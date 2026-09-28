@@ -11,6 +11,7 @@ import souther.compiler.types.BindingOwner;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.ReachName;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
@@ -92,7 +93,7 @@ class WhatTheReadingNamesIsTheForkTheLoweringBuildsTest {
         for (int i = 0; i < rules.size(); i++) {
             Hir.Binder binder = new Hir.Binder(WrittenName.synthetic(rules.get(i), AT),
                     new BindingId(new BindingOwner.OfValue(MODULE, "f"), i), AT);
-            params.add(new Hir.FnParam(binder, aRuleType(), false));
+            params.add(new Hir.FnParam(binder, aRuleType()));
             guards.add(Hir.Var.local(binder, AT));
         }
         Hir.ListComp comp = new Hir.ListComp(new Hir.IntLit(1, AT, null), guards,
@@ -107,8 +108,10 @@ class WhatTheReadingNamesIsTheForkTheLoweringBuildsTest {
         return (Hir.ListComp) ((Hir.FnBody.Written) fn.body()).expr();
     }
 
-    /** A parameter of function type, which is what a rule the caller supplies is. */
+    /** A parameter of function type, which is what a rule the caller supplies is. It answers
+     *  {@code Bool}, being what a guard reads it for. */
     private static Hir.RetType aRuleType() {
-        return new Hir.RetType(List.of(new Hir.FnType(List.of(), null, AT)), AT);
+        Hir.RetType answers = Hir.RetType.of(List.of(Hir.TypeRef.of(Type.BOOL, AT)), AT);
+        return Hir.RetType.of(List.of(new Hir.FnType(List.of(), answers, AT)), AT);
     }
 }

@@ -58,7 +58,7 @@ class AnEqualityAndItsDenialAreOneColumnOfTheDecisionTest {
                 DecisionCondition.AnOrderedComparison.class, columns.iterator().next());
         assertEquals(Rel.EQ, only.proposition(),
                 "written as the canonical relation of the pair");
-        assertEquals("spring", only.at().key());
+        assertEquals("spring", only.at().spelled());
     }
 
     /** And the two ways the path met it are the two outcomes at that one column. */

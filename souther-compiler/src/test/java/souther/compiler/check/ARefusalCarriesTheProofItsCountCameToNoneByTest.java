@@ -34,8 +34,9 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
                 "the model this reads has to be one somebody could write");
         List<souther.compiler.ast.Hir.Def> defs =
                 compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList();
-        return UninhabitableTypes.withNoValueOfTheirOwn(defs,
-                TypeCardinality.solve(defs, RuleReadings.of(compilation, "demo"),
+        return UninhabitableTypes.withNoValueOfTheirOwn(
+                defs.stream().map(souther.compiler.ast.Hir.Def::declares).toList(),
+                CountsByComponent.of(defs, RuleReadings.of(compilation, "demo"),
                         souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
     }
 
@@ -52,7 +53,7 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
         List<souther.compiler.ast.Hir.Def> defs =
                 compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList();
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
-        return shape(TypeCardinality.solve(defs, RuleReadings.of(compilation, "demo"),
+        return shape(CountsByComponent.of(defs, RuleReadings.of(compilation, "demo"),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES).of(
                 souther.compiler.types.TypeSymbols.declared(
                         new souther.compiler.types.TypeKey(symbols.module(), name))).why());

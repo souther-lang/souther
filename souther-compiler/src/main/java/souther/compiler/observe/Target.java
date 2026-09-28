@@ -192,9 +192,11 @@ public sealed interface Target {
 
         @Override
         public java.util.Optional<SourceId> sourceIdentity() {
-            // The source the row is written in, which is not what this is about. A reason about a
-            // source is a source that was not read at all; this one was read, and naming its file
-            // here would put it among the reasons about whole files.
+            // The source the row is written in, which is not what this is about. This is about the
+            // row, whichever of the things that leave a row unread happened — the row's own
+            // evaluation, or the file it is in producing nothing at all — and naming the file here
+            // would put it among the reasons about whole files, where a reader would take it for
+            // one about every row the file holds.
             return java.util.Optional.empty();
         }
 

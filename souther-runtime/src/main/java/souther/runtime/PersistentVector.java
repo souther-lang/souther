@@ -223,6 +223,7 @@ public final class PersistentVector<E> extends AbstractList<E>
     /** This vector with {@code val} appended (Clojure {@code conj}); O(1) amortized, sharing the
      *  unchanged structure with {@code this}. */
     public PersistentVector<E> append(E val) {
+        Capacity.oneMore(cnt, "List");
         int used = cnt - tailoff();
         if (used == WIDTH) {
             return appendSpilling(val);
@@ -281,6 +282,14 @@ public final class PersistentVector<E> extends AbstractList<E>
         return ret;
     }
 
+    /** How many elements the leaf starting at {@code base} holds in a vector of {@code cnt}. The
+     *  walks over leaves advance by this and not by {@link #WIDTH}: the last leaf of a vector of the
+     *  most a collection holds ({@link Capacity#MOST_ELEMENTS}) is shorter than a leaf, and stepping
+     *  a whole {@code WIDTH} past it would carry {@code base} over the top of an {@code int}. */
+    static int leafLength(int base, int cnt) {
+        return Math.min(WIDTH, cnt - base);
+    }
+
     /** A chunked iterator: it walks each leaf array in order, so iteration (and the {@code equals}/
      *  {@code hashCode} and fold reads built on it) is O(1) per element, never O(log n). */
     @Override
@@ -316,9 +325,9 @@ public final class PersistentVector<E> extends AbstractList<E>
     @Override
     @SuppressWarnings({"unchecked", "null"})
     public void forEach(Consumer<? super E> action) {
-        for (int base = 0; base < cnt; base += WIDTH) {
+        for (int base = 0; base < cnt; base += leafLength(base, cnt)) {
             @Nullable Object[] leaf = arrayFor(base);
-            int n = Math.min(WIDTH, cnt - base);
+            int n = leafLength(base, cnt);
             for (int j = 0; j < n; j++) {
                 action.accept((E) leaf[j]);
             }
@@ -359,9 +368,9 @@ public final class PersistentVector<E> extends AbstractList<E>
     public int hashCode() {
         // The List-contract hash (AbstractList's formula), via the chunked iterator: O(n).
         int h = 1;
-        for (int base = 0; base < cnt; base += WIDTH) {
+        for (int base = 0; base < cnt; base += leafLength(base, cnt)) {
             @Nullable Object[] leaf = arrayFor(base);
-            int n = Math.min(WIDTH, cnt - base);
+            int n = leafLength(base, cnt);
             for (int j = 0; j < n; j++) {
                 Object e = leaf[j];
                 h = 31 * h + (e == null ? 0 : e.hashCode());
@@ -394,9 +403,9 @@ public final class PersistentVector<E> extends AbstractList<E>
     @Override
     public int valueHash() {
         int h = 1;
-        for (int base = 0; base < cnt; base += WIDTH) {
+        for (int base = 0; base < cnt; base += leafLength(base, cnt)) {
             @Nullable Object[] leaf = arrayFor(base);
-            int n = Math.min(WIDTH, cnt - base);
+            int n = leafLength(base, cnt);
             for (int j = 0; j < n; j++) {
                 h = 31 * h + Values.hash(leaf[j]);
             }
@@ -437,6 +446,7 @@ public final class PersistentVector<E> extends AbstractList<E>
             if (built) {
                 throw new IllegalStateException("this builder has already been built");
             }
+            Capacity.oneMore(cnt, "List");
             modCount++;
             if (tailLen == WIDTH) {
                 spillTail();

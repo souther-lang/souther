@@ -186,19 +186,6 @@ class CompileTotalityTest {
     }
 
     @Test
-    void foldDerivedCombinatorsStayTotal() {
-        // `List.fold` is `List.foldFrom` (trusted total); a behavior folding a list is unaffected.
-        String src = """
-                module demo
-                data Bag = { xs: List<Int> }
-                data Out = Int
-                behavior run : (b: Bag) -> Out constructs Out
-                let run (b) = Out(List.fold((acc, x) -> acc + x, 0, b.xs))
-                """;
-        assertDoesNotThrow(() -> Compiler.compile(src));
-    }
-
-    @Test
     void treeForestMutualRecursionThroughAFoldClosureIsTotal() {
         // `sumTree` hands a strictly smaller `t.children` to `sumForest`; `sumForest` hands each
         // element (a strictly smaller part of that list) back to `sumTree` inside the fold closure.

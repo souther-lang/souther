@@ -18,9 +18,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * {@code List.sum} / {@code List.product} over a numeric element. The element is {@code Int} or
- * {@code Decimal} — the two types the arithmetic operators are defined for — and the empty-list
- * literal takes which of the two from the position it is written in.
+ * {@code List.sum} / {@code List.product} over a numeric element. The element is {@code Int},
+ * {@code Decimal} or {@code Rational} — the types the arithmetic operators are defined for — and the
+ * empty-list literal takes which from the position it is written in.
+ *
+ * <p>The empty literal's seed is written for the two a boundary carries. A {@code Rational} has no
+ * external form, so no field asks for a list of them and the seed has no position to be read from.
  */
 class CompileNumericListFoldTest {
 
@@ -64,6 +67,41 @@ class CompileNumericListFoldTest {
                 Codecs.apply(Emitted.behavior(loader, "demo", "run").getConstructor().newInstance(), in));
         assertEquals(9L, m.get("total"));
         assertEquals(24L, m.get("prod"));
+    }
+
+    /**
+     * And a list of exact quotients folds exactly, which is what the third element type is for.
+     *
+     * <p>Run and not merely compiled: what the other two elements have, and what says the kernel behind
+     * the fold is reached and answers. A {@code Rational} has no external form, so the list is built
+     * inside the model out of numbers the boundary did carry, and the answer is narrowed on the way back
+     * out.
+     */
+    @Test
+    void sumsAndMultipliesARationalList() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                import List ( sum, product )
+
+                data In = { a: Int, b: Int }
+                data Out = { total: Decimal, prod: Decimal }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let run (i) = Out {
+                    total = Rational.toDecimal(4, HALF_UP, sum([1 / i.a, 1 / i.b])),
+                    prod = Rational.toDecimal(4, HALF_UP, product([1 / i.a, 1 / i.b]))
+                }
+                """), getClass().getClassLoader());
+
+        Object in = Codecs.decoded(loader, "demo.In", Map.of("a", 3L, "b", 2L));
+        Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out",
+                Codecs.apply(Emitted.behavior(loader, "demo", "run").getConstructor().newInstance(), in));
+        assertEquals(0, new BigDecimal("0.8333").compareTo((BigDecimal) m.get("total")),
+                "a third and a half summed exactly: " + m.get("total"));
+        assertEquals(0, new BigDecimal("0.1667").compareTo((BigDecimal) m.get("prod")),
+                "and multiplied exactly: " + m.get("prod"));
     }
 
     @Test
@@ -121,9 +159,44 @@ class CompileNumericListFoldTest {
         assertEquals(0, BigDecimal.ZERO.compareTo((BigDecimal) run(loader, List.of()).get("total")));
     }
 
+    /**
+     * An annotated binding gives the empty literal an exact element too, and the seed is the one
+     * the primitives construct.
+     *
+     * <p>A `Rational` has no literal, so there is no seed an author could have written here at all,
+     * and it reaches no field: what a computation holds is not what a boundary carries (ADR-0116).
+     * The narrowing at the end is what makes the seed observable and is the model's own word.
+     */
+    @Test
+    void anAnnotatedBindingGivesTheEmptyLiteralAnExactElement() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                import List ( sum, product )
+
+                data In = { xs: List<Decimal> }
+                data Out = { total: Int, unit: Int }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let run (i) = {
+                    let total: Rational = sum([])
+                    let unit: Rational = product([])
+                    Out {
+                        total = Rational.toInt(DOWN, total),
+                        unit = Rational.toInt(DOWN, unit)
+                    }
+                }
+                """), getClass().getClassLoader());
+
+        Map<?, ?> m = run(loader, List.of());
+        assertEquals(0L, m.get("total"));
+        assertEquals(1L, m.get("unit"));
+    }
+
     @Test
     void theEmptyLiteralWithNothingToTakeItsElementFromIsRejected() {
-        // No expected type here, so neither `0` nor `0.0m` is the answer. Picking Int would be a
+        // No expected type here, so none of the seeds is the answer. Picking Int would be a
         // numeric default rule, so the compiler asks for the annotation instead.
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
                 module demo
@@ -141,8 +214,9 @@ class CompileNumericListFoldTest {
                 }
                 """));
         assertTrue(e.getMessage().contains("sum"), e.getMessage());
-        assertTrue(e.getMessage().contains("Int") && e.getMessage().contains("Decimal"),
-                "the report names the two elements the annotation may choose between: " + e.getMessage());
+        assertTrue(e.getMessage().contains("Int") && e.getMessage().contains("Decimal")
+                        && e.getMessage().contains("Rational"),
+                "the report names every element the annotation may choose between: " + e.getMessage());
     }
 
     @Test
@@ -223,7 +297,8 @@ class CompileNumericListFoldTest {
 
                 let run (i) = Out { total = sum(i.xs) }
                 """));
-        assertTrue(e.getMessage().contains("`sum` needs a list of Int or Decimal"), e.getMessage());
+        assertTrue(e.getMessage().contains("`sum` needs a list of Int, Decimal or Rational"),
+                e.getMessage());
         assertTrue(e.getMessage().contains("Hours"), e.getMessage());
     }
 
@@ -265,7 +340,8 @@ class CompileNumericListFoldTest {
                 let run (i) = Out { total = product(i.xs) }
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(module));
-        assertTrue(e.getMessage().contains("`product` needs a list of Int or Decimal"), e.getMessage());
+        assertTrue(e.getMessage().contains("`product` needs a list of Int, Decimal or Rational"),
+                e.getMessage());
         assertTrue(e.getMessage().contains("String"), e.getMessage());
         assertProductIsNotCalledSum(e, module);
     }

@@ -200,17 +200,17 @@ class WhatABodyDoesDoesNotMoveWithTheNumbersMintedForItsNamesTest {
         return switch (e) {
             case Core.Read it -> new Core.Read(it.name(), moved(it.binding(), subst), it.type(),
                     it.pos());
-            case Core.LetIn it -> new Core.LetIn(moved(it.binder(), subst), it.value(), it.body(),
-                    it.type(), it.pos());
+            case Core.LetIn it -> new Core.LetIn(moved(it.binder(), subst), it.bindType(), it.value(),
+                    it.body(), it.type(), it.pos());
             case Core.Block it -> new Core.Block(
                     it.params().stream().map(each -> moved(each, subst)).toList(),
-                    it.body(), it.type(), it.pos());
+                    it.paramTypes(), it.body(), it.pos());
             case Core.IfConstructed it -> new Core.IfConstructed(it.construct(),
                     moved(it.binder(), subst), it.then(), it.els(), it.place(), it.type(),
                     it.pos());
             case Core.Match it -> new Core.Match(it.scrutinee(),
                     it.cases().stream()
-                            .map(one -> new Core.Case(one.pattern(), moved(one.binder(), subst),
+                            .map(one -> new Core.Case(one.pattern(), movedBinding(one.binding(), subst),
                                     one.body(), one.pos()))
                             .toList(),
                     it.place(), it.type(), it.pos());
@@ -221,6 +221,17 @@ class WhatABodyDoesDoesNotMoveWithTheNumbersMintedForItsNamesTest {
     private static Core.Binder moved(Core.Binder binder, Map<BindingId, BindingId> subst) {
         return binder == null ? null
                 : new Core.Binder(binder.name(), moved(binder.binding(), subst));
+    }
+
+    private static Core.ArmBinding movedBinding(Core.ArmBinding binding,
+                                                Map<BindingId, BindingId> subst) {
+        return switch (binding) {
+            case Core.ArmBinding.Unbound unbound -> unbound;
+            case Core.ArmBinding.Selected selected ->
+                    new Core.ArmBinding.Selected(moved(selected.binder(), subst), selected.type());
+            case Core.ArmBinding.Payload payload ->
+                    new Core.ArmBinding.Payload(moved(payload.binder(), subst), payload.carrier());
+        };
     }
 
     private static BindingId moved(BindingId id, Map<BindingId, BindingId> subst) {

@@ -2,12 +2,17 @@ package souther.compiler.meta;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.BehaviorImplementation;
+import souther.compiler.check.Preserved;
 import souther.compiler.check.Scoping;
+import souther.compiler.copied.CopyRecord;
+import souther.compiler.copied.CopyTarget;
 import souther.compiler.cst.SourceLayout;
+import souther.compiler.jvm.LinkageRecord;
+import souther.compiler.jvm.LinkageTarget;
+import souther.compiler.types.ValueName;
 import java.util.List;
 
 import java.util.Map;
-import java.util.Set;
 
 /**
  * A module this compiler restored from an artifact and then checked: everything an importer needs to
@@ -50,6 +55,16 @@ public sealed interface ReadableModule permits ModuleReadback.AsRead {
      */
     Map<String, Ast.Def> declarations();
 
+    /**
+     * The names of those declarations, in the order the module writes them.
+     *
+     * <p>Beside {@link #declarations} because they are two answers. What stands under a name is a
+     * lookup and is walked by the names; the order the module writes them in is what a reader
+     * rebuilding it puts them back in, and reading that off the lookup gave two readings of one
+     * artifact the same declarations in two orders.
+     */
+    List<String> asDeclared();
+
     /** Where each behavior's body comes from, as the module that declared it decided.
      *
      * <p>Carried rather than derived. A module here published no {@code let}, so a reader working it
@@ -58,30 +73,56 @@ public sealed interface ReadableModule permits ModuleReadback.AsRead {
      * (issue #936). */
     Map<String, BehaviorImplementation> behaviorImplementations();
 
-    /** The behaviors of it Java supplies, read off the states above. */
-    default Set<String> injectedBehaviors() {
-        Set<String> injected = new java.util.LinkedHashSet<>();
-        behaviorImplementations().forEach((name, implementation) -> {
-            if (implementation.isInjectionTarget()) {
-                injected.add(name);
-            }
-        });
-        return injected;
-    }
+    /**
+     * What constructing each behavior requires injected, in the order its constructor takes them,
+     * as the module that declared it worked out. Every behavior but an injection target, which is not
+     * constructed and is not here.
+     *
+     * <p>Carried rather than derived, for the reason {@link #behaviorImplementations} is: a
+     * composition's comes from its stages, and its stages are not published.
+     */
+    Map<String, List<ValueName.Behavior>> behaviorRequirements();
 
-    /** The behaviors of it Souther is to implement and nobody has. */
-    default Set<String> unwrittenBehaviors() {
-        Set<String> unwritten = new java.util.LinkedHashSet<>();
-        behaviorImplementations().forEach((name, implementation) -> {
-            if (implementation == BehaviorImplementation.UNIMPLEMENTED) {
-                unwritten.add(name);
-            }
-        });
-        return unwritten;
-    }
+    /**
+     * What each of its declarations offers another module's classes, as its classes offered it
+     * where they were built.
+     *
+     * <p>Not worked out again from what it declares: what a declaration offers can rest on the
+     * declarations of the modules it was built against, and those may not be the ones a reader has.
+     * A class built against this module is held to what these classes offer.
+     */
+    Map<LinkageTarget, LinkageRecord> provides();
+
+    /**
+     * What its classes assumed about each declaration of another module they link against, as they
+     * were compiled.
+     *
+     * <p>Not a declaration of this module's: what it was built against. A compilation reading it
+     * holds each of those declarations, as it has them, to what is recorded here.
+     */
+    Map<LinkageTarget, LinkageRecord> requires();
+
+    /**
+     * What each of its declarations offers another module to copy into its classes, as its classes
+     * offered it where they were built — not worked out again, for the reason {@link #provides} is
+     * not.
+     */
+    Map<CopyTarget, CopyRecord> providedCopies();
+
+    /**
+     * What its classes copied of each declaration of another module, as it was when they copied it.
+     * A compilation reading it holds each of those declarations, as it has them, to what is recorded
+     * here.
+     */
+    Map<CopyTarget, CopyRecord> requiredCopies();
 
     /** What its library import lines brought in, which the module itself no longer says. */
     List<Scoping.Claim> libraryClaims();
+
+    /** What each value the module declares was settled as, by the module's own check. The one
+     *  answer a reader of one of its values has: the bodies it also carries are for the analyses
+     *  and are not asked what a value comes to. */
+    Preserved.SettledValues valueAnswers();
 
     /**
      * How the text this was read back from is laid out.

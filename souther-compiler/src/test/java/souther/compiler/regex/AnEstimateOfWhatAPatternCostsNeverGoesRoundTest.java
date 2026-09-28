@@ -22,7 +22,7 @@ class AnEstimateOfWhatAPatternCostsNeverGoesRoundTest {
 
     private static long states(String regex) {
         PatternRead said = PatternParser.read(regex);
-        return PatternPlan.of(assertInstanceOf(PatternRead.Read.class, said, regex).syntax())
+        return PatternPlan.of(assertInstanceOf(PatternRead.Read.class, said, regex).meaning())
                 .states();
     }
 

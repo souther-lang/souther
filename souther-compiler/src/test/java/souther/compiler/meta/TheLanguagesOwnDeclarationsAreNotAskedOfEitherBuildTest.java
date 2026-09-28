@@ -90,7 +90,7 @@ class TheLanguagesOwnDeclarationsAreNotAskedOfEitherBuildTest {
     private static final String UNIONING = """
             module probe.uni
 
-            import Int ( divide )
+            import Int ( truncatingDivide )
 
             data Amount = Int
                 invariant ok(value)
@@ -99,7 +99,7 @@ class TheLanguagesOwnDeclarationsAreNotAskedOfEitherBuildTest {
                 constructs Amount
 
             let ok (v: Int): Bool =
-                match divide(v, 2) with
+                match truncatingDivide(v, 2) with
                     | Int as q -> q >= 0
                     | DivisionByZero -> false
 

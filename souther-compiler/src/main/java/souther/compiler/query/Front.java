@@ -1,11 +1,17 @@
 package souther.compiler.query;
 
 import souther.compiler.cst.SourceLayout;
+import souther.compiler.copied.CopyRecord;
+import souther.compiler.copied.CopyTarget;
 import souther.compiler.Reserved;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.ValueName;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -18,10 +24,13 @@ import souther.compiler.check.Exposing;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.Scoping;
 import souther.compiler.frontend.CstFrontend;
+import souther.compiler.jvm.LinkageRecord;
+import souther.compiler.jvm.LinkageTarget;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.meta.PublishedClasses;
 import souther.compiler.meta.ModuleReadback;
+import souther.compiler.check.Preserved;
 import souther.compiler.meta.ReadableModule;
 import souther.compiler.meta.Readback;
 import souther.compiler.meta.ReadbackReasons;
@@ -202,7 +211,7 @@ public final class Front {
          */
         static final souther.compiler.partition.AdequacyPolicy STANDARD =
                 new souther.compiler.partition.AdequacyPolicy(
-                        new souther.compiler.partition.AdequacyPolicy.OfTheMeasures(20_000,
+                        new souther.compiler.partition.AdequacyPolicy.OfTheMeasures(20_000, 4096,
                                 PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS),
                         new souther.compiler.partition.AdequacyPolicy.OfTheGeneration(200, 4096));
     }
@@ -484,13 +493,52 @@ public final class Front {
                 return read.declarations();
             }
 
+            /** The names of those, in the order the module writes them. */
+            public List<String> asDeclared() {
+                return read.asDeclared();
+            }
+
             /** Where each of its behaviors gets its body, as the module that declared it decided. */
             public Map<String, BehaviorImplementation> behaviorImplementations() {
                 return read.behaviorImplementations();
             }
 
+            /** What constructing each of its behaviors requires injected, as the module that
+             *  declared it worked out. */
+            public Map<String, List<ValueName.Behavior>> behaviorRequirements() {
+                return read.behaviorRequirements();
+            }
+
+            /** What each of its declarations offers another module's classes, as its classes
+             *  offered it where they were built. */
+            public Map<LinkageTarget, LinkageRecord> provides() {
+                return read.provides();
+            }
+
+            /** What its classes assumed about each declaration of another module they link
+             *  against. */
+            public Map<LinkageTarget, LinkageRecord> requires() {
+                return read.requires();
+            }
+
+            /** What each of its declarations offers another module to copy, as its classes offered
+             *  it where they were built. */
+            public Map<CopyTarget, CopyRecord> providedCopies() {
+                return read.providedCopies();
+            }
+
+            /** What its classes copied of each declaration of another module. */
+            public Map<CopyTarget, CopyRecord> requiredCopies() {
+                return read.requiredCopies();
+            }
+
             public List<Scoping.Claim> libraryClaims() {
                 return read.libraryClaims();
+            }
+
+            /** What each value it declares was settled as, as the module's own check answered. */
+            public Preserved.SettledValues valueAnswers() {
+                return read.valueAnswers();
             }
         }
 
@@ -580,8 +628,8 @@ public final class Front {
                 }
                 ReadableModule module = ((Readback.Ready<ReadableModule>) readback).value();
                 read.put(name, module);
-                List<String> reaches = List.copyOf(reaches(module.module()).keySet());
-                edges.put(name, reaches);
+                SequencedSet<String> reaches = reaches(module);
+                edges.put(name, List.copyOf(reaches));
                 pending.addAll(reaches);
             }
             Map<String, List<SourcePos>> reachedFrom = reachedFrom(named, edges);
@@ -649,7 +697,7 @@ public final class Front {
     /**
      * The modules a module imports, named once each, in the order it names them.
      *
-     * <p>Its own question for the same reason {@link Exposes} is: what reads this wants the shape of
+     * <p>Its own question for the same reason {@link PublishedNames} is: what reads this wants the shape of
      * the workspace around a module, and that shape survives almost every edit to the module itself.
      * Reading the module here would put every body on the far side of an answer about its header.
      */
@@ -847,14 +895,15 @@ public final class Front {
     }
 
     /**
-     * The type names a module exposes.
+     * The names a module publishes: what a reader outside it may name
+     * ({@link Ast.Module#published}).
      *
      * <p>Its own question, not a read of the module. Everything that resolves a name against another
-     * module asks this, and a module changes far more often than its {@code exposing} line does —
-     * reading the whole module here would mean a new behavior in one module rebuilding every module
-     * that imports a type from it.
+     * module asks this, and what a module publishes changes far less often than the module does — an
+     * edit to a body leaves it as it was, so a module that imports from this one is not read again
+     * for it.
      */
-    public record Exposes(String name) implements Key<Set<String>> {
+    public record PublishedNames(String name) implements Key<Set<String>> {
         @Override
         public String module() {
             return name;
@@ -863,16 +912,15 @@ public final class Front {
         @Override
         public Answer<Set<String>> compute(Db db) {
             Ast.Module m = db.ask(new Available(name)).value();
-            return Answer.of(m == null ? Set.of()
-                    : souther.compiler.check.Registry.baseNames(m.exposing()));
+            return Answer.of(m == null ? Set.of() : m.published());
         }
     }
 
     /**
      * The behavior names a module declares.
      *
-     * <p>Its own question for the reason {@link Exposes} is: what reads this wants one line of a
-     * module's header, and that survives almost every edit to the module itself.
+     * <p>Its own question for the reason {@link PublishedNames} is: what reads this wants a part of
+     * a module that survives almost every edit to the module itself.
      */
     public record Behaviors(String name) implements Key<Set<String>> {
         @Override
@@ -889,6 +937,92 @@ public final class Front {
             }
             return m == null ? Answer.absent() : Answer.of(Scoping.behaviorNames(m));
         }
+    }
+
+    /**
+     * The types a module declares, in the order it writes them.
+     *
+     * <p>Its own question for the reason {@link PublishedNames} and {@link Behaviors} are theirs: what
+     * reads this wants which names a module introduces, and that survives every edit to what the
+     * declarations say and to the bodies beside them. A reader taking the declarations instead
+     * would be worked out again by an edit to any rule in the module.
+     *
+     * <p>A sequence, because the order is read. Which declaration a group of types with no value is
+     * reported at is the first of them the module writes, so an answer that only said which names
+     * there are would leave that to be settled somewhere the store does not watch.
+     *
+     * <p>Identities and not spellings, made where each declaration is in hand and says which one it
+     * is. What a declaration is called says nothing about which module declares it, and a reader
+     * pairing a name with the module it happens to be asking about would answer for a declaration
+     * here whatever the name came from.
+     */
+    public record DeclaredTypes(String name) implements Key<List<TypeSymbol.AtModule>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<List<TypeSymbol.AtModule>> compute(Db db) {
+            Ast.Module m = db.ask(new Exposed(name)).value();
+            if (m == null) {
+                FromPath.OnThePath fromPath = onThePath(db, name);
+                m = fromPath == null ? null : fromPath.module();
+            }
+            if (m == null) {
+                return Answer.absent();
+            }
+            List<TypeSymbol.AtModule> declared = new ArrayList<>();
+            for (Ast.Def def : m.defs()) {
+                declared.add(TypeSymbols.declared(def.declaredKey()));
+            }
+            return Answer.of(List.copyOf(declared));
+        }
+    }
+
+    /**
+     * Whether a module of this compilation writes a declaration of {@code named}.
+     *
+     * <p>Read off what the source was parsed as, which is the rung the question is settled at.
+     * Whether there is such a declaration and whether this compiler could make anything of the
+     * module holding it are two questions, and every answer above the parse is the second one: a
+     * namespace this compilation may not write, an {@code exposing} line that could not be read,
+     * imports that form a ring, a module that does not settle. Each of those is an answer going
+     * absent, and read for the first question each of them would say the declarations that module
+     * writes are declarations nobody wrote — which is the widening the three answers exist to keep
+     * apart, arriving through whichever judgement failed.
+     *
+     * <p>The parse is where it stops. A source that did not parse has no declarations this can
+     * enumerate, and there this does answer that there is none — not a judgement about a module,
+     * but the absence of anything to read it out of.
+     *
+     * <p>A module off the path is answered for out of what was read back from it, that being what a
+     * compilation has of one instead of a source.
+     *
+     * <p>Only what a module of this compilation writes. What the language declares belongs to no
+     * module here and is asked for where a reader has the library, which is before either boundary
+     * has a question about a name being written at all.
+     */
+    public static boolean somethingDeclares(Db db, TypeKey named) {
+        Layout.Of layout = db.ask(new Layout()).value();
+        SourceId id = layout == null ? null : layout.idOfModule().get(named.module());
+        if (id != null) {
+            Answer<CstFrontend.Parsed> parsed = db.ask(new Parsed(id));
+            return parsed.present() && writesADeclarationOf(parsed.value().module(), named);
+        }
+        FromPath.OnThePath fromPath = onThePath(db, named.module());
+        return fromPath != null && writesADeclarationOf(fromPath.module(), named);
+    }
+
+    /** Whether {@code module} writes a declaration of {@code named}, by the identity a declaration
+     *  gives for itself — the same one {@link DeclaredTypes} answers with. */
+    private static boolean writesADeclarationOf(Ast.Module module, TypeKey named) {
+        for (Ast.Def def : module.defs()) {
+            if (TypeSymbols.declared(def.declaredKey()).key().equals(named)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -1218,7 +1352,10 @@ public final class Front {
         }
         for (Ast.BehaviorDef b : m.behaviors()) {
             List<Ast.Var> named = switch (b) {
-                case Ast.PipeBehavior pipe -> pipe.stages();
+                case Ast.PipeBehavior pipe -> switch (pipe.composition()) {
+                    case Ast.Composition.Stages stages -> stages.stages();
+                    case Ast.Composition.Elsewhere _ -> List.of();
+                };
                 case Ast.SpecBehavior spec -> spec.dependsOn();
             };
             for (Ast.Var ref : named) {
@@ -1233,6 +1370,43 @@ public final class Front {
             }
         }
         names.remove(m.name());
+        return names;
+    }
+
+    /**
+     * Every module a module read off the path reaches: what its declarations name
+     * ({@link #reaches(Ast.Module)}), every module a dependency one of its behaviors is constructed
+     * with is declared in, and every module a declaration its classes link against is declared in.
+     *
+     * <p>The last two are not in the text, and are carried beside it. A composition's stages are not
+     * published, so a dependency a stage brings in may be declared in a module nothing the module
+     * carries mentions — and so may anything its bodies link against, since the bodies are not
+     * published either and the import that named it goes with them. A reader building the
+     * composition is handed that dependency and types it from its module; a reader holding the module
+     * to what its classes were built against asks each of those modules what it offers; a reader
+     * comparing two builds follows it there. One answer for both sets of published classes, for the
+     * reason the one above is one.
+     */
+    public static SequencedSet<String> reaches(ReadableModule read) {
+        String own = read.module().name();
+        SequencedSet<String> names = new LinkedHashSet<>(reaches(read.module()).keySet());
+        List<String> named = new ArrayList<>();
+        for (List<ValueName.Behavior> required : read.behaviorRequirements().values()) {
+            for (ValueName.Behavior each : required) {
+                named.add(each.module());
+            }
+        }
+        for (LinkageTarget linked : read.requires().keySet()) {
+            named.add(linked.module());
+        }
+        for (CopyTarget copied : read.requiredCopies().keySet()) {
+            named.add(copied.module());
+        }
+        for (String each : named) {
+            if (!each.equals(own)) {
+                names.add(each);
+            }
+        }
         return names;
     }
 

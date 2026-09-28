@@ -73,9 +73,8 @@ class ACounterfactualBorrowsTheMachinesTheReadingMadeTest {
         compilation.answerEverything();
         FieldDomains reading = FieldDomains.of(
                 TypeSymbols.declared(new TypeKey("demo", "Held")),
-                RuleReadings.of(compilation, compilation.modules().get(0)),
-                ReadAs.THE_COMPILATION_DOES,
-                compilation.db().readings());
+                RuleReadingContext.of(RuleReadings.of(compilation, compilation.modules().get(0)),
+                        ReadAs.THE_COMPILATION_DOES, compilation.db().readings()));
 
         long before = StringMachineAnswers.machinesMade();
         List<TypeSymbol.AtModule> holding =
@@ -110,9 +109,9 @@ class ACounterfactualBorrowsTheMachinesTheReadingMadeTest {
 
         long beforeReading = StringMachineAnswers.machinesMade();
         FieldDomains reading = FieldDomains.of(TypeSymbols.declared(held),
-                RuleReadings.of(compilation, compilation.modules().get(0)),
-                ReadAs.THE_COMPILATION_DOES,
-                _ -> StringMachineAnswers.borrowing(part, KnownExtents.NONE));
+                RuleReadingContext.of(RuleReadings.of(compilation, compilation.modules().get(0)),
+                        ReadAs.THE_COMPILATION_DOES,
+                        _ -> StringMachineAnswers.borrowing(part, KnownExtents.NONE)));
         assertTrue(StringMachineAnswers.machinesMade() > beforeReading,
                 "the reading builds what the lender had nothing to say about");
 
@@ -138,8 +137,9 @@ class ACounterfactualBorrowsTheMachinesTheReadingMadeTest {
 
         long before = StringMachineAnswers.machinesMade();
         FieldDomains.of(TypeSymbols.declared(new TypeKey("demo", "Held")),
-                RuleReadings.of(compilation, compilation.modules().get(0)),
-                ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(
+                        RuleReadings.of(compilation, compilation.modules().get(0)),
+                        ReadAs.THE_COMPILATION_DOES));
 
         assertTrue(StringMachineAnswers.machinesMade() > before,
                 "a reading with nothing to borrow from builds the machines its rules come to");

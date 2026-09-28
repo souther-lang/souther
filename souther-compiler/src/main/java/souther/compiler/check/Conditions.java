@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
+import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
@@ -92,9 +93,9 @@ final class Conditions {
             // rather than a relation, and it is read where places are seeded (#982). Written as arms
             // of this switch and not left to a default: what a way of deciding settles is a question
             // somebody has to answer, and "nothing" is an answer rather than the absence of one.
-            case Choice.Decides.ACase ignored -> { }
-            case Choice.Decides.ItWasBuilt ignored -> { }
-            case Choice.Decides.ItDeparted ignored -> { }
+            case Choice.Decides.ACase _ -> { }
+            case Choice.Decides.ItWasBuilt _ -> { }
+            case Choice.Decides.ItDeparted _ -> { }
         }
         return out;
     }
@@ -220,15 +221,15 @@ final class Conditions {
      * that each of them had to recognise again before it could read what this already knew.
      */
     static ComparisonReadings comparisonsStatedBy(Terms terms, Core cond, Denotations at) {
-        if (!(cond instanceof Core.Binary b)) {
+        if (!(Core.withoutStanding(cond) instanceof Core.Binary b)) {
             return ComparisonReadings.none();
         }
-        ComparisonClaim placed = Comparison.of(b).map(Comparison::claim).orElse(null);
+        Comparison placed = Comparison.of(b).orElse(null);
         if (placed == null) {
             return ComparisonReadings.none();
         }
         List<StatedComparison> readings = new ArrayList<>();
-        readings.add(new StatedComparison(placed, b.left(), b.right()));
+        readings.add(placed.stated());
         for (StatedComparison composed = orderStatedBy(terms, readings.getLast(), at);
                 composed != null;
                 composed = orderStatedBy(terms, readings.getLast(), at)) {
@@ -268,10 +269,11 @@ final class Conditions {
      */
     private static StatedComparison orderStatedBy(Terms terms, StatedComparison stated,
                                                   Denotations at) {
-        boolean callFirst = stated.left() instanceof Core.PreservedCall;
+        boolean callFirst = Core.withoutStanding(stated.left()) instanceof Core.PreservedCall;
         Core side = callFirst ? stated.left() : stated.right();
         Core against = callFirst ? stated.right() : stated.left();
-        if (!(side instanceof Core.PreservedCall call) || call.args().size() != 2) {
+        if (!(Core.withoutStanding(side) instanceof Core.PreservedCall call)
+                || call.args().size() != 2) {
             return null;
         }
         BoundOperationFact.StatesTheOrderOfItsArguments positive =
@@ -288,7 +290,10 @@ final class Conditions {
         return stands == null ? null
                 : new StatedComparison(ComparisonClaim.stating(stands),
                         CallArguments.of(positive.greater(), call),
-                        CallArguments.of(positive.lesser(), call));
+                        CallArguments.of(positive.lesser(), call),
+                        // Two arguments of the operation that orders them, each standing as what
+                        // it was passed as, and the order is the one over that type.
+                        Core.BinaryReading.AS_THEY_STAND);
     }
 
     /**
@@ -323,7 +328,17 @@ final class Conditions {
         java.util.Map<Object, Granularity> spacing =
                 java.util.Map.of(sign, terms.granularityOf(call.type()));
         LinearForm<Object> answered = LinearForm.atom(sign);
-        NumericDomain<Object> known = NumericDomain.<Object>top()
+        // One position, so the order is total on the domain by there being nothing to put in an
+        // order. Two of them reaching it would be a second position in a domain written to have
+        // one, and it says so rather than choosing between them.
+        CanonicalOrder<Object> order = (one, other) -> {
+            if (one == other) {
+                return 0;
+            }
+            throw new IllegalStateException("this domain stands for one number and was asked to"
+                    + " walk two: " + one + " and " + other);
+        };
+        NumericDomain<Object> known = NumericDomain.top(order)
                 .assuming(sign, ResultRange.of(DefaultBoundOperationFacts.get()
                         .boundsOnTheResult(call.operation()), ConstantArguments.none()), spacing)
                 .assume(answered.minus(LinearForm.constant(read.constant())), rel, spacing);
@@ -349,7 +364,7 @@ final class Conditions {
      * counted them would be asking a third time.
      */
     static Core asSizeComparison(Core e) {
-        if (e instanceof Core.PreservedCall call
+        if (Core.withoutStanding(e) instanceof Core.PreservedCall call
                 && DischargeRules.sizeMeantBy(call.operation())
                         instanceof BoundOperationFact.MeansTheSameAsASizeOfNought means) {
             // No source wrote this call. It is the size the written one means, composed so that the
@@ -363,9 +378,12 @@ final class Conditions {
                             ReferenceOrigin.composedOutOf(call.reference(), 0,
                                     ReferenceDerivationCause.SizeMeaningOfReference::new),
                             application, call.place().lineage()),
-                    Type.INT, call.pos());
+                    // A size is settled by nothing but what it is applied to, and no checker saw
+                    // this application to settle anything about it.
+                    Core.KernelFact.None.INSTANCE, Type.INT, call.pos());
             return new Core.Binary(BinOp.EQ, size, new Core.Int(0, Type.INT, call.pos()),
-                    ConstructOccurrence.unwritten(), Type.BOOL, call.pos());
+                    Core.BinaryReading.AS_THEY_STAND, ConstructOccurrence.unwritten(), Type.BOOL,
+                    call.pos());
         }
         return e;
     }
@@ -389,25 +407,23 @@ final class Conditions {
      * leave a clause written the other unsettled.
      */
     static Polar polar(StatedComparison stated, boolean positive) {
-        Polar written =
-                stated.claim().canonical(stated.left(), stated.right()).expressedAs(AS_POLAR);
-        return positive ? written : AS_POLAR.denied(written);
+        AsPolar as = new AsPolar(stated.reading());
+        Polar written = stated.claim().canonical(stated.left(), stated.right()).expressedAs(as);
+        return positive ? written : as.denied(written);
     }
-
-    /** One of them, because it holds nothing: what a canonical comparison is written as is the same
-     *  answer wherever it is asked. */
-    private static final AsPolar AS_POLAR = new AsPolar();
 
     /**
      * A canonical comparison, written as a node with what is asserted of it held beside it.
      *
      * <p>The node is this reader's own spelling and stands nowhere. What a comparison is filed under
-     * is what it places and the terms of its two sides ({@link Terms}), so where it came from, what
-     * it answers and where it stands decide nothing here — which is why they are written inert
-     * rather than taken from a comparison the source wrote. A statement is a claim and two sides,
-     * and there is no occurrence in it to inherit.
+     * is what it places, what it reads its sides as, and the terms of its two sides ({@link Terms}),
+     * so where it came from, what it answers and where it stands decide nothing here — which is why
+     * they are written inert rather than taken from a comparison the source wrote. A statement is a
+     * claim, a reading and two sides, and there is no occurrence in it to inherit. The reading reads
+     * both sides alike, so turning the comparison round to its canonical order keeps it.
      */
-    private record AsPolar() implements CanonicalComparison.Expression<Core, Polar> {
+    private record AsPolar(Core.BinaryReading reading)
+            implements CanonicalComparison.Expression<Core, Polar> {
 
         @Override
         public Polar theSameValue(Core left, Core right) {
@@ -423,9 +439,9 @@ final class Conditions {
          *  and sides decide nothing any reader of this asks, so they are filled with what says so:
          *  unwritten, so no coverage site is named by it, the type a comparison answers, and a
          *  position taken from a side because the constructor takes one. */
-        private static Core.Binary canonical(BinOp op, Core left, Core right) {
-            return new Core.Binary(op, left, right, ConstructOccurrence.unwritten(), Type.BOOL,
-                    left.pos());
+        private Core.Binary canonical(BinOp op, Core left, Core right) {
+            return new Core.Binary(op, left, right, reading, ConstructOccurrence.unwritten(),
+                    Type.BOOL, left.pos());
         }
 
         /** Carried beside the node, which is what a polarity is for: a denial written as a node

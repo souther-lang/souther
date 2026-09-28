@@ -53,7 +53,7 @@ class ARuleNothingWasReadAboutIsNotARuleNoRowTakesTest {
         DecisionEvidence unread = new DecisionEvidence(read.read(),
                 new Measurement.FailedToMeasure<>(
                         DecisionEvidence.Unreadable.NO_ROW_CAME_BACK,
-                        WeakeningSet.of(new Weakening.BodiesNotElaborated("example.decide"))));
+                        WeakeningSet.of(new Weakening.BodyNotInEvaluation("decides"))));
 
         assertEquals(List.of(), unread.notTakenByRows(),
                 () -> "no rule is said to be one no row takes: " + unread.notTakenByRows());
@@ -79,7 +79,7 @@ class ARuleNothingWasReadAboutIsNotARuleNoRowTakesTest {
 
         DecisionReading.Ruled ruled = partly.read().found().get(0);
         Adequacy.Finding finding = Adequacy.Finding.by(
-                new FindingSubject.OfABehavior("decides"), partly,
+                new FindingSubject.OfABehavior("decides"), partly.at(ruled),
                 new About.ARuleNoRowTakes("decides", ruled));
 
         assertEquals(Adequacy.Finding.Disposition.UNDECIDED,

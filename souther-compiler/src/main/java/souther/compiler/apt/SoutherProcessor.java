@@ -1,16 +1,12 @@
 package souther.compiler.apt;
 
-import souther.compiler.source.SourceId;
-
+import souther.compiler.CompilationSources;
+import souther.compiler.CompilationSources.SourceFile;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.DiagnosticRenderer;
 import souther.compiler.diag.HumanRenderer;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
-import souther.compiler.cst.SourceLayout;
-import souther.compiler.diag.SourceContext;
-import souther.compiler.diag.SourceContextResolver;
-import souther.compiler.diag.SourceNames;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.Compiler;
 import souther.compiler.query.Compilation;
@@ -79,30 +75,24 @@ public final class SoutherProcessor extends AbstractProcessor {
             return false;   // not configured: no-op
         }
         done = true;
-        List<Source> sources = List.of();
+        CompilationSources sources = CompilationSources.files(List.of());
         try {
             sources = readSources(Path.of(configured));
-            if (sources.isEmpty()) {
+            if (sources.texts().isEmpty()) {
                 return false;
             }
-            List<String> texts = sources.stream().map(Source::text).toList();
             // A module these sources import but do not contain is looked for on the compile
             // classpath — which is what depending on another project's jar already puts there, so
             // there is nothing to configure.
             ModulePath path = compileClassPath();
-            // One source with no `module` header is a self-contained module and can import nothing;
-            // one that names itself is a module set of one, and may import a module off the path.
-            boolean selfContained =
-                    texts.size() == 1 && Compiler.moduleNameFromHeader(texts.get(0)) == null;
-            Compiler.Compiled compiled = selfContained
-                    ? Compiler.compileWithWarnings(texts.get(0))
-                    : Compiler.compileModulesWithWarnings(texts, path);
+            List<Located> warnings = new ArrayList<>();
+            Compilation compilation = Compiler.compiled(sources, path, warnings);
             // A warning is the whole of what the checker has to say about an unproven construction,
             // so a build that never reports one lets them accumulate while staying green.
-            for (String reported : render(compiled.locatedWarnings(), sources)) {
+            for (String reported : render(warnings, sources)) {
                 processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING, reported);
             }
-            Map<String, ClassFileImage> classes = compiled.classes();
+            Map<String, ClassFileImage> classes = compilation.classes();
             Filer filer = processingEnv.getFiler();
             for (Map.Entry<String, ClassFileImage> entry : classes.entrySet()) {
                 JavaFileObject file = filer.createClassFile(entry.getKey());
@@ -122,11 +112,11 @@ public final class SoutherProcessor extends AbstractProcessor {
 
     /**
      * The compile error as the CLI would print it: an Elm-style snippet in the chosen locale, with
-     * no color since this goes to a build log. The snippet comes from the source the compiler names
-     * — the only one, or the module it was working on when a module set is linked. An error that
-     * carries several diagnostics — every failing {@code example} row — is reported once per row.
+     * no color since this goes to a build log. The snippet comes from the source the diagnostic
+     * names. An error that carries several diagnostics — every failing {@code example} row — is
+     * reported once per row.
      */
-    private List<String> render(CompileException e, List<Source> sources) {
+    private List<String> render(CompileException e, CompilationSources sources) {
         if (e.diagnostic() == null) {
             return List.of("souther: " + e.getMessage());   // not yet structured
         }
@@ -134,9 +124,9 @@ public final class SoutherProcessor extends AbstractProcessor {
     }
 
     /** The same rendering for a warning, which arrives already carrying the source it belongs to. */
-    private List<String> render(List<Located> located, List<Source> sources) {
+    private List<String> render(List<Located> located, CompilationSources sources) {
         return DiagnosticRenderer.renderAll(
-                located, sourcesOf(sources), new HumanRenderer(false), locale());
+                located, sources.contexts(), new HumanRenderer(false), locale());
     }
 
     /**
@@ -151,33 +141,6 @@ public final class SoutherProcessor extends AbstractProcessor {
         return Messages.resolveLocale(processingEnv.getOptions().get("souther.lang"));
     }
 
-    /** What to quote for each source a diagnostic points into, under names no two of these files
-     *  share. The text is already in hand, so this memoizes only to keep one answer per id. */
-    private static SourceContextResolver sourcesOf(List<Source> sources) {
-        List<String> names = SourceNames.of(
-                sources.stream().map(source -> source.path().toString()).toList());
-        return SourceContextResolver.memoized(id -> {
-            int at = indexOf(sources, id);
-            return at < 0 ? null
-                    : new SourceContext(names.get(at), sources.get(at).text(),
-                            SourceLayout.of(sources.get(at).text(), id));
-        });
-    }
-
-    /** Which of the sources handed over an id names, or -1 when it names none of them. One file
-     *  handed over is the answer however a diagnostic is tagged, including one this compile could
-     *  pin on no source. */
-    private static int indexOf(List<Source> sources, SourceId sourceId) {
-        if (sources.size() == 1) {
-            return 0;
-        }
-        for (int i = 0; i < sources.size(); i++) {
-            if (Compilation.idOfSourceIndex(i).equals(sourceId)) {
-                return i;
-            }
-        }
-        return -1;
-    }
 
     /**
      * The classes of the projects this compilation depends on, read through the {@link Filer}: javac
@@ -201,20 +164,18 @@ public final class SoutherProcessor extends AbstractProcessor {
     }
 
     /** Reads a single {@code .sou} file, or every {@code .sou} under a directory (path-sorted). */
-    private static List<Source> readSources(Path path) throws IOException {
+    private static CompilationSources readSources(Path path) throws IOException {
         if (Files.isDirectory(path)) {
             try (Stream<Path> walk = Files.walk(path)) {
                 List<Path> files = walk.filter(p -> p.toString().endsWith(".sou")).sorted().toList();
-                List<Source> sources = new ArrayList<>();
+                List<SourceFile> sources = new ArrayList<>();
                 for (Path file : files) {
-                    sources.add(new Source(file, Files.readString(file)));
+                    sources.add(new SourceFile(file.toString(), Files.readString(file)));
                 }
-                return sources;
+                return CompilationSources.files(sources);
             }
         }
-        return List.of(new Source(path, Files.readString(path)));
+        return CompilationSources.files(
+                List.of(new SourceFile(path.toString(), Files.readString(path))));
     }
-
-    /** A {@code .sou} file and its text. The path is kept so a diagnostic can quote the line. */
-    private record Source(Path path, String text) {}
 }

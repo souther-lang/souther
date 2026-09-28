@@ -184,8 +184,8 @@ class ACompilationThatFailedStillReportsWhatItsRowsCoverTest {
         assertEquals(1, ran.code());
         JsonNode gaps = JSON.readTree(ran.out()).get("modules").get(0).get("incompleteness");
         assertEquals(1, gaps.size(), "the attached source went unread: " + ran.out());
-        assertEquals("source", gaps.get(0).get("scope").asString(),
-                "what could not be read is the source, so it counts against everything in it");
+        assertEquals("row", gaps.get(0).get("scope").asString(),
+                "what could not be read is the row that source holds, which is known");
     }
 
     /**

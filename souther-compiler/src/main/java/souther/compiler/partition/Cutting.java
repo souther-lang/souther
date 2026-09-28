@@ -7,7 +7,7 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.TermOrders;
-import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Towards;
@@ -184,7 +184,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (moved == null || !moved.levels().canCutAt(at)) {
             return null;
         }
-        return new Cutting(moved, at, claim, quantities.runsBetween(direction(moved)));
+        return new Cutting(moved, at, claim, quantities.runsBetween(moved.direction()));
     }
 
     /**
@@ -313,14 +313,15 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return null;
         }
         return made(new BorderQuantity.Apart(behavior, drawn.on(), drawn.against()),
-                new Level.ACount(drawn.stepsApart()), claim, quantities);
+                new Level.OfTheQuantity(drawn.stepsApart().exactly()), claim, quantities);
     }
 
     /**
      * One line, with what the rules leave the quantity it is on.
      *
      * <p>Asked of every quantity and not of the one shape that used to ask. What a quantity runs
-     * between is a question about the quantity, which {@link #direction} answers for all three
+     * between is a question about the quantity, which {@link BorderQuantity#direction} answers for
+     * all three
      * alike; asked only where the quantity was a form, a rule cutting a length at a negative drew a
      * border where a length never goes, and a row was owed at a value no row can carry.
      *
@@ -338,7 +339,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (!of.levels().canCutAt(at)) {
             return null;
         }
-        return new Cutting(of, at, claim, quantities.runsBetween(direction(of)));
+        return new Cutting(of, at, claim, quantities.runsBetween(of.direction()));
     }
 
     /**
@@ -365,7 +366,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                      java.util.Map<NumericTerm, TermOrders> on,
                                      Quantities quantities) {
         Cutting drawn = made(new BorderQuantity.OverAForm(behavior, read.form(), on),
-                new Level.ACount(new Count(read.cut())), read.claim(), quantities);
+                new Level.OfTheQuantity(read.cut()), read.claim(), quantities);
         if (drawn == null) {
             // What this watches: `OverAForm.levels()` answers `steppingBy` or `overFiniteDecimals`,
             // and neither of those parts anywhere but everywhere — the one order that names a
@@ -389,13 +390,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * line through {@code n} where it draws two.
      */
     QuantityKey quantity() {
-        return QuantityKey.of(direction(of));
+        return QuantityKey.of(of.direction());
     }
 
     /** How much of the quantity this rule wrote, which is what a level of one reads as on the
      *  other. */
-    java.math.BigDecimal per() {
-        return QuantityKey.per(direction(of));
+    ExactRatio per() {
+        return QuantityKey.per(of.direction());
     }
 
     /**
@@ -407,34 +408,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * written form attains is a multiple of how much of the quantity it wrote.
      */
     Seam seam() {
-        ComparisonClaim.Cut order = ordering();
-        // The place under the value, where the rule names one. Such a rule parts the values twice —
-        // under what it names and over it — and this is the lower of the two, which is a place they
-        // genuinely part rather than a side chosen for a rule that has none. Which of the two bounds
-        // which run is asked where the runs are ({@link Border#partedBy}), and is no part of this.
-        Towards belongsTo = order == null ? Towards.ABOVE : order.valueBelongs();
-        LinearForm<NumericTerm> direction = direction(of);
-        java.math.BigDecimal per = QuantityKey.per(direction);
-        return Seam.of(of.levels(), at, belongsTo,
-                new Seam.Scale(per, direction.coefs().size() == 1
-                        ? of.carrierOf(direction.coefs().keySet().iterator().next()) : null));
-    }
-
-    /**
-     * The form a quantity runs along, whichever of the three it is.
-     *
-     * <p>One position's own values are that position with a coefficient of one; how far two
-     * positions stand apart is their difference; and a form is itself. The three used to be told
-     * apart by every reader that wanted to know what a rule divided, and only one of them was
-     * treated as dividing anything.
-     */
-    private static LinearForm<NumericTerm> direction(BorderQuantity of) {
-        return switch (of) {
-            case BorderQuantity.OfACoordinate one -> LinearForm.atom(one.term());
-            case BorderQuantity.Apart two -> LinearForm.<NumericTerm>atom(two.on().term())
-                    .minus(LinearForm.atom(two.against().term()));
-            case BorderQuantity.OverAForm many -> many.form();
-        };
+        return Seam.where(of, at, claim);
     }
 
     /**
@@ -454,7 +428,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * distinguishes (issue #880).
      */
     NumericTerm.FromOnePosition dividedPosition() {
-        java.util.Map<NumericTerm, java.math.BigDecimal> direction = quantity().direction();
+        java.util.Map<NumericTerm, ExactRatio> direction =
+                quantity().direction();
         // And only where one position answers that number. A quantity read from somewhere else
         // divides no position however few terms it is over, so there is nothing here for a class
         // to be a class of.
@@ -518,7 +493,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * which is true of {@code 2 * a + 2 * b == 9} and false of {@code a + b == 10}.
      */
     boolean takesTheValueItNames() {
-        return of.levels().attainable(at);
+        // `.orNull()` and not the refusal further up the chain answers with: this is a boolean
+        // question with nowhere yet to carry "not worked out" to.
+        return Boolean.TRUE.equals(of.levels().attainable(at).orNull());
     }
 
     /**
@@ -534,7 +511,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         // reading ({@link AffineReading#filedAt}): the terms themselves, in the order a document
         // names them. Written out here, a reader that reached the numbers by another way would
         // write it out again, and the two would file one rule at two coordinates.
-        return AffineReading.filedAt(direction(of).coefs().keySet());
+        return AffineReading.filedAt(of.direction().coefs().keySet());
     }
 
     /**
@@ -565,13 +542,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     souther.compiler.numeric.NumericDomain.Bounds withinGiven(
             souther.compiler.reach.ComparisonArrival.Values arriving) {
-        LinearForm<NumericTerm> direction = direction(of);
+        LinearForm<NumericTerm> direction = of.direction();
         if (direction.coefs().size() != 1 || direction.constant().signum() != 0) {
             return within;
         }
-        java.util.Map.Entry<NumericTerm, java.math.BigDecimal> only =
+        java.util.Map.Entry<NumericTerm, ExactRatio> only =
                 direction.coefs().entrySet().iterator().next();
-        if (only.getValue().compareTo(java.math.BigDecimal.ONE) != 0
+        if (!only.getValue().equals(ExactRatio.ONE)
                 || !(only.getKey() instanceof NumericTerm.ValueOf(var position))
                 // The one thing this cannot read off its own quantity: which position the interval
                 // is of. Both are the position the comparison turns on today and the check is what

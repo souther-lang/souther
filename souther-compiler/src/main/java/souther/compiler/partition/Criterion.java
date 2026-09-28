@@ -166,8 +166,8 @@ public sealed interface Criterion {
      * The same demand on a row, with every level written the one way.
      *
      * <p>What an identity built out of a criterion is built from, and what two of them are compared
-     * through. A level keeps the spelling the rule was written in, because that is what a report
-     * writes back ({@link Level#canonical()}), so two readings of one line can arrive here holding
+     * through. A level keeps the representation the rule was written with
+     * ({@link Level#canonical()}), so two readings of one line can arrive here holding
      * {@code 0} and {@code 0.00} — which is one demand and was two values.
      */
     default Criterion canonical() {
@@ -323,7 +323,8 @@ public sealed interface Criterion {
      * <p><b>{@code left} names the whole of the quantity.</b> An end only the rule that drew it can
      * name says how much of the quantity that rule wrote, and this spells that by writing the
      * multiple in front — which is what a quantity of one coordinate does and is not what a form of
-     * several does ({@link BorderQuantity#left(java.math.BigDecimal)} rebuilds the form instead). A
+     * several does ({@link BorderQuantity#left(souther.compiler.numeric.ExactRatio)} rebuilds the
+     * form instead). A
      * run bounded that way, on a line a declaration is owed over a relation between two positions,
      * would come out spelled as the multiple of the first of them. No model here writes one; the
      * limit is said rather than guessed at.

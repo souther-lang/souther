@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.identity.DecidedByTheRest;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -21,7 +22,7 @@ import java.util.Objects;
  * <p>It lives beside {@link SignatureBoundary} because {@link Nominal} is closed to it: a name is a
  * thing the boundary either admits or refuses, and a case that could be assembled with a refused one
  * would be a witness of nothing. The cases that carry no name stay records, and hold: a scalar is a
- * closed set with no {@code Raw} in it, a key is a {@link CrossingMapKey} whose own naming cases are
+ * closed set, a key is a {@link CrossingMapKey} whose own naming cases are
  * closed the same way, and a list, a set or a map is built out of those.
  *
  * <p>There is no case for an anonymous union. A parameter names a single type, so an input cannot be
@@ -30,8 +31,13 @@ import java.util.Objects;
  */
 public sealed interface BoundaryInput {
 
-    /** The type in the language this shape stands for. Answered per case rather than by switching, so
-     *  a case added here cannot forget it. */
+    /**
+     * The type in the language this shape stands for. Answered per case rather than by switching, so
+     * a case added here cannot forget it.
+     *
+     * <p>Settled where the shape is made, as it is for what leaves — see
+     * {@link BoundaryOutput#type()} for what admission settles and what decides which cases hold it.
+     */
     Type type();
 
     /** A scalar the boundary writes as itself. */
@@ -50,13 +56,20 @@ public sealed interface BoundaryInput {
      * the witness says the name may cross, and being made here says this position asked. A record's
      * canonical constructor is as accessible as the record, and one place raising a signature is what
      * makes two walks over one tree impossible (ADR-0100).
+     *
+     * <p>What it holds is the witness and not the reference it was admitted from, so the reference it
+     * answers with is made from the witness where the shape is made. The union a behavior answers
+     * with is the other way about — see {@link BoundaryOutput.Cases}, which keeps what it was given.
      */
     final class Nominal implements BoundaryInput {
 
         private final CrossingNominal admitted;
+        @DecidedByTheRest
+        private final Type type;
 
         Nominal(CrossingNominal admitted) {
             this.admitted = admitted;
+            this.type = Type.ref(admitted.name());
         }
 
         public TypeSymbol name() {
@@ -65,7 +78,7 @@ public sealed interface BoundaryInput {
 
         @Override
         public Type type() {
-            return Type.ref(name());
+            return type;
         }
 
         @Override

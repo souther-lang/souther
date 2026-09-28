@@ -80,12 +80,13 @@ class AClauseUnderABindingIsReadInsideItTest {
     }
 
     private static Core.LetIn let(String name, int ordinal, Core value, Core body) {
-        return new Core.LetIn(new Core.Binder(name, new BindingId(OWNER, ordinal)), value, body,
-                body.type(), POS);
+        return new Core.LetIn(new Core.Binder(name, new BindingId(OWNER, ordinal)), value.type(),
+                value, body, body.type(), POS);
     }
 
     private static Core.Binary binary(BinOp op, Core left, Core right) {
-        return new Core.Binary(op, left, right, ConstructOccurrence.unwritten(), Type.BOOL, POS);
+        return new Core.Binary(op, left, right, Core.BinaryReading.AS_THEY_STAND,
+                ConstructOccurrence.unwritten(), Type.BOOL, POS);
     }
 
     /** `n >= 1`, the rule every clause below states one way or another. */
@@ -226,7 +227,7 @@ class AClauseUnderABindingIsReadInsideItTest {
     }
 
     private static Core block(Core.Binder param, Core body) {
-        return new Core.Block(List.of(param), body, Type.INT, POS);
+        return new Core.Block(List.of(param), List.of(Type.INT), body, POS);
     }
 
     @Test

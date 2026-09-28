@@ -44,7 +44,7 @@ final class ValueUniverse {
                 // values, and what a rule leaves between two of them is read as an interval; a
                 // `String`, a `Decimal` and the rest have no end of values between any two. Both
                 // are the same answer to this question, which is about writing the values down.
-                case INT, DECIMAL, STRING, DATE, TIME, DATETIME, INSTANT, RAW -> null;
+                case INT, DECIMAL, RATIONAL, STRING, DATE, TIME, DATETIME, INSTANT -> null;
             };
         }
         // An enumeration's cases, in the order the sum declares them. Asked of the sum directly and
@@ -54,7 +54,8 @@ final class ValueUniverse {
         // have values that can be written out. Both go to `TypeOps` for what an enumeration is, so
         // this is one reading of that and not two.
         if (!(base instanceof Type.Ref(TypeSymbol.AtModule named))
-                || !(published.of(named.key()) instanceof DeclarationMeaning.Sum _)
+                || !(published.of(named.key())
+                        instanceof PublishedDeclarationResult.Found(DeclarationMeaning.Sum _))
                 || !TypeOps.isUnitOnlySum(base, kinds, published)) {
             return null;
         }

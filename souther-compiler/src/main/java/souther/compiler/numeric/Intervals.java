@@ -1,5 +1,6 @@
 package souther.compiler.numeric;
 
+import java.math.BigDecimal;
 import java.math.RoundingMode;
 
 
@@ -61,11 +62,16 @@ public final class Intervals {
     }
 
     /**
-     * What {@code x / y} lies between, given what each of them does.
+     * What {@code Int.truncatingDivide(x, y)} lies between, given what each of them does.
      *
-     * <p><b>What this bounds is the values the operation produces.</b> {@code /} over whole numbers
-     * does not answer everywhere, and one of the pairs it aborts on lies inside ranges this is asked
-     * about: {@code Long.MIN_VALUE} over {@code -1} is a quotient no {@code Int} holds (spec
+     * <p>That operation and not the operator. What {@code /} answers is the exact quotient, which
+     * is a number of another type and a form the affine domain carries itself; this is the
+     * whole-number quotient a model asks for by naming it, and a step function is why it is bounded
+     * here rather than composed there.
+     *
+     * <p><b>What this bounds is the values the operation produces.</b> It does not answer
+     * everywhere, and one of the pairs it aborts on lies inside ranges this is asked about:
+     * {@code Long.MIN_VALUE} over {@code -1} is a quotient no {@code Int} holds (spec
      * §stdlib-int), and both of its operands are ordinary values of their type. That pair leaves no
      * value, so what comes back is a range of what the successful divides came to and nothing else.
      * What a caller must not read into it is the other thing: a range coming back — top included —
@@ -123,9 +129,10 @@ public final class Intervals {
      * non-negative quotient would come out owed for the width of one step of a scale nobody was
      * asking about.
      *
-     * <p>{@code /} over {@code Decimal} is not this: it rounds to a significant-digit precision the
-     * run time sets rather than to a scale the domain chose (spec §stdlib-decimal), and where an end
-     * lands under that is not something this states.
+     * <p>{@code Decimal.divide} and not the operator. A scale and a rounding mode are what put a
+     * quotient on a grid, and they are the operation's arguments; {@code /} answers the exact
+     * quotient and rounds nowhere (spec §stdlib-rational), so there is no grid of its own for this
+     * to state where an end lands on.
      *
      * @param scale how many places the answer is rounded to, which the caller has read as a number.
      * @param divisor as {@link #truncatingQuotient} requires it.
@@ -184,14 +191,19 @@ public final class Intervals {
             if (corner == null) {
                 continue;   // extended arithmetic gives this pair of ends no value
             }
-            if (corner.beyond() == direction) {
+            if (corner.beyond() == direction || corner.unheld() == direction) {
                 return null;
             }
-            if (corner.at() == null) {
+            // A corner the exact arithmetic could not hold at this scale is read the way one past
+            // every value the other way already is: it bounds nothing on this side, but where its
+            // sign is the direction not being asked for here it is at least as far as zero, which is
+            // the one point of it this can still state.
+            Count at = corner.unheld() == 0 ? corner.at() : Count.ZERO;
+            if (at == null) {
                 continue;   // past every value the other way, which bounds nothing on this side
             }
-            if (best == null || corner.at().compareTo(best) * direction > 0) {
-                best = corner.at();
+            if (best == null || at.compareTo(best) * direction > 0) {
+                best = at;
             }
         }
         return best == null ? null : Endpoint.inclusive(best);
@@ -240,7 +252,11 @@ public final class Intervals {
                 }
                 return new Corner(null, false, past.beyond * finite.at.signum());
             }
-            return new Corner(at.times(other.at.at()), reached && other.reached, 0);
+            Count product = at.timesWhereHeld(other.at.at());
+            if (product == null) {
+                return Corner.unheld(at.signum() * other.at.signum());
+            }
+            return new Corner(product, reached && other.reached, 0);
         }
 
         /**
@@ -282,26 +298,63 @@ public final class Intervals {
             if (beyond != 0) {
                 return new Ratio(null, beyond * divisor.at.signum());
             }
-            return new Ratio(Count.of(at.at().divide(divisor.at.at(), scale, towards)), 0);
+            // Divided in ratios rather than in the two decimals directly: a dividend and a divisor a
+            // rule's own arithmetic put far enough apart in scale can leave the rounded quotient with
+            // no representation at this scale, which a raw BigDecimal.divide would throw for instead
+            // of answering. The quotient's sign is never in question either way — neither operand is
+            // nought by this point — so an unheld corner still says which side of zero it falls on,
+            // the same as {@link #times} already answers for a product this cannot hold.
+            return switch (ExactRatio.of(at.at()).dividedBy(ExactRatio.of(divisor.at.at()))
+                    .asDecimal(towards, scale)) {
+                case ExactAnswer.Held<BigDecimal> held -> new Ratio(Count.of(held.value()), 0);
+                case ExactAnswer.Unheld<BigDecimal> _ ->
+                        Ratio.unheld(at.signum() * divisor.at.signum());
+            };
         }
     }
 
     /**
      * One corner of the box a dividend range and a divisor range make: what the two ends divide to,
-     * or which side it is past every value on.
+     * which side it is past every value on, or which side the exact arithmetic could not hold the
+     * rounded quotient on.
      *
      * <p>Without whether the quotient reaches it. Truncation sends a range of dividends onto one
      * quotient, so an end an operand does not reach says nothing about whether the quotient reaches
      * where it lands — and a bound that says it does is the looser of the two, which is the one to
      * state.
      */
-    private record Ratio(Count at, int beyond) {}
+    private record Ratio(Count at, int beyond, int unheld) {
+
+        Ratio(Count at, int beyond) {
+            this(at, beyond, 0);
+        }
+
+        /** A corner this could not hold, named by the side of zero its sign puts it on — read the
+         *  same way an end past every value already is, since neither bounds this side. */
+        static Ratio unheld(int sign) {
+            return new Ratio(null, 0, sign);
+        }
+    }
 
     /**
      * One corner of the box two ranges make: what the two ends multiply to, whether the product has
      * a value there, and which side it is past every value on.
+     *
+     * <p>{@code unheld} is the sign of a corner whose product no count holds, and zero for every
+     * other. Such a corner is a number of a sign and no size a bound can be read off: it may be as
+     * near zero as it is far from it, so it says nothing about where the product ends on the side
+     * its sign points to, and on the other it says only that the product does not cross zero.
      */
-    private record Corner(Count at, boolean reached, int beyond) {}
+    private record Corner(Count at, boolean reached, int beyond, int unheld) {
+
+        Corner(Count at, boolean reached, int beyond) {
+            this(at, reached, beyond, 0);
+        }
+
+        static Corner unheld(int sign) {
+            return new Corner(null, false, 0, sign);
+        }
+    }
 
     /**
      * The corner furthest along {@code direction}, or null where the product runs past every value
@@ -316,15 +369,16 @@ public final class Intervals {
         Count best = null;
         boolean reached = false;
         for (Corner corner : corners) {
-            if (corner.beyond() == direction) {
+            if (corner.beyond() == direction || corner.unheld() == direction) {
                 return null;
             }
-            if (corner.at() == null) {
+            Count at = corner.unheld() == 0 ? corner.at() : Count.ZERO;
+            if (at == null) {
                 continue;   // past every value the other way, which bounds nothing on this side
             }
-            int order = best == null ? 1 : corner.at().compareTo(best) * direction;
+            int order = best == null ? 1 : at.compareTo(best) * direction;
             if (order > 0) {
-                best = corner.at();
+                best = at;
                 reached = corner.reached();
             } else if (order == 0) {
                 reached |= corner.reached();

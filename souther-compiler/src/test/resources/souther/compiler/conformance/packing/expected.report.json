@@ -1,0 +1,2719 @@
+{
+  "schemaVersion" : 23,
+  "compilerVersion" : "<version>",
+  "status" : "complete",
+  "adequacy" : "satisfied",
+  "keptOpenBy" : [ ],
+  "modules" : [ {
+    "module" : "conformance.packing",
+    "status" : "complete",
+    "incompleteness" : [ ],
+    "declarations" : [ {
+      "owners" : [ {
+        "kind" : "declared",
+        "module" : "conformance.packing",
+        "name" : "Straws"
+      } ],
+      "name" : "Straws",
+      "obligations" : [ {
+        "obligationId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Straws",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "0"
+          },
+          "location" : {
+            "kind" : "at_the_line"
+          }
+        },
+        "point" : "on",
+        "rule" : "invariant Straws #1",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Straws",
+          "clause" : 0
+        },
+        "relation" : "=",
+        "axis" : "value",
+        "against" : "0",
+        "knownWritable" : true,
+        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "status" : "complete",
+        "hit" : true,
+        "disposition" : "met",
+        "readings" : [ {
+          "behavior" : "packBox",
+          "axis" : "packBox/straws",
+          "relation" : "=",
+          "against" : "0",
+          "status" : "complete",
+          "hit" : true
+        } ]
+      }, {
+        "obligationId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Straws",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "0"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "above"
+          },
+          "stops" : {
+            "kind" : "at_the_domain",
+            "at" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "20"
+            },
+            "per" : "1",
+            "inclusive" : true
+          }
+        },
+        "point" : "in",
+        "rule" : "invariant Straws #1",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Straws",
+          "clause" : 0
+        },
+        "relation" : "in",
+        "axis" : "value",
+        "against" : "0 < value <= 20",
+        "knownWritable" : true,
+        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "status" : "complete",
+        "hit" : true,
+        "disposition" : "met",
+        "readings" : [ {
+          "behavior" : "packBox",
+          "axis" : "packBox/straws",
+          "relation" : "in",
+          "against" : "0 < straws <= 20",
+          "status" : "complete",
+          "hit" : true
+        } ]
+      }, {
+        "obligationId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Straws",
+                "clause" : 0
+              },
+              "part" : 1,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "20"
+          },
+          "location" : {
+            "kind" : "at_the_line"
+          }
+        },
+        "point" : "on",
+        "rule" : "invariant Straws #1",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Straws",
+          "clause" : 0
+        },
+        "relation" : "=",
+        "axis" : "value",
+        "against" : "20",
+        "knownWritable" : true,
+        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "status" : "complete",
+        "hit" : true,
+        "disposition" : "met",
+        "readings" : [ {
+          "behavior" : "packBox",
+          "axis" : "packBox/straws",
+          "relation" : "=",
+          "against" : "20",
+          "status" : "complete",
+          "hit" : true
+        } ]
+      }, {
+        "obligationId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Straws",
+                "clause" : 0
+              },
+              "part" : 1,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "20"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "below"
+          },
+          "stops" : {
+            "kind" : "at_the_domain",
+            "at" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "0"
+            },
+            "per" : "1",
+            "inclusive" : true
+          }
+        },
+        "point" : "in",
+        "rule" : "invariant Straws #1",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Straws",
+          "clause" : 0
+        },
+        "relation" : "in",
+        "axis" : "value",
+        "against" : "0 <= value < 20",
+        "knownWritable" : true,
+        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "status" : "complete",
+        "hit" : true,
+        "disposition" : "met",
+        "readings" : [ {
+          "behavior" : "packBox",
+          "axis" : "packBox/straws",
+          "relation" : "in",
+          "against" : "0 <= straws < 20",
+          "status" : "complete",
+          "hit" : true
+        } ]
+      } ],
+      "findings" : [ ]
+    }, {
+      "owners" : [ {
+        "kind" : "declared",
+        "module" : "conformance.packing",
+        "name" : "Bars"
+      } ],
+      "name" : "Bars",
+      "obligations" : [ {
+        "obligationId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Bars",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "0"
+          },
+          "location" : {
+            "kind" : "at_the_line"
+          }
+        },
+        "point" : "on",
+        "rule" : "invariant Bars #1",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Bars",
+          "clause" : 0
+        },
+        "relation" : "=",
+        "axis" : "value",
+        "against" : "0",
+        "knownWritable" : true,
+        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "status" : "complete",
+        "hit" : true,
+        "disposition" : "met",
+        "readings" : [ {
+          "behavior" : "packBox",
+          "axis" : "packBox/bars",
+          "relation" : "=",
+          "against" : "0",
+          "status" : "complete",
+          "hit" : true
+        } ]
+      }, {
+        "obligationId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Bars",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "0"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "above"
+          },
+          "stops" : {
+            "kind" : "at_the_domain",
+            "at" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "20"
+            },
+            "per" : "1",
+            "inclusive" : true
+          }
+        },
+        "point" : "in",
+        "rule" : "invariant Bars #1",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Bars",
+          "clause" : 0
+        },
+        "relation" : "in",
+        "axis" : "value",
+        "against" : "0 < value <= 20",
+        "knownWritable" : true,
+        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "status" : "complete",
+        "hit" : true,
+        "disposition" : "met",
+        "readings" : [ {
+          "behavior" : "packBox",
+          "axis" : "packBox/bars",
+          "relation" : "in",
+          "against" : "0 < bars <= 20",
+          "status" : "complete",
+          "hit" : true
+        } ]
+      }, {
+        "obligationId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Bars",
+                "clause" : 0
+              },
+              "part" : 1,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "20"
+          },
+          "location" : {
+            "kind" : "at_the_line"
+          }
+        },
+        "point" : "on",
+        "rule" : "invariant Bars #1",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Bars",
+          "clause" : 0
+        },
+        "relation" : "=",
+        "axis" : "value",
+        "against" : "20",
+        "knownWritable" : true,
+        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "status" : "complete",
+        "hit" : true,
+        "disposition" : "met",
+        "readings" : [ {
+          "behavior" : "packBox",
+          "axis" : "packBox/bars",
+          "relation" : "=",
+          "against" : "20",
+          "status" : "complete",
+          "hit" : true
+        } ]
+      }, {
+        "obligationId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Bars",
+                "clause" : 0
+              },
+              "part" : 1,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "20"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "below"
+          },
+          "stops" : {
+            "kind" : "at_the_domain",
+            "at" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "0"
+            },
+            "per" : "1",
+            "inclusive" : true
+          }
+        },
+        "point" : "in",
+        "rule" : "invariant Bars #1",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Bars",
+          "clause" : 0
+        },
+        "relation" : "in",
+        "axis" : "value",
+        "against" : "0 <= value < 20",
+        "knownWritable" : true,
+        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "status" : "complete",
+        "hit" : true,
+        "disposition" : "met",
+        "readings" : [ {
+          "behavior" : "packBox",
+          "axis" : "packBox/bars",
+          "relation" : "in",
+          "against" : "0 <= bars < 20",
+          "status" : "complete",
+          "hit" : true
+        } ]
+      } ],
+      "findings" : [ ]
+    }, {
+      "owners" : [ {
+        "kind" : "declared",
+        "module" : "conformance.packing",
+        "name" : "Hour"
+      } ],
+      "name" : "Hour",
+      "obligations" : [ {
+        "obligationId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Hour",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "0"
+          },
+          "location" : {
+            "kind" : "at_the_line"
+          }
+        },
+        "point" : "on",
+        "rule" : "invariant Hour #1",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Hour",
+          "clause" : 0
+        },
+        "relation" : "=",
+        "axis" : "value",
+        "against" : "0",
+        "knownWritable" : true,
+        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it", "a_value_was_built" ],
+        "status" : "complete",
+        "hit" : true,
+        "disposition" : "met",
+        "readings" : [ {
+          "behavior" : "bookSlot",
+          "axis" : "bookSlot/from",
+          "relation" : "=",
+          "against" : "0",
+          "status" : "complete",
+          "hit" : true
+        }, {
+          "behavior" : "bookSlot",
+          "axis" : "bookSlot/until",
+          "relation" : "=",
+          "against" : "0",
+          "status" : "complete",
+          "hit" : false
+        } ]
+      }, {
+        "obligationId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Hour",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "0"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "above"
+          },
+          "stops" : {
+            "kind" : "at_the_domain",
+            "at" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "24"
+            },
+            "per" : "1",
+            "inclusive" : true
+          }
+        },
+        "point" : "in",
+        "rule" : "invariant Hour #1",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Hour",
+          "clause" : 0
+        },
+        "relation" : "in",
+        "axis" : "value",
+        "against" : "0 < value <= 24",
+        "knownWritable" : true,
+        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "status" : "complete",
+        "hit" : true,
+        "disposition" : "met",
+        "readings" : [ {
+          "behavior" : "bookSlot",
+          "axis" : "bookSlot/from",
+          "relation" : "in",
+          "against" : "0 < from <= 24",
+          "status" : "complete",
+          "hit" : true
+        }, {
+          "behavior" : "bookSlot",
+          "axis" : "bookSlot/until",
+          "relation" : "in",
+          "against" : "0 < until <= 24",
+          "status" : "complete",
+          "hit" : true
+        } ]
+      }, {
+        "obligationId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Hour",
+                "clause" : 0
+              },
+              "part" : 1,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "24"
+          },
+          "location" : {
+            "kind" : "at_the_line"
+          }
+        },
+        "point" : "on",
+        "rule" : "invariant Hour #1",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Hour",
+          "clause" : 0
+        },
+        "relation" : "=",
+        "axis" : "value",
+        "against" : "24",
+        "knownWritable" : true,
+        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it", "a_value_was_built" ],
+        "status" : "complete",
+        "hit" : true,
+        "disposition" : "met",
+        "readings" : [ {
+          "behavior" : "bookSlot",
+          "axis" : "bookSlot/from",
+          "relation" : "=",
+          "against" : "24",
+          "status" : "complete",
+          "hit" : false
+        }, {
+          "behavior" : "bookSlot",
+          "axis" : "bookSlot/until",
+          "relation" : "=",
+          "against" : "24",
+          "status" : "complete",
+          "hit" : true
+        } ]
+      }, {
+        "obligationId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.packing",
+                "declaredOn" : "Hour",
+                "clause" : 0
+              },
+              "part" : 1,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "24"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "below"
+          },
+          "stops" : {
+            "kind" : "at_the_domain",
+            "at" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "0"
+            },
+            "per" : "1",
+            "inclusive" : true
+          }
+        },
+        "point" : "in",
+        "rule" : "invariant Hour #1",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.packing",
+          "declaredOn" : "Hour",
+          "clause" : 0
+        },
+        "relation" : "in",
+        "axis" : "value",
+        "against" : "0 <= value < 24",
+        "knownWritable" : true,
+        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "status" : "complete",
+        "hit" : true,
+        "disposition" : "met",
+        "readings" : [ {
+          "behavior" : "bookSlot",
+          "axis" : "bookSlot/from",
+          "relation" : "in",
+          "against" : "0 <= from < 24",
+          "status" : "complete",
+          "hit" : true
+        }, {
+          "behavior" : "bookSlot",
+          "axis" : "bookSlot/until",
+          "relation" : "in",
+          "against" : "0 <= until < 24",
+          "status" : "complete",
+          "hit" : true
+        } ]
+      } ],
+      "findings" : [ ]
+    } ],
+    "behaviors" : [ {
+      "name" : "packBox",
+      "implementation" : "implemented",
+      "rows" : 10,
+      "pending" : 0,
+      "rowObligations" : [ {
+        "obligationId" : {
+          "behavior" : "packBox",
+          "source" : "1",
+          "name" : "sixteen straws alone are exactly what a box carries"
+        },
+        "at" : {
+          "sourceId" : "1",
+          "line" : 9,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "packBox",
+          "source" : "1",
+          "name" : "eight bars alone are exactly what a box carries"
+        },
+        "at" : {
+          "sourceId" : "1",
+          "line" : 11,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "packBox",
+          "source" : "1",
+          "name" : "twelve straws and two bars are on the line between them"
+        },
+        "at" : {
+          "sourceId" : "1",
+          "line" : 13,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "packBox",
+          "source" : "1",
+          "name" : "one straw over the line is turned away"
+        },
+        "at" : {
+          "sourceId" : "1",
+          "line" : 15,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "packBox",
+          "source" : "1",
+          "name" : "one bar over the line is turned away"
+        },
+        "at" : {
+          "sourceId" : "1",
+          "line" : 17,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "packBox",
+          "source" : "1",
+          "name" : "a mixed load over the line is turned away"
+        },
+        "at" : {
+          "sourceId" : "1",
+          "line" : 19,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "packBox",
+          "source" : "1",
+          "name" : "the most straws a box is asked for are far over the line"
+        },
+        "at" : {
+          "sourceId" : "1",
+          "line" : 21,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "packBox",
+          "source" : "1",
+          "name" : "the most bars a box is asked for are far over the line"
+        },
+        "at" : {
+          "sourceId" : "1",
+          "line" : 23,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "packBox",
+          "source" : "1",
+          "name" : "an empty box is well inside"
+        },
+        "at" : {
+          "sourceId" : "1",
+          "line" : 25,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "packBox",
+          "source" : "1",
+          "name" : "a mixed load under the line is packed"
+        },
+        "at" : {
+          "sourceId" : "1",
+          "line" : 27,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      } ],
+      "status" : "complete",
+      "signature" : {
+        "status" : "complete",
+        "output" : {
+          "declared" : [ "Load", "Rejected" ],
+          "obligations" : [ {
+            "obligationId" : {
+              "behavior" : "packBox",
+              "case" : "Load"
+            }
+          }, {
+            "obligationId" : {
+              "behavior" : "packBox",
+              "case" : "Rejected"
+            }
+          } ],
+          "status" : "complete",
+          "specified" : [ "Load", "Rejected" ],
+          "observed" : [ "Load", "Rejected" ],
+          "verified" : [ "Load", "Rejected" ],
+          "unclassifiedRows" : 0
+        },
+        "inputs" : [ {
+          "declared" : [ ],
+          "excluded" : [ ],
+          "obligations" : [ ],
+          "status" : "unavailable",
+          "reason" : "not_a_sum"
+        }, {
+          "declared" : [ ],
+          "excluded" : [ ],
+          "obligations" : [ ],
+          "status" : "unavailable",
+          "reason" : "not_a_sum"
+        } ]
+      },
+      "partition" : {
+        "axesMeasure" : {
+          "status" : "unavailable",
+          "reason" : "nothing_is_divided"
+        },
+        "boundariesMeasure" : {
+          "status" : "complete"
+        },
+        "axes" : [ ],
+        "claimsOffAxis" : [ ],
+        "boundaries" : [ {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.packing",
+                  "declaredOn" : "Straws",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "0"
+            }
+          },
+          "axis" : "packBox/straws",
+          "origin" : "invariant Straws #1",
+          "kind" : "at_value",
+          "value" : "0",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "relation" : "=",
+            "against" : "0",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "below"
+            },
+            "notOwed" : "the_rules_refuse_it"
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "relation" : "in",
+            "against" : "0 < straws <= 20",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "notOwed" : "the_rules_refuse_it"
+          } ]
+        }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.packing",
+                  "declaredOn" : "Straws",
+                  "clause" : 0
+                },
+                "part" : 1,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "20"
+            }
+          },
+          "axis" : "packBox/straws",
+          "origin" : "invariant Straws #1",
+          "kind" : "at_value",
+          "value" : "20",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "relation" : "=",
+            "against" : "20",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "above"
+            },
+            "notOwed" : "the_rules_refuse_it"
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "relation" : "in",
+            "against" : "0 <= straws < 20",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "notOwed" : "the_rules_refuse_it"
+          } ]
+        }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.packing",
+                  "declaredOn" : "Bars",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "0"
+            }
+          },
+          "axis" : "packBox/bars",
+          "origin" : "invariant Bars #1",
+          "kind" : "at_value",
+          "value" : "0",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "relation" : "=",
+            "against" : "0",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "below"
+            },
+            "notOwed" : "the_rules_refuse_it"
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "relation" : "in",
+            "against" : "0 < bars <= 20",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "notOwed" : "the_rules_refuse_it"
+          } ]
+        }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.packing",
+                  "declaredOn" : "Bars",
+                  "clause" : 0
+                },
+                "part" : 1,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "20"
+            }
+          },
+          "axis" : "packBox/bars",
+          "origin" : "invariant Bars #1",
+          "kind" : "at_value",
+          "value" : "20",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "relation" : "=",
+            "against" : "20",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "above"
+            },
+            "notOwed" : "the_rules_refuse_it"
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "relation" : "in",
+            "against" : "0 <= bars < 20",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "notOwed" : "the_rules_refuse_it"
+          } ]
+        }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.packing",
+                  "definition" : "packBox",
+                  "behavior" : "packBox",
+                  "ordinal" : 7,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "a_count",
+              "at" : "4800"
+            }
+          },
+          "axis" : "packBox/600 * bars + 300 * straws",
+          "origin" : "comparison@0:34:49",
+          "kind" : "over_a_form",
+          "value" : "4800",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "relation" : "=",
+            "against" : "4800",
+            "knownWritable" : true,
+            "writableBecause" : [ "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "above"
+            },
+            "relation" : "=",
+            "against" : "5100",
+            "knownWritable" : true,
+            "writableBecause" : [ "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "relation" : "in",
+            "against" : "0 <= 600 * bars + 300 * straws < 4800",
+            "knownWritable" : true,
+            "writableBecause" : [ "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "relation" : "in",
+            "against" : "5100 < 600 * bars + 300 * straws <= 18000",
+            "knownWritable" : true,
+            "writableBecause" : [ "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          } ]
+        } ],
+        "obligations" : [ {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.packing",
+                  "definition" : "packBox",
+                  "behavior" : "packBox",
+                  "ordinal" : 7,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "a_count",
+              "at" : "4800"
+            },
+            "location" : {
+              "kind" : "at_the_line"
+            }
+          },
+          "point" : "on",
+          "rule" : "comparison@0:34:49",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.packing",
+            "definition" : "packBox",
+            "behavior" : "packBox",
+            "ordinal" : 7,
+            "lowered" : 0
+          },
+          "relation" : "=",
+          "knownWritable" : true,
+          "writableBecause" : [ "a_row_is_at_it" ],
+          "status" : "complete",
+          "hit" : true,
+          "disposition" : "met",
+          "readings" : [ {
+            "behavior" : "packBox",
+            "axis" : "packBox/600 * bars + 300 * straws",
+            "relation" : "=",
+            "against" : "4800",
+            "status" : "complete",
+            "hit" : true
+          } ]
+        }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.packing",
+                  "definition" : "packBox",
+                  "behavior" : "packBox",
+                  "ordinal" : 7,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "a_count",
+              "at" : "4800"
+            },
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "above"
+            }
+          },
+          "point" : "off",
+          "rule" : "comparison@0:34:49",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.packing",
+            "definition" : "packBox",
+            "behavior" : "packBox",
+            "ordinal" : 7,
+            "lowered" : 0
+          },
+          "relation" : "=",
+          "knownWritable" : true,
+          "writableBecause" : [ "a_row_is_at_it" ],
+          "status" : "complete",
+          "hit" : true,
+          "disposition" : "met",
+          "readings" : [ {
+            "behavior" : "packBox",
+            "axis" : "packBox/600 * bars + 300 * straws",
+            "relation" : "=",
+            "against" : "5100",
+            "status" : "complete",
+            "hit" : true
+          } ]
+        }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.packing",
+                  "definition" : "packBox",
+                  "behavior" : "packBox",
+                  "ordinal" : 7,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "a_count",
+              "at" : "4800"
+            },
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "stops" : {
+              "kind" : "at_the_domain",
+              "at" : {
+                "kind" : "a_count",
+                "at" : "0"
+              },
+              "per" : "1",
+              "inclusive" : true
+            }
+          },
+          "point" : "in",
+          "rule" : "comparison@0:34:49",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.packing",
+            "definition" : "packBox",
+            "behavior" : "packBox",
+            "ordinal" : 7,
+            "lowered" : 0
+          },
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "a_row_is_at_it" ],
+          "status" : "complete",
+          "hit" : true,
+          "disposition" : "met",
+          "readings" : [ {
+            "behavior" : "packBox",
+            "axis" : "packBox/600 * bars + 300 * straws",
+            "relation" : "in",
+            "against" : "0 <= 600 * bars + 300 * straws < 4800",
+            "status" : "complete",
+            "hit" : true
+          } ]
+        }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.packing",
+                  "definition" : "packBox",
+                  "behavior" : "packBox",
+                  "ordinal" : 7,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "a_count",
+              "at" : "4800"
+            },
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "stops" : {
+              "kind" : "at_the_domain",
+              "at" : {
+                "kind" : "a_count",
+                "at" : "18000"
+              },
+              "per" : "1",
+              "inclusive" : true
+            }
+          },
+          "point" : "out",
+          "rule" : "comparison@0:34:49",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.packing",
+            "definition" : "packBox",
+            "behavior" : "packBox",
+            "ordinal" : 7,
+            "lowered" : 0
+          },
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "a_row_is_at_it" ],
+          "status" : "complete",
+          "hit" : true,
+          "disposition" : "met",
+          "readings" : [ {
+            "behavior" : "packBox",
+            "axis" : "packBox/600 * bars + 300 * straws",
+            "relation" : "in",
+            "against" : "5100 < 600 * bars + 300 * straws <= 18000",
+            "status" : "complete",
+            "hit" : true
+          } ]
+        } ],
+        "pairs" : {
+          "total" : 0,
+          "between" : [ ],
+          "status" : "complete",
+          "covered" : 0,
+          "unknown" : 0
+        },
+        "notDerivable" : [ ],
+        "notRead" : [ {
+          "position" : "bars",
+          "reason" : "unsupported_partition_shape",
+          "rule" : "comparison@0:34:49",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.packing",
+            "definition" : "packBox",
+            "behavior" : "packBox",
+            "ordinal" : 7,
+            "lowered" : 0
+          }
+        }, {
+          "position" : "straws",
+          "reason" : "unsupported_partition_shape",
+          "rule" : "comparison@0:34:49",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.packing",
+            "definition" : "packBox",
+            "behavior" : "packBox",
+            "ordinal" : 7,
+            "lowered" : 0
+          }
+        } ]
+      },
+      "branch" : {
+        "status" : "complete",
+        "obligations" : [ {
+          "obligationId" : {
+            "module" : "conformance.packing",
+            "definition" : "packBox",
+            "construct" : 3,
+            "lowered" : 0,
+            "part" : 0,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "continued",
+          "kind" : "continued",
+          "construct" : "guard",
+          "at" : {
+            "sourceId" : "0",
+            "line" : 34,
+            "column" : 5,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met"
+        }, {
+          "obligationId" : {
+            "module" : "conformance.packing",
+            "definition" : "packBox",
+            "construct" : 3,
+            "lowered" : 0,
+            "part" : 1,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "else",
+          "kind" : "else",
+          "construct" : "guard",
+          "at" : {
+            "sourceId" : "0",
+            "line" : 34,
+            "column" : 5,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met"
+        } ],
+        "denominatorSettled" : true
+      },
+      "decision" : {
+        "coverage" : {
+          "status" : "complete"
+        },
+        "obligations" : [ {
+          "obligationId" : {
+            "behavior" : "packBox",
+            "conditions" : [ {
+              "kind" : "comparison",
+              "condition" : "GT LinearForm[constant=-4800, coefs={bars=600, straws=300}]",
+              "outcome" : "denied"
+            } ]
+          },
+          "taken" : true
+        }, {
+          "obligationId" : {
+            "behavior" : "packBox",
+            "conditions" : [ {
+              "kind" : "comparison",
+              "condition" : "GT LinearForm[constant=-4800, coefs={bars=600, straws=300}]",
+              "outcome" : "held"
+            } ]
+          },
+          "taken" : true
+        } ]
+      },
+      "findings" : [ {
+        "kind" : "partition_not_read",
+        "disposition" : "reported",
+        "subject" : "bars",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.packing",
+          "definition" : "packBox",
+          "behavior" : "packBox",
+          "ordinal" : 7,
+          "lowered" : 0
+        },
+        "reason" : "unsupported_partition_shape"
+      }, {
+        "kind" : "partition_not_read",
+        "disposition" : "reported",
+        "subject" : "straws",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.packing",
+          "definition" : "packBox",
+          "behavior" : "packBox",
+          "ordinal" : 7,
+          "lowered" : 0
+        },
+        "reason" : "unsupported_partition_shape"
+      } ]
+    }, {
+      "name" : "bookSlot",
+      "implementation" : "implemented",
+      "rows" : 8,
+      "pending" : 0,
+      "rowObligations" : [ {
+        "obligationId" : {
+          "behavior" : "bookSlot",
+          "source" : "1",
+          "name" : "eight hours from the start of the day is the longest booking"
+        },
+        "at" : {
+          "sourceId" : "1",
+          "line" : 31,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "bookSlot",
+          "source" : "1",
+          "name" : "eight hours from the middle of the day is the same booking"
+        },
+        "at" : {
+          "sourceId" : "1",
+          "line" : 33,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "bookSlot",
+          "source" : "1",
+          "name" : "eight hours ending at midnight is the same booking"
+        },
+        "at" : {
+          "sourceId" : "1",
+          "line" : 35,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "bookSlot",
+          "source" : "1",
+          "name" : "nine hours from the start of the day is a clash"
+        },
+        "at" : {
+          "sourceId" : "1",
+          "line" : 37,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "bookSlot",
+          "source" : "1",
+          "name" : "nine hours from the middle of the day is a clash"
+        },
+        "at" : {
+          "sourceId" : "1",
+          "line" : 39,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "bookSlot",
+          "source" : "1",
+          "name" : "ten hours from the start of the day is further over the line"
+        },
+        "at" : {
+          "sourceId" : "1",
+          "line" : 41,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "bookSlot",
+          "source" : "1",
+          "name" : "a short booking is well inside"
+        },
+        "at" : {
+          "sourceId" : "1",
+          "line" : 43,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      }, {
+        "obligationId" : {
+          "behavior" : "bookSlot",
+          "source" : "1",
+          "name" : "a booking that ends before it starts is inside the rule"
+        },
+        "at" : {
+          "sourceId" : "1",
+          "line" : 45,
+          "column" : 7,
+          "writtenAt" : {
+            "kind" : "here"
+          }
+        },
+        "disposition" : "met"
+      } ],
+      "status" : "complete",
+      "signature" : {
+        "status" : "complete",
+        "output" : {
+          "declared" : [ "Booked", "Clash" ],
+          "obligations" : [ {
+            "obligationId" : {
+              "behavior" : "bookSlot",
+              "case" : "Booked"
+            }
+          }, {
+            "obligationId" : {
+              "behavior" : "bookSlot",
+              "case" : "Clash"
+            }
+          } ],
+          "status" : "complete",
+          "specified" : [ "Booked", "Clash" ],
+          "observed" : [ "Booked", "Clash" ],
+          "verified" : [ "Booked", "Clash" ],
+          "unclassifiedRows" : 0
+        },
+        "inputs" : [ {
+          "declared" : [ ],
+          "excluded" : [ ],
+          "obligations" : [ ],
+          "status" : "unavailable",
+          "reason" : "not_a_sum"
+        }, {
+          "declared" : [ ],
+          "excluded" : [ ],
+          "obligations" : [ ],
+          "status" : "unavailable",
+          "reason" : "not_a_sum"
+        } ]
+      },
+      "partition" : {
+        "axesMeasure" : {
+          "status" : "unavailable",
+          "reason" : "nothing_is_divided"
+        },
+        "boundariesMeasure" : {
+          "status" : "complete"
+        },
+        "axes" : [ ],
+        "claimsOffAxis" : [ ],
+        "boundaries" : [ {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.packing",
+                  "declaredOn" : "Hour",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "0"
+            }
+          },
+          "axis" : "bookSlot/from",
+          "origin" : "invariant Hour #1",
+          "kind" : "at_value",
+          "value" : "0",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "relation" : "=",
+            "against" : "0",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "below"
+            },
+            "notOwed" : "the_rules_refuse_it"
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "relation" : "in",
+            "against" : "0 < from <= 24",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "notOwed" : "the_rules_refuse_it"
+          } ]
+        }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.packing",
+                  "declaredOn" : "Hour",
+                  "clause" : 0
+                },
+                "part" : 1,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "24"
+            }
+          },
+          "axis" : "bookSlot/from",
+          "origin" : "invariant Hour #1",
+          "kind" : "at_value",
+          "value" : "24",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "relation" : "=",
+            "against" : "24",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "status" : "complete",
+            "hit" : false
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "above"
+            },
+            "notOwed" : "the_rules_refuse_it"
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "relation" : "in",
+            "against" : "0 <= from < 24",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "notOwed" : "the_rules_refuse_it"
+          } ]
+        }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.packing",
+                  "declaredOn" : "Hour",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "0"
+            }
+          },
+          "axis" : "bookSlot/until",
+          "origin" : "invariant Hour #1",
+          "kind" : "at_value",
+          "value" : "0",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "relation" : "=",
+            "against" : "0",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "status" : "complete",
+            "hit" : false
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "below"
+            },
+            "notOwed" : "the_rules_refuse_it"
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "relation" : "in",
+            "against" : "0 < until <= 24",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "notOwed" : "the_rules_refuse_it"
+          } ]
+        }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.packing",
+                  "declaredOn" : "Hour",
+                  "clause" : 0
+                },
+                "part" : 1,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "24"
+            }
+          },
+          "axis" : "bookSlot/until",
+          "origin" : "invariant Hour #1",
+          "kind" : "at_value",
+          "value" : "24",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "relation" : "=",
+            "against" : "24",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "above"
+            },
+            "notOwed" : "the_rules_refuse_it"
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "relation" : "in",
+            "against" : "0 <= until < 24",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "notOwed" : "the_rules_refuse_it"
+          } ]
+        }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.packing",
+                  "definition" : "bookSlot",
+                  "behavior" : "bookSlot",
+                  "ordinal" : 2,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "a_count",
+              "at" : "8"
+            }
+          },
+          "axis" : "bookSlot/until",
+          "origin" : "comparison@0:47:36",
+          "kind" : "between_positions",
+          "value" : "from + 8",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "relation" : "=",
+            "against" : "from + 8",
+            "knownWritable" : true,
+            "writableBecause" : [ "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "above"
+            },
+            "relation" : "=",
+            "against" : "from + 9",
+            "knownWritable" : true,
+            "writableBecause" : [ "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "relation" : "in",
+            "against" : "from - 24 <= until < from + 8",
+            "knownWritable" : true,
+            "writableBecause" : [ "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "relation" : "in",
+            "against" : "from + 9 < until <= from + 24",
+            "knownWritable" : true,
+            "writableBecause" : [ "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          } ]
+        } ],
+        "obligations" : [ {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.packing",
+                  "definition" : "bookSlot",
+                  "behavior" : "bookSlot",
+                  "ordinal" : 2,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "a_count",
+              "at" : "8"
+            },
+            "location" : {
+              "kind" : "at_the_line"
+            }
+          },
+          "point" : "on",
+          "rule" : "comparison@0:47:36",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.packing",
+            "definition" : "bookSlot",
+            "behavior" : "bookSlot",
+            "ordinal" : 2,
+            "lowered" : 0
+          },
+          "relation" : "=",
+          "knownWritable" : true,
+          "writableBecause" : [ "a_row_is_at_it" ],
+          "status" : "complete",
+          "hit" : true,
+          "disposition" : "met",
+          "readings" : [ {
+            "behavior" : "bookSlot",
+            "axis" : "bookSlot/until",
+            "relation" : "=",
+            "against" : "from + 8",
+            "status" : "complete",
+            "hit" : true
+          } ]
+        }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.packing",
+                  "definition" : "bookSlot",
+                  "behavior" : "bookSlot",
+                  "ordinal" : 2,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "a_count",
+              "at" : "8"
+            },
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "above"
+            }
+          },
+          "point" : "off",
+          "rule" : "comparison@0:47:36",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.packing",
+            "definition" : "bookSlot",
+            "behavior" : "bookSlot",
+            "ordinal" : 2,
+            "lowered" : 0
+          },
+          "relation" : "=",
+          "knownWritable" : true,
+          "writableBecause" : [ "a_row_is_at_it" ],
+          "status" : "complete",
+          "hit" : true,
+          "disposition" : "met",
+          "readings" : [ {
+            "behavior" : "bookSlot",
+            "axis" : "bookSlot/until",
+            "relation" : "=",
+            "against" : "from + 9",
+            "status" : "complete",
+            "hit" : true
+          } ]
+        }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.packing",
+                  "definition" : "bookSlot",
+                  "behavior" : "bookSlot",
+                  "ordinal" : 2,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "a_count",
+              "at" : "8"
+            },
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "stops" : {
+              "kind" : "at_the_domain",
+              "at" : {
+                "kind" : "a_count",
+                "at" : "-24"
+              },
+              "per" : "1",
+              "inclusive" : true
+            }
+          },
+          "point" : "in",
+          "rule" : "comparison@0:47:36",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.packing",
+            "definition" : "bookSlot",
+            "behavior" : "bookSlot",
+            "ordinal" : 2,
+            "lowered" : 0
+          },
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "a_row_is_at_it" ],
+          "status" : "complete",
+          "hit" : true,
+          "disposition" : "met",
+          "readings" : [ {
+            "behavior" : "bookSlot",
+            "axis" : "bookSlot/until",
+            "relation" : "in",
+            "against" : "from - 24 <= until < from + 8",
+            "status" : "complete",
+            "hit" : true
+          } ]
+        }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.packing",
+                  "definition" : "bookSlot",
+                  "behavior" : "bookSlot",
+                  "ordinal" : 2,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "a_count",
+              "at" : "8"
+            },
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "stops" : {
+              "kind" : "at_the_domain",
+              "at" : {
+                "kind" : "a_count",
+                "at" : "24"
+              },
+              "per" : "1",
+              "inclusive" : true
+            }
+          },
+          "point" : "out",
+          "rule" : "comparison@0:47:36",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.packing",
+            "definition" : "bookSlot",
+            "behavior" : "bookSlot",
+            "ordinal" : 2,
+            "lowered" : 0
+          },
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "a_row_is_at_it" ],
+          "status" : "complete",
+          "hit" : true,
+          "disposition" : "met",
+          "readings" : [ {
+            "behavior" : "bookSlot",
+            "axis" : "bookSlot/until",
+            "relation" : "in",
+            "against" : "from + 9 < until <= from + 24",
+            "status" : "complete",
+            "hit" : true
+          } ]
+        } ],
+        "pairs" : {
+          "total" : 0,
+          "between" : [ ],
+          "status" : "complete",
+          "covered" : 0,
+          "unknown" : 0
+        },
+        "notDerivable" : [ ],
+        "notRead" : [ {
+          "position" : "from",
+          "reason" : "unsupported_partition_shape",
+          "rule" : "comparison@0:47:36",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.packing",
+            "definition" : "bookSlot",
+            "behavior" : "bookSlot",
+            "ordinal" : 2,
+            "lowered" : 0
+          }
+        }, {
+          "position" : "until",
+          "reason" : "unsupported_partition_shape",
+          "rule" : "comparison@0:47:36",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.packing",
+            "definition" : "bookSlot",
+            "behavior" : "bookSlot",
+            "ordinal" : 2,
+            "lowered" : 0
+          }
+        } ]
+      },
+      "branch" : {
+        "status" : "complete",
+        "obligations" : [ {
+          "obligationId" : {
+            "module" : "conformance.packing",
+            "definition" : "bookSlot",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 0,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "continued",
+          "kind" : "continued",
+          "construct" : "guard",
+          "at" : {
+            "sourceId" : "0",
+            "line" : 47,
+            "column" : 5,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met"
+        }, {
+          "obligationId" : {
+            "module" : "conformance.packing",
+            "definition" : "bookSlot",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 1,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "else",
+          "kind" : "else",
+          "construct" : "guard",
+          "at" : {
+            "sourceId" : "0",
+            "line" : 47,
+            "column" : 5,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met"
+        } ],
+        "denominatorSettled" : true
+      },
+      "decision" : {
+        "coverage" : {
+          "status" : "complete"
+        },
+        "obligations" : [ {
+          "obligationId" : {
+            "behavior" : "bookSlot",
+            "conditions" : [ {
+              "kind" : "comparison",
+              "condition" : "GT LinearForm[constant=-8, coefs={from=-1, until=1}]",
+              "outcome" : "denied"
+            } ]
+          },
+          "taken" : true
+        }, {
+          "obligationId" : {
+            "behavior" : "bookSlot",
+            "conditions" : [ {
+              "kind" : "comparison",
+              "condition" : "GT LinearForm[constant=-8, coefs={from=-1, until=1}]",
+              "outcome" : "held"
+            } ]
+          },
+          "taken" : true
+        } ]
+      },
+      "findings" : [ {
+        "kind" : "partition_not_read",
+        "disposition" : "reported",
+        "subject" : "from",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.packing",
+          "definition" : "bookSlot",
+          "behavior" : "bookSlot",
+          "ordinal" : 2,
+          "lowered" : 0
+        },
+        "reason" : "unsupported_partition_shape"
+      }, {
+        "kind" : "partition_not_read",
+        "disposition" : "reported",
+        "subject" : "until",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.packing",
+          "definition" : "bookSlot",
+          "behavior" : "bookSlot",
+          "ordinal" : 2,
+          "lowered" : 0
+        },
+        "reason" : "unsupported_partition_shape"
+      } ]
+    } ]
+  } ],
+  "sources" : {
+    "1" : "packing.examples.sou",
+    "0" : "packing.sou"
+  }
+}

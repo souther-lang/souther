@@ -6,6 +6,7 @@ import souther.compiler.inputs.SearchRegion;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.NumericDomain;
 
@@ -24,9 +25,9 @@ import java.util.Optional;
 record ARunOfThisMany(int many) implements SearchRegion {
 
     @Override
-    public SearchRegion assuming(LinearForm<NumericTerm> form,
-                                 Rel rel) {
-        return this;
+    public Assumption assuming(LinearForm<NumericTerm> form,
+                               Rel rel) {
+        return new Assumption.Taken(this);
     }
 
     @Override
@@ -46,6 +47,11 @@ record ARunOfThisMany(int many) implements SearchRegion {
         return this;
     }
 
+    @Override
+    public PlacesApart apartAt(NumericTerm.FromOnePosition term) {
+        return PlacesApart.NONE;
+    }
+
 
     /**
      * From nought upward, so that the walk starts inside the run rather than at an end of it.
@@ -55,9 +61,10 @@ record ARunOfThisMany(int many) implements SearchRegion {
      * directions would each hold half and the figure would be reached at twice the width.
      */
     @Override
-    public NumericDomain.Bounds runsBetween(LinearForm<NumericTerm> form) {
-        return new NumericDomain.Bounds(new Endpoint(Count.of(0), true),
-                new Endpoint(Count.of(many - 1), true));
+    public NumericDomain.FormProjection projectionOf(LinearForm<NumericTerm> form) {
+        return new NumericDomain.FormProjection.Within(
+                new NumericDomain.Bounds(new Endpoint(Count.of(0), true),
+                        new Endpoint(Count.of(many - 1), true)));
     }
 
     @Override

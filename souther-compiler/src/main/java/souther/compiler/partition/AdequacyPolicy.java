@@ -54,6 +54,8 @@ public record AdequacyPolicy(OfTheMeasures measures, OfTheGeneration generation)
 
         private final int pairSpace;
 
+        private final int cellsPerGroup;
+
         private final PatternPlan.Budget behaviorDistinctions;
 
         /**
@@ -62,13 +64,17 @@ public record AdequacyPolicy(OfTheMeasures measures, OfTheGeneration generation)
          *                             positions and their cardinalities together, so what bounds it
          *                             is the space itself and never a count of positions (rules 1
          *                             and 2). Past it the measure is partial and says so
+         * @param cellsPerGroup        how many combinations of one group of the body's decisions
+         *                             are counted off the rows. Past it the group is not measured
+         *                             and says so, rather than measured at fewer factors — which
+         *                             would be one criterion standing in for another
          * @param behaviorDistinctions what working out the classes a body's rules about the strings
          *                             at one position divide it into may build. Past it the
          *                             position's classes are not composed and it is recorded as one
          *                             this compiler did not divide, rather than divided by the
          *                             rules it could afford
          */
-        public OfTheMeasures(int pairSpace,
+        public OfTheMeasures(int pairSpace, int cellsPerGroup,
                              PatternPlan.Budget behaviorDistinctions) {
             // A guardrail is a positive number a count is compared against. Refused here rather
             // than left to whoever writes it: a bound that admits nothing measures nothing, and a
@@ -78,16 +84,26 @@ public record AdequacyPolicy(OfTheMeasures measures, OfTheGeneration generation)
                         "a pair space holds at least one combination, so a limit below one bounds"
                                 + " nothing: " + pairSpace);
             }
+            if (cellsPerGroup < 1) {
+                throw new IllegalArgumentException(
+                        "a group has at least one combination, so a limit below one bounds nothing: "
+                                + cellsPerGroup);
+            }
             if (behaviorDistinctions == null) {
                 throw new IllegalArgumentException(
                         "a measure builds what a behavior tells apart under some budget");
             }
             this.pairSpace = pairSpace;
+            this.cellsPerGroup = cellsPerGroup;
             this.behaviorDistinctions = behaviorDistinctions;
         }
 
         public int pairSpace() {
             return pairSpace;
+        }
+
+        public int cellsPerGroup() {
+            return cellsPerGroup;
         }
 
         /**
@@ -125,17 +141,19 @@ public record AdequacyPolicy(OfTheMeasures measures, OfTheGeneration generation)
         public boolean equals(Object other) {
             return this == other || (other instanceof OfTheMeasures it
                     && pairSpace == it.pairSpace
+                    && cellsPerGroup == it.cellsPerGroup
                     && behaviorDistinctions.equals(it.behaviorDistinctions));
         }
 
         @Override
         public int hashCode() {
-            return java.util.Objects.hash(pairSpace, behaviorDistinctions);
+            return java.util.Objects.hash(pairSpace, cellsPerGroup, behaviorDistinctions);
         }
 
         @Override
         public String toString() {
             return "OfTheMeasures[pairSpace=" + pairSpace
+                    + ", cellsPerGroup=" + cellsPerGroup
                     + ", behaviorDistinctions=" + behaviorDistinctions + "]";
         }
     }

@@ -65,7 +65,9 @@ class NothingExpandsAModuleThatWasNotHandedOverTest {
             "what each clause of an invariant can be discharged by", Shapes.InvariantCapabilities::new,
             "the module a body is prepared from", Shapes.Prepared::new,
             "one body as the backend emits it",
-            name -> new Bodies.LoweredBody(name, new souther.compiler.ast.DefinitionName("go")));
+            name -> new Bodies.LoweredBody(name, new souther.compiler.ast.DefinitionName("go")),
+            "one body as the discharge analysis reads it",
+            name -> new Bodies.BodyForInvariantDischarge(name, "go"));
 
     private static Db dbFor(String source) {
         return Compilation.ofDocuments(Map.of("a.sou", source), Set.of(), ModulePath.EMPTY).db();

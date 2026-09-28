@@ -40,7 +40,7 @@ class AWorldSaysWhichRulesThereAreBeforeAReadingSaysHowFarItGoesTest {
     private static final Core LEFT = leaf("left");
     private static final Core RIGHT = leaf("right");
     private static final Core BOTH = new Core.Binary(BinOp.AND, LEFT, RIGHT,
-            ConstructOccurrence.unwritten(), Type.BOOL, POS);
+            Core.BinaryReading.AS_THEY_STAND, ConstructOccurrence.unwritten(), Type.BOOL, POS);
 
     /**
      * A reading that takes a conjunction whole is handed only what its world has.
@@ -78,7 +78,7 @@ class AWorldSaysWhichRulesThereAreBeforeAReadingSaysHowFarItGoesTest {
     @Test
     void andTheWorldHoldsWhateverTreeTheReadingIsOver() {
         Core again = new Core.Binary(BinOp.AND, leaf("left"), leaf("right"),
-                ConstructOccurrence.unwritten(), Type.BOOL, POS);
+                Core.BinaryReading.AS_THEY_STAND, ConstructOccurrence.unwritten(), Type.BOOL, POS);
         assertNotSame(BOTH, again, "the same clause, built again, which is what a step downstream"
                 + " hands on");
         assertEquals(BOTH, again, "and it is the same clause");
@@ -119,7 +119,7 @@ class AWorldSaysWhichRulesThereAreBeforeAReadingSaysHowFarItGoesTest {
     /** {@code same && same}, built afresh each time this is called. */
     private static Core twice() {
         return new Core.Binary(BinOp.AND, leaf("same"), leaf("same"),
-                ConstructOccurrence.unwritten(), Type.BOOL, POS);
+                Core.BinaryReading.AS_THEY_STAND, ConstructOccurrence.unwritten(), Type.BOOL, POS);
     }
 
     private static RuleRef.Invariant rule() {
@@ -186,7 +186,7 @@ class AWorldSaysWhichRulesThereAreBeforeAReadingSaysHowFarItGoesTest {
     /** A clause of no connective, named by which of them it is. */
     private static Core leaf(String named) {
         return new Core.Binary(BinOp.EQ, new Core.Str(named, Type.STRING, POS),
-                new Core.Str(named, Type.STRING, POS), ConstructOccurrence.unwritten(),
-                Type.BOOL, POS);
+                new Core.Str(named, Type.STRING, POS), Core.BinaryReading.AS_THEY_STAND,
+                ConstructOccurrence.unwritten(), Type.BOOL, POS);
     }
 }

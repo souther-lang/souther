@@ -7,19 +7,23 @@ import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.StructuralCost;
 import souther.compiler.ast.WrittenName;
+import souther.compiler.copied.CopyTarget;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.EtaOrigin;
 import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.ExpansionSite;
+import souther.compiler.types.MaterialisationSite;
 import souther.compiler.types.ParameterSlot;
 import souther.compiler.types.ReferenceOrigin;
+import souther.compiler.types.RegionSlot;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.SourceReferenceOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
@@ -30,15 +34,19 @@ import souther.compiler.diag.DeclaringCode;
 import souther.compiler.diag.QuotedFrom;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.SequencedSet;
 import java.util.Set;
 import java.util.function.IntFunction;
+import java.util.function.Supplier;
 
 /**
  * Expands calls to helper {@code fn}s inline (spec §blocks: a named helper is the same as an inline block).
@@ -87,6 +95,51 @@ public final class HelperInliner {
      */
     private Preserved settledValues = Preserved.NONE;
     private java.util.function.Function<ValueName, Object> settledConstants = _ -> null;
+    /**
+     * What this expansion puts where a value's name was written.
+     *
+     * <p>Said by whoever makes the inliner, since what the tree it writes is read by decides it and
+     * nothing here can tell: {@link ValueAtAReference#COPIED} is for a reader that cannot read a
+     * binding, {@link ValueAtAReference#SHARED_PER_REGION} for one that can.
+     * {@link ValueAtAReference#SETTLED_REFERENCE} is carried by {@link #settledValues} rather than
+     * by this, since what it needs is the signature and not the arm.
+     */
+    private final ValueAtAReference reading;
+    /** Whether a value that needs nothing from its region is called as a method, not copied. */
+    private boolean valuesAreMethods = false;
+    /** Whether a value this module declares is built as a reference to its template. */
+    private boolean valuesAreTemplates = false;
+    /** Which references to a value are left as the reference, for a body being closed. */
+    private ValuesLeftNamed valuesStayNamed = ValuesLeftNamed.NONE;
+
+    /** Which values a body being closed names rather than holds. */
+    private enum ValuesLeftNamed {
+        /** Not closing: every value is read as the expansion's mode says. */
+        NONE,
+        /** A helper or a clause: the values of its own module are held in it, once where they are
+         *  demanded, and another module's value runs in that module, so it stays a reference. */
+        OF_OTHER_MODULES,
+        /** A value: it runs where it is declared, so everything it names stays a reference. */
+        ALL
+    }
+    /** What each value folds to, empty where it is not a constant, by what it is reached by. */
+    private final Map<ReachName.Declaration, Optional<Object>> constantOfValues = new HashMap<>();
+    /** What the method emitted for each value takes, by what the value is reached by. */
+    private final Map<ReachName.Declaration, Handover> handovers = new HashMap<>();
+    /** The fold that says which values are constants, the one every reader of a constant asks. */
+    private ConstEval constEval = null;
+    /** What each value folds to, asked by a build that carries its constant ({@link #foldedValue}). */
+    private final Map<ReachName.Declaration, Optional<Object>> foldedValues = new HashMap<>();
+    /** The same fold, reading each value it names by {@link #foldedValue}, so it copies nothing. */
+    private ConstEval foldingValues = null;
+    /**
+     * Where a value materialised in each region this expansion is inside is read, outermost first.
+     *
+     * <p>Held by what a name reaches, which is the key a value is held by everywhere here — two
+     * spellings can reach one declaration and one spelling can reach two, so a table of spellings
+     * would read one value's binding for another's.
+     */
+    private final List<Map<String, Hir.Binder>> materialised = new ArrayList<>();
     /** What each declaration this table reaches calls, and which of them recurse. A function of the
      * table, so a narrowed table does not narrow it: what recurses was settled over the table as it
      * was built. */
@@ -141,6 +194,9 @@ public final class HelperInliner {
      * @param dependencies which bindings the {@code depends on} parameters of a behavior's
      *                     {@code let} are; empty while writing anything else, because only a
      *                     behavior's {@code let} has them (spec §depends-on)
+     * @param root the region the expression being written is the whole of, where the caller says
+     *             which one it is, and null where it is the body of the definition
+     *             {@code destination} names
      * @param scopedLambdas the lambdas reached by a binding rather than by a name: one a block's
      *                      {@code let} binds, one handed to a function parameter. Apart from
      *                      {@link #table} because they are apart — a declaration is reached by a name
@@ -152,7 +208,8 @@ public final class HelperInliner {
      *                     not write is bound to a parameter and carried unchanged through every
      *                     copy that hands it on ({@link #crossedInto})
      */
-    private record Writing(BindingOwner destination, BindingOwner enclosing,
+    private record Writing(BindingOwner destination, MaterialisationSite root,
+                           BindingOwner enclosing,
                            ExpansionLineage lineage, Hir.Binders binders,
                            Set<BindingId> dependencies,
                            Map<BindingId, ScopedLambda> scopedLambdas,
@@ -185,8 +242,8 @@ public final class HelperInliner {
             Map<BindingId, ExpansionSite.Supplied.Handover> here =
                     new LinkedHashMap<>(suppliedFrom);
             here.putAll(supplied);
-            return new Writing(destination, copy, deeper, binders, dependencies, scopedLambdas,
-                    here);
+            return new Writing(destination, root, copy, deeper, binders, dependencies,
+                    scopedLambdas, here);
         }
     }
 
@@ -243,9 +300,20 @@ public final class HelperInliner {
      * operation handed a block on to another. */
     private record LambdaOrigin(String param, String owner, SourcePos pos) {}
 
-    private HelperInliner(HelperTable table, HelperGraph graph) {
+    private HelperInliner(HelperTable table, HelperGraph graph, ValueAtAReference reading) {
+        if (reading == ValueAtAReference.SETTLED_REFERENCE) {
+            throw new IllegalArgumentException("what a settled reference stands for is told to an"
+                    + " inliner beside this, by readingSettledValues");
+        }
         this.table = table;
         this.graph = graph;
+        this.reading = reading;
+    }
+
+    /** Whether a value is materialised once per evaluation region here, which is what a tree that
+     *  runs, or one a walk of regions reads, is written as. */
+    public boolean sharesValuesPerRegion() {
+        return reading == ValueAtAReference.SHARED_PER_REGION;
     }
 
     /** The body of {@code fn} in this module — what an expansion written into it belongs to. */
@@ -257,8 +325,9 @@ public final class HelperInliner {
      * prelude helpers join the inlining map under the qualified names they are reached by
      * ({@code Bool.not}), a module's own under the bare names it declared them with — so the two
      * never stand for one key, and how a call came to name one of them was settled before this. */
-    public static HelperInliner forModule(Hir.Module module, Stdlib stdlib) {
-        return forModule(module, Map.of(), stdlib);
+    public static HelperInliner forModule(Hir.Module module, Stdlib stdlib,
+                                          ValueAtAReference reading) {
+        return forModule(module, Map.of(), stdlib, reading);
     }
 
     /**
@@ -271,9 +340,9 @@ public final class HelperInliner {
      * answered where that is collected.
      */
     public static HelperInliner forModule(Hir.Module module, Map<String, Hir.FnDef> imported,
-                                          Stdlib stdlib) {
+                                          Stdlib stdlib, ValueAtAReference reading) {
         HelperTable table = HelperTable.of(module, imported, InliningPolicy.FULL, stdlib);
-        return new HelperInliner(table, HelperGraph.of(table));
+        return new HelperInliner(table, HelperGraph.of(table), reading);
     }
 
     /**
@@ -286,8 +355,8 @@ public final class HelperInliner {
      * them.
      */
     public static HelperInliner forHelpers(String module, Map<String, Hir.FnDef> own,
-                                           Stdlib stdlib) {
-        return forHelpers(module, own, InliningPolicy.FULL, stdlib);
+                                           Stdlib stdlib, ValueAtAReference reading) {
+        return forHelpers(module, own, InliningPolicy.FULL, stdlib, reading);
     }
 
     /**
@@ -298,8 +367,9 @@ public final class HelperInliner {
      * a module's own helper is expanded, and a recursive call is left standing, by the same rules.
      */
     public static HelperInliner forHelpers(String module, Map<String, Hir.FnDef> own,
-                                           InliningPolicy policy, Stdlib stdlib) {
-        return forHelpers(module, own, Map.of(), policy, stdlib);
+                                           InliningPolicy policy, Stdlib stdlib,
+                                           ValueAtAReference reading) {
+        return forHelpers(module, own, Map.of(), policy, stdlib, reading);
     }
 
     /**
@@ -310,9 +380,9 @@ public final class HelperInliner {
      */
     public static HelperInliner forHelpers(String module, Map<String, Hir.FnDef> declared,
                                            Map<String, Hir.FnDef> imported, InliningPolicy policy,
-                                           Stdlib stdlib) {
+                                           Stdlib stdlib, ValueAtAReference reading) {
         HelperTable table = HelperTable.of(module, declared, Map.of(), imported, policy, stdlib);
-        return over(table, HelperGraph.of(table));
+        return over(table, HelperGraph.of(table), reading);
     }
 
     /**
@@ -322,8 +392,9 @@ public final class HelperInliner {
      * asks them once and every body of that module is expanded against the same two answers. The
      * factories above are for a caller holding declarations rather than answers.
      */
-    public static HelperInliner over(HelperTable table, HelperGraph graph) {
-        return new HelperInliner(table, graph);
+    public static HelperInliner over(HelperTable table, HelperGraph graph,
+                                     ValueAtAReference reading) {
+        return new HelperInliner(table, graph, reading);
     }
 
     /**
@@ -354,6 +425,38 @@ public final class HelperInliner {
                                              java.util.function.Function<ValueName, Object> constants) {
         this.settledValues = settled;
         this.settledConstants = constants;
+        return this;
+    }
+
+    /**
+     * In the tree the backend emits from, a value that needs nothing from the region around it is
+     * emitted as a method of its own, and a reference to it is a call.
+     *
+     * <p>Said apart from sharing each value per region ({@link #sharesValuesPerRegion}), which every
+     * representation that runs asks for: the representation an analysis reads has no method to call
+     * and keeps the body where the value was named.
+     */
+    public HelperInliner callingValuesAsMethodsWhereEmitted(Symbols symbols) {
+        this.valuesAreMethods = table.policy() == InliningPolicy.FULL;
+        this.constEval = ConstEval.against(symbols, this::constantOf);
+        return this;
+    }
+
+    /**
+     * In the tree an analysis reads, a value this module declares is built where it is named and is
+     * held once as a template, and a build of it is a reference and not a copy of its body.
+     *
+     * <p>The other half of {@link #callingValuesAsMethodsWhereEmitted}: the tree that runs has a
+     * method to call and the tree an analysis reads has a meaning to refer to. What each of them
+     * builds where is {@link ValuePlan}'s, so the two cannot disagree about it.
+     *
+     * <p>Told the library {@code symbols} names, because a build carries what its value folds to
+     * ({@link Hir.ValueBuild#constant}) and a fold is against a library.
+     */
+    public HelperInliner buildingValuesAsTemplatesWhereAnalysed(Symbols symbols) {
+        this.valuesAreTemplates = table.policy() == InliningPolicy.DISCHARGE;
+        this.foldingValues = ConstEval.against(symbols,
+                named -> foldedValue(named.reachesADeclaration()));
         return this;
     }
 
@@ -404,9 +507,9 @@ public final class HelperInliner {
      * a module nothing has resolved, and everything after resolution asks the same question of one
      * it has. The rule is the same one, so it is here rather than restated over each tree.
      */
-    public static boolean publishes(Set<String> exposing, String fn, boolean hasWrittenBody,
+    public static boolean publishes(Set<String> published, String fn, boolean hasWrittenBody,
                                     List<String> wanted) {
-        return hasWrittenBody && exposing.contains(fn) && wanted.contains(fn);
+        return hasWrittenBody && published.contains(fn) && wanted.contains(fn);
     }
 
     /**
@@ -420,6 +523,20 @@ public final class HelperInliner {
      * reached first.
      */
     private final java.util.SequencedSet<ReachName.Declaration> leftStanding = new java.util.LinkedHashSet<>();
+
+    /**
+     * Every declaration of another module this expansion put a copy of into what it wrote: a helper
+     * it expanded, a value whose body or constant it wrote where the value was named.
+     *
+     * <p>Written where the copy is made, for the reason {@link #leftStanding} is. Afterwards the tree
+     * holds what the declaration said and nothing that names it, so a reader asking which
+     * declarations the tree was built from can no longer find out from the tree.
+     */
+    private final SequencedSet<CopyTarget> copied = new LinkedHashSet<>();
+
+    /** What each expansion being asked about has copied, innermost last — for the reason
+     *  {@link #standingHere} is kept beside {@link #leftStanding}. */
+    private final java.util.List<SequencedSet<CopyTarget>> copiedHere = new java.util.ArrayList<>();
 
     /**
      * What each expansion being asked about has left standing, innermost last.
@@ -470,28 +587,47 @@ public final class HelperInliner {
 
     /** Every recursion in reach, which is exactly what {@link #inline} leaves a call standing to —
      *  this module's own, what its imports publish to it, and the library underneath both. What a
-     *  standing call can be typed against, whatever this module turns out to reach. */
-    public java.util.SequencedSet<ReachName.Declaration> recursiveInReach() {
+     *  standing call can be typed against, whatever this module turns out to reach. In the graph's
+     *  own order, which is declaration order and is part of what this answers (see {@link
+     *  HelperGraph}). */
+    public java.util.List<ReachName.Declaration> recursiveInReach() {
         return graph.recursive();
     }
 
     /** The recursive helpers this module declares. A call to one of them is left standing by
      * {@link #inline}, as is a call to any recursion in reach — the graph's own {@code recursive}
-     * set is what {@code inline} asks, so one this module does not declare is left standing too and
+     * list is what {@code inline} asks, so one this module does not declare is left standing too and
      * is answered for by whoever collects what an expansion could not remove.
      *
      * <p>Answered in declaration order, which is the order a check reporting one of them reports in.
      * The order is the graph's and is carried, not rebuilt. */
-    public java.util.SequencedSet<ReachName.Declaration> recursiveHelpers() {
-        java.util.SequencedSet<ReachName.Declaration> result = new java.util.LinkedHashSet<>();
+    public java.util.List<ReachName.Declaration> recursiveHelpers() {
+        java.util.List<ReachName.Declaration> result = new java.util.ArrayList<>();
         for (ReachName.Declaration reference : graph.recursive()) {
-            // Held here, which is asked at the address this module puts what it reaches that way —
-            // the entry says both, so neither is worked out from the other.
-            if (table.held().containsKey(DefinitionName.of(reference))) {
+            // Held here, which the entries answer: each pairs how it is reached with where it is
+            // held, so neither is worked out from the other.
+            if (table.holds(reference)) {
                 result.add(reference);
             }
         }
-        return result;
+        return List.copyOf(result);
+    }
+
+    /** The call cycle {@code reference} is on, as the graph that answers {@link #recursiveHelpers}
+     *  has it ({@link HelperGraph#callCycleOf}). */
+    public List<ReachName.Declaration> callCycleOf(ReachName.Declaration reference) {
+        return graph.callCycleOf(reference);
+    }
+
+    /** The declaration {@code call} applies as the call graph reads it — what a sugar is written out
+     *  as, where it is one — or null where what it applies reaches no declaration. */
+    ReachName.Declaration called(Hir.Apply call) {
+        return calledHelper(table.library(), call);
+    }
+
+    /** The library this expansion's table was built over. */
+    Stdlib library() {
+        return table.library();
     }
 
     /**
@@ -508,6 +644,44 @@ public final class HelperInliner {
      */
     public java.util.SequencedSet<ReachName.Declaration> leftStanding() {
         return java.util.Collections.unmodifiableSequencedSet(leftStanding);
+    }
+
+    /**
+     * What this expansion copied of other modules' declarations, in the order it copied them.
+     *
+     * <p>Read off the expansion that made the copies, as {@link #leftStanding} is, and for every tree
+     * this inliner was driven over: what a module's classes are built from is a question about the
+     * module, and a caller that drove it over one tree is the one that knows which tree that was.
+     */
+    public SequencedSet<CopyTarget> copiedFromElsewhere() {
+        return java.util.Collections.unmodifiableSequencedSet(copied);
+    }
+
+    /** That the helper {@code reaches} declares was copied here, where it is one this module copies
+     *  ({@link CopyTarget#declaredElsewhere}). */
+    private void copiesHelper(ReachName.Declaration reaches) {
+        ValueName.Helper declared = CopyTarget.declaredElsewhere(reaches, moduleName());
+        if (declared != null) {
+            copies(new CopyTarget.Helper(declared));
+        }
+    }
+
+    /** That the value {@code reaches} declares was copied here, its body or its constant, where it is
+     *  one this module copies. */
+    private void copiesValue(ReachName.Declaration reaches) {
+        ValueName.Helper declared = CopyTarget.declaredElsewhere(reaches, moduleName());
+        if (declared != null) {
+            copies(new CopyTarget.Value(declared));
+        }
+    }
+
+    /** {@code target}, copied: into what this inliner answers for and into every expansion being
+     *  asked about, which holds this one. */
+    private void copies(CopyTarget target) {
+        copied.add(target);
+        for (SequencedSet<CopyTarget> asked : copiedHere) {
+            asked.add(target);
+        }
     }
 
     /**
@@ -608,12 +782,13 @@ public final class HelperInliner {
     /**
      * A definition {@code module} publishes, closed so that it means in a reader what it means here.
      *
-     * <p>Closing is expansion: the module's own values and non-recursive helpers are substituted into
-     * the body, so no bare name of this module is left for the reader to read against its own
-     * definitions (ADR-0067). A recursive helper is the one thing expansion cannot remove — it is
-     * lowered to a method, so the call stays a call — and it is qualified here instead, under the
-     * module that declares it. The reader emits that method as one of its own, exactly as it already
-     * does for a recursive prelude helper it reaches.
+     * <p>Closing is expansion of the helpers: the module's own non-recursive helpers are substituted
+     * into the body, so no bare name of this module is left for the reader to read against its own
+     * definitions (ADR-0067). A recursive helper cannot be expanded — it is lowered to a method, so
+     * the call stays a call — and a value is not expanded either, being one definition that every
+     * body naming it reaches. Both are qualified here instead, under the module that declares them.
+     * The reader emits a recursive helper as a method of its own, exactly as it already does for a
+     * recursive prelude helper it reaches, and calls a value's entry in its declaring module.
      *
      * <p>What comes back is named qualified too. The name is the definition's identity across
      * modules, and a bare one is only how a reader happens to write it: two modules may publish a
@@ -632,11 +807,61 @@ public final class HelperInliner {
         // Its own module is reading here, so it reaches its own declaration bare — which is the
         // reference the graph over that module's table is keyed by.
         ReachName.Declaration here = new ReachName.Own(new ValueName.Helper(module, fn.name()));
-        Hir.Expr closed = graph.recurses(here)
-                ? inlineRecursiveBody(fn) : inline(fn.writtenBody(), bodyOf(fn.name()));
+        // A value stays a reference to the values it names: it runs where it is declared, so what
+        // it names is built there and never copied. A helper is handed to its reader whole, and its
+        // own module's values are held in it, each bound once where it is demanded; a value another
+        // module declares runs in that module whichever body names it, so it stays a reference in
+        // a helper as well.
+        ValuesLeftNamed namedBefore = valuesStayNamed;
+        valuesStayNamed = fn.params().isEmpty()
+                ? ValuesLeftNamed.ALL : ValuesLeftNamed.OF_OTHER_MODULES;
+        Hir.Expr closed;
+        try {
+            closed = graph.recurses(here)
+                    ? inlineRecursiveBody(fn) : inline(fn.writtenBody(), bodyOf(fn.name()));
+        } finally {
+            valuesStayNamed = namedBefore;
+        }
         return fn.reachedAs(new ReachName.OfModule(new ValueName.Helper(module, fn.name())))
                 .withBody(new Hir.FnBody.Written(
                         HelperNames.publishedBy(HelperNames.qualifyHelpersOf(closed, module), module)));
+    }
+
+    /**
+     * {@link #closeAcross}, with what closing it copied of other modules' declarations.
+     *
+     * <p>A reader handed the closed definition copies those along with it, since the closing wrote
+     * them into what it is handed and nothing there names them any more.
+     */
+    public Expansion<Hir.FnDef> closedAcross(Hir.FnDef fn, String module) {
+        return expanding(() -> closeAcross(fn, module));
+    }
+
+    /**
+     * The clauses of {@code data}, a declaration of {@code module}, closed over that module and no
+     * other: its own helpers expanded and its own values held in each clause, once where they are
+     * demanded, and every definition of another module left as what names it — a value as its
+     * name, a helper as an expansion whose callee says which one.
+     *
+     * <p>What a declaration's invariant is, said in terms of its own module. The clauses a reader
+     * checks have the other modules' definitions written into them as well, and those are copies of
+     * those definitions, held to what they offer and not to what this declaration does.
+     */
+    public List<Hir.InvariantClause> closeClausesAcross(Hir.Data data, String module) {
+        if (!module.equals(table.module())) {
+            throw new IllegalArgumentException("`" + module + "` is not the module this expands"
+                    + " into, which is `" + table.module() + "`");
+        }
+        ValuesLeftNamed namedBefore = valuesStayNamed;
+        valuesStayNamed = ValuesLeftNamed.OF_OTHER_MODULES;
+        try {
+            BindingOwner declared = new BindingOwner.OfData(data.declares());
+            WrittenOwner.Declaration writer = new WrittenOwner.Declaration(data.declares().key());
+            return Hir.mapClauses(data.invariants(), (ordinal, clause) -> inline(clause, declared,
+                    new MaterialisationSite.Invariant(writer, ordinal)));
+        } finally {
+            valuesStayNamed = namedBefore;
+        }
     }
 
     /** The module these helpers belong to — the one whose bodies this expands into. */
@@ -711,7 +936,7 @@ public final class HelperInliner {
      * sugar it takes rewrites to. Null where what is applied is not a name that reaches a
      * declaration: a binding holding a lambda is applied by the expression and reaches nothing.
      */
-    private static ReachName.Declaration calledHelper(Stdlib stdlib, Hir.Apply call) {
+    static ReachName.Declaration calledHelper(Stdlib stdlib, Hir.Apply call) {
         if (!(call.function() instanceof Hir.Var.Denoting callee)) {
             return null;
         }
@@ -827,6 +1052,11 @@ public final class HelperInliner {
         if (is == null || is.declaredReturn() == null) {
             return null;
         }
+        // A value takes nothing and is named where what it answers would be written, so what
+        // arrives is that type and no function of it.
+        if (is.params().isEmpty()) {
+            return is.declaredReturn();
+        }
         List<Hir.RetType> params = new ArrayList<>();
         for (Hir.FnParam p : is.params()) {
             if (p.type() == null) {
@@ -834,7 +1064,7 @@ public final class HelperInliner {
             }
             params.add(p.type());
         }
-        return new Hir.RetType(
+        return Hir.RetType.of(
                 List.of(new Hir.FnType(params, is.declaredReturn(), is.pos())), is.pos());
     }
 
@@ -856,7 +1086,7 @@ public final class HelperInliner {
     /** {@code t} as a written type with no surface text: what it denotes is decided, and no source
      * stands for it. */
     private static Hir.RetType stating(Type t, SourcePos pos) {
-        return new Hir.RetType(List.of(Hir.TypeRef.of(t, pos)), pos);
+        return Hir.RetType.of(List.of(Hir.TypeRef.of(t, pos)), pos);
     }
 
     /** {@code declared} with what this application decided written into it, or as it stands where it
@@ -867,7 +1097,7 @@ public final class HelperInliner {
             return declared;
         }
         Type at = TypeOps.substitute(TypeOps.resolveParamType(declared), applied);
-        return new Hir.RetType(List.of(Hir.TypeRef.of(at, declared.pos())), declared.pos());
+        return Hir.RetType.of(List.of(Hir.TypeRef.of(at, declared.pos())), declared.pos());
     }
 
     /** Whether a declared type has a type variable inside it. A generic declared return ({@code
@@ -1116,7 +1346,21 @@ public final class HelperInliner {
      * {@code depends on} parameters are the trailing bindings named in {@code dependencies}. */
     public Hir.Expr inline(Hir.Expr e, Set<BindingId> dependencies, BindingOwner into) {
         heldToTheBound(e);
-        return writing(into, dependencies, () -> inline(e));
+        return writing(into, null, dependencies, () -> expanded(e));
+    }
+
+    /**
+     * {@code e} with its calls expanded, and — where a value is read as a shared materialisation —
+     * with the values it names bound into the regions that demand them.
+     *
+     * <p>Two walks and not one. What region a value belongs at is a fact about where its references
+     * stand, and an expansion part way through a body is not somewhere that can be answered: the
+     * expansion leaves each reference standing, and the walk after it reads the finished tree, where
+     * every region the calls brought with them is already in it.
+     */
+    private Hir.Expr expanded(Hir.Expr e) {
+        Hir.Expr calls = inline(e);
+        return reading == ValueAtAReference.SHARED_PER_REGION ? region(calls, rootSite()) : calls;
     }
 
     /**
@@ -1127,7 +1371,27 @@ public final class HelperInliner {
      */
     public Hir.Expr inline(Hir.Expr e, BindingOwner into) {
         heldToTheBound(e);
-        return writing(into, Set.of(), () -> inline(e));
+        return writing(into, null, Set.of(), () -> expanded(e));
+    }
+
+    /**
+     * The same, for an expression that is not the body of a definition, with each value it names
+     * materialised once per evaluation region rather than copied at every reference.
+     *
+     * <p>{@code root} is the region {@code e} is the whole of. A definition's body says which region
+     * it is by the definition, and {@code into} alone cannot say it for what a declaration writes:
+     * a data's {@code invariant} has one root per clause, and {@code into} is the data.
+     *
+     * <p>Only for an inliner made to share ({@link #sharesValuesPerRegion}): a region is what a
+     * shared build is bound in, and an inliner that copies has none to be told.
+     */
+    public Hir.Expr inline(Hir.Expr e, BindingOwner into, MaterialisationSite root) {
+        if (!sharesValuesPerRegion()) {
+            throw new IllegalStateException("a region is told to an inliner that shares values per"
+                    + " region, and this one copies them: " + root);
+        }
+        heldToTheBound(e);
+        return writing(into, root, Set.of(), () -> expanded(e));
     }
 
     /**
@@ -1143,18 +1407,30 @@ public final class HelperInliner {
         return expanding(() -> inline(e, into));
     }
 
+    /** As {@link #expanding(Hir.Expr, BindingOwner)}, for an expression that is the whole of the
+     * region {@code root}, with each value it names materialised once per region
+     * ({@link #inline(Hir.Expr, BindingOwner, MaterialisationSite)}). */
+    Expansion<Hir.Expr> expanding(Hir.Expr e, BindingOwner into, MaterialisationSite root) {
+        return expanding(() -> inline(e, into, root));
+    }
+
     /**
-     * What one run of {@code expansion} left standing, for a driver expanding something this class
-     * has no single entry point for — the several clauses of one declaration, expanded one after
-     * another into the tree the declaration becomes.
+     * What one run of {@code expansion} left standing and what it copied of other modules'
+     * declarations, for a driver expanding something this class has no single entry point for — the
+     * several clauses of one declaration, expanded one after another into the tree the declaration
+     * becomes, or the definitions of a module closed one after another.
      */
     <T> Expansion<T> expanding(java.util.function.Supplier<T> expansion) {
         java.util.SequencedSet<ReachName.Declaration> asked = new java.util.LinkedHashSet<>();
+        SequencedSet<CopyTarget> copiedByIt = new LinkedHashSet<>();
         standingHere.add(asked);
+        copiedHere.add(copiedByIt);
         try {
-            return new Expansion<>(expansion.get(), asked);
+            return new Expansion<>(expansion.get(), asked, copiedByIt, ElementProvenance.NONE,
+                    souther.compiler.coverage.SuppliedRules.NONE);
         } finally {
             standingHere.remove(standingHere.size() - 1);
+            copiedHere.remove(copiedHere.size() - 1);
         }
     }
 
@@ -1169,7 +1445,8 @@ public final class HelperInliner {
      * <p>A writing may hold another. A helper's body is expanded while the body that called it is
      * being expanded, so the one in force is put back when this one is done rather than dropped.
      */
-    private Hir.Expr writing(BindingOwner into, Set<BindingId> dependencies,
+    private Hir.Expr writing(BindingOwner into, MaterialisationSite root,
+                             Set<BindingId> dependencies,
                              java.util.function.Supplier<Hir.Expr> expansion) {
         Writing outer = writing;
         // Numbered among what this pass has written into that body, so a second writing into it — a
@@ -1180,7 +1457,7 @@ public final class HelperInliner {
         // The writing is what places the copies, so it is what they are written under. Rooted at
         // the body instead, two writings into one body would place one call's copy in one spot
         // twice — the body cannot tell them apart, and which writing this is is exactly what does.
-        writing = new Writing(into, mine, ExpansionLineage.ORIGINAL, new Hir.Binders(mine),
+        writing = new Writing(into, root, mine, ExpansionLineage.ORIGINAL, new Hir.Binders(mine),
                 dependencies, new HashMap<>(), new LinkedHashMap<>());
         try {
             return expansion.get();
@@ -1278,22 +1555,28 @@ public final class HelperInliner {
             case Hir.Expansion ex -> {
                 List<Hir.Bound> bound = new ArrayList<>();
                 for (Hir.Bound b : ex.bound()) {
-                    bound.add(new Hir.Bound(b.binder(), b.declaredType(), inline(b.value())));
+                    bound.add(b.with(inline(b.value())));
                 }
                 List<Hir.Given> given = new ArrayList<>();
                 for (Hir.Given g : ex.given()) {
-                    given.add(new Hir.Given(g.declaredType(), inline(g.value()), g.applied(),
-                            g.arrivesAs()));
+                    given.add(g.with(inline(g.value())));
                 }
                 // Walked with this expansion as the copy being written: a call the body still holds
                 // is one this expansion made, not one the body around it made.
                 yield new Hir.Expansion(ex.callee(), ex.application(), ex.at(), bound, given,
-                        ex.declaredReturn(),
-                        insideThisCopy(ex.application(),
-                                writing.lineage().copiedInto(ex.callee(), ex.at()), Map.of(),
-                                () -> inline(ex.body())),
+                        ex.declaredReturn(), insideThisExpansion(ex, () -> inline(ex.body())),
                         ex.pos(), ex.region());
             }
+            // A build by reference holds no body, so there is nothing in it to walk.
+            case Hir.ValueBuild build -> build;
+            // A call of a value's method holds a reference and the bindings it is handed, and
+            // there is no body in it to walk.
+            case Hir.ValueInvocation call -> call;
+            // A build already kept as one: what it holds is walked like any other body, and what
+            // says which build it is stays where the pass that made it put it.
+            case Hir.Materialised m -> new Hir.Materialised(m.value(), m.site(),
+                    insideThisBuild(m.value(), m.site(), () -> inline(m.body())),
+                    m.pos(), m.region());
             case Hir.LetIn li -> {
                 // What the value turns out to be is what decides this, so it is worked out first: a
                 // lambda the author wrote and a named function read as a value are the same block by
@@ -1379,6 +1662,7 @@ public final class HelperInliner {
             case Hir.ListComp comp -> new Hir.ListComp(inline(comp.element()), inlineList(comp.guards()),
                     comp.origin(), comp.pos(), comp.region());
             case Hir.Block block -> new Hir.Block(block.params(), inline(block.body()), block.rule(),
+                    block.expandedFrom(), block.named(),
                     block.pos(),
                     block.region());
             case Hir.IntLit _ -> e;
@@ -1444,10 +1728,28 @@ public final class HelperInliner {
         // takes nothing. The value is substituted and the arguments are applied to it.
         if (helper.params().isEmpty() && !args.isEmpty()
                 && call.function() instanceof Hir.Var named) {
-            return inline(call.replacedBy(valueOf(named), args));
+            AppliedValue value = appliedValue(named);
+            // A body being closed leaves another module's value as its name, applied or not: the
+            // reader decides what stands for it, as it does wherever the value is named.
+            ReachName.Declaration valueReach = value == null ? reaches : value.reached();
+            if (value == null || (valueReach != null && leftNamed(valueReach))) {
+                // No body to put in the callee's place. Reading the callee as a value written
+                // where a value goes would answer with the callee itself, and the call rebuilt
+                // from it would be this same call.
+                return call.withArgs(args);
+            }
+            return inline(call.replacedBy(
+                    appliedValueBody(call, (Hir.Var.Denoting) named, value), args));
         }
         if (args.size() != helper.params().size()) {
             throw wrongArity(call, helper, args.size());
+        }
+        // The body is copied here and the call is gone, so this is the last place that knows which
+        // declaration the copy is of — followed through the names that hold it, since a helper
+        // handed over and applied under a parameter's name is copied all the same.
+        ReachName.Declaration copiedFrom = callee == null ? null : reaches(callee);
+        if (copiedFrom != null) {
+            copiesHelper(copiedFrom);
         }
         // Everything this expansion writes belongs to it: the bindings its arguments become,
         // the one a lambda given to a function parameter is registered under, the one its
@@ -1782,7 +2084,7 @@ public final class HelperInliner {
             Hir.FnParam p = helper.params().get(i);
             Hir.Expr arg = args.get(i);
             if (p.type() != null && p.type().asFn() != null) {
-                // a function argument is not a value, so it cannot be bound to a let. A named
+                // a function argument is held as given rather than bound to a let. A named
                 // function is substituted directly (f(x) becomes inc(x)); a lambda is
                 // registered under a fresh name as a scoped helper, so each application of the
                 // parameter β-reduces to the lambda's body, as a let-bound lambda does (spec §blocks).
@@ -1790,7 +2092,7 @@ public final class HelperInliner {
                 // function parameter is what removes it, because the application β-reduces
                 // to the lambda's body, so the expansion holds no reference either way.
                 given.add(new Hir.Given(instantiated(p.type(), applied), arg,
-                        references(helper.writtenBody(), p.binder().id()), arrivesAs(arg)));
+                        references(helper.writtenBody(), p.binder().id()), arrivesAs(arg), i));
                 Hir.FnType declares = declaredFn(p.type(), applied);
                 // Which rule this call handed to this parameter, said where the call site is
                 // still here to say it. What the expansion holds afterwards is the rule's own body
@@ -1857,7 +2159,7 @@ public final class HelperInliner {
                     handedHere.put(f.id(), crossedInto(null, crossingInto, i));
                     stands(f.id(), ruleOf(lambda));
                     unreduced.put(f.id(),
-                            new Hir.Bound(f, instantiated(p.type(), applied), lambda));
+                            new Hir.Bound(f, instantiated(p.type(), applied), lambda, i));
                     // Only where the lambda takes the one value an element arrives as. A closure
                     // given more — an index beside the element — answers about a pair, and one
                     // answer per element says nothing about which of the two a projection is of.
@@ -1876,7 +2178,7 @@ public final class HelperInliner {
                 // carry the parameter's declared type onto the binding, so a value known to
                 // be a sum (an annotated `s: S`) is not narrowed to the argument's specific
                 // case when the body is re-checked inline — a `match s` inside still sees S.
-                bound.add(new Hir.Bound(f, instantiated(p.type(), applied), arg));
+                bound.add(new Hir.Bound(f, instantiated(p.type(), applied), arg, i));
                 // Where the argument is itself the expansion of an operation over a collection,
                 // what this binding holds came from that operation's own container — and by the
                 // time anything reads the tree, the operation is gone. Recorded here, which is the
@@ -1976,10 +2278,70 @@ public final class HelperInliner {
         // name, and these are the parameters and the call it stands for. Which expansion it is, is
         // said here, where the name that made it necessary is still in hand — a reader below has
         // only the shape, and the shape is one every composed application wears.
+        //
+        // And which block this is, for the same reason and at the same moment. Its rule says no
+        // author wrote it, so what tells it from the next one is the name it was written out of.
         return new Hir.Block(params,
                 Hir.Apply.synthetic(function, args, new ApplicationOrigin.Eta(etaOf(function)),
                         function.pos(), null),
-                souther.compiler.types.RuleOrigin.unwritten(), function.pos(), null);
+                souther.compiler.types.RuleOrigin.unwritten(), writtenReference(function),
+                namedFunction(function), function.pos(), null);
+    }
+
+    /**
+     * The function {@code function} names, with what its declaration says it takes.
+     *
+     * <p>Read here because this is where the declaration is in hand for every kind of function a
+     * name may reach, as {@link #declarationArity} reads how many it takes. What the block holds
+     * is asked of the declaration and not of what the body comes to: the call inside is expanded,
+     * left standing or bound according to what the function is, and none of the three is what the
+     * function takes.
+     */
+    private Hir.NamedFunction namedFunction(Hir.Var function) {
+        if (!(function instanceof Hir.Var.Denoting named)) {
+            return null;
+        }
+        return new Hir.NamedFunction(named.denotes(), declaredTakes(named));
+    }
+
+    /** What the declaration {@code v} reaches has settled for its parameters, or null where it is a
+     *  kind whose type is asked of something else or where one of them has none. */
+    private List<Type> declaredTakes(Hir.Var.Denoting v) {
+        return switch (v.denotes()) {
+            case ValueName.Stdlib.Operation lib -> {
+                Stdlib.Entry entry = table.library().entry(lib);
+                yield entry == null ? null : entry.signature().params();
+            }
+            case ValueName.Helper _ -> {
+                ReachName.Declaration reaches = v.reachesADeclaration();
+                Hir.FnDef declared = reaches == null ? null : table.reached(reaches);
+                yield declared == null ? null : settledTakes(declared);
+            }
+            default -> null;
+        };
+    }
+
+    private static List<Type> settledTakes(Hir.FnDef declared) {
+        List<Type> takes = new ArrayList<>();
+        for (Hir.FnParam param : declared.params()) {
+            if (param.type() == null) {
+                return null;
+            }
+            takes.add(TypeOps.resolveParamType(param.type()));
+        }
+        return takes;
+    }
+
+    /**
+     * The reference {@code function} is, where a source wrote one, and null where this compiler
+     * composed the name.
+     *
+     * <p>A name a pass wrote carries a number and nothing else, so it tells no two blocks apart. It
+     * is null here rather than a refusal: whether anything needs this block told from another is
+     * settled where one asks, and a name nobody can be sent to is only a problem for whoever asks.
+     */
+    private static SourceReferenceOrigin writtenReference(Hir.Var function) {
+        return function.origin() instanceof SourceReferenceOrigin written ? written : null;
     }
 
     /**
@@ -2060,8 +2422,98 @@ public final class HelperInliner {
         if (value == null || value.body() == null || graph.recurses(reaches)) {
             return v;
         }
+        if (leftNamed(reaches) || reading == ValueAtAReference.SHARED_PER_REGION) {
+            // Left standing here and read again by the walk that materialises it: which region the
+            // body belongs at is a fact about where the reference stands, and an expansion in
+            // progress is not yet at a region it can answer that with.
+            return v;
+        }
         Hir.Expr settled = settled(named);
+        if (settled != named) {
+            copiesValue(reaches);
+        }
         return settled != null ? settled : substituted(named.reaches(), value.writtenBody());
+    }
+
+    /**
+     * What applying {@code v} applies: the body of the value it names, copied here.
+     *
+     * <p>A different question from {@link #valueOf}, which answers what stands where a value goes.
+     * A value whose body is a block is applied by expanding the block where it is applied, as any
+     * block applied where it stands is (spec §blocks), so what the call needs is the body, and a
+     * name standing for a binding would be a call applying a binding no reader can emit.
+     *
+     * <p>Not a kind of value, either: whether a body produces a block is not what decides this.
+     * A reference in a callee position is a different use of the name from a reference in a value
+     * position, and each is answered by what its position needs.
+     */
+    private Hir.Expr appliedValueBody(Hir.Apply call, Hir.Var.Denoting named, AppliedValue value) {
+        copiesValue(value.reached());
+        // What a value's own answer was told for is the declaration, and a binding is not one.
+        Hir.Expr settled = named.denotes() instanceof ValueName.Local ? null : settled(named);
+        if (settled != null && settled != named) {
+            return settled;
+        }
+        return insideThisApplication(call, named.denotes(), value);
+    }
+
+    /**
+     * A copy of a value's body made by applying it at {@code call}, with what it writes belonging
+     * to that application.
+     *
+     * <p>Applying a value copies its body once per application, as expanding a helper copies its
+     * body once per call, so two applications of one value are two copies and a call written in the
+     * body is one site and two expansions. What tells them apart is the application, and it is
+     * said twice: in the owner of what the copy binds while it is written, and by an
+     * {@link Hir.Expansion} around it, which is what every later walk and the elaborator's
+     * occurrences read the copy off. A value takes no arguments of its own, so the expansion binds
+     * nothing and declares no result.
+     *
+     * <p>What the body binds is the copy's own, as it is for a helper: a value answering a block
+     * holds that block's parameters, and two copies sharing them would be two places binding one
+     * name.
+     */
+    private Hir.Expr insideThisApplication(Hir.Apply call, ValueName applied,
+                                           AppliedValue value) {
+        if (!(call.application() instanceof ApplicationOrigin.Identified at)) {
+            throw new IllegalStateException(
+                    "a value applied at an application that says only why it is here: " + call);
+        }
+        ExpansionSite site = siteOf(at, call);
+        BindingOwner mine = new BindingOwner.Expansion(writing.enclosing(), applied, at);
+        Hir.Expr written = value.definition().writtenBody();
+        Copy copy = new Copy(written, new Hir.Binders(mine));
+        provenance.carriedAcross(copy.renaming());
+        Renaming renaming = new Renaming(Map.of(), copy, null, null);
+        Hir.Expr body = insideThisCopy(mine,
+                writing.lineage().copiedInto(applied, site), Map.of(),
+                () -> substituted(value.reached().rendered(), rename(written, renaming)));
+        return new Hir.Expansion(applied, mine, site, List.of(), List.of(), null, body, call.pos(),
+                call.region());
+    }
+
+    /** A value applying which applies its own body: the declaration, and the definition that
+     *  declaration has, asked together so that no caller pairs one with the other's answer. */
+    private record AppliedValue(ReachName.Declaration reached, Hir.FnDef definition) {
+    }
+
+    /**
+     * The value {@code v} names where applying it applies that value's own body, or null where the
+     * name reaches no such value.
+     *
+     * <p>A binding is followed to what it was bound to: {@code let g = inc} makes {@code g} a second
+     * name for {@code inc}, so applying either applies the same value and is asked the same way.
+     */
+    private AppliedValue appliedValue(Hir.Var v) {
+        if (!(v instanceof Hir.Var.Denoting named)
+                || !(named.denotes() instanceof ValueName.Helper
+                        || named.denotes() instanceof ValueName.Local)) {
+            return null;
+        }
+        ReachName.Declaration reaches = reaches(named);
+        Hir.FnDef value = reaches == null ? null : table.reached(reaches);
+        return value == null || value.body() == null || graph.recurses(reaches) ? null
+                : new AppliedValue(reaches, value);
     }
 
     /**
@@ -2103,7 +2555,649 @@ public final class HelperInliner {
     }
 
     /**
-     * The body of the value {@code reached} stands for, expanded here — and a refusal where this
+     * {@code e} as one evaluation region: the values it demands here bound once ahead of it, and
+     * every region inside it the same.
+     *
+     * <p>A region is somewhere entered on some paths and not others — a branch, an arm, the right of
+     * a short-circuit, the body of a block, the element a comprehension writes per item. What a
+     * region demands is what it names without crossing into one of those, so a value bound at the
+     * head of a region is evaluated exactly where some reference to it would have been.
+     *
+     * <p>What is demanded is worked out before anything is written, and not as the references are
+     * met. A value named both here and inside a region below would otherwise be bound at whichever
+     * of the two the walk reached first, which is to say at whichever the source happened to write
+     * first.
+     */
+    private Hir.Expr region(Hir.Expr e, Supplier<MaterialisationSite> site) {
+        Map<String, Hir.Binder> here = new LinkedHashMap<>();
+        List<Hir.Binder> order = new ArrayList<>();
+        List<Hir.Expr> values = new ArrayList<>();
+        materialised.add(here);
+        try {
+            for (Hir.Var.Denoting each : List.copyOf(demandedHere(e).values())) {
+                materialise(each, here, order, values, site);
+            }
+            Hir.Expr inner = read(e);
+            for (int i = order.size() - 1; i >= 0; i--) {
+                Hir.Binder binder = order.get(i);
+                inner = new Hir.LetIn(binder, values.get(i), null, false, null, inner,
+                        binder.pos(), e.region());
+            }
+            return inner;
+        } finally {
+            materialised.remove(materialised.size() - 1);
+        }
+    }
+
+    /**
+     * The region a definition's body is the whole of, said as the definition being written.
+     *
+     * <p>Every site here is asked for only when a value is built in that region: a region with no
+     * build has no need of a name, and one that cannot be named is refused where a build asks.
+     */
+    private Supplier<MaterialisationSite> rootSite() {
+        MaterialisationSite named = writing.root();
+        BindingOwner into = writing.destination();
+        return () -> {
+            if (named != null) {
+                return named;
+            }
+            if (into instanceof BindingOwner.OfValue definition) {
+                return new MaterialisationSite.Body(
+                        new WrittenOwner.Body(definition.module(), definition.name()));
+            }
+            throw new IllegalStateException(
+                    "a body's builds are for some definition's body, and this is written into "
+                            + into);
+        };
+    }
+
+    /** The region {@code slot} of the construct the source wrote as {@code construct} opens. */
+    private static Supplier<MaterialisationSite> slot(SourceConstructOrigin construct,
+                                                      RegionSlot slot) {
+        return () -> new MaterialisationSite.Slot(construct, slot);
+    }
+
+    /**
+     * The region the body of {@code block} is: a block the author wrote is told by its rule, and one
+     * a pass wrote out of a name is told by that name.
+     *
+     * <p>Both are read off what the block says about itself. What stands inside it is walked again
+     * after the block is written — a call in it becomes an expansion — so a block asked which one it
+     * is by the shape it ended up with would be asked a question the shape had stopped answering.
+     */
+    private static Supplier<MaterialisationSite> siteOfBlock(Hir.Block block) {
+        return () -> {
+            if (block.rule().isWritten()) {
+                return new MaterialisationSite.WrittenBlock(block.rule());
+            }
+            if (block.expandedFrom() != null) {
+                return new MaterialisationSite.GeneratedBlock(block.expandedFrom());
+            }
+            throw new IllegalStateException("a block no author wrote and no source wrote the name"
+                    + " of has nothing to tell its builds by, at " + block.pos());
+        };
+    }
+
+    /**
+     * Binds what {@code named} reaches in the region being written, after everything that value's
+     * own body demands there.
+     *
+     * <p>Its body first, because a binding may only read bindings already written. The value graph
+     * has no cycles — {@link ValueCycles} refuses a module whose values are not well founded before
+     * a body of it is expanded — so following what each one demands terminates.
+     */
+    private void materialise(Hir.Var.Denoting named, Map<String, Hir.Binder> here,
+                             List<Hir.Binder> order, List<Hir.Expr> values,
+                             Supplier<MaterialisationSite> site) {
+        String reached = named.reaches();
+        if (readAt(reached) != null) {
+            return;
+        }
+        // A body being closed leaves the values it does not hold as the names they are.
+        if (leftNamed(named.reachesADeclaration())) {
+            return;
+        }
+        if (valuesAreTemplates && declarationArity(named).isEmpty() && isATemplateValue(named)) {
+            materialiseAsABuild(named, here, order, values, site);
+            return;
+        }
+        if (runsInItsDeclaringModule(named) && declarationArity(named).isEmpty()
+                && isAValueOfItsModule(named) && constantOf(named).isEmpty()) {
+            materialiseAsAPublishedValue(named, here, order, values, site);
+            return;
+        }
+        if (emittedAsAMethod(named) && declarationArity(named).isEmpty()) {
+            Handover handover = handoverOf(named, site.get());
+            if (handover.callable()) {
+                materialiseAsACall(named, handover.taken(), here, order, values, site);
+                return;
+            }
+        }
+        Hir.Expr body = materialisable(named);
+        if (body == null) {
+            return;
+        }
+        // Built here from its body rather than called where it is declared.
+        copiesValue(named.reachesADeclaration());
+        MaterialisationSite where = site.get();
+        Hir.Expr calls = insideThisBuild(named.denotes(), where, () -> inline(body));
+        for (Hir.Var.Denoting each : List.copyOf(demandedHere(calls).values())) {
+            materialise(each, here, order, values, site);
+        }
+        Hir.Binder binder = writing.binders()
+                .binder("$v" + next() + "_" + named.name(), named.pos());
+        here.put(reached, binder);
+        order.add(binder);
+        Hir.Expr built = HelperNames.carriedByValue(
+                insideThisBuild(named.denotes(), where, () -> read(calls)));
+        values.add(new Hir.Materialised(named.denotes(), where, built, built.pos(),
+                built.region()));
+    }
+
+    /**
+     * The values {@code e} builds as references to their templates, by the name each is reached by,
+     * in the order they are met and each once.
+     *
+     * <p>What a build holds of a value is the value's name, and what the value means is asked of the
+     * template. So this is what says which templates a body needs — and, asked of a template, which
+     * more.
+     */
+    public static SequencedSet<ReachName.Declaration> valuesBuiltIn(Hir.Expr e) {
+        SequencedSet<ReachName.Declaration> out = new LinkedHashSet<>();
+        collectBuilds(e, out);
+        return out;
+    }
+
+    private static void collectBuilds(Hir.Expr e, SequencedSet<ReachName.Declaration> out) {
+        if (e == null) {
+            return;
+        }
+        if (e instanceof Hir.ValueBuild build) {
+            out.add(build.reaches());
+            return;
+        }
+        Hir.forEachChild(e, child -> collectBuilds(child, out));
+    }
+
+    /**
+     * Whether {@code named} is a value, held once as a template.
+     *
+     * <p>The kind whose meaning is the same wherever it is built: it takes nothing, and names
+     * nothing but other values. Which module declared it is not asked — a value another module
+     * declared is one definition here as it is there.
+     */
+    private boolean isATemplateValue(Hir.Var.Denoting named) {
+        ReachName.Declaration reaches = named.reachesADeclaration();
+        Hir.FnDef value = reaches == null ? null : table.reached(reaches);
+        return value != null && value.body() != null && value.params().isEmpty()
+                && !graph.recurses(reaches);
+    }
+
+    /**
+     * Binds {@code named} in the region being written as a build of the value, which is a
+     * reference to it.
+     *
+     * <p>No body is put here. What the value comes to is its template's, so nothing under this
+     * binding is a copy, and what it names is built where the template names it.
+     */
+    private void materialiseAsABuild(Hir.Var.Denoting named, Map<String, Hir.Binder> here,
+                                     List<Hir.Binder> order, List<Hir.Expr> values,
+                                     Supplier<MaterialisationSite> site) {
+        Hir.Binder built = writing.binders()
+                .binder("$v" + next() + "_" + named.name(), named.pos());
+        here.put(named.reaches(), built);
+        order.add(built);
+        values.add(new Hir.ValueBuild(named.denotes(), named.reachesADeclaration(), site.get(),
+                foldedValue(named.reachesADeclaration())
+                        .map(constant -> literal(constant, named.pos())).orElse(null),
+                named.pos(), named.region()));
+    }
+
+    /**
+     * The body of the value {@code fn} as its template: what it means, and the builds of the values
+     * it names in the regions it names them in.
+     *
+     * <p>Held once for every build of the value. Nothing of a region that builds it is in it, so it
+     * is written under no build and every reader of a build reads the same tree.
+     */
+    public Hir.FnDef valueTemplate(Hir.FnDef fn) {
+        Hir.Expr body = writing(bodyOf(fn.name()), null, Set.of(), () -> {
+            heldToTheBound(fn.writtenBody());
+            return region(inline(fn.writtenBody()), rootSite());
+        });
+        return fn.withBody(new Hir.FnBody.Written(body));
+    }
+
+    /**
+     * Binds {@code named} in the region being written as the call of the method it is emitted as.
+     *
+     * <p>The values that method takes are built here first, and handed to it. Which they are is a fact
+     * about the value and not about the build, so it is worked out the first time the value is built
+     * and not again: a value built in each of several regions would otherwise have its body expanded
+     * in each of them to learn the same thing.
+     *
+     * <p>The method is required wherever this tree ends up, so it is recorded as left standing.
+     */
+    private void materialiseAsACall(Hir.Var.Denoting named, List<Hir.Var.Denoting> handed,
+                                    Map<String, Hir.Binder> here, List<Hir.Binder> order,
+                                    List<Hir.Expr> values, Supplier<MaterialisationSite> site) {
+        ReachName.Declaration reaches = named.reachesADeclaration();
+        MaterialisationSite where = site.get();
+        for (Hir.Var.Denoting each : handed) {
+            materialise(each, here, order, values, site);
+        }
+        leftStanding.add(reaches);
+        for (SequencedSet<ReachName.Declaration> asked : standingHere) {
+            asked.add(reaches);
+        }
+        Hir.Binder called = writing.binders()
+                .binder("$v" + next() + "_" + named.name(), named.pos());
+        here.put(named.reaches(), called);
+        order.add(called);
+        values.add(invocationOf(named, where, handed));
+    }
+
+    /**
+     * Whether {@code named} is a value this tree calls the method of rather than copying.
+     *
+     * <p>Only in the tree the backend emits from, and only a value this module declares. A value
+     * another module declares runs there ({@link #runsInItsDeclaringModule}). The signature a call
+     * is typed by is what the value's own check settled. A value that names no other value at its
+     * root region has nothing to be handed, so the method takes nothing.
+     */
+    private boolean emittedAsAMethod(Hir.Var.Denoting named) {
+        return valuesAreMethods && isAMethodValue(named);
+    }
+
+    /** Whether {@code named} is a value that does not fold to a constant, which is the kind a method
+     *  can be emitted for. */
+    private boolean isAMethodValue(Hir.Var.Denoting named) {
+        ReachName.Declaration reaches = named.reachesADeclaration();
+        Hir.FnDef value = reaches == null ? null : table.reached(reaches);
+        return value != null && value.params().isEmpty() && value.body() != null
+                && !graph.recurses(reaches) && !runsInItsDeclaringModule(named)
+                && constantOf(named).isEmpty();
+    }
+
+    /** Whether {@code named} reaches a value, which is a definition with no parameters and a body
+     *  that no cycle passes through. */
+    private boolean isAValueOfItsModule(Hir.Var.Denoting named) {
+        ReachName.Declaration reaches = named.reachesADeclaration();
+        Hir.FnDef value = reaches == null ? null : table.reached(reaches);
+        return value != null && value.params().isEmpty() && value.body() != null
+                && !graph.recurses(reaches);
+    }
+
+    /**
+     * Binds {@code named} in the region being written as the read of a value another module runs.
+     *
+     * <p>Nothing of its body is put here and nothing is left standing for this module to emit: what
+     * the binding holds is the reference, which is what stands where the value was named and is
+     * called from the module that declares it. Bound once per region, as any value is, so two
+     * references in one region are one call.
+     */
+    private void materialiseAsAPublishedValue(Hir.Var.Denoting named, Map<String, Hir.Binder> here,
+                                              List<Hir.Binder> order, List<Hir.Expr> values,
+                                              Supplier<MaterialisationSite> site) {
+        Hir.Binder called = writing.binders()
+                .binder("$v" + next() + "_" + named.name(), named.pos());
+        here.put(named.reaches(), called);
+        order.add(called);
+        values.add(invocationOf(named, site.get(), List.of()));
+    }
+
+    /** Whether a reference to the value reached by {@code reaches} is left as it stands by the body
+     *  being closed. */
+    private boolean leftNamed(ReachName.Declaration reaches) {
+        return switch (valuesStayNamed) {
+            case NONE -> false;
+            case OF_OTHER_MODULES -> reaches instanceof ReachName.OfModule of
+                    && !of.denotes().module().equals(moduleName());
+            case ALL -> true;
+        };
+    }
+
+    /**
+     * Whether {@code named} is a value another module declares, in the tree the backend emits from.
+     *
+     * <p>Such a value has one place it runs, its declaring module, and a reference to it stays a
+     * reference: nothing of its body is copied here, and it is not a method this module holds. The
+     * analyses read a value by its template and are not asked.
+     */
+    private boolean runsInItsDeclaringModule(Hir.Var.Denoting named) {
+        return valuesAreMethods && named.reachesADeclaration() instanceof ReachName.OfModule of
+                && !of.denotes().module().equals(moduleName());
+    }
+
+    /**
+     * What {@code named} folds to, or empty where it is not a constant.
+     *
+     * <p>Asked of {@link ConstEval}, which is what every reader that asks whether an expression is
+     * known at compile time asks, so what stands as a value here is what they all find. A constant
+     * stands where it is named for that reason: a call to a method would hide it from all of them.
+     * Once per value, since a value naming another twice would otherwise be folded twice and a chain
+     * of them once per path through it.
+     */
+    private Optional<Object> constantOf(Hir.Var.Denoting named) {
+        return constantOf(named.reachesADeclaration());
+    }
+
+    /**
+     * What {@code value}, a value of this module, folds to, or empty where it is not a constant.
+     *
+     * <p>The same fold a reader in another module reaches the value through, so what the declaring
+     * module says its value is copied as is what a reader copies. Asked of an inliner the tree that
+     * runs is built with ({@link #callingValuesAsMethodsWhereEmitted}), which is the one that has
+     * the fold.
+     */
+    public Optional<Object> constantOfOwn(String value) {
+        if (constEval == null) {
+            throw new IllegalStateException("what a value folds to is asked of the fold a tree that"
+                    + " runs is built with, and this inliner builds no such tree");
+        }
+        return constantOf(new ReachName.Own(new ValueName.Helper(moduleName(), value)));
+    }
+
+    private Optional<Object> constantOf(ReachName.Declaration reaches) {
+        Optional<Object> known = folded(reaches, constantOfValues, constEval);
+        // A constant stands where it is named and is folded into whatever reads it, so another
+        // module's constant found here is one this tree carries.
+        if (known.isPresent()) {
+            copiesValue(reaches);
+        }
+        return known;
+    }
+
+    /**
+     * What the value {@code reaches} names folds to, or empty where it folds to nothing — asked
+     * without this tree taking anything from it.
+     *
+     * <p>The same answer as {@link #constantOf}, for a build that carries its value's constant
+     * beside the reference: that writes nothing of the value into the tree, so neither the value
+     * nor any value its body names is copied. Folded under a reading of its own, so that nothing
+     * this asks leaves a copy behind for the other to skip.
+     */
+    private Optional<Object> foldedValue(ReachName.Declaration reaches) {
+        if (foldingValues == null) {
+            throw new IllegalStateException("a build carries its value's constant, and this"
+                    + " inliner was not told the library a constant is folded against");
+        }
+        return folded(reaches, foldedValues, foldingValues);
+    }
+
+    private Optional<Object> folded(ReachName.Declaration reaches,
+                                    Map<ReachName.Declaration, Optional<Object>> memo,
+                                    ConstEval folding) {
+        Hir.FnDef value = reaches == null ? null : table.reached(reaches);
+        if (value == null || !value.params().isEmpty() || value.body() == null
+                || graph.recurses(reaches)) {
+            return Optional.empty();
+        }
+        Optional<Object> known = memo.get(reaches);
+        if (known == null) {
+            // Put before the fold as "not a constant", so a value that reaches itself answers.
+            memo.put(reaches, Optional.empty());
+            known = folding.eval(value.writtenBody());
+            memo.put(reaches, known);
+        }
+        return known;
+    }
+
+    /**
+     * What a value's method takes, and whether it can be called at all.
+     *
+     * <p>A method is called only where everything the value demands at its root is what the method
+     * takes, {@link #takenByTheMethod}. Anything else it demands — a constant, a value another
+     * module declared — would be built inside the method, and two values that name it would each
+     * build it, which is what one region sharing it is for. Such a value is built by the region
+     * that names it instead.
+     */
+    private record Handover(boolean callable, List<Hir.Var.Denoting> taken) { }
+
+    private Handover handoverOf(Hir.Var.Denoting named, MaterialisationSite where) {
+        ReachName.Declaration reaches = named.reachesADeclaration();
+        Handover known = handovers.get(reaches);
+        if (known == null) {
+            Hir.Expr body = materialisable(named);
+            if (body == null) {
+                known = new Handover(false, List.of());
+            } else {
+                Hir.Expr calls = insideThisBuild(named.denotes(), where, () -> inline(body));
+                Map<String, Hir.Var.Denoting> under = demandedHere(calls);
+                List<Hir.Var.Denoting> taken = takenByTheMethod(under);
+                known = new Handover(taken.size() == under.size(), taken);
+            }
+            handovers.put(reaches, known);
+        }
+        return known;
+    }
+
+    /**
+     * The build of {@code named} that calls the method it is emitted as, handed the bindings that
+     * hold what the method takes.
+     */
+    private Hir.ValueInvocation invocationOf(Hir.Var.Denoting named, MaterialisationSite where,
+                                             List<Hir.Var.Denoting> handed) {
+        List<Hir.Var.Denoting> arguments = new ArrayList<>();
+        for (Hir.Var.Denoting each : handed) {
+            arguments.add(Hir.Var.local(readAt(each.reaches()), named.pos()));
+        }
+        return new Hir.ValueInvocation(named.reachesADeclaration(), where, arguments, named.pos(),
+                named.region());
+    }
+
+    /** What a method emitted for a value takes: the values its root region demands that are
+     *  themselves emitted as methods, in the order of the names they are reached by. */
+    private List<Hir.Var.Denoting> takenByTheMethod(Map<String, Hir.Var.Denoting> demanded) {
+        List<Hir.Var.Denoting> taken = new ArrayList<>();
+        for (Hir.Var.Denoting each : demanded.values()) {
+            if (isAMethodValue(each)) {
+                taken.add(each);
+            }
+        }
+        taken.sort(Comparator.comparing(Hir.Var.Denoting::reaches));
+        return taken;
+    }
+
+    /** What every parameter a value's method takes is named under. A name for a generated method to
+     *  be read by; what the parameter holds is carried beside the method, not in this. */
+    private static final String VALUE_PARAMETER = "$dep_";
+
+    /**
+     * The body of the value {@code fn} as the method it is emitted as: what its root region demands
+     * of other values is what the method takes, and what only a region inside it demands is built
+     * there.
+     *
+     * <p>Nothing the value names at its root is built inside it. A region that builds the value has
+     * built those already, and hands them over, so two values that name one value are handed the
+     * same one.
+     */
+    public LoweredDefinition valueMethod(Hir.FnDef fn) {
+        List<Hir.FnParam> parameters = new ArrayList<>();
+        Map<BindingId, ValueName.Helper> carried = new LinkedHashMap<>();
+        Hir.Expr body = writing(bodyOf(fn.name()), null, Set.of(), () -> {
+            heldToTheBound(fn.writtenBody());
+            Hir.Expr calls = inline(fn.writtenBody());
+            Map<String, Hir.Var.Denoting> demanded = demandedHere(calls);
+            Map<String, Hir.Binder> handed = new LinkedHashMap<>();
+            for (Hir.Var.Denoting each : takenByTheMethod(demanded)) {
+                Hir.Binder binder = writing.binders()
+                        .binder(VALUE_PARAMETER + each.name(), each.pos());
+                handed.put(each.reaches(), binder);
+                parameters.add(new Hir.FnParam(binder, null));
+                // takenByTheMethod took this through isAMethodValue, which only holds of a name
+                // substitutedAt already read as a ValueName.Helper — nothing else is emitted as a
+                // method for a value to be handed.
+                if (!(each.denotes() instanceof ValueName.Helper carries)) {
+                    throw new IllegalStateException("`" + each.name() + "` is handed to a value's"
+                            + " method and denotes " + each.denotes() + ", not a value");
+                }
+                carried.put(binder.binding(), carries);
+            }
+            materialised.add(handed);
+            try {
+                return region(calls, rootSite());
+            } finally {
+                materialised.remove(materialised.size() - 1);
+            }
+        });
+        return new LoweredDefinition(
+                fn.withParams(parameters).withBody(new Hir.FnBody.Written(body)), carried);
+    }
+
+    /**
+     * {@code work} done over the body of {@code ex}, an expansion already in the tree, with what it
+     * writes belonging to that expansion.
+     *
+     * <p>Every walk that goes into the body of a node standing for an owner goes in as that owner,
+     * whatever the walk is for: a build made while reading it is a build inside this copy, and one
+     * that took the owner around the expansion would be the same build in every copy of the body.
+     */
+    private Hir.Expr insideThisExpansion(Hir.Expansion ex, Supplier<Hir.Expr> work) {
+        return insideThisCopy(ex.application(),
+                writing.lineage().copiedInto(ex.callee(), ex.at()), Map.of(), work);
+    }
+
+    /**
+     * {@code work} done with the calls it expands belonging to the build of {@code value} for
+     * {@code where}.
+     *
+     * <p>A build is not a copy made through a call, so the lineage stays as it is: what changes is
+     * only which owner the expansions written from here stand inside.
+     */
+    private Hir.Expr insideThisBuild(ValueName value, MaterialisationSite where,
+                                     Supplier<Hir.Expr> work) {
+        BindingOwner build = new BindingOwner.Build(writing.enclosing(), value, where);
+        return insideThisCopy(build, writing.lineage(), Map.of(), work);
+    }
+
+    /**
+     * The body {@code named} would be materialised from, or null where the name is not one this
+     * binds.
+     *
+     * <p>Narrower than what a count of substituting asks. A declaration written with a parameter
+     * list is a function: it is applied where it is named, and written out where it is held, and
+     * neither of those is a value bound once and read. Bound as one, what would stand at the name
+     * is the function's body with its parameters reaching nothing.
+     */
+    private Hir.Expr materialisable(Hir.Var.Denoting named) {
+        return declarationArity(named).isPresent() ? null : substitutedAt(named);
+    }
+
+    /** Where a region this is inside bound {@code reached}, innermost first, or null where none
+     *  did. */
+    private Hir.Binder readAt(String reached) {
+        for (int i = materialised.size() - 1; i >= 0; i--) {
+            Hir.Binder binder = materialised.get(i).get(reached);
+            if (binder != null) {
+                return binder;
+            }
+        }
+        return null;
+    }
+
+    /** What {@code e} demands where it stands, the values a region binds at its head. */
+    private Map<String, Hir.Var.Denoting> demandedHere(Hir.Expr e) {
+        return ValuePlan.of(e, named -> materialisable(named) != null).rootDemands();
+    }
+
+    /** {@code e} with each value reference the region bound read as that binding, and each region
+     *  inside it written as one. */
+    private Hir.Expr read(Hir.Expr e) {
+        if (e == null) {
+            return null;
+        }
+        if (e instanceof Hir.Var v) {
+            return readName(v);
+        }
+        return switch (e) {
+            case Hir.If iff -> new Hir.If(read(iff.cond()),
+                    region(iff.then(), slot(iff.origin(), new RegionSlot.IfThen())),
+                    region(iff.els(), slot(iff.origin(), new RegionSlot.IfElse())),
+                    iff.origin(), iff.pos(), iff.region());
+            case Hir.IfConstructed ic -> {
+                List<Hir.ElseArm> arms = new ArrayList<>();
+                for (Hir.ElseArm arm : ic.els()) {
+                    arms.add(arm.with(region(arm.body(),
+                            slot(ic.origin(), new RegionSlot.ConstructedElse(arm.clause())))));
+                }
+                yield new Hir.IfConstructed(read(ic.construct()), ic.binder(),
+                        region(ic.then(), slot(ic.origin(), new RegionSlot.ConstructedThen())),
+                        arms, ic.origin(), ic.pos(), ic.region());
+            }
+            case Hir.Match m -> {
+                List<Hir.Case> cases = new ArrayList<>();
+                for (Hir.Case each : m.cases()) {
+                    List<String> written = new ArrayList<>();
+                    for (Hir.Name caseType : each.caseTypes()) {
+                        written.add(caseType.written());
+                    }
+                    cases.add(new Hir.Case(each.caseTypes(), each.binding(),
+                            region(each.body(), slot(m.origin(), new RegionSlot.MatchCase(written))),
+                            each.unwrapAsserts(), each.pos()));
+                }
+                yield new Hir.Match(read(m.scrutinee()), cases, m.origin(), m.pos(), m.region());
+            }
+            case Hir.Binary b when ValuePlan.isShortCircuit(b) -> new Hir.Binary(b.op(), read(b.left()),
+                    region(b.right(), slot(b.origin(), new RegionSlot.ShortCircuitRight())),
+                    b.origin(), b.pos(), b.region());
+            case Hir.Block bl -> new Hir.Block(bl.params(), region(bl.body(), siteOfBlock(bl)),
+                    bl.rule(), bl.expandedFrom(), bl.named(), bl.pos(), bl.region());
+            case Hir.ListComp comp -> {
+                List<Hir.Expr> guards = new ArrayList<>();
+                for (int at = 0; at < comp.guards().size(); at++) {
+                    guards.add(region(comp.guards().get(at),
+                            slot(comp.forkOfGuard(at), new RegionSlot.ComprehensionGuard(at))));
+                }
+                yield new Hir.ListComp(
+                        region(comp.element(),
+                                slot(comp.origin(), new RegionSlot.ComprehensionElement())),
+                        guards, comp.origin(), comp.pos(), comp.region());
+            }
+            // `given` is what the callee was handed and is also inside the body, so it is read the
+            // same way — a reference left standing there is one no reader below could emit.
+            case Hir.Expansion ex -> {
+                List<Hir.Bound> bound = new ArrayList<>();
+                for (Hir.Bound b : ex.bound()) {
+                    bound.add(b.with(read(b.value())));
+                }
+                List<Hir.Given> given = new ArrayList<>();
+                for (Hir.Given g : ex.given()) {
+                    given.add(g.with(read(g.value())));
+                }
+                yield new Hir.Expansion(ex.callee(), ex.application(), ex.at(), bound, given,
+                        ex.declaredReturn(), insideThisExpansion(ex, () -> read(ex.body())),
+                        ex.pos(), ex.region());
+            }
+            case Hir.ValueBuild build -> build;
+            case Hir.ValueInvocation call -> call;
+            case Hir.Materialised m -> new Hir.Materialised(m.value(), m.site(),
+                    insideThisBuild(m.value(), m.site(), () -> read(m.body())), m.pos(),
+                    m.region());
+            default -> Hir.mapChildren(e, this::read, this::readName);
+        };
+    }
+
+    /**
+     * A name slot as the region reads it: the binding where the region materialised what the name
+     * reaches, or the name where no region did.
+     *
+     * <p>Beside the expression slots rather than left alone, because a name written where a value
+     * goes is a reference wherever it is written. A construction's spread is one, and read here it
+     * is the same materialisation every other reference in the region reads — bound of its own, a
+     * value spread and named in one region would stand twice.
+     */
+    private Hir.Var readName(Hir.Var v) {
+        if (!(v instanceof Hir.Var.Denoting named) || materialisable(named) == null) {
+            return v;
+        }
+        Hir.Binder binder = readAt(named.reaches());
+        return binder == null ? v : Hir.Var.local(binder, named.pos());
+    }
+
+    /**
+     * The body of the value {@code reached} stands for, copied here — and a refusal where this
      * expansion is already substituting that value.
      *
      * <p>Substituting a value into itself has no end, so an expansion that reached one would descend
@@ -2115,16 +3209,12 @@ public final class HelperInliner {
      * that ran out and a report about an expression nesting too deeply.
      *
      * <p>What it holds is the path and not what it has seen: a value named twice in one body is
-     * substituted twice, side by side, and only one inside the other is re-entry.
+     * copied twice, side by side, and only one inside the other is re-entry.
      *
      * <p>The path is also what says whose job the mark is. What a value carried is written over the
      * whole expansion once it is whole, by the substitution no other substitution is inside — the
      * outermost one holds every subtree the ones under it produced, and the mark is a flag, so
-     * writing it there says of each node what writing it at every level said. Written at every
-     * level it is written over each subtree once per level that subtree is under, which is the
-     * depth of a chain of values times its length. The walk allocates nothing — rebuilding an
-     * expression hands back what it was given where nothing changed — so what it costs is the
-     * walking, and nothing downstream of it can see that it ran twice.
+     * writing it there says of each node what writing it at every level said.
      */
     private Hir.Expr substituted(String reached, Hir.Expr body) {
         if (!substituting.add(reached)) {
@@ -2153,11 +3243,20 @@ public final class HelperInliner {
         List<Hir.Expr> values = new ArrayList<>();
         List<Hir.Var> spreads = new ArrayList<>();
         for (Hir.Var spread : nd.spreads()) {
-            Hir.FnDef value = valueSpread(spread);
+            // A spread is a reference (ADR-0072), so where references are materialised once in the
+            // region that demands them, this is one of them and is left for that walk. Bound here
+            // as well, a value spread and named in one region would be built twice. A body being
+            // closed leaves the values it names as names, and a spread is one of the places it
+            // names them.
+            Hir.FnDef value = reading == ValueAtAReference.SHARED_PER_REGION
+                    || (spread instanceof Hir.Var.Denoting named
+                            && leftNamed(named.reachesADeclaration()))
+                    ? null : valueSpread(spread);
             if (value == null) {
                 spreads.add(spread);
                 continue;
             }
+            copiesValue(spread.answered().reachesADeclaration());
             Hir.Binder name = writing.binders().binder(
                     "$s" + next() + "_" + spread.answered().denotes().name(), spread.pos());
             bound.add(name);
@@ -2290,6 +3389,8 @@ public final class HelperInliner {
                         new BindingOwner.Expansion(ownerOf(it.within()), it.expanded(), it.at());
                 case BindingOwner.Synthesized it ->
                         new BindingOwner.Synthesized(ownerOf(it.within()), it.pass(), it.ordinal());
+                case BindingOwner.Build it ->
+                        new BindingOwner.Build(ownerOf(it.within()), it.value(), it.site());
                 // The body's own. What it was called where it was written says nothing here: the
                 // copy is this expansion's, so what its bindings belong to is this expansion.
                 default -> root;
@@ -2544,14 +3645,11 @@ public final class HelperInliner {
             case Hir.Expansion ex -> {
                 List<Hir.Bound> bound = new ArrayList<>();
                 for (Hir.Bound b : ex.bound()) {
-                    bound.add(new Hir.Bound(renaming.copy().of(b.binder()), b.declaredType(),
-                            rename(b.value(), renaming)));
+                    bound.add(b.with(renaming.copy().of(b.binder()), rename(b.value(), renaming)));
                 }
                 List<Hir.Given> given = new ArrayList<>();
                 for (Hir.Given g : ex.given()) {
-                    given.add(new Hir.Given(g.declaredType(),
-                            rename(g.value(), renaming), g.applied(),
-                            g.arrivesAs()));
+                    given.add(g.with(rename(g.value(), renaming)));
                 }
                 // What this copy of the expansion wrote, from the one place an owner is moved. Kept
                 // as it was, the two copies of one already-expanded body would say they wrote into
@@ -2561,6 +3659,23 @@ public final class HelperInliner {
                         ex.declaredReturn(), rename(ex.body(), renaming),
                         renaming.at(ex.pos()), renaming.over(ex.region()));
             }
+            // A copy of a build is a build of the same value for the same region: which one it is
+            // is the source's answer and moves with no copy.
+            case Hir.Materialised m -> new Hir.Materialised(m.value(), m.site(),
+                    rename(m.body(), renaming), renaming.at(m.pos()), renaming.over(m.region()));
+            // The bindings it is handed are this copy's, as any read of one is.
+            case Hir.ValueInvocation call -> {
+                List<Hir.Var.Denoting> arguments = new ArrayList<>();
+                for (Hir.Var.Denoting each : call.arguments()) {
+                    arguments.add((Hir.Var.Denoting) renameVar(each, renaming));
+                }
+                yield new Hir.ValueInvocation(call.target(), call.site(), arguments,
+                        renaming.at(call.pos()), renaming.over(call.region()));
+            }
+            // Nothing in it to rename: it names no binding, only a value.
+            case Hir.ValueBuild build -> new Hir.ValueBuild(build.value(), build.reaches(),
+                    build.site(), build.constant(), renaming.at(build.pos()),
+                    renaming.over(build.region()));
             case Hir.ListLit lit -> new Hir.ListLit(renameList(lit.elements(), renaming),
                     lit.origin(), renaming.at(lit.pos()), renaming.over(lit.region()));
             case Hir.RowCollection row -> new Hir.RowCollection(renameList(row.elements(), renaming),
@@ -2577,11 +3692,12 @@ public final class HelperInliner {
                 for (Hir.Binder p : block.params()) {
                     params.add(renaming.copy().of(p));
                 }
-                // The rule is the block's own and is not renamed. What a copy is stamped with is
-                // where a reader is sent, and which rule this is has to be the same in every copy.
+                // The rule is the block's own and is not renamed, and neither is the name a block
+                // this pass wrote was written out of. What a copy is stamped with is where a reader
+                // is sent, and which block this is has to be the same in every copy.
                 yield new Hir.Block(params,
-                        rename(block.body(), renaming), block.rule(),
-                        renaming.at(block.pos()), renaming.over(block.region()));
+                        rename(block.body(), renaming), block.rule(), block.expandedFrom(),
+                        block.named(), renaming.at(block.pos()), renaming.over(block.region()));
             }
             case Hir.IntLit lit -> renaming.stamps()
                     ? new Hir.IntLit(lit.value(), renaming.at(lit.pos()), renaming.over(lit.region()))
@@ -2750,24 +3866,13 @@ public final class HelperInliner {
      *
      * <p>Static because the value-cycle check asks it of a table it builds for itself, before an
      * inliner exists. One walk either way: an edge of this graph is what it is, and a reader that
-     * counted a different set of them would be reading a different graph.
+     * counted a different set of them would be reading a different graph. The edges are
+     * {@link HelperEdges#calls}.
      */
-    static void helperCallsIn(Stdlib stdlib, Hir.Expr e,
-                              Map<ReachName.Declaration, HelperEntry> table,
-                              Set<ReachName.Declaration> out) {
-        // Applying a function-typed parameter, or a binding holding a function, is not a call to
-        // whatever else bears that name. The call carries what it resolved to, so it is asked rather
-        // than matched against the helper table — a parameter named like a helper was reaching the
-        // graph as a call to that helper, which made `let f (g: (Int) -> Int) = g(1)` recursive.
-        if (e instanceof Hir.Apply call) {
-            // A sugar is written out before inlining, so a body that folds reaches the recursive
-            // `foldFrom` — recursion classification and what a module has to emit must see that.
-            ReachName.Declaration fn = calledHelper(stdlib, call);
-            if (fn != null && table.containsKey(fn)) {
-                out.add(fn);
-            }
-        }
-        forEachChild(e, c -> helperCallsIn(stdlib, c, table, out));
+    public static void helperCallsIn(Stdlib stdlib, Hir.Expr e,
+                                     Map<ReachName.Declaration, HelperEntry> table,
+                                     Set<ReachName.Declaration> out) {
+        out.addAll(HelperEdges.in(stdlib, e, table).calls());
     }
 
     /** Applies {@code f} to every direct subexpression of {@code e}; the one exhaustive walk

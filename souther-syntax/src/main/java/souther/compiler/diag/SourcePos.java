@@ -1,5 +1,6 @@
 package souther.compiler.diag;
 
+import souther.compiler.RecordOfTheBuilding;
 import souther.compiler.source.SourceId;
 
 import java.util.Comparator;
@@ -37,6 +38,11 @@ import java.util.Objects;
  * position with its call's, and what {@code HelperInliner} did, by comparing the declaring module
  * with its own.
  *
+ * <p>Which is what makes one a {@link RecordOfTheBuilding}: where a node was placed is something
+ * this compile keeps about having read a source, and not something a declaration says. A reader
+ * holding two builds to each other passes over it, and that is what is done with one rather than
+ * what it is.
+ *
  * <p>A place in a text is enough while one file is being read and not enough afterwards. A module's
  * {@code example} rows, fake tables and values are written in the module's own source and in any
  * number of attached {@code examples for} files, and once they are gathered under one name a
@@ -54,7 +60,7 @@ import java.util.Objects;
  * "out of sight" to one of them, "the diagnostic's own file" to another and "drop this" to two more.
  * What a {@link Placement} holds is which text and whose code, and every pair of those is legal.
  */
-public final class SourcePos {
+public final class SourcePos implements RecordOfTheBuilding {
 
     private final int construct;
 

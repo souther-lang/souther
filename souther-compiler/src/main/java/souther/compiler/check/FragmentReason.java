@@ -42,7 +42,7 @@ public sealed interface FragmentReason {
 
     /** What the reading stopped on, said as one of these. */
     static FragmentReason of(Core stoppedOn) {
-        return stoppedOn instanceof Core.PreservedCall call
+        return Core.withoutStanding(stoppedOn) instanceof Core.PreservedCall call
                 ? new ItCallsAnOperation(call.operation().name()) : new ItsShapeIsNotRead();
     }
 }

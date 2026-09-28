@@ -166,15 +166,17 @@ class OnlyAProjectionSaysHowFarAMeasurementGotTest {
      * thing in: a caller hands over the one it is looking at. This holds the other half — that the
      * canonical constructor, which a public record cannot hide, is not how anybody makes one.
      *
-     * <p>The three take a {@link souther.compiler.query.FindingSubject} and not a behavior's name.
-     * What a finding is about is a value rather than a word, because not every finding is about a
+     * <p>Each takes a {@link souther.compiler.query.FindingSubject} and not a behavior's name. What
+     * a finding is about is a value rather than a word, because not every finding is about a
      * behavior. The overloads that take a name hand one over and make nothing, which is why they are
      * not here.
      *
-     * <p>Two of them and not one, because what finds a finding is not always a measure. A point of
-     * an authored line is answered by {@link souther.compiler.query.ObligationCoverage}, which folds
-     * the readings and has no status of its own, and it is taken whole for the reason a measure is:
-     * there is no argument here to pass a set worked out somewhere else.
+     * <p>Several of them, because what finds a finding is not always a measure. A point of an
+     * authored line is answered by {@link souther.compiler.query.ObligationCoverage}, which folds
+     * the readings and has no status of its own; one of a body's meetings is answered by the
+     * reading of that meeting, which is narrower than the measure of every meeting. Each is taken
+     * whole for the reason a measure is: there is no argument here to pass a set worked out
+     * somewhere else.
      */
     @Test
     void aFindingIsMadeFromTheMeasurementThatFoundIt() throws IOException {
@@ -196,14 +198,36 @@ class OnlyAProjectionSaysHowFarAMeasurementGotTest {
                                 + "Lsouther/compiler/query/ObligationCoverage;"
                                 + "Lsouther/compiler/query/About;)"
                                 + "Lsouther/compiler/query/Adequacy$Finding;",
-                        // A third thing that finds one: the reading of a body's decision. What it
-                        // went without is neither a measure's status nor a fold of the readings of
-                        // a line — a run it could not place among the rules and a row nothing
-                        // watched each leave a rule nothing was seen taking as one a row may
-                        // already take — and it is taken whole for the reason the two above are.
+                        // A third thing that finds one: the reading of one rule of a body's
+                        // decision. What it went without is neither a measure's status nor a fold
+                        // of the readings of a line — a run it could not place among the rules and
+                        // a row nothing watched each leave a rule nothing was seen taking as one a
+                        // row may already take — and of one rule, because a rule read short bears
+                        // on that rule and on no other. Taken whole for the reason the two above
+                        // are.
                         "souther.compiler.query.Adequacy$Finding#by("
                                 + "Lsouther/compiler/query/FindingSubject;"
-                                + "Lsouther/compiler/query/DecisionEvidence;"
+                                + "Lsouther/compiler/query/DecisionEvidence$OfOneRule;"
+                                + "Lsouther/compiler/query/About;)"
+                                + "Lsouther/compiler/query/Adequacy$Finding;",
+                        // And the reading of one of a body's meetings, which is not the measure of
+                        // every meeting: a group too wide to walk bears on the meetings it could
+                        // have stated and on no others. Which those are is that reading's own to
+                        // work out, and this takes the answer whole like the rest.
+                        "souther.compiler.query.Adequacy$Finding#by("
+                                + "Lsouther/compiler/query/FindingSubject;"
+                                + "Lsouther/compiler/query/InteractionEvidence$OfOneMeeting;"
+                                + "Lsouther/compiler/query/About;)"
+                                + "Lsouther/compiler/query/Adequacy$Finding;",
+                        // And the walk over the rows at one line, which says which other lines
+                        // those rows leave standing beside it. What it went without is asymmetric —
+                        // a row read leaves fewer lines standing and never more — so it names one
+                        // only where it read every row, and a finding off it is weakened by
+                        // nothing. Taken whole so that it says so itself rather than a caller
+                        // saying it of a value that may have been asked nothing.
+                        "souther.compiler.query.Adequacy$Finding#by("
+                                + "Lsouther/compiler/query/FindingSubject;"
+                                + "Lsouther/compiler/query/AnotherLineTheRowsAllow$OneDoes;"
                                 + "Lsouther/compiler/query/About;)"
                                 + "Lsouther/compiler/query/Adequacy$Finding;",
                         "souther.compiler.query.Adequacy$Finding#noticed("

@@ -43,7 +43,10 @@ public final class ScopedDeclarations {
         RuleReadingSource source = RuleReadings.ofNoClauseFiled(symbols);
         return declaration -> {
             Hir.Def declared = symbols.declaredNode(TypeSymbols.declared(declaration));
-            return declared == null ? null : DeclarationMeaning.of(declared, source);
+            return declared == null
+                    ? new PublishedDeclarationResult.NotDeclared(declaration)
+                    : new PublishedDeclarationResult.Found(
+                            DeclarationMeaning.of(declared, source));
         };
     }
 }

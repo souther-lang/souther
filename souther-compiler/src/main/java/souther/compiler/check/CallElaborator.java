@@ -13,6 +13,7 @@ import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
+import souther.compiler.diag.msg.Reported;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.Localizable;
 import souther.compiler.diag.SourcePos;
@@ -22,7 +23,14 @@ import souther.compiler.types.ReachName;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
+import souther.compiler.regex.PatternParser;
+import souther.compiler.regex.PatternRead;
+import souther.temporal.TemporalText;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -53,16 +61,17 @@ public final class CallElaborator {
             Kernel.LIST_MIN, OrderedElement.OF_THE_OPTION);
 
     /**
-     * Refuses an element with no natural order. An ordered primitive has one, and so does a newtype
-     * over one — it carries its ordering as {@code Comparable}. A product data does not and would
-     * throw at run time, so it is refused here. The empty-list literal (element {@code Nothing}) is
-     * fine: it sorts to itself and its max is {@code None}.
+     * Refuses an element with no natural order, and answers the element that was checked against —
+     * null where this kernel places no such constraint. An ordered primitive has one, and so does a
+     * newtype over one — it carries its ordering as {@code Comparable}. A product data does not and
+     * would throw at run time, so it is refused here. The empty-list literal (element {@code
+     * Nothing}) is fine: it sorts to itself and its max is {@code None}.
      */
-    private static void requiresOrdering(Kernel kernel, Hir.Apply call, Type result,
-                                         CheckContext ctx) {
+    private static OrderingRequirement requiresOrdering(Kernel kernel, Hir.Apply call,
+                                                        Type result, CheckContext ctx) {
         OrderedElement where = ORDERED_ELEMENT.get(kernel);
         if (where == null) {
-            return;
+            return null;
         }
         boolean inOption = where == OrderedElement.OF_THE_OPTION;
         Type element = switch (result) {
@@ -70,10 +79,16 @@ public final class CallElaborator {
             case Type.ListOf l when !inOption -> l.element();
             default -> null;
         };
-        if (element == null || element instanceof Type.Nothing
-                || TypeOps.supportsOrdering(element, ctx.inners(), ctx.symbols(), ctx.kinds(),
-                        ctx.published())) {
-            return;
+        if (element == null) {
+            return null;
+        }
+        if (element instanceof Type.Nothing) {
+            return OrderingRequirement.overNothingToOrder(element);
+        }
+        Ordering how = Ordering.of(element, ctx.inners(), ctx.symbols(), ctx.kinds(),
+                ctx.published());
+        if (how != null) {
+            return OrderingRequirement.orderedBy(element, how);
         }
         String name = call.written().substring(call.written().indexOf('.') + 1);
         throw needsOrdered(call.pos(), name, element,
@@ -83,24 +98,49 @@ public final class CallElaborator {
     }
 
     /**
-     * Refuses a sort key with no natural order. The constraint is on what the key answers, not on
+     * Refuses a sort key with no natural order, and answers what it was checked against — null
+     * where this kernel is not {@code sortBy}. The constraint is on what the key answers, not on
      * what the list holds, so it reads the binding the key's declared result took rather than the
      * call's result.
      */
-    private static void requiresOrderedKey(Kernel kernel, Hir.Apply call, Type.FnOf declaredKey,
-                                           Map<String, Type> bindings, CheckContext ctx) {
+    private static OrderingRequirement requiresOrderedKey(Kernel kernel, Hir.Apply call,
+                                                          Type.FnOf declaredKey,
+                                                          Map<String, Type> bindings,
+                                                          CheckContext ctx) {
         if (kernel != Kernel.LIST_SORT_BY) {
-            return;
+            return null;
         }
         Type answered = TypeOps.substitute(declaredKey.result(), bindings);
-        if (BottomInfer.isBottom(answered) || answered instanceof Type.Var
-                || TypeOps.supportsOrdering(answered, ctx.inners(), ctx.symbols(), ctx.kinds(),
-                        ctx.published())) {
-            return;
+        if (BottomInfer.isBottom(answered) || answered instanceof Type.Var) {
+            return OrderingRequirement.overNothingToOrder(answered);
+        }
+        Ordering how = Ordering.of(answered, ctx.inners(), ctx.symbols(), ctx.kinds(),
+                ctx.published());
+        if (how != null) {
+            return OrderingRequirement.orderedBy(answered, how);
         }
         throw CompileException.of(Diagnostic
                         .at(call.pos())
                         .hint(new TypeMessage.MapToAnOrderedFieldFirst()).say(new TypeMessage.TheKeyMustBeAnOrderedValue(call.written(), Type.show(answered))).build());
+    }
+
+    /**
+     * What an ordering requirement was checked against and what orders it, which the check settles
+     * in the step that admits the subject: an admitted subject is one that has an order, and that
+     * answer is the one kept.
+     *
+     * @param ordering empty where the subject stands for no value to order yet
+     */
+    private record OrderingRequirement(Type subject, Optional<Core.OrderingBasis> ordering) {
+
+        static OrderingRequirement orderedBy(Type subject, Ordering how) {
+            return new OrderingRequirement(subject,
+                    Optional.of(new Core.OrderingBasis(how.basis())));
+        }
+
+        static OrderingRequirement overNothingToOrder(Type subject) {
+            return new OrderingRequirement(subject, Optional.empty());
+        }
     }
 
     /**
@@ -129,8 +169,14 @@ public final class CallElaborator {
         BottomInfer.pinResultTypeVars(declared, expected, bindings, ctx.published());
         // A name written where a value goes, and no call written anywhere: reading a value's name
         // is running its body, so the call is this compiler's and there is none to send anybody to.
-        return new Core.Call(reached(new ReachName.OfLibrary(lib), ctx),
-                List.of(), ConstructOccurrence.unwritten(),
+        //
+        // A kernel read this way is an application of it taking nothing, which is a settlement and
+        // not the absence of one.
+        Core.Reached reached = reached(new ReachName.OfLibrary(lib), ctx);
+        Core.CallSettlement settlement = reached instanceof Core.Reached.OfKernel
+                ? new Core.CallSettlement.AtKernel(List.of(), Core.KernelFact.None.INSTANCE)
+                : Core.CallSettlement.None.INSTANCE;
+        return new Core.Call(reached, List.of(), ConstructOccurrence.unwritten(), settlement,
                 TypeOps.toBottom(TypeOps.substitute(declared, bindings)), v.pos());
     }
 
@@ -188,7 +234,8 @@ public final class CallElaborator {
                 && library.constructs() instanceof Type.Prim kind) {
             return temporalLiteral(call, kind, ca);
         }
-        Type result = typeOfCall(ca, call, env, ctx, expected);
+        TypedCall typed = typeOfCall(ca, call, env, ctx, expected);
+        Type result = typed.type();
         // applying something this body binds is a different operation from calling something
         // declared elsewhere, and it is the only one that carries a binding into the emitted tree
         if (callee != null && callee.denotes() instanceof ValueName.Local local
@@ -198,7 +245,7 @@ public final class CallElaborator {
             // was applied, the two are a field read and the name it was bound to.
             return new Core.Apply(
                     new Core.Read(local.name(), local.id(), env.typeOf(local.id()), call.pos()),
-                    ca.cores(), result, call.pos());
+                    typed.args(), result, call.pos());
         }
         // Typing the call above refuses what is not a name outright, so what is left here names a
         // declaration and says which one and how this module reaches it.
@@ -223,8 +270,8 @@ public final class CallElaborator {
             throw new IllegalStateException("`" + call.written() + "` was elaborated as a call and"
                     + " reaches " + reaches + ", which no method is emitted for");
         }
-        return new Core.Call(reached(declaration, ctx), ca.cores(), wroteIt(call, ctx), result,
-                call.pos());
+        return new Core.Call(reached(declaration, ctx), typed.args(), wroteIt(call, ctx),
+                typed.settlement(), result, call.pos());
     }
 
     /**
@@ -270,7 +317,7 @@ public final class CallElaborator {
         for (int i = 0; i < params.size(); i++) {
             if (params.get(i) instanceof Type.FnOf declared) {
                 Type.FnOf at = (Type.FnOf) TypeOps.substitute(declared, bind);
-                Type answered = ca.block(i, call.written(), at.params());
+                Type answered = ca.block(i, call.written(), at);
                 // What the function answers settles the rest: this is an application of a declared
                 // signature and nothing more. The fold rule that reads a step's result as an
                 // accumulator to grow is one operation's meaning, and an operation kept standing is
@@ -286,6 +333,10 @@ public final class CallElaborator {
                 }
             }
         }
+        // Every argument stands as what the signature settled it to be taken as, which is known once
+        // every argument has been read.
+        Applied applied = new Applied(new Type.FnOf(params, kept.result()), bind);
+        List<Core> placed = materialized(call, applied, ca);
         // The operation as the signature that just typed this call says it: what was applied and
         // what it takes are one answer, and asking anything a second time for the name would be
         // reaching for a declaration this already has in hand.
@@ -295,17 +346,45 @@ public final class CallElaborator {
         // this applies is the callee's, and why the application is here is the application's — and
         // a call kept for a reader to quote is not always one an author wrote, a library operation
         // used as a value being expanded into a block whose application is kept the same way.
-        return new Core.PreservedCall(kept.declaring(), ca.cores(),
+        return new Core.PreservedCall(kept.declaring(), placed,
                 new Core.KeptCallPlace(call.answered().origin(), call.application(),
                         ctx.lineage()),
-                TypeOps.substitute(kept.result(), bind), call.pos());
+                settledWhereKept(call, env, ctx), applied.result(), call.pos());
     }
 
     /**
-     * The arguments of one call, each elaborated once, as the call's typing rule reaches it. A rule
-     * types its arguments in its own order and shape — some through a required type, a step through
-     * the accumulator the other arguments fixed — so the Core for each argument is collected here
-     * rather than by a separate walk that would have to reconstruct that context.
+     * What the checker settles about a kept application, which is what only it can settle.
+     *
+     * <p>The pattern of {@code String.matches}, read by {@link #settledPattern} as it is for an
+     * emitted call, so a reader of the kept call takes the meaning from the call and no reader works
+     * it out from the text again. Nothing else: what a kept operation means beyond that is left to
+     * whoever reads it, which is why it was kept.
+     */
+    private static Core.KernelFact settledWhereKept(Hir.Apply call, Scope env, CheckContext ctx) {
+        if (call.answered().denotes() instanceof ValueName.Stdlib.Operation operation
+                && ctx.symbols().library().intrinsicOf(operation) instanceof Stdlib.Intrinsic kernel
+                && kernel.kernel() == Kernel.STRING_MATCHES) {
+            return settledPattern(new BoundExpr(call.args().get(0), env.values()), ctx.symbols());
+        }
+        return Core.KernelFact.None.INSTANCE;
+    }
+
+    /**
+     * The arguments of one call, as the call's typing rule reaches them. A rule types its arguments
+     * in its own order and shape — some through a required type, a step through the accumulator the
+     * other arguments fixed — so the Core for each argument is collected here rather than by a
+     * separate walk that would have to reconstruct that context.
+     *
+     * <p>A value argument is elaborated once ({@link #type}); what it is is not a question the
+     * settlement changes, only where it is placed. A function argument is elaborated at the
+     * parameters the settlement stood at when it was reached, which is evidence for settling and
+     * may not be what the call holds: where the final settlement has it take something else, it is
+     * elaborated again there ({@link #settledAs}), because what a block's body read its parameters
+     * at is part of the block.
+     *
+     * <p>So what is collected while the rule settles the signature's variables is not what the call
+     * holds. The call holds {@link #cores} once {@link #materialized} has placed every argument at
+     * the settlement that is final.
      */
     static final class CallArgs {
         private final List<Hir.Expr> args;
@@ -335,7 +414,8 @@ public final class CallElaborator {
          * Core that reached the tree would be the later one while the type a rule reasoned about was
          * the earlier. A rule may ask in whatever order it types in ({@link #requireTyped} already
          * rests on this), so the guarantee belongs here rather than in each rule remembering to ask
-         * once.
+         * once. It is a value argument's: a function argument is read at parameters, and read again
+         * where those move ({@link #settledAs}).
          */
         Type type(int i) {
             if (cores[i] == null) {
@@ -344,18 +424,17 @@ public final class CallElaborator {
             return cores[i].type();
         }
 
-        /** Argument {@code i} checked against {@code expected}, as {@link Elaborator#requireType} does. */
+        /** Argument {@code i} checked against {@code expected}, as {@link Elaborator#requireType}
+         *  does, and handed to the call standing as {@code expected}. */
         void require(int i, Type expected, String what) {
-            Core c = Elaborator.elaborate(args.get(i), env, ctx);
-            cores[i] = c;
-            Elaborator.requireType(args.get(i), c.type(), expected, ctx.published(), what);
+            cores[i] = Elaborator.standing(args.get(i), Elaborator.elaborate(args.get(i), env, ctx),
+                    expected, ctx.published(), what);
         }
 
         /** Argument {@code i}, elaborated once by {@link #type}, required to fit {@code required}
-         *  now that the signature's variables are settled. Reads the stored core — the
-         *  expression's own type did not change, only what is asked of it — so nothing is
-         *  elaborated twice. */
-        void requireTyped(int i, Type required, String what) {
+         *  while the signature's variables are still being settled. Nothing is handed to the call:
+         *  what it is placed at is decided by {@link #requireTyped} once the settlement is final. */
+        void fits(int i, Type required, String what) {
             if (cores[i] == null) {
                 throw new IllegalStateException(
                         "argument " + (i + 1) + " required before it was typed");
@@ -363,16 +442,62 @@ public final class CallElaborator {
             Elaborator.requireType(args.get(i), cores[i].type(), required, ctx.published(), what);
         }
 
+        /** Argument {@code i}, elaborated once by {@link #type}, required to fit {@code required}
+         *  now that the signature's variables are settled, and handed to the call standing as
+         *  {@code required}. Reads the stored core — the expression's own type did not change, only
+         *  what is asked of it — so nothing is elaborated twice. */
+        void requireTyped(int i, Type required, String what) {
+            if (cores[i] == null) {
+                throw new IllegalStateException(
+                        "argument " + (i + 1) + " required before it was typed");
+            }
+            cores[i] = Elaborator.standing(args.get(i), cores[i], required, ctx.published(), what);
+        }
+
         /** Argument {@code i} as a block (or a function value standing in for one), returning the
-         * result type the block yields at {@code paramTypes}. */
-        Type block(int i, String fnName, List<Type> paramTypes) {
-            Core c = Elaborator.elaborateBlockArg(fnName, args.get(i), paramTypes, env, ctx);
+         * result type the block yields at what {@code takes} says it takes. What {@code takes}
+         * says it answers is what a body that is itself a function is read against. */
+        Type block(int i, String fnName, Type.FnOf takes) {
+            Core c = Elaborator.elaborateBlockArg(fnName, args.get(i), takes, env, ctx);
             cores[i] = c;
             return ((Type.FnOf) c.type()).result();
         }
 
         void put(int i, Core c) {
             cores[i] = c;
+        }
+
+        /**
+         * Argument {@code i}, a function value already read, handed to the call as one taking and
+         * answering what {@code takes} says, now that the signature's variables are settled.
+         *
+         * <p>Read again where what it was read taking is not what the call takes. A block's
+         * parameter types are what its body read its parameters at, so a block read at a
+         * substitution that moved afterwards cannot be given the settled ones, and it cannot stand
+         * as a function taking them either: one that takes less does not take what the call hands
+         * it. What it answers stands as what the call takes it to answer, as {@link
+         * Elaborator#answering} says, except where that is a variable nothing settled, which is no
+         * type to stand as.
+         *
+         * <p>Held to that here, whether it was read again or not. A {@link Core.Widen} says the
+         * checker decided the one type may stand as the other, and it is placed here, so this is
+         * where that is decided: a settlement that stopped short of what the function answers would
+         * otherwise have its answer stand as something narrower.
+         */
+        void settledAs(int i, String fnName, Type.FnOf takes, String what) {
+            Core read = cores[i];
+            if (!((Type.FnOf) read.type()).params().equals(takes.params())) {
+                read = Elaborator.elaborateBlockArg(fnName, args.get(i), takes, env, ctx);
+            }
+            if (takes.result() instanceof Type.Var) {
+                cores[i] = read;
+                return;
+            }
+            Type answered = ((Type.FnOf) read.type()).result();
+            if (!TypeOps.assignable(answered, takes.result(), ctx.published())) {
+                throw Elaborator.doesNotFit(args.get(i), answered, takes.result(), what);
+            }
+            cores[i] = Elaborator.answering(read, takes.result());
         }
 
         /** The elaborated arguments. Every argument must have been reached: a rule that yields a type
@@ -458,13 +583,38 @@ public final class CallElaborator {
                 + " and reached call elaboration unexpanded, at " + call.pos());
     }
 
-    /** What one application of a declared signature settled: the declared result with the
-     *  signature's variables substituted, and that substitution itself — for the checks a kernel
-     *  runs on the outcome. Settled at construction: the map is copied, not shared with the
-     *  unifier. */
-    private record Applied(Type result, Map<String, Type> substitution) {
+    /**
+     * What one application of a declared signature settled: the substitution of the signature's
+     * variables, from which what it takes and what it answers are both read. Held as the one
+     * substitution so the two cannot come to answer from different settlements — a kernel that
+     * settles a variable further ({@link #settlingTheElement}) settles both at once. Copied at
+     * construction, not shared with the unifier.
+     */
+    private record Applied(Type.FnOf signature, Map<String, Type> substitution) {
+
         private Applied {
             substitution = Map.copyOf(substitution);
+        }
+
+        /** What the application takes each argument as. */
+        List<Type> takes() {
+            List<Type> out = new ArrayList<>();
+            for (Type param : signature.params()) {
+                out.add(TypeOps.substitute(param, substitution));
+            }
+            return out;
+        }
+
+        /** What the application answers. */
+        Type result() {
+            return TypeOps.substitute(signature.result(), substitution);
+        }
+
+        /** This application with {@code variable} settled as {@code as}. */
+        Applied settling(Type.Var variable, Type as) {
+            Map<String, Type> settled = new HashMap<>(substitution);
+            settled.put(variable.name(), as);
+            return new Applied(signature, settled);
         }
     }
 
@@ -534,20 +684,66 @@ public final class CallElaborator {
             }
             throw CompileException.of(b.say(new NameMessage.TheElementTypeCannotBeInferredHere()).build());
         }
-        return new Applied(TypeOps.substitute(signature.result(), bind), bind);
+        return new Applied(signature, bind);
     }
 
     /** Each value argument held to the parameter it was given to, at its own position — the
      * refusal {@link SignatureApplication#settledByValues} leaves to whoever has the argument in
-     * hand. */
+     * hand. Held and not placed: a function argument read afterwards may settle further a variable
+     * the parameter reads. */
     private static void requireValueArgs(Hir.Apply call, List<Type> params, CallArgs ca,
                                          Map<String, Type> bind) {
         for (int i = 0; i < params.size(); i++) {
             Type param = params.get(i);
             if (!(param instanceof Type.FnOf)) {
-                ca.requireTyped(i, TypeOps.substitute(param, bind),
+                ca.fits(i, TypeOps.substitute(param, bind),
                         "argument " + (i + 1) + " of " + call.written());
             }
+        }
+    }
+
+    /**
+     * The arguments the call holds: each placed at what {@code applied} says the application takes
+     * it as, once the settlement is final.
+     *
+     * <p>The one place a call's arguments are decided. Every argument was read while the signature's
+     * variables were being settled, and what a function argument settled afterwards, or a kernel's
+     * own rule, may have settled further a variable an earlier argument was read against. A value
+     * stands as what its parameter settled to, and a function is read again where it was read
+     * taking something else ({@link CallArgs#settledAs}).
+     */
+    private static List<Core> materialized(Hir.Apply call, Applied applied, CallArgs ca) {
+        List<Type> declared = applied.signature().params();
+        List<Type> takes = applied.takes();
+        for (int i = 0; i < declared.size(); i++) {
+            String what = "argument " + (i + 1) + " of " + call.written();
+            if (declared.get(i) instanceof Type.FnOf) {
+                ca.settledAs(i, call.written(), (Type.FnOf) takes.get(i), what);
+            } else {
+                ca.requireTyped(i, takes.get(i), what);
+            }
+        }
+        return ca.cores();
+    }
+
+    /**
+     * What typing a call answers: the arguments the call holds, the result type, and what the
+     * checker settled about this application along the way ({@link Core.CallSettlement}) — for a
+     * kernel, what it takes each argument as and any fact of its own; {@code None} for any other
+     * call.
+     *
+     * <p>One answer, so the arguments and the type are read off one settlement. Collected apart, the
+     * arguments would be whatever the typing left behind when it finished, read against whichever
+     * substitution stood when each was read.
+     */
+    record TypedCall(List<Core> args, Type type, Core.CallSettlement settlement) {
+
+        TypedCall {
+            args = List.copyOf(args);
+        }
+
+        TypedCall(List<Core> args, Type type) {
+            this(args, type, Core.CallSettlement.None.INSTANCE);
         }
     }
 
@@ -559,7 +755,8 @@ public final class CallElaborator {
      * the library, then a function-typed binding, then an injected behavior — and a name that could
      * be read two ways was whichever came first.
      */
-    static Type typeOfCall(CallArgs ca, Hir.Apply call, Scope env, CheckContext ctx, Type expected) {
+    static TypedCall typeOfCall(CallArgs ca, Hir.Apply call, Scope env, CheckContext ctx,
+                                        Type expected) {
         List<Hir.Expr> args = call.args();
         if (call.function() instanceof Hir.Var.Unanswered) {
             // reported where the name was written; this definition has no meaning to work out
@@ -604,19 +801,32 @@ public final class CallElaborator {
             // signature could not state, and the emitter's special cases. They read the settled
             // substitution and result — they are checks on what the application became, not part
             // of how an application is typed.
+            OrderingRequirement orderingSubject = null;
             for (Type param : intrinsic.parameters()) {
                 if (param instanceof Type.FnOf declaredStep) {
-                    requiresOrderedKey(kernel, call, declaredStep, applied.substitution(), ctx);
+                    orderingSubject = requiresOrderedKey(kernel, call, declaredStep,
+                            applied.substitution(), ctx);
                 }
             }
-            requiresOrdering(kernel, call, applied.result(), ctx);
+            OrderingRequirement orderedElement = requiresOrdering(kernel, call, applied.result(),
+                    ctx);
+            if (orderedElement != null) {
+                orderingSubject = orderedElement;
+            }
             if (kernel == Kernel.LIST_SUM || kernel == Kernel.LIST_PRODUCT) {
-                return numericFold(call, applied.result(), expected);
+                applied = settlingTheElement(call, applied, expected);
             }
+            Core.KernelFact fact;
             if (kernel == Kernel.STRING_MATCHES) {
-                validateRegexPattern(args.get(0), ctx.symbols());
+                fact = settledPattern(new BoundExpr(args.get(0), env.values()), ctx.symbols());
+            } else if (orderingSubject != null) {
+                fact = new Core.KernelFact.OrderingSubject(orderingSubject.subject(),
+                        orderingSubject.ordering());
+            } else {
+                fact = Core.KernelFact.None.INSTANCE;
             }
-            return applied.result();
+            return new TypedCall(materialized(call, applied, ca), applied.result(),
+                    new Core.CallSettlement.AtKernel(applied.takes(), fact));
         }
         // a function-typed value in scope (a helper's function parameter) applied to
         // arguments — f(x) (spec §fn-declaration). A newtype construction 金額(500) never
@@ -634,7 +844,8 @@ public final class CallElaborator {
                                 .at(call.appliedAt())
                                 .say(new DeclarationMessage.AppliedToAnotherNumberOfArguments(call.written(), String.valueOf(fn.params().size()), String.valueOf(args.size()))).build());
             }
-            return applySignature(call, fn, ca, expected, env, ctx).result();
+            Applied applied = applySignature(call, fn, ca, expected, env, ctx);
+            return new TypedCall(materialized(call, applied, ca), applied.result());
         }
         // A library name that matched no builtin or intrinsic above. Which of the two it is the
         // library says, and the two are not one report. A name it declares reached here without
@@ -697,7 +908,7 @@ public final class CallElaborator {
         for (int i = 0; i < required.params().size(); i++) {
             ca.require(i, required.params().get(i), "argument " + (i + 1) + " of " + call.written());
         }
-        return required.success();
+        return new TypedCall(ca.cores(), required.success());
     }
 
     /**
@@ -706,71 +917,98 @@ public final class CallElaborator {
      * form written directly. Empty when the argument is a runtime value or the data is not a
      * single-{@code value} wrapper (e.g. a product).
      */
-    static Optional<Object> newtypeConstantArg(Hir.NewData nd, Symbols symbols) {
+    static Optional<Object> newtypeConstantArg(Hir.NewData nd, Symbols symbols, BoundValues at) {
         if (nd.spreads().isEmpty() && nd.inits().size() == 1
                 && nd.inits().get(0).name().equals("value")) {
-            return ConstEval.against(symbols).eval(nd.inits().get(0).value());
+            return ConstEval.against(symbols).eval(new BoundExpr(nd.inits().get(0).value(), at));
         }
         return Optional.empty();
     }
 
-    /** The pattern of {@code String.matches} must evaluate to a string at compile time, so it is
-     * validated (and can be compiled) there: a malformed regex is a compile error, not a runtime
-     * exception, and the value it constrains is proven at construction (spec §stdlib-string). A
-     * literal is one such expression and so is a {@code ++} of literals and of a module's values,
-     * which is what lets several formats share a part (issue #208). What is validated is the string
-     * the whole expression composes to, not the pieces it was written in. */
-    static void validateRegexPattern(Hir.Expr e, Symbols symbols) {
+    /**
+     * What the pattern of {@code String.matches} means, which is settled here or the call is
+     * refused.
+     *
+     * <p>The pattern must evaluate to a string at compile time, so it is read there: text that is
+     * no pattern of the language is a compile error, not a runtime exception, and the value it
+     * constrains is proven at construction (spec §stdlib-string). A literal is one such expression
+     * and so is a {@code ++} of literals and of a module's values, which is what lets several
+     * formats share a part. What is read is the string the whole expression composes to, not the
+     * pieces it was written in.
+     *
+     * <p>Read by {@link PatternParser}, which is the language's reader, and by nothing a host
+     * supplies: which text is a pattern and which strings it accepts is what the specification
+     * states, and a host engine accepting more would make a pattern valid because of the compiler
+     * it was checked with. What the reading comes to is carried onto the call, so every output
+     * lowers the meaning read here and none of them reads the text.
+     */
+    static Core.KernelFact.StringMatches settledPattern(BoundExpr e, Symbols symbols) {
         String pattern = ConstEval.against(symbols).evalString(e).orElse(null);
         if (pattern == null) {
-            throw CompileException.of(Diagnostic
-                            .at(e.pos()).say(new TypeMessage.ThePatternMustBeWrittenOut()).build());
+            throw refusedAt(e, new TypeMessage.ThePatternMustBeWrittenOut());
         }
-        try {
-            java.util.regex.Pattern.compile(pattern);
-        } catch (java.util.regex.PatternSyntaxException ex) {
-            // getDescription() is the one-line reason ("Unclosed character class near index 3");
-            // getMessage() would also dump the pattern and a caret, which the source region already shows.
-            throw CompileException.of(Diagnostic
-                            .at(e.pos()).say(new TypeMessage.ThePatternIsNotARegularExpression(ex.getDescription())).build());
-        }
+        return switch (PatternParser.read(pattern)) {
+            case PatternRead.Read read -> new Core.KernelFact.StringMatches(pattern, read.meaning());
+            case PatternRead.Refused refused -> throw refusedAt(e, switch (refused.why()) {
+                case SOMETHING_UNCLOSED, A_COUNT_THIS_CANNOT_READ, AN_ESCAPE_THIS_DOES_NOT_READ ->
+                        refused.construct().isEmpty()
+                                ? new TypeMessage.ThePatternEndsBeforeItIsWhole()
+                                : new TypeMessage.ThePatternIsNotAPatternAt(refused.construct());
+                // Whatever the pattern says about it is about text that never arrives, so writing
+                // one is a mistake about the text.
+                case A_CHARACTER_NO_STRING_HOLDS ->
+                        new TypeMessage.ThePatternWritesHalfASurrogatePair(refused.construct());
+                case AN_ANCHOR_THIS_CANNOT_PLACE ->
+                        new TypeMessage.ThePatternPlacesAnAnchorTheStringDecides();
+                case A_GROUP_THE_GRAMMAR_DOES_NOT_HAVE, A_BACK_REFERENCE, A_CHARACTER_PROPERTY, A_BOUNDARY,
+                     A_QUOTATION, A_CLASS_OF_CLASSES, A_POSSESSIVE_REPETITION ->
+                        new TypeMessage.ThePatternWritesWhatNoPatternHas(refused.construct());
+            });
+            case PatternRead.TooDeep deep ->
+                    throw refusedAt(e, new TypeMessage.ThePatternNestsDeeperThanIsRead(deep.deepest()));
+        };
     }
 
-    /** A stdlib argument-type error: {@code subject} (a function name) expects a container of kind
-     * {@code kindKey} (a localized phrase such as "a List"), but got {@code actual}. */
-    static CompileException expects(SourcePos pos, String subject, String kindKey, Type actual,
-                                            String legacy) {
-        return CompileException.of(Diagnostic.at(pos)
-                        .say(new DeclarationMessage.ItExpectsAnotherType(subject, Localizable.of(kindKey), Type.show(actual))).build());
+    private static <M extends TypeMessage & Reported> CompileException refusedAt(BoundExpr e,
+                                                                                M message) {
+        return CompileException.of(Diagnostic.at(e.expr().pos()).say(message).build());
     }
 
     /**
-     * The element {@code List.sum} / {@code List.product} answers with. It is {@code Int} or
-     * {@code Decimal} — the two types {@code +} and {@code *} are defined for — and nothing else:
-     * a newtype over one of them declares neither an addition nor a zero, so it is rejected here
-     * rather than folded as the value it wraps.
+     * {@code applied} with the element {@code List.sum} / {@code List.product} folds settled. It is
+     * {@code Int}, {@code Decimal} or {@code Rational} — the types {@code +} and {@code *} are
+     * defined for (ADR-0116) — and nothing else: a newtype over one of them declares neither an
+     * addition nor a zero, so it is rejected here rather than folded as the value it wraps.
      *
      * <p>Over the empty-list literal there is no element to read, and the seed the fold answers with
-     * is {@code 0} or {@code 0.0m} by which of the two this is. That comes from the position the call
+     * is the nought or the one of whichever of them this is. That comes from the position the call
      * is written in — the field, the annotated binding, the declared output it feeds. A {@code ?}
      * field asks for the value it wraps rather than for an optional (ADR-0011), so the optional is
-     * peeled before the position is read, exactly as a written literal has it peeled.
+     * peeled before the position is read, exactly as a written literal has it peeled. What the
+     * position says settles the signature's element variable, so the list the call takes is a list
+     * of it as well as the answer being one.
      *
      * <p>Three things the position can be, and they are three different reports. It states one of
-     * the two: that is the answer. It states nothing: the answer is asked for rather than defaulted,
+     * the numbers arithmetic is defined for: that is the answer. It states nothing: the answer is asked for rather than defaulted,
      * since defaulting to {@code Int} would make a numeric-literal default rule out of one library
      * function. It states something else: nothing about the element is unknown, and what is wrong is
      * that a sum does not go here — asking for an annotation would send the reader after something
      * the position already carries.
      */
-    private static Type numericFold(Hir.Apply call, Type element, Type expected) {
-        if (element == Type.INT || element == Type.DECIMAL) {
-            return element;
+    private static Applied settlingTheElement(Hir.Apply call, Applied applied, Type expected) {
+        Type element = applied.result();
+        if (foldsANumber(element)) {
+            return applied;
         }
         if (BottomInfer.isBottom(element)) {
             Type position = expected instanceof Type.OptionOf o ? o.element() : expected;
-            if (position == Type.INT || position == Type.DECIMAL) {
-                return position;
+            if (foldsANumber(position)) {
+                if (!(applied.signature().result() instanceof Type.Var variable)) {
+                    throw new IllegalStateException("`" + call.written() + "` answers "
+                            + Type.show(applied.signature().result())
+                            + ", which is no element for its position to settle");
+                }
+                return applied.settling(variable, position);
             }
             if (position == null || BottomInfer.isBottom(position)) {
                 throw CompileException.of(Diagnostic
@@ -786,6 +1024,14 @@ public final class CallElaborator {
                         .at(call.appliedAt())
                         
                         .hint(new TypeMessage.MapToTheNumericFieldFirst(call.written())).say(new DeclarationMessage.ItNeedsANumericElement(call.written(), Localizable.of("kind.numeric.list"), Type.show(element))).build());
+    }
+
+    /** Whether a numeric fold takes this as its element: the types {@code +} and {@code *} are
+     *  defined for, each closed under both and each with an exact nought and one the primitives
+     *  construct. Rational is the third (ADR-0116, amending ADR-0082). Asked in the one place, so the
+     *  element and the position a call over the empty list reads cannot come to differ. */
+    private static boolean foldsANumber(Type t) {
+        return t == Type.INT || t == Type.DECIMAL || t == Type.RATIONAL;
     }
 
     /** A stdlib error where a list's element (or a key) must be an ordered primitive to sort/compare. */
@@ -827,79 +1073,36 @@ public final class CallElaborator {
      * Returns the parsed value so the backend and the example verifier share this one reading of
      * the text.
      *
-     * <p>{@code kind} decides which parse runs and {@code fn} is only what a report quotes. They
-     * were one value, and the caller that had a name for a temporal it had not resolved got the
-     * parse the name spelled. */
+     * <p>Which text a temporal may be written as is {@link TemporalText#inSource}'s, asked before
+     * anything is parsed: what {@code java.time} would take is wider, and the difference is not
+     * the checker's to decide. {@code kind} decides which value is built and {@code fn} is only what
+     * a report quotes. They were one value, and the caller that had a name for a temporal it had not
+     * resolved got the parse the name spelled. */
     public static Object parseTemporal(Type.Prim kind, String fn, String text, Region at) {
-        Object parsed;
-        try {
-            parsed = switch (kind) {
-                case DATE -> java.time.LocalDate.parse(text);
-                case TIME -> java.time.LocalTime.parse(text);
-                case DATETIME -> java.time.LocalDateTime.parse(text);
-                case INSTANT -> instantInUtc(text, at);
-                case INT, STRING, BOOL, DECIMAL, RAW ->
-                        throw new IllegalStateException("`" + fn + "` names no temporal");
-            };
-        } catch (java.time.format.DateTimeParseException _) {
-            throw CompileException.of(Diagnostic
-                            .at(at).say(new TypeMessage.ThatIsNotATemporalOfThatKind(fn, text)).build());
-        }
-        return toTheSecond(parsed, fn, text, at);
-    }
-
-    /**
-     * A written {@code Instant}: refused where it names a second that does not exist, and where it is
-     * not spelled in UTC.
-     *
-     * <p>A leap second is the substitution this type exists not to make. {@code Instant.parse} takes
-     * {@code 23:59:60} and answers {@code 23:59:59}, so a written moment the language cannot
-     * represent would become a different one with nothing saying so — the defect this whole rule is
-     * about, made by the reader that enforces it. Java hands the fact over separately
-     * ({@code DateTimeFormatter.parsedLeapSecond}), and that is what is read.
-     *
-     * <p>The {@code Z} form is the other rule and a different kind of thing. A numeric offset names
-     * the same moment — {@code 09:30+09:00} and {@code 00:30Z} are one instant, and either determines
-     * it — so it is not refused for being wrong. It is refused because a written value is written the
-     * way the value is written back (spec §fixture-is-written-not-carried), and an {@code Instant} is
-     * written in UTC. A boundary reads either form.
-     *
-     * <p>An offset is a spelling and not a zone. A zone is a place with rules about when its offset
-     * changes ({@code ZoneId}), an offset is a displacement from UTC ({@code ZoneOffset}), and this
-     * language names neither — which is why the refusal above is about the written form and not
-     * about a zone leaking in.
-     *
-     * <p>Both are asked after parsing, so text that is no instant at all is still reported as that.
-     */
-    private static java.time.Instant instantInUtc(String text, Region at) {
-        java.time.Instant parsed = java.time.Instant.parse(text);
-        if (Boolean.TRUE.equals(java.time.format.DateTimeFormatter.ISO_INSTANT.parse(text)
-                .query(java.time.format.DateTimeFormatter.parsedLeapSecond()))) {
-            throw CompileException.of(Diagnostic
-                            .at(at).say(new TypeMessage.ALeapSecondIsNotAMoment(text)).build());
-        }
-        if (!text.endsWith("Z")) {
-            throw CompileException.of(Diagnostic
-                            .at(at).say(new TypeMessage.AnInstantIsWrittenInUtc(text)).build());
-        }
-        return parsed;
-    }
-
-    /** A written time of day is spelled to the second. {@code Time} and {@code DateTime} hold no
-     * finer (spec §temporal-literal), so text carrying a fraction is refused where it stands rather
-     * than losing it on the way in. {@code Instant} is the temporal that keeps a sub-second reading,
-     * and a {@code Date} has no time of day to carry one. */
-    private static Object toTheSecond(Object parsed, String fn, String text, Region at) {
-        int nano = switch (parsed) {
-            case java.time.LocalTime t -> t.getNano();
-            case java.time.LocalDateTime d -> d.getNano();
-            default -> 0;
+        TemporalText.Kind form = switch (kind) {
+            case DATE -> TemporalText.Kind.DATE;
+            case TIME -> TemporalText.Kind.TIME;
+            case DATETIME -> TemporalText.Kind.DATETIME;
+            case INSTANT -> TemporalText.Kind.INSTANT;
+            case INT, STRING, BOOL, DECIMAL, RATIONAL ->
+                    throw new IllegalStateException("`" + fn + "` names no temporal");
         };
-        if (nano != 0) {
-            throw CompileException.of(Diagnostic
-                            .at(at).say(new TypeMessage.ATimeOfDayIsWrittenToTheSecond(fn, text)).build());
-        }
-        return parsed;
+        TemporalText.inSource(form, text).ifPresent(refusal -> {
+            throw CompileException.of(Diagnostic.at(at).say(switch (refusal) {
+                case MALFORMED -> new TypeMessage.ThatIsNotATemporalOfThatKind(fn, text);
+                case SUB_SECOND -> new TypeMessage.ATimeOfDayIsWrittenToTheSecond(fn, text);
+                case LEAP_SECOND -> new TypeMessage.ALeapSecondIsNotAMoment(text);
+                case NOT_UTC -> new TypeMessage.AnInstantIsWrittenInUtc(text);
+            }).build());
+        });
+        // The text is in the language, so what reads it here only builds the value.
+        return switch (kind) {
+            case DATE -> LocalDate.parse(text);
+            case TIME -> LocalTime.parse(text);
+            case DATETIME -> LocalDateTime.parse(text);
+            case INSTANT -> Instant.parse(text);
+            case INT, STRING, BOOL, DECIMAL, RATIONAL -> throw new IllegalStateException();
+        };
     }
 
     static void arity(Hir.Apply call, int n) {

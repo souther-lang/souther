@@ -1,5 +1,7 @@
 package souther.compiler.flow;
 
+import souther.compiler.check.Choice;
+import souther.compiler.check.ScopeStep;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 
@@ -11,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.SequencedSet;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * The ways an expression arrives at a value, read off the body it is written in.
@@ -78,11 +81,39 @@ public final class ValueArrivals<P> {
     /** Whether a call kept standing is a defect here or an operation the model names. */
     private final WhereTheOperationsAre operations;
 
+    /**
+     * What a value built in the tree means, for a tree that builds values it does not hold the
+     * bodies of.
+     */
+    private final Function<Core.MaterialisedValue, Core> templates;
+
+    /**
+     * What each template comes to, worked out once for every reading that shares this.
+     *
+     * <p>A value means the same wherever it is built, so what it comes to is not a fact about any
+     * one build of it. Shared with the readings made of the templates in turn, so a template built
+     * from several places is read once and a chain of them costs the links it has.
+     */
+    private final Map<Core, Comes> templateComes;
+
+    /** Where there are no builds of values to answer for, which is every tree that runs. */
+    private static final Function<Core.MaterialisedValue, Core> NO_TEMPLATES =
+            ValueArrivals::noTemplate;
+
+    private static Core noTemplate(Core.MaterialisedValue build) {
+        throw new IllegalStateException("a build of " + build.value()
+                + " is in a tree that holds no templates");
+    }
+
     private ValueArrivals(Naming<P> naming, ValueArrivals<AnonymousPath> semantics,
-                          WhereTheOperationsAre operations) {
+                          WhereTheOperationsAre operations,
+                          Function<Core.MaterialisedValue, Core> templates,
+                          Map<Core, Comes> templateComes) {
         this.naming = naming;
         this.semantics = semantics;
         this.operations = operations;
+        this.templates = templates;
+        this.templateComes = templateComes;
     }
 
     /** The reading of {@code body} against what the body's own text says of its comparisons. */
@@ -116,13 +147,58 @@ public final class ValueArrivals<P> {
      */
     public static <P> ValueArrivals<P> ofBody(Core body, Naming<P> naming, ComparisonWays ways,
                                               WhereTheOperationsAre operations) {
+        return ofBody(body, naming, ways, operations, NO_TEMPLATES, new IdentityHashMap<>());
+    }
+
+    /**
+     * The same, of a tree that builds values: {@code templates} says what each build is, and what a
+     * build comes to is what its template does — whether a run arrives at a value there, and which
+     * it is.
+     *
+     * <p>A build is not a leaf that always answers. The value it stands for may abort or answer
+     * nothing, and then nothing after the build is reached, exactly as when the value's body stood
+     * where it was named.
+     */
+    public static <P> ValueArrivals<P> ofBodyWhereTheOperationsStand(
+            Core body, Naming<P> naming, Function<Core.MaterialisedValue, Core> templates) {
+        return ofBody(body, naming, ComparisonWays.OF_THE_TREE, WhereTheOperationsAre.STAND_IN_IT,
+                templates, new IdentityHashMap<>());
+    }
+
+    private static <P> ValueArrivals<P> ofBody(Core body, Naming<P> naming, ComparisonWays ways,
+                                               WhereTheOperationsAre operations,
+                                               Function<Core.MaterialisedValue, Core> templates,
+                                               Map<Core, Comes> templateComes) {
         ValueArrivals<AnonymousPath> semantics = naming == Anonymous.NAMING
-                ? null : ofBody(body, Anonymous.NAMING, ways, operations);
-        ValueArrivals<P> reading = new ValueArrivals<>(naming, semantics, operations);
+                ? null : ofBody(body, Anonymous.NAMING, ways, operations, templates, templateComes);
+        ValueArrivals<P> reading =
+                new ValueArrivals<>(naming, semantics, operations, templates, templateComes);
         if (body != null) {
             reading.fill(body, naming, ways, Map.of());
         }
         return reading;
+    }
+
+    /** What the template {@code build} stands for comes to, worked out the first time it is asked. */
+    private Comes templateComes(Core.MaterialisedValue build) {
+        Core template = templates.apply(build);
+        Comes known = templateComes.get(template);
+        if (known == null) {
+            known = ofBody(template, Anonymous.NAMING, ComparisonWays.OF_THE_TREE, operations,
+                    templates, templateComes).comesAt(template);
+            templateComes.put(template, known);
+        }
+        return known;
+    }
+
+    /** The ways a build of a value arrives, which are the ways its template does. */
+    private Paths<P> aTemplateComes(Core.MaterialisedValue build) {
+        Comes comes = templateComes(build);
+        List<Arrival<P>> ways = new ArrayList<>();
+        for (Truth each : comes.truths()) {
+            ways.add(new Arrival<>(each, whole(naming.nowhere())));
+        }
+        return new Paths.Held<>(ways);
     }
 
     /**
@@ -213,41 +289,46 @@ public final class ValueArrivals<P> {
             return;
         }
         settle(e, naming, comparisons, bound);
-        switch (e) {
-            case Core.LetIn let -> {
-                fill(let.value(), naming, comparisons, bound);
-                fill(let.body(), naming.under(let.binder(), let.value()),
-                        comparisons.under(let.binder(), let.value()),
-                        with(bound, let.binder(),
-                                settle(let.value(), naming, comparisons, bound), let.value()));
-            }
-            case Core.Block block -> {
+        // Through the enumeration the language keeps for itself, each child under what the step
+        // into it binds. A list written out here would be a copy of that one, agreeing with it
+        // until one of them changed — and a copy is how a slot comes to be walked with the names of
+        // the node above it: the naming, the comparisons and the names this reading binds are three
+        // environments, and each is entered at the same step or the three disagree about a name.
+        ScopeStep.forEachChild(e, (child, step) -> fill(child, naming.entering(step),
+                comparisons.entering(step), inside(step, naming, comparisons, bound)));
+    }
+
+    /**
+     * {@code bound} as it stands in a child, {@code step} being the way into it.
+     *
+     * <p>A {@code let}'s name arrives the way its value does. A name an arm, an attempt or a block
+     * binds is one this reading bound to nothing it can read, which is a position of whatever the
+     * body is handed.
+     */
+    private Map<BindingId, Bound<P>> inside(ScopeStep step, Naming<P> naming,
+                                            ComparisonWays comparisons,
+                                            Map<BindingId, Bound<P>> bound) {
+        return switch (step) {
+            case ScopeStep.Same _ -> bound;
+            case ScopeStep.Let(Core.LetIn let) -> with(bound, let.binder(),
+                    settle(let.value(), naming, comparisons, bound), let.value());
+            case ScopeStep.Chosen(Choice.Decides decidedBy) -> switch (decidedBy) {
+                case Choice.Decides.ACase(Core.Case arm, Core _) ->
+                        with(bound, arm.binder(), oneWay(), null);
+                case Choice.Decides.ItWasBuilt(Core.IfConstructed attempt) ->
+                        with(bound, attempt.binder(), oneWay(), null);
+                case Choice.Decides.ACondition _ -> bound;
+                case Choice.Decides.ItDeparted _ -> bound;
+                case Choice.Decides.ByArgumentRelations _ -> bound;
+            };
+            case ScopeStep.Block(Core.Block block) -> {
                 Map<BindingId, Bound<P>> inner = bound;
                 for (Core.Binder param : block.params()) {
                     inner = with(inner, param, oneWay(), null);
                 }
-                fill(block.body(), naming, comparisons, inner);
+                yield inner;
             }
-            case Core.Match match -> {
-                fill(match.scrutinee(), naming, comparisons, bound);
-                for (Core.Case arm : match.cases()) {
-                    fill(arm.body(), naming.insideArm(match, arm),
-                            comparisons.insideArm(match, arm),
-                            with(bound, arm.binder(), oneWay(), null));
-                }
-            }
-            case Core.IfConstructed constructed -> {
-                fill(constructed.construct(), naming, comparisons, bound);
-                fill(constructed.then(), naming, comparisons,
-                        with(bound, constructed.binder(), oneWay(), null));
-                constructed.els().forEach(arm -> fill(arm.body(), naming, comparisons, bound));
-            }
-            // Everything else through the enumeration the language keeps for itself. A list written
-            // out here would be a copy of that one, agreeing with it until one of them changed — and
-            // the two slots it had already stopped agreeing about are exactly the ones nothing here
-            // could have noticed: a name a call applies, and the construction an attempt is of.
-            default -> Core.forEachChild(e, child -> fill(child, naming, comparisons, bound));
-        }
+        };
     }
 
     /**
@@ -314,20 +395,24 @@ public final class ValueArrivals<P> {
     private Paths<P> reading(Core e, Naming<P> naming, ComparisonWays comparisons,
                             Map<BindingId, Bound<P>> bound) {
         return switch (e) {
-            case Core.Unreachable ignored -> new Paths.Held<>(List.of());
+            case Core.Unreachable _ -> new Paths.Held<>(List.of());
+            case Core.MaterialisedValue build -> aTemplateComes(build);
             case Core.Bool literal -> one(Truth.of(literal.value()), whole(naming.nowhere()));
             case Core.Read read when bound.containsKey(read.binding()) ->
                     bound.get(read.binding()).ways();
             // A function value, not a body being run here. What happens when a call applies it is
             // that call's business, and a call is not read through either.
-            case Core.Block ignored -> oneWay();
+            case Core.Block _ -> oneWay();
+            // Arrives as the value it holds: standing as a wider type evaluates nothing and settles
+            // nothing.
+            case Core.Widen widen -> settle(widen.value(), naming, comparisons, bound);
             // The value is evaluated before the body it binds is.
             case Core.LetIn let -> {
-                Paths<P> value = settle(let.value(), naming, comparisons, bound);
+                settle(let.value(), naming, comparisons, bound);
+                ScopeStep into = new ScopeStep.Let(let);
                 yield arrivesAt(let.value())
-                        ? settle(let.body(), naming.under(let.binder(), let.value()),
-                                comparisons.under(let.binder(), let.value()),
-                                with(bound, let.binder(), value, let.value()))
+                        ? settle(let.body(), naming.entering(into), comparisons.entering(into),
+                                inside(into, naming, comparisons, bound))
                         : new Paths.Held<>(List.of());
             }
             case Core.Binary binary when binary.op().stopsWhenItsAnswerIsSettled() ->
@@ -516,7 +601,11 @@ public final class ValueArrivals<P> {
         return List.of(armWay(iff, part, naming));
     }
 
-    /** The arm itself as the one way in, for a condition whose ways cannot all be written down. */
+    /**
+     * The arm itself as the one way in, for a fork whose ways in cannot be written down as the ways
+     * a condition comes out: a condition whose ways cannot all be written down, and an attempt,
+     * whose arms are decided by whether an invariant held and by no condition written in the body.
+     */
     private Provenance<P> armWay(Core fork, int part, Naming<P> naming) {
         P named = naming.forkArm(fork, part);
         return named == null
@@ -532,10 +621,9 @@ public final class ValueArrivals<P> {
         Gathered out = new Gathered();
         for (int part = 0; part < match.cases().size(); part++) {
             Core.Case arm = match.cases().get(part);
-            Paths<P> body =
-                    settle(arm.body(), naming.insideArm(match, arm),
-                            comparisons.insideArm(match, arm),
-                            with(bound, arm.binder(), oneWay(), null));
+            ScopeStep into = new ScopeStep.Chosen(Choice.Decides.ofCase(match, arm));
+            Paths<P> body = settle(arm.body(), naming.entering(into), comparisons.entering(into),
+                    inside(into, naming, comparisons, bound));
             if (!arrivesAt(arm.body())) {
                 continue;
             }
@@ -561,15 +649,16 @@ public final class ValueArrivals<P> {
                 return new Paths.Held<>(List.of());
             }
         }
-        List<Core> arms = new ArrayList<>();
-        arms.add(constructed.then());
-        constructed.els().forEach(arm -> arms.add(arm.body()));
+        // Each arm read under what choosing it binds, and the way into it said where the attempt
+        // stands: which arm was taken is a fact about the attempt, and not one read inside the arm.
+        List<Choice.Arm> arms = Choice.of(constructed).arms();
         Gathered out = new Gathered();
         for (int part = 0; part < arms.size(); part++) {
-            Map<BindingId, Bound<P>> inner =
-                    part == 0 ? with(bound, constructed.binder(), oneWay(), null) : bound;
-            Paths<P> body = settle(arms.get(part), naming, comparisons, inner);
-            if (!arrivesAt(arms.get(part))) {
+            Core answers = arms.get(part).answers();
+            ScopeStep into = new ScopeStep.Chosen(arms.get(part).decidedBy());
+            Paths<P> body = settle(answers, naming.entering(into), comparisons.entering(into),
+                    inside(into, naming, comparisons, bound));
+            if (!arrivesAt(answers)) {
                 continue;
             }
             if (body instanceof Paths.Beyond) {
@@ -711,19 +800,22 @@ public final class ValueArrivals<P> {
      */
     private static List<Core> partsOf(Core node) {
         return switch (node) {
-            case Core.Int ignored -> List.of();
-            case Core.Decimal ignored -> List.of();
-            case Core.Str ignored -> List.of();
-            case Core.Bool ignored -> List.of();
-            case Core.Temporal ignored -> List.of();
-            case Core.Read ignored -> List.of();
-            case Core.UnitValue ignored -> List.of();
-            case Core.OptionNone ignored -> List.of();
-            case Core.Unreachable ignored -> List.of();
+            case Core.Int _ -> List.of();
+            case Core.Decimal _ -> List.of();
+            case Core.Str _ -> List.of();
+            case Core.Bool _ -> List.of();
+            case Core.Temporal _ -> List.of();
+            case Core.Read _ -> List.of();
+            case Core.UnitValue _ -> List.of();
+            case Core.OptionNone _ -> List.of();
+            case Core.Unreachable _ -> List.of();
+            // Built out of nothing here: what a value comes to is its template's and is read there.
+            case Core.MaterialisedValue _ -> List.of();
             case Core.Neg neg -> present(neg.operand());
             case Core.FieldAccess access -> present(access.target());
             case Core.TupleGet get -> present(get.tuple());
             case Core.OptionSome option -> present(option.value());
+            case Core.Widen widen -> present(widen.value());
             case Core.Binary binary -> present(binary.left(), binary.right());
             // The callee's own body is not read; its arguments are evaluated before it is reached.
             case Core.Call call -> call.args();
@@ -737,7 +829,7 @@ public final class ValueArrivals<P> {
             case Core.If iff -> present(iff.cond(), iff.then(), iff.els());
             case Core.LetIn let -> present(let.value(), let.body());
             // Not the body. Evaluating this makes the function.
-            case Core.Block ignored -> List.of();
+            case Core.Block _ -> List.of();
             case Core.Match match -> {
                 List<Core> out = new ArrayList<>();
                 out.add(match.scrutinee());

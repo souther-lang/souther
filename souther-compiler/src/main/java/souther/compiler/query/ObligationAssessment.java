@@ -60,12 +60,6 @@ public record ObligationAssessment(Criterion criterion, ObligationCoverage cover
         };
     }
 
-    /** The same point, with what one more search of it came to. */
-    public ObligationAssessment settledBy(ItemAssessment.Attempt searched) {
-        return new ObligationAssessment(criterion, coverage, projection,
-                searches.plus(SearchOutcomes.of(searched)));
-    }
-
     /**
      * What has shown that a row can be written here, read off the three things that show it.
      *

@@ -18,6 +18,7 @@ import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
+import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.StructuralInspection;
@@ -42,7 +43,7 @@ import souther.compiler.numeric.PlacesApart;
 import souther.compiler.regex.Language;
 import souther.compiler.regex.Meter;
 import souther.compiler.regex.PatternPlan;
-import souther.compiler.regex.PatternSyntax;
+import souther.compiler.regex.PatternMeaning;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
@@ -54,6 +55,7 @@ import java.util.List;
 import java.util.function.Supplier;
 import java.util.Map;
 import java.util.SequencedMap;
+import java.util.Set;
 
 /**
  * The equivalence classes a model already states, read off the types a behavior takes.
@@ -180,10 +182,39 @@ public final class Partitions {
             for (PositionMeasurements at : measurements) {
                 PendingPosition pending = PendingPosition.of(at.position(), at.hasMeasures());
                 if (pending != null) {
-                    out.add(pending.complete(at.inspection()));
+                    out.add(withheldWhereNothingRead(pending.complete(at.inspection())));
                 }
             }
             return List.copyOf(out);
+        }
+
+        /**
+         * The same answer, less the one conclusion a reading nobody made cannot support.
+         *
+         * <p>{@link UndividedPosition.Why.Absent} says the model divides the position no way at
+         * all, and what proves it is every rule about the position having been read and none of
+         * them dividing it. Where nothing read the body, the rules it writes were not among them —
+         * so the phases that did run answered for what they saw and the conclusion is one nobody
+         * is entitled to draw.
+         *
+         * <p>Only that one. A position the walk could not enter and one a rule was filed at say
+         * what they say whether or not a body was read, and taking them out here would lose a
+         * finding an author can act on to a fact about a different part of the reading.
+         *
+         * <p>And it becomes the answer for that, rather than the one for a reading that did not
+         * get far enough. That one promises a reader something standing at the position and a
+         * finding published at it, and a body this image has none of is true of every position of
+         * the behavior at once and stands at none of them.
+         *
+         * <p>Withheld here rather than concluded elsewhere: {@code Absent} has one producer, and
+         * this is the reader that holds both the position's answer and what the measure's reading
+         * came to.
+         */
+        private UndividedPosition withheldWhereNothingRead(UndividedPosition said) {
+            return partitionClosure instanceof MeasureClosure.OfThePartition.BodyNotRead
+                    && said.why() instanceof UndividedPosition.Why.Absent
+                    ? UndividedPosition.bodyNotInEvaluation(said.at())
+                    : said;
         }
 
         /**
@@ -736,7 +767,7 @@ public final class Partitions {
                     .forEach(each -> account.measured(each, id));
             return made(out, at, behavior, term,
                     made.classesFor(axis, () -> singledClasses(points, term, type, reading,
-                            domain, at.position().admits(), ruleSource)),
+                            domain, at.position().admits(), ruleReading)),
                     made.divides(),
                     // A cut is a place on the order the values are counted on, and a class that is
                     // a set has no answer to where it lies — so where the classes are sets there
@@ -922,115 +953,6 @@ public final class Partitions {
     }
 
     /**
-     * The same axes, with what the behavior's own comparisons divide them into.
-     *
-     * <p>This is where a numeric position stops being one undivided range. A type's invariant bounds
-     * what can exist; a {@code guard} says where the behavior does something else, and both sides of
-     * that line hold values a row can write. The cuts merge into one partition and the origins stay
-     * apart, so reaching the line through one rule still leaves the others unmet.
-     *
-     * <p><b>Not the way in.</b> These take a list per kind of thing a rule can say and put them
-     * together, and putting them together is not the reading's order — every range comes before
-     * every equality, whatever order a body wrote them in. What the rules said arrives as one list
-     * in that order ({@link #withEvidence}); these are here for a caller writing the lines itself,
-     * which has no reading to be in the order of.
-     */
-    static Partitioning withThresholds(Partitioning base,
-                                       Quantities reading,
-                                       List<Threshold> thresholds,
-                                       RuleReadingContext ruleReading,
-                                       Allowance<NumericTerm.FromOnePosition> allowance) {
-        return withThresholds(base, reading, thresholds, ruleReading, RulesWithNoLine.NONE,
-                allowance);
-    }
-
-    /**
-     * The same, told which positions a comparison names that nothing turned into a line.
-     *
-     * <p>A position left undivided is not thereby a position the model divides no way. What this
-     * takes in is the other half of that: the body compared it, and the form the comparison is
-     * written in is one no reader here takes apart. Carried rather than re-derived, because the only
-     * place that knows is the reader that gave up.
-     */
-    static Partitioning withThresholds(Partitioning base,
-                                       Quantities reading,
-                                       List<Threshold> thresholds,
-                                       RuleReadingContext ruleReading,
-                                       RulesWithNoLine rulesWithoutALine,
-                                       Allowance<NumericTerm.FromOnePosition> allowance) {
-        return withThresholds(base, reading, thresholds, ruleReading, rulesWithoutALine,
-                List.of(), allowance);
-    }
-
-    /**
-     * The same, with the values a body singles out as well.
-     *
-     * <p>An equality is not a place to cut. What it distinguishes is one value from every other,
-     * so where nothing else divides the position its classes are those two — and the second of them
-     * is not a range, which is a thing a class is allowed not to be. Where an ordering comparison
-     * divides the position as well, the model has drawn the further distinction itself and the value
-     * is one more line among the ranges.
-     */
-    static Partitioning withThresholds(Partitioning base,
-                                       Quantities reading,
-                                       List<Threshold> thresholds,
-                                       RuleReadingContext ruleReading,
-                                       RulesWithNoLine rulesWithoutALine,
-                                       List<GuardThresholds.Guards.Singled> singled,
-                                       Allowance<NumericTerm.FromOnePosition> allowance) {
-        return withThresholds(base, reading, thresholds, ruleReading, rulesWithoutALine,
-                singled, List.of(), allowance);
-    }
-
-    /**
-     * The same, with the lines a body draws between two of its positions.
-     *
-     * <p>Carried through rather than derived here. A line between two positions divides neither of
-     * them, so nothing about it belongs to an axis — it is read where the comparison is and travels
-     * beside the partition, which is what keeps a position the classes could say nothing about from
-     * losing the line its body draws about it.
-     */
-    static Partitioning withThresholds(Partitioning base,
-                                       Quantities reading,
-                                       List<Threshold> thresholds,
-                                       RuleReadingContext ruleReading,
-                                       RulesWithNoLine rulesWithoutALine,
-                                       List<GuardThresholds.Guards.Singled> singled,
-                                       List<LineDrawn> between,
-                                       Allowance<NumericTerm.FromOnePosition> allowance) {
-        return withThresholds(base, reading, thresholds, ruleReading, rulesWithoutALine,
-                singled, between, ReachingCuts.NONE, allowance);
-    }
-
-    /**
-     * The same, told what a row has already had to satisfy by the time it reaches each comparison.
-     *
-     * <p>Carried and not re-derived, which is the whole discipline {@link ReachingCuts} is written
-     * around: what a region may assume is what the walk of the body actually took in, and a reading
-     * that recovered it from where a comparison sits would be free to name a condition nothing here
-     * could read.
-     */
-    static Partitioning withThresholds(Partitioning base,
-                                       Quantities reading,
-                                       List<Threshold> thresholds,
-                                       RuleReadingContext ruleReading,
-                                       RulesWithNoLine rulesWithoutALine,
-                                       List<GuardThresholds.Guards.Singled> singled,
-                                       List<LineDrawn> between,
-                                       ReachingCuts reaching,
-                                       Allowance<NumericTerm.FromOnePosition> allowance) {
-        List<RuleEvidence> evidence = new ArrayList<>();
-        thresholds.forEach(each -> evidence.add(new RuleEvidence.Divides(each)));
-        singled.forEach(each -> evidence.add(new RuleEvidence.Singles(each)));
-        // Nothing here tells a set of the position's values from the rest, so nothing composes one
-        // and the allowance for composing them is never asked for a machine. It is still handed in
-        // rather than made: an allowance is what a compilation's grant becomes, and one made here
-        // would be a meter at every position that nobody granted.
-        return withEvidence(base, reading, evidence, List.of(), allowance, ruleReading,
-                rulesWithoutALine, between, reaching);
-    }
-
-    /**
      * The same, given what the rules said as the reading of them met it.
      *
      * <p>One list and not one per kind of thing a rule can say. What this stage does with a piece of
@@ -1048,7 +970,8 @@ public final class Partitions {
                                             RuleReadingContext ruleReading,
                                             RulesWithNoLine rulesWithoutALine,
                                             List<LineDrawn> between,
-                                            ReachingCuts reaching) {
+                                            ReachingCuts reaching,
+                                            MeasureClosure.Drawing drawing) {
         // Both producers of one kind of evidence. What a body compared and what a type's own rules
         // bound are read by different readers and answer the same question, so a position either of
         // them wrote about and neither could turn into a line is named once, whichever wrote it.
@@ -1117,7 +1040,16 @@ public final class Partitions {
         List<Border> across = Border.allOf(between, partedByQuantity(out), read);
         read.returning(lines.values().stream().flatMap(List::stream).toList());
         read.returning(across);
-        MeasureClosure.Both closed = MeasureClosure.of(base.positions(), asked, read);
+        // Drawn from the reading that was made, or said to be the absence of one. A body this
+        // elaboration has none of was not read: the classes above are what the declarations and
+        // the clauses came to, and what the body's own rules add to them is unknown — so neither
+        // measure may conclude over it, and neither may name a question either.
+        MeasureClosure.Both closed = switch (drawing) {
+            case MeasureClosure.Drawing.FromTheReading _ ->
+                    MeasureClosure.of(base.positions(), asked, read);
+            case MeasureClosure.Drawing.NoneWasMade it -> MeasureClosure.bodyNotRead(
+                    it.behavior(), MeasureClosure.of(base.positions(), asked, read));
+        };
         return new Partitioning(measurements, asked, base.uncertain(),
                 // Read after every position was measured, so that what a position's classes would
                 // not compose is in it. Taken before, the list is what the producers handed over and
@@ -1182,7 +1114,7 @@ public final class Partitions {
                                                        NumericTerm.FromOnePosition term, Type type,
                                                        Quantities reading,
                                                        NumericDomain.Bounds within, ValueSet admits,
-                                                       RuleReadingSource ruleSource) {
+                                                       RuleReadingContext ruleReading) {
         // Asked here rather than handed in beside the term. A term and a pair of orders are two
         // arguments, and two arguments can be about two terms; the reading is one argument that
         // answers about whichever term it is asked.
@@ -1194,40 +1126,24 @@ public final class Partitions {
                 values.add(each.value());
             }
         }
-        // The position, read once: every class below writes its value under the same names.
-        TypeView view = TypeView.of(type, ruleSource.inners(), ruleSource.symbols(), ruleSource.published());
         List<PartitionClass> classes = new ArrayList<>();
         for (Place value : values) {
             String written = carrier.written(value);
             classes.add(classAt(term + "/= " + written, "= " + written,
-                    holding(orders, new Recognition.CountIs.At(value)),
-                    standing(view, carrier, value, ruleSource)));
+                    orders, new NumericSet.At(value), value, type, reading, ruleReading));
         }
-        // Out of what writing one value costs, as every witness for a row is.
+        // Out of what writing one value costs, as every witness for a row is. Which number beside
+        // the ones singled out to write is chosen here, where what a witness may cost is named;
+        // what a value standing at that number looks like is asked of the one reader that answers
+        // it, so the number and the value it is written into are not two spellings of one thing.
         Place other = carrier.somethingOtherThan(PlacesApart.of(values), within, admits,
                 PatternPlan.Budget.OF_A_WITNESS.meter());
         String label = "/= " + String.join(", ",
                 values.stream().map(carrier::written).toList());
-        Recognition away = holding(orders,
-                new Recognition.CountIs.AwayFrom(values));
-        classes.add(other == null
-                ? PartitionClass.ungeneratable(term + "/" + label, label, away,
-                        "nothing here composed a value of this position other than the ones"
-                                + " singled out")
-                : classAt(term + "/" + label, label, away,
-                        standing(view, carrier, other, ruleSource)));
+        classes.add(classAt(term + "/" + label, label,
+                orders, new NumericSet.AwayFrom(values), other, type, reading, ruleReading));
         // Classes of the number the values were singled out of, said where that is known.
         return classes.stream().map(each -> each.ofTheNumber(term)).toList();
-    }
-
-    /** A class over the one value that stands for it, or one nothing produces where there is no
-     *  such value — which is what a position wearing a name this module cannot write leaves. */
-    private static PartitionClass classAt(String id, String label, Recognition is,
-                                          FixtureTemplate standing) {
-        return standing == null
-                ? PartitionClass.ungeneratable(id, label, is,
-                        "nothing here can write a value of this position")
-                : PartitionClass.of(id, label, is, RepresentativeSource.of(standing));
     }
 
     /** A count written at a position, wearing every name that position declares — which the reading
@@ -1238,10 +1154,46 @@ public final class Partitions {
                 FixtureTemplate.on(carrier, at, ruleSource.symbols().scope()::reach), ruleSource);
     }
 
+    /**
+     * A class over the values a rule singled out, standing for whatever writes a value at one of
+     * those numbers.
+     *
+     * <p><b>Asked of the one reader that writes a value for a number.</b> A value singled out of a
+     * number taken of a position is not a value of the position: the ninth hour is a number and a
+     * time is what stands there, and a class that wrote the number itself put a count where the
+     * decoder wanted a time. Which is the same second writer the classes of a range had, in the one
+     * place that still had it.
+     */
+    private static PartitionClass classAt(String id, String label, TermOrders orders,
+                                          NumericSet is, Place at, Type type, Quantities reading,
+                                          RuleReadingContext ruleReading) {
+        String what = "a value whose " + Intervals.measureOf(orders.term().atOnePosition()) + " is "
+                + (is instanceof NumericSet.At ? "the one" : "none of the ones") + " singled out";
+        if (at == null) {
+            // No number was named beside the ones singled out, which is this compiler naming one
+            // place in a run and not the order having none left.
+            return PartitionClass.of(id, label, holding(orders, is),
+                    new RepresentativeSource.NotArrivedAt(CompositionShortfall.writing(
+                            Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED)),
+                            "nothing here composed " + what
+                                    + ", which does not make one unwritable"));
+        }
+        // The number this reader named, and what stands at it asked of what writes a value for a
+        // number. Written here out of the carrier instead, a number taken of the position went into
+        // the row where the value it was taken of belongs — a count where a time was owed.
+        //
+        // The class stays what it is. Asked as the one number named, a class holding every number
+        // but the ones a rule singled out would be answered by whichever of them this reader
+        // reached for first — and nothing built at that one would be told as a class with no value
+        // in it, which is every other number it holds going unlooked at.
+        return PartitionClass.of(id, label, holding(orders, is),
+                Intervals.standingFor(orders, is, at, type, reading, ruleReading, what));
+    }
+
     /** A class that reads the count of the number {@code on} is of out of a row, and answers about
      *  it. The number comes from the orders rather than beside them: a class of one number built on
      *  another's order is what the pair naming its own number is here to stop. */
-    private static Recognition holding(TermOrders on, Recognition.CountIs is) {
+    private static Recognition holding(TermOrders on, NumericSet is) {
         return new Recognition.OfACount(on.term().atOnePosition(), on, is);
     }
 
@@ -1640,9 +1592,9 @@ public final class Partitions {
      * own rules were written closest to. It is {@link #patternsStatedOn}'s order, read once for
      * every reader of it here.
      */
-    private static List<FixtureTemplate> whatAFormatAsksFor(List<PatternSyntax> stated) {
+    private static List<FixtureTemplate> whatAFormatAsksFor(List<PatternMeaning> stated) {
         List<FixtureTemplate> out = new ArrayList<>();
-        for (PatternSyntax each : stated) {
+        for (PatternMeaning each : stated) {
             String text = writtenFor(each);
             if (text != null) {
                 out.add(FixtureTemplate.string(text));
@@ -1706,9 +1658,10 @@ public final class Partitions {
             case TIME -> List.of(FixtureTemplate.time("00:00:00"));
             case DATETIME -> List.of(FixtureTemplate.dateTime("2000-01-01T00:00:00"));
             case INSTANT -> List.of(FixtureTemplate.instant("2000-01-01T00:00:00Z"));
-            // Bytes nobody wrote. What a row would carry is a value of somebody's making, and there
-            // is none here to make it out of.
-            case RAW -> List.of();
+            // A Rational reaches no position: it has no external form, so nothing declares one and no
+            // row is written at one (ADR-0116). Said here rather than left to the numeric arm above,
+            // which would offer a value of a type a fixture cannot carry.
+            case RATIONAL -> List.of();
         };
     }
 
@@ -1733,12 +1686,13 @@ public final class Partitions {
      */
     static List<FixtureTemplate> standingFor(RepresentativeSource source, RuleReadingContext reading,
                                              java.util.Set<TypeSymbol> expanding) {
-        return switch (source.evaluate()) {
-            case RepresentativeSource.Evaluation.Values values -> values.written();
-            case RepresentativeSource.Evaluation.Compose compose ->
+        return switch (source) {
+            case RepresentativeSource.Values values -> values.written();
+            case RepresentativeSource.Compose compose ->
                     composed(compose.through(), reading, expanding).stream()
                             .map(compose::written).toList();
-            case RepresentativeSource.Evaluation.NothingProducible _ -> List.of();
+            case RepresentativeSource.NothingProducible _,
+                 RepresentativeSource.NotArrivedAt _ -> List.of();
         };
     }
 
@@ -1963,7 +1917,7 @@ public final class Partitions {
             return from != null && index == 0 ? from : null;
         }
         Count stepped = Count.number(from).plus(index);
-        return holdsCount(range, stepped) ? stepped : null;
+        return stepped != null && holdsCount(range, stepped) ? stepped : null;
     }
 
     /**
@@ -1988,7 +1942,11 @@ public final class Partitions {
             // Ordered, some of them, and none of them counted in numbers of its own: a date is a
             // count of days and a string a count of characters, which is what a rule about them
             // counts rather than what the value is.
-            case STRING, BOOL, DATE, TIME, DATETIME, INSTANT, RAW -> null;
+            case STRING, BOOL, DATE, TIME, DATETIME, INSTANT -> null;
+            // A Rational is a number and is counted on nothing: a carrier is what a position's values
+            // are placed on, and no position holds a Rational (ADR-0116). The same answer
+            // {@code Carrier} gives it, for the same reason.
+            case RATIONAL -> null;
         };
     }
 
@@ -2115,11 +2073,11 @@ public final class Partitions {
                     : carrier.somethingInside(Endpoint.exclusive(min.at()), max);
         }
         Count up = Count.number(from).plus(1);
-        if (holdsCount(range, up)) {
+        if (up != null && holdsCount(range, up)) {
             return up;
         }
         Count down = Count.number(from).minus(1);
-        return holdsCount(range, down) ? down : null;
+        return down != null && holdsCount(range, down) ? down : null;
     }
 
     /** Whether a range holds a count, with no range holding everything. */
@@ -2133,21 +2091,21 @@ public final class Partitions {
      * <p>Null two ways, and they are one answer here: a pattern whose machine costs more than
      * writing a value is allowed, and one every string of which is something nobody can paste. What
      * a caller does with each of them is offer no candidate, so they are not told apart — a row is
-     * offered or it is not. A pattern outside the subset this compiler reads never reaches here:
-     * the reading says so, and the caller offers no candidate for the same reason.
+     * offered or it is not. Text that is no pattern of the language never reaches here: the
+     * reading says so, and the caller offers no candidate for the same reason.
      *
      * <p>Read by the one thing here that reads patterns. What this used to have was a reader of its
      * own, which meant two answers to "what does this pattern accept" and one model where they
      * could differ.
      */
-    private static String writtenFor(PatternSyntax syntax) {
+    private static String writtenFor(PatternMeaning syntax) {
         Language language = languageOf(syntax, PatternPlan.Budget.OF_A_WITNESS.meter());
         return language == null ? null : language.someWritten();
     }
 
     /** The strings {@code syntax} accepts, or null where making the machine costs more than
      *  {@code meter} allows. */
-    private static Language languageOf(PatternSyntax syntax, Meter meter) {
+    private static Language languageOf(PatternMeaning syntax, Meter meter) {
         return PatternPlan.of(syntax).compile(meter);
     }
 
@@ -2211,7 +2169,7 @@ public final class Partitions {
         Meter meter = PatternPlan.Budget.OF_A_WITNESS.meter();
         Language admits = stringsTheRulesReadAdmit(view, reading, meter).language();
         Language counted = admits == null ? null
-                : languageOf(PatternSyntax.ofAnySymbols(size, size), meter);
+                : languageOf(PatternMeaning.ofAnySymbols(size, size), meter);
         Language both = counted == null ? null : admits.and(counted, meter);
         String some = both == null ? null : both.someWritten();
         return some == null ? List.of() : List.of(FixtureTemplate.string(some));
@@ -2363,11 +2321,11 @@ public final class Partitions {
                 switch (StringPredicates.statedByWritten(each.expr(), ruleSource.symbols())) {
                     case StringPredicates.Reading.Accepting it ->
                             read.add(new Stated(each.part(), it.accepts()));
-                    case StringPredicates.Reading.PatternNotRead it ->
+                    case StringPredicates.Reading.PatternNotRead _ ->
                             unread.add(StringOfferShortfall.NotOffered.ofARuleNotRead(
-                                    each.part(), BlockReason.forAPatternNotRead(it.why())));
+                                    each.part(), BlockReason.forAPatternNotRead()));
                     // A rule whose text this compiler did not work out is a rule it did not read,
-                    // the same as one written in a construct the subset does not hold.
+                    // the same as one whose text is no pattern.
                     case StringPredicates.Reading.WrittenArgumentNotKnown _ ->
                             unread.add(StringOfferShortfall.NotOffered.ofARuleNotRead(
                                     each.part(), new BlockReason.UnreadValueRule()));
@@ -2403,7 +2361,7 @@ public final class Partitions {
         }
 
         /** Just the patterns, for a caller that offers a value per rule and names none of them. */
-        private List<PatternSyntax> patterns() {
+        private List<PatternMeaning> patterns() {
             return read.stream().map(Stated::accepts).toList();
         }
     }
@@ -2415,7 +2373,7 @@ public final class Partitions {
      * the rule and not by the pattern: two rules of one declaration state two patterns, and a
      * sentence about "the pattern here" leaves them to guess which.
      */
-    private record Stated(PartId<RuleRef.Invariant> part, PatternSyntax accepts) {}
+    private record Stated(PartId<RuleRef.Invariant> part, PatternMeaning accepts) {}
 
     /** Whether a rule counts the characters, which leaves out every string of another length and
      *  is a thing to be met with the patterns like any other. */
@@ -2485,9 +2443,9 @@ public final class Partitions {
         if (!countsTheCharacters(characters)) {
             return new CandidateStrings(strings, shortfall);  // every count, nothing to take away
         }
-        Language counted = languageOf(PatternSyntax.ofAnySymbols(characters.least(),
+        Language counted = languageOf(PatternMeaning.ofAnySymbols(characters.least(),
                 characters.most() == Integer.MAX_VALUE
-                        ? PatternSyntax.Repeated.NO_CEILING : characters.most()), meter);
+                        ? PatternMeaning.Repeated.NO_CEILING : characters.most()), meter);
         Language within = counted == null ? null : strings.and(counted, meter);
         // The count met with the strings, which is again nobody's one rule.
         return within == null
@@ -2568,13 +2526,14 @@ public final class Partitions {
 
     /**
      * What a search composing a value at one of this phase's positions is given: the sets the
-     * declarations leave them, and what looking for a value in one may cost.
+     * declarations leave them, where a name of one value stands in another, and what looking for a
+     * value in one may cost.
      *
      * <p>Here because this is where what a position admits is already in hand and where what writing
      * one value out may cost is already granted. A search reaching for either would be a second
      * answer about the model beside an allowance nothing granted it.
      */
-    static WitnessSearch witnessSearch(List<PositionMeasurements> measurements) {
+    static WitnessSearch witnessSearch(List<PositionMeasurements> measurements, NameReach reach) {
         java.util.Map<TermPath, ValueSet> sets = new LinkedHashMap<>();
         for (PositionMeasurements at : measurements) {
             // Every position the reading measured, including the ones whose rules leave them
@@ -2582,7 +2541,12 @@ public final class Partitions {
             // a map with a hole in it cannot tell a caller which of the two it is looking at.
             sets.put(at.position().path(), at.position().admits());
         }
-        return new WitnessSearch(AdmittedValues.of(sets), PatternPlan.Budget.OF_A_WITNESS::meter);
+        // And what the same walk saw of the names that stand somewhere other than the position of
+        // the same name one step down, so that a path this measurement has no position at is told
+        // from a position it was left short of. Worked out from the measurements alone, the two
+        // would be one hole in one map.
+        return new WitnessSearch(AdmittedValues.of(sets, reach),
+                PatternPlan.Budget.OF_A_WITNESS::meter);
     }
 
     private Partitions() {}

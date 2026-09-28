@@ -8,15 +8,21 @@ import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.TemporalRule;
+import souther.compiler.types.TextRule;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.runtime.BoundaryScalars;
 import souther.runtime.Representations;
 import souther.runtime.Sets;
+import souther.runtime.Strings;
 import souther.runtime.Temporals;
+import souther.runtime.TextAdmission;
 
 import net.unit8.raoh.Err;
+import net.unit8.raoh.ErrorCodes;
 import net.unit8.raoh.Issues;
 import net.unit8.raoh.Ok;
+import net.unit8.raoh.Path;
 import net.unit8.raoh.Result;
 import net.unit8.raoh.decode.Decoder;
 import net.unit8.raoh.decode.ObjectDecoders;
@@ -27,6 +33,7 @@ import net.unit8.raoh.encode.ObjectEncoders;
 import net.unit8.raoh.json.JsonDecoders;
 import tools.jackson.databind.JsonNode;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -132,10 +139,36 @@ public final class JsonBoundary {
         };
     }
 
-    /** The string leaf a key is read through. Text arriving from outside is canonical, which is what
-     *  the leaf makes it (ADR-0096). */
+    /** The string leaf a key is read through. */
     private static StringDecoder<Object> text() {
-        return ObjectDecoders.string().normalize();
+        return admitted(ObjectDecoders.string());
+    }
+
+    /**
+     * Text as it arrives, let in: what the generated string leaf does, in Java.
+     *
+     * <p>{@link Strings#admission} decides it — Unicode 18.0.0's NFC, or why the text is not a
+     * {@code String}: it holds half of a surrogate pair, or its canonical value is longer than a
+     * {@code String} holds — and {@link #textOf} reports each refusal at the path, as the generated
+     * leaf does ({@link TextRule}). Not {@code StringDecoder.normalize()}, which answers for whatever
+     * Unicode version this JDK's own {@code java.text.Normalizer} carries.
+     * {@link StringDecoder#from} keeps the result a {@link StringDecoder}, so {@link #temporal} can
+     * still chain {@code .date()} etc. on it.
+     */
+    private static <I> StringDecoder<I> admitted(StringDecoder<I> text) {
+        return StringDecoder.from(text.map(Strings::admission).flatMapWithPath(JsonBoundary::textOf));
+    }
+
+    /** The text an admission let in, or the failure at {@code path} saying why it is not a
+     *  {@code String}. */
+    public static Result<String> textOf(TextAdmission admission, Path path) {
+        return switch (admission) {
+            case TextAdmission.Admitted a -> Result.ok(a.text());
+            case TextAdmission.NotText _ ->
+                    Result.failCustom(path, TextRule.REFUSED, TextRule.HALF_A_PAIR, Map.of());
+            case TextAdmission.NoPlace _ ->
+                    Result.failCustom(path, TextRule.REFUSED, TextRule.NO_PLACE, Map.of());
+        };
     }
 
     /**
@@ -201,16 +234,40 @@ public final class JsonBoundary {
         }
     }
 
-    /** A scalar over the JSON source. {@code JsonDecoders} has no temporal factory — in JSON a
-     *  temporal is a string that is then parsed — so a date reads as {@code string().date()}, the
-     *  same two steps the generated JSON decoder takes, and through the same rules. */
+    /** A scalar over the JSON source. Text is the string leaf let in, as the generated JSON decoder
+     *  has it. {@code JsonDecoders} has no temporal factory — in JSON a temporal is a string that is
+     *  then parsed — so a date reads as that leaf and then {@code .date()}, the same two steps the
+     *  generated JSON decoder takes, and through the same rules. */
     private static Decoder<JsonNode, ?> leafDecoder(LeafScalar scalar) {
         return switch (scalar) {
-            case STRING -> JsonDecoders.string();
+            case STRING -> admitted(JsonDecoders.string());
             case INT -> JsonDecoders.long_();
             case BOOL -> JsonDecoders.bool();
-            case DECIMAL -> JsonDecoders.decimal();
-            case DATE, TIME, DATETIME, INSTANT -> temporal(JsonDecoders.string(), scalar);
+            case DECIMAL -> exactDecimal();
+            case DATE, TIME, DATETIME, INSTANT -> temporal(admitted(JsonDecoders.string()), scalar);
+        };
+    }
+
+    /**
+     * A {@code Decimal} read from a JSON number, asking the one question every reading of a bare
+     * number asks ({@link BoundaryScalars#decimalRefusal}), as the generated decoder's
+     * {@code __decimalNode} does: a {@code double} the reader parsed a fraction into is refused,
+     * since it is already the nearest binary value and the decimal that prints may not be the
+     * number that was written. Whether a reader keeps the fraction as the decimal it was written is
+     * the reader's to be told (Jackson's {@code USE_BIG_DECIMAL_FOR_FLOATS}), and the runner's is.
+     * A node that is not a number, and what a {@code NaN} or an infinity carries, are Raoh's: this
+     * only extracts the carrier a JSON number holds and asks whether it is exact.
+     */
+    private static Decoder<JsonNode, BigDecimal> exactDecimal() {
+        Decoder<JsonNode, BigDecimal> raoh = JsonDecoders.decimal();
+        return (node, path) -> {
+            String refusal = node != null && node.isNumber()
+                    ? BoundaryScalars.decimalRefusal(node.numberValue()) : null;
+            return refusal != null
+                    ? Result.failCustom(path, ErrorCodes.TYPE_MISMATCH, refusal,
+                            Map.of("expected", "exact number",
+                                    "actual", node.numberValue().getClass().getSimpleName()))
+                    : raoh.decode(node, path);
         };
     }
 
@@ -221,14 +278,14 @@ public final class JsonBoundary {
      * <p>These were {@code string().time()} and its siblings, spelled out beside the generated
      * decoder's own — so a top-level {@code Time} argument took {@code 09:00:00.5} and a top-level
      * {@code Instant} took a leap second, both of which the same types refuse at a data's field. A
-     * rule that changes with the way in is not the type's rule, and this reads the one table rather
-     * than restating it a third time.
+     * rule that changes with the way in is not the type's rule, so the text is put to the same
+     * question the generated decoder puts ({@link #temporalText}), before Raoh's parse builds the
+     * value.
      */
     private static <I> Decoder<I, ?> temporal(StringDecoder<I> text, LeafScalar scalar) {
         TemporalRule rule = TemporalRule.of(scalar);
-        StringDecoder<I> guarded = rule.guardsText()
-                ? text.refine(Temporals::notALeapSecond, TemporalRule.REFUSED, TemporalRule.LEAP_SECOND)
-                : text;
+        StringDecoder<I> guarded = StringDecoder.from(
+                text.flatMapWithPath((s, path) -> temporalText(scalar, s, path)));
         TemporalDecoder<I, ?> parsed = switch (scalar) {
             case DATE -> guarded.date();
             case TIME -> guarded.time();
@@ -240,6 +297,22 @@ public final class JsonBoundary {
         return rule.guardsValue()
                 ? parsed.refine(Temporals::toTheSecond, TemporalRule.REFUSED, TemporalRule.SUB_SECOND)
                 : parsed;
+    }
+
+    /** The text, or the failure at {@code path} saying why it is not the temporal: what the generated
+     *  decoder's own {@code __dateText} and its siblings say. */
+    private static Result<String> temporalText(LeafScalar scalar, String text, Path path) {
+        String refusal = switch (scalar) {
+            case DATE -> Temporals.dateRefusal(text);
+            case TIME -> Temporals.timeRefusal(text);
+            case DATETIME -> Temporals.dateTimeRefusal(text);
+            case INSTANT -> Temporals.instantRefusal(text);
+            case STRING, INT, BOOL, DECIMAL ->
+                    throw new IllegalStateException(scalar + " is not a temporal");
+        };
+        return refusal == null
+                ? Result.ok(text)
+                : Result.failCustom(path, TemporalRule.REFUSED, refusal, Map.of());
     }
 
     /**
@@ -277,7 +350,7 @@ public final class JsonBoundary {
             // A union nobody named is generated as the behavior's result type, which is where its
             // encoder is (spec §jvm-anonymous-union). It is the only output with no name in the source, so it is the
             // behavior that says which class to reach for.
-            case BoundaryOutput.Cases c -> encodeThrough(loader,
+            case BoundaryOutput.Cases _ -> encodeThrough(loader,
                     SoutherJvmAbi.nameOf(new GeneratedClass.BehaviorResult(pkg, behavior)).binaryName(), result);
         };
     }

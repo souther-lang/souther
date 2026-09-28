@@ -7,6 +7,7 @@ import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import souther.compiler.execute.EvaluationPolicy;
+import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Measure;
@@ -205,7 +206,7 @@ class AMeasureWeakerThanCompleteSaysWhatMadeItSoTest {
         assertFalse(findings.isEmpty(), "the model produces findings");
         for (Adequacy.Finding each : findings) {
             Adequacy.Finding.Disposition said = each.disposition();
-            if (!each.kind().isAboutAnObligation()) {
+            if (!(each.about() instanceof About.OfAnObligation)) {
                 assertEquals(Adequacy.Finding.Disposition.REPORTED, said, each::toString);
                 continue;
             }

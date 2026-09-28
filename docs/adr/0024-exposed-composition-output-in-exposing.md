@@ -30,6 +30,8 @@ The cost is that an exposed composition's output is stated twice — in its upst
 
 This narrows ADR-0017 for the exposed case (optional to required) and fixes the location (the exposing list). It revises `[#declared-composition-output]`, which had the declaration optional and on the definition.
 
+The specification now uses "exposed" for "published", and a module that writes no `exposing` clause publishes every declaration it makes (`[#a-module-publishes-what-it-declares]`). Read against that, the "exposed composition" of this record is a composition *named by* the `exposing` clause, which is what the decision above states. A composition published because its module writes no clause is not named by one and keeps ADR-0017's optional declaration: the module has stated no boundary, and there is no clause to write the signature in.
+
 ## References
 
 - Specification: `[#modules]`, `[#declared-composition-output]`, `[#jvm-anonymous-union]`

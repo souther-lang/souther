@@ -1,8 +1,19 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Place;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 /**
  * What looking for a row at one coverage item came to.
@@ -35,8 +46,27 @@ public sealed interface Realization {
      */
     record Found(Map<RealizationTarget, Place> fixing) implements Realization {
 
+        /**
+         * Held in the terms' own order, so that a reader walking it meets the demands in the same
+         * order in every run. Two demands of one term are told apart by where they write, compared
+         * by every part of the path and not by how it is spelled.
+         */
         public Found {
-            fixing = Map.copyOf(fixing);
+            Map<NumericTerm, List<RealizationTarget>> byTerm = new HashMap<>();
+            for (RealizationTarget each : fixing.keySet()) {
+                byTerm.computeIfAbsent(each.term(), _ -> new ArrayList<>()).add(each);
+            }
+            Map<RealizationTarget, Place> inOrder = new LinkedHashMap<>();
+            for (NumericTerm term : NumericTerms.inOrder(byTerm.keySet())) {
+                List<RealizationTarget> ofOne = byTerm.get(term);
+                ofOne.sort(Comparator.comparing(RealizationTarget::writeRoot,
+                        TermPath.structuralOrder()));
+                for (RealizationTarget each : ofOne) {
+                    inOrder.put(each, Objects.requireNonNull(fixing.get(each),
+                            "a target the search fixed stands somewhere: " + each));
+                }
+            }
+            fixing = Collections.unmodifiableMap(inOrder);
         }
     }
 
@@ -44,7 +74,8 @@ public sealed interface Realization {
      * The rules leave nothing at this item, and that is proved rather than searched for.
      *
      * <p>What a report counts as excluded and what a build is not refused over. Only a proof reaches
-     * here: two ends that have crossed, an order with nothing past its last value.
+     * here: two ends that have crossed, an order with nothing past its last value, a region that
+     * leaves the item's quantity no value the item asks for.
      */
     record Impossible() implements Realization {}
 
@@ -54,21 +85,25 @@ public sealed interface Realization {
      * <p>The item stays owed. What a report says of it is that it is not known to be writable, which
      * is the account any unpromised edge gets.
      *
-     * <p><b>Two vocabularies for what was left untried, because what a reader does about them
+     * <p><b>Three vocabularies for what was left untried, because what a reader does about them
      * differs.</b> {@code stoppedBy} is a figure somebody wrote down and raising it goes further;
      * {@code notAllOf} is a set this compiler has no way of producing the rest of, and raising
-     * anything reaches none of it ({@link CompositionRepertoire}). Either may be empty and both may
-     * be there. Held as one vocabulary, a reader is sent to raise a number that changes nothing —
-     * and held as neither, a search that could name one place and no second one came back saying
-     * what a search that had looked everywhere says.
+     * anything reaches none of it ({@link CompositionRepertoire}); {@code unheld} is a number the
+     * search worked out and could not hold, which a host with more room reaches or nothing does
+     * ({@link CompositionCapacity}). Any of them may be empty and all of them may be there. Held as
+     * one vocabulary, a reader is sent to raise a number that changes nothing — and held as none, a
+     * search that could name one place and no second one came back saying what a search that had
+     * looked everywhere says.
      */
-    record Unknown(Reason why, java.util.Set<CompositionBudget> stoppedBy,
-                   java.util.Set<CompositionRepertoire> notAllOf)
+    record Unknown(Reason why, Set<CompositionBudget> stoppedBy,
+                   Set<CompositionRepertoire> notAllOf,
+                   Set<CompositionCapacity> unheld)
             implements Realization {
 
         public Unknown {
-            stoppedBy = java.util.Set.copyOf(stoppedBy);
-            notAllOf = java.util.Set.copyOf(notAllOf);
+            stoppedBy = Set.copyOf(stoppedBy);
+            notAllOf = Set.copyOf(notAllOf);
+            unheld = Set.copyOf(unheld);
             // What a walk stopped by these says is the budgets' to say, so the two cannot be put
             // here disagreeing. A pair that could is a pair somebody has to keep in step, and
             // keeping two spellings of one answer in step by hand is what a stopped walk lost its
@@ -94,13 +129,14 @@ public sealed interface Realization {
          * <p>Empty is the ordinary case and says the same thing: nothing was composed, and nothing
          * of this compiler's is why.
          */
-        public static Unknown nothingComposedOne(java.util.Set<CompositionBudget> stoppedBy) {
-            return new Unknown(Reason.NOTHING_COMPOSED_ONE, stoppedBy, java.util.Set.of());
+        public static Unknown nothingComposedOne(Set<CompositionBudget> stoppedBy) {
+            return new Unknown(Reason.NOTHING_COMPOSED_ONE, stoppedBy, Set.of(),
+                    Set.of());
         }
 
         /** The same, of a walk that composed no candidate and met no figure. */
         public static Unknown nothingComposedOne() {
-            return nothingComposedOne(java.util.Set.of());
+            return nothingComposedOne(Set.of());
         }
 
         /**
@@ -112,8 +148,8 @@ public sealed interface Realization {
          * beside the answer and do not choose it.
          */
         public static Unknown searchLeftSomethingUntried(
-                java.util.Set<CompositionBudget> stoppedBy) {
-            return searchLeftSomethingUntried(stoppedBy, java.util.Set.of());
+                Set<CompositionBudget> stoppedBy) {
+            return searchLeftSomethingUntried(stoppedBy, Set.of());
         }
 
         /**
@@ -125,9 +161,36 @@ public sealed interface Realization {
          * compiler's is why — of a walk that looked in one place.
          */
         public static Unknown searchLeftSomethingUntried(
-                java.util.Set<CompositionBudget> stoppedBy,
-                java.util.Set<CompositionRepertoire> notAllOf) {
-            return new Unknown(Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED, stoppedBy, notAllOf);
+                Set<CompositionBudget> stoppedBy,
+                Set<CompositionRepertoire> notAllOf) {
+            return new Unknown(Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED, stoppedBy, notAllOf,
+                    Set.of());
+        }
+
+        /**
+         * A walk that came to nothing, from everything it left untried in all three vocabularies,
+         * with the word it comes back with decided here once.
+         *
+         * <p>The figures decide it where there are any, because a word a figure stopped is the
+         * figures' to say and is checked against them at both ends. Where there are none and
+         * something else was left — a population walked in part, a number not held — the walk left
+         * something untried. Where nothing was left at all the word is the walk's own, which is
+         * {@code otherwise}: a walk over one place that composed nothing and one over a form that
+         * never settles by looking come back with different words for the same empty hand.
+         *
+         * <p>Whatever the word, all three sets travel. Chosen between instead, a walk that met a
+         * figure and also reached a number it could not hold would tell a reader to raise the
+         * figure and nothing else.
+         */
+        public static Unknown leftOpen(Reason otherwise,
+                                       Set<CompositionBudget> stoppedBy,
+                                       Set<CompositionRepertoire> notAllOf,
+                                       Set<CompositionCapacity> unheld) {
+            Reason why = !stoppedBy.isEmpty()
+                    ? Generator.UnresolvedCombination.Reason.wordFor(stoppedBy).asAWalksAnswer()
+                    : !notAllOf.isEmpty() || !unheld.isEmpty()
+                            ? Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED : otherwise;
+            return new Unknown(why, stoppedBy, notAllOf, unheld);
         }
 
         public enum Reason {

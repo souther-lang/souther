@@ -1,12 +1,11 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
-
-import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -55,7 +54,7 @@ class OneRuleIsOneWayHoweverTheWalkMetItsConditionsTest {
     /** One comparison of {@code head} against {@code against}, coming out {@code held}. */
     private static DecisionPath.Consulted compared(String head, int against, boolean held) {
         LinearForm<DecisionAtom> form =
-                LinearForm.<DecisionAtom>constant(BigDecimal.valueOf(-against))
+                LinearForm.<DecisionAtom>constant(ExactRatio.of(-against))
                         .plus(LinearForm.atom(new DecisionAtom.OfTheInput(
                                 new NumericTerm.ValueOf(TermPath.of(head)))));
         DecisionCondition.AComparison column = new DecisionCondition.AComparison(form, Rel.GT);

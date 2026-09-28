@@ -59,13 +59,17 @@ public sealed interface Recognition {
     /**
      * Where a count sits, read out of the row through the carrier that says how its values step.
      *
-     * <p>One arm for the three ways a count is asked about, because reading the count is the part
-     * they share and it is the part that can fail. Written as three arms, the walk from the row to
+     * <p>One arm for every way a count is asked about, because reading the count is the part they
+     * share and it is the part that can fail. Written as an arm apiece, the walk from the row to
      * the number — and what a value that is not a number, or one that could not be read, comes to —
      * was spelled twice in this package and would have been spelled a third time by the next one.
+     *
+     * <p>Which numbers it is about is a {@link NumericSet} and is not spelled here. The same set is
+     * what a search for a value to write at this position is asked for, so a class and the value
+     * composed for it are about one set of numbers rather than two derived alike.
      */
     record OfACount(NumericTerm.FromOnePosition term,
-                    souther.compiler.inputs.TermOrders orders, CountIs is)
+                    souther.compiler.inputs.TermOrders orders, NumericSet is)
             implements Recognition {
 
         public OfACount {
@@ -80,24 +84,6 @@ public sealed interface Recognition {
         public Carrier carrier() {
             return orders.answered();
         }
-    }
-
-    /** What is asked of the count once it has been read. */
-    sealed interface CountIs {
-
-        /** Exactly the value a rule singled out. */
-        record At(Place value) implements CountIs {}
-
-        /** None of the values any rule singled out, which is the class those leave behind. */
-        record AwayFrom(List<Place> values) implements CountIs {
-
-            public AwayFrom {
-                values = List.copyOf(values);
-            }
-        }
-
-        /** Inside one of the runs the lines a rule drew cut the position into. */
-        record InARun(Band run) implements CountIs {}
     }
 
     /**
@@ -180,18 +166,38 @@ public sealed interface Recognition {
      */
     default boolean answersAboutAPlace() {
         return switch (this) {
-            case OfACount ignored -> true;
+            case OfACount _ -> true;
             case Under under -> under.inner().answersAboutAPlace();
             case OfCase one -> one.at() != null;
             case AtAValue one -> one.at() != null;
-            case Truth ignored -> false;
-            case Held ignored -> false;
+            case Truth _ -> false;
+            case Held _ -> false;
             // A set of values is not a run of them, so no place is inside it or outside it in the
             // way a line asks about. Answered yes, a line would fall in whichever of these
             // happened to hold the one value the place stands for, which is an answer about a
             // value where the question was about an order.
-            case OfASet ignored -> false;
-            case Nothing ignored -> false;
+            case OfASet _ -> false;
+            case Nothing _ -> false;
+        };
+    }
+
+    /**
+     * The numbers this class is about, or null where it is not about a number.
+     *
+     * <p>What a value standing in this class has to read as, which is the same set the class reads
+     * a row against. Asked of the meaning because that is where it is written down: a reader that
+     * chose a number of the set and carried that instead would be deciding which value stands for
+     * the class, and the answer about the number it chose would be all a search ever saw of it.
+     *
+     * <p>Exhaustive with no {@code default}. A meaning about what stands at the position is about a
+     * value rather than a number, and says so by having none — which is a different answer from a
+     * set that holds nothing, and is why this is asked before a search is.
+     */
+    default NumericSet numbers() {
+        return switch (this) {
+            case OfACount count -> count.is();
+            case Under under -> under.inner().numbers();
+            case Truth _, Held _, OfCase _, AtAValue _, OfASet _, Nothing _ -> null;
         };
     }
 
@@ -214,16 +220,16 @@ public sealed interface Recognition {
         return switch (this) {
             case OfACount count -> count.term().equals(number);
             case Under under -> under.inner().canBeAClassOf(number);
-            case Truth ignored -> number instanceof NumericTerm.ValueOf;
-            case Held ignored -> number instanceof NumericTerm.ValueOf;
-            case OfCase ignored -> number instanceof NumericTerm.ValueOf;
-            case AtAValue ignored -> number instanceof NumericTerm.ValueOf;
+            case Truth _ -> number instanceof NumericTerm.ValueOf;
+            case Held _ -> number instanceof NumericTerm.ValueOf;
+            case OfCase _ -> number instanceof NumericTerm.ValueOf;
+            case AtAValue _ -> number instanceof NumericTerm.ValueOf;
             // The values are the position's own, which is what the sets a rule about them names
             // hold. A count taken of the position is a number, and a set of the position's values
             // said to be a class of it would answer membership by reading a value of one where the
             // other was owed.
-            case OfASet ignored -> number instanceof NumericTerm.ValueOf;
-            case Nothing ignored -> number instanceof NumericTerm.ValueOf;
+            case OfASet _ -> number instanceof NumericTerm.ValueOf;
+            case Nothing _ -> number instanceof NumericTerm.ValueOf;
         };
     }
 }

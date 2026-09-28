@@ -1,9 +1,9 @@
 package souther.compiler.fmt;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.cst.CstParser;
+import souther.test.ClosedWorldContract;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
  * width. Recovering that from the text means measuring the group again, which is running the layout
  * a second time and calling the answer evidence.
  */
-@Tag("population")
+@ClosedWorldContract
 class TheLayoutKeepsWhatItsTextCannotSayTest {
 
     /** Two documents laid out to one text, for two reasons. */

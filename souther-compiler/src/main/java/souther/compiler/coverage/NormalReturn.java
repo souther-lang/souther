@@ -5,6 +5,8 @@ import souther.compiler.flow.Anonymous;
 import souther.compiler.flow.AnonymousPath;
 import souther.compiler.flow.ValueArrivals;
 
+import java.util.function.Function;
+
 /**
  * Whether evaluating an expression can answer a value.
  *
@@ -65,20 +67,12 @@ public final class NormalReturn {
     }
 
     /**
-     * The same, of a tree the language's own operations stand in.
+     * The same, of a tree the language's own operations stand in, read when something first asks.
      *
      * <p>Which kind of tree this is, is the caller's to say and this class's to spend. A call kept
      * standing is a defect in a tree the operations were expanded in and the model naming an
      * operation in one they stand in, and a reader that answered it for itself would be deciding
      * what a tree is from the outside of the reading that walks it.
-     */
-    public static NormalReturn ofBodyWhereTheOperationsStand(Core body) {
-        return new NormalReturn(
-                ValueArrivals.ofBodyWhereTheOperationsStand(body, Anonymous.NAMING));
-    }
-
-    /**
-     * The same, read when something first asks.
      *
      * <p>For a caller that holds a body every reading of it may want this about and most do not:
      * whether an expression answers a value is asked about the arms of a fork, and a body with no
@@ -88,6 +82,16 @@ public final class NormalReturn {
     public static NormalReturn lazilyWhereTheOperationsStand(Core body) {
         return new NormalReturn(
                 () -> ValueArrivals.ofBodyWhereTheOperationsStand(body, Anonymous.NAMING));
+    }
+
+    /**
+     * The same, of a tree that builds values: what a build comes to is what {@code templates} says
+     * the value's template does.
+     */
+    public static NormalReturn lazilyWhereTheOperationsStand(
+            Core body, Function<Core.MaterialisedValue, Core> templates) {
+        return new NormalReturn(() -> ValueArrivals.ofBodyWhereTheOperationsStand(
+                body, Anonymous.NAMING, templates));
     }
 
     /** Whether {@code e}, standing where it stands in this body, can be evaluated to a value. */

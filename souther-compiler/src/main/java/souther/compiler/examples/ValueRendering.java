@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.observe.Alignment;
 import souther.compiler.observe.Asserted;
 import souther.compiler.observe.Expectation;
@@ -368,12 +369,14 @@ final class ValueRendering {
         };
     }
 
-    /** The value as a row would write it, where nothing says what its sequences are. */
+    /** The value as a row would write it, where nothing says what its sequences are — a decimal in
+     *  exponent notation past a thousand digits ({@link ExactRatio#spelledBounded}), since this is a
+     *  diagnostic a reader reads and not source pasted back. */
     String show(ObservedValue v) {
         return switch (v) {
             case ObservedValue.Bool b -> String.valueOf(b.value());
             case ObservedValue.Integer i -> String.valueOf(i.value());
-            case ObservedValue.Decimal d -> d.value().toPlainString();
+            case ObservedValue.Decimal d -> ExactRatio.spelledBounded(d.value());
             case ObservedValue.Text t -> "\"" + t.value() + "\"";
             // Written as the construction a fixture writes one with, so it is never read as the text
             // that spells it — which is the difference a row writing a date as a string is told about.

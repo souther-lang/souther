@@ -4,6 +4,8 @@ import souther.compiler.source.SourceId;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.CompilationSources;
+import souther.compiler.CompilationSources.SourceFile;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Compilation;
 
@@ -40,8 +42,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AReportNamesASourceTheWayItsCallerDoesTest {
 
-    /** A model whose rows are never evaluated: the `constructs` clause promises a construction the
-     * body does not make, which is raised before anything runs. */
+    /**
+     * A model whose rows are never evaluated: a composition names a stage that does not exist, so
+     * the module has no meaning to emit and nothing of it runs.
+     *
+     * <p>A name and not a body. A body that does not check leaves the bodies that do check runnable
+     * and their rows observed, which is a source that produced an observation — and what a source
+     * that produced none is called is what these tests are about.
+     *
+     * <p>Its row is written without a name, which is the row whose identity needs the file it is
+     * written in to be said.
+     */
     private static String stopped(String module, String type) {
         return String.format("""
                 module %s
@@ -50,12 +61,13 @@ class AReportNamesASourceTheWayItsCallerDoesTest {
                     invariant value >= 0
 
                 behavior passThrough : (a: %s) -> %s
-                    constructs %s
                 let passThrough (a) = a
 
+                behavior onwards = passThrough >-> nosuch
+
                 example passThrough
-                    | "through" : (%s(1)) -> %s(1)
-                """, module, type, type, type, type, type, type);
+                    | (%s(1)) -> %s(1)
+                """, module, type, type, type, type, type);
     }
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -71,7 +83,7 @@ class AReportNamesASourceTheWayItsCallerDoesTest {
     void aSingleSourceIsNamedAndNotNumbered() throws Exception {
         Streams ran = run(Map.of("zeroname.sou", stopped("example.zeroname", "Amount")));
 
-        assertTrue(ran.out().contains("no rows were read from `zeroname.sou`"), ran.out());
+        assertTrue(ran.out().contains("`passThrough #1 in zeroname.sou`"), ran.out());
         assertFalse(ran.out().contains("`0`"), "an id is not a name: " + ran.out());
     }
 
@@ -85,9 +97,9 @@ class AReportNamesASourceTheWayItsCallerDoesTest {
         Streams ran = run(sources);
 
         assertTrue(blockOf(ran.out(), "example.other")
-                        .contains("no rows were read from `other.sou`"), ran.out());
+                        .contains("`passThrough #1 in other.sou`"), ran.out());
         assertTrue(blockOf(ran.out(), "example.zeroname")
-                        .contains("no rows were read from `zeroname.sou`"), ran.out());
+                        .contains("`passThrough #1 in zeroname.sou`"), ran.out());
     }
 
     /**
@@ -107,9 +119,9 @@ class AReportNamesASourceTheWayItsCallerDoesTest {
         Streams ran = run(sources);
 
         assertTrue(blockOf(ran.out(), "example.a")
-                        .contains("no rows were read from `a/model.sou`"), ran.out());
+                        .contains("`passThrough #1 in a/model.sou`"), ran.out());
         assertTrue(blockOf(ran.out(), "example.b")
-                        .contains("no rows were read from `b/model.sou`"), ran.out());
+                        .contains("`passThrough #1 in b/model.sou`"), ran.out());
     }
 
     /** The rows written beside the report read the same way, being read in the same terminal. */
@@ -119,8 +131,8 @@ class AReportNamesASourceTheWayItsCallerDoesTest {
                 "--generate");
 
         assertTrue(ran.out().contains(
-                        "// generation stopped for `passThrough`: no rows were read from"
-                                + " `zeroname.sou`"), ran.out());
+                        "// generation stopped for `passThrough`: nothing was observed for"
+                                + " `passThrough #1 in zeroname.sou`"), ran.out());
     }
 
     /**
@@ -130,6 +142,10 @@ class AReportNamesASourceTheWayItsCallerDoesTest {
      * across runs nor a key. Turning the JSON's subject into one would move the defect rather than
      * fix it: the document would then say what a person should be shown and no longer say which
      * source it is about.
+     *
+     * <p>A row nothing was observed for is named by the source it is written in as well as by the
+     * behavior it is of, so the same question is asked of it: what is written is the id this run
+     * files that source under, and the name is given where the line is rendered.
      */
     @Test
     void theJsonSubjectIsStillTheSourceId() throws Exception {
@@ -143,28 +159,23 @@ class AReportNamesASourceTheWayItsCallerDoesTest {
         Map<String, String> subjects = new LinkedHashMap<>();
         for (JsonNode module : modules) {
             for (JsonNode gap : module.get("incompleteness")) {
-                if ("source".equals(gap.get("scope").asString())) {
-                    subjects.put(module.get("module").asString(), gap.get("subject").asString());
-                }
+                subjects.put(module.get("module").asString(), gap.get("subject").asString());
             }
         }
-        assertEquals(Map.of("example.other", "0", "example.zeroname", "1"), subjects, ran.out());
+        assertEquals(Map.of("example.other", "passThrough/0/#1",
+                        "example.zeroname", "passThrough/1/#1"), subjects, ran.out());
     }
 
     /**
      * An id this command did not hand out is left as it is, and not read as the only file there is.
      *
-     * <p>Two lookups run over the same list of files and answer differently, because they are asked
-     * different questions. A diagnostic may name no source at all — a compile of one file tags its
-     * problems with nothing, and the file handed over is the answer however the diagnostic is tagged
-     * — so that lookup takes the single source whatever the id reads. A reason in a report always
-     * names one, so an id that is none of these files is about a source this command did not hand
-     * over, and answering with the only file would invent the correspondence this whole change is
-     * about not guessing at.
+     * <p>An id that is none of these files is about a source this command did not hand over, and
+     * answering with the only file would invent a correspondence nothing established.
      */
     @Test
     void anIdThisCommandDidNotHandOverIsNotResolvedToItsOnlyFile() {
-        SourceNameResolver names = Main.namesOf(List.of(Path.of("a", "zeroname.sou")));
+        SourceNameResolver names = CompilationSources.files(List.of(
+                new SourceFile(Path.of("a", "zeroname.sou").toString(), ""))).names();
 
         assertEquals("zeroname.sou", names.nameOf(Compilation.idOfSourceIndex(0)));
         assertEquals("elsewhere.sou", names.nameOf(new SourceId("elsewhere.sou")),

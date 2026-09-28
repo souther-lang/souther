@@ -71,13 +71,9 @@ final class PathEngine {
     /** What each behavior a body may call states about its answer, by the name it is called under. */
     private final Map<ValueName.Behavior, AssumedContract> contracts;
 
-    PathEngine(RuleReadingContext reading) {
-        this(reading, Map.of(), Terms.Of.THE_DISCHARGE_TREE);
-    }
-
-    PathEngine(RuleReadingContext reading,
-               Map<ValueName.Behavior, AssumedContract> contracts) {
-        this(reading, contracts, Terms.Of.THE_DISCHARGE_TREE);
+    /** The environment a value's body is read in, which is the same for every build of it. */
+    Denotations insideATemplate() {
+        return terms.insideATemplate();
     }
 
     /**
@@ -95,8 +91,18 @@ final class PathEngine {
     PathEngine(RuleReadingContext ruleReading,
                Map<ValueName.Behavior, AssumedContract> contracts,
                Terms.Of reading) {
+        this(ruleReading, contracts, reading, ValueTemplates.NONE);
+    }
+
+    /**
+     * The same, over a tree that builds values and holds their bodies in {@code templates}: what a
+     * build comes to is what its template is, and this reads it there.
+     */
+    PathEngine(RuleReadingContext ruleReading,
+               Map<ValueName.Behavior, AssumedContract> contracts,
+               Terms.Of reading, ValueTemplates templates) {
         this.symbols = ruleReading.source().symbols();
-        this.terms = new Terms(reading, ruleReading);
+        this.terms = new Terms(reading, ruleReading, templates);
         this.clauses = terms.clauses();
         this.predicates = terms.predicates();
         this.guarantees = terms.guarantees();
@@ -215,7 +221,7 @@ final class PathEngine {
      * the one that forgot fell over on every ordinary unit case.
      */
     Entered enteringArm(Core.Case arm, Core scrutinee, Known k, Denotations at) {
-        Entered in = arm.binder() == null || arm.bindType() == null
+        Entered in = arm.binder() == null
                 ? new Entered(k, at)
                 : opening(arm, scrutinee, k, at);
         return whatTakingThisCaseSays(arm, scrutinee,
@@ -234,7 +240,7 @@ final class PathEngine {
      * case.
      *
      * <p>About which case came back and not about whether a number was answered. An operation may
-     * answer nothing at all — {@code Int.divide} aborts on the one pair whose quotient no {@code
+     * answer nothing at all — {@code Int.truncatingDivide} aborts on the one pair whose quotient no {@code
      * Int} holds (spec §stdlib-int) — and an abort comes back as no case, so no arm is reached and
      * there is nothing here for it to say.
      *
@@ -325,7 +331,8 @@ final class PathEngine {
 
     /** The call {@code value} came from, through however many names it was given, or null where it
      * came from something else. {@code seen} stops a binding given itself. */
-    private Core.Call originatingCall(Core value, Denotations at, Set<BindingId> seen) {
+    private Core.Call originatingCall(Core standing, Denotations at, Set<BindingId> seen) {
+        Core value = Core.withoutStanding(standing);
         if (value instanceof Core.Call call) {
             return call;
         }
@@ -382,7 +389,7 @@ final class PathEngine {
     /** What the arm holds of the answer: what it binds where it binds one, and the answer itself
      * where it does not — an arm may state a relation about a case that carries nothing. */
     private static Core answered(Core.Case arm, Core scrutinee) {
-        return arm.binder() == null || arm.bindType() == null ? scrutinee
+        return arm.binder() == null ? scrutinee
                 : Terms.read(arm.binder(), arm.bindType(), arm.pos());
     }
 
@@ -461,10 +468,14 @@ final class PathEngine {
      * <p>Its departures stand where the invariant did not hold and nothing was built, so none of
      * them is entered with anything the attempt would have guaranteed. That is the caller's to
      * honour by not asking.
+     *
+     * <p>Handed the decision rather than the attempt, so that a walk carrying another environment
+     * beside this one enters it with the same value this entered.
      */
-    Entered enteringBuilt(Core.IfConstructed ic, Known k, Denotations at) {
+    Entered enteringBuilt(Choice.Decides.ItWasBuilt built, Known k, Denotations at) {
+        Core.IfConstructed ic = built.attempt();
         Core.Read root = Terms.read(ic.binder(), ic.construct().type(), ic.pos());
-        Denotations next = terms.choosing(new Choice.Decides.ItWasBuilt(ic), at);
+        Denotations next = terms.choosing(built, at);
         return new Entered(seedAt(root, k, next), next);
     }
 

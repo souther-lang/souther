@@ -56,7 +56,8 @@ final class Witnessed {
      * @param settledBy what a name was bound to, or null where the body bound it to nothing this can
      *                  read — a parameter, an arm's binding, a value handed in from outside
      */
-    static boolean comesOut(Core e, boolean want, Function<Core.Read, Core> settledBy) {
+    static boolean comesOut(Core standing, boolean want, Function<Core.Read, Core> settledBy) {
+        Core e = Core.withoutStanding(standing);
         if (e instanceof Core.Binary binary) {
             Comparison comparison = Comparison.of(binary).orElse(null);
             if (comparison != null) {
@@ -73,8 +74,8 @@ final class Witnessed {
      *  {@code want}. */
     private static boolean standsBehind(Core.Binary comparison, ComparisonClaim placed,
                                         boolean want, Function<Core.Read, Core> settledBy) {
-        Core left = comparison.left();
-        Core right = comparison.right();
+        Core left = Core.withoutStanding(comparison.left());
+        Core right = Core.withoutStanding(comparison.right());
         List<Object> here = wholeNumberPosition(left, settledBy);
         List<Object> there = wholeNumberPosition(right, settledBy);
         if (here != null && there != null) {
@@ -133,7 +134,8 @@ final class Witnessed {
         List<Object> taken = new ArrayList<>();
         Core at = e;
         while (true) {
-            switch (at) {
+            // Which position a value reads does not turn on the type it stands as.
+            switch (Core.withoutStanding(at)) {
                 case Core.FieldAccess access -> {
                     taken.add(access.field());
                     at = access.target();

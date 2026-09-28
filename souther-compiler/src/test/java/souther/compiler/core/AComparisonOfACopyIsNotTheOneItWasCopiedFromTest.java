@@ -1,6 +1,5 @@
 package souther.compiler.core;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.AnalysisBody;
@@ -9,8 +8,9 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.ConstructOccurrence;
-import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.WrittenOwner;
+import souther.test.ClosedWorldContract;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -37,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * they do and the tree the analysis reads keeps them standing, so a comparison written inside one of
  * those operations stands in a copy in the first and is not in the second at all.
  */
-@Tag("population")
+@ClosedWorldContract
 class AComparisonOfACopyIsNotTheOneItWasCopiedFromTest {
 
     /** One helper called twice: one written comparison, two copies. */
@@ -169,9 +169,9 @@ class AComparisonOfACopyIsNotTheOneItWasCopiedFromTest {
         // And not the same occurrence, because it stands in copies in one tree and in none in the
         // other. Stated the strong way round: the analysis reads it where it was written, and the
         // emitted tree reads it inside what expanding the operation made.
-        assertEquals(ExpansionLineage.ORIGINAL, wroteItAnalysis.get(0).lineage(),
+        assertEquals(OccurrenceLineage.ORIGINAL, wroteItAnalysis.get(0).lineage(),
                 "the analysis reads the comparison where the author wrote it");
-        assertTrue(!(wroteItEmitted.get(0).lineage() instanceof ExpansionLineage.Original),
+        assertTrue(!(wroteItEmitted.get(0).lineage() instanceof OccurrenceLineage.Original),
                 () -> "and the emitted tree reads it inside the copies expanding the operation"
                         + " made: " + wroteItEmitted);
         // And the operation's own body brings comparisons the analysis never sees, which is what

@@ -9,7 +9,6 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -52,13 +51,12 @@ public final class ResolvedSymbols implements Symbols {
             throw CompileException.of(
                     DeclarationRefusals.reportedAsResolved(declared.refusals().get(0)));
         }
-        Map<String, Denotation> names = new HashMap<>();
-        for (Hir.Def def : declared.declarations().values()) {
-            names.put(def.name(), new Denotation.Denotes(def.declares()));
-        }
+        Map<String, Denotation> names = declared.byName(
+                def -> new Denotation.Denotes(def.declares()));
         return new ResolvedSymbols(new SymbolTable<>(m.name(),
                 Registry.ofRead(Map.of(m.name(), new Registry.Declared<>(
-                        declared.declarations(), Registry.baseNames(m.exposing())))),
+                        declared.declarations(), declared.asDeclared(),
+                        m.published()))),
                 Denoting.of(names, Map.of()), Declarations.Vocabulary.of(stdlib), stdlib,
                 each -> each));
     }

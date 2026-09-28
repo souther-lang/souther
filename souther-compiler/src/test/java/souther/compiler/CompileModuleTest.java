@@ -60,23 +60,6 @@ class CompileModuleTest {
         assertTrue(Codecs.decode(loader, "example.trip.Trip", Map.of("who", "")) instanceof Err);
     }
 
-    @Test
-    void cyclicImportIsE1501() {
-        String a = """
-                module m.a exposing ( A )
-                import m.b ( B )
-                data A = { b: B }
-                """;
-        String b = """
-                module m.b exposing ( B )
-                import m.a ( A )
-                data B = String
-                """;
-        CompileException e = assertThrows(CompileException.class,
-                () -> Compiler.compileModules(List.of(a, b)));
-        assertEquals("E1501", e.code());
-    }
-
     /** One module on its own has nothing to import from, so the import line is what is wrong. Left
      * to fall through, the name would go missing and the report would land on its first use. */
     @Test

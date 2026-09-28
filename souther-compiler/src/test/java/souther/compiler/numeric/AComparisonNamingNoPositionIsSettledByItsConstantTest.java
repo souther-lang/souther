@@ -75,7 +75,7 @@ class AComparisonNamingNoPositionIsSettledByItsConstantTest {
         List<String> answered = new ArrayList<>();
         for (Row each : ROWS) {
             AffineConstraint.Read<String> read = AffineConstraint.of(Map.of(),
-                    Rational.of(each.constant()), each.rel(), atom -> Granularity.DISCRETE);
+                    ExactRatio.of(each.constant()), each.rel(), atom -> Granularity.DISCRETE);
             answered.add(each.asked() + ": " + read.getClass().getSimpleName());
         }
 

@@ -6,12 +6,8 @@ import souther.compiler.types.Type;
  * What a declared fact requires of a position in the signature it names.
  *
  * <p>A closed vocabulary, so that requiring something of a position is choosing from it. Written as
- * a {@code Predicate<Type>} the caller handed over, the condition and its name came from the caller
- * too: {@link OperationFactBinder} named a projection's closure by writing
- * {@code type -> type instanceof Type.FnOf} where the call was made, said "no requirement" as
- * {@code type -> true}, and borrowed the two classifications that had been written inside
- * {@link Question} for the rest. Each of those is a classification answered inside a consumer of the
- * answer, which is the defect #1056 removed twice over and this closes the route to (#1059).
+ * a {@code Predicate<Type>} the caller handed over, the condition and its name would come from the
+ * caller too, and each would be a classification answered inside a consumer of the answer.
  *
  * <p><b>A requirement names a condition; it does not own the answer to one.</b> Each constant below
  * delegates to whatever owns the classification it names, and a constant added is a constant whose
@@ -25,11 +21,9 @@ import souther.compiler.types.Type;
  * it; {@link OperationFactBinder} states that one where it holds a shift and both ends are known,
  * and holds the position itself to {@link #ANY}.
  *
- * <p>Not read by {@link Question}, which reads the owners directly. The two sides ask the same
- * things of a type, but this is the vocabulary of one of them — what a fact requires of a
- * declaration — and a range is not a requirement. Read by both, the names here would stop meaning
- * what a fact demands and become somewhere to put a type predicate, which is the shape of the
- * defect rather than the fix.
+ * <p>What a fact requires of a declaration, and nothing else. A reader wanting to ask one of these
+ * things of a type for a reason of its own asks the owner the constant delegates to; read from here,
+ * the names would stop meaning what a fact demands and become somewhere to put a type predicate.
  */
 enum TypeRequirement {
 

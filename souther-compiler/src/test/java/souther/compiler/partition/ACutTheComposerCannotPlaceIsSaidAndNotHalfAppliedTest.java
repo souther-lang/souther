@@ -9,6 +9,7 @@ import souther.compiler.check.Prepared;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
+import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.LinearForm;
@@ -17,12 +18,15 @@ import souther.compiler.numeric.Place;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.query.Shapes;
+import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -38,10 +42,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the answer, because a row composed without it may not arrive and nothing else would say why.
  *
  * <p><b>What a location holds and what is measured there are two things.</b> A row writes one value
- * where a location is, and a location may have more than one number taken at it — the length of a
- * string beside the string. Keyed by the location, the second of them is dropped for the first; and
- * a condition above the line dropped without a word is the composer having been handed the way and
- * quietly not using it.
+ * where a location is, and a location may have more than one number taken at it — a string beside
+ * how long it is, a list beside how many it holds. Whether one value answers them is
+ * the realizer's answer, and a group it answers is placed and written once, which is what the case
+ * below asserts. What the composer does with a group nothing writes a value for is the other half,
+ * and is asked where that answer is made rather than here: no group of the models this file builds
+ * reaches it.
  *
  * <p>Held here rather than against a model, because what is under test is the rule and not which
  * models happen to reach it. Naming the terms directly says which case is which, where a search for
@@ -56,7 +62,10 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
                 invariant value >= 0 && value <= 100
             data Code = String
                 invariant String.length(value) >= 4
-            data Req = { cost: Amount, code: Code }
+            data Line = { a: Int, b: Int }
+            data Lines = List<Line>
+                invariant spread = List.length(value) >= 2
+            data Req = { cost: Amount, code: Code, lines: Lines }
             data Res = { n: Int }
 
             behavior f : (r: Req) -> Res
@@ -74,37 +83,75 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
         Generator.BoundaryAttempt attempt = composing(costAxis(), Count.of(100),
                 cut(new NumericTerm.ValueOf(TermPath.of("r").then("elsewhere"))));
 
-        assertEquals(1, attempt.unrepresented().size(),
+        assertEquals(1, attempt.unrepresented().onTheWay().size(),
                 "the one cut it was handed and could not place: " + attempt.unrepresented());
         assertInstanceOf(ReachabilityGap.Why.NoValueComposedForItsPositions.class,
-                attempt.unrepresented().get(0).why());
-        assertEquals(WHERE, attempt.unrepresented().get(0).anchor(),
+                assertInstanceOf(ReachabilityGap.Uncomposed.class,
+                        attempt.unrepresented().onTheWay().get(0)).why());
+        assertEquals(WHERE, attempt.unrepresented().onTheWay().get(0).anchor(),
                 "said of the condition, which is what a reader is sent to");
     }
 
     /**
-     * A cut naming another number taken at a location the item already writes is on it too.
+     * A cut naming numbers of a location nothing composes one value for is said as that.
      *
-     * <p>The item fixes how long the string is; the condition above the line is about the string
-     * itself. One location, two numbers, and the one value a row writes there would have to answer
-     * both — which is not something this composes. Dropped for sharing a location with the item's
-     * own number, the condition would go unmet by a row nothing said anything about.
+     * <p><b>The boundary this file exists for.</b> What the realizer answers of a group it has no
+     * way for is a population it writes some of, and what a reader meets on the way to a point has
+     * to keep that: a row was not composed because nobody has written the composing, and never
+     * because the positions hold no value. Told as the second, an author goes looking for the rule
+     * that refuses a row nothing refuses.
+     *
+     * <p>Two totals of one container beside how many it holds, which is the group nothing composes
+     * one value for. The numbers here are named directly, because what is under test is the
+     * boundary and not which models happen to reach it — and the day this group is composed for,
+     * the fixture moves to whichever group is left rather than the claim going with it.
      */
     @Test
-    void aCutNamingAnotherNumberAtALocationTheItemWritesIsSaidToo() {
+    void aCutNamingNumbersNothingComposesOneValueForIsSaidAsThat() {
+        Generator.BoundaryAttempt attempt = composing(axisAt("r.lines"), Count.of(2),
+                cut(aTotalOver("a")), cut(aTotalOver("b")));
+
+        assertFalse(attempt.unrepresented().onTheWay().isEmpty(),
+                "the cuts it was handed and could not place: " + attempt.unrepresented());
+        for (ReachabilityGap gap : attempt.unrepresented().onTheWay()) {
+            assertInstanceOf(ReachabilityGap.Why.TwoNumbersAtOneLocation.class,
+                    assertInstanceOf(ReachabilityGap.Uncomposed.class, gap).why(),
+                    () -> "said as numbers of one location this writes no value for, and not as a"
+                            + " position nothing could build at: " + attempt.unrepresented());
+        }
+    }
+
+    /** The total of what stands at {@code field} in each of the container's elements. */
+    private static NumericTerm aTotalOver(String field) {
+        NumericTerm.TakenOver over = NumericTerm.TakenOver.of(
+                ValueName.Stdlib.operation("List", "sum"),
+                RunSource.overTheOccurrencesAt(
+                        TermPath.of("r").then("lines").element().then(field)),
+                Type.INT, rules().inners(), rules().symbols());
+        assertNotNull(over, "a total over the occurrences of a path is a number of the run");
+        return over;
+    }
+
+    /**
+     * And a cut naming a number of a location whose own value the item writes is placed.
+     *
+     * <p>The other side of the same question, because the answer turns on the group and not on
+     * there being two of them. What stands at the location is what the item fixes and how long it
+     * is is read off what stands there, so one value answers both and the condition is one the row
+     * was composed against.
+     */
+    @Test
+    void aCutNamingANumberOfALocationTheItemWritesTheValueOfIsPlaced() {
         Axis length = codeAxis();
         assertInstanceOf(NumericTerm.TakenOf.class, length.term(),
-                "the item's own number here is one taken of the location");
+                "the number here is one taken of the location");
 
         Generator.BoundaryAttempt attempt = composing(length, Count.of(4),
                 cut(new NumericTerm.ValueOf(length.term().position())));
 
-        assertEquals(1, attempt.unrepresented().size(),
-                "one location, two numbers, and nothing composes a value to both: "
+        assertTrue(attempt.unrepresented().onTheWay().isEmpty(),
+                "the value of the location and a number taken of it are written together: "
                         + attempt.unrepresented());
-        assertInstanceOf(ReachabilityGap.Why.TwoNumbersAtOneLocation.class,
-                attempt.unrepresented().get(0).why(),
-                "said as what it is, and not as a position nothing could build at");
     }
 
     /**
@@ -119,7 +166,7 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
         Generator.BoundaryAttempt attempt =
                 composing(costAxis(), Count.of(100), cut(costAxis().term()));
 
-        assertTrue(attempt.unrepresented().isEmpty(),
+        assertTrue(attempt.unrepresented().onTheWay().isEmpty(),
                 "every condition it was handed was one it put a value under: "
                         + attempt.unrepresented());
     }
@@ -135,9 +182,12 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
     }
 
     /** A row composed with {@code axis} at {@code at}, and {@code taken} on the way to it. */
-    private static Generator.BoundaryAttempt composing(Axis axis, Place at, OnTheWay.TakenIn taken) {
+    private static Generator.BoundaryAttempt composing(Axis axis, Place at,
+                                                       OnTheWay.TakenIn... taken) {
         return Generator.probeFixing(subject(), axis.path() + " = " + at,
                 Map.of(new RealizationTarget.AtOnePosition(axis.term()), at),
+                NumbersAskedFor.of(LevelRegion.point(new Level.OnACarrier(
+                        domain().quantities(rules()).ordersOf(axis.term()).answered(), at))),
                 new Reachability.Reaching(domain().quantities(rules()).region(),
                         Requirements.NONE, List.of(taken)),
                 Generator.CandidateCheck.ANY);

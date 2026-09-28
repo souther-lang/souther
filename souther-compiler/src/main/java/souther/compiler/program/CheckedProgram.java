@@ -1,8 +1,11 @@
 package souther.compiler.program;
 
+import souther.compiler.abort.AbortSet;
+import souther.compiler.abort.AbortSites;
+import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
-import souther.compiler.core.KernelSignature;
-import souther.compiler.core.KernelSignatures;
+import souther.compiler.core.KernelContract;
+import souther.compiler.core.KernelContracts;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -106,19 +109,32 @@ public final class CheckedProgram {
      */
     private final Map<ValueName.Behavior, BehaviorTarget> behaviors;
     /**
-     * What each kernel of the language was declared to take and answer.
+     * What each kernel of the language was declared to take and answer, and every way a call to it
+     * can end without a value instead.
      *
      * <p>Held once for the program and not on the calls that reach one. Which operation a call
-     * reaches is a fact about that call; what the operation accepts is a fact about the language
-     * this program was checked with, and the same for every call in every module — written onto
-     * each call site it would be one statement copied as many times as the program happens to reach
-     * the library.
+     * reaches is a fact about that call, and so is what the call takes each argument as once the
+     * signature's variables are settled for it; what the operation was declared to take and how it
+     * can end without a value are facts about the language this program was checked with, and the
+     * same for every call in every module — written onto each call site it would be one statement
+     * copied as many times as the program happens to reach the library.
      */
-    private final KernelSignatures kernels;
+    private final KernelContracts kernels;
+    /**
+     * Every way each {@code Core} site this program's outputs are asked to emit can end without a
+     * value.
+     *
+     * <p>Classified once, over every behavior body and helper this program holds, rather than left
+     * for an output to work out from {@code Core}'s own shape: that working-out is exactly what
+     * left the JVM and a second backend each reading the same specification prose and writing down
+     * their own list, which is what this program answers instead.
+     */
+    private final AbortSites aborts;
 
     CheckedProgram(List<CheckedModule> modules, List<CheckedData> languageDeclarations,
                    List<CheckedData> declaredOnThePath,
-                   Map<ValueName.Behavior, BehaviorTarget> behaviors, KernelSignatures kernels) {
+                   Map<ValueName.Behavior, BehaviorTarget> behaviors, KernelContracts kernels,
+                   AbortSites aborts) {
         this.modules = List.copyOf(modules);
         Map<String, CheckedModule> named = new LinkedHashMap<>();
         for (CheckedModule module : this.modules) {
@@ -179,6 +195,8 @@ public final class CheckedProgram {
         }
         this.kernels = Objects.requireNonNull(kernels,
                 "a checked program is what the language it was checked with declares of its kernels");
+        this.aborts = Objects.requireNonNull(aborts,
+                "a checked program is what its own Core sites can end without a value for, too");
     }
 
     /**
@@ -300,25 +318,70 @@ public final class CheckedProgram {
     }
 
     /**
-     * What {@code kernel} was declared to take and to answer.
+     * What {@code kernel} was declared to take and to answer, and every way a call to it can end
+     * without a value instead.
      *
      * <p>The declaration behind a call this program's bodies reach. A call says which operation it
-     * reaches ({@link souther.compiler.core.Core.Reached.OfKernel}) and every node carries the type
-     * the checker settled for it, and those answer what arrived rather than what the callee accepts:
-     * the two part company wherever a declared parameter is a type a value can arrive narrower than,
-     * which a sum-typed parameter is. An output building a boundary form for a call reads it here.
+     * reaches ({@link souther.compiler.core.Core.Reached.OfKernel}), and this answers what the
+     * language declared of that operation for every call to it: the types as declared, with the
+     * signature's type variables still open. It is not what one call takes. Each application settles
+     * those variables, and the call says what it takes each argument as ({@link
+     * souther.compiler.core.Core.CallSettlement.AtKernel#takes}), each argument standing at exactly
+     * that type. An output reads that off the call and never substitutes this signature again.
+     *
+     * <p>An output building a boundary form for a call reads the declaration here — and reads {@link
+     * KernelContract#aborts} here too, rather than deriving what a kernel can end without a value
+     * for from its own reading of {@code souther-runtime} or of the specification prose the two
+     * would otherwise have been read from separately.
      *
      * <p>Total over the kernels, and never a null. The language names a fixed set of them and a
      * snapshot holding fewer cannot be made, so there is no kernel a program can reach that this
      * has nothing for.
      *
      * <p>Asked of the program, because a program was checked against one version of the language.
-     * A signature read from a library obtained some other way would be a second reading of what a
+     * A contract read from a library obtained some other way would be a second reading of what a
      * body was already checked against, and the two would agree for exactly as long as they were
      * the same version.
      */
-    public KernelSignature kernelSignature(Kernel kernel) {
-        return kernels.signatureOf(kernel);
+    public KernelContract kernel(Kernel kernel) {
+        return kernels.contractOf(kernel);
+    }
+
+    /**
+     * Every {@link souther.compiler.abort.AbortKind} a run reaching {@code site} can end without a
+     * value for.
+     *
+     * <p>{@code site} is any {@code Core} this program hands out, or a node under one: a body, a
+     * clause a declared data holds its values to, a rule a behavior declares of its answer. Every
+     * place the program hands one out is a site this answers for, whichever an output happens to
+     * emit. A kernel site's answer already reads {@link #kernel}'s {@link KernelContract#aborts};
+     * an {@code ensures} crossing's already reads {@link EnsuresEnforcement#aborts}; this is where
+     * the rest — an arithmetic operator, an {@code unreachable}, a construction — answers the same
+     * question.
+     *
+     * @throws IllegalArgumentException where {@code site} is not a {@code Core} this program holds
+     */
+    public AbortSet abortsAt(Core site) {
+        return aborts.at(site);
+    }
+
+    /**
+     * Every {@link souther.compiler.abort.AbortKind} an ordinary construction of {@code type} can
+     * end without a value for, where the construction is not a site this program holds.
+     *
+     * <p>An output that builds a value of a declared type out of something other than a body — what
+     * a row states, which the compile read as a value and not as an expression — writes a
+     * construction {@link #abortsAt} has never seen, and asking it of that would be refused. This is
+     * the same question asked of the type instead of the site, answered by the classification every
+     * {@code Core.Construct} this program holds was filed with. Not the answer for the construction
+     * an {@code IfConstructed} tests, which takes its else arm instead and ends nothing.
+     *
+     * @throws IllegalArgumentException where nothing this compile read declares {@code type}, or
+     *     where what it declares is not built out of fields
+     */
+    public AbortSet constructionAborts(TypeSymbol.AtModule type) {
+        declaration(type);
+        return aborts.ordinaryConstructionOf(type);
     }
 
     /**

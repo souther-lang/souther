@@ -136,7 +136,8 @@ class AnOutputReadsWhatTheLanguageDeclaresTest {
         // What each of them reaches, said out loud. A walk that quietly reached nothing would hold
         // here exactly as one that reached everything, and the second of these is a name this
         // compile did not check.
-        assertEquals(List.of(HALF_UP), List.copyOf(everyIdentityIn(language)));
+        // The case the body writes, and the sum it stands as where the call takes it.
+        assertEquals(List.of(HALF_UP, ROUNDING_MODE), List.copyOf(everyIdentityIn(language)));
         assertEquals(List.of("app.bills.Receipt", "lib.money.Amount"),
                 everyIdentityIn(dependency).stream().map(TypeSymbol.AtModule::toString).toList());
 

@@ -126,7 +126,8 @@ final class OrderedReading {
     OrderedIntervals<FactSubject> leaf(Core e, boolean positive, Denotations at) {
         // A rule of another shape. Whether it holds a value down anywhere is not something this
         // reading has a word for, so it is not a rule it can be said to have read.
-        return e instanceof Core.Binary bin ? comparison(bin, positive, at) : gaveUp(e);
+        return Core.withoutStanding(e) instanceof Core.Binary bin
+                ? comparison(bin, positive, at) : gaveUp(e);
     }
 
     /**

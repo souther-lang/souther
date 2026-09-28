@@ -1,6 +1,9 @@
 package souther.lsp;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -15,6 +18,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -78,6 +82,53 @@ class AdequacyLensTest {
 
             example keep
                 | "mid" : (Amount(5)) -> Ok { n = Amount(5) }
+            """;
+
+    private static final String MEETINGS = "file:///meetings.sou";
+
+    /**
+     * A behavior owed a row at a line its rules draw, and owed rows at meetings of its own
+     * decisions that no row makes.
+     *
+     * <p>Both, because the two are offered on different terms. What puts the offer on the
+     * declaration is a line owed a row; what the block then holds includes the meetings, and which
+     * meetings the rows made is read off what those rows recorded. So a block written from a
+     * compile that recorded nothing holds the line's row and none of theirs.
+     */
+    private static final String A_LINE_AND_SOME_MEETINGS = """
+            module meetings
+
+            data Total = Int
+                invariant value >= 0 && value <= 10000
+            data Premium
+            data Standard
+            data Membership = Premium | Standard
+            data Express
+            data Regular
+            data Delivery = Express | Regular
+            data Fee = Int
+
+            behavior shippingFee : (total: Total, member: Membership, delivery: Delivery) -> Fee
+                constructs Fee
+
+            let shippingFee (total, member, delivery) =
+                Fee(baseFee(total, member) + expressFee(delivery))
+
+            let baseFee (total: Total, member: Membership): Int =
+                match member with
+                    | Premium -> 0
+                    | Standard -> if total.value >= 5000 then 0 else 500
+
+            let expressFee (delivery: Delivery): Int =
+                match delivery with
+                    | Express -> 500
+                    | Regular -> 0
+
+            example shippingFee
+                | (Total(0), Premium, Express)     -> Fee(500)
+                | (Total(0), Standard, Regular)    -> Fee(500)
+                | (Total(5000), Premium, Regular)  -> Fee(0)
+                | (Total(5000), Standard, Express) -> Fee(500)
             """;
 
     private static ModuleGraph graphOf(Map<String, String> documents) {
@@ -327,6 +378,45 @@ class AdequacyLensTest {
                 "and the document goes on compiling with them in it");
     }
 
+    /**
+     * Taking the offer composes what the workspace's own report cannot see.
+     *
+     * <p>What a person is offered follows from what they asked for. An editor asks for a report at
+     * whatever its workspace is set to, and a report at this level says nothing about the arms of a
+     * body — so a run made for it records nothing of where its rows went, and which meetings of the
+     * body's decisions they made cannot be read. Taking the offer says what composing rows needs
+     * instead of inheriting that, so the meetings are among the rows written in.
+     *
+     * <p>A model owed a row at a line and at meetings, because the two are what tell this apart. The
+     * line's row is composed whatever the run recorded; a block asserted on that alone would hold
+     * while the offer went back to being answered by what the workspace happened to be reporting.
+     *
+     * <p>At this level and not at the default: an editor measuring nothing is offered no rows at
+     * all, so there is nothing to take and nothing to tell apart.
+     */
+    @Test
+    void takingTheOfferComposesWhatTheWorkspacesOwnReportCannotSee() {
+        Analyzer analyzer = measuring(Adequacy.Level.WITNESS);
+        ModuleGraph graph = graphOf(Map.of(MEETINGS, A_LINE_AND_SOME_MEETINGS));
+        List<CodeAction> actions =
+                analyzer.codeActions(MEETINGS, A_LINE_AND_SOME_MEETINGS, on(12), graph);
+
+        CodeAction.Deferred offered = assertInstanceOf(CodeAction.Deferred.class,
+                actions.get(0), actions.toString());
+        CodeAction.Edit taken = analyzer.resolve(offered, A_LINE_AND_SOME_MEETINGS, graph);
+
+        assertNotNull(taken, "taking the offer writes rows");
+        // The value the body's own comparison turns on, which no rule of the model draws a line at.
+        // A row standing there is a row composed for a meeting, and nothing else in the block is at
+        // it — the line this behavior is owed a row at is at the end of what the invariant admits.
+        assertTrue(taken.newText().contains("Total(5000)"),
+                "the meetings the rows leave unmade are among what is written in: "
+                        + taken.newText());
+        assertEquals(List.of(),
+                errorsIn(A_LINE_AND_SOME_MEETINGS.stripTrailing() + "\n" + taken.newText()),
+                "and the document goes on compiling with them in it");
+    }
+
     /** What a compile of {@code source} refuses it for, which is nothing where it compiles. */
     private static List<String> errorsIn(String source) {
         List<String> said = new ArrayList<>();
@@ -415,6 +505,66 @@ class AdequacyLensTest {
                         .codeActions(EDGES, ONLY_EDGES, on(7),
                                 graphOf(Map.of(EDGES, ONLY_EDGES))).size(),
                 "and at `witness` they are the same rows: taking the action is what asks for them");
+    }
+
+    private static final String ROLES = "file:///roles.sou";
+
+    /**
+     * A behavior whose only work is the classes of its position.
+     *
+     * <p>No row names it, so the measure of every position comes back saying so and the account has
+     * no class to report a gap at — a gap is something a measurement established, and nothing was
+     * measured. The position has no line either: nothing here bounds a value. So the one thing a row
+     * written for this would answer is a class, which is what the block {@code --generate} prints
+     * for it holds.
+     */
+    private static final String CLASSES_ONLY = """
+            module roles
+
+            data SalesManager
+            data RegionalVp
+            data Cfo
+            data Role = SalesManager | RegionalVp | Cfo
+            data Person = { name: String }
+
+            behavior approver : (role: Role) -> Person
+                constructs Person
+
+            let approver (role) = Person { name = "who" }
+            """;
+
+    /**
+     * The offer is made where the only rows to write are at the classes.
+     *
+     * <p>The offer and the block are two readings of one offering, and this is the shape that told
+     * them apart: the command writes a row per class of the position and the editor stood beside the
+     * declaration with nothing to say.
+     *
+     * <p>What the offering holds is asked first, by taking an offer nobody was shown. That is the
+     * control: an offer made where there is nothing to write and an offer withheld where there is
+     * something both come back as one absent action, and only the block tells the two apart.
+     */
+    @Test
+    void theOfferIsMadeWhereTheOnlyRowsToWriteAreAtTheClasses() {
+        Analyzer analyzer = measuring(Adequacy.Level.ALL);
+        ModuleGraph graph = graphOf(Map.of(ROLES, CLASSES_ONLY));
+        CodeAction.Edit written = analyzer.resolve(
+                new CodeAction.Deferred("taken unoffered", ROLES, "roles", "approver"),
+                CLASSES_ONLY, graph);
+        assertNotNull(written, "the offering has rows to write for this behavior");
+        assertTrue(written.newText().contains("SalesManager"),
+                () -> "a row per class of the position: " + written.newText());
+
+        List<CodeAction> actions = analyzer.codeActions(ROLES, CLASSES_ONLY,
+                on(lineOf(CLASSES_ONLY, "behavior approver")), graph);
+        CodeAction.Deferred offered = assertInstanceOf(CodeAction.Deferred.class,
+                actions.stream().findFirst().orElse(null), actions.toString());
+
+        CodeAction.Edit taken = analyzer.resolve(offered, CLASSES_ONLY, graph);
+        assertNotNull(taken, "and taking it writes them");
+        assertEquals(List.of(),
+                errorsIn(CLASSES_ONLY.stripTrailing() + "\n" + taken.newText()),
+                "and the document goes on compiling with them in it");
     }
 
     /**
@@ -616,6 +766,83 @@ class AdequacyLensTest {
         assertEquals("Write the rows `first` does not cover",
                 analyzer.codeActions(TWO_URI, TWO, over(first, 0, second + 1, 0), graph)
                         .get(0).title());
+    }
+
+    /**
+     * The offer stands beside every declaration the block has rows for.
+     *
+     * <p>The one question, held over every model this class writes. An offer is made from what the
+     * account and the measures say is owed and the block is composed from a plan built beside them,
+     * and the two came apart at the axis neither of the offer's questions put — so what is asserted
+     * is the agreement itself rather than the class that was found short of it.
+     *
+     * <p>One direction, because only one of them is promised. An offer made where nothing can be
+     * composed is a search that could not compose the row somebody asked for, which is news and is
+     * what {@link Analyzer#resolve} is written to be allowed to say; a block with rows and no offer
+     * leaves an author with work the command would write and nothing to show them it is there.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("modelsThisClassWrites")
+    void theOfferStandsWhereverTheBlockHasRowsToWrite(String named,
+                                                      Map<String, String> workspace) {
+        Analyzer analyzer = measuring(Adequacy.Level.ALL);
+        List<String> disagreed = new ArrayList<>();
+        ModuleGraph graph = graphOf(workspace);
+        workspace.forEach((uri, text) -> {
+            for (String behavior : behaviorsIn(text)) {
+                boolean offered = offersRows(analyzer, uri, text,
+                        on(lineOf(text, "behavior " + behavior)), graph);
+                boolean written = analyzer.resolve(
+                        new CodeAction.Deferred("taken unoffered", uri, moduleOf(text),
+                                behavior),
+                        text, graph) != null;
+                // One direction. A block with rows and no offer leaves an author work the
+                // command would write and nothing to show them it is there; an offer that
+                // composes nothing is a search that could not make the row somebody asked for,
+                // which is news and is what the offer is allowed to say.
+                if (written && !offered) {
+                    disagreed.add(moduleOf(text) + "." + behavior
+                            + ": the block has rows, and nothing is offered");
+                }
+            }
+        });
+
+        assertEquals(List.of(), disagreed);
+    }
+
+    /** Every model this class writes for the check above, a case each and named by the file it
+     *  is written in. */
+    static Stream<Arguments> modelsThisClassWrites() {
+        return Stream.of(
+                Arguments.of(MODULE, Map.of(MODULE, TRIP)),
+                Arguments.of(EDGES, Map.of(EDGES, ONLY_EDGES)),
+                Arguments.of(MEETINGS, Map.of(MEETINGS, A_LINE_AND_SOME_MEETINGS)),
+                Arguments.of(SPREAD_URI, Map.of(SPREAD_URI, SETTLED_UNDER_ONE_CASE)),
+                Arguments.of(ROLES, Map.of(ROLES, CLASSES_ONLY)),
+                Arguments.of(TWO_URI, Map.of(TWO_URI, TWO)),
+                Arguments.of(PRODUCER_URI,
+                        Map.of(PRODUCER_URI, PRODUCER, CARRIER_URI, CARRIER)));
+    }
+
+    /** The behaviors declared in {@code text}, in the order they are written. */
+    private static List<String> behaviorsIn(String text) {
+        List<String> out = new ArrayList<>();
+        for (String line : text.split("\n", -1)) {
+            if (line.startsWith("behavior ")) {
+                out.add(line.substring("behavior ".length()).split("[ :]")[0]);
+            }
+        }
+        return out;
+    }
+
+    /** The module {@code text} declares, which is what an offer names it by. */
+    private static String moduleOf(String text) {
+        for (String line : text.split("\n", -1)) {
+            if (line.startsWith("module ")) {
+                return line.substring("module ".length()).split("[ (]")[0];
+            }
+        }
+        throw new IllegalArgumentException("no module header: " + text);
     }
 
     /** The zero-based line {@code written} is on. */

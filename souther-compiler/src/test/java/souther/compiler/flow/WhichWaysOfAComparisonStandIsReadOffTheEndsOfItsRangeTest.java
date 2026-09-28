@@ -165,8 +165,10 @@ class WhichWaysOfAComparisonStandIsReadOffTheEndsOfItsRangeTest {
             BinOp op = numberOnTheLeft ? exchanged(each.op()) : each.op();
             Core number = new Core.Int(each.written(), Type.INT, POS);
             Core.Binary comparison = numberOnTheLeft
-                    ? new Core.Binary(op, number, POSITION, ConstructOccurrence.unwritten(), Type.BOOL, POS)
-                    : new Core.Binary(op, POSITION, number, ConstructOccurrence.unwritten(), Type.BOOL, POS);
+                    ? new Core.Binary(op, number, POSITION, Core.BinaryReading.AS_THEY_STAND,
+                            ConstructOccurrence.unwritten(), Type.BOOL, POS)
+                    : new Core.Binary(op, POSITION, number, Core.BinaryReading.AS_THEY_STAND,
+                            ConstructOccurrence.unwritten(), Type.BOOL, POS);
             boolean stands = Witnessed.comesOut(comparison, each.want(), read -> null);
             out.add(new Row(op, each.written(), each.want(), stands).asked(numberOnTheLeft)
                     + ": " + stands);

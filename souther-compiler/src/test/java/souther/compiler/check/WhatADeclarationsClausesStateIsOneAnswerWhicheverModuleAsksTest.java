@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -133,11 +134,14 @@ class WhatADeclarationsClausesStateIsOneAnswerWhicheverModuleAsksTest {
     private static final List<String> MODULES = List.of("demo.base", "demo.user");
 
     /**
-     * The declarations {@code demo.user} imports, in the order its scope reaches them.
+     * The declarations {@code demo.user} imports.
      *
      * <p>Written down rather than counted, because a count says nothing about which. {@code Item}
      * writes no clause of its own and is here all the same: what it spreads wrote two, and a reading
      * of {@code Item} reaches both.
+     *
+     * <p>Which of them, and not the order they are reached in: a module's imports are keyed by the
+     * spelling it writes for each, and an order over them is nobody's answer.
      */
     private static final List<String> IMPORTED =
             List.of("Amount", "Line", "Order", "Even", "Item");
@@ -146,8 +150,12 @@ class WhatADeclarationsClausesStateIsOneAnswerWhicheverModuleAsksTest {
     void anImportedDeclarationStatesTheSameThingInBothModules() {
         Db db = analysed(List.of(DECLARING, IMPORTING));
         List<ClauseReadings.Edge> edges = ClauseReadings.importsOf(db, MODULES);
-        assertEquals(IMPORTED, edges.stream().map(each -> each.named().name()).toList(),
+        assertEquals(new TreeSet<>(IMPORTED),
+                edges.stream().map(each -> each.named().name())
+                        .collect(java.util.stream.Collectors.toCollection(TreeSet::new)),
                 "the sweep is not reaching the declarations these sources were written to import");
+        assertEquals(IMPORTED.size(), edges.size(),
+                "and it reaches each of them once");
         for (ClauseReadings.Edge edge : edges) {
             assertEquals(ClauseReadings.readBy(db, edge.declaring(), edge.named()).stated(),
                     ClauseReadings.readBy(db, edge.asking(), edge.named()).stated(),

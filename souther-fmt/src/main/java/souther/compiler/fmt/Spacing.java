@@ -126,7 +126,11 @@ final class Spacing {
         // the canonical form writes it exactly as it writes a name there. Read under the name, so
         // that the answer for `| _ ->` is the answer for `| C ->` rather than six rows saying again
         // what those rows say.
-        return kind == SyntaxKind.UNDERSCORE ? SyntaxKind.IDENT : kind;
+        //
+        // A contextual keyword is a name the lexer handed over and the parse read as a keyword, and
+        // it is written against its neighbours the way the name it lexes as is.
+        return kind == SyntaxKind.UNDERSCORE || kind == SyntaxKind.CONTEXTUAL_KW
+                ? SyntaxKind.IDENT : kind;
     }
 
     /**

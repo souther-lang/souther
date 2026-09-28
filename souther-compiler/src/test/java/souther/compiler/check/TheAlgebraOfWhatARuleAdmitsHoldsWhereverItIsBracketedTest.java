@@ -35,7 +35,7 @@ class TheAlgebraOfWhatARuleAdmitsHoldsWhereverItIsBracketedTest {
     private static final StringRestriction NONE =
             new StringRestriction.Admitting(AdmittedPlan.NONE);
     private static final StringRestriction UNKNOWN =
-            new StringRestriction.NotKnown(new BlockReason.PatternTooDeeplyNested());
+            new StringRestriction.NotKnown(new BlockReason.PatternTooCostly());
     private static final StringRestriction UNREAD =
             new StringRestriction.NotKnown(new BlockReason.UnreadValueRule());
 
@@ -126,13 +126,13 @@ class TheAlgebraOfWhatARuleAdmitsHoldsWhereverItIsBracketedTest {
     void twoReadingsThatStoppedKeepBothReasons() {
         StringRestriction.NotKnown both = assertInstanceOf(StringRestriction.NotKnown.class,
                 join(UNKNOWN, UNREAD));
-        assertEquals(List.of(new BlockReason.PatternTooDeeplyNested(),
+        assertEquals(List.of(new BlockReason.PatternTooCostly(),
                         new BlockReason.UnreadValueRule()), both.why());
 
         StringRestriction.NotKnown other = assertInstanceOf(StringRestriction.NotKnown.class,
                 join(UNREAD, UNKNOWN));
         assertEquals(List.of(new BlockReason.UnreadValueRule(),
-                new BlockReason.PatternTooDeeplyNested()), other.why());
+                new BlockReason.PatternTooCostly()), other.why());
     }
 
     /** The same reason twice is one reason: one rule stopped by one thing in two branches is not
@@ -141,7 +141,7 @@ class TheAlgebraOfWhatARuleAdmitsHoldsWhereverItIsBracketedTest {
     void theSameReasonTwiceIsOneReason() {
         StringRestriction.NotKnown both = assertInstanceOf(StringRestriction.NotKnown.class,
                 join(UNKNOWN, UNKNOWN));
-        assertEquals(List.of(new BlockReason.PatternTooDeeplyNested()), both.why());
+        assertEquals(List.of(new BlockReason.PatternTooCostly()), both.why());
     }
 
     private static StringRestriction join(StringRestriction one, StringRestriction other) {

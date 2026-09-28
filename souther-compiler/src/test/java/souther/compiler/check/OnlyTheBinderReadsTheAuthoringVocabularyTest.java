@@ -305,10 +305,7 @@ class OnlyTheBinderReadsTheAuthoringVocabularyTest {
                     "what a call hands its closure, for a construction inside the closure"),
             new Reader("souther.compiler.check.WalkElements",
                     "what a call hands its closure, for which binding one element of a walk arrives"
-                            + " under whichever representation the walk is in"),
-            new Reader("souther.compiler.check.Question",
-                    "which operations are answered for what they hand their closure, for the range"
-                            + " a question is asked over"));
+                            + " under whichever representation the walk is in"));
 
     @Test
     void everyReaderOfWhatAnOperationHandsItsClosureIsWrittenDownWithWhatItAsks() {

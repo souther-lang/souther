@@ -1,5 +1,8 @@
 package souther.compiler.numeric;
 
+import souther.exact.ExactDecimals;
+import souther.exact.ExactFailure;
+
 import java.math.BigDecimal;
 
 /**
@@ -60,69 +63,157 @@ public record Count(BigDecimal at) implements Place {
     }
 
     /**
-     * The count {@code steps} further along the order.
+     * The count an exact number is, or null where no count is it.
+     *
+     * <p><b>The edge exact reasoning becomes a value on a carrier at, for a reader asking whether
+     * it does.</b> Every carrier's order is counted in decimals and the algebra above it is not: a
+     * form weighed by a third puts a level a third along, and no count is a third. Null says that
+     * and never that this could not work it out — {@link ExactRatio#asWrittenDecimal} is exact, so a
+     * caller is told which of the two it has rather than handed a number that cannot be asked.
+     *
+     * <p>Whether the carrier holds the count it is a separate question and the carrier's own
+     * ({@link Granularity}): a third is no count anywhere, and a half is a count no whole-numbered
+     * order stands at.
+     *
+     * <p>For a caller that has established there is one, {@link #number(ExactRatio)}. The two are
+     * the same edge asked by two kinds of reader, and which of them a caller is decides what a
+     * missing count means — so it is said in the signature rather than worked out again at each
+     * call.
+     */
+    public static Count at(ExactRatio number) {
+        BigDecimal written = number.asWrittenDecimal();
+        return written == null ? null : new Count(written);
+    }
+
+    /**
+     * The count an exact number is, where the caller has established that one is.
+     *
+     * <p>The same narrowing {@link #number(Place)} is, asked of the other side of the edge: there,
+     * a caller holding a place has established which carrier it is on; here, a caller holding an
+     * exact number has established that a carrier's order counts to it. A level the written form
+     * attains is a whole multiple of what that form wrote, so reading it back in the quantity's own
+     * units lands on a number the order has — and a reader that has that in hand has no use for an
+     * absence.
+     *
+     * <p>Refused rather than answered with a level of the exact side. The two are values of
+     * different spaces, and one handed over where the other was asked for travels until something
+     * far from here asks it for a place. What reaches this is this compiler having broken the
+     * premise the caller stands on, so it is said where the premise is.
+     */
+    public static Count number(ExactRatio at) {
+        Count count = at(at);
+        if (count == null) {
+            throw new IllegalStateException(
+                    "no count on any carrier's order is this number: " + at);
+        }
+        return count;
+    }
+
+    /** This count as the exact number it is, which never loses anything: every finite decimal is a
+     *  ratio. */
+    public ExactRatio exactly() {
+        return ExactRatio.of(at);
+    }
+
+    /**
+     * The count {@code steps} further along the order, or null where no count is that number.
      *
      * <p>Whole steps only. What one step means is the carrier's — a day for a date, a second for a
      * date-time — and every caller stepping a count is stepping over a carrier that has a step at
      * all, which {@link Granularity} is what says.
+     *
+     * <p>Added as numbers and not as the decimals they are written as. A count is the number, and
+     * the places it was written to are no part of where a step lands: {@code 0E-2147483647} is
+     * nought, a whole number an order holds, and the count after it is one. Added as written
+     * decimals, the one step would first be written to the count's two billion places, which no
+     * host holds — the decimal refusing a number that has an answer.
+     *
+     * <p>Null is the one way a sum of two numbers has no answer: no whole number the host holds is
+     * it, so no count is it and no carrier's order has it — the same null {@link #at(ExactRatio)}
+     * answers, and never that this could not work it out.
      */
     public Count plus(long steps) {
-        return new Count(at.add(BigDecimal.valueOf(steps)));
+        return along(ExactRatio.of(steps));
     }
 
+    /** The count {@code steps} back along the order, or null where no count is that number. */
     public Count minus(long steps) {
-        return plus(-steps);
+        return along(ExactRatio.of(steps).negated());
+    }
+
+    private Count along(ExactRatio steps) {
+        return switch (exactly().plus(steps)) {
+            case ExactAnswer.Held<ExactRatio> held -> at(held.value());
+            case ExactAnswer.Unheld<ExactRatio> unheld -> switch (unheld.why()) {
+                case NO_REPRESENTATION_EXISTS -> null;
+                // An exact sum builds the answer's own digits and nothing more, so it is refused
+                // for there being no such whole number and never for a shortage of room.
+                case MORE_ROOM_COULD_ANSWER -> throw new IllegalStateException(
+                        "an exact sum was refused for room, which a sum never needs: " + at
+                                + " and " + steps);
+            };
+        };
     }
 
     /**
-     * The counts added, and the difference of two counts.
+     * The count this comes to {@code factor} times over, or null where no {@link BigDecimal} holds
+     * the product.
      *
-     * <p>Both are counts, because the domain that proves what a position holds reasons over
-     * differences: {@code a - b <= 0} bounds one position through another, and what it carries either
-     * side of the comparison is a coordinate. Scaling is there for the same reason — a rule may relate
-     * a position to a multiple of another — and the factor is a plain number rather than a count,
-     * since a coefficient is not a place on any order.
+     * <p>For a reader whose factors are ends of ranges and so of any scale. A number worked out of
+     * two coordinates is on no carrier's order until somebody puts it on one, and whether it lands
+     * there, and what it means where it does not, is the question of the reader holding it.
+     *
+     * <p>A count is the number and not the places it was written to, so the product is asked of the
+     * number ({@link ExactDecimals#product}) and never of the scale {@code BigDecimal.multiply}
+     * would build it at, which is what lets this answer for a factor of any scale rather than
+     * throwing where the product runs past what a scale holds.
+     *
+     * <p>Null is no count to hold it, for either of the two reasons that has: no decimal is the
+     * number, or this host has no room for its digits. They are different answers about a number and
+     * the same one for a reader that claims less where it has no count, which is what this is for;
+     * a reader that must tell them apart asks {@code ExactDecimals} and gets the failure for the
+     * second.
      */
-    public Count plus(Count other) {
-        return new Count(at.add(other.at));
-    }
-
-    public Count minus(Count other) {
-        return new Count(at.subtract(other.at));
-    }
-
-    public Count times(BigDecimal factor) {
-        return new Count(at.multiply(factor));
+    public Count timesWhereHeld(BigDecimal factor) {
+        try {
+            BigDecimal held = ExactDecimals.product(at, factor);
+            return held == null ? null : new Count(held);
+        } catch (ExactFailure _) {
+            return null;
+        }
     }
 
     public Count negate() {
         return new Count(at.negate());
     }
 
-    /** This count moved onto a whole one, which is what a discrete carrier's order is made of. */
-    public Count rounded(java.math.RoundingMode towards) {
-        return new Count(at.setScale(0, towards));
-    }
-
     /**
-     * The count halfway between this and {@code other}, exact where the halves land on the order and
-     * rounded towards this one where they do not.
+     * This count moved onto a whole one, which is what a discrete carrier's order is made of.
      *
-     * <p>Rounded rather than refused, because a caller asking for the middle of two counts is asking
-     * for one of them to stand for what lies between, and half a step is not a place on any carrier's
-     * order. Where the carrier has no step at all the halves are exact and nothing rounds.
+     * @param towards {@code FLOOR} or {@code CEILING}, the two directions a caller ever asks this
+     *                for; read exactly, so that rounding a count never trips over the same
+     *                scale-overflow a plain {@code setScale} could
      */
-    public Count halfwayTo(Count other, Granularity spacing) {
-        BigDecimal span = other.at.subtract(at);
-        return new Count(at.add(spacing == Granularity.DISCRETE
-                ? span.divide(BigDecimal.valueOf(2), 0, java.math.RoundingMode.DOWN)
-                : span.divide(BigDecimal.valueOf(2))));
+    public Count rounded(java.math.RoundingMode towards) {
+        ExactAnswer<java.math.BigInteger> rounded = switch (towards) {
+            case FLOOR -> exactly().floor();
+            case CEILING -> exactly().ceiling();
+            default -> throw new IllegalArgumentException(
+                    "a count is rounded toward the floor or the ceiling of its order, and asked no"
+                            + " other way: " + towards);
+        };
+        if (!(rounded instanceof ExactAnswer.Held<java.math.BigInteger> held)) {
+            throw new IllegalStateException(
+                    "the exact arithmetic could not hold the whole number this count rounds to: "
+                            + at);
+        }
+        return new Count(new BigDecimal(held.value()));
     }
 
     /** Whether this counts to a place on an order that steps: a count with a fraction in it is
      * between two of a discrete carrier's values and is none of them. */
     public boolean whole() {
-        return at.stripTrailingZeros().scale() <= 0;
+        return ExactDecimals.leastDigits(at).scale() <= 0;
     }
 
     public int signum() {
@@ -147,6 +238,13 @@ public record Count(BigDecimal at) implements Place {
     /**
      * What makes two counts one line: the number, and not how many places it was written to.
      *
+     * <p>Built from the two parts a decimal is held as once the trailing zeros are off it, which is
+     * one pair per number — so two counts with this name are one count, and the name costs what
+     * those parts cost. Spelled out instead, a bound at a decimal written at a wide scale is a
+     * character per place: the value is a single digit and a scale, and naming it wrote every place
+     * between them. What a reader sees is {@link #spelled}, and no line in the algebra is named by
+     * asking for that.
+     *
      * <p>Not {@link #equals}, which a record derives from {@link BigDecimal#equals} and which says
      * {@code 0.00} and {@code 0} are two places. The derived equality is left alone rather than
      * overridden so that a map keyed on counts keeps saying what a map keyed on {@code BigDecimal}
@@ -154,17 +252,27 @@ public record Count(BigDecimal at) implements Place {
      */
     @Override
     public String key() {
-        return at.stripTrailingZeros().toPlainString();
+        BigDecimal canonical = ExactDecimals.leastDigits(at);
+        return canonical.unscaledValue() + ";" + canonical.scale();
+    }
+
+    /** This count as the number it is. The trailing zeros are gone, so {@code 0.00} and {@code 0}
+     *  are written one way — the same number {@link #key()} names, said in digits. Past a thousand
+     *  digits, in exponent notation rather than spelled out in full
+     *  ({@link ExactDecimals#spelledBounded}). */
+    @Override
+    public String spelled() {
+        return ExactDecimals.spelledBounded(ExactDecimals.leastDigits(at));
     }
 
     /** The same count with the trailing zeros gone, which is the number {@link #key()} names. */
     @Override
     public Count canonical() {
-        return new Count(at.stripTrailingZeros());
+        return new Count(ExactDecimals.leastDigits(at));
     }
 
     @Override
     public String toString() {
-        return key();
+        return spelled();
     }
 }

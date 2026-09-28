@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.ObligationCoverage;
@@ -87,8 +88,8 @@ class EveryWayTheVerdictStaysOpenNamesSomethingTest {
     void everyWayAnObligationStaysOpenSaysWhatItOpensTheVerdictOn() {
         Map<String, List<String>> said = new LinkedHashMap<>();
         everyWay().forEach((name, why) -> {
-            List<AdequacyOpening> out = new ArrayList<>();
-            AdequacyReport.openedBy(out, HANDED_IN, ObligationDisposition.Undecided.about(List.of(why)));
+            List<AdequacyUncertainty> out = new ArrayList<>();
+            AdequacyReport.unresolvedBy(out, HANDED_IN, ObligationDisposition.Undecided.about(List.of(why)));
             said.put(name, out.stream()
                     .map(each -> each.getClass().getSimpleName() + "/" + each.runSensitivity())
                     .toList());
@@ -129,8 +130,8 @@ class EveryWayTheVerdictStaysOpenNamesSomethingTest {
     @Test
     void anUndecidedObligationIsAlwaysOpenOnSomething() {
         for (ObligationDisposition.Uncertainty each : everyWay().values()) {
-            List<AdequacyOpening> out = new ArrayList<>();
-            AdequacyReport.openedBy(out, HANDED_IN, ObligationDisposition.Undecided.about(List.of(each)));
+            List<AdequacyUncertainty> out = new ArrayList<>();
+            AdequacyReport.unresolvedBy(out, HANDED_IN, ObligationDisposition.Undecided.about(List.of(each)));
             boolean readings =
                     each instanceof ObligationDisposition.Uncertainty.WhetherARowIsThere
                             .ReadingsStopped;
@@ -140,7 +141,7 @@ class EveryWayTheVerdictStaysOpenNamesSomethingTest {
             // And names the point the walk reached it at, which is the half a disposition does not
             // hold. Handed over and dropped, every one of these came out as the same entry however
             // many points the module owed a row at (issue #1437).
-            for (AdequacyOpening opened : out) {
+            for (AdequacyUncertainty opened : out) {
                 assertEquals(HANDED_IN, opened.subject(),
                         () -> each + " opened the verdict on something other than the point it is"
                                 + " about");
@@ -159,7 +160,8 @@ class EveryWayTheVerdictStaysOpenNamesSomethingTest {
         Map<String, ObligationDisposition.Uncertainty> out = new LinkedHashMap<>();
         out.put("ReadingsStopped",
                 new ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped(
-                        ReadingReasons.of(List.of())));
+                        ReadingReasons.of(List.of(),
+                                StandingAtAPoint.ReadingsTried.EVERY_ONE)));
         out.put("NothingWasRead",
                 new ObligationDisposition.Uncertainty.WhetherARowIsThere.NothingWasRead(
                         UnaskedReasons.of(ItemAssessment.Coverage.NotAsked.NOT_ASKED)));

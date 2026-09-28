@@ -40,7 +40,7 @@ class WhatARangeLeavesIsNotHowItIsWrittenTest {
         assertTrue(from("3.0").sameValuesAs(from("3.00")));
         assertTrue(from("3.00").sameValuesAs(from("3.0")), "either way round");
         assertFalse(from("3.0").equals(from("3.00")),
-                "and the derived equality is the writing, which a report writes back as written");
+                "and the derived equality is the representation each was read with");
     }
 
     /** And an end that is there is not the same as no end. */

@@ -63,9 +63,13 @@ public interface PublishedClasses {
     }
 
     /** What one class was annotated with. A class carries at most one of each, which the reading
-     *  holds it to rather than taking whichever it met last. */
+     *  holds it to rather than taking whichever it met last.
+     *
+     *  <p>{@code behaviorRequirements} is null where the class carries no behavior, and a list —
+     *  empty where the behavior requires nothing — where it carries one. */
     record Declarations(SoutherModuleView module, String data, String behaviorSignature,
-                        String behaviorImplementation) {}
+                        String behaviorSignatureFrom, String behaviorImplementation,
+                        List<String> behaviorRequirements) {}
 
     /**
      * The {@code $Module} annotation's members, as a reader here uses them.
@@ -79,5 +83,19 @@ public interface PublishedClasses {
      */
     record SoutherModuleView(int compat, String compiler, String header,
                              List<String> imports, List<String> types,
-                             List<String> behaviors, List<String> invariantHelpers) {}
+                             List<String> behaviors, List<String> invariantHelpers,
+                             List<String> valueAnswers, List<String> providedLinkages,
+                             List<String> requiredLinkages, List<String> providedCopies,
+                             List<String> requiredCopies) {
+
+        /** A module that records no answers for its values, offers nothing another module's classes
+         *  link by or copy, and whose classes link against and copy nothing of another module, which
+         *  is what a writer that has none of these to record wrote. */
+        public SoutherModuleView(int compat, String compiler, String header, List<String> imports,
+                                 List<String> types, List<String> behaviors,
+                                 List<String> invariantHelpers) {
+            this(compat, compiler, header, imports, types, behaviors, invariantHelpers, List.of(),
+                    List.of(), List.of(), List.of(), List.of());
+        }
+    }
 }

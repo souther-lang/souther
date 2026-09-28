@@ -33,7 +33,7 @@ package souther.compiler.types;
  * @param origin  which construct of which owner the source wrote
  * @param lineage which copy of it this is
  */
-public record ConstructOccurrence(SourceConstructOrigin origin, ExpansionLineage lineage) {
+public record ConstructOccurrence(SourceConstructOrigin origin, OccurrenceLineage lineage) {
 
     public ConstructOccurrence {
         if (origin == null || lineage == null) {
@@ -45,7 +45,7 @@ public record ConstructOccurrence(SourceConstructOrigin origin, ExpansionLineage
 
     /** The construct as the source wrote it, in the body that wrote it. */
     public static ConstructOccurrence asWritten(SourceConstructOrigin origin) {
-        return new ConstructOccurrence(origin, ExpansionLineage.ORIGINAL);
+        return new ConstructOccurrence(origin, OccurrenceLineage.ORIGINAL);
     }
 
     /**
@@ -61,7 +61,7 @@ public record ConstructOccurrence(SourceConstructOrigin origin, ExpansionLineage
     }
 
     private static final ConstructOccurrence UNWRITTEN =
-            new ConstructOccurrence(SourceConstructOrigin.unwritten(), ExpansionLineage.ORIGINAL);
+            new ConstructOccurrence(SourceConstructOrigin.unwritten(), OccurrenceLineage.ORIGINAL);
 
     /** Whether the source wrote this at all, which is what its origin says. */
     public boolean isWritten() {
@@ -70,7 +70,7 @@ public record ConstructOccurrence(SourceConstructOrigin origin, ExpansionLineage
 
     @Override
     public String toString() {
-        return lineage instanceof ExpansionLineage.Original ? String.valueOf(origin)
+        return lineage instanceof OccurrenceLineage.Original ? String.valueOf(origin)
                 : origin + " in " + lineage;
     }
 }

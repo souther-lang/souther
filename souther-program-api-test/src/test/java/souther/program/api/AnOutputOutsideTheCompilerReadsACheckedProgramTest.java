@@ -5,6 +5,7 @@ import souther.compiler.core.Composition;
 import souther.compiler.diag.CompileException;
 import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
+import souther.compiler.abort.AbortKind;
 import souther.compiler.core.KernelSignature;
 import souther.compiler.program.CheckedBehavior;
 import souther.compiler.program.CheckedData;
@@ -12,7 +13,10 @@ import souther.compiler.program.CheckedHelper;
 import souther.compiler.program.CheckedImplementation;
 import souther.compiler.program.CheckedModule;
 import souther.compiler.program.CheckedProgram;
+import souther.compiler.regex.PatternParser;
+import souther.compiler.regex.PatternRead;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.LanguageCaseId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -20,8 +24,11 @@ import souther.compiler.types.ValueName;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -136,8 +143,8 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
      * A call whose argument arrives narrower than the parameter it goes into.
      *
      * <p>{@code round} declares its second parameter {@code RoundingMode}, a sum the language
-     * itself gives; {@code HALF_UP} is one of its cases, so the type at the call is the case and
-     * the type in the declaration is the sum.
+     * itself gives; {@code HALF_UP} is one of its cases, so the value is the case and the parameter
+     * is the sum. The call stands the value as the sum, which is what it says it takes there.
      */
     private static final String ROUNDS = """
             module demo
@@ -149,9 +156,46 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
             let toCents (r) = Decimal.round(2, HALF_UP, r.value)
             """;
 
+    /**
+     * Three operations the language tells a way of rounding, each at a different position of its
+     * own declaration: {@code round} takes it second, {@code toInt} takes it first, {@code divide}
+     * takes it last.
+     */
+    private static final String ROUNDING_OPERATIONS = """
+            module demo
+
+            data Rate = { value: Decimal }
+
+            behavior toCents : (r: Rate) -> Decimal
+            behavior wholeCents : (r: Rate) -> Int
+            behavior perUnit : (total: Decimal, units: Decimal) -> Decimal
+
+            let toCents (r) = Decimal.round(2, HALF_UP, r.value)
+            let wholeCents (r) = Decimal.toInt(HALF_UP, r.value)
+            let perUnit (total, units) =
+                match Decimal.divide(total, units, 2, HALF_UP) with
+                    | Decimal as q -> q
+                    | DivisionByZero -> unreachable "units > 0"
+            """;
+
+    /**
+     * The checked fixtures below, built once per distinct source rather than once per test.
+     *
+     * <p>{@code CheckedProgram.of} reads the whole standard library and checks it beside whatever
+     * it is handed, and {@code StdlibLoader} memoizes none of that on purpose, leaving the choice to
+     * whoever calls it more than once. Several tests here ask different questions of the same
+     * fixture (a module compiled and read by four tests below, a fixture three tests check the
+     * result of), and a fresh program per test would pay that reading again for a source already
+     * checked in this class.
+     */
+    private static final Map<String, CheckedProgram> CHECKED = new HashMap<>();
+
+    private static CheckedProgram checked(String source) {
+        return CHECKED.computeIfAbsent(source, s -> CheckedProgram.of(List.of(s)));
+    }
+
     private static CheckedModule demo() {
-        CheckedProgram program = CheckedProgram.of(List.of(MODULE));
-        CheckedModule module = program.module("demo");
+        CheckedModule module = checked(MODULE).module("demo");
         assertNotNull(module, "the compile checked this module");
         return module;
     }
@@ -164,7 +208,7 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
 
     @Test
     void theProgramHoldsTheModulesItChecked() {
-        CheckedProgram program = CheckedProgram.of(List.of(MODULE));
+        CheckedProgram program = checked(MODULE);
 
         assertEquals(List.of("demo"), program.modules().stream().map(CheckedModule::name).toList());
     }
@@ -208,12 +252,12 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
                 assertFalse(composed.composition().stages().isEmpty());
                 yield "composed";
             }
-            case CheckedImplementation.Injected ignored -> "injected";
-            case CheckedImplementation.Unwritten ignored -> "unwritten";
+            case CheckedImplementation.Injected _ -> "injected";
+            case CheckedImplementation.Unwritten _ -> "unwritten";
             // Every behavior asked here is one this compile checked, and an implementation another
             // compile emitted belongs to a module this program does not hold. Answered with a word
             // of its own it would be a state this test reads as covered and never sees.
-            case CheckedImplementation.ImplementedElsewhere ignored ->
+            case CheckedImplementation.ImplementedElsewhere _ ->
                     fail("`" + behavior.name() + "` is a behavior of a checked module and its"
                             + " implementation is another compile's");
         };
@@ -380,7 +424,7 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
      */
     @Test
     void everyParameterReadInABodyResolvesToAParameter() {
-        CheckedModule demo = CheckedProgram.of(List.of(TAKES_TWO)).module("demo");
+        CheckedModule demo = checked(TAKES_TWO).module("demo");
         CheckedBehavior combine = named(demo, "combine");
         CheckedImplementation.Body body =
                 (CheckedImplementation.Body) combine.implementation();
@@ -405,7 +449,7 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
     @Test
     void theBindersAreInTheOrderTheInputsWereDeclared() {
         CheckedBehavior combine =
-                named(CheckedProgram.of(List.of(TAKES_TWO)).module("demo"), "combine");
+                named(checked(TAKES_TWO).module("demo"), "combine");
         CheckedImplementation.Body body = (CheckedImplementation.Body) combine.implementation();
 
         assertEquals(List.of("first", "second"),
@@ -523,7 +567,7 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
      */
     @Test
     void aCallReachingAKernelSaysWhichKernel() {
-        CheckedProgram program = CheckedProgram.of(List.of(CALLS_THE_LIBRARY));
+        CheckedProgram program = checked(CALLS_THE_LIBRARY);
         Core body = ((CheckedImplementation.Body)
                 named(program.module("demo"), "tidy").implementation()).body();
 
@@ -555,7 +599,7 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
      */
     @Test
     void andSoDoesAKernelWrittenWhereAValueGoes() {
-        CheckedProgram program = CheckedProgram.of(List.of(CALLS_THE_LIBRARY));
+        CheckedProgram program = checked(CALLS_THE_LIBRARY);
         Core body = ((CheckedImplementation.Body)
                 named(program.module("demo"), "counts").implementation()).body();
 
@@ -576,15 +620,15 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
     /**
      * And the program says what the kernel that call reaches was declared to take.
      *
-     * <p>What the checker settled for each node is what arrived there. That answers the callee's
-     * shape only while no value can arrive narrower than the parameter it goes into, and a
-     * sum-typed parameter ends it: the argument here is a {@code HALF_UP} and the parameter is the
-     * sum it is a case of. An output building a boundary form off the arguments would build one
-     * naming the case, and find nothing declared that way.
+     * <p>A value may arrive narrower than the parameter it goes into: the argument here is a
+     * {@code HALF_UP} and the parameter is the sum it is a case of. What the call is handed stands as
+     * the parameter, and what it holds is the case, so an output building a boundary form off the
+     * arguments builds it at the type declared there and finds the case under it — and never has to
+     * work out for itself that the one may stand as the other.
      */
     @Test
     void andTheProgramSaysWhatThatKernelWasDeclaredToTake() {
-        CheckedProgram program = CheckedProgram.of(List.of(ROUNDS));
+        CheckedProgram program = checked(ROUNDS);
         Core body = ((CheckedImplementation.Body)
                 named(program.module("demo"), "toCents").implementation()).body();
         Core.Call rounds = null;
@@ -597,15 +641,96 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
         }
         assertNotNull(rounds, "the body reaches Decimal.round");
 
-        KernelSignature declared = program.kernelSignature(Kernel.DECIMAL_ROUND);
+        KernelSignature declared = program.kernel(Kernel.DECIMAL_ROUND).signature();
 
         assertEquals(List.of("Int", "RoundingMode", "Decimal"),
                 declared.parameters().stream().map(Type::show).toList(),
                 "what the language declared the kernel to take");
         assertEquals("Decimal", Type.show(declared.result()),
                 "and what it declared it answers");
-        assertEquals("HALF_UP", Type.show(rounds.args().get(1).type()),
-                "while what arrived at the sum-typed parameter is the case it is");
+        Core.Widen arrived = assertInstanceOf(Core.Widen.class, rounds.args().get(1),
+                "what arrived at the sum-typed parameter stands as that parameter");
+        assertEquals("RoundingMode", Type.show(arrived.type()),
+                "at the type the kernel was declared to take there");
+        assertEquals("HALF_UP", Type.show(arrived.value().type()),
+                "and what it holds is the case it is");
+        assertEquals(declared.parameters(),
+                ((Core.CallSettlement.AtKernel) rounds.settlement()).takes(),
+                "and the call says it takes the parameters the declaration names, which it can only"
+                        + " say by settling them and not by reading them off its arguments");
+    }
+
+    /**
+     * And a kernel read as a value, with no argument, is an application that takes nothing: the
+     * settlement says so and is not absent.
+     */
+    @Test
+    void aKernelTakingNoArgumentSaysItTakesNone() {
+        CheckedProgram program = checked(CALLS_THE_LIBRARY);
+        Core body = ((CheckedImplementation.Body)
+                named(program.module("demo"), "counts").implementation()).body();
+
+        Core.Call empty = callTo(Kernel.MAP_EMPTY, body);
+
+        assertEquals(List.of(), empty.args(), "the empty map is applied to nothing");
+        assertEquals(new Core.CallSettlement.AtKernel(List.of(), Core.KernelFact.None.INSTANCE),
+                empty.settlement(), "and says it takes nothing, with nothing more settled");
+    }
+
+    /**
+     * And the other two operations the language tells a way of rounding expose the same boundary.
+     *
+     * <p>The same invariant checked above for {@code Decimal.round} — the declaration says which
+     * parameter is {@code RoundingMode}, the checked call is handed a value standing as that
+     * parameter and holding the case that arrived there —
+     * holds at {@code toInt}'s and {@code divide}'s own declared positions too. An output that reads
+     * the declaration does not need to be told separately that {@code toInt} takes its mode first
+     * and {@code divide} takes its last.
+     */
+    @Test
+    void theOtherRoundingOperationsExposeTheSameDeclaredParameterActualCaseBoundary() {
+        CheckedProgram program = checked(ROUNDING_OPERATIONS);
+        CheckedModule demo = program.module("demo");
+
+        assertRoundingModeArrivesAsItsCase(program,
+                ((CheckedImplementation.Body) named(demo, "toCents").implementation()).body(),
+                Kernel.DECIMAL_ROUND);
+        assertRoundingModeArrivesAsItsCase(program,
+                ((CheckedImplementation.Body) named(demo, "wholeCents").implementation()).body(),
+                Kernel.DECIMAL_TO_INT);
+        assertRoundingModeArrivesAsItsCase(program,
+                ((CheckedImplementation.Body) named(demo, "perUnit").implementation()).body(),
+                Kernel.DECIMAL_DIVIDE);
+    }
+
+    private static void assertRoundingModeArrivesAsItsCase(
+            CheckedProgram program, Core body, Kernel kernel) {
+        Core.Call reached = null;
+        for (Core node : everyNodeOf(body)) {
+            if (node instanceof Core.Call call
+                    && call.fn() instanceof Core.Reached.OfKernel reaches
+                    && reaches.kernel() == kernel) {
+                reached = call;
+            }
+        }
+        assertNotNull(reached, () -> "the body reaches " + kernel);
+
+        List<Type> parameters = program.kernel(kernel).signature().parameters();
+        List<Integer> modePositions = new ArrayList<>();
+        for (int i = 0; i < parameters.size(); i++) {
+            if (Type.show(parameters.get(i)).equals("RoundingMode")) {
+                modePositions.add(i);
+            }
+        }
+        assertEquals(1, modePositions.size(),
+                () -> kernel + " declares exactly one RoundingMode parameter");
+
+        Core arrived = reached.args().get(modePositions.get(0));
+        assertEquals(parameters.get(modePositions.get(0)), arrived.type(),
+                () -> "what arrived at " + kernel + "'s RoundingMode parameter stands as it");
+        assertEquals("HALF_UP", Type.show(Core.withoutStanding(arrived).type()),
+                () -> "and what it holds at " + kernel + "'s RoundingMode parameter is the case"
+                        + " it is");
     }
 
     /**
@@ -616,16 +741,290 @@ class AnOutputOutsideTheCompilerReadsACheckedProgramTest {
      */
     @Test
     void andItSaysSoForEveryKernelTheLanguageHas() {
-        CheckedProgram program = CheckedProgram.of(List.of(ROUNDS));
+        CheckedProgram program = checked(ROUNDS);
 
         List<String> answered = new ArrayList<>();
         for (Kernel kernel : Kernel.values()) {
             // Refused rather than answered with an absence, so asking is the assertion.
-            answered.add(Type.show(program.kernelSignature(kernel).result()));
+            answered.add(Type.show(program.kernel(kernel).signature().result()));
         }
 
         assertEquals(Kernel.values().length, answered.size(),
                 "every kernel the language has says what it answers");
+    }
+
+    /**
+     * And a case a kernel can answer with arrives as the member it is.
+     *
+     * <p>What an output needs of a departure is something to represent: a class to name, a
+     * descriptor to point at. Handed the member of the declared result, it has the identity the rest
+     * of the language uses for that case and represents it the way it represents any other. Handed a
+     * spelling, it would search the result for the member carrying it, and would be naming a case by
+     * a name the compiler is free to change.
+     */
+    @Test
+    void andACaseAKernelCanAnswerWithArrivesAsTheMemberItIs() {
+        CheckedProgram program = checked(ROUNDS);
+
+        assertEquals(Set.of(new TypeSymbol.LanguageCase(LanguageCaseId.DIVISION_BY_ZERO)),
+                program.kernel(Kernel.INT_TRUNCATING_DIVIDE).signature().languageCaseMembers(),
+                "the case a truncating quotient departs with, as the language's own identity");
+        assertEquals(Set.of(),
+                program.kernel(Kernel.DECIMAL_ROUND).signature().languageCaseMembers(),
+                "while a kernel that cannot depart names none");
+    }
+
+    /**
+     * And the program says every way a call to that kernel can end without a value instead.
+     *
+     * <p>An output reads this off {@link CheckedProgram#kernel}, the same call it reads the
+     * signature through, rather than deriving it from {@code souther-runtime}'s classes or from the
+     * specification's prose.
+     */
+    @Test
+    void andTheProgramSaysEveryWayThatKernelCanEndWithoutAValue() {
+        CheckedProgram program = checked(ROUNDS);
+
+        assertEquals(Set.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE),
+                program.kernel(Kernel.DECIMAL_ROUND).aborts().kinds(),
+                "Decimal.round aborts where the rounded value has no place at the scale asked");
+        assertEquals(Set.of(AbortKind.REQUIRED_FORM_HAS_NO_PLACE),
+                program.kernel(Kernel.INT_TRUNCATING_DIVIDE).aborts().kinds(),
+                "truncatingDivide answers a zero divisor as a case and aborts only on the one pair"
+                        + " whose quotient no Int holds");
+        assertEquals(Set.of(AbortKind.DIVISION_BY_ZERO),
+                program.kernel(Kernel.INT_FLOOR_MOD).aborts().kinds(),
+                "floorMod aborts on a zero divisor like / does, and never overflows");
+        assertTrue(program.kernel(Kernel.STRING_LENGTH).aborts().isEmpty(),
+                "a kernel that never aborts still answers, with AbortSet.NONE");
+
+        for (Kernel kernel : Kernel.values()) {
+            // Refused rather than answered with a null, so asking is the assertion: every kernel
+            // the language has says whether and how it can end without a value.
+            assertNotNull(program.kernel(kernel).aborts(), () -> kernel + " answers no AbortSet");
+        }
+    }
+
+    /**
+     * A {@code String.matches} pattern composed under a local binding: {@code tail} is bound inside
+     * the body, so the composition is settled only where the checker folds it under the bindings in
+     * force — not by any walk that reads {@code Core} back after the fact, which finds a binding
+     * still a binding.
+     */
+    private static final String MATCHES_A_COMPOSED_LOCAL_PATTERN = """
+            module wit
+
+            behavior looksRight : (s: String) -> Bool
+
+            let looksRight (s) = {
+                let tail = "[0-9]{4}"
+                String.matches("AB-" ++ tail, s)
+            }
+            """;
+
+    /**
+     * The settled pattern text travels with the call that was checked against it, so an output reads
+     * it off {@code Core.Call} instead of folding the argument a second time.
+     *
+     * <p>{@code "AB-" ++ tail} is settled only under the bindings {@code looksRight}'s body holds in
+     * force, which is what makes this the case a second, weaker constant evaluator misses: {@code
+     * tail} is still a binding in {@code Core}, and only the checker's own fold saw through it.
+     */
+    @Test
+    void theSettledPatternOfAStringMatchesCallTravelsWithTheCall() {
+        CheckedProgram program = CheckedProgram.of(List.of(MATCHES_A_COMPOSED_LOCAL_PATTERN));
+        Core body = ((CheckedImplementation.Body)
+                named(program.module("wit"), "looksRight").implementation()).body();
+
+        Core.Call matches = null;
+        for (Core node : everyNodeOf(body)) {
+            if (node instanceof Core.Call call
+                    && call.fn() instanceof Core.Reached.OfKernel kernel
+                    && kernel.kernel() == Kernel.STRING_MATCHES) {
+                matches = call;
+            }
+        }
+        assertNotNull(matches, "the body reaches String.matches");
+
+        Core.KernelFact.StringMatches pattern = assertInstanceOf(
+                Core.KernelFact.StringMatches.class, factOf(matches),
+                "the checker settled this call's pattern, and the call carries it");
+        assertEquals("AB-[0-9]{4}", pattern.written(),
+                "settled under the binding the body holds in force, not read back from the argument");
+        assertEquals(new PatternRead.Read(pattern.meaning()), PatternParser.read("AB-[0-9]{4}"),
+                "and what it means is what the language's reader reads that text as, so an output"
+                        + " lowers the meaning and reads no text");
+    }
+
+    /**
+     * Every kernel call says what it takes each of its arguments as, and each argument is of that
+     * type: an output holding a slot to the type its position takes reads it off the call, without
+     * substituting the kernel's signature under a rule of its own. And no other kernel carries a
+     * fact: a pattern is {@code String.matches}'s own.
+     */
+    @Test
+    void aKernelCallSaysWhatItTakesEachArgumentAs() {
+        CheckedProgram program = checked(CALLS_THE_LIBRARY);
+        Core body = ((CheckedImplementation.Body)
+                named(program.module("demo"), "tidy").implementation()).body();
+
+        int kernelCalls = 0;
+        for (Core node : everyNodeOf(body)) {
+            if (node instanceof Core.Call call
+                    && call.fn() instanceof Core.Reached.OfKernel kernel) {
+                kernelCalls++;
+                Core.CallSettlement.AtKernel settled = assertInstanceOf(
+                        Core.CallSettlement.AtKernel.class, call.settlement(),
+                        kernel.rendered() + " says what it takes");
+                assertEquals(call.args().stream().map(Core::type).toList(), settled.takes(),
+                        kernel.rendered() + " holds each argument at what it takes it as");
+                assertEquals(Core.KernelFact.None.INSTANCE, settled.fact(),
+                        kernel.rendered() + " settles nothing beyond what it takes and answers");
+            }
+        }
+        assertTrue(kernelCalls > 0, "the body reaches a kernel");
+    }
+
+    /** What the checker settled about one kernel's application beside what it takes. */
+    private static Core.KernelFact factOf(Core.Call call) {
+        return assertInstanceOf(Core.CallSettlement.AtKernel.class, call.settlement(),
+                call.name() + " is a kernel's application").fact();
+    }
+
+    // --- an ordering-sensitive kernel's checked subject travels with the call, the way
+    // String.matches's pattern does (issue #1859) ---
+
+    // One module, one checked() call — CheckedProgram.of reads the whole standard library per
+    // distinct source (this class's own fixture-cost comment above), so the three cases below share
+    // a single compile rather than paying it three times over.
+    private static final String ORDERS_LISTS_THREE_WAYS = """
+            module demo
+
+            data In = { ns: List<Int> }
+            data Out = { sorted: List<Int>, furthest: Int?, nearest: Int? }
+            data Row = { weight: Int }
+            data RowsIn = { rows: List<Row> }
+            data RowsOut = { sorted: List<Row> }
+            data EmptyOut = { sorted: List<Int> }
+            data Amount = Int
+            data Won
+            data Lost
+            data Stage = Won | Lost
+            data StageN = Stage
+            data CasesIn = { wons: List<Won>, amounts: List<Amount>, stages: List<StageN> }
+            data CasesOut = { wons: List<Won>, amounts: List<Amount>, stages: List<StageN> }
+
+            behavior run : (i: In) -> Out constructs Out
+            behavior sortByRun : (i: RowsIn) -> RowsOut constructs RowsOut
+            behavior emptyRun : () -> EmptyOut constructs EmptyOut
+            behavior casesRun : (i: CasesIn) -> CasesOut constructs CasesOut
+
+            let run (i) =
+                Out { sorted = List.sort(i.ns),
+                      furthest = List.max(i.ns),
+                      nearest = List.min(i.ns) }
+
+            let sortByRun (i) = RowsOut { sorted = List.sortBy(r -> r.weight, i.rows) }
+
+            let emptyRun = EmptyOut { sorted = List.sort([]) }
+
+            let casesRun (i) =
+                CasesOut { wons = List.sort(i.wons), amounts = List.sort(i.amounts),
+                           stages = List.sort(i.stages) }
+            """;
+
+    /** The one call in {@code body} reaching {@code kernel} — a fixture is written to hold exactly
+     *  one, so a reader does not have to say which. */
+    private static Core.Call callTo(Kernel kernel, Core body) {
+        Core.Call found = null;
+        for (Core node : everyNodeOf(body)) {
+            if (node instanceof Core.Call call
+                    && call.fn() instanceof Core.Reached.OfKernel k && k.kernel() == kernel) {
+                assertEquals(null, found, kernel.name() + " is reached more than once");
+                found = call;
+            }
+        }
+        assertNotNull(found, "the body reaches " + kernel.name());
+        return found;
+    }
+
+    /**
+     * {@code sort} and the two extremes settle the list's element — not the {@code List<Int>} or
+     * {@code Int?} the call itself answers, which a comparator has no use for.
+     */
+    @Test
+    void sortMaxAndMinSettleTheListsElement() {
+        CheckedProgram program = checked(ORDERS_LISTS_THREE_WAYS);
+        Core body = ((CheckedImplementation.Body)
+                named(program.module("demo"), "run").implementation()).body();
+
+        for (Kernel kernel : List.of(Kernel.LIST_SORT, Kernel.LIST_MAX, Kernel.LIST_MIN)) {
+            Core.KernelFact.OrderingSubject subject = assertInstanceOf(
+                    Core.KernelFact.OrderingSubject.class, factOf(callTo(kernel, body)),
+                    kernel.name() + " carries what the ordering requirement was checked against");
+            assertEquals(Type.INT, subject.type(),
+                    kernel.name() + "'s subject is the element, not the call's own result");
+        }
+    }
+
+    /**
+     * {@code sortBy} settles the key function's result, not the list's element — the two differ for
+     * every row this fixture sorts.
+     */
+    @Test
+    void sortBySettlesTheKeysResultNotTheListsElement() {
+        CheckedProgram program = checked(ORDERS_LISTS_THREE_WAYS);
+        Core body = ((CheckedImplementation.Body)
+                named(program.module("demo"), "sortByRun").implementation()).body();
+
+        Core.KernelFact.OrderingSubject subject = assertInstanceOf(
+                Core.KernelFact.OrderingSubject.class, factOf(callTo(Kernel.LIST_SORT_BY, body)),
+                "sortBy carries what the ordering requirement was checked against");
+        assertEquals(Type.INT, subject.type(),
+                "the subject is the key's result (Int), not the row it was read off");
+    }
+
+    /**
+     * An empty-list literal sorts to itself with no element to compare, so the ordering requirement
+     * is checked against {@code Nothing} rather than the settlement being dropped — {@code None}
+     * would say the requirement never ran, which is not what happened.
+     */
+    @Test
+    void sortingAnEmptyListLiteralSettlesNothingRatherThanNoSettlement() {
+        CheckedProgram program = checked(ORDERS_LISTS_THREE_WAYS);
+        Core body = ((CheckedImplementation.Body)
+                named(program.module("demo"), "emptyRun").implementation()).body();
+
+        Core.KernelFact.OrderingSubject subject = assertInstanceOf(
+                Core.KernelFact.OrderingSubject.class, factOf(callTo(Kernel.LIST_SORT, body)),
+                "the checker still settles a subject for an empty-list literal");
+        assertInstanceOf(Type.Nothing.class, subject.type(),
+                "the subject is Nothing, not an element this call never had");
+        assertEquals(Optional.empty(), subject.ordering(),
+                "there is no value to order, so nothing orders it");
+    }
+
+    /**
+     * What a sort orders its values by is settled and carried, as the enumeration listing a case and
+     * the number a quantity wraps — neither of which is the element type the call names.
+     */
+    @Test
+    void aSortSaysWhatOrdersItsElementAndNotOnlyWhatTheElementIs() {
+        CheckedProgram program = checked(ORDERS_LISTS_THREE_WAYS);
+        Core body = ((CheckedImplementation.Body)
+                named(program.module("demo"), "casesRun").implementation()).body();
+        List<String> ordered = new ArrayList<>();
+        for (Core node : everyNodeOf(body)) {
+            if (node instanceof Core.Call call
+                    && call.fn() instanceof Core.Reached.OfKernel k
+                    && k.kernel() == Kernel.LIST_SORT) {
+                Core.KernelFact.OrderingSubject subject = assertInstanceOf(
+                        Core.KernelFact.OrderingSubject.class, factOf(call));
+                ordered.add(Type.show(subject.type()) + " by "
+                        + Type.show(subject.ordering().orElseThrow().type()));
+            }
+        }
+        assertEquals(List.of("Won by Stage", "Amount by Int", "StageN by Stage"), ordered);
     }
 
     /** Every helper a call in {@code body} reaches, walking every node of it. */

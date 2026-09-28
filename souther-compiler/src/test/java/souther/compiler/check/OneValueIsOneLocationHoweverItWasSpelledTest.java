@@ -59,7 +59,8 @@ class OneValueIsOneLocationHoweverItWasSpelledTest {
         assertNull(of(new Core.Int(1, Type.INT, POS)));
         assertNull(of(new Core.Binary(BinOp.ADD,
                 new Core.Int(1, Type.INT, POS), new Core.Int(2, Type.INT, POS),
-                ConstructOccurrence.unwritten(), Type.INT, POS)));
+                Core.BinaryReading.AS_THEY_STAND, ConstructOccurrence.unwritten(), Type.INT,
+                POS)));
     }
 
     private static Core read(BindingId binding, String spelledAs) {

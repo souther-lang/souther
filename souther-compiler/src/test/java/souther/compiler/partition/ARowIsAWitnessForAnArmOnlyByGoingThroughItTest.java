@@ -93,7 +93,7 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
         Model model = Model.of(GATE);
         Set<ArmProbe> everyArm = model.read().arms().keySet();
 
-        FillResult filled = Generator.fill(model.subject(), List.of(),
+        FillResult filled = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),
                 // Seen doing everything the ways in name, and seen at no arm at all.
                 _ -> new Generator.Watched.Ran(waysWithoutTheArms(model)),
@@ -101,7 +101,7 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
 
         for (ArmProbe probe : everyArm) {
             assertFalse(filled.discharge().at(new Generator.ArmOwed(probe)) instanceof ArmDisposition.Built,
-                    () -> "no row goes through an arm nothing was seen at: " + filled.discharge().arms().values());
+                    () -> "no row goes through an arm nothing was seen at: " + GenerationFixtures.arms(filled.discharge()).values());
         }
         assertEquals(List.of(), filled.rows(),
                 () -> "so nothing is offered for one: " + filled.rows());
@@ -114,13 +114,13 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
         Model model = Model.of(GATE);
         Set<ArmProbe> everyArm = model.read().arms().keySet();
 
-        FillResult filled = Generator.fill(model.subject(), List.of(),
+        FillResult filled = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),
                 _ -> new Generator.Watched.Ran(everywhere(model, everyArm)),
                 List.of(), List.of(), List.copyOf(everyArm), Budgets.generation());
 
-        assertTrue(filled.discharge().arms().values().stream().allMatch(ArmDisposition.Built.class::isInstance),
-                () -> "each arm has a row through it: " + filled.discharge().arms().values());
+        assertTrue(GenerationFixtures.arms(filled.discharge()).values().stream().allMatch(ArmDisposition.Built.class::isInstance),
+                () -> "each arm has a row through it: " + GenerationFixtures.arms(filled.discharge()).values());
     }
 
     /** Everything the ways in name, and nothing at any arm. */

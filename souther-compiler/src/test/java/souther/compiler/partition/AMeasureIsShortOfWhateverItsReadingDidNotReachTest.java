@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.HowALineIsRead;
 import souther.compiler.query.PartitionEvidence;
 
 import java.util.List;
@@ -156,7 +157,8 @@ class AMeasureIsShortOfWhateverItsReadingDidNotReachTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return compilation.db()
-                .ask(new Adequacy.BoundaryReadings(compilation.modules().get(0)))
+                .ask(new Adequacy.BoundaryReadings(compilation.modules().get(0),
+                        HowALineIsRead.VALUES_COMPOSED))
                 .value().get(behavior);
     }
 }

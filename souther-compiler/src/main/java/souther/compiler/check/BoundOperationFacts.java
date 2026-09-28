@@ -3,12 +3,14 @@ package souther.compiler.check;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.Accumulation;
 import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.semantics.NumericResult;
-import souther.compiler.semantics.OperationSubject;
 import souther.compiler.semantics.ResultBound;
+import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
+import souther.compiler.types.BinOp;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -68,7 +70,7 @@ public final class BoundOperationFacts {
     private final Map<ValueName, List<ResultBound<DeclaredArgument>>> bounds;
     private final Map<ValueName, List<DeclaredArgument>> noSmallerThan;
     private final Map<ValueName, List<DefinitionCase<DeclaredArgument>>> cases;
-    private final Map<OperationSubject, Set<ValueName>> silences;
+    private final Map<BinOp, List<ValueName>> writtenAs;
 
     /** Made by the binder and by nothing else: what these are is what a binding came to, and a
      *  set of facts gathered anywhere else would say so of facts nothing bound. Counted from the
@@ -99,7 +101,26 @@ public final class BoundOperationFacts {
                 BoundOperationFact.ResultIsNoSmallerThan::container);
         cases = projected(BoundOperationFact.IsDefinedByCases.class,
                 BoundOperationFact.IsDefinedByCases::one);
-        silences = silences();
+        writtenAs = writtenAs();
+    }
+
+    /** Which operation computes what each operator computes, read off the arithmetic each of them
+     *  declares. */
+    private Map<BinOp, List<ValueName>> writtenAs() {
+        Map<BinOp, List<ValueName>> out = new LinkedHashMap<>();
+        for (ValueName operation : computesANumber()) {
+            NumericResult<DeclaredArgument> result = computesANumber(operation);
+            BinOp op = result == null ? null : result.computes().writtenAs();
+            if (op != null) {
+                List<ValueName> computing = out.get(op);
+                if (computing == null) {
+                    computing = new ArrayList<>();
+                    out.put(op, computing);
+                }
+                computing.add(operation);
+            }
+        }
+        return Collections.unmodifiableMap(out);
     }
 
     /** The facts of {@code kind} an operation carries, each read as {@code part}, by operation. */
@@ -113,30 +134,6 @@ public final class BoundOperationFacts {
             facts.forEach(each -> parts.add(part.apply(kind.cast(each))));
             out.put(operation, List.copyOf(parts));
         });
-        return Collections.unmodifiableMap(out);
-    }
-
-    /**
-     * The silences by what they are about, read off the filed facts.
-     *
-     * <p>A silence is a fact an operation carries several of — one per subject — so it is filed
-     * with that family and this is a second reading of the same list, by the subject a reader asks
-     * under. Two silences of one operation under one subject are refused here: the family admits
-     * several of a kind, and this is where what several may not be is said.
-     */
-    private Map<OperationSubject, Set<ValueName>> silences() {
-        Map<OperationSubject, Set<ValueName>> out = new LinkedHashMap<>();
-        several.getOrDefault(BoundOperationFact.SaysNothingOf.class, Map.of())
-                .forEach((operation, facts) -> facts.forEach(each -> {
-                    OperationSubject subject =
-                            ((BoundOperationFact.SaysNothingOf) each).subject();
-                    if (!out.computeIfAbsent(subject, _ -> new LinkedHashSet<>())
-                            .add(operation)) {
-                        throw new IllegalStateException(operation
-                                + " is declared to say nothing under " + subject + " twice");
-                    }
-                }));
-        out.replaceAll((_, named) -> Collections.unmodifiableSet(named));
         return Collections.unmodifiableMap(out);
     }
 
@@ -298,6 +295,25 @@ public final class BoundOperationFacts {
         return ones(BoundOperationFact.ComputesANumber.class);
     }
 
+    /**
+     * The operations computing what {@code op} computes, in the order the facts were declared.
+     *
+     * <p>What a reader has when it holds an operator and wants the operation whose account says how
+     * such a number is read and built. What an operator computes is declared with the arithmetic
+     * ({@link Arithmetic#writtenAs}), so this is an index over the declarations and not a second
+     * list of which operation an operator reaches.
+     *
+     * <p><b>All of them, because which one a call reached is the call's to settle.</b> An operator
+     * is written over whatever numbers the language has — the same {@code +} adds two whole numbers
+     * and two decimals — so the operations computing one arithmetic are as many as there are kinds
+     * of number, and a reader holding a call knows which kind it answered. Answered here as "one,
+     * or none where there are two", the first pair to arrive for an operator would take the answer
+     * away from every call of it, including the calls that were never ambiguous.
+     */
+    public List<ValueName> computing(BinOp op) {
+        return writtenAs.getOrDefault(op, List.of());
+    }
+
     /** The cases {@code operation}'s definition is written in, in the order declared, or an empty
      *  list where it answers none of the values it was given. */
     public List<DefinitionCase<DeclaredArgument>> isDefinedByCases(ValueName operation) {
@@ -307,11 +323,6 @@ public final class BoundOperationFacts {
     /** The operations that answer one of the values they were given. */
     public Set<ValueName> isDefinedByCases() {
         return cases.keySet();
-    }
-
-    /** The operations declared to say nothing under {@code subject}. */
-    public Set<ValueName> saysNothingOf(OperationSubject subject) {
-        return silences.getOrDefault(subject, Set.of());
     }
 
     /** What walking {@code operation}'s container comes to, and over which argument — or null where
@@ -332,8 +343,8 @@ public final class BoundOperationFacts {
     }
 
     /**
-     * What {@code operation} takes of the one value it is given, or null where the number it
-     * answers is not taken of one value.
+     * What {@code operation} takes of a value it is given whatever else it is given, or null where
+     * the number it answers is not taken of one value at all.
      *
      * <p>Declared, or read off the walk where the operation is one — and the second is the walk's
      * own reading ({@link BoundOperationFact.AccumulatesItsContainer#takenAs}), put beside the first
@@ -341,8 +352,8 @@ public final class BoundOperationFacts {
      * held where the declarations are bound ({@link NumericReadings}).
      */
     public TakenAs takenAs(ValueName operation) {
-        BoundOperationFact.AnswersANumberTakenOfTheOneValueItIsGiven declared =
-                one(BoundOperationFact.AnswersANumberTakenOfTheOneValueItIsGiven.class, operation);
+        BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven declared =
+                one(BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven.class, operation);
         if (declared != null) {
             return declared.how();
         }
@@ -351,14 +362,42 @@ public final class BoundOperationFacts {
     }
 
     /**
-     * The operations that answer a number taken of the one value they are given.
+     * The same for one call, where {@code arguments} is what the call's other arguments read as.
      *
-     * <p>The ones {@link #takenAs} answers for, which is not the same as the ones an account is
-     * declared of: a walk that adds up a container is read as one and its account is that walk.
+     * <p><b>Two questions, one wider than the other.</b> What an operation takes of a value it is
+     * given is a fact about the operation and is what {@link #takenAs(ValueName)} answers; whether
+     * a <em>call</em> of it is a number taken of one position can turn on what the call was given —
+     * a quotient by a written constant is such a number and a quotient by a name is not. So the
+     * second is asked with the arguments in hand, and the population an operation-level reader walks
+     * ({@link #answersANumberTakenOfItsArgument}) is the first and stays as wide as it was.
+     *
+     * <p>Derived and not declared. The account for such a call comes off the representation the
+     * operation already has ({@link BoundOperationFact.ComputesANumber#takenAs}), so the library
+     * still reads one operation's number one way and nothing here is a second account of it.
+     */
+    public TakenAs takenAs(ValueName operation, TakenArguments arguments) {
+        TakenAs declared = takenAs(operation);
+        if (declared != null) {
+            return declared;
+        }
+        BoundOperationFact.ComputesANumber computes =
+                one(BoundOperationFact.ComputesANumber.class, operation);
+        return computes == null ? null : computes.takenAs(arguments);
+    }
+
+    /**
+     * The operations that answer a number taken of a value they are given, whatever else they are
+     * given.
+     *
+     * <p>The ones {@link #takenAs(ValueName)} answers for, which is not the same as the ones an
+     * account is declared of: a walk that adds up a container is read as one and its account is
+     * that walk. Nor is it every operation some call of which is such a number: an account a call's
+     * own arguments settle belongs to the call ({@link #takenAs(ValueName, TakenArguments)}), and a
+     * reader walking operations is not holding one.
      */
     public Set<ValueName> answersANumberTakenOfItsArgument() {
         Set<ValueName> out = new LinkedHashSet<>(
-                ones(BoundOperationFact.AnswersANumberTakenOfTheOneValueItIsGiven.class));
+                ones(BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven.class));
         for (ValueName operation : accumulates()) {
             if (takenAs(operation) != null) {
                 out.add(operation);
@@ -372,7 +411,7 @@ public final class BoundOperationFacts {
     public Set<ValueName> countsWhatItIsGiven() {
         Set<ValueName> out = new LinkedHashSet<>();
         for (ValueName operation
-                : ones(BoundOperationFact.AnswersANumberTakenOfTheOneValueItIsGiven.class)) {
+                : ones(BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven.class)) {
             if (takenAs(operation) instanceof TakenAs.HowManyItHolds) {
                 out.add(operation);
             }

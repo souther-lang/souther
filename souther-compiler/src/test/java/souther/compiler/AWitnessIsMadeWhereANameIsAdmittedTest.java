@@ -6,6 +6,7 @@ import souther.compiler.check.CrossingMapKey;
 import souther.compiler.check.CrossingNominal;
 import souther.compiler.check.Sig;
 import souther.compiler.types.MapKeyRepresentation;
+import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
 import org.junit.jupiter.api.Test;
@@ -55,7 +56,7 @@ class AWitnessIsMadeWhereANameIsAdmittedTest {
     @Test
     void anOutputNamingATypeIsMadeOnlyWhereThatNameIsAdmitted() throws Exception {
         assertClosed(BoundaryOutput.Nominal.class, CrossingNominal.class);
-        assertClosed(BoundaryOutput.Cases.class, List.class);
+        assertClosed(BoundaryOutput.Cases.class, Type.Union.class);
     }
 
     @Test

@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ARuleNoReadingTakesIn;
 import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
@@ -36,7 +37,7 @@ class AnInputsReadingDoesNotDependOnWhichCompileBuiltItTest {
             """;
 
     /**
-     * And one no finite machine reads, so the reading is short of something a rule is answerable
+     * And one no reading takes in, so the reading is short of something a rule is answerable
      * for.
      *
      * <p>Beside the one above and not instead of it. What a reading holds of a rule it took in and
@@ -48,8 +49,8 @@ class AnInputsReadingDoesNotDependOnWhichCompileBuiltItTest {
             module shop.prices exposing ( Amount )
 
             data Amount = String
-                invariant shape = String.matches("(a+)\\\\1.*", value)
-            """;
+                invariant shape = UNREAD
+            """.replace("UNREAD", ARuleNoReadingTakesIn.narrowly("value"));
 
     private static final String IMPORTING = """
             module shop.cart exposing ( Basket, paidOn )
@@ -76,7 +77,7 @@ class AnInputsReadingDoesNotDependOnWhichCompileBuiltItTest {
             let paidOn (t) = t.paid.value
 
             example paidOn
-                | "one" : (Basket { paid = Amount { value = "aabb" } }) -> "aabb"
+                | "one" : (Basket { paid = Amount { value = "2a" } }) -> "2a"
             """;
 
     @Test
@@ -85,7 +86,7 @@ class AnInputsReadingDoesNotDependOnWhichCompileBuiltItTest {
     }
 
     @Test
-    void andSoWhereTheDeclarationWritesARuleNoFiniteMachineReads() {
+    void andSoWhereTheDeclarationWritesARuleNoMachineIsMadeOf() {
         sameFromTwoCompiles(DECLARING_UNREADABLE, IMPORTING_STRING);
     }
 

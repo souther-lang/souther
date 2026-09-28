@@ -24,9 +24,11 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.query.ReadingReasons;
+import souther.compiler.query.RowDisposition;
 import souther.compiler.query.UnaskedReasons;
 import souther.compiler.query.WritabilityKnowledge;
 import souther.compiler.partition.ReadingGap;
+import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.Clause;
@@ -35,6 +37,9 @@ import souther.compiler.report.AdequacyReport;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.RuleOrigin;
+import souther.compiler.publish.MaterialisationRegionWord;
+import souther.compiler.publish.RegionSlotWord;
+import souther.compiler.publish.ThroughStepWord;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.ValueName;
 
@@ -278,7 +283,9 @@ class EverySchemaWordIsAccountedForTest {
         Map<String, String> spelling = new LinkedHashMap<>();
         spelling.put("OnePositionCannotBeBoth", "the_way_needs_one_position_to_be_two");
         spelling.put("AnArmNothingReaches", "an_arm_nothing_reaches");
+        spelling.put("TheRulesLeaveNoValueForIt", "the_rules_leave_no_value_for_it");
         spelling.put("AComposedRowWentElsewhere", "a_composed_row_went_elsewhere");
+        spelling.put("AComposedRowWasShortOfTheWay", "a_composed_row_was_short_of_the_way");
         spelling.put("CouldNotTellWhereTheRowWent", "the_rule_the_row_took_could_not_be_told");
         spelling.put("NothingWatchedTheRow", "nothing_watched_the_row");
         spelling.put("NothingWasComposedToTry", "nothing_was_composed_to_try");
@@ -350,6 +357,17 @@ class EverySchemaWordIsAccountedForTest {
             new LinkedHashSet<>(List.of("complete", "partial", "unavailable"));
 
     /**
+     * What a decision of a body is written as in the identity of a combination.
+     *
+     * <p>The image of the projection and not the arms of {@link souther.compiler.reading.Condition}
+     * read back: what a reading calls its own arms is this compiler's business, and the words a
+     * consumer keys on are the ones the writer can write. Which is
+     * {@code theDecisionWordsAreWhatTheWriterCanWrite}'s to hold against the writer.
+     */
+    private static final Set<String> DECISION_WORDS =
+            new LinkedHashSet<>(List.of("case", "comparison", "arm"));
+
+    /**
      * Every enumerated field the schema has.
      *
      * <p>Written out rather than discovered. A test that walked the schema for `enum` and looked for
@@ -359,6 +377,19 @@ class EverySchemaWordIsAccountedForTest {
     private static final List<Vocabulary> VOCABULARIES = List.of(
             new Vocabulary("adequacy", List.of("properties", "adequacy"),
                     AdequacyReport.AdequacyStatus.class),
+            // What a construct's copy was made by, and how a build's region is named: which of the
+            // two a step is, which way its region is told, and which of a construct's regions it is.
+            new Vocabulary("through[].kind",
+                    List.of("$defs", "combinationObligationId", "properties", "decisions", "items",
+                            "properties", "construct", "properties", "through", "items",
+                            "properties", "kind"),
+                    ThroughStepWord.class),
+            new Vocabulary("materialisationRegion.kind",
+                    List.of("$defs", "materialisationRegion", "properties", "kind"),
+                    MaterialisationRegionWord.class),
+            new Vocabulary("materialisationRegion.slot",
+                    List.of("$defs", "materialisationRegion", "properties", "slot"),
+                    RegionSlotWord.class),
             // What one thing keeping that verdict open says about a wider run. Its own enum and its
             // own field: the words are the compiler's, and which of them a fact answers is decided
             // where the fact is made rather than read back off the kind beside it here — one kind
@@ -372,7 +403,7 @@ class EverySchemaWordIsAccountedForTest {
             // the writer spelled its words as literals and nothing could be pointed at them.
             new Vocabulary("keptOpenBy[].kind",
                     List.of("$defs", "adequacyOpening", "properties", "kind"),
-                    Set.of("probe_mapping_lost", "row_did_not_finish"),
+                    Set.of("probe_mapping_lost", "row_did_not_finish", "bodies_not_elaborated"),
                     Incompleteness.Code.class,
                     souther.compiler.publish.WeakeningWord.class,
                     souther.compiler.publish.AdequacyOpeningWord.class),
@@ -392,7 +423,19 @@ class EverySchemaWordIsAccountedForTest {
             // inside the compiler is not a change to the contract, and would be one if this read
             // the constants.
             new Vocabulary("status", List.of("$defs", "status"), STATUS_WORDS),
+            // Which kind of decision a combination is of. Written as the words rather than as the
+            // reading's arms, for the reason `status` is: the document promises what the writer
+            // writes, and a reading renaming one of its own cases is not a change to the contract.
+            new Vocabulary("combinationObligationId.decisions[].kind",
+                    List.of("$defs", "combinationObligationId", "properties", "decisions", "items",
+                            "properties", "kind"),
+                    DECISION_WORDS),
+            // `bodies_not_elaborated` said of one behavior's arms that its module had not been
+            // elaborated, which is one quantifier too wide: an evaluation image holds some of a
+            // module's bodies and not others, so the measure now says the behavior whose body was
+            // not read. Retired rather than gone, for the reason `probe_mapping_lost` is.
             Vocabulary.of("branch.reason", List.of("$defs", "branch", "properties", "reason"),
+                    Set.of("bodies_not_elaborated"),
                     Adequacy.BranchEvidence.class),
             // Why nobody read which rules of a body's decision the rows took. Its own field beside
             // the branch's, because the two measures fall short of different things: an arm is one
@@ -401,6 +444,14 @@ class EverySchemaWordIsAccountedForTest {
             Vocabulary.of("decision.coverage.reason",
                     List.of("$defs", "decision", "properties", "coverage", "properties", "reason"),
                     souther.compiler.query.DecisionEvidence.class),
+            // Why nobody read which combinations of a body's decisions the rows made. Its own
+            // field beside the decision's, because the two measures fall short of different
+            // things: a reading that placed no run has said nothing about the rules, and one that
+            // read no account has said nothing about the meetings.
+            Vocabulary.of("interaction.coverage.reason",
+                    List.of("$defs", "interaction", "properties", "coverage", "properties",
+                            "reason"),
+                    souther.compiler.query.InteractionEvidence.class),
             // Whether a row is owed at one rule at all, which is a different question from whether
             // one took it. Spelled here and held against the answers a search may come to, so an
             // answer added to that vocabulary is one somebody gives a word rather than one a
@@ -497,6 +548,11 @@ class EverySchemaWordIsAccountedForTest {
                     List.of("$defs", "branch", "properties", "obligations", "items", "properties",
                             "disposition"),
                     List.of(ArmDisposition.class), armDispositionWords(), Set.of()),
+            // Where the row account puts a row, spelled by the writer for the same reason.
+            new Vocabulary("behavior.rowObligations[].disposition",
+                    List.of("$defs", "behavior", "properties", "rowObligations", "items",
+                            "properties", "disposition"),
+                    List.of(RowDisposition.class), rowDispositionWords(), Set.of()),
             new Vocabulary("branch.obligations[].notCountedBecause",
                     List.of("$defs", "branch", "properties", "obligations", "items", "properties",
                             "notCountedBecause"),
@@ -582,7 +638,9 @@ class EverySchemaWordIsAccountedForTest {
                     ItemAssessment.Coverage.CouldNotAsk.class),
             new Vocabulary("partition.pairs.reason",
                     List.of("$defs", "partition", "properties", "pairs", "properties", "reason"),
-                    PartitionEvidence.PairSpace.NoRows.class, souther.compiler.query.NothingWasAsked.class),
+                    PartitionEvidence.PairSpace.NoRows.class,
+                    PartitionEvidence.PairSpace.TooLarge.class,
+                    souther.compiler.query.NothingWasAsked.class),
             new Vocabulary("signature.reason", List.of("$defs", "signature", "properties", "reason"),
                     Adequacy.SignatureEvidence.NotASum.class,
                     Adequacy.SignatureEvidence.NoRows.class, souther.compiler.query.NothingWasAsked.class),
@@ -605,7 +663,7 @@ class EverySchemaWordIsAccountedForTest {
             // observation codes, and named the row without its source, so two rows of one behavior
             // were one word. Retired rather than gone, for the reason `probe_mapping_lost` is.
             new Vocabulary("weakening[]", List.of("$defs", "weakening", "items"),
-                    Set.of("probe_mapping_lost", "row_did_not_finish"),
+                    Set.of("probe_mapping_lost", "row_did_not_finish", "bodies_not_elaborated"),
                     Incompleteness.Code.class,
                     souther.compiler.publish.WeakeningWord.class),
             new Vocabulary("incompleteness.scope",
@@ -706,9 +764,11 @@ class EverySchemaWordIsAccountedForTest {
         return List.of(
                 new ObligationDisposition.Met(),
                 new ObligationDisposition.Unmet(),
+                new ObligationDisposition.Refuted(),
                 ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped(
-                                ReadingReasons.of(List.of(ReadingGap.NO_VALUE))))),
+                                ReadingReasons.of(List.of(ReadingGap.NO_VALUE),
+                                        StandingAtAPoint.ReadingsTried.EVERY_ONE)))),
                 ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty.WhetherARowIsThere.NothingWasRead(
                                 UnaskedReasons.of(
@@ -750,6 +810,13 @@ class EverySchemaWordIsAccountedForTest {
     /** The dispositions a document may name, spelled by the one writer of the field. */
     private static Set<String> dispositionWords() {
         return dispositions().stream()
+                .map(AdequacyReport::wire)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    /** Where the row account puts a row, spelled by the one writer of the field. */
+    private static Set<String> rowDispositionWords() {
+        return Arrays.stream(RowDisposition.values())
                 .map(AdequacyReport::wire)
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
@@ -827,6 +894,24 @@ class EverySchemaWordIsAccountedForTest {
             written.add(AdequacyReport.wire(status));
         }
         assertEquals(STATUS_WORDS, written);
+    }
+
+    /**
+     * A decision of a body has a word for every shape a reading of one can take.
+     *
+     * <p>The writer's switch over those shapes is what makes it say so — an arm added to the
+     * reading does not compile until it is given a word — and this is the other half: that the
+     * words the schema allows are as many as there are shapes, so an arm given the word of another
+     * is a document keying two things alike.
+     *
+     * <p>Counted rather than matched on names. What a reading calls its own arms is this compiler's
+     * and moves; how many kinds of decision a document can carry is the contract.
+     */
+    @Test
+    void everyShapeOfADecisionHasAWordOfItsOwn() {
+        assertEquals(souther.compiler.reading.Condition.class.getPermittedSubclasses().length,
+                DECISION_WORDS.size(),
+                "a shape of a decision the document has no word of its own for");
     }
 
     /**
@@ -1126,7 +1211,12 @@ class EverySchemaWordIsAccountedForTest {
             // is short of it, and the document leaves those sections out rather than writing each
             // of them a reason: `behavior_boundary_not_derived` is a `weakening` word, and is held
             // as one above.
-            souther.compiler.query.BoundaryForMeasurement.NotDerived.class);
+            souther.compiler.query.BoundaryForMeasurement.NotDerived.class,
+            // A coverage item's own place on the order the exact arithmetic could not read. What a
+            // document carries for this is `items_place_not_worked_out`, a `weakening` word held as
+            // one above; this reason is `weakeningSource()`'s own, for a reader asking one point's
+            // status directly rather than reading a border's weakening set.
+            souther.compiler.query.ItemAssessment.PlaceCouldNotBeWorkedOut.class);
     }
 
     /**

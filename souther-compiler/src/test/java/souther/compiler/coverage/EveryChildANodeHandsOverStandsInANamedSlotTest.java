@@ -1,6 +1,5 @@
 package souther.compiler.coverage;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.conformance.ConformanceCorpus;
@@ -8,6 +7,7 @@ import souther.compiler.core.Core;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.test.ClosedWorldContract;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -39,7 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * elsewhere, rather than of a model written to have one of everything. A model like that says what
  * its author remembered to put in it.
  */
-@Tag("population")
+@ClosedWorldContract
 class EveryChildANodeHandsOverStandsInANamedSlotTest {
 
     @Test
@@ -107,7 +107,8 @@ class EveryChildANodeHandsOverStandsInANamedSlotTest {
         assertEquals(List.of("BinaryLeft", "BinaryRight", "BlockBody", "CallArgument",
                         "ConstructedAttempt", "ConstructedElse", "ConstructedThen", "FieldTarget",
                         "FieldValue", "IfCondition", "IfElse", "IfThen", "LetBody", "LetValue",
-                        "ListElement", "MatchCase", "MatchScrutinee", "NegOperand", "SomeValue"),
+                        "ListElement", "MatchCase", "MatchScrutinee", "NegOperand", "SomeValue",
+                        "WidenedValue"),
                 List.copyOf(met),
                 "which slots the models put something in, and so which slots the checks above are"
                         + " about");

@@ -138,7 +138,8 @@ class CompileHigherOrderIntrinsicTest {
 
                 let run (i) = Out { total = List.sum(i.xs) }
                 """));
-        assertTrue(e.getMessage().contains("`List.sum` needs a list of Int or Decimal"), e.getMessage());
+        assertTrue(e.getMessage().contains("`List.sum` needs a list of Int, Decimal or Rational"),
+                e.getMessage());
     }
 
     /** A key answering something with no natural order is refused for what the key answers. */

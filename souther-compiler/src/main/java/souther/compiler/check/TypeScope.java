@@ -4,6 +4,7 @@ import souther.compiler.ast.WrittenName;
 import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.LanguageCaseId;
+import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
 
@@ -77,14 +78,20 @@ public final class TypeScope {
      * when it is none of those.
      */
     Denotation resolveCase(WrittenName written) {
-        return switch (written.canonical()) {
-            case "Int", "String", "Bool", "Decimal", "Date", "Time", "DateTime", "Instant", "Raw" ->
-                    new Denotation.Denotes(TypeSymbol.primitive(written.canonical()));
-            case "DivisionByZero", "NotANumber", "NotADate", "NotATime" ->
-                    new Denotation.Denotes(new TypeSymbol.LanguageCase(
-                            LanguageCaseId.named(written.canonical())));
-            default -> resolve(written);
-        };
+        // Both sets are read from the tables that close them rather than spelled again here. Written
+        // out, each list was the set as it stood when somebody last looked: a primitive added to the
+        // language resolved nowhere as an arm's name, and a case the runtime declares would be a name
+        // this answered nothing for.
+        String spelling = written.canonical();
+        Type.Prim primitive = Type.Prim.named(spelling);
+        if (primitive != null) {
+            return new Denotation.Denotes(TypeSymbol.primitive(spelling));
+        }
+        LanguageCaseId given = LanguageCaseId.named(spelling);
+        if (given != null && given.isNamedAsALanguageCase()) {
+            return new Denotation.Denotes(new TypeSymbol.LanguageCase(given));
+        }
+        return resolve(written);
     }
 
     /** What the written name {@code written} denotes here. Accepts a bare name, a
@@ -289,10 +296,9 @@ public final class TypeScope {
 
     /** Whether the module that declares {@code name} exposes it — its own names always count. */
     public boolean isExposed(TypeSymbol name) {
-        // What the language and its library give is reachable from everywhere and kept from nobody.
-        // The library's modules write no `exposing` line, and a rule about what a module keeps to
-        // itself is a rule about a module of the compilation — asking it of `souther.decimal` reads
-        // an empty answer as a decision that module made.
+        // What the language and its library give is reachable from everywhere and kept from nobody,
+        // which is the language's to say and not a clause's: a rule about what a module keeps to
+        // itself is a rule about a module of the compilation, and `souther.decimal` is not one.
         if (!(name instanceof TypeSymbol.AtModule at)
                 || name.equals(languageNames.get(name.name()))) {
             return true;

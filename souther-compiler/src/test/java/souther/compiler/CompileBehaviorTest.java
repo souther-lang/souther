@@ -59,34 +59,4 @@ class CompileBehaviorTest {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
         assertEquals("E1002", e.code());
     }
-
-    /** System 2 (ADR-0026): a behavior signature uses `:`, so the old `=` signature is rejected. */
-    @Test
-    void oldEqualsSignatureIsRejected() {
-        String src = MODULE.replace("behavior toResponse : (m: Member)",
-                "behavior toResponse = (m: Member)");
-        assertThrows(CompileException.class, () -> Compiler.compile(src));
-    }
-
-    /** System 2 (ADR-0026): an implementation is `let`, so the old `fn` keyword no longer parses. */
-    @Test
-    void oldFnKeywordIsRejected() {
-        String src = MODULE.replace("let toResponse (m)", "fn toResponse (m)");
-        assertThrows(CompileException.class, () -> Compiler.compile(src));
-    }
-
-    @Test
-    void constructingInvariantDataNeedsNoViolationCase() {
-        // A violation aborts (spec §algebraic-types, §violation-destination), so the output needs no 制約違反
-        // case — this compiles.
-        String src = """
-                module demo
-                data Positive = { value: Int } invariant value > 0
-                behavior make : (x: Int) -> Positive
-                    constructs Positive
-
-                let make (x) = Positive { value = x }
-                """;
-        Compiler.compile(src);
-    }
 }

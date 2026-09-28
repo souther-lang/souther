@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.observe.RunSensitivity;
+
 /**
  * A population this compiler offers some of rather than all of.
  *
@@ -46,5 +48,46 @@ public enum CompositionRepertoire {
      * leave a pair for anywhere but at that one place come back with nothing composed, and read as
      * an answer about the rules it says the model refuses a relation it satisfies.
      */
-    PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE
+    PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE,
+
+    /**
+     * The values that answer several of their own numbers at once.
+     *
+     * <p>A location asked for two numbers is one value to write, and how a value with both is come
+     * by depends on how its numbers are reached: a number that is a place in the spelling of what
+     * stands there is written at, one whose values come of a run of the place's own is solved for,
+     * and one read off a value the group already asks for is read off the values that demand
+     * admits, and one it is composed out of is composed for. Which groups those are is the
+     * realizer's to say and is not spelled out here; what this names is the values left over, whose
+     * numbers are reached none of those ways — two totals of one container are two spreadings of
+     * one list of elements at once, and nothing here writes that.
+     *
+     * <p>So a group nothing built a value for is not a group no value answers. Raising anything
+     * reaches none of them; what would is somebody writing the solving.
+     */
+    VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS,
+
+    /**
+     * The places inside one run of an order that this compiler names a value at.
+     *
+     * <p>It names one. Where the order has a smallest step there are others to step to and nothing
+     * here steps to them; where it has none — a decimal, a moment — there is no step to take at
+     * all, and the one place the run gives up is the whole of what this compiler can name in it.
+     * Raising anything reaches none of the rest, which is what makes this a population and not a
+     * figure: what would reach them is a way of naming a second place in a run.
+     *
+     * <p>So a class whose one named place builds nothing is not a class with no value in it. Read
+     * as a figure, an author is told to raise a number that changes nothing; read as an answer
+     * about the model, they are told the range holds no value when what happened is that this
+     * compiler tried one of them.
+     */
+    PLACES_IN_A_RUN_THAT_ARE_NAMED;
+
+    /**
+     * Whether a wider run could reach the rest: never, since raising anything reaches none of it.
+     * What would is somebody writing the rest, which is no run of this compiler.
+     */
+    public RunSensitivity runSensitivity() {
+        return RunSensitivity.UNAFFECTED;
+    }
 }

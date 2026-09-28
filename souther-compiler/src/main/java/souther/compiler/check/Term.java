@@ -8,8 +8,10 @@ import souther.compiler.types.ValueName;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * What the invariant-discharge check names a value by — the identity two writings of one value
@@ -106,10 +108,10 @@ final class Term {
          * apart because an optional's carrier is a case of a type this compiler declares and can
          * cancel against the {@code Some} that built it, and a union's case is neither.
          *
-         * <p>Not every case result takes this. Where the language has a second spelling for the same
-         * arithmetic, the value is named by that arithmetic — the {@code Int} of {@code Int.divide}
-         * is {@code a / b} and is one term with the written divide (spec
-         * §invariant-discharge-arithmetic).
+         * <p>Not every case result takes this. Where an operation's value case carries what some
+         * arithmetic computes, the value is named by that arithmetic rather than by the case it
+         * arrived at — the {@code Int} of {@code Int.truncatingDivide(a, b)} is the truncating
+         * quotient of the two and is filed as one (spec §invariant-discharge-arithmetic).
          */
         OPENED(Payload.of(souther.compiler.types.Type.class)),
         /**
@@ -222,6 +224,7 @@ final class Term {
     private final List<Term> parts;
     private final int hash;
 
+
     /**
      * How a term's hash is mixed with the hashes of its parts.
      *
@@ -254,6 +257,8 @@ final class Term {
         ITS_ELEMENTS,
         /** Each of its elements, in no order — what a set's own equality reads. */
         ITS_UNORDERED_ELEMENTS,
+        /** The one element it holds, or that it holds none. */
+        ITS_ELEMENT_IF_ANY,
         /** The value it says stands for it ({@link SaysWhatStandsForIt}). */
         THE_PARTS_IT_NAMES,
         /** Nothing here takes a value of this class. */
@@ -290,6 +295,9 @@ final class Term {
         }
         if (java.util.Set.class.isAssignableFrom(type)) {
             return Rule.ITS_UNORDERED_ELEMENTS;
+        }
+        if (type == Optional.class) {
+            return Rule.ITS_ELEMENT_IF_ANY;
         }
         // Asked before the question about records, because a value that keeps the number it is
         // asked for is a class here and may hold its parts in a record all the same: what it says
@@ -408,9 +416,144 @@ final class Term {
             case ITS_COMPONENTS, THE_PARTS_IT_NAMES -> componentsOf(value, type);
             case ITS_ELEMENTS -> elementsOf((List<?>) value);
             case ITS_UNORDERED_ELEMENTS -> unorderedOf((java.util.Set<?>) value);
+            case ITS_ELEMENT_IF_ANY -> optionalOf((Optional<?>) value);
             case NONE_HERE -> throw new IllegalStateException(
                     "nothing says what a term hashed from a " + type.getName() + " is hashed from");
         };
+    }
+
+    /**
+     * The one order a walk of several terms takes them in.
+     *
+     * <p><b>The same walk the hash takes, compared instead of added up.</b> What a term is told
+     * apart by is its shape, what that shape carries and its parts, and {@link #hashOf} already says
+     * how each kind of carried thing is read without ever reaching which object it is. So the order
+     * is read off the same places — the shape, then what it carries, then its parts one by one — and
+     * two terms that are equal come out level here for the same reason they are hashed alike.
+     *
+     * <p><b>Compared, and never written out.</b> A term is a graph and not a tree: a value named
+     * twice by the value before it, over a chain of them, is one part read twice at each link.
+     * Written out, what stands for such a term doubles at each link; compared, each pair of parts is
+     * compared once ({@link Ordering}) and the comparison is as long as the graph.
+     *
+     * <p><b>And not off {@link #rendered}.</b> That is for a person: it drops what the algebra tells
+     * two apart by — an evaluation renders as what was written and where, and two evaluations of one
+     * line in one place are two values. A walk put in an order by renderings would take such a pair
+     * for one term and weigh one of them twice and the other never.
+     *
+     * <p><b>Weaker than equality, and said so.</b> What a value names as standing for it is only
+     * ever something its equality agrees with ({@link SaysWhatStandsForIt}), so two terms written
+     * alike here are not thereby one term. That is the whole of what an order may be built on, and
+     * where the gap is reached it is refused rather than chosen through — see
+     * {@link souther.compiler.numeric.CanonicalForm#entriesIn}.
+     */
+    static int inOneOrder(Term one, Term other) {
+        return new Ordering().compare(one, other);
+    }
+
+    /**
+     * One comparison of two terms, holding what each pair of their parts came to.
+     *
+     * <p>Held by identity, since a part read twice is one object read twice, and for one comparison
+     * and not beyond it. Two terms built by two interners are equal and not the same object, and a
+     * pair of them is compared once however many places the graph reaches it from.
+     */
+    private static final class Ordering {
+
+        private final Map<Term, Map<Term, Integer>> compared = new IdentityHashMap<>();
+
+        int compare(Term one, Term other) {
+            if (one == other) {
+                return 0;
+            }
+            Map<Term, Integer> against = compared.computeIfAbsent(one, _ -> new IdentityHashMap<>());
+            Integer known = against.get(other);
+            if (known == null) {
+                known = comparedOnce(one, other);
+                against.put(other, known);
+            }
+            return known;
+        }
+
+        private int comparedOnce(Term one, Term other) {
+            int by = one.shape.name().compareTo(other.shape.name());
+            if (by != 0) {
+                return by;
+            }
+            by = textOf(one.of).compareTo(textOf(other.of));
+            if (by != 0) {
+                return by;
+            }
+            List<Term> these = inOrder(one);
+            List<Term> those = inOrder(other);
+            for (int at = 0; at < Math.min(these.size(), those.size()); at++) {
+                by = compare(these.get(at), those.get(at));
+                if (by != 0) {
+                    return by;
+                }
+            }
+            return Integer.compare(these.size(), those.size());
+        }
+
+        /** The parts in the order they are compared in. An equality is between two values and not
+         *  from one to the other, so its two are taken in one order however they were built — the
+         *  same thing the hash does by adding them. */
+        private List<Term> inOrder(Term term) {
+            if (term.shape != Shape.EQ) {
+                return term.parts;
+            }
+            Term first = term.parts.get(0);
+            Term second = term.parts.get(1);
+            return compare(first, second) <= 0 ? term.parts : List.of(second, first);
+        }
+    }
+
+    /** What stands for a value a shape carries, taken the way {@link #hashOf} takes it. */
+    private static String textOf(Object value) {
+        if (value == null) {
+            return "";
+        }
+        Class<?> type = value.getClass();
+        return switch (ruleFor(type)) {
+            case ITS_OWN_HASH -> value.toString();
+            case AN_ENUM_BY_NAME -> ((Enum<?>) value).name();
+            case ITS_COMPONENTS, THE_PARTS_IT_NAMES -> componentTextOf(value, type);
+            case ITS_ELEMENTS -> elementTextOf((List<?>) value);
+            case ITS_UNORDERED_ELEMENTS -> unorderedTextOf((java.util.Set<?>) value);
+            case ITS_ELEMENT_IF_ANY -> optionalTextOf((Optional<?>) value);
+            case NONE_HERE -> throw new IllegalStateException(
+                    "nothing says what a term carrying a " + type.getName() + " is walked by");
+        };
+    }
+
+    private static String componentTextOf(Object value, Class<?> type) {
+        StringBuilder sb = new StringBuilder(type.getName()).append('{');
+        for (java.lang.invoke.MethodHandle accessor : ACCESSORS.get(type)) {
+            try {
+                sb.append(textOf((Object) accessor.invokeExact(value))).append(';');
+            } catch (Throwable e) {
+                throw new IllegalStateException("a " + type.getName() + " does not answer one of"
+                        + " what it holds", e);
+            }
+        }
+        return sb.append('}').toString();
+    }
+
+    private static String elementTextOf(List<?> values) {
+        StringBuilder sb = new StringBuilder("[");
+        for (Object value : values) {
+            sb.append(textOf(value)).append(';');
+        }
+        return sb.append(']').toString();
+    }
+
+    /** What a set holds, written so that the answer does not depend on the order it hands them over
+     *  in — which is what its own equality reads, the same reason {@link #unorderedOf} adds them. */
+    private static String unorderedTextOf(java.util.Set<?> values) {
+        List<String> each = new java.util.ArrayList<>();
+        values.forEach(value -> each.add(textOf(value)));
+        each.sort(null);
+        return each.toString();
     }
 
     /** What a set holds, taken so that the answer does not depend on the order it hands them over
@@ -438,6 +581,18 @@ final class Term {
             }
         }
         return h;
+    }
+
+    /** What {@link #elementsOf} gives the list of the one element {@code value} holds, or of none,
+     *  without making the list. */
+    private static int optionalOf(Optional<?> value) {
+        return value.isPresent() ? MIX + hashOf(value.get()) : 0;
+    }
+
+    /** What {@link #elementTextOf} gives the list of the one element {@code value} holds, or of
+     *  none, without making the list. */
+    private static String optionalTextOf(Optional<?> value) {
+        return value.isPresent() ? "[" + textOf(value.get()) + ";]" : "[]";
     }
 
     private static int elementsOf(List<?> values) {
@@ -478,21 +633,44 @@ final class Term {
         return hash;
     }
 
+    /**
+     * Structural, as the type says. Two terms built by two interners are two graphs, and a part read
+     * twice in one is read twice in the other, so each pair of parts is compared once for the whole
+     * question and a pair found equal is not asked again.
+     */
     @Override
     public boolean equals(Object other) {
-        if (this == other) {
+        return other instanceof Term term && same(this, term, new IdentityHashMap<>());
+    }
+
+    private static boolean same(Term one, Term other, Map<Term, Map<Term, Boolean>> met) {
+        if (one == other) {
             return true;
         }
-        if (!(other instanceof Term term) || term.hash != hash || term.shape != shape
-                || !java.util.Objects.equals(term.of, of)) {
+        if (other.hash != one.hash || other.shape != one.shape
+                || !java.util.Objects.equals(other.of, one.of)
+                || other.parts.size() != one.parts.size()) {
             return false;
         }
-        if (shape == Shape.EQ) {
-            return (parts.get(0).equals(term.parts.get(0)) && parts.get(1).equals(term.parts.get(1)))
-                    || (parts.get(0).equals(term.parts.get(1))
-                            && parts.get(1).equals(term.parts.get(0)));
+        Map<Term, Boolean> against = met.computeIfAbsent(one, _ -> new IdentityHashMap<>());
+        Boolean known = against.get(other);
+        if (known != null) {
+            return known;
         }
-        return parts.equals(term.parts);
+        boolean answer;
+        if (one.shape == Shape.EQ) {
+            List<Term> a = one.parts;
+            List<Term> b = other.parts;
+            answer = (same(a.get(0), b.get(0), met) && same(a.get(1), b.get(1), met))
+                    || (same(a.get(0), b.get(1), met) && same(a.get(1), b.get(0), met));
+        } else {
+            answer = true;
+            for (int at = 0; at < one.parts.size() && answer; at++) {
+                answer = same(one.parts.get(at), other.parts.get(at), met);
+            }
+        }
+        against.put(other, answer);
+        return answer;
     }
 
     /**

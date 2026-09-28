@@ -17,7 +17,7 @@ import java.util.Set;
  * <p>A missing end is no bound that way, not a bound at nothing. A position this says nothing about
  * runs the whole way in both directions.
  */
-public record Box<A>(Map<A, RationalCut> atLeast, Map<A, RationalCut> atMost) {
+public record Box<A>(Map<A, ExactCut> atLeast, Map<A, ExactCut> atMost) {
 
     public Box {
         atLeast = Map.copyOf(atLeast);
@@ -29,12 +29,12 @@ public record Box<A>(Map<A, RationalCut> atLeast, Map<A, RationalCut> atMost) {
     }
 
     /** The tightest {@code atom >= …} this holds, or {@code null} for no bound below. */
-    public RationalCut leastOf(A atom) {
+    public ExactCut leastOf(A atom) {
         return atLeast.get(atom);
     }
 
     /** The tightest {@code atom <= …} this holds, or {@code null} for no bound above. */
-    public RationalCut mostOf(A atom) {
+    public ExactCut mostOf(A atom) {
         return atMost.get(atom);
     }
 
@@ -51,11 +51,11 @@ public record Box<A>(Map<A, RationalCut> atLeast, Map<A, RationalCut> atMost) {
      * <p>Both directions at once, because a reduction hands back what it found on either side and
      * the two are one answer about the position.
      */
-    public Box<A> meeting(Map<A, RationalCut> foundAtLeast, Map<A, RationalCut> foundAtMost) {
-        Map<A, RationalCut> least = new LinkedHashMap<>(atLeast);
-        foundAtLeast.forEach((atom, cut) -> least.merge(atom, cut, RationalCut::tighterLower));
-        Map<A, RationalCut> most = new LinkedHashMap<>(atMost);
-        foundAtMost.forEach((atom, cut) -> most.merge(atom, cut, RationalCut::tighterUpper));
+    public Box<A> meeting(Map<A, ExactCut> foundAtLeast, Map<A, ExactCut> foundAtMost) {
+        Map<A, ExactCut> least = new LinkedHashMap<>(atLeast);
+        foundAtLeast.forEach((atom, cut) -> least.merge(atom, cut, ExactCut::tighterLower));
+        Map<A, ExactCut> most = new LinkedHashMap<>(atMost);
+        foundAtMost.forEach((atom, cut) -> most.merge(atom, cut, ExactCut::tighterUpper));
         return new Box<>(least, most);
     }
 
@@ -67,8 +67,8 @@ public record Box<A>(Map<A, RationalCut> atLeast, Map<A, RationalCut> atMost) {
      * them to fall back on.
      */
     public boolean holdsAValueAt(A atom) {
-        RationalCut low = atLeast.get(atom);
-        RationalCut high = atMost.get(atom);
+        ExactCut low = atLeast.get(atom);
+        ExactCut high = atMost.get(atom);
         if (low == null || high == null) {
             return true;
         }

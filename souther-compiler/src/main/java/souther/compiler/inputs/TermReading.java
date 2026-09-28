@@ -3,13 +3,21 @@ package souther.compiler.inputs;
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Dates;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.semantics.Arithmetic;
+import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.Objects;
 
 import souther.compiler.inputs.NumericTerm.Reading;
+import souther.unicode.ScalarValues;
 
 /**
  * The number a term names at an observation of its position, or why there is none.
@@ -62,7 +70,7 @@ final class TermReading {
         }
         return switch (term) {
             case NumericTerm.ValueOf _ -> asItStands(at, observed);
-            case NumericTerm.TakenOf taken -> taken(taken.takenAs(), at, on);
+            case NumericTerm.TakenOf taken -> taken(taken.takenAs(), taken.arguments(), at, on);
         };
     }
 
@@ -97,8 +105,8 @@ final class TermReading {
         }
         return switch (term.takenAs()) {
             case TakenAs.TheSumOfWhatItHolds _ -> addedUp(values, on);
-            case TakenAs.HowManyItHolds _, TakenAs.PartOfTime _, TakenAs.PartOfDate _ ->
-                    new Reading.NotNumber();
+            case TakenAs.HowManyItHolds _, TakenAs.PartOfTime _, TakenAs.PartOfDate _,
+                    TakenAs.TheTruncatingQuotient _ -> new Reading.NotNumber();
         };
     }
 
@@ -127,12 +135,47 @@ final class TermReading {
      * nothing to say so with — and a container is written on no order at all, so the one that adds
      * its elements up is handed nothing.
      */
-    private static Reading taken(TakenAs how, ObservedValue at, TermOrders on) {
+    private static Reading taken(TakenAs how, TakenArguments arguments, ObservedValue at,
+                                 TermOrders on) {
         return switch (how) {
             case TakenAs.HowManyItHolds _ -> howMany(at);
             case TakenAs.TheSumOfWhatItHolds _ -> addedUp(at, on);
             case TakenAs.PartOfTime taken -> partOfTime(taken.part(), at, on.observed());
             case TakenAs.PartOfDate taken -> partOfDate(taken.part(), at, on.observed());
+            case TakenAs.TheTruncatingQuotient taken ->
+                    quotient(taken.read(arguments), at, on.observed());
+        };
+    }
+
+    /**
+     * The whole-number quotient of an observed value by the divisor the term carries.
+     *
+     * <p>Divided the way the operator divides — toward zero — so what is read off a row is the
+     * number that row's run computes and not a rounding of it. Both ends are the same order here: a
+     * whole number and its quotient are counted by one, so the value is read and the answer given
+     * on the order the position is written on.
+     *
+     * <p>No divisor is a term nothing built: a taking whose divisor reads as no constant, or as
+     * nought, is refused where the term is made. Answered here as an observation of the wrong shape
+     * is, so that a reader reaching it is told what it has rather than stopped.
+     */
+    private static Reading quotient(BigDecimal by, ObservedValue at, Carrier observed) {
+        if (observed == null || by == null || by.signum() == 0) {
+            return new Reading.NotNumber();
+        }
+        Place read = observed.placeOf(at);
+        if (!(read instanceof Count count)) {
+            return new Reading.NotNumber();
+        }
+        // A quotient past the end of what a whole number holds is one no run answers: the smallest
+        // of them over minus one is a number the operator aborts at rather than a number a row has.
+        // Asked of the carrier, which is where what a whole number stops at is answered.
+        return switch (Arithmetic.ATruncatingQuotient.quotientOf(count.at(), by)) {
+            case ExactAnswer.Unheld<BigDecimal> unheld -> new Reading.NotWorkedOut(unheld.why());
+            case ExactAnswer.Held<BigDecimal> held -> {
+                Place quotient = observed.onTheGrid(new Count(held.value()));
+                yield quotient == null ? new Reading.NotNumber() : new Reading.Number(quotient);
+            }
         };
     }
 
@@ -141,14 +184,12 @@ final class TermReading {
      *
      * <p>Read off the observation under the premise {@link NumericTerm.TakenOf} states: the
      * operation and what it is applied to agree, so counting what is there counts what was asked
-     * for. A string counts in code points, as {@code Strings.length} does — counting UTF-16 units
-     * here would put a boundary one place away from the rule that drew it for every string outside
-     * the basic plane.
+     * for. A string counts in scalar values, by the count the run time's {@code String.length}
+     * answers with ({@link ScalarValues#count}).
      */
     private static Reading howMany(ObservedValue at) {
         return switch (at) {
-            case ObservedValue.Text t -> new Reading.Number(
-                    Count.of(t.value().codePointCount(0, t.value().length())));
+            case ObservedValue.Text t -> new Reading.Number(Count.of(ScalarValues.count(t.value())));
             case ObservedValue.Sequence s -> new Reading.Number(Count.of(s.elements().size()));
             case ObservedValue.Mapping m -> new Reading.Number(Count.of(m.entries().size()));
             case null, default -> new Reading.NotNumber();
@@ -190,7 +231,7 @@ final class TermReading {
         if (elements == null) {
             return new Reading.NotNumber();
         }
-        java.math.BigDecimal total = java.math.BigDecimal.ZERO;
+        ExactRatio total = ExactRatio.ZERO;
         for (ObservedValue each : values) {
             Membership.Incomplete unread = Membership.unread(each);
             if (unread != null) {
@@ -205,9 +246,22 @@ final class TermReading {
             if (!(read instanceof Count count)) {
                 return new Reading.NotNumber();
             }
-            total = total.add(count.at());
+            // A container may hold a model's own decimals, spaced as widely apart in scale as any
+            // two of them this compiler ever adds — the same hazard `check.ConstantAlgebra` guards
+            // against when a rule adds two of them. The values are numbers and the sum is a number
+            // of them; what a sum this wide meets is the exact arithmetic's own limit and not a
+            // question about whether this term is one, so it is read as `NotWorkedOut` rather than
+            // let throw or folded into a sentence that says the values are not numbers at all.
+            ExactAnswer<ExactRatio> summed = total.plus(count.exactly());
+            if (summed instanceof ExactAnswer.Unheld<ExactRatio> unheld) {
+                return new Reading.NotWorkedOut(unheld.why());
+            }
+            total = ((ExactAnswer.Held<ExactRatio>) summed).value();
         }
-        return new Reading.Number(new Count(total));
+        BigDecimal written = total.asWrittenDecimal();
+        return written == null
+                ? new Reading.NotWorkedOut(UnheldNumber.NO_REPRESENTATION_EXISTS)
+                : new Reading.Number(new Count(written));
     }
 
     /**
@@ -233,10 +287,15 @@ final class TermReading {
         if (!(read instanceof Count count)) {
             return new Reading.NotNumber();
         }
-        java.math.BigDecimal seconds = count.at();
-        return new Reading.Number(Count.of(seconds
-                .divideToIntegralValue(java.math.BigDecimal.valueOf(part.seconds()))
-                .remainder(java.math.BigDecimal.valueOf(part.many()))));
+        // Divided as numbers: which hour, minute or second a count of seconds falls in is a fact
+        // about the number and not the places it came written to, and the whole number of this
+        // part's seconds in it is one the exact arithmetic says it could not hold rather than
+        // one a decimal division throws over.
+        return switch (count.exactly().dividedBy(ExactRatio.of(part.seconds())).truncated()) {
+            case ExactAnswer.Unheld<BigInteger> unheld -> new Reading.NotWorkedOut(unheld.why());
+            case ExactAnswer.Held<BigInteger> whole -> new Reading.Number(Count.of(new BigDecimal(
+                    whole.value().remainder(BigInteger.valueOf(part.many())))));
+        };
     }
 
     /**
@@ -261,7 +320,7 @@ final class TermReading {
         // A place that is not a count is not a date. No operation declaring this arm is given
         // anything else, so this is the observation being something other than what the position
         // declares, which is what `NotNumber` says.
-        if (!(read instanceof Count count)) {
+        if (!(read instanceof Count count) || observed.onTheGrid(count) == null) {
             return new Reading.NotNumber();
         }
         java.time.LocalDate date = Dates.dateAt(count);

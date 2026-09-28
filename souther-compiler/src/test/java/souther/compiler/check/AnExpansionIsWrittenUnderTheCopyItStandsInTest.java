@@ -111,7 +111,7 @@ class AnExpansionIsWrittenUnderTheCopyItStandsInTest {
         Ast.Module parsed = CstFrontend.parse(source);
         HelperInliner inliner = HelperInliner.forModule(
                 Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get())),
-                DefaultStdlib.get());
+                DefaultStdlib.get(), ValueAtAReference.COPIED);
         return inliner.inline(
                 inliner.held().get(new DefinitionName(helper)).definition().writtenBody(),
                 inliner.bodyOf(helper));

@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.core.ConstraintProjection;
 import souther.compiler.core.Core;
 import souther.compiler.core.ValueShape;
 import souther.compiler.diag.CompileException;
@@ -12,6 +13,7 @@ import souther.compiler.types.Type;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * What a value of a declared data is made of and what must hold of one, elaborated once.
@@ -28,11 +30,11 @@ import java.util.Map;
  * clause was written on: an answer keyed by where a clause was written would be short exactly the
  * clauses a construction has to satisfy.
  *
- * <p>And every one of them comes out of one derived world. What a clause states depends on the
- * representation its declaration is read in — a helper the declaring module expanded is still a
- * call in the form resolution left, under a name that means nothing where this stands — while what
- * a clause is called and where it was written do not. This is the reading that runs, so it is the
- * settled form it wants, and the world it asks is the one that has it.
+ * <p>And every one of them is the settled form. What a clause states depends on the representation
+ * its declaration is read in — a helper the declaring module expanded is still a call in the form
+ * resolution left, under a name that means nothing where this stands — while what a clause is called
+ * and where it was written do not. This is the reading that runs, so it is handed the clauses as they
+ * were settled, reaching what they name as the module building the value reaches it.
  */
 public final class ExecutableInvariants {
 
@@ -42,36 +44,52 @@ public final class ExecutableInvariants {
      * {@code data} as it is built and checked.
      *
      * <p>{@code data} says which declaration values are being built of, and decides nothing about
-     * how any declaration is read: the rules that govern it — its own and every one a spread brings
-     * in — are read through {@code symbols}, this one included. A node is what a caller of this
-     * already holds, and what would go wrong if it decided the reading is that the declaration
-     * asked about would be at whichever stage the caller was at and the ones under it at whichever
-     * the world reads.
+     * how any clause reads: the rules that govern it — its own and every one a spread brings in —
+     * are {@code governing}, answered for the module building it. The node is where the fields are
+     * read from and nothing more.
      *
+     * @param governing the settled clauses that govern {@code data}, as the module building it
+     *     reaches what they name — the answer the module's emitted methods are read off too
      * @param helpers the signatures of the recursive helpers a clause may reach — the same table the
      *     body check reads, because a clause naming a total helper names the same one a body does
+     * @param form the clauses in the representation the boundary's constraints are read from
+     * @param statements what each part of a clause states in that representation
      * @throws CompileException where a clause is not a condition
      */
-    public static ValueShape of(Hir.Data data, DerivedSymbols symbols,
+    public static ValueShape of(Hir.Data data, List<GoverningInvariant> governing,
+                                DerivedSymbols symbols,
                                 PublishedDeclarations published, DeclarationKinds kinds,
-                                NewtypeInners inners,
-                                Map<String, Type> helpers) {
+                                NewtypeInners inners, EffectiveFieldTypes fieldTypes,
+                                Map<String, Type> helpers, ExpandedClauseLookup form,
+                                InvariantStatements statements) {
         Map<String, Type> types = TypeOps.fieldTypes(data, symbols);
         Map<String, BindingId> bindings =
                 TypeOps.fieldBindings(data.declares(), symbols);
         List<ValueShape.Field> fields = new ArrayList<>();
-        // In the order a value lays its fields out, which is what `fieldTypes` answers. The bindings
-        // are a walk of their own and answer in an order of nothing's deciding, so what is read off
-        // them is the binding of a field this one named.
-        types.forEach((field, type) -> fields.add(
-                new ValueShape.Field(field, type, bindings.get(field))));
+        // In the order a value lays its fields out, asked of what answers that. The two beside it
+        // are read by name: which type stands at a name and which binding it is are mappings and
+        // say nothing about where the field stands, so taking the order off either would be reading
+        // something neither of them answers.
+        for (String field : TypeOps.fieldLayout(data, symbols)) {
+            fields.add(new ValueShape.Field(field, types.get(field), bindings.get(field)));
+        }
 
         Scope reading = DataChecker.fieldScope(data.declares(), types,
                 FieldBindings.asWritten(symbols)).reaching(helpers);
         CheckContext ctx =
-                CheckContext.executableInvariant(symbols, published, kinds, inners, data);
+                CheckContext.executableInvariant(symbols, new DeclarationAccess(published, kinds,
+                        inners, fieldTypes, FieldLayout.asWritten(symbols)), data);
+        // A constraint is about the value of a data made of one field, whichever form it was
+        // declared in: a newtype and a product of one field hold the same clauses of that field. A
+        // data of more fields has no one field for a constraint to be about, and each of its clauses
+        // is none.
+        Optional<BoundaryConstraints.Projections> projected = fields.size() == 1
+                ? Optional.of(BoundaryConstraints.of(symbols, data.declares(), fields.get(0), form,
+                        statements))
+                : Optional.empty();
         List<ValueShape.Invariant> invariants = new ArrayList<>();
-        for (Hir.InvariantClause clause : TypeOps.settledClausesGoverning(data.declares(), symbols)) {
+        for (GoverningInvariant governed : governing) {
+            Hir.InvariantClause clause = governed.settled().clause();
             // Desugared first, the way a body is: a clause writing a comprehension states the same
             // condition as the `if` it is derived from, and one of the two reaching the check and
             // the other reaching what runs is the shape this exists to stop.
@@ -81,7 +99,9 @@ public final class ExecutableInvariants {
                         .say(new DeclarationMessage.AnInvariantExpressionIsBool(
                                 Type.show(condition.type()))).build());
             }
-            invariants.add(new ValueShape.Invariant(clause.name(), condition));
+            invariants.add(new ValueShape.Invariant(clause.name(), condition,
+                    projected.map(projections -> projections.of(governed.id()))
+                            .orElseGet(ConstraintProjection::none)));
         }
         return new ValueShape(data.declares(), fields, invariants);
     }

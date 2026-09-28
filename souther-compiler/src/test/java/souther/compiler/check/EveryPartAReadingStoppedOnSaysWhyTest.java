@@ -187,8 +187,8 @@ class EveryPartAReadingStoppedOnSaysWhyTest {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), "N"));
         return FieldDomains.of(name,
-                RuleReadings.of(compilation, "demo"),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
     }
 
     /** What the reading of values was stopped by, over every question of every rule of the value. */

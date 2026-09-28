@@ -13,6 +13,7 @@ import souther.compiler.types.ReachName;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.TypeReachName;
 import souther.compiler.types.ValueName;
+import souther.exact.ExactDecimals;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -58,13 +59,32 @@ public record FixtureTemplate(String text, Hir.Expr value) {
     }
 
     public static FixtureTemplate integer(long value) {
+        // The smallest Int has no magnitude an Int holds, so it is one literal, as the source reads it.
+        if (value == Long.MIN_VALUE) {
+            return new FixtureTemplate(Long.toString(value), new Hir.IntLit(value, NOWHERE, NO_SOURCE));
+        }
         Hir.Expr magnitude = new Hir.IntLit(Math.abs(value), NOWHERE, NO_SOURCE);
         return new FixtureTemplate(Long.toString(value),
                 value < 0 ? new Hir.Neg(magnitude, NOWHERE, NO_SOURCE) : magnitude);
     }
 
+    /**
+     * A decimal, written at its own scale — or {@code null} where a model's own decimals put it far
+     * enough from an ordinary one that plain notation would cost more than building it did.
+     *
+     * <p>Exponent notation is not the answer here the way it is in a report: this language's grammar
+     * has none for a {@code Decimal} literal, so a row written that way would not be one a reader
+     * could paste back. Refusing it is the sound answer with less — the same one a candidate the
+     * rules admit nothing at already gets ({@link Generator.UnresolvedCombination.Reason#NOTHING_COMPOSES_ONE}) —
+     * rather than the cost every other place that writes such a value is already held to answering
+     * for.
+     */
     public static FixtureTemplate decimal(BigDecimal value) {
-        String written = value.stripTrailingZeros().toPlainString();
+        BigDecimal stripped = ExactDecimals.leastDigits(value);
+        if (!ExactDecimals.fitsPlainNotation(stripped)) {
+            return null;
+        }
+        String written = stripped.toPlainString();
         BigDecimal magnitude = value.abs();
         Hir.Expr literal = new Hir.DecimalLit(magnitude, NOWHERE, NO_SOURCE);
         return new FixtureTemplate(written + "m",
@@ -188,7 +208,7 @@ public record FixtureTemplate(String text, Hir.Expr value) {
      * came back missing the name in the middle.
      */
     public static FixtureTemplate on(Carrier carrier, Place at, TypeReachName.Naming naming) {
-        if (!carrier.extent().admits(at)) {
+        if (carrier.onTheGrid(at) == null) {
             return null;
         }
         return switch (carrier) {
@@ -207,7 +227,7 @@ public record FixtureTemplate(String text, Hir.Expr value) {
                             ? unitCase(written) : null;
             // A string stands for itself, so what a row carries is the string, escaped the way the
             // language reads one back.
-            case Carrier.Text _ -> string(at.key());
+            case Carrier.Text _ -> string(at.spelled());
         };
     }
 
@@ -265,22 +285,24 @@ public record FixtureTemplate(String text, Hir.Expr value) {
      * module-level {@code let} is a row an author writes today — the value is expanded where the
      * row is read — and this is that same row, composed.
      *
-     * <p>{@code occurrence} is which reference of the helper this is, and the run that composed it
-     * says so. The name reaches a declaration, so it is some reference of one; no source wrote it
-     * and no construct a source wrote is behind it, so nothing here could work one out — which is
-     * why it is taken and not minted. What the name reaches is {@code module} and {@code name}'s to
-     * answer, and the occurrence does not repeat it.
+     * <p>{@code reachedAs} is taken whole and not rebuilt: it already carries what the value
+     * denotes ({@link ReachName#denotes()}, what a fixture entry is keyed by) and how this module
+     * writes it ({@link ReachName#rendered()}, what the row prints) — for an imported value the two
+     * are not the same string, and reconstructing one from a spelling or a spelling from one is the
+     * rediscovery {@link ReachName}'s own doc refuses.
      *
-     * @param module     what the name belongs to, which is what a reader of the name resolves it
-     *                   through
-     * @param name       the name as this module writes it
+     * <p>{@code occurrence} is which reference of the value this is, and the run that composed it
+     * says so; no source wrote it and no construct a source wrote is behind it, so nothing here
+     * could work one out — which is why it is taken and not minted.
+     *
+     * @param reachedAs  the value, as this module reaches it
      * @param occurrence which reference this run composed, from {@link FixtureReferences}
      */
-    public static FixtureTemplate named(String module, String name,
+    public static FixtureTemplate named(ReachName.Declaration reachedAs,
                                         FixtureReferenceOrigin occurrence) {
-        ValueName.Helper helper = new ValueName.Helper(module, name);
-        return new FixtureTemplate(name,
-                Hir.Var.respelled(name, new ReachName.Own(helper), occurrence, NOWHERE, NO_SOURCE));
+        String written = reachedAs.rendered();
+        return new FixtureTemplate(written,
+                Hir.Var.respelled(written, reachedAs, occurrence, NOWHERE, NO_SOURCE));
     }
 
     /**

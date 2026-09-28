@@ -3,17 +3,18 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-
-import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -61,15 +62,18 @@ class WhatIsKnownBesideTheRulesIsSolvedWithThemTest {
         SearchRegion rules = region();
 
         // Nothing bounds the third, so the rules alone leave the sum nowhere in particular.
-        assertNull(rules.runsBetween(sum()).min(), "the third can be as far below nothing as it likes");
+        assertNull(runsBetween(rules, sum()).min(),
+                "the third can be as far below nothing as it likes");
 
         // And on its own the third is exactly what the caller said and no more, so a reader meeting
         // that onto the answer above would still have no floor for the sum.
         SearchRegion withAFloorUnderTheThird =
-                rules.assuming(LinearForm.atom(Z), Rel.GE);
-        assertEquals(Endpoint.inclusive(Count.of(0)), withAFloorUnderTheThird.runsBetween(Z).min());
+                rules.assuming(LinearForm.atom(Z), Rel.GE).taken();
+        assertEquals(Endpoint.inclusive(Count.of(0)),
+                runsBetween(withAFloorUnderTheThird, LinearForm.atom(Z)).min());
 
-        assertEquals(Endpoint.inclusive(Count.of(1)), withAFloorUnderTheThird.runsBetween(sum()).min(),
+        assertEquals(Endpoint.inclusive(Count.of(1)),
+                runsBetween(withAFloorUnderTheThird, sum()).min(),
                 "two of them come to one and the third is never below nought");
     }
 
@@ -79,17 +83,28 @@ class WhatIsKnownBesideTheRulesIsSolvedWithThemTest {
     void aFactAboutAPositionTheRulesDoNotNameChangesNothing() {
         SearchRegion rules = region();
 
-        assertEquals(rules.runsBetween(LinearForm.atom(X)),
-                rules.assuming(LinearForm.atom(Z), Rel.GE)
-                        .runsBetween(LinearForm.atom(X)));
+        assertEquals(runsBetween(rules, LinearForm.atom(X)),
+                runsBetween(rules.assuming(LinearForm.atom(Z), Rel.GE).taken(),
+                        LinearForm.atom(X)));
+    }
+
+    /** Where the form runs, of a region that holds something — which every region here does. */
+    private static NumericDomain.Bounds runsBetween(SearchRegion within,
+                                                    LinearForm<NumericTerm> form) {
+        return switch (within.projectionOf(form)) {
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds runs) -> runs;
+            case NumericDomain.FormProjection.NothingIsLeft _ ->
+                    throw new AssertionError("these rules leave a value: " + form);
+            case null -> null;
+        };
     }
 
     private static LinearForm<NumericTerm> sum() {
-        Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
-        coefs.put(X, BigDecimal.ONE);
-        coefs.put(Y, BigDecimal.ONE);
-        coefs.put(Z, BigDecimal.ONE);
-        return new LinearForm<>(BigDecimal.ZERO, coefs);
+        Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
+        coefs.put(X, ExactRatio.ONE);
+        coefs.put(Y, ExactRatio.ONE);
+        coefs.put(Z, ExactRatio.ONE);
+        return new LinearForm<>(ExactRatio.ZERO, coefs);
     }
 
     private static NumericTerm value(String field) {
@@ -103,7 +118,8 @@ class WhatIsKnownBesideTheRulesIsSolvedWithThemTest {
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
-        return InputDomain.of(sigs.get("take"), rules, ReadAs.THE_COMPILATION_DOES)
+        return InputDomain.of(sigs.get("take"),
+                        RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES))
                 .quantities(rules).region();
     }
 }

@@ -1,9 +1,9 @@
 package souther.runtime;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.ListIterator;
 
 import org.jspecify.annotations.Nullable;
 
@@ -112,41 +112,50 @@ public final class Lists {
         return acc;
     }
 
+    /** Every element through {@code f}, in order — not the self-hosted {@code List.map} a Souther
+     *  body writes (which folds over a first-class {@code Fn}), but the codegen-internal one a
+     *  crossing's canonicalization composes recursively for a nested container
+     *  ({@code CanonicalizeAtCrossing}): a plain {@link java.util.function.Function} the compiler
+     *  builds and binds at the crossing, not a value the domain can construct. */
+    public static <T> List<Object> map(java.util.function.Function<? super T, Object> f, List<T> xs) {
+        PersistentVector.Builder<Object> out = new PersistentVector.Builder<>();
+        for (T x : xs) {
+            out.add(f.apply(x));
+        }
+        return out.build();
+    }
+
     /** The list in reverse order (Elm {@code List.reverse}). A native primitive rather than a fold:
      *  a left fold can only prepend to build a reversed list, and prepending to an array-backed
-     *  vector is O(n) per step (O(n²) overall), so reversing walks the input from the end in O(n). */
+     *  vector is O(n) per step (O(n²) overall), so reversing walks the input from the end in O(n).
+     *  Walked in place, from its end, and not copied into an array first: a list holds more than an
+     *  array does ({@link Capacity}). */
     public static <T> List<T> reverse(List<? extends T> xs) {
-        Object[] a = xs.toArray();
-        PersistentVector<T> out = PersistentVector.empty();
-        for (int i = a.length - 1; i >= 0; i--) {
-            @SuppressWarnings("unchecked")
-            T e = (T) a[i];
-            out = out.append(e);
+        PersistentVector.Builder<T> out = new PersistentVector.Builder<>();
+        for (ListIterator<? extends T> back = xs.listIterator(xs.size()); back.hasPrevious(); ) {
+            out.add(back.previous());
         }
-        return out;
+        return out.build();
     }
 
     /** The consecutive integers from {@code from} to {@code to}, both ends included (Elm
      *  {@code List.rangeInclusive}); {@code from} above {@code to} gives the empty list. A primitive rather
      *  than a fold, because a fold needs a list to walk and this is what produces one.
      *
-     *  <p>A span longer than a list can hold aborts up front rather than filling memory until it
-     *  dies — an out-of-range bound is a model bug, not a business result, so it gets the treatment
-     *  {@link IntMath} gives an overflow. The width is computed before the walk because
-     *  {@code to - from} itself can overflow. */
+     *  <p>A span longer than a list holds ({@link Capacity#MOST_ELEMENTS}) aborts up front rather
+     *  than filling memory until it dies — an out-of-range bound is a model bug, not a business
+     *  result, so it gets the treatment {@link IntMath} gives an overflow. A span within it that the
+     *  heap cannot hold is the host's refusal and not this one. */
     public static List<Long> rangeInclusive(long from, long to) {
         if (from > to) {
             return PersistentVector.empty();
         }
-        long width = to - from + 1;
-        if (width <= 0 || width > Integer.MAX_VALUE) {
-            throw new ConstraintViolation("List.rangeInclusive is out of range: " + from + " to " + to);
-        }
-        PersistentVector<Long> out = PersistentVector.empty();
+        Capacity.span(from, to);
+        PersistentVector.Builder<Long> out = new PersistentVector.Builder<>();
         for (long i = from; ; i++) {
-            out = out.append(i);
+            out.add(i);
             if (i == to) {
-                return out;
+                return out.build();
             }
         }
     }
@@ -154,59 +163,80 @@ public final class Lists {
     /** The sum of a list of {@code Int} (Elm {@code List.sum}); the empty list is 0. Adds through
      *  the kernel the {@code +} operator uses, so a total past the range of an {@code Int} aborts
      *  here rather than wrapping. */
-    public static long sumInt(List<?> xs) {
+    public static long sumInt(List<Long> xs) {
         long acc = 0;
-        for (Object x : xs) {
-            acc = IntMath.addExact(acc, (Long) x);
+        for (long x : xs) {
+            acc = IntMath.addExact(acc, x);
         }
         return acc;
     }
 
     /** The product of a list of {@code Int} (Elm {@code List.product}); the empty list is 1. */
-    public static long productInt(List<?> xs) {
+    public static long productInt(List<Long> xs) {
         long acc = 1;
-        for (Object x : xs) {
-            acc = IntMath.multiplyExact(acc, (Long) x);
+        for (long x : xs) {
+            acc = IntMath.multiplyExact(acc, x);
         }
         return acc;
     }
 
-    /** The sum of a list of {@code Decimal}; the empty list is 0. {@code BigDecimal.add} keeps the
-     *  larger scale of its two operands, so the elements' own scales carry through the walk. */
-    public static BigDecimal sumDecimal(List<?> xs) {
+    /** The sum of a list of {@code Decimal}; the empty list is 0. Each step is {@code +}
+     *  ({@link DecimalMath#add}), which keeps the larger scale of its two operands, so the elements'
+     *  own scales carry through the walk and a sum past what a {@code Decimal} holds aborts as
+     *  {@code +} does. */
+    public static BigDecimal sumDecimal(List<BigDecimal> xs) {
         BigDecimal acc = BigDecimal.ZERO;
-        for (Object x : xs) {
-            acc = acc.add((BigDecimal) x);
+        for (BigDecimal x : xs) {
+            acc = DecimalMath.add(acc, x);
         }
         return acc;
     }
 
-    /** The product of a list of {@code Decimal}; the empty list is 1. */
-    public static BigDecimal productDecimal(List<?> xs) {
+    /** The product of a list of {@code Decimal}; the empty list is 1. Each step is {@code *}
+     *  ({@link DecimalMath#multiply}), and aborts where {@code *} does. */
+    public static BigDecimal productDecimal(List<BigDecimal> xs) {
         BigDecimal acc = BigDecimal.ONE;
-        for (Object x : xs) {
-            acc = acc.multiply((BigDecimal) x);
+        for (BigDecimal x : xs) {
+            acc = DecimalMath.multiply(acc, x);
+        }
+        return acc;
+    }
+
+    /** The sum of a list of {@code Rational}; the empty list is nought. Exact throughout — the
+     *  identity is the exact nought the type constructs, so there is no seed for an author to write
+     *  and no rounding anywhere in the walk. */
+    public static Rational sumRational(List<Rational> xs) {
+        Rational acc = Rational.ZERO;
+        for (Rational x : xs) {
+            acc = acc.plus(x);
+        }
+        return acc;
+    }
+
+    /** The product of a list of {@code Rational}; the empty list is one. */
+    public static Rational productRational(List<Rational> xs) {
+        Rational acc = Rational.ONE;
+        for (Rational x : xs) {
+            acc = acc.times(x);
         }
         return acc;
     }
 
     /** Sorts by the elements' natural order (Elm {@code List.sort}). The element type is a
-     *  {@link Comparable} — {@code String} and the {@code Int}/{@code Decimal} carriers all are —
-     *  and the input is left untouched. */
+     *  {@link Comparable} whose {@code compareTo} is the language's order — the {@code Int} and
+     *  {@code Decimal} carriers are — and the input is left untouched. Stable, through
+     *  {@link Sorting}, which holds as many elements as a list does. */
     @SuppressWarnings({"unchecked", "rawtypes"})
     public static <T> List<T> sort(List<? extends T> xs) {
-        List<T> out = new ArrayList<>(xs);
-        out.sort((a, b) -> ((Comparable) a).compareTo(b));
-        return PersistentVector.from(out);
+        return Sorting.stably(xs, (a, b) -> ((Comparable) a).compareTo(b));
     }
 
     /** As {@link #sort(List)}, ordering by {@code by} rather than by the element's natural order.
      *  An enumeration's order belongs to the sum, not to the case value — the same case may be
-     *  listed by two sums in different positions — so it arrives as a comparator. */
+     *  listed by two sums in different positions — so it arrives as a comparator. So does the order
+     *  of text ({@link Strings#ordering}), which is not what {@link String#compareTo} answers. */
     public static <T> List<T> sort(Comparator<Object> by, List<? extends T> xs) {
-        List<T> out = new ArrayList<>(xs);
-        out.sort((a, b) -> by.compare(a, b));
-        return PersistentVector.from(out);
+        return Sorting.stably(xs, by);
     }
 
     /** The greatest element by natural order, {@code None} for an empty list (Elm {@code List.maximum}).
@@ -251,18 +281,18 @@ public final class Lists {
     /** As {@link #sortBy(Fn, List)}, ordering the keys by {@code by} rather than naturally. */
     @SuppressWarnings({"unchecked", "rawtypes"})
     public static <T> List<T> sortBy(@Nullable Comparator<Object> by, Fn key, List<? extends T> xs) {
-        List<Object[]> decorated = new ArrayList<>(xs.size());
+        PersistentVector.Builder<Object[]> decorated = new PersistentVector.Builder<>();
         for (T x : xs) {
             decorated.add(new Object[] {x, key.apply(new Object[] {x})});
         }
-        decorated.sort(by == null
+        List<Object[]> sorted = Sorting.stably(decorated.build(), by == null
                 ? (a, b) -> ((Comparable) a[1]).compareTo(b[1])
                 : (a, b) -> by.compare(a[1], b[1]));
-        List<T> out = new ArrayList<>(decorated.size());
-        for (Object[] pair : decorated) {
+        PersistentVector.Builder<T> out = new PersistentVector.Builder<>();
+        for (Object[] pair : sorted) {
             out.add((T) pair[0]);
         }
-        return PersistentVector.from(out);
+        return out.build();
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})

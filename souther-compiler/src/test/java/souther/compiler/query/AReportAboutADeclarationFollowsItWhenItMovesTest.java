@@ -1,5 +1,8 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticPlace;
+import souther.compiler.diag.LabeledRegion;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Primary;
 import souther.compiler.meta.ModulePath;
@@ -13,6 +16,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 /**
  * A report about a declaration is sent where the declaration is now.
@@ -38,6 +42,38 @@ class AReportAboutADeclarationFollowsItWhenItMovesTest {
                 invariant value >= 1 && value <= 0
             """;
 
+    /** A rule another module is judged against, written above a declaration it says nothing about. */
+    private static final String RULED = """
+            module shop.prices exposing ( Amount )
+
+            data Amount = Int
+                invariant value >= 0
+
+            data Note = Int
+            """;
+
+    /** The same two declarations, written the other way round. Nothing is added or taken away. */
+    private static final String REORDERED = """
+            module shop.prices exposing ( Amount )
+
+            data Note = Int
+
+            data Amount = Int
+                invariant value >= 0
+            """;
+
+    /** Builds one, out of a number nothing here says anything about, so the rule is left standing
+     *  and the construction is warned about. */
+    private static final String BUILDING = """
+            module shop.cart exposing ( make )
+
+            import shop.prices ( Amount )
+
+            behavior make : (n: Int) -> Amount
+                constructs Amount
+            let make (n) = Amount(n)
+            """;
+
     @Test
     void movingTheDeclarationMovesTheCaretUnderIt() {
         Compilation c = Compilation.ofDocuments(Map.of("empty.sou", EMPTY), Set.of(),
@@ -56,6 +92,89 @@ class AReportAboutADeclarationFollowsItWhenItMovesTest {
                         + " the line it used to be on");
         assertEquals(before + 2, whereItIsReported(c),
                 "the report followed the declaration, but not to where it went");
+    }
+
+    /**
+     * A module that imports the declaration is warned about a rule of it, and that warning points at
+     * the rule where the rule is now — while the body it is about is not checked again.
+     *
+     * <p>The two halves of the boundary, held at once. A body judged against an imported rule means
+     * what it meant when the rule is written somewhere else, so nothing about it is worked out
+     * again; the report it raised says where that rule is, which is somewhere else than it was. A
+     * reader depending on one answer for both can satisfy either of these and not the two together —
+     * keeping the body keeps the caret where it was, and moving the caret checks the body again.
+     *
+     * <p>The declarations are written in the other order rather than pushed down the file. Where
+     * something stands is which of the things written in the text it is, so a line above it moves
+     * nothing and a report would follow it with no question asked of anybody.
+     */
+    @Test
+    void aWarningAboutAnImportedRuleFollowsItWithoutCheckingTheBodyAgain() {
+        Compilation c = compiling(RULED);
+        Answer<?> judged = c.db().ask(new Bodies.CheckedBehavior("shop.cart", "make"));
+        int primary = whereTheWarningIs(c);
+        int secondary = whereTheRuleIsQuoted(c);
+
+        edit(c, REORDERED);
+
+        assertSame(judged, c.db().ask(new Bodies.CheckedBehavior("shop.cart", "make")),
+                "the rule says what it said, so the body judged against it was not judged again");
+        assertEquals(primary, whereTheWarningIs(c),
+                "and the warning is still about the construction it was about");
+        assertNotEquals(secondary, whereTheRuleIsQuoted(c),
+                "the rule was written further down the file and the warning still quotes the line"
+                        + " it used to be on");
+        assertEquals(secondary + 2, whereTheRuleIsQuoted(c),
+                "the warning followed the rule, but not to where it went");
+    }
+
+    /** The line the one warning about this workspace puts its caret on. */
+    private static int whereTheWarningIs(Compilation c) {
+        Primary primary = theOneWarning(c).primary();
+        if (primary instanceof Primary.InSource in) {
+            return c.texts().resolve(in.place().region().start()).line();
+        }
+        throw new AssertionError("the warning is supposed to point at the construction, and points "
+                + primary + " instead");
+    }
+
+    /** The line the one warning about this workspace quotes the rule from. */
+    private static int whereTheRuleIsQuoted(Compilation c) {
+        List<LabeledRegion> quoted = theOneWarning(c).secondary();
+        assertEquals(1, quoted.size(),
+                "the warning is supposed to quote the one rule it is about: " + quoted);
+        DiagnosticPlace place = quoted.getFirst().place();
+        if (place instanceof DiagnosticPlace.InSource in) {
+            return c.texts().resolve(in.region().start()).line();
+        }
+        throw new AssertionError("the rule is written in this workspace, and the warning quotes it "
+                + place + " instead");
+    }
+
+    private static Diagnostic theOneWarning(Compilation c) {
+        List<Located> warnings = c.warnings();
+        assertEquals(1, warnings.size(),
+                "this workspace is supposed to be warned about exactly one thing: " + warnings);
+        return warnings.getFirst().diagnostic();
+    }
+
+    /** The workspace with the declaring module written over, and the importer where it was. */
+    private static void edit(Compilation c, String prices) {
+        Map<String, String> edited = new LinkedHashMap<>();
+        edited.put("prices.sou", prices);
+        edited.put("cart.sou", BUILDING);
+        c.update(edited, Set.of());
+        c.answerEverything();
+    }
+
+    private static Compilation compiling(String prices) {
+        Map<String, String> byId = new LinkedHashMap<>();
+        byId.put("prices.sou", prices);
+        byId.put("cart.sou", BUILDING);
+        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        c.answerEverything();
+        assertEquals(List.of(), c.errors(), "this workspace is supposed to compile");
+        return c;
     }
 
     /** The line the one report about this workspace puts its caret on. */

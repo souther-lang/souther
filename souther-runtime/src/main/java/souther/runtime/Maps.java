@@ -2,7 +2,6 @@ package souther.runtime;
 
 import org.jspecify.annotations.Nullable;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -12,9 +11,9 @@ import java.util.Map;
  *  so a {@code groupBy} that grows a map is O(n log n) rather than the O(n²) a whole-map copy costs.
  *  The language specifies no iteration order, and it is not insertion order; two maps that are equal
  *  are not guaranteed to iterate in the same order, so a caller may depend on no particular one
- *  ({@link PersistentHashMap}). The boundary does not depend on it either — a boundary map is written
- *  in ascending order of its rendered keys ({@link Representations#sortedObject}) — so that order is
- *  specified and this one is not. Inputs may be any {@code java.util.Map}
+ *  ({@link PersistentHashMap}). The boundary does not depend on it either — this runtime writes a
+ *  boundary map in ascending order of its rendered keys ({@link Representations#sortedObject}), so
+ *  the bytes follow from the keys and not from the trie. Inputs may be any {@code java.util.Map}
  *  (a decoded map comes from Raoh as a {@code LinkedHashMap}), so builders normalize through
  *  {@link PersistentHashMap#from}. */
 public final class Maps {
@@ -100,11 +99,11 @@ public final class Maps {
     /** The entries as a list of {@code (key, value)} tuples (ADR-0036), in the map's iteration
      *  order. */
     public static <K, V> List<Tuple> toList(Map<K, V> m) {
-        List<Tuple> out = new ArrayList<>(m.size());
+        PersistentVector.Builder<Tuple> out = new PersistentVector.Builder<>();
         for (Map.Entry<K, V> e : m.entrySet()) {
             out.add(Tuple.of(e.getKey(), e.getValue()));
         }
-        return PersistentVector.from(out);
+        return out.build();
     }
 
     /** A map from a list of {@code (key, value)} tuples; a later entry overwrites an earlier one
@@ -176,5 +175,41 @@ public final class Maps {
     public static <K, V> Map<String, V> mapKeysWith(java.util.function.Function<K, ?> keyFn,
                                                     Map<K, V> m) {
         return mapKeys(m, keyFn);
+    }
+
+    /** Key and value through {@code keyFn}/{@code valueFn} in one pass, for a crossing's
+     *  canonicalization ({@code CanonicalizeAtCrossing}) — not {@link #mapKeysWith}, which the
+     *  encoder also calls and which overwrites on a collision because the encoder's own keys are
+     *  already known distinct before it renders them. A crossing's keys are not: a Java-supplied
+     *  {@code Map} can hold two keys, canonically equivalent to each other, that were two entries
+     *  before the invariant was established and would be one silently dropped entry after — the
+     *  same shape of loss a derived decoder refuses outright as {@code duplicate_key}. This aborts
+     *  the same way rather than choosing a survivor. Either function may be
+     *  {@code Function.identity()} where that half of the crossing does not reach a {@code String}. */
+    public static Map<Object, Object> canonicalizeWith(Map<Object, Object> m,
+                                                        java.util.function.Function<Object, Object> keyFn,
+                                                        java.util.function.Function<Object, Object> valueFn) {
+        Map<Object, Object> canonicalToOriginal = new java.util.HashMap<>();
+        PersistentHashMap.Builder<Object, Object> out = new PersistentHashMap.Builder<>();
+        for (Map.Entry<Object, Object> e : m.entrySet()) {
+            Object canonicalKey = keyFn.apply(e.getKey());
+            Object priorOriginal = canonicalToOriginal.putIfAbsent(canonicalKey, e.getKey());
+            if (priorOriginal != null && !priorOriginal.equals(e.getKey())) {
+                throw new ConstraintViolation("two distinct keys canonicalize to the same key"
+                        + " crossing into the domain: " + priorOriginal + " and " + e.getKey());
+            }
+            out.set(canonicalKey, valueFn.apply(e.getValue()));
+        }
+        return out.build();
+    }
+
+    /** {@link #canonicalizeWith}, the map last: a nested {@code Map} — one inside a list, a set or
+     *  an option — is canonicalized by a single element function reused for every occurrence, which
+     *  therefore has to capture {@code keyFn}/{@code valueFn} and receive the map per call, the same
+     *  reason {@link #mapKeysWith} takes its function first. */
+    public static Map<Object, Object> canonicalizeWithCaptured(
+            java.util.function.Function<Object, Object> keyFn,
+            java.util.function.Function<Object, Object> valueFn, Map<Object, Object> m) {
+        return canonicalizeWith(m, keyFn, valueFn);
     }
 }

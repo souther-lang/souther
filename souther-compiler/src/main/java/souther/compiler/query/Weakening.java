@@ -146,6 +146,126 @@ public sealed interface Weakening {
         }
     }
 
+    /**
+     * A coverage item's own place on the order — whether a row is owed there at all — is one a
+     * model's own decimals put far enough apart in scale that the exact arithmetic could not read,
+     * so what became of it is undecided rather than settled either way.
+     *
+     * <p>Apart from {@link BorderValueUnreadable}: there a row's value could not be read against a
+     * line already known to ask for one; here whether the line asks for a row here at all — is it
+     * at the threshold, does the order name a neighbour, does the model leave a run beside it — is
+     * what the arithmetic gave out on. Neither a row this compiler could not measure nor a fact the
+     * model settled, so counting it as excluded or counting it against coverage would both say more
+     * than this found out.
+     */
+    record ItemsPlaceNotWorkedOut(souther.compiler.partition.Border border,
+                                  souther.compiler.numeric.UnheldNumber why) implements Weakening {
+
+        public ItemsPlaceNotWorkedOut {
+            if (why == null) {
+                throw new IllegalArgumentException("not worked out, in one of the two ways it is not");
+            }
+        }
+
+        /** Unaffected either way: no allowance of this compiler's stopped the working out, and the
+         *  room that ran out, where it was room, is the host's. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
+        }
+    }
+
+    /**
+     * A row holds more readings at one border than a point is tried against, so what no reading
+     * stands at is undecided rather than absent.
+     *
+     * <p>Beside {@link BorderValueUnreadable}, and not one of it. There the reading was made and
+     * came to nothing; here the readings that were made were read in full and the rest were never
+     * made. A row whose positions run inside sequences has one reading per element chosen at each
+     * step, and which of them holds the value at the line is the row's business — so a walk that
+     * stops part-way through them may say it found the value and may not say nobody wrote it.
+     *
+     * <p><b>The border and not the row.</b> Two rows can stop this walk at one border and a third
+     * can run out, and what is owed a reader is that the border was not searched to the end. How
+     * large the search was is what one row happened to hold rather than what is true of the point,
+     * so a figure of it here would make two facts of one.
+     *
+     * @param limit how many readings of one row a point is tried against
+     */
+    record BorderReadingsNotExhausted(souther.compiler.partition.Border border, int limit)
+            implements Weakening {
+
+        /** The figure is this compiler's, so a run allowed more readings comes to another answer. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.MAY_CHANGE;
+        }
+    }
+
+    /**
+     * A border was not held against the lines the model puts one step from it.
+     *
+     * <p>Beside the two above rather than among them. Those are readings of the rows that came to
+     * nothing or were never made, and what they weaken is every question over those rows. This is
+     * the one question over them that was not put — either because nothing here holds a border of
+     * that shape against anything, or because the rows fall all on one side of the line and pin no
+     * threshold on any line beside it.
+     *
+     * <p><b>So it is not a fact about the model.</b> A line one step from this one exists whichever
+     * of the two it is, and a reader told the question does not arise would be told the opposite of
+     * what happened. Which of the two it was is the word a document writes, because what to do
+     * about them differs: one wants a row, and the other wants this compiler to grow a strategy.
+     *
+     * <p>The border and not the line beside it. Which lines are beside it is the family's answer and
+     * is the same at every run; that this one was not held against them is the fact, and it is one
+     * fact however many lines the family holds.
+     */
+    record ABorderNotHeldAgainstTheLinesBesideIt(souther.compiler.partition.Border border,
+                                                 ABorderNotHeldAgainstTheLinesBesideIt.Why why)
+            implements Weakening {
+
+        /** What stood in the way of holding it against them. */
+        public enum Why {
+            /** Nothing here holds a border of this shape against a line beside it. */
+            NO_STRATEGY_FOR_THE_RULE,
+            /** Every row the quantity has a value at falls on one side of the line, so the rows pin
+             *  no threshold on any line beside it. */
+            THE_ROWS_ARE_ALL_ON_ONE_SIDE,
+            /** A row was left out because nothing watched its run, so whether it reached the rule
+             *  could not be told. */
+            NOTHING_WATCHED_THE_RUNS,
+            /** A line beside it stands after every row, and nothing here could show an input the
+             *  two answer differently at that a row still arrives at. */
+            NO_REACHABLE_DISTINGUISHER,
+            /** A model's own decimals put a step of the fault family out of the exact arithmetic's
+             *  reach, so the family this border is held against is not known whole. */
+            ARITHMETIC_COULD_NOT_HOLD_A_FAMILY_MEMBER
+        }
+
+        public ABorderNotHeldAgainstTheLinesBesideIt {
+            java.util.Objects.requireNonNull(border, "a border that was not held is named");
+            java.util.Objects.requireNonNull(why, "a question not put says what stood in the way");
+        }
+
+        /**
+         * Asked of what stood in the way, because they do not answer alike.
+         *
+         * <p>A strategy nobody has written and rows that fall all on one side are not allowances:
+         * one wants code and the other wants a row, and every run of this compiler over this model
+         * says the same. What a run watched is an allowance — the arms are instrumented because a
+         * build asked for them — so a run allowing more need not leave the same rows out.
+         */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return switch (why) {
+                case NO_STRATEGY_FOR_THE_RULE, THE_ROWS_ARE_ALL_ON_ONE_SIDE,
+                     NO_REACHABLE_DISTINGUISHER, ARITHMETIC_COULD_NOT_HOLD_A_FAMILY_MEMBER ->
+                        RunSensitivity.UNAFFECTED;
+                case NOTHING_WATCHED_THE_RUNS -> RunSensitivity.MAY_CHANGE;
+            };
+        }
+    }
+
     /** The reading of the model that a measure depends on did not run out. */
     record ModelReadingIncomplete(ClosureGap cause) implements Weakening {
 
@@ -157,26 +277,25 @@ public sealed interface Weakening {
     }
 
     /**
-     * The elaborated bodies a measure counts inside were not made, so what they hold was not read.
+     * The model gives this behavior a body, and the image the run was measured in does not carry
+     * it.
      *
-     * <p>Not a reading of the model that stopped and not an observation that went missing: the
-     * declarations are here and say a body is written, and what did not come back is the checked
-     * body. The measure that needed it has no number, and what it needed to get one is this.
+     * <p>The whole of what a measure knows, and nothing about how it came about. A body its own
+     * rules refused, one an image left out because an implementation it reaches could not be made,
+     * and a module nothing elaborated at all are one fact here — which of them it was is the
+     * elaboration's answer, and a measure that named it would be reporting the route rather than
+     * the hole. {@code BodyReading.NotInElaboration} is the same sentence one rung down, and this
+     * is what it costs a measure.
      *
-     * <p>Named by the module, because that is what the answer is of: one compile that did not get
-     * that far is one fact however many behaviors went looking for it, and naming the behavior
-     * would make it as many facts as the module has.
-     *
-     * <p>It had no arm, and what it cost is what #996 was found through. A behavior whose body was
-     * not elaborated was answered as a behavior with no body — which is a claim about the model, is
-     * false, and is contradicted by the {@code implemented} on the line above it in the same
-     * report.
+     * <p>Named by the behavior, because that is what the answer is of. Which implementations an
+     * image carries is a closure over a module's implementations and is settled per behavior, so a
+     * word quantified over the module says of every behavior of it something true of one — and the
+     * module whose check was made in full is then reported as one that did not compile.
      */
-    record BodiesNotElaborated(String module) implements Weakening {
+    record BodyNotInEvaluation(String behavior) implements Weakening {
 
-        /** Nothing was compared against a figure. The compile did not get that far, and a run under
-         *  wider allowances does not get further — a build that compiles is a different run's
-         *  input, not a wider run of this one. */
+        /** Which implementations an image carries is settled by what came out, and a run under
+         *  wider allowances is made in the same image. */
         @Override
         public RunSensitivity runSensitivity() {
             return RunSensitivity.UNAFFECTED;
@@ -344,6 +463,34 @@ public sealed interface Weakening {
     }
 
     /**
+     * A meeting of the body's decisions the measure would not walk the combinations of.
+     *
+     * <p>The group is read and its combinations are not enumerated, so which of them the rows make
+     * is unknown — and nothing is owed at any of them, because nothing established that a row is
+     * missing. What that costs is said here: a wider build would walk the group and may find a
+     * combination this one never asked about.
+     *
+     * <p>Beside {@link PairSpaceTruncated}, which is the same figure running out on the other
+     * criterion. Two words because a reader raising a limit raises a different one for each.
+     */
+    record MeetingsNotWalked(String behavior, int groups) implements Weakening {
+
+        public MeetingsNotWalked {
+            if (groups < 1) {
+                throw new IllegalArgumentException(
+                        "a measure that walked every group went without nothing here: " + groups);
+            }
+        }
+
+        /** A figure the query graph hands the analysis, like the pair space's: a run under a wider
+         *  {@code AdequacyPolicy} walks the group this one held back. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.MAY_CHANGE;
+        }
+    }
+
+    /**
      * The ways through a body could not all be written down, so what rules its decision has is not
      * known.
      *
@@ -373,6 +520,33 @@ public sealed interface Weakening {
         @Override
         public RunSensitivity runSensitivity() {
             return RunSensitivity.MAY_CHANGE;
+        }
+    }
+
+    /**
+     * Some rule of the decision was read with fewer of the distinctions its way consults than the
+     * body draws, so what it is was not read in full.
+     *
+     * <p>Beside {@link DecisionReadingIncomplete} and not one of its reasons. There the rules are not
+     * in hand; here they are, and one of them is described by less than it turns on — so it may be
+     * one rule where the body has two, and a run seen doing every condition it carries has not been
+     * shown to have taken it. A fact about the derivation of the rules, and so a fact whether or not
+     * any row ran: a behavior nobody wrote a row for is short of it exactly as much.
+     *
+     * <p>Of the behavior and not of a rule. Which rules it bears on is each rule's own answer
+     * ({@link souther.compiler.partition.DecisionReading.Ruled#whole}), and it is asked of the rule
+     * where a finding about one is made ({@link DecisionEvidence#at}).
+     */
+    record DecisionRuleReadShort(String behavior) implements Weakening {
+
+        public DecisionRuleReadShort {
+            java.util.Objects.requireNonNull(behavior, "a decision is some body's");
+        }
+
+        /** What the reading has no words for is not given words by allowing it more. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
         }
     }
 }

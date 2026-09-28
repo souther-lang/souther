@@ -62,7 +62,8 @@ class WhatANameIsAboutIsWhatItWasGivenIsAboutTest {
         Denotations outer = Denotations.none().location(x, engine.terms().placeSubject(x), engine.terms().placeTerm(x));
 
         heldOf(new Core.Binary(BinOp.ADD, new Core.Read("x", x, Type.INT, POS),
-                new Core.Int(1, Type.INT, POS), ConstructOccurrence.unwritten(), Type.INT, POS),
+                new Core.Int(1, Type.INT, POS), Core.BinaryReading.AS_THEY_STAND,
+                ConstructOccurrence.unwritten(), Type.INT, POS),
                 outer);
     }
 
@@ -111,13 +112,14 @@ class WhatANameIsAboutIsWhatItWasGivenIsAboutTest {
     }
 
     private Core.LetIn letting(Core.Binder binder, Core value) {
-        return new Core.LetIn(binder, value, new Core.Read(binder.name(), binder.binding(), value.type(),
-                POS), value.type(), POS);
+        return new Core.LetIn(binder, value.type(), value,
+                new Core.Read(binder.name(), binder.binding(), value.type(), POS), value.type(), POS);
     }
 
     private static Core answer() {
         return new Core.Call(new Core.Reached.OfDeclaration(
                 new ReachName.Own(FIND)), List.of(),
-                ConstructOccurrence.unwritten(), Type.INT, POS);
+                ConstructOccurrence.unwritten(), Core.CallSettlement.None.INSTANCE,
+                Type.INT, POS);
     }
 }

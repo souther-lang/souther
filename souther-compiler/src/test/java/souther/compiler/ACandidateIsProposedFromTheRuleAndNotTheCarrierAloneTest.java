@@ -1,6 +1,8 @@
 package souther.compiler;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import souther.compiler.partition.Generator;
 import souther.compiler.query.Adequacy;
@@ -503,7 +505,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
         // happened is that this declined to build it, which is a fact about the generator. Reporting it
         // as a refusal would send a reader to look for the rule that refuses a value nothing refuses.
         assertTrue(filled.unresolved().stream().allMatch(left ->
-                        left.reason() == Generator.UnresolvedCombination.Reason
+                        left.why().reason() == Generator.UnresolvedCombination.Reason
                                 .NOTHING_COMPOSES_ONE),
                 "and said as this not composing one rather than as the model refusing it: "
                         + filled.unresolved());
@@ -521,20 +523,25 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
      * string has at once, the values reading follows them and shows the declaration admits nothing,
      * and a model refused before a search is asked for is not one this can say anything about.
      *
-     * <p>What no pair clears is the ninth rule, which this compiler cannot take apart. Strings
-     * clearing all nine exist — a run of b's of even length is one — so the declaration is not an
-     * empty one, and what stops a row is that nothing here derives a value from a rule it could not
-     * read. Held that way because the rules it can read it meets with each other: eight formats that
+     * <p>What no pair clears is the ninth rule, which this compiler cannot take apart: what it looks
+     * for is made of the value itself. Whether any string clears all nine is a question about that
+     * rule, and it is not one the values reading answers — so what stops a row is that nothing here
+     * derives a value from a rule it could not read, and not that the declaration was shown to hold
+     * none. Held that way because the rules it can read it meets with each other: eight formats that
      * hold together are eight a proposal clears at once, and a pair built from them is a row.
+     *
+     * <p>Written two ways a map is said not to be empty. {@code /= 0} is read as a minimum too — a
+     * count is never below none — so pairings are built for it and what stops is the same search.
      */
-    @Test
-    void moreParingsThanAreBuiltIsSaidAsASearchThatStopped() {
+    @ParameterizedTest
+    @ValueSource(strings = {">= 1", "/= 0"})
+    void moreParingsThanAreBuiltIsSaidAsASearchThatStopped(String notEmpty) {
         String formats = "";
         for (int i = 1; i <= 8; i++) {
             formats += "    invariant p%d = String.matches(\"[a-h]{%d,}\", value)\n"
                     .formatted(i, i);
         }
-        formats += "    invariant twice = String.matches(\"(b+)\\\\1\", value)\n";
+        formats += "    invariant twice = " + ARuleNoReadingTakesIn.narrowly("value") + "\n";
         souther.compiler.partition.FillResult filled = generated("""
                 module nd.gen
 
@@ -547,74 +554,21 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
                 data V = String
                 %s
                 data M = Map<K, V>
-                    invariant nonEmpty = Map.size(value) >= 1
+                    invariant nonEmpty = Map.size(value) %s
 
                 data T = { kind: Kind, m: M }
 
                 behavior look : (t: T) -> Int
 
                 let look (t) = 1
-                """.formatted(formats, formats));
+                """.formatted(formats, formats, notEmpty));
 
         assertEquals(List.of(), filled.rows(),
                 "no row, because the pairings ran out before one of them was tried");
         assertTrue(filled.unresolved().stream().allMatch(left ->
-                        left.reason() == Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED),
-                "and the pairings this did not build are said as a search that stopped: "
-                        + filled.unresolved());
-    }
-
-    /**
-     * A map nothing was paired for is not a search that stopped.
-     *
-     * <p>{@code /= 0} says the map is not empty, and a count is never below none, so what it says is
-     * that the map holds at least one pair. A minimum is read, pairings are built for it, and what
-     * stops is the search for a key and a value that clear eight rules apiece. So the reason is the
-     * search reaching its limit, and it is the reason because that is what happened.
-     *
-     * <p>This asked for the other reason while a disequality reached the domain as nothing at all:
-     * no minimum was read, the position offered the empty map, and it was refused. The distinction
-     * still matters — a reader told a search stopped would go looking for the pairing it stopped
-     * short of — but a map the rules will not let be empty is no longer an example of it.
-     *
-     * <p>The ninth rule is one this compiler cannot take apart, which is what leaves the parts
-     * unfound: the rules it can read are met with each other and a value clearing all of them is
-     * proposed, so eight formats that hold together are eight a single proposal clears.
-     */
-    @Test
-    void aMapWhoseSearchStoppedSaysSoRatherThanCallingItARefusal() {
-        String formats = "";
-        for (int i = 1; i <= 8; i++) {
-            formats += "    invariant p%d = String.matches(\"[a-h]{%d,}\", value)\n"
-                    .formatted(i, i);
-        }
-        formats += "    invariant twice = String.matches(\"(b+)\\\\1\", value)\n";
-        souther.compiler.partition.FillResult filled = generated("""
-                module nd.gen
-
-                data Domestic
-                data Overseas
-                data Kind = Domestic | Overseas
-
-                data K = String
-                %s
-                data V = String
-                %s
-                data M = Map<K, V>
-                    invariant notEmpty = Map.size(value) /= 0
-
-                data T = { kind: Kind, m: M }
-
-                behavior look : (t: T) -> Int
-
-                let look (t) = 1
-                """.formatted(formats, formats));
-
-        assertEquals(List.of(), filled.rows(), "no key and value clearing all eight rules was found");
-        assertTrue(filled.unresolved().stream().allMatch(left ->
-                        left.reason() == Generator.UnresolvedCombination.Reason
+                        left.why().reason() == Generator.UnresolvedCombination.Reason
                                 .THE_SEARCH_LEFT_SOMETHING_UNTRIED),
-                "the pairing was built and the search for its parts is what stopped: "
+                "and the pairings this did not build are said as a search that stopped: "
                         + filled.unresolved());
     }
 
@@ -696,7 +650,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
 
         assertEquals(List.of(), filled.rows(), "two equal elements is not a list of two distinct ones");
         assertTrue(filled.unresolved().stream().allMatch(left ->
-                        left.reason() == Generator.UnresolvedCombination.Reason
+                        left.why().reason() == Generator.UnresolvedCombination.Reason
                                 .ALL_CANDIDATES_REJECTED),
                 "refused, which is not a claim that no row can be written: "
                         + filled.unresolved());

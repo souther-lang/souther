@@ -1,12 +1,11 @@
 package souther.compiler.check;
 
 import souther.compiler.numeric.CountDomain;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.TypeSymbol;
-
-import java.math.BigDecimal;
 import java.util.Map;
 import java.util.Set;
 
@@ -49,27 +48,13 @@ public final class OccurrenceCounts {
      * up to how many values the element has, and each of those is the same reading of the same
      * clauses.
      */
-    public static OccurrenceCounts of(TypeSymbol.AtModule named, RuleReadingSource source,
-                                       ReadingPolicy policy, DeclarationReadings machines) {
-        return of(named, source, policy, Set.of(), machines);
+    public static OccurrenceCounts of(TypeSymbol.AtModule named, RuleReadingContext reading) {
+        return of(named, reading, Set.of());
     }
 
     /** The same counts, off a reading somebody has already made of the declaration. */
     static OccurrenceCounts of(InvariantChecker.Seeded seeded) {
         return new OccurrenceCounts(seeded);
-    }
-
-    /** The same, reading for itself. */
-    public static OccurrenceCounts of(TypeSymbol.AtModule named, RuleReadingSource source,
-                                       ReadingPolicy policy) {
-        return of(named, source, policy, Set.of(), DeclarationReadings.NONE);
-    }
-
-    /** The same, with the declarations {@code granted} names supposed to hold values, reading for
-     *  itself. */
-    static OccurrenceCounts of(TypeSymbol.AtModule named, RuleReadingSource source,
-                                 ReadingPolicy policy, Set<TypeSymbol> granted) {
-        return of(named, source, policy, granted, DeclarationReadings.NONE);
     }
 
     /**
@@ -79,13 +64,11 @@ public final class OccurrenceCounts {
      * rules are what say it has none — its own, and the ones under whatever it wraps — so supposing
      * it has a value is not reading it at all.
      */
-    static OccurrenceCounts of(TypeSymbol.AtModule named, RuleReadingSource source,
-                                 ReadingPolicy policy,
-                                 Set<TypeSymbol> granted,
-                                 DeclarationReadings machines) {
+    static OccurrenceCounts of(TypeSymbol.AtModule named, RuleReadingContext reading,
+                               Set<TypeSymbol> granted) {
         return new OccurrenceCounts(
-                InvariantChecker.seedFields(named, source, policy, java.util.Map.of(),
-                        InvariantChecker.Reach.stoppingAt(granted), machines));
+                InvariantChecker.seedFields(named, reading, java.util.Map.of(),
+                        InvariantChecker.Reach.stoppingAt(granted)));
     }
 
     /** Whether the value at {@code path} may hold no more than {@code count}. */
@@ -116,7 +99,7 @@ public final class OccurrenceCounts {
         if (seeded == null) {
             return 0;
         }
-        FactSubject counted = seeded.heldAtoms().get(path);
+        FactSubject counted = seeded.heldAtomAt(path);
         return counted == null ? 0
                 : CountDomain.leastFrom(seeded.numbers().boundsOf(counted).min());
     }
@@ -125,12 +108,12 @@ public final class OccurrenceCounts {
         if (seeded == null) {
             return true;
         }
-        FactSubject counted = seeded.heldAtoms().get(path);
+        FactSubject counted = seeded.heldAtomAt(path);
         if (counted == null) {
             return true;   // nothing counts what is there, so no rule here is about how much it holds
         }
         LinearForm<FactSubject> from = LinearForm.atom(counted)
-                .minus(LinearForm.constant(BigDecimal.valueOf(count)));
+                .minus(LinearForm.constant(ExactRatio.of(count)));
         return !seeded.numbers()
                 .assume(from, against, Map.of(counted, Granularity.DISCRETE))
                 .isBottom();

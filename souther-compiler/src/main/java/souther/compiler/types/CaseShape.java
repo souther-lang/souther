@@ -19,9 +19,7 @@ public enum CaseShape {
     UNIT,
 
     /** A newtype, or a primitive standing as a member of a behavior's answer: the standalone
-     *  representation under {@code "value"}, beside the discriminator. */
-    WRAPPED;
-
-    /** The key a wrapped case's contents are written under. */
-    public static final String ENVELOPE_KEY = "value";
+     *  representation under a key of its own, beside the discriminator. Which key is the
+     *  representation's, not the shape's. */
+    WRAPPED
 }

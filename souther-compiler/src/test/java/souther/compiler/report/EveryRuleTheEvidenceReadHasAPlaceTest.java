@@ -1,10 +1,10 @@
 package souther.compiler.report;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.query.Compilation;
+import souther.test.ClosedWorldContract;
 
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * source: a rule reaches a page by whichever reading found it, and a population of one model is an
  * answer about the readings that model happens to raise.
  */
-@Tag("population")
+@ClosedWorldContract
 class EveryRuleTheEvidenceReadHasAPlaceTest {
 
     @Test

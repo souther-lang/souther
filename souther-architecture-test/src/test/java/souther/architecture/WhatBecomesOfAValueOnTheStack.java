@@ -89,7 +89,7 @@ final class WhatBecomesOfAValueOnTheStack {
      *                 under another type; a call that returns something is not, however alike the
      *                 two look to a walk that only counts
      */
-    private record Effect(int takes, int leaves, boolean carrying) {
+    record Effect(int takes, int leaves, boolean carrying) {
 
         static Effect of(int takes, int leaves) {
             return new Effect(takes, leaves, false);
@@ -377,8 +377,9 @@ final class WhatBecomesOfAValueOnTheStack {
                         && (branch.opcode() == Opcode.GOTO || branch.opcode() == Opcode.GOTO_W));
     }
 
-    /** What one instruction takes off the stack and what it leaves there. */
-    private static Effect effectOf(Instruction instruction) {
+    /** What one instruction takes off the stack and what it leaves there, said once for every
+     *  reading here that follows a value across instructions. */
+    static Effect effectOf(Instruction instruction) {
         return switch (instruction) {
             case LoadInstruction it -> Effect.of(0, slotsOf(it.typeKind()));
             case ConstantInstruction it -> Effect.of(0, slotsOf(it.typeKind()));

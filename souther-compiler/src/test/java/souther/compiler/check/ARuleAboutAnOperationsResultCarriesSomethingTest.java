@@ -155,6 +155,25 @@ class ARuleAboutAnOperationsResultCarriesSomethingTest {
                     let order (a, b) = AtMostOne(Decimal.compare(a, b))
                     """),
 
+            // And the same of an exact value. No position holds one, so the program makes both
+            // operands by dividing — which is the one way into exact arithmetic a model has without
+            // writing the conversion (spec §stdlib-rational).
+            new Discharges("Rational.compare", """
+                    module demo
+                    data AtLeastMinusOne = Int
+                        invariant value >= -1
+                    behavior order : (a: Int, b: Int) -> AtLeastMinusOne
+                        constructs AtLeastMinusOne
+                    let order (a, b) = AtLeastMinusOne(Rational.compare(a / 1, b / 1))
+                    """),
+            new Discharges("Rational.compare", """
+                    module demo
+                    data AtMostOne = Int
+                        invariant value <= 1
+                    behavior order : (a: Int, b: Int) -> AtMostOne constructs AtMostOne
+                    let order (a, b) = AtMostOne(Rational.compare(a / 1, b / 1))
+                    """),
+
             // The parts a temporal is read out in, each end of each.
             new Discharges("Time.hour", """
                     module demo

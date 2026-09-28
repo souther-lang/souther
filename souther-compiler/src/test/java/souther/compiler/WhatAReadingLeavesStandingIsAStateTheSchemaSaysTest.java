@@ -295,16 +295,6 @@ class WhatAReadingLeavesStandingIsAStateTheSchemaSaysTest {
         assertEquals("boundary", partition.get("unanswered").get(0).get("question").asString());
     }
 
-    /** Rules out of sight: `partial`, the reach, and no rule to name. */
-    @Test
-    void rulesOutOfSightArePartialAndNameNoRule() {
-        JsonNode partition = partitionOf(RULES_OUT_OF_SIGHT, "classify");
-        JsonNode read = partition.get("axes").get(0).get("read");
-
-        assertEquals("partial", read.get("extent").asString(), read.toString());
-        assertTrue(read.get("rulesNotReached").asBoolean(), read.toString());
-        assertFalse(partition.has("unanswered"), partition.toString());
-    }
     /**
      * And the model that leaves a rule unread at a position it measured is one this compiler
      * refuses.

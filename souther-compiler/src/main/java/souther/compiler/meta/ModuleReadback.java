@@ -4,16 +4,23 @@ import souther.compiler.stdlib.LibraryNames;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.DeclaredNames;
 import souther.compiler.check.Exposing;
+import souther.compiler.check.Preserved;
 import souther.compiler.check.Scoping;
 import souther.compiler.check.Registry;
 import souther.compiler.codegen.Backend;
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Region;
 import souther.compiler.cst.SourceLayout;
 import souther.compiler.diag.SourceProvenance;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.check.BehaviorImplementation;
+import souther.compiler.copied.CopyRecord;
+import souther.compiler.copied.CopyTarget;
 import souther.compiler.jvm.GeneratedClass;
+import souther.compiler.jvm.LinkageRecord;
+import souther.compiler.jvm.LinkageTarget;
 import souther.compiler.jvm.SoutherJvmAbi;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -22,6 +29,8 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.SortedMap;
+import java.util.TreeMap;
 
 /**
  * Reading a module back from what {@link ModuleMetadata} wrote into its classes: the declarations
@@ -124,8 +133,29 @@ public final class ModuleReadback {
         if (m.compat() != Backend.BOUNDARY_VERSION || m.header().isBlank()) {
             return unreadable(moduleName, new Readback.Failure.Incompatible(m.compiler()));
         }
+        // What its declarations offer another module's classes, and what its own classes were built
+        // against. Written by every writer at this boundary, so a module at this number without
+        // either is not one this wrote.
+        SortedMap<LinkageTarget, LinkageRecord> provides = m.providedLinkages() == null
+                ? null : PublishedLinkages.read(m.providedLinkages());
+        SortedMap<LinkageTarget, LinkageRecord> requires = m.requiredLinkages() == null
+                ? null : PublishedLinkages.read(m.requiredLinkages());
+        if (provides == null || requires == null) {
+            return unreadable(moduleName, new Readback.Failure.UnreadableMetadata());
+        }
+        // What its declarations offer to be copied, and what its classes copied — the other half of
+        // what it was built against, written by every writer at this boundary for the same reason.
+        SortedMap<CopyTarget, CopyRecord> providedCopies = m.providedCopies() == null
+                ? null : PublishedCopies.read(m.providedCopies());
+        SortedMap<CopyTarget, CopyRecord> requiredCopies = m.requiredCopies() == null
+                ? null : PublishedCopies.read(m.requiredCopies());
+        if (providedCopies == null || requiredCopies == null) {
+            return unreadable(moduleName, new Readback.Failure.UnreadableMetadata());
+        }
         StringBuilder declarations = new StringBuilder();
         Map<String, BehaviorImplementation> implementations = new LinkedHashMap<>();
+        Map<String, List<ValueName.Behavior>> requirements = new LinkedHashMap<>();
+        Map<String, PublishedSignature> signaturesFrom = new LinkedHashMap<>();
         for (String type : m.types()) {
             PublishedClasses.Declarations carried;
             switch (classes.of(moduleName + "." + type)) {
@@ -164,6 +194,12 @@ public final class ModuleReadback {
                 return unreadable(moduleName, new Readback.Failure.DeclarationMissing(behavior));
             }
             declarations.append('\n').append(carried.behaviorSignature()).append('\n');
+            PublishedSignature from =
+                    PublishedSignature.readingWritten(carried.behaviorSignatureFrom());
+            if (from == null) {
+                return unreadable(moduleName, new Readback.Failure.UnreadableMetadata());
+            }
+            signaturesFrom.put(behavior, from);
             BehaviorImplementation implementation;
             try {
                 implementation =
@@ -174,14 +210,25 @@ public final class ModuleReadback {
                 return unreadable(moduleName, new Readback.Failure.UnreadableMetadata());
             }
             implementations.put(behavior, implementation);
+            List<ValueName.Behavior> required = carried.behaviorRequirements() == null
+                    ? null : PublishedRequirements.read(carried.behaviorRequirements());
+            // An injection target is not constructed by Souther, so it requires nothing; it is the
+            // dependency. A class saying it is one and that it requires something says two things,
+            // and neither is taken over the other.
+            if (required == null || !implementation.admits(required)) {
+                return unreadable(moduleName, new Readback.Failure.UnreadableMetadata());
+            }
+            requirements.put(behavior, required);
         }
         for (String helper : m.invariantHelpers()) {
             declarations.append('\n').append(helper).append('\n');
         }
         StringBuilder source = new StringBuilder(m.header()).append('\n');
+        int importsFrom = source.length();
         for (String line : m.imports()) {
             source.append(line).append('\n');
         }
+        Span importLines = new Span(importsFrom, source.length());
         source.append(declarations);
         CstFrontend.ReadBack readBack;
         try {
@@ -196,7 +243,14 @@ public final class ModuleReadback {
             // else's raise arrive as a statement about this artifact.
             return unreadable(moduleName, new Readback.Failure.InvalidPublishedSyntax());
         }
-        Ast.Module parsed = readBack.module();
+        Published published = asPublished(readBack.module(), signaturesFrom);
+        if (published == null) {
+            // A composition's signature carrying what only a declaration writes, or a signature
+            // the metadata says was declared written as stages: the two members disagree about
+            // what this behavior is.
+            return unreadable(moduleName, new Readback.Failure.UnreadableMetadata());
+        }
+        Ast.Module parsed = published.module();
         if (!parsed.name().equals(moduleName)) {
             // A reading answers about the module it was asked for. The class was found by that name
             // and the module is named by the header on it; where the two differ there is no reading
@@ -214,20 +268,33 @@ public final class ModuleReadback {
             return unreadable(moduleName, new Readback.Failure.InvalidDeclarations(
                     refused.get(0), refused.subList(1, refused.size())));
         }
-        // Which imports are needed is asked of the header and the declarations — everything that was
-        // published except the import lines themselves.
+        // Which imports are needed is asked of the text that was parsed, passing over the import
+        // lines themselves and what was written only to carry a composition through the parser.
+        List<Span> passedOver = new ArrayList<>();
+        passedOver.add(importLines);
+        for (Region binder : published.writtenForTheParser()) {
+            passedOver.add(new Span(readBack.laidOut().offsetOf(binder.start()),
+                    readBack.laidOut().offsetOf(binder.end())));
+        }
         Exposing.Checked checked =
-                Exposing.check(withNeededImports(parsed, m.header() + "\n" + declarations),
-                        library);
+                Exposing.check(withNeededImports(parsed, source.toString(), passedOver), library);
         if (!checked.refused().isEmpty()) {
             List<Readback.Exposure> crossed = checked.refused().stream()
                     .map(ModuleReadback::asAnArtifactsFailure).toList();
             return unreadable(moduleName, new Readback.Failure.InvalidExposure(
                     crossed.get(0), crossed.subList(1, crossed.size())));
         }
+        // What each value it declares was settled as, which the reading of another module's value
+        // rests on. A line this cannot read is metadata of its name carrying something else.
+        Preserved.SettledValues answers = ValueAnswers.read(moduleName, m.valueAnswers());
+        if (answers == null) {
+            return unreadable(moduleName, new Readback.Failure.UnreadableMetadata());
+        }
         return new Readback.Ready<>(
-                new AsRead(checked.module(), declared.declarations(), implementations,
-                        checked.claims(), readBack.laidOut()));
+                new AsRead(checked.module(), declared.declarations(), declared.asDeclared(),
+                        implementations, requirements, provides, requires,
+                        providedCopies, requiredCopies, checked.claims(),
+                        readBack.laidOut(), answers));
     }
 
     /**
@@ -238,18 +305,106 @@ public final class ModuleReadback {
      * the end, rather than a value somebody assembled that looks like one.
      */
     record AsRead(Ast.Module module, Map<String, Ast.Def> declarations,
+                  java.util.List<String> asDeclared,
                   Map<String, BehaviorImplementation> behaviorImplementations,
+                  Map<String, List<ValueName.Behavior>> behaviorRequirements,
+                  Map<LinkageTarget, LinkageRecord> provides,
+                  Map<LinkageTarget, LinkageRecord> requires,
+                  Map<CopyTarget, CopyRecord> providedCopies,
+                  Map<CopyTarget, CopyRecord> requiredCopies,
                   java.util.List<Scoping.Claim> libraryClaims,
-                  SourceLayout laidOutText) implements ReadableModule {
+                  SourceLayout laidOutText,
+                  Preserved.SettledValues valueAnswers) implements ReadableModule {
 
         /** Copied, because this is an answer a compilation remembers and an answer it remembers is
          *  a value. */
         AsRead {
-            declarations = Collections.unmodifiableMap(new LinkedHashMap<>(declarations));
+            declarations = Collections.unmodifiableMap(new java.util.TreeMap<>(declarations));
+            asDeclared = java.util.List.copyOf(asDeclared);
             behaviorImplementations =
                     Collections.unmodifiableMap(new LinkedHashMap<>(behaviorImplementations));
+            behaviorRequirements =
+                    Collections.unmodifiableMap(new LinkedHashMap<>(behaviorRequirements));
+            provides = Collections.unmodifiableMap(new TreeMap<>(provides));
+            requires = Collections.unmodifiableMap(new TreeMap<>(requires));
+            providedCopies = Collections.unmodifiableMap(new TreeMap<>(providedCopies));
+            requiredCopies = Collections.unmodifiableMap(new TreeMap<>(requiredCopies));
             libraryClaims = List.copyOf(libraryClaims);
         }
+    }
+
+    /**
+     * {@code parsed} with each composition put back as one.
+     *
+     * <p>What was parsed for a composition is a declaration with the parameter names the writer made
+     * up for the parser ({@link PublishedSignature#COMPOSED}). It is a composition whose stages stayed
+     * behind, and is read back as that: the types it takes and what it answers, with no names. Left
+     * as a declaration, every reader that asks what kind of behavior this is would answer for one
+     * that declared parameters.
+     *
+     * <p>The parameter names it drops are still written in the text, and where they are written is
+     * answered beside the module: the text is what was parsed and stays as it is, and a reading of
+     * its words passes over them.
+     *
+     * <p>Null where the text and the metadata disagree: a composition's signature written with a
+     * clause only a declaration carries, or a behavior the metadata says was declared written as
+     * stages. The writer produces neither.
+     */
+    private static Published asPublished(Ast.Module parsed,
+                                         Map<String, PublishedSignature> signaturesFrom) {
+        List<Ast.BehaviorDef> behaviors = new ArrayList<>(parsed.behaviors().size());
+        List<Region> writtenForTheParser = new ArrayList<>();
+        for (Ast.BehaviorDef behavior : parsed.behaviors()) {
+            PublishedSignature from = signaturesFrom.get(behavior.name());
+            if (from == null) {
+                return null;
+            }
+            Ast.BehaviorDef read = switch (behavior) {
+                case Ast.PipeBehavior _ -> null;
+                case Ast.SpecBehavior spec -> switch (from) {
+                    case DECLARED -> spec;
+                    case COMPOSED -> {
+                        for (Ast.Param param : spec.params()) {
+                            writtenForTheParser.add(param.written().region());
+                        }
+                        yield compositionOf(spec);
+                    }
+                };
+            };
+            if (read == null) {
+                return null;
+            }
+            behaviors.add(read);
+        }
+        return new Published(new Ast.Module(parsed.name(), parsed.exposing(),
+                parsed.exposedOutputs(), parsed.imports(), parsed.defs(), behaviors, parsed.fns(),
+                parsed.takenOn(), parsed.examples(), parsed.fakes(), parsed.exampleFileTarget(),
+                parsed.pos()), List.copyOf(writtenForTheParser));
+    }
+
+    /**
+     * A module as it was published, and where its text holds syntax that is no part of any
+     * declaration: the parameter names written to carry a composition's signature through the
+     * parser.
+     */
+    private record Published(Ast.Module module, List<Region> writtenForTheParser) {}
+
+    /** A stretch of the published text, from {@code from} up to {@code to}, in UTF-16 code units. */
+    private record Span(int from, int to) {}
+
+    /** The composition {@code written} is the published signature of, or null where it carries a
+     *  clause a composition does not write. */
+    private static Ast.PipeBehavior compositionOf(Ast.SpecBehavior written) {
+        if (!written.constructs().isEmpty() || !written.dependsOn().isEmpty()
+                || !written.ensures().isEmpty()) {
+            return null;
+        }
+        List<Ast.RetType> takes = new ArrayList<>(written.params().size());
+        for (Ast.Param param : written.params()) {
+            takes.add(param.type());
+        }
+        return new Ast.PipeBehavior(written.written(),
+                new Ast.Composition.Elsewhere(takes, written.ret()), written.pos());
     }
 
     private static Readback<ReadableModule> unreadable(String module, Readback.Failure why) {
@@ -305,16 +460,22 @@ public final class ModuleReadback {
      * declarations that never mention it (issue #138).
      *
      * <p>Needed is decided on the words of the published text rather than on the parsed
-     * declarations. The text is exactly what an importing project reads, and a word is a word
-     * wherever it is written — in a field's type, a spread, an invariant, a helper an invariant
-     * calls, an exposed composition's output. A walk over the parsed forms would have to name every
-     * place a type can appear and would drop an import the day one is added; a word that is written
-     * nowhere cannot be referred to by anything.
+     * declarations, and a word is a word wherever it is written — in a field's type, a spread, an
+     * invariant, a helper an invariant calls, the output the clause declares for a composition. A
+     * walk over the parsed forms would have to name every place a type can appear and would drop an
+     * import the day one is added; a word that is written nowhere cannot be referred to by anything.
+     *
+     * <p>The words of every declaration, and nothing else: {@code passedOver} is where the text holds
+     * something else — the import lines being decided about, and syntax written only to carry a
+     * declaration through the parser, which for a published composition is the parameter names its
+     * signature is written with. Those are found by where the parse put them, and the text itself is
+     * read as it is.
      */
-    private static Ast.Module withNeededImports(Ast.Module module, String declared) {
+    private static Ast.Module withNeededImports(Ast.Module module, String text,
+                                                List<Span> passedOver) {
         Set<String> written = new LinkedHashSet<>();
         Set<String> qualifiers = new LinkedHashSet<>();
-        for (String word : words(declared)) {
+        for (String word : words(text, passedOver)) {
             written.add(word);
             int dot = word.lastIndexOf('.');
             if (dot > 0) {
@@ -345,12 +506,22 @@ public final class ModuleReadback {
      *
      * <p>A run inside a string literal is a word here too: it costs an import that is kept, which is
      * what was published anyway.
+     *
+     * <p>What lies in {@code passedOver} is read as no part of any word, so a run ends where one
+     * begins and starts again after it, and nothing on either side of it is joined into a word the
+     * text does not write.
      */
-    private static List<String> words(String text) {
+    private static List<String> words(String text, List<Span> passedOver) {
+        boolean[] skipped = new boolean[text.length()];
+        for (Span span : passedOver) {
+            for (int i = span.from(); i < span.to(); i++) {
+                skipped[i] = true;
+            }
+        }
         List<String> words = new ArrayList<>();
         int start = -1;
         for (int i = 0; i <= text.length(); i++) {
-            boolean part = i < text.length()
+            boolean part = i < text.length() && !skipped[i]
                     && (Character.isLetterOrDigit(text.charAt(i)) || text.charAt(i) == '_'
                             || text.charAt(i) == '.');
             if (part && start < 0) {

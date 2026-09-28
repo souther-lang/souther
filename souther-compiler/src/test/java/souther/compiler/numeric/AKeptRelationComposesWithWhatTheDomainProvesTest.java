@@ -2,8 +2,6 @@ package souther.compiler.numeric;
 
 
 import org.junit.jupiter.api.Test;
-
-import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -34,7 +32,7 @@ class AKeptRelationComposesWithWhatTheDomainProvesTest {
     }
 
     private static LinearForm<String> num(long n) {
-        return LinearForm.<String>constant(BigDecimal.valueOf(n));
+        return LinearForm.<String>constant(ExactRatio.of(n));
     }
 
     /** {@code a + b - c}, which is of neither shape: three atoms, so it is kept as written. */
@@ -54,7 +52,7 @@ class AKeptRelationComposesWithWhatTheDomainProvesTest {
      * the second is a difference; nothing but their sum reaches the goal. */
     @Test
     void aKeptRelationComposesWithADifference() {
-        NumericDomain<String> d = NumericDomain.<String>top()
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(aPlusBMinus(C), Rel.LE, dense(A, B, C))
                 .assume(atom(C).minus(atom(D)), Rel.LE, dense(C, D));
 
@@ -66,7 +64,7 @@ class AKeptRelationComposesWithWhatTheDomainProvesTest {
      * particular but whatever the domain proves of the residual. */
     @Test
     void aKeptRelationComposesWithAnIntervalBound() {
-        NumericDomain<String> d = NumericDomain.<String>top()
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(aPlusBMinus(C), Rel.LE, dense(A, B, C))
                 .assume(atom(C).minus(num(100)), Rel.LE, dense(C));
 
@@ -78,7 +76,7 @@ class AKeptRelationComposesWithWhatTheDomainProvesTest {
      * {@code a + b < d}. */
     @Test
     void aStrictResidualCarriesItsStrictnessToTheGoal() {
-        NumericDomain<String> d = NumericDomain.<String>top()
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(aPlusBMinus(C), Rel.LE, dense(A, B, C))
                 .assume(atom(C).minus(atom(D)), Rel.LT, dense(C, D));
 
@@ -89,7 +87,7 @@ class AKeptRelationComposesWithWhatTheDomainProvesTest {
      * {@code a + b < d}, so the residual is only asked for what the premise did not already give. */
     @Test
     void aStrictKeptRelationLeavesTheResidualNothingToProve() {
-        NumericDomain<String> d = NumericDomain.<String>top()
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(aPlusBMinus(C), Rel.LT, dense(A, B, C))
                 .assume(atom(C).minus(atom(D)), Rel.LE, dense(C, D));
 
@@ -100,7 +98,7 @@ class AKeptRelationComposesWithWhatTheDomainProvesTest {
      * {@code a + b = d} admitted, so {@code a + b < d} does not follow. */
     @Test
     void twoNonStrictRelationsDoNotProveAStrictGoal() {
-        NumericDomain<String> d = NumericDomain.<String>top()
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(aPlusBMinus(C), Rel.LE, dense(A, B, C))
                 .assume(atom(C).minus(atom(D)), Rel.LE, dense(C, D));
 
@@ -112,7 +110,7 @@ class AKeptRelationComposesWithWhatTheDomainProvesTest {
      * residual of either against the goal is of neither shape too and nothing proves it. */
     @Test
     void twoKeptRelationsAreNotAddedTogether() {
-        NumericDomain<String> d = NumericDomain.<String>top()
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(aPlusBMinus(C), Rel.LE, dense(A, B, C))
                 .assume(atom(C).minus(atom(D)).minus(atom(E)), Rel.LE, dense(C, D, E));
 

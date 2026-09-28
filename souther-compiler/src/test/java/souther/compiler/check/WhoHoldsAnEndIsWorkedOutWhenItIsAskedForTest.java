@@ -123,7 +123,8 @@ class WhoHoldsAnEndIsWorkedOutWhenItIsAskedForTest {
         compilation.answerEverything();
         TypeSymbol.AtModule held = TypeSymbols.declared(new TypeKey("demo", "Held"));
         return FieldDomains.of(held,
-                RuleReadings.of(compilation, compilation.modules().get(0)),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(
+                        RuleReadings.of(compilation, compilation.modules().get(0)),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
     }
 }

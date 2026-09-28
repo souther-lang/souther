@@ -123,7 +123,8 @@ class ACounterfactualIsReadOncePerSetOfRulesLeftOutTest {
         compilation.answerEverything();
         TypeSymbol.AtModule of = TypeSymbols.declared(new TypeKey("demo", declaration));
         return FieldDomains.of(of,
-                RuleReadings.of(compilation, compilation.modules().get(0)),
-                ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(
+                        RuleReadings.of(compilation, compilation.modules().get(0)),
+                        ReadAs.THE_COMPILATION_DOES));
     }
 }

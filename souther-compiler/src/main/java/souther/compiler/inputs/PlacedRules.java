@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.NumberAt;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.DeclarationReadings;
 import souther.compiler.check.FieldDomains;
@@ -18,7 +19,6 @@ import souther.compiler.check.Shape;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
 import souther.compiler.numeric.NumericDomain;
-import souther.compiler.check.ReadingPolicy;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
@@ -82,30 +82,29 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * fields, and can be ones this could not read, and all three are answers about the same value:
      * lifted as ends alone, a wrapper relating two of the record's fields narrowed nothing and a
      * wrapper clause nothing could read left every edge under it looking certain.
+     *
+     * <p>Read in the world the walk carries, asking where it borrows from for what somebody has
+     * already made of the value's string rules before building any of it.
      */
-    static PlacedRules of(TermPath root, Type type, RuleReadingSource source,
-                          ReadingPolicy policy) {
-        return of(root, type, source, policy, null, DeclarationReadings.NONE);
-    }
-
-    /** The same, asking {@code machines} for what somebody has already made of the value's string
-     *  rules before building any of it. */
-    static PlacedRules of(TermPath root, Type type, RuleReadingSource source,
-                          ReadingPolicy policy, DeclarationReadings machines) {
-        return of(root, type, source, policy, null, machines);
+    static PlacedRules of(TermPath root, Type type, RuleReadingContext reading) {
+        return of(root, type, reading, null);
     }
 
     /** The same, of a value narrowed out of another whose rules name some of the same positions. */
-    static PlacedRules of(TermPath root, Type type, RuleReadingSource source, ReadingPolicy policy,
-                          Reaching alsoReaching, DeclarationReadings machines) {
+    static PlacedRules of(TermPath root, Type type, RuleReadingContext reading,
+                          Reaching alsoReaching) {
+        RuleReadingSource source = reading.source();
         TypeSymbol read = readAs(type, source.symbols(), source.published());
+        // What this keeps of the world is the lender alone: the questions asked of these rules after
+        // the walk borrow what the walk made.
+        DeclarationReadings machines = reading.retainedReadings();
         // One composer for this reading, made where the reading is. What {@link #admits} builds is
         // the set a position of this value finally admits, met out of the rules here and the rules
         // of the value this was narrowed from — one answer, however many paths are asked about it.
         // Made per call instead, every ask would get its own allowance and the whole of what a
         // reading costs would be bounded by nothing.
-        return new PlacedRules(root, read, Rules.of(read, source, policy, machines), alsoReaching,
-                policy.allowanceForAdmittedValues(answersFor(read, machines).lending()),
+        return new PlacedRules(root, read, Rules.of(read, reading), alsoReaching,
+                reading.policy().allowanceForAdmittedValues(answersFor(read, machines).lending()),
                 machines);
     }
 

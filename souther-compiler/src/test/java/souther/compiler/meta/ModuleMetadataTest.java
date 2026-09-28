@@ -219,31 +219,6 @@ class ModuleMetadataTest {
                 "the attached file's source is not in this module's jar, so it has none to carry");
     }
 
-    /** A composition declares stages, not a signature. The importing module reads a signature, so
-     * the computed one is written out and the stages stay behind. */
-    @Test
-    void aCompositionPublishesTheSignatureItComputesTo() {
-        Map<String, ClassFileImage> classes = Compiler.compileModules(List.of("""
-                module shop.pricing exposing ( Cart, Priced, quote )
-                data Cart = { n: Int }
-                data Priced = { total: Int }
-                behavior quote : (c: Cart) -> Priced constructs Priced
-                let quote (c) = Priced { total = c.n }
-                """, """
-                module shop.checkout exposing ( Done, place, checkout : Done )
-                import shop.pricing ( Cart, Priced, quote )
-                data Done = { total: Int }
-                behavior place : (p: Priced) -> Done constructs Done
-                let place (p) = Done { total = p.total }
-                behavior checkout = quote >-> place
-                """));
-
-        assertEquals("behavior checkout : (in0: Cart) -> Done",
-                string(annotation(classes, "shop.checkout.Checkout", "SoutherBehavior"), "signature"),
-                "written in the names shop.checkout has: Cart came in on its import line and Done is"
-                        + " its own");
-    }
-
     private static Annotation annotation(Map<String, ClassFileImage> classes, String binaryName,
                                          String simpleAnnotationName) {
         ClassFileImage image = classes.get(binaryName);

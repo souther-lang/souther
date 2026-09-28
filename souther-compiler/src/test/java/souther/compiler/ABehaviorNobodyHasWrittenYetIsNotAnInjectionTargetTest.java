@@ -1,12 +1,7 @@
 package souther.compiler;
 
 import org.junit.jupiter.api.Test;
-import souther.compiler.ast.Hir;
-import souther.compiler.check.BehaviorImplementation;
-import souther.compiler.check.Prepared;
 import souther.compiler.diag.CompileException;
-import souther.compiler.query.Bodies;
-import souther.compiler.query.Shapes;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.jvm.ClassFileImage;
@@ -133,48 +128,6 @@ class ABehaviorNobodyHasWrittenYetIsNotAnInjectionTargetTest {
         assertEquals("E1627", refused.code(), refused.getMessage());
     }
 
-    /**
-     * The two representations answer alike.
-     *
-     * <p>The rule is one method, and a behavior is read in two trees — the module as parsed, which is
-     * what a reader off the path gets, and the lowered one the checks and the emitter walk. Each has
-     * an adapter that asks the rule, and nothing else would notice if the adapters stopped agreeing:
-     * whichever of them a consumer happened to ask would be its answer.
-     */
-    @Test
-    void bothRepresentationsGiveOneAnswerForEveryBehavior() {
-        String source = HEAD + """
-                behavior outer : (id: Id) -> Out
-                    depends on inner
-
-                behavior whole : (id: Id) -> Out
-                    depends on outer
-
-                behavior twice : (id: Id) -> Out
-                    constructs Out
-                let twice (id) = Out { n = id.n * 2 }
-
-                behavior chained = twice >-> twice
-                """;
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-
-        Map<String, BehaviorImplementation> asParsed = compilation.db()
-                .ask(new Bodies.Implementation("example.owed")).value();
-        Prepared lowered = compilation.db().ask(new Shapes.Prepared("example.owed")).value();
-
-        Map<String, BehaviorImplementation> asLowered = new java.util.LinkedHashMap<>();
-        for (Hir.BehaviorDef declared : lowered.behaviors()) {
-            asLowered.put(declared.name(), lowered.implementationOf(declared));
-        }
-
-        assertEquals(asParsed, asLowered);
-        assertEquals(BehaviorImplementation.UNIMPLEMENTED, asParsed.get("outer"));
-        assertEquals(BehaviorImplementation.INJECTION_TARGET, asParsed.get("inner"));
-        assertEquals(BehaviorImplementation.IMPLEMENTED, asParsed.get("twice"));
-        assertEquals(BehaviorImplementation.IMPLEMENTED, asParsed.get("chained"));
-    }
-
     private static List<String> withUpstream(List<String> upstream, String reader) {
         List<String> all = new java.util.ArrayList<>(upstream);
         all.add(reader);
@@ -195,5 +148,43 @@ class ABehaviorNobodyHasWrittenYetIsNotAnInjectionTargetTest {
                         """)));
 
         assertEquals("E1627", refused.code(), refused.getMessage());
+    }
+
+    /**
+     * A composition builds each stage with a body and holds each one Java supplies, and one nobody
+     * has written is neither. Refused where the composition is written, whichever module declares
+     * the stage, so emitting a stage never meets one.
+     */
+    @Test
+    void aCompositionThatWouldHaveToBuildItIsRefused() {
+        String restated = """
+                behavior restated : (out: Out) -> Out
+                let restated (out) = out
+                """;
+        CompileException here = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of(HEAD + restated + """
+                        behavior outer : (id: Id) -> Out
+                            depends on inner
+
+                        behavior whole = outer >-> restated
+                        """)));
+        CompileException elsewhere = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(withUpstream(List.of("""
+                        module example.owed exposing ( Id, Out, inner, outer, restated )
+
+                        data Id = { n: Int }
+                        data Out = { n: Int }
+
+                        behavior inner : (id: Id) -> Out
+                        behavior outer : (id: Id) -> Out
+                            depends on inner
+                        """ + restated), """
+                        module example.reader exposing ( whole )
+                        import example.owed ( outer, restated )
+                        behavior whole = outer >-> restated
+                        """)));
+
+        assertEquals("E1627", here.code(), here.getMessage());
+        assertEquals("E1627", elsewhere.code(), elsewhere.getMessage());
     }
 }

@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.core.Core;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
@@ -146,5 +147,18 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
                 ? new Read(answerOf(null, onTheWay, true), onTheWay)
                 : new Read(new DecidedCondition.Narrowed(
                         new DecisionCondition.ACase(subject), narrowing), onTheWay);
+    }
+
+    /**
+     * What taking arm {@code part} of {@code attempt} decides: a column this reading names and
+     * cannot say the meaning of, one per arm.
+     *
+     * <p>One per arm because the arms are the answers. The success and each departure are
+     * distinctions the body draws, and a rule through one is a rule through none of the others.
+     */
+    Read attempting(Core.IfConstructed attempt, int part, SourcePos at,
+                    ConditionNumbering numbering) {
+        OnTheWay onTheWay = states.attempting(attempt, part, at, numbering);
+        return new Read(answerOf(null, onTheWay, true), onTheWay);
     }
 }

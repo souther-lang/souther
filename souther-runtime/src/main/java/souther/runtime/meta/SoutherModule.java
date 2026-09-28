@@ -55,4 +55,34 @@ public @interface SoutherModule {
      * what a type is, so it has to be readable where the type is imported, and it cannot be read
      * without the helpers it names. Helpers no invariant reaches are not carried. */
     String[] invariantHelpers() default {};
+
+    /** What each value the module declares was settled as, one {@code name=type} entry each. */
+    String[] valueAnswers() default {};
+
+    /** What each declaration of this module offers the classes of another module on the JVM: one
+     * entry per declaration, its kind, module and name and then the facts a class compiled against it
+     * links by, each counted. Recorded where the module was built, so a reader holds a class built
+     * against this module to what these classes offer and not to what they would offer if built
+     * again. No default: a writer that says nothing about it has not said its module offers
+     * nothing. */
+    String[] providedLinkages();
+
+    /** What this module's classes assumed about each declaration of another module they link
+     * against, written as {@link #providedLinkages} writes one: the projection of that declaration
+     * they were compiled against, which a reader holds the declaring module to. No default, for the
+     * reason {@link #providedLinkages} has none. */
+    String[] requiredLinkages();
+
+    /** What each declaration of this module offers another module to copy into its classes — a
+     * helper expanded where it is called, a value's constant or body, a type's invariant: one entry
+     * per declaration, its kind, module and name, the form it is copied in and what it is copied as,
+     * each counted. Recorded where the module was built, for the reason {@link #providedLinkages} is.
+     * No default, for the reason {@link #providedLinkages} has none. */
+    String[] providedCopies();
+
+    /** What this module's classes copied of each declaration of another module, written as {@link
+     * #providedCopies} writes one: what that declaration was when they copied it, which a reader
+     * holds the declaring module to. No default, for the reason {@link #providedLinkages} has
+     * none. */
+    String[] requiredCopies();
 }

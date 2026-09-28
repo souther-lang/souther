@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
 
 /**
  * What a row has to satisfy to stand at one coverage item, in the words a search can solve.
@@ -47,7 +48,19 @@ public sealed interface Standing {
      */
     record OfTwoOnOneCarrier(NumericTerm.FromOnePosition on, NumericTerm.FromOnePosition against,
                              Carrier of, Criterion where)
-            implements Standing {}
+            implements Standing {
+
+        public OfTwoOnOneCarrier {
+            // Two positions, which is what makes this a distance. One position named twice stands
+            // nowhere from itself, and a reader working the quantity out of the pair gets a form
+            // weighing no term — a question about nothing, arriving where an answer about a
+            // quantity belongs.
+            if (on != null && on.equals(against)) {
+                throw new IllegalArgumentException(
+                        "a distance is between two positions, and this names one twice: " + on);
+            }
+        }
+    }
 
     /**
      * An arithmetic form over several positions, held at a value of the form or past one.
@@ -72,9 +85,17 @@ public sealed interface Standing {
 
         public OfAForm {
             on = java.util.Map.copyOf(on);
+            // A form over no position comes to its constant wherever a row stands, so there is
+            // nothing to search for and nothing for a region to be asked about.
+            if (form.coefs().isEmpty()) {
+                throw new IllegalArgumentException(
+                        "a form stands over the positions it names, and this names none: " + form);
+            }
             if (!on.keySet().equals(form.coefs().keySet())) {
                 throw new IllegalArgumentException("a form stands over the positions it names, each"
-                        + " on one order: " + form.coefs().keySet() + " against " + on.keySet());
+                        + " on one order: "
+                        + NumericTerms.inOrder(form.coefs().keySet())
+                        + " against " + NumericTerms.inOrder(on.keySet()));
             }
         }
     }

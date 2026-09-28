@@ -47,6 +47,12 @@ class WhatEachIncompletenessSaysAboutAWiderRunIsWrittenDownOnceTest {
         table.put("LINKAGE_FAILED", "UNAFFECTED");
         table.put("OBSERVATION_ABSENT", "UNAFFECTED");
         table.put("INSTRUMENTATION_ABSENT", "UNAFFECTED");
+        // What decided it is which of the module's bodies came out, and no run allows more of that.
+        table.put("IMPLEMENTATION_NOT_MADE", "UNAFFECTED");
+        // No representation exists, so no host has one to offer.
+        table.put("VALUE_NOT_WORKED_OUT", "UNAFFECTED");
+        // The room that ran out is the host's, and a host is not an allowance.
+        table.put("VALUE_ROOM_EXCEEDED", "UNAFFECTED");
         return table;
     }
 

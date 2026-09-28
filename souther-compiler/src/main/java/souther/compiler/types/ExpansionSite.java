@@ -1,5 +1,7 @@
 package souther.compiler.types;
 
+import souther.compiler.SettledAnswer;
+
 /**
  * Where a copy of a body was made, said in words the source settles.
  *
@@ -22,7 +24,8 @@ package souther.compiler.types;
  * parts do not reach a written thing, stops the expansion rather than being given a name. So this
  * says which sites the compiler can name, and never that the ones it cannot are impossible.
  */
-public sealed interface ExpansionSite permits ExpansionSite.Direct, ExpansionSite.Supplied {
+public sealed interface ExpansionSite
+        extends SettledAnswer permits ExpansionSite.Direct, ExpansionSite.Supplied {
 
     /**
      * A site the source wrote where the copy was made: the call, or the name standing where a value
@@ -133,7 +136,8 @@ public sealed interface ExpansionSite permits ExpansionSite.Direct, ExpansionSit
          * @param copy      the copy the block was handed to
          * @param parameter which of that callee's parameters it filled
          */
-        public record Handover(ExpansionLineage.Step copy, ParameterSlot parameter) {
+        public record Handover(ExpansionLineage.Step copy, ParameterSlot parameter)
+                implements SettledAnswer {
 
             public Handover {
                 if (copy == null || parameter == null) {

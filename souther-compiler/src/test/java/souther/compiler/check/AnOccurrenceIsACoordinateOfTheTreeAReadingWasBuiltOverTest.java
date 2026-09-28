@@ -79,13 +79,14 @@ class AnOccurrenceIsACoordinateOfTheTreeAReadingWasBuiltOverTest {
 
     /** A clause of two parts, written as the author's {@code &&}. */
     private static Core joined(Core left, Core right) {
-        return new Core.Binary(BinOp.AND, left, right, ConstructOccurrence.unwritten(), Type.BOOL,
-                POS);
+        return new Core.Binary(BinOp.AND, left, right, Core.BinaryReading.AS_THEY_STAND,
+                ConstructOccurrence.unwritten(), Type.BOOL, POS);
     }
 
     /** A part of no connective, which is all a shape needs of one. */
     private static Core leaf() {
         return new Core.Binary(BinOp.EQ, new Core.Int(0, Type.INT, POS),
-                new Core.Int(0, Type.INT, POS), ConstructOccurrence.unwritten(), Type.BOOL, POS);
+                new Core.Int(0, Type.INT, POS), Core.BinaryReading.AS_THEY_STAND,
+                ConstructOccurrence.unwritten(), Type.BOOL, POS);
     }
 }

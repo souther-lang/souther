@@ -11,6 +11,7 @@ import souther.compiler.check.Combinators.Handed;
 import souther.compiler.check.PathEngine.Entered;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.core.Core;
@@ -18,22 +19,18 @@ import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.core.Evaluated;
 import souther.compiler.coverage.Arrivals;
 import souther.compiler.diag.CompileException;
-import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.msg.InvariantMessage;
-import souther.compiler.diag.msg.Message;
-import souther.compiler.diag.msg.Supporting;
+import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.ChoiceToLift;
 import souther.compiler.inputs.RuleSite;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.values.TextExtent;
 import souther.compiler.values.ValueSet;
-
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -44,11 +41,9 @@ import java.util.LinkedHashSet;
 import java.util.SequencedMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -115,7 +110,7 @@ public final class InvariantChecker {
      * construction is discharged is asserting something about an analysis that ran, and without this
      * it would pass just as well on one that did not.
      */
-    record Findings(List<CompileException> errors, List<Diagnostic> warnings, Status status) {
+    record Findings(List<CompileException> errors, List<InvariantFinding> warnings, Status status) {
 
         /** What an analysis that was never run has to say, which is nothing and says so. A caller
          *  without the representation this reads takes this rather than running the analysis over
@@ -230,12 +225,24 @@ public final class InvariantChecker {
      * reading made here is filed under cannot come from two places.
      */
     public record Source(Hir.Expr body, ElementProvenance elements, RuleReadingContext reading,
-                         Map<ValueName.Behavior, AssumedContract> contracts) {
+                         Map<ValueName.Behavior, AssumedContract> contracts,
+                         SequencedMap<ReachName.Declaration, Template> templates) {
 
         public Source {
             contracts = Map.copyOf(contracts);
+            templates = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(templates));
         }
     }
+
+    /**
+     * What a value means as the analysis reads it: its body as the checker typed it, with what its
+     * expansion said of the elements of the bindings that body writes.
+     *
+     * <p>One of these for each value the body builds, and for each value those build in turn. Its
+     * bindings are its own, so what is said of them is said of no other body's. Typed once for the
+     * value, whichever bodies build it: it is the meaning of a value that takes nothing.
+     */
+    public record Template(Core body, ElementProvenance elements) { }
 
     /**
      * How far the splits down one path are opened, which this walk holds itself to and does not own.
@@ -255,6 +262,11 @@ public final class InvariantChecker {
      * second walk deriving it again would be a second set of rules. */
     private final PathEngine engine;
     private final Symbols symbols;
+    /** Which form each declaration was written in and which of them wrap one value. Beside
+     * {@link #symbols} and not read off it: what a construction is judged against turns on the form
+     * its name was declared in, which was settled when the module was indexed. */
+    private final DeclarationKinds kinds;
+    private final DeclarationNewtypes newtypes;
     /** The declarations' invariants, typed where they are declared and read where a value is built. */
     private final Clauses clauses;
     /** Where a value is, what it is called, and what can be said of it. */
@@ -276,7 +288,15 @@ public final class InvariantChecker {
      */
     private StringMachineAnswers answers;
     private final List<CompileException> errors = new ArrayList<>();
-    private final List<Diagnostic> warnings = new ArrayList<>();
+    private final List<InvariantFinding> warnings = new ArrayList<>();
+
+    /** What each value the body builds comes to. */
+    private final ValueTemplates templates;
+
+    /** Whether a run comes back from each template this has read, by the tree that is the template.
+     *  A value means the same wherever it is built, so what is owed inside it is owed once, and
+     *  whether it answers is one fact for every build of it. */
+    private final Map<Core, Boolean> templateAnswers = new IdentityHashMap<>();
 
     private InvariantChecker(RuleReadingContext reading) {
         this(reading, Map.of());
@@ -284,13 +304,22 @@ public final class InvariantChecker {
 
     private InvariantChecker(RuleReadingContext reading,
                              Map<ValueName.Behavior, AssumedContract> contracts) {
-        this.engine = new PathEngine(reading, contracts);
+        this(reading, contracts, ValueTemplates.NONE);
+    }
+
+    private InvariantChecker(RuleReadingContext reading,
+                             Map<ValueName.Behavior, AssumedContract> contracts,
+                             ValueTemplates templates) {
+        this.templates = templates;
+        this.engine = new PathEngine(reading, contracts, Terms.Of.THE_DISCHARGE_TREE, templates);
         // Borrowing nothing, since no declaration is being seeded yet, and knowing what the
         // revision knows: where a set stops is the same answer whoever met it.
         this.answers = StringMachineAnswers.unborrowed(reading.readings().extents());
         // Named here because this check reads them directly and often. They are the engine's, not a
         // second copy: one engine builds them once and everything below sees those.
         this.symbols = engine.symbols();
+        this.kinds = reading.source().kinds();
+        this.newtypes = reading.source().newtypes();
         this.clauses = engine.clauses();
         this.terms = engine.terms();
         this.predicates = engine.predicates();
@@ -500,6 +529,19 @@ public final class InvariantChecker {
         }
 
         /**
+         * The same for one name, or null where nothing counts what is there.
+         *
+         * <p>Beside the projection and not through it, because of how a count asks. Settling the
+         * size at a number and seeing whether anything is left is one question per number, and a
+         * reader answering each of them out of {@link #heldAtoms()} builds the whole projection
+         * once per size it asks about.
+         */
+        FactSubject heldAtomAt(RuleKey path) {
+            FieldDomains.Counted counted = held.get(path);
+            return counted == null ? null : counted.atom();
+        }
+
+        /**
          * Both subjects the name {@code path} answers to.
          *
          * <p>A number has one of each and everything else has the second, and a clause is filed
@@ -646,46 +688,19 @@ public final class InvariantChecker {
         }
     }
 
-    /** {@link Seeded} for one declaration, asking {@code machines} for what somebody has already
-     * made of its string rules before building any of it. A declaration this cannot read is one
-     * whose fields it says nothing about, which is the same answer as a declaration with no rules —
-     * so nothing about the declaration throws. {@link Terms.OneTermTwoKinds} is not about the
-     * declaration, and nothing below here catches it. */
-    static Seeded seedFields(TypeSymbol.AtModule named, RuleReadingSource source,
-                             ReadingPolicy policy, DeclarationReadings machines) {
-        return seedFields(named, source, policy, Map.of(), Reach.EVERYTHING, machines);
-    }
-
     /**
-     * The same, read in the world a walk carries.
+     * {@link Seeded} for one declaration, read in the world a walk carries, asking where that world
+     * borrows from for what somebody has already made of its string rules before building any of
+     * it. A declaration this cannot read is one whose fields it says nothing about, which is the
+     * same answer as a declaration with no rules — so nothing about the declaration throws.
+     * {@link Terms.OneTermTwoKinds} is not about the declaration, and nothing below here catches it.
      *
-     * <p>What a reader under a walk asks. It is handed the world the reading it stands inside was
-     * made in, so where it borrows from is already decided — including where that world was bounded
-     * for a reading under way ({@link RuleReadingContext#whileTheAnswerIsMade}), which a reader
-     * choosing a lender for itself would be choosing past.
+     * <p>Where it borrows from is decided by the world it is handed — including where that world
+     * was bounded for a reading under way ({@link RuleReadingContext#whileTheAnswerIsMade}), which a
+     * reader choosing a lender for itself would be choosing past.
      */
     static Seeded seedFields(TypeSymbol.AtModule named, RuleReadingContext reading) {
-        return seedFields(named, reading.source(), reading.policy(), reading.readings());
-    }
-
-    /** The same, reading for itself. */
-    static Seeded seedFields(TypeSymbol.AtModule named, RuleReadingSource source,
-                             ReadingPolicy policy) {
-        return seedFields(named, source, policy, DeclarationReadings.NONE);
-    }
-
-    /** The same, with some of the fields already settled at a value, reading for itself. */
-    static Seeded seedFields(TypeSymbol.AtModule named, RuleReadingSource source,
-                             ReadingPolicy policy, Map<NumberAt<RuleKey>, Count> settled) {
-        return seedFields(named, source, policy, settled, Reach.EVERYTHING,
-                DeclarationReadings.NONE);
-    }
-
-    /** The same, reading only as far as {@code reach} says, and reading for itself. */
-    static Seeded seedFields(TypeSymbol.AtModule named, RuleReadingSource source,
-                             ReadingPolicy policy, Map<NumberAt<RuleKey>, Count> settled,
-                             Reach reach) {
-        return seedFields(named, source, policy, settled, reach, DeclarationReadings.NONE);
+        return seedFields(named, reading, Map.of(), Reach.EVERYTHING);
     }
 
     /**
@@ -708,16 +723,15 @@ public final class InvariantChecker {
      * nothing of its own to suppose asks for that one reading, and there is nothing to tell two of
      * them apart — the same declaration, the same world, the same terms. So the first is made and
      * the rest are lent it, for as long as the world it was read from is the one it was read from,
-     * which is what {@code readings} is answering for.
+     * which is what the world's lender is answering for.
      *
      * <p>A reading with something settled or something left out is not that reading and is made
      * here every time. It belongs to the question that asked for it: what it leaves out is that
      * question's, and the next question leaves out something else.
      */
-    static Seeded seedFields(TypeSymbol.AtModule named, RuleReadingSource source,
-                             ReadingPolicy policy, Map<NumberAt<RuleKey>, Count> settled,
-                             Reach reach, DeclarationReadings readings) {
-        return readFields(named, source, policy, settled, reach, readings).seeded();
+    static Seeded seedFields(TypeSymbol.AtModule named, RuleReadingContext reading,
+                             Map<NumberAt<RuleKey>, Count> settled, Reach reach) {
+        return readFields(named, reading, settled, reach).seeded();
     }
 
     /**
@@ -734,20 +748,20 @@ public final class InvariantChecker {
      * the same kind of thing, so no reader downstream has to put the question again to know what it
      * may keep.
      */
-    static DeclarationReading readFields(TypeSymbol.AtModule named, RuleReadingSource source,
-                                         ReadingPolicy policy, Map<NumberAt<RuleKey>, Count> settled,
-                                         Reach reach, DeclarationReadings readings) {
+    static DeclarationReading readFields(TypeSymbol.AtModule named, RuleReadingContext reading,
+                                         Map<NumberAt<RuleKey>, Count> settled, Reach reach) {
         // What the declaration's string rules came to, asked for before anything else. Where a store
         // is answering, making that answer is what makes the declaration's canonical reading — so a
         // borrower asks for the machines and then looks for the reading, rather than reading for
         // itself and standing a second reading beside the answer's.
+        DeclarationReadings readings = reading.readings();
         StringMachineAnswers answers = readings.of(named.key());
         if (!settled.isEmpty() || !reach.everything()) {
             return DeclarationReading.of(
-                    seedFieldsFresh(named, source, policy, settled, reach, readings, answers));
+                    seedFieldsFresh(named, reading, settled, reach, answers));
         }
-        return readings.reading(named.key(), source, policy,
-                () -> seedFieldsFresh(named, source, policy, settled, reach, readings, answers));
+        return readings.reading(named.key(), reading.source().origin(), reading.policy(),
+                () -> seedFieldsFresh(named, reading, settled, reach, answers));
     }
 
     /**
@@ -777,16 +791,14 @@ public final class InvariantChecker {
      * does not arrive back at the borrowing entry it is answering for, and so that what counts as a
      * reading made is where the reading is made.
      */
-    private static Seeded seedFieldsFresh(TypeSymbol.AtModule named, RuleReadingSource source,
-                             ReadingPolicy policy, Map<NumberAt<RuleKey>, Count> settled,
-                             Reach reach, DeclarationReadings machines,
+    private static Seeded seedFieldsFresh(TypeSymbol.AtModule named, RuleReadingContext world,
+                             Map<NumberAt<RuleKey>, Count> settled, Reach reach,
                              StringMachineAnswers answers) {
         READINGS.incrementAndGet();
-        Symbols symbols = source.symbols();
-        // The three this was handed, put back together to hand on. Not a world of its own: nothing
-        // here chooses any of them, and a reader below is given what this reader was given.
-        InvariantChecker c =
-                new InvariantChecker(RuleReadingContext.of(source, policy, machines));
+        Symbols symbols = world.source().symbols();
+        ReadingPolicy policy = world.policy();
+        // The world this was handed, handed on: a reader below is given what this reader was given.
+        InvariantChecker c = new InvariantChecker(world);
         c.answers = answers;
         // A newtype's value is the same location as the newtype, so it is at no name of its own and
         // its fields are the first step there is. Read from the world rather than off a node handed
@@ -1547,6 +1559,19 @@ public final class InvariantChecker {
             constrained = Map.copyOf(constrained);
         }
 
+        /**
+         * Hashed by which reading it is, which two that are equal share.
+         *
+         * <p>The clause and what the reading made of it are trees and tables, and hashing them is a
+         * walk of all of them at every lookup of a reading by itself: as long as the clause is,
+         * and the clause of a chain of values is as long as the chain. What tells one reading from
+         * another is its number, and the rest is compared only between two that share one.
+         */
+        @Override
+        public int hashCode() {
+            return opened.hashCode();
+        }
+
         /** The clause {@code authored} was written in, as {@code world} holds it, with what the
          *  reading that built it made of each occurrence of each part it holds. */
         static Written of(ReadingId opened, Core clause, List<Clauses.StatedPart> authored,
@@ -2251,7 +2276,7 @@ public final class InvariantChecker {
         // out here rather than being filed as a clause that could have moved an edge.
         InvariantBound.Read end = numbered != null
                 && numbered.claim() instanceof ComparisonClaim.Cut cut
-                ? InvariantBound.at(cut, Terms.asWrittenValue(numbered.other(), at),
+                ? InvariantBound.at(cut, Terms.writtenLiteralOf(numbered.other(), at),
                         numbered.number().carrier())
                 : new InvariantBound.Read.NoEnd();
         Coordinate about = numbered == null ? null : numbered.number();
@@ -2527,7 +2552,7 @@ public final class InvariantChecker {
     private StatedLines.Statement lineStatedIn(Core leaf, boolean positive, Denotations at,
                                                Map<FactSubject, Coordinate> byName,
                                                Arrivals answering) {
-        if (!(leaf instanceof Core.Binary bin)) {
+        if (!(Core.withoutStanding(leaf) instanceof Core.Binary bin)) {
             return NO_LINE;
         }
         StatedComparison read = StatedComparison.of(bin, positive);
@@ -3384,7 +3409,7 @@ public final class InvariantChecker {
          * position at all — asked by the one authority for that question, which is the walk over
          * the clause, and not by this.
          */
-        record CutsNothing(StatedComparison comparison, BigDecimal residue)
+        record CutsNothing(StatedComparison comparison, ExactRatio residue)
                 implements CanonicalForm {
 
             /**
@@ -3586,7 +3611,16 @@ public final class InvariantChecker {
     static Findings analyze(Core body, RuleReadingContext reading,
                             Map<ValueName.Behavior, AssumedContract> contracts,
                             Scope params) {
-        InvariantChecker c = new InvariantChecker(reading, contracts);
+        return analyze(body, reading, contracts, params, ValueTemplates.NONE);
+    }
+
+    /**
+     * The same, over a body that builds values whose bodies are held in {@code templates}.
+     */
+    static Findings analyze(Core body, RuleReadingContext reading,
+                            Map<ValueName.Behavior, AssumedContract> contracts,
+                            Scope params, ValueTemplates templates) {
+        InvariantChecker c = new InvariantChecker(reading, contracts, templates);
         if (body == null) {
             return new Findings(c.errors, c.warnings, Status.ABANDONED);
         }
@@ -3693,6 +3727,35 @@ public final class InvariantChecker {
     }
 
     /**
+     * What is known after the value a {@code let} is given has been evaluated.
+     *
+     * <p>A closure is read where it is applied, and a build of a value is read where the value is
+     * held: what a value comes to does not turn on where it is built, so the constructions in it
+     * are owed once, under nothing that was assumed on the way to any build of it.
+     */
+    private Known walkedValue(Core value, Known k, Denotations at, ContextMultiplicity copies) {
+        return switch (Core.withoutStanding(value)) {
+            case Core.Block _ -> k;
+            case Core.MaterialisedValue build -> {
+                Core template = templates.bodyOf(build);
+                Boolean answers = templateAnswers.get(template);
+                if (answers == null) {
+                    Known left = entering(template, Known.top(), engine.insideATemplate(),
+                            ONE_READING);
+                    answers = !left.reachesNothing();
+                    templateAnswers.put(template, answers);
+                }
+                // What the value constructs is judged once, where it is held, and what was learned
+                // there is not the caller's. Whether it comes back is: an evaluation no run carries
+                // a value on from is one nothing written after is reached from, whichever build
+                // asked.
+                yield answers ? k : k.reachingNothing();
+            }
+            default -> walk(value, k, at, copies);
+        };
+    }
+
+    /**
      * One step of a region, over facts that already hold where the step begins — and what a
      * continuation of {@code e} inside this region may take out of it.
      *
@@ -3717,6 +3780,11 @@ public final class InvariantChecker {
         if (k.reachesNothing()) {
             return k;
         }
+        // Standing as a wider type evaluates nothing, constructs nothing and settles nothing: what
+        // is walked is what it holds, and what that leaves is what this leaves.
+        if (e instanceof Core.Widen w) {
+            return walk(w.value(), k, at, copies);
+        }
         Core.LetIn standing = bindingInValueIn(e);
         if (standing != null) {
             // A call this analysis expanded is a binding holding what it was given, and where that
@@ -3727,8 +3795,7 @@ public final class InvariantChecker {
             // the source would have written with a `let`, which is the tree the rest of this walk
             // already reads — so a construction moved into a helper reads the terms its caller's
             // guards settled, which is what the expansion is for.
-            Known held = standing.value() instanceof Core.Block ? k
-                    : walk(standing.value(), k, at, copies);
+            Known held = walkedValue(standing.value(), k, at, copies);
             Entered in = bindLet(standing, held, at);
             // The rebuilt tree is the whole of this expression, so it is the one way on. What it
             // settles is inside the binder the expansion introduced and does not come back out;
@@ -3761,7 +3828,7 @@ public final class InvariantChecker {
             // What the split asks is evaluated before any arm is, so it is walked here and what it
             // leaves is what the arms are read under.
             within = walk(split.asked(), within, there, copies);
-            Set<Core> alike = sameSplit(e, value, there);
+            Set<Core> alike = sameSplit(e, at, value, there);
             // The readings start from where the split stood, not from outside it. The tree each is
             // given still holds those binders and walks into them again, which is why entering one
             // already entered is nothing: a second transition would forget what the arm settled.
@@ -3832,7 +3899,7 @@ public final class InvariantChecker {
                 // of the attempt, and an attempt is written where it could not say enough: an
                 // expression it cannot name denotes nothing, and inheriting that would drop the one
                 // thing reaching this branch established.
-                Entered in = engine.enteringBuilt(ic, out, at);
+                Entered in = engine.enteringBuilt(Choice.Decides.ofBuilt(ic), out, at);
                 List<Entered> ways = new ArrayList<>();
                 ways.add(new Entered(entering(ic.then(), in.known(), in.at(), copies), in.at()));
                 // Each departure stands where the invariant did not hold, and nothing was built
@@ -3845,8 +3912,7 @@ public final class InvariantChecker {
             case Core.LetIn li -> {
                 // A closure is read where it is applied: what its parameter holds is decided there,
                 // and reading it here would read every construction in it with the element unknown.
-                Known out = li.value() instanceof Core.Block ? k
-                        : walk(li.value(), k, at, copies);
+                Known out = walkedValue(li.value(), k, at, copies);
                 Entered in = bindLet(li, out, at);
                 // The body is the one way on: what a `let` answers is what its body answers, so a
                 // body no run leaves is a `let` no run leaves.
@@ -4038,7 +4104,12 @@ public final class InvariantChecker {
      * what it builds and what each of its fields is given came with it.
      */
     private Judgment judge(Core.Construct made, Known k, Denotations at, boolean attempted) {
-        if (!(symbols.declaredNode(made.typeName()) instanceof Hir.Data type)) {
+        // Which form the name was declared in, asked of what was settled when its module was
+        // indexed. Only a product carries an invariant to judge a construction against; reading the
+        // declaration to find that out is what had this check re-run for a declaration of another
+        // module that had only moved.
+        if (!(made.typeName() instanceof TypeSymbol.AtModule type)
+                || kinds.of(type.key()) != DeclarationKind.PRODUCT) {
             return null;
         }
         Judgment judged = verdictOf(made, type, k, at);
@@ -4059,7 +4130,7 @@ public final class InvariantChecker {
      * reaches here: the walk opens it before anything is checked, so what a field is given is a
      * value and not a choice of arms.
      */
-    private Judgment verdictOf(Core.Construct nd, Hir.Data type, Known k, Denotations at) {
+    private Judgment verdictOf(Core.Construct nd, TypeSymbol.AtModule type, Known k, Denotations at) {
         Map<String, BindingId> fields = clauses.bindingsOf(nd.typeName());
         Map<BindingId, Core> given = new HashMap<>();
         for (Core.FieldValue fv : nd.values()) {
@@ -4194,7 +4265,7 @@ public final class InvariantChecker {
             }
         }
         if (owed.isEmpty()) {
-            return new Judgment(unreadable ? Verdict.UNREPRESENTABLE : Verdict.PROVED, found);
+            return new Judgment(unreadable ? Verdict.UNREPRESENTABLE : Verdict.PROVED, ClauseJudgments.of(found));
         }
         NumericDomain<FactSubject> dom = readingOf(k.numbers(), owed);
         // The same clauses read against the same site, under what would be known here had no
@@ -4220,17 +4291,17 @@ public final class InvariantChecker {
             put(found, owing.clause(), status);
         }
         if (refutedAlone) {
-            return new Judgment(Verdict.REFUTED_ALONE, found);
+            return new Judgment(Verdict.REFUTED_ALONE, ClauseJudgments.of(found));
         }
         if (alongside) {
-            return new Judgment(Verdict.REFUTED_NOT_ALONE, found);
+            return new Judgment(Verdict.REFUTED_NOT_ALONE, ClauseJudgments.of(found));
         }
         if (unknown) {
-            return new Judgment(Verdict.UNKNOWN, found);
+            return new Judgment(Verdict.UNKNOWN, ClauseJudgments.of(found));
         }
         // Every clause that could be read is discharged. One that could not be read still stands, so
         // this is not the whole invariant proven.
-        return new Judgment(unreadable ? Verdict.UNREPRESENTABLE : Verdict.PROVED, found);
+        return new Judgment(unreadable ? Verdict.UNREPRESENTABLE : Verdict.PROVED, ClauseJudgments.of(found));
     }
 
     /**
@@ -4289,6 +4360,62 @@ public final class InvariantChecker {
     }
 
     /**
+     * The clauses one construction was judged against, in the order they were declared, with what
+     * was proved about each.
+     *
+     * <p>A sequence and not a map, because the sequence is part of what this says: a report names
+     * the clauses in it and labels their places in it, so two of these holding the same clauses in
+     * different orders are two reports. A map keyed by the clause would say the same thing and
+     * compare as though it did not — {@code Map.equals} is about entries — and this is held inside
+     * an answer that is kept or discarded by what {@code equals} says. Written as a sequence, the
+     * comparison that comes for free is the one that is right.
+     *
+     * <p>Each clause once. Which of the three a clause came out as is one answer, and a clause
+     * reached twice — through two spreads, or read again under a rewrite — is one clause, joined
+     * where it is recorded ({@link #put}). Two entries for one clause would be this check
+     * disagreeing with itself about a clause it read, and there would be no answer to which of them
+     * a report is about.
+     *
+     * <p>Copied on the way in, since what a walk was building is not what an answer holds: an answer
+     * that went on being written into after it was answered with is one whose readers were told about
+     * it before it was what it is.
+     */
+    record ClauseJudgments(List<Judged> inOrder) {
+
+        static final ClauseJudgments NONE = new ClauseJudgments(List.of());
+
+        ClauseJudgments {
+            inOrder = List.copyOf(inOrder);
+            Set<Clause.Id> once = new LinkedHashSet<>();
+            for (Judged one : inOrder) {
+                if (!once.add(one.clause().id())) {
+                    throw new Clause.NotOneClause("clause " + one.clause().id()
+                            + " was judged twice at one construction");
+                }
+            }
+        }
+
+        /** What a walk recorded, in the order it recorded it. */
+        static ClauseJudgments of(SequencedMap<Clause.Id, Judged> recorded) {
+            return new ClauseJudgments(List.copyOf(recorded.sequencedValues()));
+        }
+
+        /** What was proved about {@code clause} here, or null where this did not read it. */
+        Judged at(Clause.Id clause) {
+            for (Judged one : inOrder) {
+                if (one.clause().id().equals(clause)) {
+                    return one;
+                }
+            }
+            return null;
+        }
+
+        boolean isEmpty() {
+            return inOrder.isEmpty();
+        }
+    }
+
+    /**
      * One clause and what was proved about it.
      *
      * <p>The pair rather than a clause on one of two lists, so that a clause cannot be on two of
@@ -4337,8 +4464,11 @@ public final class InvariantChecker {
      * off it: {@link #settled()} is what the guards establish, {@link #refuted()} is what the value
      * fails, and {@link #unsettled()} is the two nothing known there establishes — which is the
      * question E2011 asks and E2010 does not.
+     *
+     * <p>In the order the clauses were declared, which {@link ClauseJudgments} holds and is part of
+     * what this says.
      */
-    record Judgment(Verdict verdict, SequencedMap<Clause.Id, Judged> found) {
+    record Judgment(Verdict verdict, ClauseJudgments found) {
 
         /**
          * What two readings of one construction found, together.
@@ -4356,21 +4486,22 @@ public final class InvariantChecker {
          * warning points anywhere.
          */
         static Judgment of(Judgment a, Judgment b) {
-            SequencedMap<Clause.Id, Judged> found = new LinkedHashMap<>();
-            a.found().forEach((id, one) -> {
-                Judged also = b.found().get(id);
+            List<Judged> found = new ArrayList<>();
+            for (Judged one : a.found().inOrder()) {
+                Judged also = b.found().at(one.clause().id());
                 if (also != null) {
-                    found.put(id, Judged.merge(one, also));
+                    found.add(Judged.merge(one, also));
                 } else if (one.status().unsettled()) {
-                    found.put(id, one.whereTheOtherReadingSaysNothing());
+                    found.add(one.whereTheOtherReadingSaysNothing());
                 }
-            });
-            b.found().forEach((id, one) -> {
-                if (!a.found().containsKey(id) && one.status().unsettled()) {
-                    found.put(id, one.whereTheOtherReadingSaysNothing());
+            }
+            for (Judged one : b.found().inOrder()) {
+                if (a.found().at(one.clause().id()) == null && one.status().unsettled()) {
+                    found.add(one.whereTheOtherReadingSaysNothing());
                 }
-            });
-            return new Judgment(Verdict.of(a.verdict(), b.verdict()), found);
+            }
+            return new Judgment(Verdict.of(a.verdict(), b.verdict()),
+                    new ClauseJudgments(found));
         }
 
         /** The clauses nothing known there establishes — the ones this check could not settle and
@@ -4404,11 +4535,11 @@ public final class InvariantChecker {
 
         private SequencedMap<Clause.Id, Clause.Ref> where(Predicate<ClauseStatus> which) {
             SequencedMap<Clause.Id, Clause.Ref> side = new LinkedHashMap<>();
-            found.forEach((id, one) -> {
+            for (Judged one : found.inOrder()) {
                 if (which.test(one.status())) {
-                    side.put(id, one.clause());
+                    side.put(one.clause().id(), one.clause());
                 }
-            });
+            }
             return side;
         }
 
@@ -4441,72 +4572,29 @@ public final class InvariantChecker {
          * clauses it is about, and where each of them is written is the declaration's answer: taken
          * from the judgment, a report would point where the clause was when the judgment was made.
          */
-        static Stream<souther.compiler.diag.DiagnosticPlace> pointsTo(
+        static Stream<DiagnosticPlace> pointsTo(
                 SequencedMap<Clause.Id, Clause.Ref> side, ClauseLocations written) {
             return side.keySet().stream().map(written::of);
         }
     }
 
-    /**
-     * What a possible violation of {@code type}'s invariant is said as, which is two questions and
-     * not one: whether a clause nothing known there establishes can be named, and whether one
-     * that was established can be. Neither answers the other, and neither answers whether there was
-     * such a clause — a clause written without a name is judged like any other and is in no set
-     * here.
-     *
-     * <p>Asked one at a time and of the sets, before anything is written out. One joined string
-     * answering both is what ended this warning with `Established here: .`, and it could as easily
-     * have dropped an established clause a reader could have been told about: the two mistakes are
-     * the same mistake, and they are the two spellings this did not have.
-     */
-    private static Diagnostic.Builder mayViolate(Hir.Data type, Judgment judgment) {
-        if (judgment.canNameUnsettled()) {
-            if (judgment.canNameSettled()) {
-                return Diagnostic.say(new InvariantMessage.NothingKnownHereEstablishesButDoesEstablish(
-                        type.name(), names(judgment.unsettled()),
-                        names(judgment.settled())));
-            }
-            return Diagnostic.say(new InvariantMessage.NothingKnownHereEstablishes(
-                    type.name(), names(judgment.unsettled())));
-        }
-        if (judgment.canNameSettled()) {
-            return Diagnostic.say(
-                    new InvariantMessage.NothingKnownHereEstablishesTheInvariantButDoesEstablish(
-                            type.name(), names(judgment.settled())));
-        }
-        return Diagnostic.say(new InvariantMessage.NothingKnownHereEstablishesTheInvariant(type.name()));
-    }
-
-    /**
-     * The clause names as a diagnostic writes them out.
-     *
-     * <p>Reached only from a branch that has already chosen what to say. What decides which of the
-     * spellings a diagnostic is written in is the set, and never this text: an empty string is what
-     * a set with no names in it renders as, and reading it back as an answer puts "no clause was
-     * named" and "there is no clause" into one value.
-     */
-    private static String names(SequencedMap<Clause.Id, Clause.Ref> clauses) {
-        return clauses.values().stream().map(Clause.Ref::name).flatMap(Optional::stream)
-                .map(ClauseName::value).collect(Collectors.joining(", "));
-    }
-
     /** Whether the constant check reads this construction: a newtype's, over a value written where
      * it is built. That check names the clause that failed, so it is left to say it — and it reads
      * the construction as written, so a name given the value is not one it sees. */
-    private static boolean constantlyBuilt(Hir.Data type, Core.Construct nd) {
-        return type.newtype() && Terms.isWritten(nd.values().get(0).value());
+    private boolean constantlyBuilt(TypeSymbol.AtModule type, Core.Construct nd) {
+        return newtypes.of(type.key()) && Terms.isWritten(nd.values().get(0).value());
     }
 
     /** Says what {@code verdict} found. A definite violation is an error and an unproven one a
      * warning; a discharged or non-expressible invariant says nothing. An {@code attempted}
      * construction raises no warning: what the warning reports is a possible abort, and an attempt
      * takes its else branch instead. */
-    private void report(Core at, Hir.Data type, SourcePos pos, boolean attempted,
+    private void report(Core at, TypeSymbol.AtModule type, SourcePos pos, boolean attempted,
                         Judgment judgment) {
         Verdict verdict = judgment.verdict();
         List<Said> watching = WATCHING;
         if (watching != null && capturing == null) {
-            watching.add(new Said(type.name(), pos, judgment));
+            watching.add(new Said(type.key().name(), pos, judgment));
         }
         if (capturing != null) {
             capturing.found().put(new Occurrence(asWritten(at)),
@@ -4514,16 +4602,16 @@ public final class InvariantChecker {
             return;
         }
         switch (verdict) {
-            case REFUTED_ALONE -> reportViolation(type, pos, judgment, false);
-            case REFUTED_NOT_ALONE -> reportViolation(type, pos, judgment, true);
+            // Said here and not handed on. A refusal is why this body has no meaning to emit, and it
+            // travels as the exception that stops the check — there is no answer about this body for
+            // a reader of findings to be reading, so there is nothing for a place to be looked up
+            // later by.
+            case REFUTED_ALONE, REFUTED_NOT_ALONE ->
+                    errors.add(CompileException.of(new InvariantFinding(type, pos, judgment)
+                            .reportedAs(clauses.written())));
             case UNKNOWN -> {
                 if (!attempted) {
-                    warnings.add(finish(
-                            mayViolate(type, judgment)
-                                    .hint(new InvariantMessage
-                                            .GuardItOrLetADataOwnTheRelation()),
-                            pos, judgment.unsettled(),
-                            new InvariantMessage.ThisClauseIsNotEstablishedHere()));
+                    warnings.add(new InvariantFinding(type, pos, judgment));
                 }
             }
             // Nothing was asked here, so nothing is said. Whether that is the right thing to say of a
@@ -4535,7 +4623,7 @@ public final class InvariantChecker {
     }
 
     /** What a construction came out as where it is being read on a branch rather than said. */
-    private record Reported(Hir.Data type, SourcePos pos, Judgment judgment, boolean attempted) {}
+    private record Reported(TypeSymbol.AtModule type, SourcePos pos, Judgment judgment, boolean attempted) {}
 
     /**
      * Which construction a reading found: the one in the body as it was written. A reading is that
@@ -4655,7 +4743,8 @@ public final class InvariantChecker {
         /** An attempted construction's success branch, read with the binding carrying the invariant
          * the attempt established. */
         static Binder of(Core.IfConstructed ic) {
-            return (engine, k, at) -> engine.enteringBuilt(ic, k, at);
+            return (engine, k, at) ->
+                    engine.enteringBuilt(Choice.Decides.ofBuilt(ic), k, at);
         }
     }
 
@@ -4762,13 +4851,13 @@ public final class InvariantChecker {
                     predicates.assumeCond(c.cond(), within, there, c.holding()).known(), there));
             case Choice.Decides.ACase c -> new Opened(c.scrutinee(), (within, there) ->
                     engine.enteringArm(c.arm(), c.scrutinee(), within, there));
-            case Choice.Decides.ItWasBuilt ignored -> throw notOpened(split,
+            case Choice.Decides.ItWasBuilt _ -> throw notOpened(split,
                     "an attempted construction", "it is read where it stands with what it built"
                             + " bound");
-            case Choice.Decides.ItDeparted ignored -> throw notOpened(split,
+            case Choice.Decides.ItDeparted _ -> throw notOpened(split,
                     "an attempted construction", "it is read where it stands with what it built"
                             + " bound");
-            case Choice.Decides.ByArgumentRelations ignored -> throw notOpened(split,
+            case Choice.Decides.ByArgumentRelations _ -> throw notOpened(split,
                     "an operation the library defines by cases", "there is no node to ask — what"
                             + " decides it is how its arguments stand, and the value is bounded by"
                             + " what its cases answer");
@@ -4840,7 +4929,7 @@ public final class InvariantChecker {
      */
     private static Core.LetIn bindingIn(Core e) {
         return switch (e) {
-            case Core.Block b -> null;
+            case Core.Block _ -> null;
             case Core.LetIn li -> li;
             case Core.If iff -> bindingIn(iff.cond());
             case Core.IfConstructed ic -> bindingIn(ic.construct());
@@ -4971,21 +5060,30 @@ public final class InvariantChecker {
      * included. Asked once for all the readings, since which nodes those are does not depend on which
      * arm is being read.
      *
-     * <p>{@code at} is where {@code value} stands, which is what keying it needs. A candidate
-     * elsewhere in {@code e} is keyed there too rather than in its own scope, so two splits that
-     * compute the same value under different bindings are read as two — which is the thing this
-     * exists to prevent, still unanswered for that shape.
+     * <p>Two environments, because a key means something only beside the environment it was read
+     * in. {@code there} is where {@code value} stands and is what its key is read in; {@code at} is
+     * where {@code e} stands, and each candidate is keyed where it stands inside {@code e}. A helper
+     * called twice is two bindings of one argument, and read in the first one's environment the
+     * second one's name denotes nothing.
      */
-    private Set<Core> sameSplit(Core e, Core value, Denotations at) {
+    private Set<Core> sameSplit(Core e, Denotations at, Core value, Denotations there) {
         Set<Core> alike = Collections.newSetFromMap(new IdentityHashMap<>());
         alike.add(value);
-        Term key = terms.bodyKey(value, at);
+        Term key = terms.bodyKey(value, there);
         if (key != null) {
             collectAlike(e, key, at, alike);
         }
         return alike;
     }
 
+    /**
+     * The splits under {@code e} keyed as {@code key} is, {@code e} standing at {@code at}.
+     *
+     * <p>Every child is visited, and what a binder over one means is {@link Terms}' answer: a
+     * {@code let}'s body is read {@link Terms#inside} it, and an arm of a {@code match} or of an
+     * attempt under what {@link Terms#choosing} that arm binds. The forms that open a scope are the
+     * ones named here.
+     */
     private void collectAlike(Core e, Term key, Denotations at, Set<Core> alike) {
         if (e instanceof Core.Block) {
             return;
@@ -4994,7 +5092,36 @@ public final class InvariantChecker {
             alike.add(e);
             return;
         }
+        if (e instanceof Core.LetIn li) {
+            collectAlike(li.value(), key, at, alike);
+            collectAlike(li.body(), key, terms.inside(li, at), alike);
+            return;
+        }
+        if (e instanceof Core.Match m) {
+            collectAlike(m.scrutinee(), key, at, alike);
+            collectArms(Choice.of(m), key, at, alike);
+            return;
+        }
+        if (e instanceof Core.IfConstructed ic) {
+            collectAlike(ic.construct(), key, at, alike);
+            collectArms(Choice.of(ic), key, at, alike);
+            return;
+        }
         Core.forEachChild(e, child -> collectAlike(child, key, at, alike));
+    }
+
+    /**
+     * The splits under the arms of {@code choice}, each read under what choosing that arm binds.
+     *
+     * <p>Only for a choice whose arms are the bodies of the node it was read off, which a
+     * {@code match} and an attempt are. The forms that bind are named by {@link #collectAlike} and
+     * not found by asking {@link Choice}: which value a node is one of is that type's question, and
+     * where a binder's scope begins is not.
+     */
+    private void collectArms(Choice choice, Term key, Denotations at, Set<Core> alike) {
+        for (Choice.Arm arm : choice.arms()) {
+            collectAlike(arm.answers(), key, terms.choosing(arm.decidedBy(), at), alike);
+        }
     }
 
     /**
@@ -5025,102 +5152,6 @@ public final class InvariantChecker {
             }
             report(one.of(), said.type(), said.pos(), said.attempted(), judgment);
         }
-    }
-
-    /** Reports the violation, saying it in the terms {@code reason} was reached in: the value alone
-     * fails the invariant on its own, or it fails under what else is known where it stands. The check
-     * knows which of the two decided it and not what within the second did, so neither message names
-     * a guard. */
-    private void reportViolation(Hir.Data type, SourcePos pos, Judgment judgment,
-                                 boolean onAPath) {
-        Diagnostic.Builder said = rejects(type, judgment, onAPath);
-        // The message says what holds of every path, so it names the clauses the value fails
-        // wherever it is built. Where there are none it names none, and the regions then carry a
-        // weaker claim about a wider set: the clauses some path here fails. Two sets, because they
-        // are two claims — pointing at those clauses under the sentence's own words would say of
-        // each that the value fails it, which the value coming down the other branch refutes.
-        errors.add(CompileException.of(judgment.refuted().isEmpty()
-                ? finish(said, pos, judgment.refutedSomewhere(),
-                        new InvariantMessage.ThisClauseRejectsTheValueOnSomeOfThePathsHere())
-                : finish(said, pos, judgment.refuted(),
-                        new InvariantMessage.ThisClauseRejectsThisValue())));
-    }
-
-    /**
-     * Where a report about a construction is, and where the clauses it is about are written.
-     *
-     * <p>Both places, in one place, because a report that gave itself a position and stopped there
-     * still reads as a report — nothing about a warning that points only at the construction says a
-     * clause was left unpointed at. Every one of these is built here, so a diagnostic added to this
-     * check gets both or neither.
-     *
-     * <p>Which clauses is the caller's, and is not something this works out from a judgment: E2011
-     * is about the clauses nothing known there establishes and E2010 about the ones the value fails,
-     * and those are the two questions the classification was split to keep apart. What this does
-     * with the clauses it is handed is the same either way — every one of them that this compile can
-     * quote, in the order the clauses were declared, labelled with what the caller says of them.
-     *
-     * <p>A clause this compile has no file for is said rather than left out: the label says where
-     * the code came from and points at nothing ({@link souther.compiler.diag.DiagnosticPlace}). It
-     * used to be dropped, so the same warning about the same rule told a reader which clause was at
-     * issue when the declaration was in this project and told them nothing when it came off the
-     * module path. What the message says is a different question with a different answer — whether
-     * the clause could be named — and neither decides the other.
-     */
-    private <M extends Message & Supporting> Diagnostic finish(
-            Diagnostic.Builder said, SourcePos at, SequencedMap<Clause.Id, Clause.Ref> clauses,
-            M label) {
-        said.at(at);
-        // One label per place, and the clauses are what there are several of. A label is a sentence
-        // about a place, and where two clauses are written in one module this compile has no file
-        // for, the place is all either of them has: what told the two labels apart was the caret,
-        // and there is no caret. Said once each they come out as the same sentence twice, which
-        // reads as a repeat rather than as two clauses. Which clauses they are is in the message,
-        // which names them.
-        java.util.Set<souther.compiler.diag.DiagnosticPlace> already = new java.util.LinkedHashSet<>();
-        Judgment.pointsTo(clauses, this.clauses.written()).forEach(place -> {
-            if (!already.add(place)) {
-                return;
-            }
-            switch (place) {
-                case souther.compiler.diag.DiagnosticPlace.InSource in ->
-                        said.secondary(in.region(), label);
-                case souther.compiler.diag.DiagnosticPlace.Unavailable out ->
-                        said.secondaryOutOfSight(out.provenance(), label);
-            }
-        });
-        return said.build();
-    }
-
-    /**
-     * What a refuted invariant is said as. One question here and not two, because what this error
-     * reports is the clause the value fails and nothing else.
-     *
-     * <p>Which is why it is the refuted clauses that are named and not the unsettled ones. A value
-     * that fails one clause may leave others standing that nothing here decides, and those are
-     * clauses nothing known there establishes rather than clauses the value fails — a sentence saying
-     * "the value being built is one that clause rejects" over a list holding both says something
-     * untrue of some of them.
-     *
-     * <p>A refuted invariant may well have clauses the guards established, and {@code judgment}
-     * holds their names when it does — E2010 does not report them, which is a decision about what
-     * this diagnostic is for and not an observation that there were none. Anything that starts
-     * reporting them here asks {@link Judgment#canNameSettled()}, as the warning does, rather than
-     * reading the answer off the set it is already writing out.
-     */
-    private static Diagnostic.Builder rejects(Hir.Data type, Judgment judgment, boolean onAPath) {
-        if (onAPath) {
-            return judgment.canNameRefuted()
-                    ? Diagnostic.say(new InvariantMessage.TheValueIsRejectedOnAReachablePath(
-                            type.name(), names(judgment.refuted())))
-                    : Diagnostic.say(new InvariantMessage.TheValueIsRejectedOnAReachablePathUnnamed(
-                            type.name()));
-        }
-        return judgment.canNameRefuted()
-                ? Diagnostic.say(new InvariantMessage.TheValueIsOneTheInvariantRejects(
-                        type.name(), names(judgment.refuted())))
-                : Diagnostic.say(new InvariantMessage.TheValueIsOneTheInvariantRejectsUnnamed(
-                        type.name()));
     }
 
     // --- introducing a binding -----------------------------------------------------------------

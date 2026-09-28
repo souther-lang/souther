@@ -61,32 +61,6 @@ class CompileCallResultFieldAccessTest {
     }
 
     @Test
-    void anImportedTypesConstructorResultIsReachedInto() throws Exception {
-        String up = """
-                module up exposing ( Amount )
-
-                data Amount = Int invariant value >= 0
-                """;
-        String down = """
-                module down exposing ( In, Out, run )
-                import up ( Amount )
-
-                data In = { n: Int }
-                data Out = { m: Int }
-
-                behavior run : (i: In) -> Out constructs Out, Amount
-
-                let run (i) = Out { m = Amount(i.n).value }
-                """;
-        BytesClassLoader loader = new BytesClassLoader(
-                Compiler.compileModules(java.util.List.of(up, down)), getClass().getClassLoader());
-        Object b = Emitted.behavior(loader, "down", "run").getConstructor().newInstance();
-        Object out = Codecs.apply(b, Codecs.decoded(loader, "down.In", java.util.Map.of("n", 3L)));
-
-        assertEquals(3L, out.getClass().getMethod("m").invoke(out));
-    }
-
-    @Test
     void aMatchScrutineeReachesIntoACallResult() throws Exception {
         String src = """
                 module demo

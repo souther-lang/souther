@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.SequencedMap;
 
@@ -39,6 +40,7 @@ public final class Offering {
     private final SequencedMap<String, Adequacy.Filling> searched;
     private final BorderAccount account;
     private final Set<ObligationIdentity> answered;
+    private final Map<ObligationIdentity, InputOfARowForALine> shownAt;
 
     /**
      * @param request  what was asked for, which is what settles which rows are here
@@ -50,10 +52,16 @@ public final class Offering {
      *                 rows, which is not the same as a request that asked and found none
      * @param answered what the rows here settle: every item one of them would answer if it were
      *                 written, whichever row it was composed for
+     * @param shownAt  the input of the row a person is handed for each line, for the lines one of
+     *                 these rows is offered for. Decided here because it is decided by what is
+     *                 offered: the row composed for a line goes when another row already answers
+     *                 it, so an input read off the search is one from before that was settled
      */
     Offering(OfferingRequest request, SequencedMap<String, List<OfferedRow>> rowsByBehavior,
              SequencedMap<String, Adequacy.Filling> searched, BorderAccount account,
-             Set<ObligationIdentity> answered) {
+             Set<ObligationIdentity> answered,
+             Map<ObligationIdentity, InputOfARowForALine> shownAt) {
+        this.shownAt = Collections.unmodifiableMap(new LinkedHashMap<>(shownAt));
         this.request = request;
         this.rowsByBehavior =
                 Collections.unmodifiableSequencedMap(new LinkedHashMap<>(rowsByBehavior));
@@ -86,6 +94,18 @@ public final class Offering {
     /** The items one of these rows would answer if it were written. */
     public Set<ObligationIdentity> answered() {
         return answered;
+    }
+
+    /**
+     * The input of the row a person is handed for {@code item}'s line, or null where no row here is
+     * offered for it.
+     *
+     * <p>The one place a report may name for such a line. What a search composed is a candidate and
+     * what is left after the reduction is the work, and only the second of those is in front of a
+     * person.
+     */
+    public InputOfARowForALine shownAt(ObligationIdentity item) {
+        return shownAt.get(item);
     }
 
     /** How many pieces of work this offers, which is what a block says at the top of it. */

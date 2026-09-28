@@ -3,8 +3,10 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
@@ -245,7 +247,7 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
     /** What {@link NumericDomain} says about a position, which is three answers and not two. */
     @Test
     void aDomainSaysNothingAboutAnAtomAndSaysWhereOneIsWithNoEnds() {
-        NumericDomain<String> nothing = NumericDomain.top();
+        NumericDomain<String> nothing = NumericDomain.top(CanonicalOrder.asTheyAreSpelled());
         assertInstanceOf(NumericDomain.Projection.NotSpokenOf.class, nothing.projectionOf("x"),
                 "no rule names it, so nothing about it follows from these rules");
         NumericDomain<String> related = nothing.assume(
@@ -256,7 +258,7 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
                 related.projectionOf("x"),
                 "a rule names it and places no end, which is not the same as no rule naming it");
         NumericDomain<String> nowhere = related.assume(
-                LinearForm.<String>constant(BigDecimal.ONE), Rel.LT,
+                LinearForm.<String>constant(ExactRatio.ONE), Rel.LT,
                 Map.of("x", souther.compiler.numeric.Granularity.DISCRETE));
         assertInstanceOf(NumericDomain.Projection.NothingIsLeft.class, nowhere.projectionOf("x"),
                 "an atom of rules nothing satisfies is at no value, not at every value");
@@ -273,10 +275,10 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
      */
     @Test
     void aComponentHoldingNothingLeavesNoEnvelopeEvenWithNoPositionToAskAbout() {
-        ConstraintState<String> nowhere = ConstraintState.<String>top()
+        ConstraintState<String> nowhere = ConstraintState.top(CanonicalOrder.asTheyAreSpelled())
                 .taking(LinearForm.<String>atom("x"), Rel.GE,
                         Map.of("x", souther.compiler.numeric.Granularity.DISCRETE))
-                .taking(LinearForm.<String>constant(BigDecimal.valueOf(-1))
+                .taking(LinearForm.<String>constant(ExactRatio.of(-1))
                                 .minus(LinearForm.atom("x")), Rel.GE,
                         Map.of("x", souther.compiler.numeric.Granularity.DISCRETE));
         assertTrue(nowhere.numbers().isBottom(), "x is at nought or above and below minus one");
@@ -333,11 +335,13 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
         compilation.answerEverything();
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         FieldDomains domains = FieldDomains.of(named(symbols, "Held"),
-                RuleReadings.of(compilation, "demo"), ReadAs.THE_COMPILATION_DOES);
+                RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),
+                        ReadAs.THE_COMPILATION_DOES));
         Map<NumberAt<RuleKey>, Count> fixed = new LinkedHashMap<>();
         fixed.put(NumberAt.valueOf(RuleKey.of("y")), new Count(BigDecimal.valueOf(at)));
         return domains.given(fixed)
-                .constraintsOver(claim -> "at:" + claim, other -> "other:" + other)
+                .constraintsOver(claim -> "at:" + claim, other -> "other:" + other,
+                        CanonicalOrder.asTheyAreSpelled())
                 .constraints().isBottom();
     }
 
@@ -352,7 +356,7 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
         List<Hir.Def> defs = compilation.module("demo").defs().stream()
                 .map(each -> each.declaration().node()).toList();
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
-        return TypeCardinality.solve(defs, RuleReadings.of(compilation, "demo"),
+        return CountsByComponent.of(defs, RuleReadings.of(compilation, "demo"),
                         ReadAs.THE_COMPILATION_DOES)
                 .of(named(symbols, source.contains("data Span") ? "Span" : "Held")).why();
     }

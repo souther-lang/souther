@@ -1,6 +1,5 @@
 package souther.compiler.coverage;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Comparison;
@@ -11,6 +10,7 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
+import souther.test.ClosedWorldContract;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -46,7 +46,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * below are answered by walks that never met a second copy of anything, and one of them is answered
  * by a walk that never met the absence it is about.
  */
-@Tag("population")
+@ClosedWorldContract
 class WhatAReadingReadsCanBeKeyedByWhatTheModelStatesTest {
 
     /** One helper called twice: one written comparison, two copies of it in the tree that runs. */

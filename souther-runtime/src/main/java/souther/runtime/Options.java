@@ -34,4 +34,13 @@ public final class Options {
                                                  Option<?> o) {
         return o instanceof Option.Some<?> s ? inner.apply(s.value()) : null;
     }
+
+    /** {@link #map}'s codegen-internal counterpart for a crossing's canonicalization
+     *  ({@code CanonicalizeAtCrossing}): {@code f} is a plain {@link java.util.function.Function}
+     *  the compiler builds and binds at the crossing, and the {@code Option} shape survives —
+     *  unlike {@link #encodedOrNull}, which unwraps to the boundary's null-for-absent representation
+     *  instead. */
+    public static Option<Object> mapWith(java.util.function.Function<Object, Object> f, Option<?> o) {
+        return o instanceof Option.Some<?> s ? Option.some(f.apply(s.value())) : Option.none();
+    }
 }

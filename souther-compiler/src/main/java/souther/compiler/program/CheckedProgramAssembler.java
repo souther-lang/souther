@@ -1,21 +1,37 @@
 package souther.compiler.program;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.DefinitionRole;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
+import souther.compiler.check.BehaviorBodies;
 import souther.compiler.check.BehaviorImplementation;
+import souther.compiler.check.BehaviorRequirement;
+import souther.compiler.check.Boundary;
+import souther.compiler.check.BoundaryInput;
+import souther.compiler.check.BoundaryOutput;
 import souther.compiler.check.CoreBinders;
+import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.Derived;
+import souther.compiler.check.EmittedDefinition;
 import souther.compiler.check.Lower;
-import souther.compiler.check.PublishedDeclarations;
+import souther.compiler.check.LoweringRole;
+import souther.compiler.check.Requirements;
 import souther.compiler.check.Sig;
 import souther.compiler.check.SpecImplementation;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
+import souther.compiler.derive.CodecShape;
+import souther.compiler.derive.Deriver;
+import souther.compiler.abort.AbortSites;
+import souther.compiler.abort.Constructible;
 import souther.compiler.core.Composition;
+import souther.compiler.core.Contract;
 import souther.compiler.core.Core;
 import souther.compiler.core.EnsuresEnforcement;
+import souther.compiler.core.KernelContracts;
 import souther.compiler.core.ValueShape;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.Expectation;
 import souther.compiler.observe.FieldTypes;
@@ -41,6 +57,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -94,15 +111,96 @@ final class CheckedProgramAssembler {
         Map<ValueName.Behavior, BehaviorTarget> targets = new LinkedHashMap<>();
         List<ModuleBoundaries> boundaries = new ArrayList<>();
         for (ModuleReading module : read) {
-            boundaries.add(fileWhatIsChecked(targets, module));
+            boundaries.add(fileWhatIsChecked(targets, module, db));
         }
         fileWhatIsOnThePath(targets, db);
         List<CheckedModule> modules = new ArrayList<>();
         for (ModuleBoundaries module : boundaries) {
             modules.add(moduleOf(module, types, targets));
         }
-        return new CheckedProgram(modules, language, onThePath, targets,
-                libraryOf(db).kernelSignatures());
+        KernelContracts kernels = KernelContracts.of(libraryOf(db).kernelSignatures());
+        AbortSites aborts = AbortSites.of(everyCoreRootOf(modules, everyDeclaration), kernels,
+                constructible(everyDeclaration));
+        return new CheckedProgram(modules, language, onThePath, targets, kernels, aborts);
+    }
+
+    /**
+     * Every declared type a construction can build, each with whether an {@code invariant} clause
+     * names it.
+     *
+     * <p>Every one, and not only the ones with an invariant: a list of those would leave a type with
+     * none and a type it never reached reading the same. Read off the same declarations
+     * {@link #languageDataOf} and {@link #dataOf} already answered, and not re-derived from the
+     * checker's own state: a second reading of what a type's invariants are would be a second place
+     * that could disagree with {@link ValueShape#invariants} about which types have one.
+     */
+    private static List<Constructible> constructible(List<CheckedData> everyDeclaration) {
+        List<Constructible> found = new ArrayList<>();
+        for (CheckedData declared : everyDeclaration) {
+            if (declared instanceof CheckedData.WithFields fields) {
+                found.add(new Constructible(declared.name(), !fields.invariants().isEmpty()));
+            }
+        }
+        return found;
+    }
+
+    /**
+     * Every {@code Core} a program's outputs are asked to emit: each behavior's body, where it has
+     * one this compile wrote, each helper's, each value's and each value entry's, the condition of
+     * every clause a declared data holds its values to, and the condition of every rule a behavior
+     * declares of its answer.
+     *
+     * <p>The one list of them, and a list of every place a checked program hands a {@code Core}
+     * out: each of those is code some output runs, so each is a site {@link AbortSites} has to
+     * answer for. A place added to the program's surface is added here too, and
+     * {@code EveryCoreAProgramHandsOutIsASiteAbortsAtAnswersForTest} fails until it is.
+     *
+     * <p>A clause is emitted wherever a value of its data is built, and a rule wherever its
+     * behavior's answer is held to it, which for a behavior another build answers is every
+     * crossing into this program. Every declaration is asked, one on the path among them, since a
+     * construction of that data runs its clauses in whatever output builds it. A clause a spread
+     * takes in is the one {@code Core} in every data that includes it, and it is classified once:
+     * what it can end without a value for does not depend on which data is being built.
+     *
+     * <p>A body only where this compile wrote one. {@link CheckedImplementation.Composed} has no
+     * {@code Core} of its own, and what {@link CheckedImplementation.ImplementedElsewhere} and
+     * {@link CheckedImplementation.Injected} can end without a value for is a fact about a build
+     * this is not, read the same way a call to either answers {@link AbortSet#NONE} at the site
+     * that reaches it.
+     */
+    private static List<Core> everyCoreRootOf(List<CheckedModule> modules,
+                                              List<CheckedData> everyDeclaration) {
+        List<Core> roots = new ArrayList<>();
+        for (CheckedModule module : modules) {
+            for (CheckedBehavior behavior : module.behaviors()) {
+                if (behavior.implementation() instanceof CheckedImplementation.Body body) {
+                    roots.add(body.body());
+                }
+                Contract declares = behavior.ensures().contract();
+                if (declares != null) {
+                    for (Contract.Rule rule : declares.rules()) {
+                        roots.add(rule.condition());
+                    }
+                }
+            }
+            for (CheckedHelper helper : module.helpers()) {
+                roots.add(helper.body());
+            }
+            for (CheckedValue value : module.values()) {
+                roots.add(value.body());
+            }
+            for (CheckedValueEntry entry : module.valueEntries()) {
+                roots.add(entry.body());
+            }
+        }
+        for (CheckedData declared : everyDeclaration) {
+            if (declared instanceof CheckedData.WithFields fields) {
+                for (ValueShape.Invariant clause : fields.invariants()) {
+                    roots.add(clause.condition());
+                }
+            }
+        }
+        return roots;
     }
 
     /**
@@ -132,25 +230,34 @@ final class CheckedProgramAssembler {
      * answer arrives where a state is being chosen — and it is chosen as one of them.
      */
     private static ModuleBoundaries fileWhatIsChecked(
-            Map<ValueName.Behavior, BehaviorTarget> targets, ModuleReading module) {
+            Map<ValueName.Behavior, BehaviorTarget> targets, ModuleReading module, Db db) {
         Map<ValueName.Behavior, BehaviorTarget> declares = new LinkedHashMap<>();
         Map<String, SpecImplementation.Implemented> implementations =
                 SpecImplementation.implementationsOf(module.bodies());
         for (Hir.BehaviorDef declared : module.bodies().behaviors()) {
             ValueName.Behavior named = new ValueName.Behavior(module.name(), declared.name());
-            Sig signature = module.signatures().get(declared.name());
-            BehaviorImplementation state = module.implementations().get(declared.name());
-            if (signature == null || state == null) {
+            CheckedSignature signature = switch (declared) {
+                case Hir.SpecBehavior _ -> {
+                    DeclaredSig written = module.declaredSignatures().get(declared.name());
+                    yield written == null ? null : declaredSignatureOf(written, module.name(), db);
+                }
+                case Hir.PipeBehavior _ -> {
+                    Sig composed = module.signatures().get(declared.name());
+                    yield composed == null ? null : composedSignatureOf(composed, module.name(), db);
+                }
+            };
+            if (signature == null) {
                 // The module was taken as checked and one of the behaviors it declares has no
-                // signature, or no reading of where its body comes from. A caller reaches it, so
-                // letting it through hands an output a call it cannot emit and says nothing about
-                // why.
+                // signature. A caller reaches it, so letting it through hands an output a call it
+                // cannot emit and says nothing about why.
                 throw new IllegalStateException("`" + named + "` was taken as checked and this"
                         + " compile has no reading of it");
             }
-            BehaviorTarget target = new BehaviorTarget(signatureOf(signature),
-                    implementedAs(state, named, declared, implementations, module.checked(),
-                            module.compositions()));
+            BehaviorImplementation state = module.implementations().of(named);
+            CheckedImplementation implementation = implementedAs(state, named, declared,
+                    implementations, module.checked(), module.compositions());
+            BehaviorTarget target = new BehaviorTarget(signature, implementation,
+                    constructionRequirementsOf(named, module.requirements()));
             file(targets, named, target);
             declares.put(named, target);
         }
@@ -178,24 +285,61 @@ final class CheckedProgramAssembler {
         for (String module : readOffThePath(db)) {
             Ast.Module declares = db.ask(new Front.Available(module)).value();
             Map<String, Sig> signatures = db.ask(new Bodies.Signatures(module)).value();
-            Map<String, BehaviorImplementation> implementations =
-                    db.ask(new Bodies.Implementation(module)).value();
-            if (declares == null || signatures == null || implementations == null) {
+            Map<String, DeclaredSig> declaredSignatures =
+                    db.ask(new Bodies.DeclaredSignatures(module)).value();
+            BehaviorBodies implementations = db.ask(new Bodies.Implementation(module)).value();
+            // The answer a composition here that uses one of these as a stage was worked out from,
+            // and not a second reading of what the module published: this is the answer that holds
+            // the module to what it was built against.
+            Map<String, List<BehaviorRequirement>> requirements =
+                    db.ask(new Bodies.Requirements(module)).value();
+            if (declares == null || signatures == null || declaredSignatures == null
+                    || implementations == null || requirements == null) {
                 throw new IllegalStateException("`" + module + "` was read off the path and this"
                         + " compile has nothing to say about the behaviors it declares");
             }
+            Map<String, List<ValueName.Behavior>> required = requirementsOf(requirements);
             for (Ast.BehaviorDef declared : declares.behaviors()) {
                 ValueName.Behavior named = new ValueName.Behavior(module, declared.name());
-                Sig signature = signatures.get(declared.name());
-                BehaviorImplementation state = implementations.get(declared.name());
-                if (signature == null || state == null) {
+                CheckedSignature signature = switch (declared) {
+                    case Ast.SpecBehavior _ -> {
+                        DeclaredSig written = declaredSignatures.get(declared.name());
+                        yield written == null ? null : declaredSignatureOf(written, module, db);
+                    }
+                    case Ast.PipeBehavior _ -> {
+                        Sig composed = signatures.get(declared.name());
+                        yield composed == null ? null : composedSignatureOf(composed, module, db);
+                    }
+                };
+                if (signature == null) {
                     throw new IllegalStateException("`" + named + "` is declared by a module this"
                             + " compile read off the path and this compile has no reading of it");
                 }
-                file(targets, named,
-                        new BehaviorTarget(signatureOf(signature), publishedAs(state)));
+                CheckedImplementation implementation = publishedAs(implementations.of(named));
+                file(targets, named, new BehaviorTarget(signature, implementation,
+                        constructionRequirementsOf(named, required)));
             }
         }
+    }
+
+    /**
+     * What constructing {@code named} requires injected, as this compile answered for its module.
+     *
+     * <p>Read and handed on, and not worked out from the implementation. The answer has an entry
+     * for every behavior the module declares, an injected one requiring nothing, so a missing entry
+     * is the answer not holding together and is refused rather than read as requiring nothing. An
+     * entry that disagrees with the implementation reaches {@link BehaviorTarget}, which refuses it:
+     * supplying the value the implementation says it should be would make that refusal one that
+     * never runs on what a compile produces.
+     */
+    private static List<ValueName.Behavior> constructionRequirementsOf(
+            ValueName.Behavior named, Map<String, List<ValueName.Behavior>> requirements) {
+        List<ValueName.Behavior> required = requirements.get(named.name());
+        if (required == null) {
+            throw new IllegalStateException("`" + named + "` is declared and this compile has no"
+                    + " requirement set for it");
+        }
+        return required;
     }
 
     /**
@@ -281,7 +425,7 @@ final class CheckedProgramAssembler {
                 throw new IllegalStateException("the language declares `" + product.declares()
                         + "` as a product, and what a value of one is made of is not derived here");
             }
-            declared.add(declaredAs(def, Shapes.publishedDeclarations(db), Map.of()));
+            declared.add(declaredAs(def, db, Map.of(), Map.of()));
         }
         return declared;
     }
@@ -314,8 +458,7 @@ final class CheckedProgramAssembler {
                         + " compile has nothing to say about what it declares");
             }
             for (Derived.Def def : defs.values()) {
-                declared.add(declaredAs(def.declaration().node(),
-                        Shapes.publishedDeclarations(db), shapes));
+                declared.add(declaredAs(def.declaration().node(), db, shapes, defs));
             }
         }
         return declared;
@@ -332,11 +475,15 @@ final class CheckedProgramAssembler {
      */
     private record ModuleReading(String name, Hir.Module bodies, Bodies.Elaborated checked,
                                  Map<String, Sig> signatures,
-                                 Map<String, BehaviorImplementation> implementations,
+                                 Map<String, DeclaredSig> declaredSignatures,
+                                 BehaviorBodies implementations,
                                  Map<ValueName.Behavior, Composition> compositions,
                                  Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                  List<CheckedData> data,
-                                 Map<String, List<Output.RowsRead.ReadRow>> rowsByBehavior) {}
+                                 Map<String, List<Output.RowsRead.ReadRow>> rowsByBehavior,
+                                 Map<String, List<ValueName.Behavior>> requirements,
+                                 Set<String> published,
+                                 Set<ValueName.Helper> valuesDeclared) {}
 
     /**
      * The rows this compile read for {@code module}, by the behavior each is a row of.
@@ -365,8 +512,12 @@ final class CheckedProgramAssembler {
         Bodies.Elaborated checked = db.ask(new Bodies.Checked(module)).value();
         Lower.Lowered lowering = db.ask(new Bodies.Lowering(module)).value();
         Map<String, Sig> signatures = db.ask(new Bodies.Signatures(module)).value();
-        Map<String, BehaviorImplementation> implementations =
-                db.ask(new Bodies.Implementation(module)).value();
+        // The declarations the signatures above were made from, for the names each parameter is
+        // written under: what crosses the boundary is the same answer whatever a parameter is
+        // called, so the names are asked of the answer that changes when one is renamed.
+        Map<String, DeclaredSig> declaredSignatures =
+                db.ask(new Bodies.DeclaredSignatures(module)).value();
+        BehaviorBodies implementations = db.ask(new Bodies.Implementation(module)).value();
         Map<ValueName.Behavior, Composition> compositions =
                 db.ask(new Compositions.Of(module)).value();
         // What a value of each declared data is made of and must satisfy, and where each behavior's
@@ -375,8 +526,14 @@ final class CheckedProgramAssembler {
         // the bytecode beside it hold one another's decisions.
         Map<TypeSymbol.AtModule, ValueShape> shapes =
                 db.ask(new Shapes.ValueShapes(module)).value();
+        // What each field a product or a newtype declares carries across the boundary — the same
+        // walk `Shapes.ValueShapes` is read beside, held here so a reader of the program does not
+        // re-derive it from a field's bare type.
+        Map<String, Derived.Def> codecDefs = db.ask(new Shapes.DerivedDeclarations(module)).value();
         Map<ValueName.Behavior, EnsuresEnforcement> checks =
                 db.ask(new Bodies.EnsuresChecks(module)).value();
+        Map<String, List<BehaviorRequirement>> requirements =
+                db.ask(new Bodies.Requirements(module)).value();
         // What the module's names mean over the derived declarations, which is what a declaration's
         // fields and a sum's cases are read against. It is a way of reaching the compiler's answers
         // and not one of them: it holds a registry that asks `db` for each declaration, so it is
@@ -384,8 +541,9 @@ final class CheckedProgramAssembler {
         // made.
         Symbols symbols = Names.derivedSymbols(db, module).value();
         if (checked == null || lowering == null || signatures == null
-                || implementations == null
-                || compositions == null || symbols == null || shapes == null || checks == null) {
+                || declaredSignatures == null || implementations == null
+                || compositions == null || symbols == null || shapes == null || checks == null
+                || requirements == null || codecDefs == null) {
             // Not a report: the failure above is what a caller is told, and reaching here past it
             // means the two readings of whether this program checked have come apart.
             throw new IllegalStateException("`" + module + "` was taken as checked and is not");
@@ -397,10 +555,48 @@ final class CheckedProgramAssembler {
         // agree with the checker only for as long as lowering left declarations alone.
         Hir.Module declarations = lowering.settled();
         Hir.Module bodies = lowering.lowered();
-        return new ModuleReading(module, bodies, checked, signatures, implementations,
+        // What the module publishes, asked of the one answer everything that reaches across a
+        // module boundary asks. Worked out again here from the `exposing` clause, this would be a
+        // second reading of a decision the check already made — and the two would agree until one
+        // of them learnt something.
+        Set<String> published = db.ask(new Front.PublishedNames(module)).value();
+        if (published == null) {
+            // The same reading as every other answer above: a module taken as checked is one every
+            // question about it has been answered for, and nothing here turns an answer that was
+            // never read into a module that publishes nothing.
+            throw new IllegalStateException("`" + module + "` was taken as checked and what it"
+                    + " publishes was not read");
+        }
+        // Which definitions this module wrote is the settled tree's to say, and what each of them
+        // runs as is what lowering answered for it. A constant folds into whatever reads it and has
+        // no method, so what the emitted definitions hold is not where its declaration is read.
+        Set<ValueName.Helper> valuesDeclared = new LinkedHashSet<>();
+        for (Hir.FnDef fn : declarations.fns()) {
+            if (fn.role() instanceof DefinitionRole.Ordinary
+                    && lowering.roles().get(fn.name()) instanceof LoweringRole.ValueHome home) {
+                valuesDeclared.add(home.value());
+            }
+        }
+        return new ModuleReading(module, bodies, checked, signatures, declaredSignatures,
+                implementations,
                 compositions, checks,
-                dataOf(declarations, Shapes.publishedDeclarations(db), shapes),
-                rowsOf(db, module));
+                dataOf(declarations, db, shapes, codecDefs),
+                rowsOf(db, module), requirementsOf(requirements), published, valuesDeclared);
+    }
+
+    /**
+     * {@code requirements}, projected to the dependency identities alone.
+     *
+     * <p>{@link BehaviorRequirement#requiredBy} is a compiler diagnostic's provenance for a missing
+     * fake, not a fact a checked program's reader wants — every one of those wants the dependency
+     * and the order its constructor takes them in, which {@link Requirements#names} already
+     * answers.
+     */
+    private static Map<String, List<ValueName.Behavior>> requirementsOf(
+            Map<String, List<BehaviorRequirement>> requirements) {
+        Map<String, List<ValueName.Behavior>> byName = new LinkedHashMap<>();
+        requirements.forEach((name, reqs) -> byName.put(name, Requirements.names(reqs)));
+        return byName;
     }
 
     /**
@@ -413,14 +609,15 @@ final class CheckedProgramAssembler {
     private static CheckedModule moduleOf(ModuleBoundaries module, ValueTypes types,
                                           Map<ValueName.Behavior, BehaviorTarget> targets) {
         ModuleReading read = module.read();
+        Emitted emitted = emittedBy(read.name(), read.checked());
         List<CheckedBehavior> behaviors = new ArrayList<>();
         module.declared().forEach((named, target) ->
                 behaviors.add(new CheckedBehavior(named, target,
                         EnsuresEnforcement.in(read.checks(), read.name(), named),
                         rowsOf(read.rowsByBehavior().getOrDefault(named.name(), List.of()), types,
-                                target.signature(), targets))));
-        return new CheckedModule(read.name(), behaviors,
-                helpersOf(read.name(), read.bodies(), read.checked()), read.data());
+                                target.signature(), targets, emitted.rowValues()))));
+        return new CheckedModule(read.name(), behaviors, emitted.helpers(), emitted.values(),
+                emitted.valueEntries(), read.data(), read.published(), read.valuesDeclared());
     }
 
     /**
@@ -431,15 +628,19 @@ final class CheckedProgramAssembler {
      * {@link CheckedRow.SelfContained#holds} takes — how a value's parts are read, and where this
      * behavior's answer stands — so that asking is not a question about the program the row came
      * from. A row that stands something in for a dependency is given where that dependency's
-     * arguments stand as well, for the same reason.
+     * arguments stand as well, for the same reason. And a row that hands over values is given the
+     * definition computing each of them, and each value its stand-ins state, out of
+     * {@code rowValues}: the helpers of the module the row is written in that compute a row's
+     * operand, by the name each was emitted under.
      */
     private static List<CheckedRow> rowsOf(List<Output.RowsRead.ReadRow> read, ValueTypes types,
                                            CheckedSignature signature,
-                                           Map<ValueName.Behavior, BehaviorTarget> targets) {
+                                           Map<ValueName.Behavior, BehaviorTarget> targets,
+                                           Map<String, CheckedHelper> rowValues) {
         List<CheckedRow> rows = new ArrayList<>();
         for (Output.RowsRead.ReadRow row : read) {
             rows.add(new CheckedRow(row.identity(), row.at(),
-                    statementOf(row, types, signature, targets)));
+                    statementOf(row, types, signature, targets, rowValues)));
         }
         return rows;
     }
@@ -458,26 +659,29 @@ final class CheckedProgramAssembler {
      */
     private static CheckedRow.Statement statementOf(Output.RowsRead.ReadRow row, ValueTypes types,
                                                     CheckedSignature signature,
-                                                    Map<ValueName.Behavior, BehaviorTarget> targets) {
+                                                    Map<ValueName.Behavior, BehaviorTarget> targets,
+                                                    Map<String, CheckedHelper> rowValues) {
         // A switch over both sums, so a row nothing came back for is written down here rather than
         // being whatever falls out of reading a list of the ones that did — which is a row an output
         // would never hear of, and a behavior reading as having said nothing about an input someone
         // wrote down.
         return switch (row) {
-            case Output.RowsRead.ReadRow.Ran(RowOutcome outcome) -> switch (outcome.statement()) {
+            case Output.RowsRead.ReadRow.Ran ran -> switch (ran.outcome().statement()) {
                 // A row whose answer is owed first, because what a reader can do with a row turns on
                 // whether there is anything to hold before it turns on what the row needs to run.
                 // Sorted the other way, such a row would arrive as one an output applies and asks,
                 // and what it asked would be answered against no statement at all.
                 case RowStatement.Stated stated
                         when stated.expects() instanceof Expectation.Owed ->
-                        new CheckedRow.AnswerOwed(stated);
+                        new CheckedRow.AnswerOwed(stated,
+                                suppliesOf(ran, stated, targets, rowValues), types);
                 case RowStatement.Stated stated -> stated.standIns().isEmpty()
-                        ? new CheckedRow.SelfContained(stated, types,
+                        ? new CheckedRow.SelfContained(stated,
+                                suppliesOf(ran, stated, targets, rowValues), types,
                                 Position.at(signature.answers()))
-                        : new CheckedRow.WithStandIns(stated, types,
-                                Position.at(signature.answers()),
-                                whereArgumentsStand(stated, targets));
+                        : new CheckedRow.WithStandIns(stated,
+                                suppliesOf(ran, stated, targets, rowValues), types,
+                                Position.at(signature.answers()));
                 case RowStatement.NotStated why -> new CheckedRow.NotReproducible(why);
                 // What acceptance guarantees, asserted where the guarantee is relied on. A row an
                 // evaluation stopped before the values of is one the language refuses the program
@@ -486,12 +690,170 @@ final class CheckedProgramAssembler {
                 // this one can read.
                 case RowStatement.StoppedBeforeItsValues _ -> throw new IllegalStateException(
                         "a program the language accepted holds a row its evaluation stopped before"
-                                + " the values of: " + outcome.target() + " "
-                                + outcome.identity().shown() + " at " + outcome.at());
+                                + " the values of: " + ran.outcome().target() + " "
+                                + ran.outcome().identity().shown() + " at " + ran.outcome().at());
             };
             case Output.RowsRead.ReadRow.NotRun notRun ->
                     new CheckedRow.NotReproducible(new RowStatement.NotRead(notRun.why()));
         };
+    }
+
+    /**
+     * What {@code ran}'s row hands over, for whichever arm it is: what computes each input, where
+     * each dependency's arguments stand, and what computes each value its stand-ins state.
+     *
+     * <p>Made the same way for every arm that states values. Whether the row's answer is owed and
+     * whether it needs something stood in for are two questions, and what an arm is handed does
+     * not turn on the first.
+     */
+    private static CheckedRow.Supplies suppliesOf(Output.RowsRead.ReadRow.Ran ran,
+                                                  RowStatement.Stated stated,
+                                                  Map<ValueName.Behavior, BehaviorTarget> targets,
+                                                  Map<String, CheckedHelper> rowValues) {
+        return new CheckedRow.Supplies(computing(ran, stated, rowValues),
+                whereArgumentsStand(stated, targets), computingStandIns(ran, stated, rowValues));
+    }
+
+    /**
+     * The definition computing each input of {@code ran}'s row, as its module holds it.
+     *
+     * <p>Looked up by the name the reading of the row says each was emitted under, among the
+     * helpers the module holds for a row's operand. One for each value the row states: a program
+     * the language accepted had its rows read with the declarations in hand, so a row stating
+     * values names what computes each of them. A name with nothing under it is a row read against
+     * a module other than the one whose helpers are in hand, which the row would otherwise carry
+     * into the program as an input nothing computes.
+     */
+    private static List<CheckedHelper> computing(Output.RowsRead.ReadRow.Ran ran,
+                                                 RowStatement.Stated stated,
+                                                 Map<String, CheckedHelper> rowValues) {
+        RowOutcome outcome = ran.outcome();
+        if (ran.inputDefinitions().size() != stated.inputs().size()) {
+            throw new IllegalStateException("a program the language accepted holds a row stating "
+                    + stated.inputs().size() + " value(s) whose reading names "
+                    + ran.inputDefinitions() + " as computing them: " + outcome.target() + " "
+                    + outcome.identity().shown() + " at " + outcome.at());
+        }
+        List<CheckedHelper> inputs = new ArrayList<>();
+        for (String method : ran.inputDefinitions()) {
+            inputs.add(definitionNamed(method, rowValues, "an input", outcome));
+        }
+        return inputs;
+    }
+
+    /**
+     * What computes each value {@code ran}'s row states a dependency answers, by the dependency.
+     *
+     * <p>Looked up as {@link #computing} looks up the inputs, among the same helpers. Each entry the
+     * reading named is held to the entry of the stand-in it is put beside by where the two say the
+     * entry is written, and the answer for the rest the same way: that is what the reading found
+     * each of them among the module's tables by. A stand-in the reading named nothing for, or named
+     * a different number of entries, an entry written elsewhere, or another answer for the rest
+     * for, is the two readings of one row having come apart, and is refused rather than carried in
+     * with values something else computes.
+     */
+    private static Map<ValueName.Behavior, StandsIn.Computed> computingStandIns(
+            Output.RowsRead.ReadRow.Ran ran, RowStatement.Stated stated,
+            Map<String, CheckedHelper> rowValues) {
+        RowOutcome outcome = ran.outcome();
+        Map<ValueName.Behavior, StandsIn.Computed> byDependency = new LinkedHashMap<>();
+        for (StoodIn stoodIn : stated.standIns()) {
+            Output.RowsRead.StandInDefinitions named =
+                    ran.standInDefinitions().get(stoodIn.dependency());
+            if (named == null || named.entries().size() != stoodIn.entries().size()) {
+                throw new IllegalStateException("a program the language accepted holds a row whose"
+                        + " stand-in for `" + stoodIn.dependency() + "` states the entries "
+                        + stoodIn.entries() + " and whose reading names " + named
+                        + " as computing them: " + outcome.target() + " "
+                        + outcome.identity().shown() + " at " + outcome.at());
+            }
+            List<StandsIn.Entry> entries = new ArrayList<>();
+            for (int i = 0; i < stoodIn.entries().size(); i++) {
+                Output.RowsRead.StandInDefinitions.EntryDefinitions each = named.entries().get(i);
+                StoodIn.Entry stoodInEntry = stoodIn.entries().get(i);
+                if (!each.at().equals(stoodInEntry.at())) {
+                    throw new IllegalStateException("a program the language accepted holds a row"
+                            + " whose stand-in for `" + stoodIn.dependency() + "` states the entry"
+                            + " at " + stoodInEntry.at() + " where its reading names what computes"
+                            + " the entry at " + each.at() + ": " + outcome.target() + " "
+                            + outcome.identity().shown() + " at " + outcome.at());
+                }
+                List<CheckedHelper> arguments = new ArrayList<>();
+                for (String method : each.arguments()) {
+                    arguments.add(definitionNamed(method, rowValues, "an argument a stand-in states",
+                            outcome));
+                }
+                entries.add(new StandsIn.Entry(stoodInEntry, arguments,
+                        definitionNamed(each.answer(), rowValues, "an answer a stand-in states",
+                                outcome)));
+            }
+            byDependency.put(stoodIn.dependency(), new StandsIn.Computed(entries,
+                    computingTheRest(stoodIn, named.otherwise(), rowValues, outcome)));
+        }
+        return byDependency;
+    }
+
+    /**
+     * What computes what {@code stoodIn} answers for the rest, off what the row's reading named.
+     *
+     * <p>Over both sums, so that a stand-in answering something for the rest with nothing named to
+     * compute it, and one stating nothing with something named, are each refused by name rather
+     * than sharing whatever arm the two happen to fall into.
+     */
+    private static StandsIn.Otherwise computingTheRest(
+            StoodIn stoodIn, Output.RowsRead.StandInDefinitions.Otherwise named,
+            Map<String, CheckedHelper> rowValues, RowOutcome outcome) {
+        return switch (stoodIn.otherwise()) {
+            case StoodIn.Otherwise.Answer answer -> switch (named) {
+                case Output.RowsRead.StandInDefinitions.Otherwise.Computed(
+                        SourcePos at, String method) -> {
+                    if (!at.equals(answer.at())) {
+                        throw new IllegalStateException("a program the language accepted holds a"
+                                + " row whose stand-in for `" + stoodIn.dependency() + "` answers"
+                                + " for the rest with what is written at " + answer.at()
+                                + " where its reading names what computes the value at " + at
+                                + ": " + outcome.target() + " " + outcome.identity().shown()
+                                + " at " + outcome.at());
+                    }
+                    yield new StandsIn.Otherwise.Answers(answer, definitionNamed(method, rowValues,
+                            "what a stand-in answers for the rest", outcome));
+                }
+                case Output.RowsRead.StandInDefinitions.Otherwise.NothingStated _ ->
+                        throw new IllegalStateException("a program the language accepted holds a"
+                                + " row whose stand-in for `" + stoodIn.dependency() + "` answers"
+                                + " for the rest and whose reading names nothing computing it: "
+                                + outcome.target() + " " + outcome.identity().shown() + " at "
+                                + outcome.at());
+            };
+            case StoodIn.Otherwise.NothingStated _ -> switch (named) {
+                case Output.RowsRead.StandInDefinitions.Otherwise.Computed(
+                        SourcePos _, String method) ->
+                        throw new IllegalStateException("a program the language accepted holds a"
+                                + " row whose stand-in for `" + stoodIn.dependency() + "` states"
+                                + " nothing for the rest and whose reading names `" + method
+                                + "` as computing it: " + outcome.target() + " "
+                                + outcome.identity().shown() + " at " + outcome.at());
+                case Output.RowsRead.StandInDefinitions.Otherwise.NothingStated _ ->
+                        new StandsIn.Otherwise.NothingStated();
+            };
+        };
+    }
+
+    /**
+     * The helper the module holds under {@code method}, which the reading of {@code outcome}'s row
+     * named as computing {@code what}. A name with nothing under it is a row read against a module
+     * other than the one whose helpers are in hand, which the row would otherwise carry into the
+     * program as a value nothing computes.
+     */
+    private static CheckedHelper definitionNamed(String method, Map<String, CheckedHelper> rowValues,
+                                                 String what, RowOutcome outcome) {
+        CheckedHelper helper = rowValues.get(method);
+        if (helper == null) {
+            throw new IllegalStateException(what + " of " + outcome.target() + " "
+                    + outcome.identity().shown() + " at " + outcome.at() + " is computed by `"
+                    + method + "`, which the module holds no helper for");
+        }
+        return helper;
     }
 
     /**
@@ -550,12 +912,12 @@ final class CheckedProgramAssembler {
      * {@link CheckedData.WithFields#fields} and {@link CheckedData.Sum#cases} — and those are the
      * ones said out loud.
      */
-    private static List<CheckedData> dataOf(Hir.Module declarations,
-                                           PublishedDeclarations published,
-                                           Map<TypeSymbol.AtModule, ValueShape> shapes) {
+    private static List<CheckedData> dataOf(Hir.Module declarations, Db db,
+                                           Map<TypeSymbol.AtModule, ValueShape> shapes,
+                                           Map<String, Derived.Def> codecDefs) {
         List<CheckedData> declared = new ArrayList<>();
         for (Hir.Def def : declarations.defs()) {
-            declared.add(declaredAs(def, published, shapes));
+            declared.add(declaredAs(def, db, shapes, codecDefs));
         }
         return declared;
     }
@@ -567,12 +929,20 @@ final class CheckedProgramAssembler {
      * of thing — they resolve and type alike and a value of either lays out alike — and this is
      * where that stops being something two readings agree about.
      */
-    private static CheckedData declaredAs(Hir.Def def, PublishedDeclarations published,
-                                          Map<TypeSymbol.AtModule, ValueShape> shapes) {
+    private static CheckedData declaredAs(Hir.Def def, Db db,
+                                          Map<TypeSymbol.AtModule, ValueShape> shapes,
+                                          Map<String, Derived.Def> codecDefs) {
         return switch (def) {
-            case Hir.Data data -> checkedDataOf(data, shapes);
-            case Hir.SumData sum -> new CheckedData.Sum(sum.declares(),
-                    AtomSpace.subjectAtoms(Type.ref(sum.declares()), published));
+            case Hir.Data data -> checkedDataOf(data, shapes, codecDefs);
+            case Hir.SumData sum -> {
+                // Asked of the store and not settled here: this is a `Type -> answer` question, and
+                // the answer belongs to whichever check-stage query already answers it for every
+                // other reader — never to a second place that works it out again.
+                Boundary.Alternatives alternatives = db.ask(new Shapes.TypeAlternatives(
+                        sum.declares().key().module(), Type.ref(sum.declares()))).value();
+                yield new CheckedData.Sum(sum.declares(), alternatives.atoms(),
+                        projectRepresentation(alternatives.representation()));
+            }
             case Hir.UnitData unit -> new CheckedData.Unit(unit.declares());
         };
     }
@@ -592,7 +962,8 @@ final class CheckedProgramAssembler {
      * codec is generated from.
      */
     private static CheckedData checkedDataOf(Hir.Data data,
-                                             Map<TypeSymbol.AtModule, ValueShape> shapes) {
+                                             Map<TypeSymbol.AtModule, ValueShape> shapes,
+                                             Map<String, Derived.Def> codecDefs) {
         ValueShape shape = shapes.get(data.declares());
         if (shape == null) {
             // The module was taken as checked, and a declaration of it has no answer for what a
@@ -601,19 +972,142 @@ final class CheckedProgramAssembler {
             throw new IllegalStateException("`" + data.declares() + "` was taken as checked and"
                     + " the check said nothing about what a value of it is");
         }
-        return data.newtype() ? new CheckedData.Newtype(shape) : new CheckedData.Product(shape);
+        List<CheckedCodecShape> codecShapes = codecShapesOf(data, shape, codecDefs);
+        return data.newtype() ? new CheckedData.Newtype(shape, codecShapes)
+                : new CheckedData.Product(shape, codecShapes);
     }
 
     /**
-     * What the behavior takes and answers, as types.
-     *
-     * <p>The reading of a boundary the compiler's own signature carries as well — which of a
-     * {@code Map}'s key readings admitted it, and the witness that says so — is left behind here.
-     * That witness offers the module as it was parsed, so a signature handed over whole would put
-     * the syntax tree two hops from a behavior's declared output.
+     * What each of {@code shape}'s fields carries across the boundary, in the same order — read
+     * off the shape {@link Deriver} already derived rather than derived again here.
      */
-    private static CheckedSignature signatureOf(Sig signature) {
-        return new CheckedSignature(signature.inputTypes(), signature.outputType());
+    private static List<CheckedCodecShape> codecShapesOf(Hir.Data data, ValueShape shape,
+                                                          Map<String, Derived.Def> codecDefs) {
+        Derived.Def derived = codecDefs.get(data.declares().name());
+        if (!(derived instanceof Derived.Data withCodec)) {
+            // Present for every product this compile checked (`Shapes.DerivedDeclarations` only
+            // leaves one out where a field of it names no type, which is refused before a module
+            // reaches here) — so a product with a `ValueShape` and nothing here is the two readings
+            // of this module having come apart, the same disagreement `checkedDataOf` refuses above.
+            throw new IllegalStateException("`" + data.declares() + "` was taken as checked and"
+                    + " nothing here derived what its fields carry across the boundary");
+        }
+        Map<String, CodecShape> byField = withCodec.fieldShapes();
+        List<CheckedCodecShape> codecShapes = new ArrayList<>(shape.fields().size());
+        for (ValueShape.Field field : shape.fields()) {
+            CodecShape fieldShape = byField.get(field.name());
+            if (fieldShape == null) {
+                // The two readings of this declaration's fields — what a value is made of and what
+                // each field carries across the boundary — are worked out by two different walks,
+                // and a name one of them has that the other does not is those two walks having come
+                // apart on this declaration, not a field a reader can be handed nothing for.
+                throw new IllegalStateException("`" + data.declares() + "` was taken as checked and"
+                        + " nothing here derived what its field `" + field.name()
+                        + "` carries across the boundary");
+            }
+            codecShapes.add(projectCodecShape(fieldShape));
+        }
+        return codecShapes;
+    }
+
+    /** {@code checked}, carried over without the boundary-admission witnesses it was built from. */
+    private static CheckedCodecShape projectCodecShape(CodecShape checked) {
+        return switch (checked) {
+            case CodecShape.Scalar s -> new CheckedCodecShape.Scalar(s.kind());
+            case CodecShape.Named n -> new CheckedCodecShape.Named(n.admitted().name());
+            case CodecShape.ListOf l ->
+                    new CheckedCodecShape.ListOf(projectCodecShape(l.element()));
+            case CodecShape.SetOf s -> new CheckedCodecShape.SetOf(projectCodecShape(s.element()));
+            case CodecShape.MapOf m -> new CheckedCodecShape.MapOf(m.key().representation(),
+                    projectCodecShape(m.value()));
+            case CodecShape.OptionOf o ->
+                    new CheckedCodecShape.OptionOf((CheckedCodecShape.Bare) projectCodecShape(o.present()));
+        };
+    }
+
+    /**
+     * What the behavior takes and answers, as the checked boundary shape.
+     *
+     * <p>The compiler's own {@link BoundaryInput}/{@link BoundaryOutput} are projected rather than
+     * handed over whole: each holds a witness — which of a {@code Map}'s key readings admitted it —
+     * that offers the module as it was parsed, so handing one over whole would put the syntax tree
+     * two hops from a behavior's declared output. What is kept is the answer the witness proves,
+     * never the witness.
+     *
+     * <p>Each parameter is carried with the name it was declared under, off the one
+     * {@link DeclaredSig.Input} that holds both: the pairing is what the declaration was admitted
+     * as, and nothing here lines a name up with a shape by position.
+     */
+    private static CheckedSignature declaredSignatureOf(DeclaredSig declared, String moduleName,
+                                                        Db db) {
+        List<CheckedSignature.Parameter> parameters = new ArrayList<>(declared.inputs().size());
+        for (DeclaredSig.Input input : declared.inputs()) {
+            parameters.add(
+                    new CheckedSignature.Parameter(input.name(), projectInput(input.boundary())));
+        }
+        return CheckedSignature.declared(parameters,
+                projectOutput(declared.boundary().out(), moduleName, db));
+    }
+
+    /** What a composition takes and answers, projected the same way. It wrote no parameters, so
+     *  its inputs have no names to carry. */
+    private static CheckedSignature composedSignatureOf(Sig signature, String moduleName, Db db) {
+        List<CheckedBoundaryInput> inputs = new ArrayList<>(signature.ins().size());
+        for (BoundaryInput in : signature.ins()) {
+            inputs.add(projectInput(in));
+        }
+        return CheckedSignature.composed(inputs, projectOutput(signature.out(), moduleName, db));
+    }
+
+    /** {@code checked}, carried over without the admission witness it was made from. */
+    private static CheckedBoundaryInput projectInput(BoundaryInput checked) {
+        return switch (checked) {
+            case BoundaryInput.Scalar s -> new CheckedBoundaryInput.Scalar(s.scalar());
+            case BoundaryInput.Nominal n -> new CheckedBoundaryInput.Nominal(n.name());
+            case BoundaryInput.ListOf l -> new CheckedBoundaryInput.ListOf(projectInput(l.element()));
+            case BoundaryInput.SetOf s -> new CheckedBoundaryInput.SetOf(projectInput(s.element()));
+            case BoundaryInput.MapOf m ->
+                    new CheckedBoundaryInput.MapOf(m.key().representation(), projectInput(m.value()));
+        };
+    }
+
+    /**
+     * {@code checked}, carried over the same way. A union of cases nobody named together carries
+     * its wire cases and their form beside the union itself — asked of the store rather than
+     * settled here, the same {@link souther.compiler.query.Shapes.TypeAlternatives} a named sum's
+     * cases answer from (spec §sum-discrimination) — rather than left for a reader to work out from
+     * the union's own members, which are not descended the way a boundary's cases are.
+     */
+    private static CheckedBoundaryOutput projectOutput(BoundaryOutput checked, String moduleName, Db db) {
+        return switch (checked) {
+            case BoundaryOutput.Scalar s -> new CheckedBoundaryOutput.Scalar(s.scalar());
+            case BoundaryOutput.Nominal n -> new CheckedBoundaryOutput.Nominal(n.name());
+            case BoundaryOutput.ListOf l ->
+                    new CheckedBoundaryOutput.ListOf(projectOutput(l.element(), moduleName, db));
+            case BoundaryOutput.SetOf s ->
+                    new CheckedBoundaryOutput.SetOf(projectOutput(s.element(), moduleName, db));
+            case BoundaryOutput.MapOf m -> new CheckedBoundaryOutput.MapOf(
+                    m.key().representation(), projectOutput(m.value(), moduleName, db));
+            case BoundaryOutput.Cases c -> {
+                // `c.type()` answers `Type` — the interface every case here answers — but a union
+                // is what this case was admitted from and the only thing it could be.
+                Type.Union union = (Type.Union) c.type();
+                Boundary.Alternatives alternatives =
+                        db.ask(new Shapes.TypeAlternatives(moduleName, union)).value();
+                yield new CheckedBoundaryOutput.Cases(union, alternatives.atoms(),
+                        projectRepresentation(alternatives.representation()));
+            }
+        };
+    }
+
+    /** {@code representation}, carried over: enumeration or discriminated, and the keys where it is
+     *  one (spec §sum-discrimination). */
+    private static CheckedAlternativesForm projectRepresentation(Boundary.Representation representation) {
+        return switch (representation) {
+            case Boundary.Representation.Enumeration _ -> new CheckedAlternativesForm.Enumeration();
+            case Boundary.Representation.Discriminated d ->
+                    new CheckedAlternativesForm.Discriminated(d.tagKey(), d.contentsKey());
+        };
     }
 
     /**
@@ -693,44 +1187,112 @@ final class CheckedProgramAssembler {
     }
 
     /**
-     * The helpers this module emits as definitions of their own.
+     * What this module emits as methods of its own: the helpers it carries, the values it builds,
+     * and the entries it publishes for them.
      *
-     * <p>A helper's body is the check's; what it takes is the definition's, which the check did not
-     * rewrite. Both are read here so that a call reaching a helper reaches something the snapshot
-     * holds.
+     * <p>Which of the three each method is was answered where the method was lowered, and is read
+     * here as it was answered. Nothing is worked out again from what a method takes or what it is
+     * named: a value's method takes the values its root region demands, and the name a method is
+     * filed under is where the module holds it.
      */
-    private static List<CheckedHelper> helpersOf(String module, Hir.Module lowered,
-                                                 Bodies.Elaborated checked) {
-        Map<String, Hir.FnDef> defined = new LinkedHashMap<>();
-        for (Hir.FnDef fn : lowered.fns()) {
-            defined.put(fn.name(), fn);
-        }
-        for (Hir.FnDef fn : lowered.takenOn()) {
-            defined.put(fn.name(), fn);
-        }
+    private record Emitted(List<CheckedHelper> helpers, List<CheckedValue> values,
+                           List<CheckedValueEntry> valueEntries,
+                           Map<String, CheckedHelper> rowValues) {}
+
+    /**
+     * {@link Emitted} for {@code module}, off what its check emitted.
+     *
+     * <p>What each method takes and its body are the check's, read whole; what the calls in this
+     * module reach it by is its role's. Both are read here so that a call reaching a method reaches
+     * something the snapshot holds.
+     *
+     * <p>{@link LoweringRole.RowValue} and {@link LoweringRole.PublishedValueEntry} are answered by
+     * separate arms even though a row's harness value still comes out as a {@link CheckedHelper}: an
+     * entry is not a helper — it is nullary by ADR-0074 and {@link CheckedModule} answers its
+     * publication — and folding the two into one arm is the projection issue #1885 refused.
+     *
+     * <p>{@link LoweringRole.FixtureValueEntry} joins {@code RowValue}'s arm rather than
+     * {@code PublishedValueEntry}'s: {@link CheckedModule} holds its {@code valueEntries} to exactly
+     * the values this module publishes (ADR-0074), and a fixture entry exists for a value that is not
+     * one of those as often as it exists for one that is.
+     */
+    private static Emitted emittedBy(String module, Bodies.Elaborated checked) {
         List<CheckedHelper> helpers = new ArrayList<>();
-        checked.emittedHelpers().forEach((name, body) -> {
-            Hir.FnDef fn = defined.get(name);
-            if (fn == null) {
-                // A call in a body reaches this helper by name, so a snapshot without it hands an
-                // output a call to something it was never given. Nothing here can put that right,
-                // and letting it through is what makes it the reader's problem.
-                throw new IllegalStateException("the checked helper `" + module + "." + name
-                        + "` has no definition to read what it takes from");
+        List<CheckedValue> values = new ArrayList<>();
+        List<CheckedValueEntry> valueEntries = new ArrayList<>();
+        Map<String, CheckedHelper> rowValues = new LinkedHashMap<>();
+        checked.emittedDefinitions().forEach((name, emitted) -> {
+            switch (emitted.role()) {
+                case LoweringRole.ValueHome home ->
+                        values.add(new CheckedValue(home.value(), handoversOf(emitted),
+                                emitted.body()));
+                case LoweringRole.Helper helper ->
+                        helpers.add(new CheckedHelper(helper.declaration(), parametersOf(emitted),
+                                emitted.body()));
+                // What the harness calls, under the name the module holds the method at, which no
+                // source declares and which is the only reference to it. A row names it by that
+                // name as what computes one of its inputs.
+                case LoweringRole.RowValue _ -> {
+                    CheckedHelper helper = new CheckedHelper(
+                            new ReachName.Own(new ValueName.Helper(module, name)),
+                            parametersOf(emitted), emitted.body());
+                    helpers.add(helper);
+                    rowValues.put(name, helper);
+                }
+                case LoweringRole.PublishedValueEntry entry -> {
+                    if (!emitted.parameters().isEmpty()) {
+                        // ADR-0074: the entry takes nothing and answers with the value. A parameter
+                        // here is `ValueEntries` having stopped minting the nullary bridge it
+                        // promises, which this refuses rather than carries into a program a reader
+                        // takes as nullary on that promise.
+                        throw new IllegalStateException("`" + entry.value() + "`'s published entry"
+                                + " takes " + emitted.parameters().size() + " parameter(s), and ADR-"
+                                + "0074 says it takes none");
+                    }
+                    valueEntries.add(new CheckedValueEntry(entry.value(), emitted.body()));
+                }
+                // A fixture calls the emitted method the same way a row calls its own operand's: by
+                // name, through the harness, with nothing a source declares to reach it by.
+                case LoweringRole.FixtureValueEntry entry -> {
+                    if (!emitted.parameters().isEmpty()) {
+                        // Not ADR-0074, which is silent about a fixture: `OperandRunner` is what
+                        // takes this method with no arguments, and a parameter here is this compiler
+                        // having minted something the fixture execution protocol cannot call.
+                        throw new IllegalStateException("`" + entry.value() + "`'s fixture entry"
+                                + " takes " + emitted.parameters().size() + " parameter(s), and a"
+                                + " fixture can only call one that takes none");
+                    }
+                    helpers.add(new CheckedHelper(
+                            new ReachName.Own(new ValueName.Helper(module, name)),
+                            parametersOf(emitted), emitted.body()));
+                }
             }
-            List<CheckedHelper.Parameter> parameters = new ArrayList<>();
-            for (Hir.FnParam parameter : fn.params()) {
-                parameters.add(new CheckedHelper.Parameter(CoreBinders.of(parameter.binder()),
-                        TypeOps.resolveParamType(parameter.type())));
-            }
-            // What the calls in this module reach it by. A definition this module took on says so
-            // itself; one it declared it reaches as it stands. Neither is worked out from the name
-            // it is filed under here — that name is where the module holds the method, and the
-            // alias a library operation is carried under says nothing about who declared it.
-            ReachName.Declaration reachedAs = fn.takenOnAs() != null ? fn.takenOnAs()
-                    : new ReachName.Own(new ValueName.Helper(module, fn.name()));
-            helpers.add(new CheckedHelper(reachedAs, parameters, body));
         });
-        return helpers;
+        return new Emitted(helpers, values, valueEntries, rowValues);
+    }
+
+    /** What a helper's method takes: what its source wrote. */
+    private static List<CheckedHelper.Parameter> parametersOf(EmittedDefinition emitted) {
+        List<CheckedHelper.Parameter> parameters = new ArrayList<>();
+        for (EmittedDefinition.Parameter parameter : emitted.parameters()) {
+            parameters.add(new CheckedHelper.Parameter(parameter.binder(), parameter.type()));
+        }
+        return parameters;
+    }
+
+    /** What a value's method is handed. {@link EmittedDefinition} holds that it is handed nothing
+     *  else. */
+    private static List<CheckedValue.Handover> handoversOf(EmittedDefinition emitted) {
+        List<CheckedValue.Handover> handovers = new ArrayList<>();
+        for (EmittedDefinition.Parameter parameter : emitted.parameters()) {
+            switch (parameter) {
+                case EmittedDefinition.Handover handover -> handovers.add(new CheckedValue.Handover(
+                        handover.binder(), handover.type(), handover.carries()));
+                case EmittedDefinition.Declared declared -> throw new IllegalStateException(
+                        "a value's method takes `" + declared.binder() + "`, which nothing hands"
+                                + " over to it");
+            }
+        }
+        return handovers;
     }
 }

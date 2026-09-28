@@ -2,8 +2,10 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
+import souther.compiler.core.IntNegation;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Dates;
@@ -134,10 +136,10 @@ public sealed interface Carrier extends ValueOrder {
             return index < 0 ? null : Count.of(index);
         }
 
-        /** The case at a count. Only ever asked of a count this carrier holds, which is what
-         * {@link Carrier#onTheGrid} is for. */
+        /** The case at a count, which must be one this carrier holds ({@link #requiredOnGrid}). */
         public TypeSymbol caseAt(Place count) {
-            return cases.get(Count.number(count).at().intValueExact());
+            Place held = requiredOnGrid(count);
+            return cases.get(Count.number(held).at().intValueExact());
         }
     }
 
@@ -211,7 +213,7 @@ public sealed interface Carrier extends ValueOrder {
         return switch (how.opened()) {
             // Being ordered is not being counted: two dates order alike whatever a line on one is
             // counted in, and which count that is belongs here and is asked of the type.
-            case Ordering.Longs _, Ordering.Natural _ -> countOf(base);
+            case Ordering.Longs _, Ordering.Natural _, Ordering.Strings _ -> countOf(base);
             // What is left is the one thing a carrier asks that an order does not: whether the
             // position's values range over the whole of it. A case and a union of cases are
             // comparable on their sum's order without ranging over it, and a position declared as
@@ -239,9 +241,15 @@ public sealed interface Carrier extends ValueOrder {
             case TIME -> Carrier.TIME;
             case INSTANT -> Carrier.INSTANT;
             // `String` is ordered lexicographically and stands for itself, having no count to
-            // embed into and needing none. `Bool` and `Raw` are not ordered at all.
+            // embed into and needing none. `Bool` is not ordered at all.
             case STRING -> TEXT;
-            case BOOL, RAW -> null;
+            // A Rational is ordered and is still on no carrier. A carrier is what a position's
+            // values are placed on, and no position is declared Rational: the type has no external
+            // form, so no input holds one and no row is ever written at one (ADR-0116). Answered
+            // here beside the counted primitives rather than left to the ordering question above,
+            // which this one is not the same as.
+            case RATIONAL -> null;
+            case BOOL -> null;
         };
     }
 
@@ -249,7 +257,8 @@ public sealed interface Carrier extends ValueOrder {
      *  declaration is read for that list alone: whether this is an enumeration is already answered. */
     private static Carrier ordinalOf(Ordering.Places places, PublishedDeclarations published) {
         if (!(places.enumeration() instanceof TypeSymbol.AtModule at)
-                || !(published.of(at.key()) instanceof DeclarationMeaning.Sum)) {
+                || !(published.of(at.key())
+                        instanceof PublishedDeclarationResult.Found(DeclarationMeaning.Sum _))) {
             return null;
         }
         List<TypeSymbol> cases = AtomSpace.subjectAtoms(Type.ref(places.enumeration()), published);
@@ -266,6 +275,30 @@ public sealed interface Carrier extends ValueOrder {
      */
     default boolean counts() {
         return !(this instanceof Text);
+    }
+
+    /**
+     * Whether a rule can weigh a value on this order by a number.
+     *
+     * <p>Apart from {@link #counts}, and further in. A date counts to a number and the number counts
+     * from an origin nobody wrote: twice a date is twice as many days since an epoch, which is not a
+     * date and is not a quantity any model states. The same of a time of day, a moment, and the
+     * place a case takes in its enumeration. What is left is the two orders whose numbers are the
+     * model's own — a whole number and a decimal — and a multiple of one of those is a quantity a
+     * rule can be written about.
+     *
+     * <p>Which is why a distance between two of the rest is still a quantity: {@link
+     * #sharesCountSpaceWith} is about coefficients of one and minus one, where the origins cancel.
+     * Any other pair of weights leaves the origin in, and the line is one nobody could write.
+     *
+     * <p>A switch with nothing to fall through to, as every question about these is: a ninth carrier
+     * says for itself whether its counts are numbers a model weighs.
+     */
+    default boolean canBeWeighed() {
+        return switch (this) {
+            case Whole _, Dense _ -> true;
+            case Days _, Seconds _, SecondsOfDay _, Nanos _, Ordinal _, Text _ -> false;
+        };
     }
 
     /**
@@ -467,6 +500,29 @@ public sealed interface Carrier extends ValueOrder {
         };
     }
 
+    /**
+     * {@code place}, once this carrier has confirmed it is one of the places it holds
+     * ({@link #onTheGrid}).
+     *
+     * <p>A place a value is about to be read or written at is asked for on this carrier's own
+     * grid ({@link #onTheGrid}'s own doc), and every reader downstream of that point — the digits,
+     * the case, the date — works because the place is one this carrier answers for. That was a
+     * caller's discipline to remember rather than a fact this enforced, so a place built off the
+     * grid reached a narrowing conversion as itself, a {@code java.math} refusal from inside a
+     * checker rather than the invariant violation it is. Asked here instead, once, at the choke
+     * point every reader of a place passes through.
+     *
+     * @throws IllegalArgumentException where {@code place} is not one of this carrier's own
+     */
+    default Place requiredOnGrid(Place place) {
+        Place held = onTheGrid(place);
+        if (held == null) {
+            throw new IllegalArgumentException(
+                    "a place read or written as a value must be one this carrier holds: " + place);
+        }
+        return held;
+    }
+
     /** Whether a place counts to a whole number, which is what a stepping order is made of. A place
      * that is not a number is not one. */
     private static boolean countsWhole(Place at) {
@@ -524,6 +580,7 @@ public sealed interface Carrier extends ValueOrder {
                 case Core.Decimal d -> onTheGrid(Count.of(d.value()));
                 // A minus in front of a value is part of the value written down, and these are the
                 // only carriers with one to write: nothing negates a date, a case or a string.
+                case Core.Neg n when IntNegation.isTheLeastInt(n.operand()) -> null;
                 case Core.Neg n -> {
                     Place inner = literalOf(n.operand(), symbols);
                     yield inner == null ? null : Count.number(inner).negate();
@@ -560,7 +617,9 @@ public sealed interface Carrier extends ValueOrder {
      * is not a newtype wraps its value rather than being it, so its construction is a value of its
      * own and is left alone.
      */
-    private static Core bare(Core e, Symbols symbols) {
+    private static Core bare(Core written, Symbols symbols) {
+        // A value written down is the value it is whatever type it stands as.
+        Core e = Core.withoutStanding(written);
         return e instanceof Core.Construct nd && !nd.values().isEmpty()
                 && TypeOps.isSingleValueNewtype(Type.ref(nd.typeName()), symbols)
                 ? bare(nd.values().get(0).value(), symbols) : e;
@@ -662,27 +721,47 @@ public sealed interface Carrier extends ValueOrder {
         if (from == Towards.BELOW) {
             if (high == null) {
                 return low == null ? Count.ZERO
-                        : low.inclusive() ? low.at() : count(low).plus(1);
+                        : low.inclusive() ? low.at() : oneFrom(count(low), ExactRatio.ONE);
             }
             if (high.inclusive()) {
                 return high.at();
             }
             // Open above, so the place is not the end. Halfway to the other end where there is one,
-            // and a step in where there is not.
-            return low == null ? count(high).minus(1)
-                    : count(low).halfwayTo(count(high), Granularity.DENSE);
+            // and one in where there is not.
+            return low == null ? oneFrom(count(high), ExactRatio.ONE.negated())
+                    : halfway(count(low), count(high));
         }
         if (low == null) {
             return high == null ? Count.ZERO
-                    : high.inclusive() ? high.at() : count(high).minus(1);
+                    : high.inclusive() ? high.at() : oneFrom(count(high), ExactRatio.ONE.negated());
         }
         if (low.inclusive()) {
             return low.at();
         }
         // Open below, so the place is not the end. Halfway to the other end where there is one — a
-        // count the dense carrier holds, and inside both — and a step in where there is not.
-        return high == null ? count(low).plus(1)
-                : count(low).halfwayTo(count(high), Granularity.DENSE);
+        // count the dense carrier holds, and inside both — and one in where there is not.
+        return high == null ? oneFrom(count(low), ExactRatio.ONE)
+                : halfway(count(low), count(high));
+    }
+
+    /**
+     * The count {@code by} from {@code at} on an order with no step, or null where this could not
+     * hold it.
+     *
+     * <p>Not a step: this order has none, and one is only a distance that lands inside a range open
+     * on the far side. Worked out exactly and made a count only at the end, so where the number is
+     * one this has no room for, the answer is the null every caller here already reads as this
+     * composing nothing — never the range holding nothing.
+     */
+    private static Count oneFrom(Count at, ExactRatio by) {
+        return at.exactly().plus(by).orNull() instanceof ExactRatio at1 ? Count.at(at1) : null;
+    }
+
+    /** The count halfway between two, or null where this could not hold it, for the same reason
+     *  as {@link #oneFrom}. Exact, since half a decimal is a decimal. */
+    private static Count halfway(Count low, Count high) {
+        ExactRatio summed = low.exactly().plus(high.exactly()).orNull();
+        return summed == null ? null : Count.at(summed.dividedBy(ExactRatio.of(2)));
     }
 
     /**
@@ -739,7 +818,10 @@ public sealed interface Carrier extends ValueOrder {
         java.math.RoundingMode into = lower ? java.math.RoundingMode.FLOOR
                 : java.math.RoundingMode.CEILING;
         Count step = count(end).rounded(into);
-        return Endpoint.inclusive(lower ? step.plus(1) : step.minus(1));
+        Count beside = lower ? step.plus(1) : step.minus(1);
+        // Where no count is the whole number beside it, the same whole numbers are the ones past
+        // `step` itself, which says it without a number nothing holds.
+        return beside == null ? Endpoint.exclusive(step) : Endpoint.inclusive(beside);
     }
 
     /** The count an end is at. Only reached from the arithmetic above, which every carrier that has
@@ -788,8 +870,26 @@ public sealed interface Carrier extends ValueOrder {
         java.util.List<Place> stepped = new ArrayList<>();
         for (Place from : singled.places()) {
             if (from instanceof Count count) {
-                stepped.add(count.plus(1));
-                stepped.add(count.minus(1));
+                // Where the values step, the step. Where they do not, the place one away is no
+                // neighbour and only one more candidate, so a place this could not hold is left out
+                // and the rest are still tried.
+                if (spacing() == Granularity.DENSE) {
+                    for (ExactRatio away : List.of(ExactRatio.ONE, ExactRatio.ONE.negated())) {
+                        Count beside = oneFrom(count, away);
+                        if (beside != null) {
+                            stepped.add(beside);
+                        }
+                    }
+                } else {
+                    Count above = count.plus(1);
+                    if (above != null) {
+                        stepped.add(above);
+                    }
+                    Count below = count.minus(1);
+                    if (below != null) {
+                        stepped.add(below);
+                    }
+                }
             }
         }
         java.util.List<Place> inside = new ArrayList<>();
@@ -1391,7 +1491,11 @@ public sealed interface Carrier extends ValueOrder {
         if (!high.inclusive()) {
             last = last.minus(1);
         }
-        for (Count at = first; at.compareTo(last) <= 0; at = at.plus(1)) {
+        // A step no count is has no count past it either, so the places end there.
+        if (first == null || last == null) {
+            return out;
+        }
+        for (Count at = first; at != null && at.compareTo(last) <= 0; at = at.plus(1)) {
             if (out.size() == atMost) {
                 return null;
             }
@@ -1482,14 +1586,15 @@ public sealed interface Carrier extends ValueOrder {
      */
     default ObservedValue valueOf(Place count) {
         return switch (this) {
-            case Whole _ -> new ObservedValue.Integer(Count.number(count).at().longValueExact());
+            case Whole _ ->
+                    new ObservedValue.Integer(Count.number(requiredOnGrid(count)).at().longValueExact());
             case Dense _ -> new ObservedValue.Decimal(Count.number(count).at());
-            case Days _ -> new ObservedValue.Temporal(Dates.written(count));
-            case Seconds _ -> new ObservedValue.Temporal(DateTimes.written(count));
-            case SecondsOfDay _ -> new ObservedValue.Temporal(Times.written(count));
-            case Nanos _ -> new ObservedValue.Temporal(Instants.written(count));
+            case Days _ -> new ObservedValue.Temporal(Dates.written(requiredOnGrid(count)));
+            case Seconds _ -> new ObservedValue.Temporal(DateTimes.written(requiredOnGrid(count)));
+            case SecondsOfDay _ -> new ObservedValue.Temporal(Times.written(requiredOnGrid(count)));
+            case Nanos _ -> new ObservedValue.Temporal(Instants.written(requiredOnGrid(count)));
             case Ordinal ordinal -> new ObservedValue.Unit(ordinal.caseAt(count));
-            case Text _ -> new ObservedValue.Text(count.key());
+            case Text _ -> new ObservedValue.Text(count.spelled());
         };
     }
 
@@ -1498,24 +1603,27 @@ public sealed interface Carrier extends ValueOrder {
      * itself would name a line at a number nobody wrote.
      *
      * <p>The number and not how many places it was written to, which is the same thing that makes
-     * two cuts one cut ({@link Count#key()}). A line an invariant and a {@code guard} both draw is
+     * two cuts one cut ({@link Place#key()}). A line an invariant and a {@code guard} both draw is
      * one line recorded once, and the spelling it keeps is whichever rule reached it first — so a
      * label that preserved places would print one line two ways depending on the order the rules
      * were read in.
+     *
+     * <p>Written through {@link Place#spelled}, which is that same number in digits. Naming a line
+     * and writing one are two questions, and a reader here is asking the second.
      */
     default String written(Place count) {
         return switch (this) {
-            case Whole _, Dense _ -> count.key();
-            case Days _ -> Dates.written(count);
-            case Seconds _ -> DateTimes.written(count);
-            case SecondsOfDay _ -> Times.written(count);
-            case Nanos _ -> Instants.written(count);
+            case Whole _, Dense _ -> count.spelled();
+            case Days _ -> Dates.written(requiredOnGrid(count));
+            case Seconds _ -> DateTimes.written(requiredOnGrid(count));
+            case SecondsOfDay _ -> Times.written(requiredOnGrid(count));
+            case Nanos _ -> Instants.written(requiredOnGrid(count));
             // The case's name, which is the only thing a person ever writes at such a position. An
             // ordinal in a report would name a line at a number the model does not contain.
             case Ordinal ordinal -> ordinal.caseAt(count).name();
             // Bare, as a date and a case are. A row's own description is quoted text, so a quote
             // here ends it early and the rest of the line lands where the input goes.
-            case Text _ -> count.key();
+            case Text _ -> count.spelled();
         };
     }
 }

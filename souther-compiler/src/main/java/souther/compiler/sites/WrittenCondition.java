@@ -58,7 +58,9 @@ public sealed interface WrittenCondition {
 
     /**
      * One arm of a fork, which is the condition that the value being matched turned out to be the
-     * case the arm selects.
+     * case the arm selects. An attempted construction's first arm is the condition that its
+     * invariant held, and each arm after it that the invariant failed the way that departure
+     * answers.
      *
      * @param construct the fork, which is what the source wrote
      * @param part      which arm of it, in the order the fork holds them

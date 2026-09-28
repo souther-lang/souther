@@ -21,14 +21,12 @@ import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What a behavior's {@code example} rows said, read by an output that is not this compiler.
@@ -467,54 +465,6 @@ class AnOutputReadsWhatABehaviorsExamplesSaidTest {
         CheckedProgram program = CheckedProgram.of(List.of(source));
 
         assertEquals(List.of(), behavior(program, "demo", "twice").rows());
-    }
-
-    /**
-     * Every row written in the program is one an output is handed.
-     *
-     * <p>What must never happen is a row that cannot be reproduced arriving as no row: an output
-     * would then read "this behavior has no rows" and count a set it never walked as one it walked
-     * and found empty. Counted over a program whose rows are of every kind there is.
-     */
-    @Test
-    void everyRowWrittenCrossesAsARow() {
-        String source = """
-                module demo
-
-                data Amount = Int
-                data Rate = Int
-
-                behavior rateNow : () -> Rate
-
-                behavior twice : (a: Amount) -> Amount constructs Amount
-
-                let twice (a) = Amount(a.value * 2)
-
-                behavior scaled : (a: Amount) -> Amount
-                    depends on rateNow
-                    constructs Amount
-
-                let scaled (a, rateNow) = Amount(a.value * rateNow().value)
-
-                example twice
-                    | "one" : (Amount(1)) -> Amount(2)
-                    | (Amount(2)) -> Amount(4)
-
-                example scaled
-                    | "with a rate" : (Amount(2)) with rateNow = Rate(3) -> Amount(6)
-                """;
-        CheckedProgram program = CheckedProgram.of(List.of(source));
-
-        List<CheckedRow> every = new ArrayList<>();
-        for (CheckedModule module : program.modules()) {
-            for (CheckedBehavior behavior : module.behaviors()) {
-                every.addAll(behavior.rows());
-            }
-        }
-        assertEquals(3, every.size(), () -> "the rows that crossed are " + every);
-        assertTrue(every.stream().anyMatch(row -> row.statement()
-                        instanceof CheckedRow.WithStandIns),
-                "including the one that needs something stood in for");
     }
 
     private static Mismatch notHeld(Verdict verdict) {

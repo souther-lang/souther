@@ -10,7 +10,7 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.regex.PatternSyntax;
+import souther.compiler.regex.PatternMeaning;
 
 import java.util.List;
 
@@ -34,9 +34,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 class ARuleAboutTheStringsAtAPositionIsReadWhereTheOperationStandsTest {
 
     /** Every string that begins with {@code written}, which is what {@code startsWith} states. */
-    private static PatternSyntax beginningWith(String written) {
-        return new PatternSyntax.InTurn(
-                List.of(PatternSyntax.text(written), PatternSyntax.anything()));
+    private static PatternMeaning beginningWith(String written) {
+        return new PatternMeaning.InTurn(
+                List.of(PatternMeaning.text(written), PatternMeaning.anything()));
     }
 
     @Test

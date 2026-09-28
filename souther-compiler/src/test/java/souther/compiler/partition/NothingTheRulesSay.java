@@ -5,6 +5,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Rel;
 
 import java.util.Map;
@@ -22,9 +23,9 @@ final class NothingTheRulesSay implements SearchRegion {
     static final SearchRegion REGION = new NothingTheRulesSay();
 
     @Override
-    public SearchRegion assuming(LinearForm<NumericTerm> form,
-                                 Rel rel) {
-        return this;
+    public Assumption assuming(LinearForm<NumericTerm> form,
+                               Rel rel) {
+        return new Assumption.Taken(this);
     }
 
     @Override
@@ -44,10 +45,15 @@ final class NothingTheRulesSay implements SearchRegion {
         return this;
     }
 
+    @Override
+    public PlacesApart apartAt(NumericTerm.FromOnePosition term) {
+        return PlacesApart.NONE;
+    }
+
 
     @Override
-    public NumericDomain.Bounds runsBetween(LinearForm<NumericTerm> form) {
-        return NumericDomain.Bounds.OPEN;
+    public NumericDomain.FormProjection projectionOf(LinearForm<NumericTerm> form) {
+        return new NumericDomain.FormProjection.Within(NumericDomain.Bounds.OPEN);
     }
 
     @Override

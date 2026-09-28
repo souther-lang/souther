@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.RuleReadingContext;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.DeclaredSig;
@@ -174,15 +175,15 @@ class WhatARuleOnAStringIsMeasuredAtTest {
 
         CoverageSites.Plan plan = checked.plan();
         Core body = checked.behaviorBodies().get("f");
-        GuardThresholds.Guards guards = GuardThresholds.of("f",
+        GuardThresholds.Guards guards = ThresholdFixtures.guardsOf("f",
                 checked.analysisBodies().get("f"), body, plan,
                 compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("f"), rules);
-        InputDomain read = InputDomain.of(sigs.get("f"), rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        InputDomain read = InputDomain.of(sigs.get("f"), RuleReadingContext.unshared(rules,
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
         souther.compiler.inputs.Quantities reading = read.quantities(rules);
         RuleReadingContext ruleReading = RuleReadingContext.unshared(rules,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
-        Partitions.Partitioning p = Partitions.withThresholds(
+        Partitions.Partitioning p = ThresholdFixtures.withThresholds(
                 Partitions.of("f", read, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 reading,
                 guards.thresholds(), ruleReading,

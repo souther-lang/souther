@@ -45,10 +45,4 @@ public record DecisionRule(Map<DecisionCondition, DecidedCondition> consulted) {
     public DecidedCondition at(DecisionCondition condition) {
         return consulted.get(condition);
     }
-
-    /** Whether any condition on this path is one the reading had no words for. */
-    public boolean consultedSomethingUnread() {
-        return consulted.keySet().stream()
-                .anyMatch(DecisionCondition.AConditionNotRead.class::isInstance);
-    }
 }

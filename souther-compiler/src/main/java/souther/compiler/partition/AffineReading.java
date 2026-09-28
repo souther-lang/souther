@@ -14,10 +14,11 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.PathResolution;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 
-import java.math.BigDecimal;
 import java.util.Map;
 
 /**
@@ -42,7 +43,7 @@ import java.util.Map;
  * @param cut   where the rule cuts it
  * @param claim what the operator states about the threshold's own value
  */
-record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonClaim claim) {
+record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonClaim claim) {
 
     /**
      * What reading {@code comparison} as a line came to.
@@ -119,8 +120,8 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
                     return new OfAComparison.CutsNothing(named);
                 }
                 AffineReading here = new AffineReading(
-                        new LinearForm<>(BigDecimal.ZERO, whole.coefs()),
-                        whole.constant().negate(), comparison.claim());
+                        new LinearForm<>(ExactRatio.ZERO, whole.coefs()),
+                        whole.constant().negated(), comparison.claim());
                 // Turned round here and nowhere else. `48 >= 3a + 6b` and `3a + 6b <= 48` are one
                 // rule, and a reader that met the first without turning it round drew its border on
                 // `-3a - 6b` — the same four points under a name no author wrote, and a different
@@ -141,10 +142,9 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
      * order the author happened to add them in, and a report is a document compared against the one
      * written last time.
      */
-    static java.util.List<Map.Entry<NumericTerm, BigDecimal>> ordered(
+    static java.util.List<Map.Entry<NumericTerm, ExactRatio>> ordered(
             LinearForm<NumericTerm> form) {
-        return form.coefs().entrySet().stream()
-                .sorted(java.util.Comparator.comparing(each -> each.getKey().toString())).toList();
+        return NumericTerms.entriesInOrder(form.coefs());
     }
 
     /**
@@ -164,8 +164,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
      */
     static java.util.List<souther.compiler.inputs.FilingCoordinate> filedAt(
             java.util.Collection<NumericTerm> terms) {
-        return terms.stream()
-                .sorted(java.util.Comparator.comparing(NumericTerm::toString))
+        return souther.compiler.inputs.NumericTerms.inOrder(terms).stream()
                 .<souther.compiler.inputs.FilingCoordinate>map(
                         souther.compiler.inputs.FilingCoordinate::of)
                 .distinct().toList();
@@ -278,8 +277,8 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
         if (form.coefs().size() != 1) {
             return null;
         }
-        Map.Entry<NumericTerm, BigDecimal> only = form.coefs().entrySet().iterator().next();
-        return only.getValue().compareTo(BigDecimal.ONE) == 0 ? only.getKey() : null;
+        Map.Entry<NumericTerm, ExactRatio> only = form.coefs().entrySet().iterator().next();
+        return only.getValue().equals(ExactRatio.ONE) ? only.getKey() : null;
     }
 
     /**
@@ -295,10 +294,10 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
         }
         NumericTerm on = null;
         NumericTerm against = null;
-        for (Map.Entry<NumericTerm, BigDecimal> each : form.coefs().entrySet()) {
-            if (each.getValue().compareTo(BigDecimal.ONE) == 0) {
+        for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
+            if (each.getValue().equals(ExactRatio.ONE)) {
                 on = each.getKey();
-            } else if (each.getValue().compareTo(BigDecimal.ONE.negate()) == 0) {
+            } else if (each.getValue().equals(ExactRatio.ONE.negated())) {
                 against = each.getKey();
             }
         }
@@ -312,7 +311,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
      * whichever way the author wrote the subtraction, and it is not a difference between two rules.
      */
     private AffineReading mirrored() {
-        return new AffineReading(form.negate(), cut.negate(), claim.turned());
+        return new AffineReading(form.negate(), cut.negated(), claim.turned());
     }
 
     /**
@@ -329,7 +328,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
      * the same line as {@code 3a - 6b <= 48} under a name no author wrote.
      */
     private boolean facesTheOtherWay(NumericTerm subject) {
-        BigDecimal first = subject == null ? null : form.coefs().get(subject);
+        ExactRatio first = subject == null ? null : form.coefs().get(subject);
         return (first != null ? first : ordered(form).getFirst().getValue()).signum() < 0;
     }
 
@@ -347,7 +346,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
                         // alone, and rooting a reading of arrivals at it would read it as a tree of
                         // its own and lose whatever bound a name above it.
                         souther.compiler.coverage.Arrivals.everyArmIsTakenForAValue())) {
-            for (NumericTerm atom : left.coefs().keySet()) {
+            for (NumericTerm atom : NumericTerms.inOrder(left.coefs().keySet())) {
                 if (atom.subjectPath().equals(named)) {
                     return atom;
                 }
@@ -380,7 +379,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
             souther.compiler.inputs.Quantities quantities) {
         java.util.Map<NumericTerm, souther.compiler.inputs.TermOrders> on =
                 new java.util.LinkedHashMap<>();
-        for (NumericTerm term : form.coefs().keySet()) {
+        for (NumericTerm term : NumericTerms.inOrder(form.coefs().keySet())) {
             // Both ends of the term, because a reader of a row wants the one it is decoded on and a
             // reader of a line wants the one the answer is measured on. Carried together so neither
             // stands in for the other (#1027).

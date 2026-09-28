@@ -3,7 +3,9 @@ package souther.compiler.meta;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
-import souther.compiler.check.HelperInliner;
+import souther.compiler.check.CarriedDefinitions;
+import souther.compiler.check.Preserved;
+import souther.compiler.check.ValueEntries;
 import souther.compiler.check.Sig;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeReachName;
@@ -25,11 +27,8 @@ import java.lang.classfile.ClassTransform;
 import java.lang.classfile.attribute.RuntimeInvisibleAnnotationsAttribute;
 import java.lang.constant.ClassDesc;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Writes a module's declarations into the classes it generated, so another project can import the
@@ -86,12 +85,15 @@ public final class ModuleMetadata {
      * or inlined, so the invariants read as they were written. {@code sigs} supplies the signature
      * of a {@code >->} composition, which declares stages instead of one; {@code implementations}
      * says where each behavior's body comes from (spec §injected-behavior, §unwritten-behavior),
-     * which is the compiler's rule to state and not a fact about any one class.
+     * which is the compiler's rule to state and not a fact about any one class. {@code requirements}
+     * is what each behavior constructed here requires injected, which a composition works out from
+     * stages that are not carried.
      */
     public static void stamp(Emissions out, Ast.Module module, Hir.Module resolved,
                              CstFrontend.Slices slices, Map<String, Sig> sigs,
                              Map<String, BehaviorImplementation> implementations,
-                             TypeReachName.Naming naming) {
+                             Map<String, List<ValueName.Behavior>> requirements,
+                             TypeReachName.Naming naming, Preserved.SettledValues settledValues) {
         List<String> types = new ArrayList<>();
         for (Ast.Def def : module.defs()) {
             types.add(def.name());
@@ -106,20 +108,45 @@ public final class ModuleMetadata {
                 continue;
             }
             behaviors.add(b.name());
+            PublishedSignature from = switch (b) {
+                case Ast.SpecBehavior _ -> PublishedSignature.DECLARED;
+                case Ast.PipeBehavior _ -> PublishedSignature.COMPOSED;
+            };
+            BehaviorImplementation implementation = implementations.get(b.name());
+            List<ValueName.Behavior> required = requirements.get(b.name());
+            if (required == null) {
+                throw new IllegalStateException("`" + module.name() + "." + b.name()
+                        + "` reached publication with no requirement set");
+            }
+            if (!implementation.admits(required)) {
+                // What a reader of the class refuses to read, so it is not written.
+                throw new IllegalStateException("`" + module.name() + "." + b.name() + "` is "
+                        + implementation.written() + " and reached publication requiring "
+                        + required);
+            }
             add(out, new GeneratedClass.BehaviorInterface(module.name(), b.name()),
                     Annotation.of(BEHAVIOR_ANN,
                             AnnotationElement.ofString("signature", signature),
-                            AnnotationElement.ofString("implementation",
-                                    implementations.get(b.name()).written())));
+                            AnnotationElement.ofString("signatureFrom", from.written()),
+                            AnnotationElement.ofString("implementation", implementation.written()),
+                            strings("requirements", PublishedRequirements.written(required))));
         }
         out.put(new GeneratedClass.ModuleDeclarations(module.name()),
-                Backend.moduleClass(module.name(), moduleAnnotation(module, resolved, slices, types, behaviors)));
+                Backend.moduleClass(module.name(), moduleAnnotation(module, resolved, slices, types,
+                        behaviors, ValueAnswers.written(module.name(),
+                                ValueEntries.publishedValues(resolved), settledValues),
+                        PublishedLinkages.written(out.provides()),
+                        PublishedLinkages.written(out.requires()),
+                        PublishedCopies.written(out.copies().provides()),
+                        PublishedCopies.written(out.copies().requires()))));
     }
 
     /**
      * What the importing module reads as this behavior's signature. A declared one is the
      * declaration as written. A composition declares its stages, not a signature, so the computed
-     * one is written out — the stages are the module's own business and are not carried.
+     * one is written out — the stages are the module's own business and are not carried. The
+     * parser asks for a name on every parameter, so the computed one is given names; they are
+     * {@link PublishedSignature#COMPOSED}'s to drop, and a reader never sees them.
      *
      * <p>Null where the behavior has no signature to publish, and only there. A composition whose
      * stage names nothing computes none, and nothing is carried for it.
@@ -192,7 +219,12 @@ public final class ModuleMetadata {
 
     private static Annotation moduleAnnotation(Ast.Module module, Hir.Module resolved,
             CstFrontend.Slices slices,
-                                               List<String> types, List<String> behaviors) {
+                                               List<String> types, List<String> behaviors,
+                                               List<String> valueAnswers,
+                                               List<String> providedLinkages,
+                                               List<String> requiredLinkages,
+                                               List<String> providedCopies,
+                                               List<String> requiredCopies) {
         return Annotation.of(MODULE_ANN,
                 AnnotationElement.ofInt("compat", Backend.BOUNDARY_VERSION),
                 AnnotationElement.ofString("compiler", compilerVersion()),
@@ -201,7 +233,12 @@ public final class ModuleMetadata {
                 strings("imports", slices.imports()),
                 strings("types", types),
                 strings("behaviors", behaviors),
-                strings("invariantHelpers", invariantHelpers(module, resolved, slices)));
+                strings("invariantHelpers", invariantHelpers(module, resolved, slices)),
+                strings("valueAnswers", valueAnswers),
+                strings("providedLinkages", providedLinkages),
+                strings("requiredLinkages", requiredLinkages),
+                strings("providedCopies", providedCopies),
+                strings("requiredCopies", requiredCopies));
     }
 
     private static AnnotationElement strings(String name, List<String> values) {
@@ -213,14 +250,9 @@ public final class ModuleMetadata {
     }
 
     /**
-     * The {@code let}s a reader of this module's declarations needs, as they were written: the
-     * helpers its invariants call, and the definitions it publishes.
-     *
-     * <p>An invariant is part of what a type is, so it has to be readable where the type is imported,
-     * and it cannot be read without the helpers it names. A published value or helper is the same: a
-     * value is substituted where it is named and a helper expanded where it is called (ADR-0072), so
-     * a reader needs the body, and the body's own workings with it. A {@code let} neither reaches is
-     * not carried — this publishes what the declarations need, not the module's implementation.
+     * The {@code let}s a reader of this module's declarations needs, as they were written: what the
+     * module hands over ({@link CarriedDefinitions}). A value runs where it is declared and is not
+     * executed from what is carried here.
      *
      * <p>What travels is the source as written, which the reader's compiler reads back. That makes
      * the meaning of a carried body part of what a jar promises, and it is {@link
@@ -228,76 +260,11 @@ public final class ModuleMetadata {
      */
     private static List<String> invariantHelpers(Ast.Module module, Hir.Module resolved,
                                                  CstFrontend.Slices slices) {
-        // A behavior's body is not published — a reader has its signature and calls it — so a
-        // behavior's own `let` is not among what may be carried, whatever reaches its spelling.
-        Set<String> behaviorNames = new LinkedHashSet<>();
-        for (Hir.BehaviorDef b : resolved.behaviors()) {
-            behaviorNames.add(b.name());
-        }
-        // What may be carried is what the model declares. The resolved module is wider than that:
-        // an attached file's values join the module its rows join, and an attached file does not
-        // add to what the model compiles to — so a `let` only it declares has no source here to
-        // carry. Asked of the definition, which is where that is recorded: whether a slice of its
-        // text was kept is how the jar is written, and would answer this by accident.
-        Map<String, Hir.FnDef> own = new LinkedHashMap<>();
-        for (Hir.FnDef fn : resolved.fns()) {
-            if (HelperInliner.isHelperName(behaviorNames, fn.name()) && fn.role().isTheModels()) {
-                own.put(fn.name(), fn);
-            }
-        }
-
-        Set<String> reached = new LinkedHashSet<>();
-        for (Hir.Def def : resolved.defs()) {
-            if (def instanceof Hir.Data d) {
-                for (Hir.InvariantClause clause : d.invariants()) {
-                    reach(clause.expr(), own, reached);
-                }
-            }
-        }
-        for (Hir.BehaviorDef behavior : resolved.behaviors()) {
-            if (behavior instanceof Hir.SpecBehavior spec) {
-                for (Hir.EnsuresClause clause : spec.ensures()) {
-                    for (Hir.EnsuresArm arm : clause.arms()) {
-                        reach(arm.expr(), own, reached);
-                    }
-                }
-            }
-        }
-        Set<String> exposed = new java.util.HashSet<>(module.exposing());
-        for (Hir.FnDef fn : own.values()) {
-            if (exposed.contains(fn.name()) && fn.body() instanceof Hir.FnBody.Written w) {
-                reached.add(fn.name());
-                reach(w.expr(), own, reached);
-            }
-        }
         List<String> texts = new ArrayList<>();
-        for (String name : reached) {
+        for (String name : CarriedDefinitions.of(resolved, module.published())) {
             texts.add(slices.fns().get(name));
         }
         return texts;
     }
 
-    /**
-     * A helper is reached by being called and by being named — handing one to a combinator, as in
-     * {@code all(positive, items)}, needs it just as much as calling it does.
-     *
-     * <p>One set does for both visited and reached: a helper is added the first time it is seen, and
-     * nothing is ever taken out, so a second sighting stops the walk by itself.
-     */
-    private static void reach(Hir.Expr e, Map<String, Hir.FnDef> own, Set<String> reached) {
-        // What a name reaches, read off the name rather than off its spelling. A clause is written
-        // among bindings — a data's fields, a behavior's parameters, `value` — and one of those
-        // spelled like a helper is not a use of that helper. Answered by spelling, a parameter
-        // called `positive` carried the module's `positive` across the boundary, and one called
-        // like a behavior carried that behavior's implementation.
-        String named = e instanceof Hir.Var.Denoting var
-                && var.denotes() instanceof ValueName.Helper helper ? helper.name() : null;
-        if (named != null && own.containsKey(named) && reached.add(named)) {
-            // an `intrinsic` helper is a name with nothing to walk into
-            if (own.get(named).body() instanceof Hir.FnBody.Written w) {
-                reach(w.expr(), own, reached);
-            }
-        }
-        Hir.forEachChild(e, c -> reach(c, own, reached));
-    }
 }

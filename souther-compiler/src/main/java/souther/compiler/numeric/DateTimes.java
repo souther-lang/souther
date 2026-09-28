@@ -1,6 +1,6 @@
 package souther.compiler.numeric;
 
-import java.math.RoundingMode;
+import java.math.BigInteger;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -73,13 +73,22 @@ public final class DateTimes {
         }
     }
 
-    /** The date-time {@code count} counts to, written the way a model writes one. A count carrying a
+    /**
+     * The date-time {@code count} counts to, written the way a model writes one. A count carrying a
      * fraction is floored rather than written as a date-time no model could have named, which is
-     * what lets the round-trip that asks whether this carrier holds a count answer no. */
+     * what lets the round-trip that asks whether this carrier holds a count answer no.
+     *
+     * @throws IllegalStateException where the exact arithmetic could not hold the floor of
+     *         {@code count} — a count no date-time this compiler reasons about is ever built at
+     */
     public static String written(Place count) {
-        return written(LocalDateTime.ofEpochSecond(
-                Count.number(count).at().setScale(0, RoundingMode.FLOOR).longValueExact(),
-                0, ZoneOffset.UTC));
+        if (!(Count.number(count).exactly().floor()
+                instanceof ExactAnswer.Held<BigInteger> held)) {
+            throw new IllegalStateException(
+                    "a count read or written as a date-time is one the exact arithmetic can hold"
+                            + " the floor of, and this was not: " + count);
+        }
+        return written(LocalDateTime.ofEpochSecond(held.value().longValueExact(), 0, ZoneOffset.UTC));
     }
 
     /** The same text, for a caller holding the value rather than the count. Every place a date-time

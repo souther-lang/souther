@@ -2,7 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -61,7 +61,7 @@ class ADemandOnADistanceReadsTheOtherWayRoundTest {
         for (Criterion each : criteria()) {
             Criterion reflected = each.reflected();
             for (long at = -4; at <= 4; at++) {
-                Level level = Level.ACount.of(at);
+                Level level = Level.OfTheQuantity.of(at);
                 assertEquals(each.holds(level), reflected.holds(level.negated()),
                         "at " + at + ": " + each + " against " + reflected);
             }
@@ -72,11 +72,12 @@ class ADemandOnADistanceReadsTheOtherWayRoundTest {
     @Test
     void negatingALevelTwiceIsTheLevel() {
         for (long at = -4; at <= 4; at++) {
-            Level level = Level.ACount.of(at);
+            Level level = Level.OfTheQuantity.of(at);
             assertEquals(level, level.negated().negated(), "negated twice: " + at);
         }
-        assertEquals(new Level.ACount(new Count(new java.math.BigDecimal("-2.5"))),
-                new Level.ACount(new Count(new java.math.BigDecimal("2.5"))).negated(),
+        assertEquals(
+                new Level.OfTheQuantity(ExactRatio.of(new java.math.BigDecimal("-2.5"))),
+                new Level.OfTheQuantity(ExactRatio.of(new java.math.BigDecimal("2.5"))).negated(),
                 "a distance that is not whole negates the same way");
     }
 

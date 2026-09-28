@@ -72,12 +72,20 @@ public record ElementProjection(List<String> steps) {
      */
     private record Reading(Map<BindingId, Core> held, DeclarationNewtypes newtypes) {
 
+        private Reading {
+            if (newtypes == null) {
+                throw new IllegalArgumentException("walking to an element asks which of the names"
+                        + " on the way wrap one value, so it is handed somewhere to read that");
+            }
+        }
+
         private List<String> from(Core e, BindingId element) {
             return steps(e, element, new BindingTrail());
         }
 
         private List<String> steps(Core e, BindingId element, BindingTrail trail) {
-            return switch (e) {
+            // Where an element stands does not turn on the type it stands as.
+            return switch (Core.withoutStanding(e)) {
                 // What a `let` comes to is what its body comes to, and the name it bound is answered
                 // where it is read. Ordinary binding semantics, and what a helper applied to the
                 // element leaves behind once it is spliced in: `amountOf(line).value` is a field of

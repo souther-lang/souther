@@ -86,10 +86,11 @@ class WhoNamesAComparisonAndWhoAddressesOneTest {
      * What keeps them true is that one place makes each, so what is fixed is where that place is.
      */
     private static final List<Licence> MAY_PAIR = List.of(
-            new Licence("souther.compiler.query.Bodies.Checked.compute", 1,
-                    "where a module's name and its trees are both in hand for the first and only"
-                            + " time: the check was asked under the name and produced the trees, so"
-                            + " nothing else has to be trusted to put the two together"),
+            new Licence("souther.compiler.query.Bodies.elaborationOf", 1,
+                    "where a module's name and the trees of one elaboration of it are both in hand"
+                            + " for the first and only time: the check was asked under the name and"
+                            + " produced the trees, so nothing else has to be trusted to put the"
+                            + " two together"),
             new Licence("souther.compiler.coverage.ModuleBodies.none", 1,
                     "the module with nothing in it, which is what a check that did not finish"
                             + " leaves and is a pair of nothing with nobody"));

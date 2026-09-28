@@ -7,8 +7,10 @@ import souther.compiler.check.BehaviorContract.RuleId;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.MaterialisationSite;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
+import souther.compiler.types.WrittenOwner;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -142,18 +144,21 @@ public record StatedContract(ValueName.Behavior behavior, List<Param> params, Ty
      * @param helpers the signatures a rule may reach without a binding
      */
     public static StatedContract of(BehaviorContract contract, ClausesForDischarge declaring,
-                                    Symbols symbols, PublishedDeclarations published,
-                                    DeclarationKinds kinds, NewtypeInners inners,
+                                    Symbols symbols, DeclarationAccess declarations,
                                     Map<String, Type> helpers) {
-        CheckContext ctx = CheckContext.of(symbols, published, kinds, inners).forDischarge();
+        CheckContext ctx = CheckContext.of(symbols, declarations).forDischarge();
         List<StatedRule> rules = new ArrayList<>();
         for (BehaviorContract.Clause clause : contract.clauses()) {
             for (Rule rule : clause.rules()) {
                 Scope scope = BehaviorChecker.scopeOf(contract, rule).reaching(helpers);
                 RuleRef.Ensures ref = contract.refOf(rule);
                 List<Conjunct> conjuncts = new ArrayList<>();
+                MaterialisationSite root = new MaterialisationSite.Ensures(
+                        new WrittenOwner.Stated(contract.behavior().module(),
+                                contract.behavior().name()),
+                        rule.id().clause(), rule.id().arm());
                 for (ClausesForDischarge.ClauseReading written : declaring.conjunctsOf(
-                        rule.statement(), BehaviorContract.ownerOf(contract.behavior()))) {
+                        rule.statement(), BehaviorContract.ownerOf(contract.behavior()), root)) {
                     conjuncts.add(new Conjunct(written.part().idFor(ref), written.at(),
                             SecondaryClauseReading.of(written.asExpanded(),
                                     () -> new SecondaryClauseReading.Over(scope, ctx),

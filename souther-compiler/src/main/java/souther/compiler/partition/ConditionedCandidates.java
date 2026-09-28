@@ -31,7 +31,7 @@ final class ConditionedCandidates {
 
     private final RuleReadingContext reading;
     private final FieldDomains rules;
-    private final Map<Map<RuleKey, Count>, FieldDomains.Composing> states = new HashMap<>();
+    private final Map<Settling, FieldDomains.Composing> states = new HashMap<>();
     private final Map<Asked, List<FixtureTemplate>> found = new HashMap<>();
 
     /**
@@ -49,7 +49,7 @@ final class ConditionedCandidates {
      *                being composed name them. Never held on to: what is kept is a copy taken here
      */
     List<FixtureTemplate> at(ConstructionPlan.Slot position, Map<RuleKey, Count> settled) {
-        Asked asked = new Asked(position.at(), settled);
+        Asked asked = new Asked(position.at(), new Settling(settled));
         List<FixtureTemplate> known = found.get(asked);
         if (known != null) {
             return known;
@@ -66,15 +66,44 @@ final class ConditionedCandidates {
 
     /** The rules with these coordinates settled, worked out once however many positions ask under
      *  it. */
-    private FieldDomains.Composing state(Map<RuleKey, Count> settled) {
-        return states.computeIfAbsent(settled, at -> rules.composing(FieldDomains.atValues(at)));
+    private FieldDomains.Composing state(Settling settled) {
+        return states.computeIfAbsent(settled, at -> at.under(rules));
     }
 
     /** One position under one settling, which is what the same answer is the answer to. */
-    private record Asked(TermPath at, Map<RuleKey, Count> settled) {
+    private record Asked(TermPath at, Settling settled) {}
 
-        private Asked {
-            settled = Map.copyOf(settled);
+    /**
+     * The numbers the positions before one took, and the one thing done with them: taking them on
+     * to the rules of the value being composed ({@link #under}).
+     *
+     * <p>Two of these are one settling where they name the same numbers, whichever order they were
+     * written in — which is what makes it a key for what a position can take. What they name is not
+     * handed out: taking equalities onto a set of constraints comes to the same constraints in any
+     * order, so the one traversal there is is inside {@link #under} and nobody else has a map of
+     * them to walk in whatever order it comes.
+     */
+    private static final class Settling {
+
+        private final Map<RuleKey, Count> named;
+
+        Settling(Map<RuleKey, Count> named) {
+            this.named = Map.copyOf(named);
+        }
+
+        /** The rules with these coordinates settled. */
+        FieldDomains.Composing under(FieldDomains rules) {
+            return rules.composing(FieldDomains.atValues(named));
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Settling settling && named.equals(settling.named);
+        }
+
+        @Override
+        public int hashCode() {
+            return named.hashCode();
         }
     }
 }

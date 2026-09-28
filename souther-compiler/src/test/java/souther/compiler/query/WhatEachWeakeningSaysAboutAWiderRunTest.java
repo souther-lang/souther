@@ -70,16 +70,31 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         table.put("BorderValueUnreadable", "asks the reading/MAY_CHANGE");
         table.put("ModelReadingIncomplete", "asks the gap/UNAFFECTED");
         // And the seven where there is nothing further in to ask. Six of them are this compiler
-        // meeting something it has no reading for; one is a figure of its own.
+        // meeting something it has no reading for; one is a figure of its own. A body the image
+        // this run was made in does not carry is among them, and a wider run does not get past it —
+        // what was elaborated is what the classes that ran came from.
         table.put("OutputCasesUnreadable", "answers/UNAFFECTED");
         table.put("InputCasesUnreadable", "answers/UNAFFECTED");
-        table.put("BodiesNotElaborated", "answers/UNAFFECTED");
+        table.put("BodyNotInEvaluation", "answers/UNAFFECTED");
         table.put("BoundaryNotDerived", "answers/UNAFFECTED");
         table.put("InputNotRead", "answers/UNAFFECTED");
         table.put("ProofContradicted", "answers/UNAFFECTED");
         table.put("ArmsUnsettled", "answers/UNAFFECTED");
         // The one arm that is a figure the query graph hands the analysis.
         table.put("PairSpaceTruncated", "answers/MAY_CHANGE");
+        // And the figure the readings of one row are tried against: a build allowed more tries the
+        // readings the walk stopped short of.
+        table.put("BorderReadingsNotExhausted", "answers/MAY_CHANGE");
+        // A coverage item's own place on the order is a question the exact arithmetic answers or
+        // does not; a wider run does not change what scale a model's decimals were written at.
+        table.put("ItemsPlaceNotWorkedOut", "answers/UNAFFECTED");
+        // A border nothing held against the lines beside it, which does not answer one way: a
+        // strategy nobody wrote and rows all on one side are not allowances, and a run nobody
+        // watched is. The row is written with the one that is, so what it shows is the answer
+        // travelling rather than a constant.
+        table.put("ABorderNotHeldAgainstTheLinesBesideIt", "asks what stood in the way/MAY_CHANGE");
+        // And the same figure on the other criterion: a build allowed more walks the group.
+        table.put("MeetingsNotWalked", "answers/MAY_CHANGE");
         // A run this reading cannot place among the rules is not placed by allowing more.
         table.put("DecisionOfRowUnreadable", "answers/UNAFFECTED");
         // And a run nothing recorded is not recorded by allowing more either: what watched it is
@@ -87,6 +102,8 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         table.put("DecisionRunNotWatched", "answers/UNAFFECTED");
         // A reading held to a larger figure gets further, so this one a wider run can answer.
         table.put("DecisionReadingIncomplete", "answers/MAY_CHANGE");
+        // A rule read short is short of words, which no figure gives it.
+        table.put("DecisionRuleReadShort", "answers/UNAFFECTED");
         return table;
     }
 
@@ -197,13 +214,20 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         return switch (each) {
             case Weakening.ObservationIncomplete _ -> "asks the code";
             case Weakening.BorderValueUnreadable _ -> "asks the reading";
+            // What stood in the way, because the ways do not answer alike: a strategy nobody wrote
+            // and rows all on one side are not allowances, and what a run watched is.
+            case Weakening.ABorderNotHeldAgainstTheLinesBesideIt _ -> "asks what stood in the way";
             case Weakening.ModelReadingIncomplete _ -> "asks the gap";
             case Weakening.OutputCasesUnreadable _, Weakening.InputCasesUnreadable _,
-                 Weakening.BodiesNotElaborated _, Weakening.BoundaryNotDerived _,
+                 Weakening.BodyNotInEvaluation _, Weakening.BoundaryNotDerived _,
                  Weakening.InputNotRead _, Weakening.PairSpaceTruncated _,
+                 Weakening.BorderReadingsNotExhausted _,
+                 Weakening.ItemsPlaceNotWorkedOut _,
                  Weakening.ProofContradicted _, Weakening.ArmsUnsettled _,
                  Weakening.DecisionOfRowUnreadable _, Weakening.DecisionRunNotWatched _,
-                 Weakening.DecisionReadingIncomplete _ -> "answers";
+                 Weakening.MeetingsNotWalked _,
+                 Weakening.DecisionReadingIncomplete _,
+                 Weakening.DecisionRuleReadShort _ -> "answers";
         };
     }
 
@@ -224,7 +248,7 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                 "b", new PositionId(TermPath.of("x")))));
         out.add(new Weakening.OutputCasesUnreadable("b"));
         out.add(new Weakening.InputCasesUnreadable("b", 0));
-        out.add(new Weakening.BodiesNotElaborated("m"));
+        out.add(new Weakening.BodyNotInEvaluation("b"));
         out.add(new Weakening.BoundaryNotDerived("b"));
         out.add(new Weakening.InputNotRead("b"));
         out.add(new Weakening.ProofContradicted(new CoverageSites.Obligation("b",
@@ -235,6 +259,12 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                 new SourceConstructOrigin(new WrittenOwner.Body("m", "b"), 1, 0,
                         SourceConstruct.IF)));
         out.add(new Weakening.PairSpaceTruncated("b", 9, 4));
+        out.add(new Weakening.BorderReadingsNotExhausted(border(), 4));
+        out.add(new Weakening.ItemsPlaceNotWorkedOut(border(),
+                souther.compiler.numeric.UnheldNumber.MORE_ROOM_COULD_ANSWER));
+        out.add(new Weakening.ABorderNotHeldAgainstTheLinesBesideIt(border(),
+                Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why.NOTHING_WATCHED_THE_RUNS));
+        out.add(new Weakening.MeetingsNotWalked("b", 1));
         out.add(new Weakening.DecisionOfRowUnreadable("b",
                 souther.compiler.partition.RulesTaken.WhichRule.Why.NO_RECOGNISABLE_RULE_MATCHES));
         out.add(new Weakening.DecisionRunNotWatched("b"));
@@ -242,6 +272,7 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                 new souther.compiler.partition.DecisionReading.Enumeration.StoppedAtAFigure(
                         souther.compiler.partition.CompositionBudget
                                 .PATHS_OF_A_DECISION_READ)));
+        out.add(new Weakening.DecisionRuleReadShort("b"));
         return out;
     }
 

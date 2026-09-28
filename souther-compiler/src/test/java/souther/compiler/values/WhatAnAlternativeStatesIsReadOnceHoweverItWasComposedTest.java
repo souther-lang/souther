@@ -60,16 +60,16 @@ class WhatAnAlternativeStatesIsReadOnceHoweverItWasComposedTest {
     /** A denial stated again is the same denial, and it is read where it was first stated. */
     @Test
     void aDenialStatedAgainIsReadOnceAndWhereItWasFirstStated() {
-        assertEquals(List.of(denial("p", "q"), denial("q", "r"), denial("p", "r")),
-                List.copyOf(said(List.of("p/q", "q/r", "q/p", "p/r", "r/q")).denials()),
+        assertEquals(Set.of(denial("p", "q"), denial("q", "r"), denial("p", "r")),
+                said(List.of("p/q", "q/r", "q/p", "p/r", "r/q")).denials(),
                 "and a denial stated the other way round is the same denial");
     }
 
-    /** Two readings' denials said together are the first's and then what the second adds. */
+    /** Two readings' denials said together are both readings', each of them once. */
     @Test
-    void twoReadingsDenialsAreReadAsTheFirstsAndThenWhatTheSecondAdds() {
-        assertEquals(List.of(denial("p", "q"), denial("q", "r"), denial("r", "s")),
-                List.copyOf(said(List.of("p/q", "q/r")).and(said(List.of("q/r", "r/s"))).denials()));
+    void twoReadingsDenialsAreBothReadingsEachOnce() {
+        assertEquals(Set.of(denial("p", "q"), denial("q", "r"), denial("r", "s")),
+                said(List.of("p/q", "q/r")).and(said(List.of("q/r", "r/s"))).denials());
     }
 
     /** Nothing stated, which is what a reading that read no denial holds. */
@@ -91,8 +91,8 @@ class WhatAnAlternativeStatesIsReadOnceHoweverItWasComposedTest {
         for (int stated = 0; stated < LONGER_THAN_A_STACK; stated++) {
             deep = deep.and(StatedApartness.of("p", "q"));
         }
-        assertEquals(List.of(denial("p", "q"), denial("r", "s")),
-                List.copyOf(deep.and(StatedApartness.of("r", "s")).denials()));
+        assertEquals(Set.of(denial("p", "q"), denial("r", "s")),
+                deep.and(StatedApartness.of("r", "s")).denials());
     }
 
     /**
@@ -110,7 +110,7 @@ class WhatAnAlternativeStatesIsReadOnceHoweverItWasComposedTest {
         for (int doubled = 0; doubled < MORE_REACHES_THAN_THERE_ARE_PARTS; doubled++) {
             shared = shared.and(shared);
         }
-        assertEquals(List.of(denial("p", "q")), List.copyOf(shared.denials()));
+        assertEquals(Set.of(denial("p", "q")), shared.denials());
     }
 
     /**
@@ -146,7 +146,7 @@ class WhatAnAlternativeStatesIsReadOnceHoweverItWasComposedTest {
         }
 
         assertFalse(shared.isEmpty(), "a reading that states a denial states it");
-        assertEquals(List.of(denial("p", "q")), List.copyOf(shared.denials()));
+        assertEquals(Set.of(denial("p", "q")), shared.denials());
         assertTrue(shared.contradicts(Sameness.of("p", "q")),
                 "and holding its ends as one value empties the reading");
     }

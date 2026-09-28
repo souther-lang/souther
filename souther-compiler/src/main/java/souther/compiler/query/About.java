@@ -4,13 +4,17 @@ import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleCitations;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.observe.RowIdentity;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.numeric.Place;
+import souther.compiler.observe.RowRef;
 import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.ObligationIdentity;
+import souther.compiler.partition.OrderedAffineBoundary;
 import souther.compiler.partition.WhereACaseOfAnInputIsOwed;
 import souther.compiler.types.TypeSymbol;
 
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -44,10 +48,24 @@ import java.util.Set;
  */
 public sealed interface About {
 
-    /** A case of the output no row expects. */
-    record ACaseNoRowExpects(TypeSymbol missing) implements About {
+    /**
+     * A case of the output no row expects.
+     *
+     * <p>One entry of the signature's output account, and it says so by being an
+     * {@link OfAnObligation}. The behavior is carried rather than read back off whichever subject
+     * the finding was filed under: what the case is owed by is settled where the finding is made,
+     * and an identity worked out from the surface a reader happened to reach it through is the
+     * bookkeeping this type exists to have none of.
+     */
+    record ACaseNoRowExpects(String behavior, TypeSymbol missing) implements OfAnObligation {
         public ACaseNoRowExpects {
-            java.util.Objects.requireNonNull(missing, "a finding is about something");
+            Objects.requireNonNull(behavior, "a case of an output is some behavior's");
+            Objects.requireNonNull(missing, "a finding is about something");
+        }
+
+        @Override
+        public ObligationIdentity obligationIdentity() {
+            return new ObligationIdentity.OfAnOutputCase(behavior, missing);
         }
     }
 
@@ -107,6 +125,54 @@ public sealed interface About {
         public ObligationIdentity obligationIdentity() {
             return new ObligationIdentity.OfAClass(
                     new ClassOfAPosition(axisClass.axis().at(), axisClass.name()));
+        }
+    }
+
+    /**
+     * A combination of the decisions a body settles a value by that no row was seen making.
+     *
+     * <p>One entry of the interaction account. What tells it from every other is the decisions a
+     * run has to have made, which is the obligation it carries; the claims it would be certified by
+     * are how a run is held to it and are the measure's, not the account's.
+     *
+     * <p>Said only of a combination the body has a path to. A choice whose decisions leave a
+     * position no class is not a combination at all — the body cannot take both — so it is not
+     * owed a row and is not one of these.
+     */
+    record ACombinationNoRowMakes(ObligationIdentity.OfACombinationOfDecisions combination)
+            implements OfAnObligation {
+
+        public ACombinationNoRowMakes {
+            java.util.Objects.requireNonNull(combination, "a finding is about something");
+        }
+
+        @Override
+        public ObligationIdentity obligationIdentity() {
+            return combination;
+        }
+    }
+
+    /**
+     * A combination of two classes no row is in, where the pair space is the criterion.
+     *
+     * <p>One entry of the fallback account. Beside {@link ACombinationNoRowMakes} and not among it:
+     * that one is a meeting of the body's own decisions and is settled by a run, and this is two
+     * positions a behavior whose decisions meet nowhere has, settled by where the values fall.
+     *
+     * <p>Said only of a combination the model has. Two classes no one value holds together make no
+     * combination — the positions are under different cases of a sum — so there is nothing there to
+     * ask for.
+     */
+    record ACombinationOfTwoClassesNoRowIsIn(
+            ObligationIdentity.OfAFallbackPairCell combination) implements OfAnObligation {
+
+        public ACombinationOfTwoClassesNoRowIsIn {
+            java.util.Objects.requireNonNull(combination, "a finding is about something");
+        }
+
+        @Override
+        public ObligationIdentity obligationIdentity() {
+            return combination;
         }
     }
 
@@ -189,6 +255,73 @@ public sealed interface About {
             implements ABorderObligation {
         public APointOfABorder {
             java.util.Objects.requireNonNull(obligation, "a finding is about something");
+        }
+    }
+
+    /**
+     * A line of a body the rows do not tell from another line the model's own weights put beside it.
+     *
+     * <p>Beside {@link APointOfABorder} rather than among its findings, and the difference is what
+     * the rows failed to show. A point no row is at is a place on this line nobody stands; this is
+     * every point of the line stood at and the line still not shown to be where the model says — the
+     * rows would answer the same under a line weighing one of the positions differently. Domain
+     * testing separates the two: rows at a border's points show a line that has moved, and a line
+     * that has turned takes a row the turned line answers differently at (White &amp; Cohen, IEEE
+     * TSE SE-6(3), 1980).
+     *
+     * <p>The line as one reading of it, which is the whole reading and not a word off it. Every
+     * reading folded into one line is at one position and spells the quantity one way, so there is
+     * no representative being chosen here — and what the finding is about is that reading's rows,
+     * its line, and the line beside it that they allow.
+     */
+    record ALineTheRowsDoNotTellFromAnother(BorderAssessment line)
+            implements OfAnObligation, RuleCitations {
+
+        /**
+         * The line, which is one grain coarser than a point of it.
+         *
+         * <p>What a row here shows is which of two lines the model draws, and a line is what two
+         * lines are two of. Keyed on a point, this would be owed four times over one border and the
+         * row that answers it would leave three of them open.
+         */
+        @Override
+        public ObligationIdentity obligationIdentity() {
+            return new ObligationIdentity.OfABorder(line.border().obligation());
+        }
+
+        public ALineTheRowsDoNotTellFromAnother {
+            Objects.requireNonNull(line, "a finding is about something");
+            if (!(line.beside() instanceof AnotherLineTheRowsAllow.OneDoes)) {
+                throw new IllegalArgumentException("a line the rows do not tell from another names"
+                        + " the other one, and this reading has none: " + line.beside());
+            }
+        }
+
+        /** The line these rows allow beside the one the model drew. */
+        public AnotherLineTheRowsAllow.OneDoes allowed() {
+            return (AnotherLineTheRowsAllow.OneDoes) line.beside();
+        }
+
+        /**
+         * The input the measurement itself saw the two lines part company at, as an author would
+         * write the positions — or null where none was worked out.
+         *
+         * <p><b>What was seen, and never what a person is handed.</b> Which row goes out for this
+         * line is settled after a search, after the whole table of what each offered row would
+         * answer, and after the reduction that drops a row another one already answers for — so
+         * nothing here can name it, and a finding that tried would be naming a candidate from
+         * before any of that. What is offered is the offering's to say
+         * ({@link Offering#shownAt}), and a reader with no offering in hand has this.
+         */
+        public String sawThemPartSaid() {
+            Map<NumericTerm, Place> saw = allowed().tellsApartAt();
+            return saw == null ? null
+                    : OrderedAffineBoundary.saidAt(line.border().cut().of(), saw);
+        }
+
+        @Override
+        public Set<RuleCitation> ruleCitations() {
+            return line.ruleCitations();
         }
     }
 
@@ -469,14 +602,23 @@ public sealed interface About {
      *
      * <p>Beside {@link ARowAtAnArmAwaitsItsAnswer} and not instead of it. That one is about an arm
      * — what to tell an author about it, and that nothing should compose a second row for it —
-     * and this one is the work itself.
+     * and this one is the work itself. Two obligations and not one reading of a third: the arm's
+     * is discharged by any row going through it, and this one only by an answer written where this
+     * row is.
+     *
+     * @param at where the row is written, which is where a reader is sent. Not where the answer
+     *           goes: an author told to answer this row is told about the row
      */
-    record AnUnansweredRow(String behavior, RowIdentity identity, SourcePos at) implements About {
+    record AnUnansweredRow(RowRef rowRef, SourcePos at) implements OfAnObligation {
 
         public AnUnansweredRow {
-            Objects.requireNonNull(behavior, "a row is a row of a behavior");
-            Objects.requireNonNull(identity, "a row says what it calls itself");
+            Objects.requireNonNull(rowRef, "a finding is about something");
             Objects.requireNonNull(at, "a row is written somewhere");
+        }
+
+        @Override
+        public ObligationIdentity obligationIdentity() {
+            return new ObligationIdentity.OfARow(rowRef);
         }
     }
 

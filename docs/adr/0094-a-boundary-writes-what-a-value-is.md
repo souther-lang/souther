@@ -1,6 +1,64 @@
 # ADR-0094: A boundary writes what a value is, not how it was built or written
 
-Status: Accepted
+Status: Accepted. Revised 2026-09-24 and 2026-09-26 — see *Revision*.
+
+## Revision (2026-09-26)
+
+Strings are ordered by Unicode scalar value, not by UTF-16 code unit. The Decision below took the
+string order from the language's own `<`, which then compared `java.lang.String`s, and that is
+still the reason: the order a boundary writes in is the language's order on text. What changed is
+that order. A `String` is now a sequence of scalar values (`[#a-string-is-a-sequence-of-scalar-values]`),
+and `<` compares those (`[#a-string-is-ordered-by-scalar-value]`), so the table's `string` row
+follows it.
+
+What moves in the representation is a `Set`'s array, and not only a `Set` of strings. The order
+compares representations recursively, so a `Set` of lists, of data, or of maps moves too wherever
+the first string two members differ at is a character past the basic plane against one in
+U+E000–U+FFFF. An object's member order is not part of its representation (the revision below), so
+no `Map` moves in the language's sense. The bytes the JVM writes do: its encoders write an object's
+members in ascending key order, and that order is now the scalar-value one, so a `Map<String, V>`
+with such keys is written in another member order than before. The representation is the same one;
+the bytes are not, and nothing here promised they would be across compiler versions.
+
+The Decision's other reason, RFC 8785, no longer holds. JCS sorts an object's members by UTF-16
+code unit, so neither a `Set`'s array nor the member order the JVM writes is in JCS order for such
+text. Souther does not promise JCS output, so this is not a breach of anything; it is a reason the
+Decision gave that is gone. A canonical byte form shared with JCS would be the separate decision the
+revision below already names.
+
+## Revision (2026-09-24)
+
+The law is about the external representation, and bytes are a separate step. Under a derived
+Encoder, equal values at one position write one representation; at that position, one
+implementation turns one representation into one byte sequence. The Decision below put both halves into "the same JSON, byte for byte", and a second
+implementation showed that they come apart: the JVM writes a product case's discriminator after the
+case's fields, souther-native-compiler writes it first, and nothing in the language said whether
+that was a disagreement (issue #1900).
+
+It is not. This ADR already decided that an object's member order does not count towards the
+sameness of two representations, and that is now what the specification says an object is
+(`[#an-object-is-a-mapping]`): a mapping from names to values, where an array's order is part of
+what it is and an object's is not. The byte-for-byte claim was the one sentence that disagreed with
+that, and it held only because the JVM's generated encoders happen to write one type's members in
+one order.
+
+What stays:
+
+- A `Decimal` is written as its amount. That settles the representation, not the bytes.
+- A `Set`'s array is written in ascending order of its members' representations. An array's order
+  is part of the representation, so the language has to decide it.
+- At a position whose Encoder is derived, what one implementation writes is decided by the
+  position and the representation and never by how the value was built
+  (`[#bytes-follow-from-the-representation]`). A custom Encoder is bound by none of this, as it
+  was not by the Decision. This is the
+  construction-history problem the Decision set out to remove, placed where it belongs, and golden
+  tests, ETags and cache keys rest on it within one implementation.
+
+What goes: a boundary `Map`'s object being written in ascending order of its rendered keys is no
+longer the language's. An object has no order to specify. The JVM runtime still writes it that way,
+which is how it meets the rule above, and another implementation may meet the rule another way. Two
+implementations are not required to write the same bytes; a canonical form shared across them would
+be a separate decision.
 
 ## Context
 
@@ -13,7 +71,7 @@ Three separate mechanisms make what is written follow the history of the collect
 collection:
 
 - **A hash-collision bucket holds its members in the order they were put.** `HashCollisionNode`
-  appends on insert and the iterator walks that array. `ValueClassGen` folds `hashCode` over the
+  appends on insert and the iterator walks the bucket in that order. `ValueClassGen` folds `hashCode` over the
   fields from `1`, and a unit data has no fields, so *every* unit data in a program hashes to `1` —
   which puts every `Set` of two or more enumeration cases in one bucket.
 - **A decoded `Map` was never a trie.** The decoders leave the map the decode produced, and only
@@ -155,7 +213,8 @@ that is reading something the language does not decide. Writing "the first inser
 
 ## References
 
-- Specification: `[#encode-law]`, `[#primitives]`, `[#collections]`, `[#stdlib-set]`, `[#stdlib-map]`
+- Specification: `[#encode-law]`, `[#bytes-follow-from-the-representation]`,
+  `[#an-object-is-a-mapping]`, `[#primitives]`, `[#collections]`, `[#stdlib-set]`, `[#stdlib-map]`
 - ADR-0039 (a `Set`'s external representation), ADR-0040 (what a boundary map key may be),
   ADR-0009 (`Decimal` ignores scale), ADR-0036 (a tuple has no external representation)
 - Issues #299 (the order was unstated), #327 (equal collections encoded differently); RFC 8785 (JCS)

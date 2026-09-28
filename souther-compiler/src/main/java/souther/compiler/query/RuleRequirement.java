@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.Requirements;
+import souther.compiler.partition.Generator;
 import souther.compiler.partition.RowToRun;
 import souther.compiler.partition.RulesTaken;
 
@@ -18,12 +19,19 @@ import souther.compiler.partition.RulesTaken;
  * excluded however the rows are written — the two questions are orthogonal, and a sentence here
  * that said "no row takes it" would put the coverage answer in the requirement's mouth.
  *
- * <p><b>What answers this is not one thing.</b> A search answers the first and the last, and it
- * cannot answer the middle: what a search came back with is always this compiler having looked, and
- * a model refusing a way is a fact the readings already hold. So the middle is its own shape here
- * rather than a word a search comes back with — written the other way round, a reader would have to
- * open a search's reason to find out whether the model said anything, and a reason added to that
+ * <p><b>What answers this is not one thing, and most of what a search says is not the model's.</b>
+ * Almost everything a search comes back with is this compiler having looked, and a model refusing a
+ * way is mostly a fact the readings already hold. So the middle is its own shape here rather than a
+ * word lifted out of a search's reason — written the other way round, a reader would have to open a
+ * search's reason to find out whether the model said anything, and a reason added to that
  * vocabulary would change what the account means.
+ *
+ * <p>The exception is a search that proves it. A walk of the whole of what the rules leave that
+ * reaches nothing, and rules shown to leave nothing before anything was walked, are statements
+ * about the model that a search is where they turn up
+ * ({@link souther.compiler.partition.Generator.UnresolvedCombination.Reason#provesInfeasible}). One
+ * of those is the middle and is written as the middle, and it is told from the rest by asking that
+ * question rather than by a reader reading the word.
  *
  * <p><b>And a witness is not a row anybody is owed.</b> What a search built is evidence that the
  * rule can be reached; whether the rows written for the behavior reach it is the other question,
@@ -89,6 +97,23 @@ public sealed interface RuleRequirement {
                 }
             }
         }
+
+        /**
+         * The rules of the way to the rule leave no value that takes it, and the composings are
+         * what proved it.
+         *
+         * <p>Beside the two above rather than under them, and it is the one of the three a search
+         * establishes ({@link Generator.UnresolvedCombination.Reason#provesInfeasible} is what
+         * tells such a word from the rest).
+         *
+         * <p><b>The conclusion and no proof beside it.</b> What each composing said is the search's
+         * to hold ({@link RuleSearch.CameToNothing}), where all of them are; a word copied here
+         * would be one of them standing for the rule, and which one would follow the order the ways
+         * were walked in. It is also a claim this value could not make: what makes the rule's
+         * answer is every way of standing the dependencies in having proved it, and a value holding
+         * one proof says nothing about the ways it does not hold.
+         */
+        record TheRulesLeaveNoValueForIt() implements Excluded {}
     }
 
     /**
@@ -122,6 +147,27 @@ public sealed interface RuleRequirement {
 
         /** A row was composed against the rule and its run took another. */
         record AComposedRowWentElsewhere() implements Unsettled {}
+
+        /**
+         * A row was composed and run, and what it was composed against was less than the way asks.
+         *
+         * <p>Beside {@link AComposedRowWentElsewhere} rather than among it, because what a reader
+         * may conclude differs. That one is a row built to the whole of what the way states going
+         * somewhere else, which is something about the way; this is a row that meets some of what
+         * the way states reaching whatever such a row reaches, and where it went is a fact about a
+         * row nobody asked for. Read as the one above, a condition this compiler could not put a
+         * value under is published as the model refusing the way.
+         *
+         * <p>A row all the same, which is why this is not
+         * {@link NothingWasComposedToTry}: something was composed and tried, and a search that
+         * produced no candidate is a different thing to do something about.
+         *
+         * <p>What it was short of is on the settlement's account
+         * ({@link RuleSettlement#account()}) and is carried nowhere here, for the reason the
+         * shortfall of a synthesis is: a generator's vocabulary inside this one would make a
+         * requirement answer out of it.
+         */
+        record AComposedRowWasShortOfTheWay() implements Unsettled {}
 
         /**
          * A row was composed and run, and this reading could not say which rule it took.

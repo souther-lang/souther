@@ -2,9 +2,14 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
+import souther.compiler.inputs.SearchRegion;
 import souther.compiler.numeric.AdditiveImage;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
@@ -12,11 +17,12 @@ import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.regex.Meter;
 import souther.compiler.values.ValueSet;
-
 import java.math.BigDecimal;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Supplier;
 
 /**
@@ -31,9 +37,13 @@ import java.util.function.Supplier;
  * <p>What it is handed is a {@link Standing} — a constraint, not a shape of line — so a quantity
  * added later brings work here only where it needs a kind of search that is not already written.
  *
- * <p>Nothing here decides that an item cannot be reached. A refusal is a refusal of what was tried,
- * and {@link Realization} keeps that apart from a proof: read as one, a search that ran out said the
- * model refuses an edge it merely could not compose (ADR-0091).
+ * <p>No search here decides that an item cannot be reached. A refusal is a refusal of what was
+ * tried, and {@link Realization} keeps that apart from a proof: read as one, a search that ran out
+ * said the model refuses an edge it merely could not compose (ADR-0091). What does decide it are the
+ * proofs the rules themselves make, and they are asked for before anything is looked for — a region
+ * shown to hold nothing, and a region that leaves the item's quantity no value the item asks for
+ * ({@link StandingImpossibility}). A walk of the whole of what is left is the third, and the only
+ * one of the three a search has any part in.
  */
 public final class LevelRealizer {
 
@@ -50,7 +60,7 @@ public final class LevelRealizer {
      *               leave and never narrower than what reaches the item, which is what makes an
      *               exhausted walk of it a proof
      */
-    public Realization realize(Standing standing, souther.compiler.inputs.SearchRegion within,
+    public Realization realize(Standing standing, SearchRegion within,
                                WitnessSearch looking) {
         return realize(standing, within, looking, ValuesTried.NONE);
     }
@@ -67,7 +77,7 @@ public final class LevelRealizer {
      * had offered would answer differently on two askings of one question, and what it had offered
      * would outlive the point it was offered for.
      */
-    public Realization realize(Standing standing, souther.compiler.inputs.SearchRegion within,
+    public Realization realize(Standing standing, SearchRegion within,
                                WitnessSearch looking, ValuesTried tried) {
         if (within == null) {
             throw new IllegalArgumentException(
@@ -84,18 +94,66 @@ public final class LevelRealizer {
                             + " the reading already has: a search that may be handed none is one"
                             + " that composes without asking");
         }
+        // Where every position the item names runs in this region, read once and here.
+        //
+        // <p>Two ways for the rules to settle the item before anything is looked for, and this is
+        // both of them. The region may admit no assignment — the rules a row passes on the way can
+        // close it between them — and it may admit one while leaving a position the item names
+        // nowhere to stand, which an input holding an empty collection does to every position
+        // inside it. Either way no place a walk of it reaches is a row, and a walk would end at a
+        // figure of this compiler's with nothing to show: a proof about the model reported as this
+        // compiler falling short, which is the one thing a reader may act on arriving as one of the
+        // things they may not (ADR-0091).
+        //
+        // <p>Read here rather than where each search wants it, so that there is one reader of it and
+        // the searches below are handed ranges. Asked again down there, the answer that is not a
+        // range would have to be turned into something a range-shaped reader could hold — which is
+        // the collapse this whole class of defect is.
+        Map<NumericTerm, NumericDomain.Bounds> runs = new LinkedHashMap<>();
+        if (within.emptiness().isPresent()) {
+            return new Realization.Impossible();
+        }
+        // The item's own quantity, asked of the region before its positions are. A rule spanning
+        // two of them leaves a fact about the pair, and every position can run somewhere while what
+        // they come to between them runs nowhere — or runs somewhere, and nowhere the item asks
+        // for, which is what the rules on the way to a border and the border itself say between
+        // them. Neither is readable off the positions one at a time.
+        if (StandingImpossibility.provesImpossible(within, standing)) {
+            return new Realization.Impossible();
+        }
+        for (NumericTerm term : termsOf(standing)) {
+            switch (within.projectionOf(term)) {
+                case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
+                        runs.put(term, held == null ? NumericDomain.Bounds.OPEN : held);
+                case NumericDomain.FormProjection.NothingIsLeft _ -> {
+                    return new Realization.Impossible();
+                }
+                case null -> runs.put(term, NumericDomain.Bounds.OPEN);
+            }
+        }
         return switch (standing) {
-            case Standing.OfOneCoordinate one -> ofOne(one, within, looking, tried);
-            case Standing.OfTwoOnOneCarrier two -> ofTwo(two, within, looking, tried);
-            case Standing.OfAForm over -> ofAForm(over, within, tried);
+            case Standing.OfOneCoordinate one -> ofOne(one, within, runs, looking, tried);
+            case Standing.OfTwoOnOneCarrier two -> ofTwo(two, within, runs, looking, tried);
+            case Standing.OfAForm over -> ofAForm(over, within, runs, tried);
+        };
+    }
+
+    /** Every position the item asks a value at: where the item names them in an order, that one,
+     *  and where it is a form, the order its terms are walked in. */
+    private static List<NumericTerm> termsOf(Standing standing) {
+        return switch (standing) {
+            case Standing.OfOneCoordinate one -> List.of(one.term());
+            case Standing.OfTwoOnOneCarrier two -> List.of(two.on(), two.against());
+            case Standing.OfAForm over -> NumericTerms.inOrder(over.form().coefs().keySet());
         };
     }
 
     /** One position at a place of its own carrier that the item accepts. */
     private Realization ofOne(Standing.OfOneCoordinate one,
-                              souther.compiler.inputs.SearchRegion within,
+                              SearchRegion within,
+                              Map<NumericTerm, NumericDomain.Bounds> runs,
                               WitnessSearch looking, ValuesTried tried) {
-        Place at = placeMeeting(one.where(), one.term(), one.of(), bounds(within, one.term()),
+        Place at = placeMeeting(one.where(), one.term(), one.of(), runs.get(one.term()),
                 looking, tried, Map.of());
         return at == null ? Realization.Unknown.nothingComposedOne()
                 : found(Map.of(new RealizationTarget.AtOnePosition(one.term()), at), within, tried);
@@ -121,22 +179,24 @@ public final class LevelRealizer {
      * {@code b > a} not.
      */
     private Realization ofTwo(Standing.OfTwoOnOneCarrier two,
-                              souther.compiler.inputs.SearchRegion within,
+                              SearchRegion within,
+                              Map<NumericTerm, NumericDomain.Bounds> runs,
                               WitnessSearch looking, ValuesTried tried) {
-        // What each reading left behind, in the two vocabularies there are for it. Kept apart all
-        // the way here: how a walk ended says which of them it is, and a reader told the wrong one
-        // is sent to raise a figure that reached its end or told that no number would have helped
-        // where one would.
+        // What each reading left behind, in the three vocabularies there are for it. Kept apart
+        // all the way here: how a walk ended says which of them it is, and a reader told the wrong
+        // one is sent to raise a figure that reached its end or told that no number would have
+        // helped where one would.
         java.util.Set<CompositionBudget> stoppedBy =
                 java.util.EnumSet.noneOf(CompositionBudget.class);
         java.util.Set<CompositionRepertoire> notAllOf =
                 java.util.EnumSet.noneOf(CompositionRepertoire.class);
+        Set<CompositionCapacity> unheld = new HashSet<>();
         for (Reading reading : readings(two)) {
-            NumericDomain.Bounds settled = bounds(within, reading.settles());
+            NumericDomain.Bounds settled = runs.get(reading.settles());
             NumericDomain.Bounds together = commonRange(settled,
-                    bounds(within, reading.anchors()), two.of(),
-                    reading.where().anchor().asACount());
-            Outwards.Walked walked = alongTheLine(together, two.of());
+                    runs.get(reading.anchors()), two.of(), distance(reading.where().anchor()));
+            Outwards.Walked walked = alongTheLine(together, two.of(), reading.anchors(),
+                    within, looking);
             if (walked == null) {
                 // Nothing composed a place to anchor at, which is this reading's own answer and
                 // says nothing about how much of the line was looked at.
@@ -148,9 +208,17 @@ public final class LevelRealizer {
             // only afterwards they were named for each other.
             switch (walked.ended()) {
                 case HAVING_TRIED_THEM_ALL -> { }
-                case AT_THE_FIGURE -> stoppedBy.add(CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT);
+                case AT_THE_FIGURE_OF_CANDIDATES ->
+                        stoppedBy.add(CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT);
+                case AT_THE_FIGURE_OF_PLACES_LOOKED_AT ->
+                        stoppedBy.add(CompositionBudget.PLACES_A_PAIR_IS_LOOKED_AT);
                 case WITH_NO_STEP_TO_TAKE -> notAllOf.add(
                         CompositionRepertoire.PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE);
+                // Neither a figure nor an order without a step: raising a figure reaches no place
+                // this could not hold, and the order has a next place. So it is the third
+                // vocabulary, with which of the two ways the place went unheld.
+                case AT_A_PLACE_IT_COULD_NOT_HOLD -> unheld.add(new CompositionCapacity(
+                        CompositionCapacity.Where.PLACES_A_PAIR_IS_WALKED_TO, walked.unheld()));
             }
             for (Place common : walked) {
                 // Where the settled one has to stand relative to the anchored one: the place the
@@ -161,7 +229,18 @@ public final class LevelRealizer {
                 // Null where the carrier's arithmetic could not put the item's levels beside the
                 // place the other position stands at — read on, an item with no level in it was
                 // handed to a reader that asks where its level falls.
-                Criterion here = relativeTo(reading.where(), common, two.of());
+                // And where this could not hold the place a level moves this one to, this place
+                // composed nothing and the next one is tried. Another place or the other reading
+                // may compose a pair; where none does, the place not held is said with the answer
+                // below, since it is a place this left untried and not one it found empty.
+                Related related = relativeTo(reading.where(), common, two.of());
+                if (related.unheld() != null) {
+                    unheld.add(new CompositionCapacity(
+                            CompositionCapacity.Where.PLACES_A_DISTANCE_MOVES_A_POSITION_TO,
+                            related.unheld()));
+                    continue;
+                }
+                Criterion here = related.where();
                 Place at = here == null ? null
                         : placeMeeting(here, reading.settles(), two.of(), settled, looking, tried,
                                 Map.of(new RealizationTarget.AtOnePosition(reading.anchors()),
@@ -179,19 +258,13 @@ public final class LevelRealizer {
         }
         // Nothing was composed, which is what a pair the ranges leave no place for comes to and
         // what this has always said. What a walk left is said beside that answer rather than in
-        // place of it, each in its own vocabulary: raising a figure goes past it, and raising
-        // anything reaches no second place on an order that has no step.
-        //
-        // The word follows the walk that has one. A walk with no step to take composed a place and
-        // tried it, which is what the second word is for; a walk that met the figure says what this
-        // has always said, and the figures hold it to that at both ends. They cannot both be here —
-        // both readings walk the one order this pair is on, and an order with no step reaches no
-        // figure — and it is {@link Realization.Unknown} that holds them to it rather than this
-        // sentence.
-        if (!notAllOf.isEmpty()) {
-            return Realization.Unknown.searchLeftSomethingUntried(stoppedBy, notAllOf);
-        }
-        return Realization.Unknown.nothingComposedOne(stoppedBy);
+        // place of it, each in its own vocabulary: raising a figure goes past it, raising anything
+        // reaches no second place on an order that has no step, and a place not held is reached by
+        // a host with more room or by nothing. The two readings may leave different ones, and all
+        // of them go.
+        // Which word they come back with is {@link Realization.Unknown#leftOpen}'s to say.
+        return Realization.Unknown.leftOpen(Realization.Unknown.Reason.NOTHING_COMPOSED_ONE,
+                stoppedBy, notAllOf, unheld);
     }
 
     /**
@@ -225,12 +298,22 @@ public final class LevelRealizer {
     /**
      * How many places along a line a pair is tried at before this stops.
      *
-     * <p>Small on purpose. What a range cannot say is that one of its values is missing, and a rule
-     * that takes a value away takes one — everything that moves an end is in the range already. So
-     * what this steps past is holes, and there are as many of those as the rules state.
+     * <p>Small on purpose. Every place offered here is one the anchored position may stand at, and
+     * a pair that is not written at the first few is rarely written further along. What it costs to
+     * walk past the places it may not stand at is the other figure's.
      */
     private static final int HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT =
             CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT.maximum();
+
+    /**
+     * How many places of that line are walked past to find them.
+     *
+     * <p>Wider than the figure above, and a figure of its own: what the declarations leave the
+     * anchored position and what a rule holds it away from take places out of the middle of the
+     * line, and a walk that steps past one of those has not tried a pair there.
+     */
+    private static final int HOW_MANY_PLACES_A_PAIR_IS_LOOKED_AT =
+            CompositionBudget.PLACES_A_PAIR_IS_LOOKED_AT.maximum();
 
     /**
      * The places to try the pair at, from the one the ranges leave outward.
@@ -253,11 +336,28 @@ public final class LevelRealizer {
      * something to ask a walk about: a walk of no places would have to say whether there were more,
      * and there was never a walk.
      */
-    private static Outwards.Walked alongTheLine(NumericDomain.Bounds together, Carrier carrier) {
-        Place first = carrier.somethingInside(together.min(), together.max());
+    private static Outwards.Walked alongTheLine(NumericDomain.Bounds together, Carrier carrier,
+                                                NumericTerm.FromOnePosition anchored,
+                                                SearchRegion within,
+                                                WitnessSearch looking) {
+        // Every narrowing the anchored position stands under, and not the common range alone. What
+        // the ranges leave is where the pair can be at all; what the declarations leave that
+        // position and what a rule holds it away from are two more, and a place taken from the
+        // first and refused by either of the others is a pair reported as one nothing composed.
+        //
+        // Composed from and not narrowed by, because the place walked here is written into a row.
+        // A pair standing at a value out of a set nobody established is the same row this class
+        // declines to offer at one position, offered because it was reached through two.
+        ValueSet admits = looking.toComposeFrom(anchored).toCrossTheRunWith();
+        if (admits == null) {
+            return null;
+        }
+        PlacesApart apart = within.apartAt(anchored);
+        Place first = carrier.somethingOtherThan(apart, together, admits, looking.meter());
         return first == null ? null
                 : Outwards.from(first, Count.of(1), carrier, together,
-                        HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT);
+                        HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT, HOW_MANY_PLACES_A_PAIR_IS_LOOKED_AT,
+                        admits, apart);
     }
 
     /**
@@ -268,13 +368,47 @@ public final class LevelRealizer {
      * values do not count there is no distance to add, and the only level such a quantity takes is
      * the one where the two meet — so the place is the one they meet at and any other level names
      * nothing.
+     *
+     * <p>Added exactly and put on the carrier only at the end, so a distance no decimal writes
+     * reaches the carrier as the number it is and the carrier says there is no value there.
+     *
      */
-    private static Place movedBy(Place from, Level level, Carrier carrier) {
-        Count apart = level.asACount();
+    private static MovedTo movedBy(Place from, Level level, Carrier carrier) {
+        ExactRatio apart = distance(level);
         if (!carrier.counts()) {
-            return apart.signum() == 0 ? from : null;
+            return new MovedTo(apart.isZero() ? from : null, null);
         }
-        return carrier.onTheGrid(Count.number(from).plus(apart));
+        // Where this cannot hold the place the distance moves to, this compiler composed nothing
+        // from `from` — never the carrier holding nothing there. The caller trying one place after
+        // another is the one that knows what that means, so which of the two this was travels with
+        // the answer rather than being told apart by a caught exception.
+        return switch (Count.number(from).exactly().plus(apart)) {
+            case ExactAnswer.Unheld<ExactRatio> unheld -> new MovedTo(null, unheld.why());
+            case ExactAnswer.Held<ExactRatio> held -> {
+                Count at = Count.at(held.value());
+                yield new MovedTo(at == null ? null : carrier.onTheGrid(at), null);
+            }
+        };
+    }
+
+    /** Where a distance moved a place to: the place, or which way the exact arithmetic could not
+     *  hold the sum. Neither set is the carrier holding nothing there — that is a place of
+     *  {@code null} with no reason, which is not an unheld number and is the ordinary answer this
+     *  had before either compose a place or say why not. */
+    private record MovedTo(Place place, UnheldNumber unheld) {}
+
+    /**
+     * The number a level of the distance between two positions is.
+     *
+     * <p>Established by every caller: a distance is a number, and a level of it on an order with no
+     * numbers reaching here is this compiler having mixed two orders.
+     */
+    private static ExactRatio distance(Level level) {
+        ExactRatio at = level.asANumber();
+        if (at == null) {
+            throw new IllegalStateException("a distance that is no number: " + level);
+        }
+        return at;
     }
 
     /**
@@ -302,15 +436,15 @@ public final class LevelRealizer {
      * apart so that how long this is willing to look does not read as a fact about the order.
      */
     private Realization ofAForm(Standing.OfAForm over,
-                                souther.compiler.inputs.SearchRegion within, ValuesTried tried) {
+                                SearchRegion within,
+                                Map<NumericTerm, NumericDomain.Bounds> runs, ValuesTried tried) {
         LevelSpace levels = over.levels();
         // In the form's own order and not the map's. A form is a map, so the order its coefficients
         // were recorded in is a hash order — and which position is solved last decides whether the
         // walk finds an answer inside its budget, so an answer that depended on it would depend on
         // nothing a reader can see.
-        List<Map.Entry<RealizationTarget, java.math.BigDecimal>> terms = new java.util.ArrayList<>();
-        for (Map.Entry<NumericTerm, java.math.BigDecimal> each
-                : AffineReading.ordered(over.form())) {
+        List<Map.Entry<RealizationTarget, ExactRatio>> terms = new java.util.ArrayList<>();
+        for (Map.Entry<NumericTerm, ExactRatio> each : AffineReading.ordered(over.form())) {
             // Every number is realized by rebuilding one value, so what the walk assigns is a demand
             // and there is one for each term of the form. Whether anything writes such a value is
             // not asked here and is not this reader's to answer: a walk that turned a term away for
@@ -325,15 +459,17 @@ public final class LevelRealizer {
         // asking what would let the search go further is owed both.
         java.util.Set<CompositionBudget> stoppedBy =
                 java.util.EnumSet.noneOf(CompositionBudget.class);
+        Set<CompositionCapacity> unheld = new HashSet<>();
         LevelCandidateSource.Offered offered =
                 LevelCandidateSource.forItem(over.where(), levels);
         if (offered.stoppedShort()) {
             stoppedBy.add(CompositionBudget.LEVELS_A_SIDE_IS_ASKED_AT);
         }
         for (Level level : offered.levels()) {
-            Search search = new Search(terms, over.on(), within, tried);
-            Reached reached = search.solve(level.asACount());
+            Search search = new Search(terms, over.on(), within, runs, tried);
+            Reached reached = search.solve(level.asAnExactNumber());
             stoppedBy.addAll(search.stoppedBy());
+            unheld.addAll(search.unheld());
             if (reached == Reached.FOUND) {
                 Realization made = found(search.fixing(), within, tried);
                 if (made instanceof Realization.Found) {
@@ -357,8 +493,11 @@ public final class LevelRealizer {
         // A side is never settled by looking, so what this comes back with is that something was
         // left untried — which is what it has always come back with, whether or not a figure of
         // this compiler's was reached. The figures are said beside that answer and do not choose
-        // it, which is why the answer is not named for one of them running out.
-        return Realization.Unknown.searchLeftSomethingUntried(stoppedBy);
+        // it, which is why the answer is not named for one of them running out. Nor for a value it
+        // could not hold, which goes beside the figures in its own vocabulary.
+        return Realization.Unknown.leftOpen(
+                Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
+                stoppedBy, Set.of(), unheld);
     }
 
     /** How many assignments the search will try before it stops and says it did not settle it. */
@@ -443,7 +582,7 @@ public final class LevelRealizer {
      */
     private final class Search {
 
-        private final List<Map.Entry<RealizationTarget, java.math.BigDecimal>> terms;
+        private final List<Map.Entry<RealizationTarget, ExactRatio>> terms;
         /**
          * The order each position is read and written on, in the order the terms are walked.
          *
@@ -455,7 +594,7 @@ public final class LevelRealizer {
          */
         private final Carrier[] carriers;
         /** Where a row for the item being searched for may be written. */
-        private final souther.compiler.inputs.SearchRegion within;
+        private final SearchRegion within;
         /**
          * The assignments a row was already built from that did not stand at the point.
          *
@@ -489,9 +628,15 @@ public final class LevelRealizer {
          *  it came back with says that nothing was reached and not what kept it from reaching. */
         private final java.util.Set<CompositionBudget> stoppedBy =
                 java.util.EnumSet.noneOf(CompositionBudget.class);
+        /** Which values this walk reached and could not hold, recorded where each was met. */
+        private final Set<CompositionCapacity> unheld = new HashSet<>();
 
         java.util.Set<CompositionBudget> stoppedBy() {
             return stoppedBy;
+        }
+
+        Set<CompositionCapacity> unheld() {
+            return unheld;
         }
 
         /** Whether there is room for another assignment, marking the budget where there is not. */
@@ -503,9 +648,9 @@ public final class LevelRealizer {
             return true;
         }
 
-        Search(List<Map.Entry<RealizationTarget, java.math.BigDecimal>> terms,
-               Map<NumericTerm, Carrier> on, souther.compiler.inputs.SearchRegion within,
-               ValuesTried tried) {
+        Search(List<Map.Entry<RealizationTarget, ExactRatio>> terms,
+               Map<NumericTerm, Carrier> on, SearchRegion within,
+               Map<NumericTerm, NumericDomain.Bounds> runs, ValuesTried tried) {
             this.tried = tried;
             this.terms = terms;
             this.carriers = new Carrier[terms.size()];
@@ -516,14 +661,13 @@ public final class LevelRealizer {
             this.at = new Place[terms.size()];
             this.runsBetween = new NumericDomain.Bounds[terms.size()];
             for (int i = 0; i < terms.size(); i++) {
-                runsBetween[i] = bounds(within, terms.get(i).getKey().term());
+                runsBetween[i] = runs.get(terms.get(i).getKey().term());
             }
             this.fromHere = new AdditiveImage[terms.size()];
             for (int i = 0; i < terms.size(); i++) {
-                Map<NumericTerm, souther.compiler.numeric.Rational> coefs = new LinkedHashMap<>();
+                Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
                 for (int j = i; j < terms.size(); j++) {
-                    coefs.put(terms.get(j).getKey().term(),
-                            souther.compiler.numeric.Rational.of(terms.get(j).getValue()));
+                    coefs.put(terms.get(j).getKey().term(), terms.get(j).getValue());
                 }
                 // Each term's own spacing, which is what the image was always asking for: a sum of
                 // whole numbers lands on whole numbers, and one decimal among them makes it dense.
@@ -531,8 +675,8 @@ public final class LevelRealizer {
             }
         }
 
-        Reached solve(Count target) {
-            return walk(0, target.at(), within);
+        Reached solve(ExactRatio target) {
+            return walk(0, target, within);
         }
 
         /**
@@ -564,18 +708,32 @@ public final class LevelRealizer {
          * is the whole reason this is not a boolean: a position all of whose values were tried leaves
          * an empty-handed walk a proof, and one that was cut short leaves it nothing at all.
          */
-        private Reached walk(int i, java.math.BigDecimal owed,
-                             souther.compiler.inputs.SearchRegion here) {
+        private Reached walk(int i, ExactRatio owed,
+                             SearchRegion here) {
             taken++;
             if (!stepsLeft()) {
                 return Reached.INCOMPLETE;
             }
-            java.math.BigDecimal coef = terms.get(i).getValue();
+            ExactRatio coef = terms.get(i).getValue();
+            // Where this position runs under what the walk has fixed above it, which is not what it
+            // runs in the region the search was handed. The rules leaving it nothing here is a proof
+            // about this branch and about no other: the values fixed above took it away, and the
+            // walk is standing where it can try a different one. So the branch is exhausted — which
+            // is what {@link Reached#EXHAUSTED} says and what a value the rules refuse gets — rather
+            // than the item being settled, which would say of every branch what holds of this one.
+            NumericDomain.Bounds runs;
+            switch (here.projectionOf(terms.get(i).getKey().term())) {
+                case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
+                        runs = held == null ? NumericDomain.Bounds.OPEN : held;
+                case NumericDomain.FormProjection.NothingIsLeft _ -> {
+                    return Reached.EXHAUSTED;
+                }
+                case null -> runs = NumericDomain.Bounds.OPEN;
+            }
             // Narrowed by what the positions after this one can add up to. Left at the position's own
             // ends, a box a million wide is walked a million times and the budget runs out on
             // `a + b <= 2000000` — an equation with one answer.
-            NumericDomain.Bounds left =
-                    leaving(i + 1, owed, coef, bounds(here, terms.get(i).getKey().term()));
+            NumericDomain.Bounds left = leaving(i + 1, owed, coef, runs);
             if (i == terms.size() - 1) {
                 return solving(i, owed, coef, left);
             }
@@ -585,11 +743,7 @@ public final class LevelRealizer {
             // them arrives at, and a position offering one candidate has nothing for a test applied
             // afterwards to leave.
             CandidateDomain may = CandidateDomain.of(
-                    fromHere[i + 1].affinePreimage(
-                            souther.compiler.numeric.Rational.of(coef),
-                            souther.compiler.numeric.Rational.of(owed),
-                            carriers[i].spacing()),
-                    left);
+                    fromHere[i + 1].affinePreimage(coef, owed, carriers[i].spacing()), left);
             return switch (may) {
                 case CandidateDomain.None _ -> Reached.EXHAUSTED;
                 case CandidateDomain.One only -> trying(i, only.at().at(), owed, coef, here);
@@ -600,6 +754,15 @@ public final class LevelRealizer {
                                 ? Reached.FOUND : Reached.INCOMPLETE;
                 case CandidateDomain.Walking every -> walking(i, every, owed, coef, here);
                 case CandidateDomain.Outward on -> outward(i, on, owed, coef, here);
+                // Neither a proof nor a set: this position's own coset could not be cut to the run
+                // at all. Never `EXHAUSTED`, which the rules leaving nothing here is not — this
+                // compiler simply could not say what they leave.
+                case CandidateDomain.NotWorkedOut it -> {
+                    unheld.add(new CompositionCapacity(
+                            CompositionCapacity.Where.VALUES_A_POSITION_ON_THE_WAY_IS_WALKED_TO,
+                            it.why()));
+                    yield Reached.INCOMPLETE;
+                }
             };
         }
 
@@ -611,15 +774,26 @@ public final class LevelRealizer {
          * reported as every value having been tried. Nothing being left is proved by the rules, so
          * stepping past it takes nothing out of a walk that reaches the end.
          */
-        private Reached trying(int i, java.math.BigDecimal x, java.math.BigDecimal owed,
-                               java.math.BigDecimal coef, souther.compiler.inputs.SearchRegion here) {
-            souther.compiler.inputs.SearchRegion next =
+        private Reached trying(int i, BigDecimal x, ExactRatio owed,
+                               ExactRatio coef, SearchRegion here) {
+            SearchRegion next =
                     narrowing(here, terms.get(i).getKey().term(), x);
             if (next == null) {
                 return Reached.EXHAUSTED;
             }
+            // A value tried can put what is owed after it out of the exact arithmetic's reach where
+            // this position's own value is fine enough. That is never a proof the rules leave
+            // nothing here — the walk simply could not go on past this value — so it is the third
+            // vocabulary and `INCOMPLETE`, and this value is neither taken nor refused.
+            ExactAnswer<ExactRatio> remaining = owed.minus(coef.times(ExactRatio.of(x)));
+            if (remaining instanceof ExactAnswer.Unheld<ExactRatio> unheldRest) {
+                unheld.add(new CompositionCapacity(
+                        CompositionCapacity.Where.VALUES_A_POSITION_ON_THE_WAY_IS_WALKED_TO,
+                        unheldRest.why()));
+                return Reached.INCOMPLETE;
+            }
             at[i] = new Count(x);
-            Reached reached = walk(i + 1, owed.subtract(coef.multiply(x)), next);
+            Reached reached = walk(i + 1, remaining.orNull(), next);
             if (reached != Reached.FOUND) {
                 at[i] = null;
             }
@@ -634,12 +808,46 @@ public final class LevelRealizer {
          * walked to the end, which is why what comes back is the weakest of the children rather than
          * the last of them.
          */
-        private Reached walking(int i, CandidateDomain.Walking every, java.math.BigDecimal owed,
-                                java.math.BigDecimal coef,
-                                souther.compiler.inputs.SearchRegion here) {
+        private Reached walking(int i, CandidateDomain.Walking every, ExactRatio owed,
+                                ExactRatio coef,
+                                SearchRegion here) {
+            // Aligned once, to the wider of the two scales, rather than let every step of what may
+            // be a run a hundred thousand wide rescale `by` against `x` on its own: once `first` and
+            // `by` share a scale, every further `add` between them holds it and builds no digit to
+            // align them. The exact walk below is still what a scale this host cannot align in one
+            // decimal falls back to — this is a faster route to the values that arithmetic already
+            // proves reachable, not a wider one.
+            BigDecimal first = every.first();
+            BigDecimal by = every.by();
+            int aligned = Math.max(first.scale(), by.scale());
+            BigDecimal alignedFirst;
+            BigDecimal alignedBy;
+            try {
+                alignedFirst = first.setScale(aligned);
+                alignedBy = by.setScale(aligned);
+            } catch (ArithmeticException cannotAlign) {
+                return walkingExactly(i, every, owed, coef, here);
+            }
+            return walkingAtOneScale(i, alignedFirst, alignedBy, every.last(), owed, coef, here);
+        }
+
+        /**
+         * {@code every}, walked at the one scale {@code first} and {@code by} were aligned to.
+         *
+         * <p>Every step is a same-scale sum, so no step builds digits to align the two. What a
+         * same-scale sum can still meet is a value with more digits than the host holds, and a
+         * step that meets one is carried on in exact ratios from the value just tried — which says
+         * that value could not be held, the same as a walk that was exact from the start.
+         *
+         * <p>No step is taken past the last value. The next value after the last is no value of
+         * the run, and forming it is work that can only refuse.
+         */
+        private Reached walkingAtOneScale(int i, BigDecimal first, BigDecimal by, BigDecimal last,
+                                          ExactRatio owed, ExactRatio coef,
+                                          SearchRegion here) {
             Reached weakest = Reached.EXHAUSTED;
-            for (java.math.BigDecimal x = every.first();
-                    x.compareTo(every.last()) <= 0; x = x.add(every.by())) {
+            BigDecimal x = first;
+            for (;;) {
                 Reached reached = trying(i, x, owed, coef, here);
                 if (reached == Reached.FOUND) {
                     return Reached.FOUND;
@@ -650,8 +858,77 @@ public final class LevelRealizer {
                 if (!stepsLeft()) {
                     return Reached.INCOMPLETE;
                 }
+                if (x.compareTo(last) >= 0) {
+                    return weakest;
+                }
+                try {
+                    x = x.add(by);
+                } catch (ArithmeticException noRoom) {
+                    return onExactly(i, ExactRatio.of(x), ExactRatio.of(by),
+                            ExactRatio.of(last), weakest, owed, coef, here);
+                }
             }
-            return weakest;
+        }
+
+        /**
+         * {@code every}, walked in exact ratios: what a run this host cannot align {@code first}
+         * and {@code by} to one scale for falls back to.
+         *
+         * <p>Worked out exactly and never asked of the two decimals directly: a run whose first and
+         * step are ordinary can still meet a next value the exact arithmetic could not hold, and
+         * stepping past that one is never a proof the run was walked to the end.
+         */
+        private Reached walkingExactly(int i, CandidateDomain.Walking every, ExactRatio owed,
+                                       ExactRatio coef,
+                                       SearchRegion here) {
+            ExactRatio x = ExactRatio.of(every.first());
+            ExactRatio last = ExactRatio.of(every.last());
+            Reached reached = trying(i, x.asWrittenDecimal(), owed, coef, here);
+            if (reached == Reached.FOUND) {
+                return Reached.FOUND;
+            }
+            Reached weakest = reached == Reached.INCOMPLETE ? Reached.INCOMPLETE : Reached.EXHAUSTED;
+            if (!stepsLeft()) {
+                return Reached.INCOMPLETE;
+            }
+            if (x.compareTo(last) >= 0) {
+                return weakest;
+            }
+            return onExactly(i, x, ExactRatio.of(every.by()), last, weakest, owed, coef, here);
+        }
+
+        /**
+         * The rest of a run after {@code tried}, walked in exact ratios, where {@code weakest} is
+         * what the values up to and including {@code tried} came to.
+         */
+        private Reached onExactly(int i, ExactRatio tried, ExactRatio step, ExactRatio last,
+                                  Reached upToTried, ExactRatio owed, ExactRatio coef,
+                                  SearchRegion here) {
+            ExactRatio x = tried;
+            Reached weakest = upToTried;
+            for (;;) {
+                ExactAnswer<ExactRatio> next = x.plus(step);
+                if (next instanceof ExactAnswer.Unheld<ExactRatio> unheldNext) {
+                    unheld.add(new CompositionCapacity(
+                            CompositionCapacity.Where.VALUES_OF_A_PROGRESSION_WALKED_TO,
+                            unheldNext.why()));
+                    return Reached.INCOMPLETE;
+                }
+                x = next.orNull();
+                Reached reached = trying(i, x.asWrittenDecimal(), owed, coef, here);
+                if (reached == Reached.FOUND) {
+                    return Reached.FOUND;
+                }
+                if (reached == Reached.INCOMPLETE) {
+                    weakest = Reached.INCOMPLETE;
+                }
+                if (!stepsLeft()) {
+                    return Reached.INCOMPLETE;
+                }
+                if (x.compareTo(last) >= 0) {
+                    return weakest;
+                }
+            }
         }
 
         /**
@@ -668,11 +945,18 @@ public final class LevelRealizer {
          * allowance of its own, and what a step past a refused value buys is not the same question
          * here as it is for a pair on a line.
          */
-        private Reached outward(int i, CandidateDomain.Outward on, java.math.BigDecimal owed,
-                                java.math.BigDecimal coef,
-                                souther.compiler.inputs.SearchRegion here) {
+        private Reached outward(int i, CandidateDomain.Outward on, ExactRatio owed,
+                                ExactRatio coef,
+                                SearchRegion here) {
+            // The coset is what the arithmetic leaves the position and the run is where the rules
+            // leave it; what the declarations leave its values is not given to this search, so
+            // there is no set here to narrow by and the identity of that crossing is what goes in.
+            // Each value is still put to the region below, which is where a rule that refuses one
+            // of them answers.
             Outwards.Walked walked = Outwards.from(new Count(on.from()), new Count(on.by()),
-                    carriers[i], on.within(), VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT);
+                    carriers[i], on.within(), VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT,
+                    VALUES_A_PROGRESSION_WITHOUT_AN_END_IS_TRIED_AT,
+                    ValueSet.ANY, PlacesApart.NONE);
             for (Place x : walked) {
                 if (trying(i, Count.number(x).at(), owed, coef, here) == Reached.FOUND) {
                     return Reached.FOUND;
@@ -688,13 +972,21 @@ public final class LevelRealizer {
             // it, which is this compiler claiming to have been stopped where it was not.
             switch (walked.ended()) {
                 case HAVING_TRIED_THEM_ALL -> { }
-                case AT_THE_FIGURE ->
+                // One figure named twice, because this walk is given no set and no holes: every
+                // place of the run is a place to take, so the looking and the taking are the same
+                // number and the reader is owed the same one whichever arm the walk ended on.
+                case AT_THE_FIGURE_OF_CANDIDATES, AT_THE_FIGURE_OF_PLACES_LOOKED_AT ->
                         stoppedBy.add(CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED);
                 // A progression is a sum of counts, and a sum exists only over orders that count
                 // ({@link LevelSpace#addedUpOver}). So a walk of one that had no step to take is a
                 // form over an order with no arithmetic, which is refused before a search is built.
                 case WITH_NO_STEP_TO_TAKE -> throw new IllegalStateException(
                         "a progression over an order with no step: " + carriers[i]);
+                // Stopped at a value this could not hold, which no figure reaches past: the third
+                // vocabulary, with which of the two ways it went unheld.
+                case AT_A_PLACE_IT_COULD_NOT_HOLD -> unheld.add(new CompositionCapacity(
+                        CompositionCapacity.Where.VALUES_OF_A_PROGRESSION_WALKED_TO,
+                        walked.unheld()));
             }
             return Reached.INCOMPLETE;
         }
@@ -702,30 +994,41 @@ public final class LevelRealizer {
         /**
          * The last position, solved rather than tried, and every way it can fail is a proof.
          *
-         * <p>Where its values step, what is left over has to be its coefficient's multiple; where
-         * they fill, it is a division and the answer is whatever number it comes to. A quotient with
-         * no end is the one that used to be read as a search giving up, and it is not: a value a
-         * model cannot write is a value the position does not hold, so what it says is that this
-         * prefix has no last value and never that this compiler could not find one.
+         * <p>The division itself is exact. What decides the answer is whether the quotient is a
+         * value the position holds: where its values step, a whole number; where they fill, a number
+         * a model can write. A third is neither, and what that says is that this prefix has no last
+         * value — never that this compiler could not find one.
          *
          * <p>Then the ends themselves, which say whether they are their own values, and then the
          * rules with every position fixed — the one place a whole assignment exists to be held
          * against them. Each of the three refuses on something proved, so a walk that ends here
          * empty-handed has ended.
          */
-        private Reached solving(int i, java.math.BigDecimal owed, java.math.BigDecimal coef,
+        private Reached solving(int i, ExactRatio owed, ExactRatio coef,
                                 NumericDomain.Bounds left) {
-            java.math.BigDecimal solved;
+            ExactRatio quotient = owed.dividedBy(coef);
+            BigDecimal solved;
             if (carriers[i].spacing() == souther.compiler.numeric.Granularity.DISCRETE) {
-                java.math.BigDecimal[] divided = owed.divideAndRemainder(coef);
-                if (divided[1].signum() != 0) {
+                if (!quotient.isWhole()) {
                     return Reached.EXHAUSTED;
                 }
-                solved = divided[0];
+                // Whole, and still one the exact arithmetic can meet no room for: a whole quotient
+                // this fine can be one whose digits are past what this host addresses. Not a proof
+                // either way, the same as every other place this walk meets the arithmetic's own
+                // limit — `INCOMPLETE`, with the third vocabulary saying which value it was.
+                switch (quotient.truncated()) {
+                    case ExactAnswer.Held<java.math.BigInteger> held ->
+                            solved = new BigDecimal(held.value());
+                    case ExactAnswer.Unheld<java.math.BigInteger> unheldQuotient -> {
+                        unheld.add(new CompositionCapacity(
+                                CompositionCapacity.Where.VALUES_A_POSITION_ON_THE_WAY_IS_WALKED_TO,
+                                unheldQuotient.why()));
+                        return Reached.INCOMPLETE;
+                    }
+                }
             } else {
-                try {
-                    solved = owed.divide(coef);
-                } catch (ArithmeticException noEnd) {
+                solved = quotient.asWrittenDecimal();
+                if (solved == null) {
                     return Reached.EXHAUSTED;
                 }
             }
@@ -770,13 +1073,14 @@ public final class LevelRealizer {
          * arriving by way of a budget. So the last step is {@link #theRulesHaveNotRefused} and is
          * not budgeted.
          */
-        private souther.compiler.inputs.SearchRegion narrowing(souther.compiler.inputs.SearchRegion here, NumericTerm term,
-                                    java.math.BigDecimal at) {
+        private SearchRegion narrowing(
+                SearchRegion here, NumericTerm term,
+                BigDecimal at) {
             if (asked >= HOW_OFTEN_THE_RULES_ARE_ASKED_AGAIN) {
                 return here;
             }
             asked++;
-            souther.compiler.inputs.SearchRegion next = here.given(term, new Count(at));
+            SearchRegion next = here.given(term, new Count(at));
             return next.emptiness().isPresent() ? null : next;
         }
 
@@ -817,74 +1121,100 @@ public final class LevelRealizer {
          * positions — asking for that one is the change the walk's own cost note argues against, and
          * it is a question of its own rather than part of where a position may stand.
          */
-        private NumericDomain.Bounds leaving(int rest, java.math.BigDecimal owed,
-                                             java.math.BigDecimal coef,
+        private NumericDomain.Bounds leaving(int rest, ExactRatio owed, ExactRatio coef,
                                              NumericDomain.Bounds within) {
-            java.math.BigDecimal[] reach = reach(rest);
-            if (reach == null || coef.signum() == 0) {
+            ExactRatio[] reach = reach(rest);
+            if (reach == null || coef.isZero()) {
                 return within;
             }
             // owed - coef * x must lie in [reach0, reach1], so coef * x lies in
-            // [owed - reach1, owed - reach0].
-            java.math.BigDecimal one = owed.subtract(reach[1]);
-            java.math.BigDecimal other = owed.subtract(reach[0]);
-            java.math.BigDecimal low = quotient(one, coef, java.math.RoundingMode.FLOOR)
-                    .min(quotient(other, coef, java.math.RoundingMode.FLOOR));
-            java.math.BigDecimal high = quotient(one, coef, java.math.RoundingMode.CEILING)
-                    .max(quotient(other, coef, java.math.RoundingMode.CEILING));
+            // [owed - reach1, owed - reach0]. Where `owed` and a reach a model's own decimals put
+            // far enough apart in scale meet an arithmetic that cannot sum them, this narrows by
+            // nothing rather than by a value it cannot hold — the same answer `reach` itself gives
+            // for an end nothing bounds.
+            ExactRatio oneApart = owed.minus(reach[1]).orNull();
+            ExactRatio otherApart = owed.minus(reach[0]).orNull();
+            if (oneApart == null || otherApart == null) {
+                return within;
+            }
+            ExactRatio one = oneApart.dividedBy(coef);
+            ExactRatio other = otherApart.dividedBy(coef);
+            ExactRatio low = one.compareTo(other) <= 0 ? one : other;
+            ExactRatio high = one.compareTo(other) <= 0 ? other : one;
+            Count lowWritten = written(low, java.math.RoundingMode.FLOOR);
+            Count highWritten = written(high, java.math.RoundingMode.CEILING);
+            if (lowWritten == null || highWritten == null) {
+                return within;
+            }
             return new NumericDomain.Bounds(
-                    Endpoint.lower(within.min(), Endpoint.inclusive(new Count(low))),
-                    Endpoint.upper(within.max(), Endpoint.inclusive(new Count(high))));
+                    Endpoint.lower(within.min(), Endpoint.inclusive(lowWritten)),
+                    Endpoint.upper(within.max(), Endpoint.inclusive(highWritten)));
         }
 
         /**
-         * A quotient that is exact where the division ends, and rounded the way {@code towards} says
-         * where it does not.
+         * A derived end as a count somebody could write: the number itself where a decimal is it,
+         * and rounded the way {@code towards} says where none is.
          *
          * <p><b>Outward and never inward.</b> What this bounds is a proof — a value outside it is one
          * no assignment of the rest completes — so a bound rounded the wrong way takes a value the
          * box holds out of the walk, and a walk that then finds nothing calls the level unreachable.
          * Rounded to sixteen digits at the nearest, {@code a = 10000000000000001} was rounded to
          * {@code 10000000000000000} and the one pair that meets the line was proved not to exist.
+         *
+         * <p>The division above is exact, so what is left here is only that the interval algebra
+         * this end is handed to counts in decimals. A third has none, and the number written out for
+         * it is past where the rules stop rather than short of it.
          */
-        private static java.math.BigDecimal quotient(java.math.BigDecimal owed,
-                                                     java.math.BigDecimal coef,
-                                                     java.math.RoundingMode towards) {
-            try {
-                return owed.divide(coef);
-            } catch (ArithmeticException noEnd) {
-                return owed.divide(coef, DIGITS_A_DERIVED_END_KEEPS, towards);
+        private static Count written(ExactRatio at, java.math.RoundingMode towards) {
+            Count exactly = Count.at(at);
+            if (exactly != null) {
+                return exactly;
             }
+            BigDecimal outward =
+                    at.asDecimal(towards, DIGITS_A_DERIVED_END_KEEPS).orNull();
+            return outward == null ? null : new Count(outward);
         }
 
         /**
          * The least and the greatest the positions from {@code i} on can add up to, or null where
          * one of them is unbounded and there is nothing to say.
          */
-        private java.math.BigDecimal[] reach(int i) {
-            java.math.BigDecimal least = java.math.BigDecimal.ZERO;
-            java.math.BigDecimal most = java.math.BigDecimal.ZERO;
+        private ExactRatio[] reach(int i) {
+            ExactRatio least = ExactRatio.ZERO;
+            ExactRatio most = ExactRatio.ZERO;
             for (int j = i; j < terms.size(); j++) {
                 NumericDomain.Bounds within = runsBetween[j];
-                java.math.BigDecimal coef = terms.get(j).getValue();
-                java.math.BigDecimal low = numberOf(within.min());
-                java.math.BigDecimal high = numberOf(within.max());
+                ExactRatio coef = terms.get(j).getValue();
+                ExactRatio low = numberOf(within.min());
+                ExactRatio high = numberOf(within.max());
                 if (low == null || high == null) {
                     return null;
                 }
-                java.math.BigDecimal one = coef.multiply(low);
-                java.math.BigDecimal other = coef.multiply(high);
-                least = least.add(one.min(other));
-                most = most.add(one.max(other));
+                ExactRatio one = coef.times(low);
+                ExactRatio other = coef.times(high);
+                // A model's own ends can be far enough apart in scale, running, that the exact
+                // arithmetic cannot carry the sum this narrowing is built from. Nothing to say is
+                // already this method's own answer for an end nothing bounds, so an unheld sum reads
+                // the same way: `leaving` narrows by nothing rather than by a value this cannot hold.
+                least = least.plus(one.compareTo(other) <= 0 ? one : other).orNull();
+                most = most.plus(one.compareTo(other) <= 0 ? other : one).orNull();
+                if (least == null || most == null) {
+                    return null;
+                }
             }
-            return new java.math.BigDecimal[] {least, most};
+            return new ExactRatio[] {least, most};
         }
 
-        private static java.math.BigDecimal numberOf(Endpoint end) {
-            return end == null || !(end.at() instanceof Count count) ? null : count.at();
+        private static ExactRatio numberOf(Endpoint end) {
+            return end == null || !(end.at() instanceof Count count) ? null : count.exactly();
         }
 
     }
+
+    /** Where {@code where} lands relative to {@code common}, or which way the exact arithmetic could
+     *  not hold a level it needed to move — the first such reason met, said instead of the item that
+     *  reason stopped {@link #relativeTo} composing. */
+    private record Related(Criterion where, UnheldNumber unheld) {}
 
     /**
      * The item read as a question about one place of one carrier, given where the other position
@@ -894,7 +1224,7 @@ public final class LevelRealizer {
      * known. Once it is, an item about the pair is an item about one place — which is why the two
      * are searched for by one procedure rather than by two that agreed by being written alike.
      */
-    private static Criterion relativeTo(Criterion where, Place common, Carrier of) {
+    private static Related relativeTo(Criterion where, Place common, Carrier of) {
         // Every level of the item read as the place it lands on once the other end of the line is
         // known. Mapped one level at a time and not by handing one place to all of them: a run has
         // two ends and a line between them, and a mapping that gave them all the same place left a
@@ -903,11 +1233,15 @@ public final class LevelRealizer {
         // Null where the carrier's arithmetic puts a level nowhere. Which end that happens at
         // decides what it means: a line with no place is an item this order cannot be read as at
         // all, and a run's far end with no place is a run that reaches as far as the carrier does.
+        UnheldNumber[] unheld = {null};
         java.util.function.UnaryOperator<Level> onto = level -> {
-            Place at = movedBy(common, level, of);
-            return at == null ? null : new Level.OnACarrier(of, at);
+            MovedTo moved = movedBy(common, level, of);
+            if (moved.unheld() != null && unheld[0] == null) {
+                unheld[0] = moved.unheld();
+            }
+            return moved.place() == null ? null : new Level.OnACarrier(of, moved.place());
         };
-        return switch (where) {
+        Criterion mapped = switch (where) {
             case Criterion.AtTheLevel at -> only(new Criterion.AtTheLevel(onto.apply(at.at())),
                     onto.apply(at.at()));
             case Criterion.Within within -> {
@@ -917,6 +1251,7 @@ public final class LevelRealizer {
                         within.away());
             }
         };
+        return new Related(unheld[0] == null ? mapped : null, unheld[0]);
     }
 
     /** An item, unless the level it is written against has no place on this order. */
@@ -948,15 +1283,17 @@ public final class LevelRealizer {
             // rather than as the same place a second time, which a caller asking again would read
             // as a search that had not moved.
             case Criterion.AtTheLevel at ->
-                    apart.has(placeOf(at.at())) ? null : placeOf(at.at());
+                    apart.has(at.at().asAPlace()) ? null : at.at().asAPlace();
             // Nothing composed where nothing worked out what the position holds. Which is this
             // compiler's own limit and is reported in the word it has for one: a run searched against
             // a set nobody established would offer a row at a position whose rules were never read.
-            case Criterion.Within within ->
-                    whatTheValuesAre(term, looking.admitted())
-                            instanceof AdmittedValues.Admitted.Values(ValueSet admits)
-                            ? someValueIn(within, carrier, bounds, admits, apart, looking::meter)
-                            : null;
+            // A path the reading puts no position at is not that, and the run is what a value there
+            // is composed from.
+            case Criterion.Within within -> {
+                ValueSet admits = looking.toComposeFrom(term).toCrossTheRunWith();
+                yield admits == null ? null
+                        : someValueIn(within, carrier, bounds, admits, apart, looking::meter);
+            }
         };
         if (offered == null) {
             return null;
@@ -966,27 +1303,6 @@ public final class LevelRealizer {
         // one of them, which is the carrier's question rather than the item's.
         Place onTheGrid = carrier.onTheGrid(offered);
         return onTheGrid != null && accepts(where, carrier, onTheGrid) ? onTheGrid : null;
-    }
-
-    /**
-     * What the position admits, where the place being composed is a value of it.
-     *
-     * <p>Asked of the location the number is read from rather than of the number, because one location
-     * is measured at as many numbers as the rules name of it and admits one set of values — a rule
-     * about one of those numbers is what leaves the others short, which is the whole reason this set
-     * is here.
-     *
-     * <p><b>And every value there is where the number is one taken of the position rather than its
-     * own.</b> {@code String.length(code)} counts a string and the place composed for it is a count;
-     * the set holds the strings. Put to it, every count would be refused for not being one of them,
-     * and a boundary on a length would stop being offered a row at all. What a value carrying that
-     * count looks like is asked where such a value is written ({@link Witnesses}) and the set reaches
-     * it there.
-     */
-    private static AdmittedValues.Admitted whatTheValuesAre(NumericTerm.FromOnePosition term,
-                                                            AdmittedValues admitted) {
-        return term instanceof NumericTerm.ValueOf ? admitted.at(term.position())
-                : new AdmittedValues.Admitted.Values(ValueSet.ANY);
     }
 
     /**
@@ -1055,7 +1371,7 @@ public final class LevelRealizer {
 
     /** One end of such a run, or null where it is not a place of the position. */
     private static Endpoint endOf(Bound end, Carrier carrier) {
-        if (end == null || end.at().per().compareTo(BigDecimal.ONE) != 0) {
+        if (end == null || !end.at().per().equals(ExactRatio.ONE)) {
             return null;
         }
         return end.at().written() instanceof Level.OnACarrier on && on.of().equals(carrier)
@@ -1087,8 +1403,8 @@ public final class LevelRealizer {
      * caller is the one holding whether that happened.
      */
     static NumericDomain.Bounds commonRange(NumericDomain.Bounds on, NumericDomain.Bounds against,
-                                            Carrier carrier, Count apart) {
-        NumericDomain.Bounds moved = carrier.counts() ? shifted(on, apart.negate()) : on;
+                                            Carrier carrier, ExactRatio apart) {
+        NumericDomain.Bounds moved = carrier.counts() ? shifted(on, apart.negated()) : on;
         return new NumericDomain.Bounds(
                 Endpoint.lower(moved == null ? null : moved.min(),
                         against == null ? null : against.min()),
@@ -1106,16 +1422,31 @@ public final class LevelRealizer {
      * refuse. Intersected without the distance, the search offered exactly that pair and the report
      * said every value tried had been refused.
      */
-    private static NumericDomain.Bounds shifted(NumericDomain.Bounds bounds, Count by) {
+    private static NumericDomain.Bounds shifted(NumericDomain.Bounds bounds, ExactRatio by) {
         if (bounds == null) {
             return null;
         }
         return new NumericDomain.Bounds(moved(bounds.min(), by), moved(bounds.max(), by));
     }
 
-    private static Endpoint moved(Endpoint end, Count by) {
-        return end == null || !(end.at() instanceof Count count) ? end
-                : new Endpoint(count.plus(by), end.inclusive());
+    /**
+     * An end moved by the distance, or no end where the place it moves to is none this can write.
+     *
+     * <p>Dropping the end widens the range, and that is sound here: what this bounds is where a
+     * search starts looking, and every placement it composes is put back to the rules before it is
+     * handed back ({@link #found}). A wider start costs looking and never offers a placement the
+     * rules refuse.
+     */
+    private static Endpoint moved(Endpoint end, ExactRatio by) {
+        if (end == null || !(end.at() instanceof Count count)) {
+            return end;
+        }
+        ExactRatio moved = count.exactly().plus(by).orNull();
+        if (moved == null) {
+            return null;
+        }
+        Count at = Count.at(moved);
+        return at == null ? null : new Endpoint(at, end.inclusive());
     }
 
     /**
@@ -1140,7 +1471,7 @@ public final class LevelRealizer {
      * reaches — and this is where that stops being each search's to remember.
      */
     private Realization found(Map<RealizationTarget, Place> fixing,
-                              souther.compiler.inputs.SearchRegion within, ValuesTried tried) {
+                              SearchRegion within, ValuesTried tried) {
         if (tried.holds(fixing)) {
             return Realization.Unknown.nothingComposedOne();
         }
@@ -1171,23 +1502,9 @@ public final class LevelRealizer {
      * reach.
      */
     private boolean theRulesHaveNotRefused(Map<RealizationTarget, Place> fixing,
-                                           souther.compiler.inputs.SearchRegion within) {
+                                           SearchRegion within) {
         Map<NumericTerm, Place> standing = new LinkedHashMap<>();
         fixing.forEach((target, at) -> standing.put(target.term(), at));
         return standing.isEmpty() || within.given(standing).emptiness().isEmpty();
-    }
-
-    /** The same, of the rules as some of the positions have been fixed. */
-    private static NumericDomain.Bounds bounds(souther.compiler.inputs.SearchRegion rules,
-                                               NumericTerm term) {
-        NumericDomain.Bounds held = rules.runsBetween(term);
-        return held == null ? new NumericDomain.Bounds(null, null) : held;
-    }
-
-    private static Place placeOf(Level level) {
-        return switch (level) {
-            case Level.OnACarrier on -> on.at();
-            case Level.ACount count -> count.at();
-        };
     }
 }

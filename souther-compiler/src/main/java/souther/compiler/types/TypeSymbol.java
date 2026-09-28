@@ -1,7 +1,9 @@
 package souther.compiler.types;
 
 import souther.compiler.Reserved;
-import souther.compiler.hash.SaysWhatStandsForIt;
+import souther.compiler.SettledAnswer;
+import souther.compiler.crossing.ObjectEqualityIsRepresentedByWhatItStandsFor;
+import souther.compiler.crossing.ObjectEqualityIsTheCrossingAnswer;
 import souther.compiler.hash.ValueHash;
 
 /**
@@ -23,7 +25,7 @@ import souther.compiler.hash.ValueHash;
  * <p>Nothing here says what any of this is called on a machine. {@code jvm.SoutherJvmAbi} is where
  * that is asked and answered, and it is the only place that may.
  */
-public sealed interface TypeSymbol extends Comparable<TypeSymbol> {
+public sealed interface TypeSymbol extends SettledAnswer, Comparable<TypeSymbol> {
 
     /** The name this is written under. */
     String name();
@@ -35,7 +37,7 @@ public sealed interface TypeSymbol extends Comparable<TypeSymbol> {
      * where it stands for the declaration in the compiler's own reasoning, and one is minted from
      * the other only in {@link TypeSymbols}.
      */
-    final class AtModule implements TypeSymbol, SaysWhatStandsForIt {
+    final class AtModule implements TypeSymbol, ObjectEqualityIsRepresentedByWhatItStandsFor {
 
         private final TypeKey key;
 
@@ -104,7 +106,8 @@ public sealed interface TypeSymbol extends Comparable<TypeSymbol> {
      * and recovering the primitive from one was already written as the inverse of writing it out for
      * exactly that reason.
      */
-    record Primitive(Type.Prim primitive) implements OfLanguage {
+    record Primitive(Type.Prim primitive)
+            implements OfLanguage, ObjectEqualityIsTheCrossingAnswer {
 
         public Primitive {
             if (primitive == null) {

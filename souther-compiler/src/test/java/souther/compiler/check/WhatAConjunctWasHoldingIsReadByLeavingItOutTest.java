@@ -129,7 +129,7 @@ class WhatAConjunctWasHoldingIsReadByLeavingItOutTest {
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         TypeSymbol subject = TypeSymbols.declared(new TypeKey(module, "Subject"));
-        return Rules.of(subject, RuleReadings.of(compilation, module),
-                ReadAs.THE_COMPILATION_DOES).bounds();
+        return Rules.of(subject, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
+                ReadAs.THE_COMPILATION_DOES)).bounds();
     }
 }

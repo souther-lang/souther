@@ -211,7 +211,14 @@ final class AReportOfOneBorder {
                     ItemAssessment.WritabilityProjection.PROVEN,
                     souther.compiler.query.SearchOutcomes.none()));
         }
-        return new BorderAssessment(border, items);
+        // Every line this fixture builds is on one position, which has no line one step from it:
+        // weighed one less it is nothing, and weighed one more it is the same line. So there is
+        // nothing here to hold it against, which is a fact about the line and not a question this
+        // fixture is dodging — and it is why these reports are settled on that measure.
+        return new BorderAssessment(border, items,
+                new souther.compiler.query.AnotherLineTheRowsAllow.NoSuchQuestion(
+                        souther.compiler.query.AnotherLineTheRowsAllow.Reason
+                                .THE_LINE_IS_ON_ONE_POSITION));
     }
 
     /** A row is at every point the border owes. */
@@ -294,7 +301,8 @@ final class AReportOfOneBorder {
                                 .BorderObligationPointAssessment.across(read).stream()
                                 .filter(point -> point.belongsToBehaviorAccount("weigh"))
                                 .toList()),
-                        null, null),
+                        null, null, null),
+                new souther.compiler.query.RowSummary(List.of()),
                 souther.compiler.query.ClaimAnnotations.NONE, List.of(), java.util.Map.of(),
                 java.util.Map.of(), rulePlaces(lines), java.util.Map.of(), java.util.Map.of(),
                 java.util.Map.of());

@@ -1,5 +1,6 @@
 package souther.compiler.flow;
 
+import souther.compiler.check.ScopeStep;
 import souther.compiler.core.Core;
 
 /**
@@ -30,12 +31,7 @@ public final class Anonymous implements Naming<AnonymousPath> {
     }
 
     @Override
-    public Naming<AnonymousPath> under(Core.Binder binder, Core value) {
-        return this;
-    }
-
-    @Override
-    public Naming<AnonymousPath> insideArm(Core.Match match, Core.Case arm) {
+    public Naming<AnonymousPath> entering(ScopeStep step) {
         return this;
     }
 

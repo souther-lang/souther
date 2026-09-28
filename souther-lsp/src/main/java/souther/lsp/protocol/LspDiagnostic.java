@@ -34,12 +34,6 @@ public record LspDiagnostic(Range range, int severity, String code, String messa
         related = related == null ? List.of() : List.copyOf(related);
     }
 
-    /** A diagnostic with nothing to say about itself beyond where it is and what it says. */
-    public LspDiagnostic(Range range, int severity, String code, String message,
-                         List<Related> related) {
-        this(range, severity, code, message, List.of(), related);
-    }
-
     /** A diagnostic that points at one place only. */
     public LspDiagnostic(Range range, int severity, String code, String message) {
         this(range, severity, code, message, List.of(), List.of());

@@ -2,14 +2,20 @@ package souther.compiler.check;
 
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.ast.Hir;
+import souther.compiler.copied.CopyTarget;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.MaterialisationSite;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.TypeKey;
+import souther.compiler.types.WrittenOwner;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedSet;
 import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 
@@ -54,20 +60,47 @@ public final class ClauseHelpers {
      * the spelling the table is keyed by — {@link HelperNames#qualifyImportsIn} does it again for the
      * bodies below, and says the same thing both times.
      */
-    static Expansion<Hir.Module> withSettledInvariants(Hir.Module m, Symbols symbols,
-                                                       DeclarationKinds kinds,
-                                                       Map<String, Hir.FnDef> published) {
+    static SettledClauses withSettledInvariants(Hir.Module m, Symbols symbols,
+                                                DeclarationKinds kinds,
+                                                Map<String, Hir.FnDef> published) {
         // Settling runs while what these declarations say is still being worked out, so what is read
         // here is which form each one is — settled when the module was indexed — and asking what one
         // says is refused rather than answered with nothing.
         Hir.Module settled = settled(m, symbols, PublishedDeclarations.THE_ONE_THAT_MAKES_THEM,
                 kinds);
-        HelperInliner inliner = HelperInliner.forModule(settled, published, symbols.library());
-        // What these expansions could not remove comes back with what they produced. A clause is the
-        // one place a module writes an expression that is not a definition, so a recursion reached
-        // from one is reached from nowhere a reader of the module's declarations would look.
-        return new Expansion<>(withInlinedInvariants(inliner, settled), inliner.leftStanding());
+        HelperInliner inliner = HelperInliner.forModule(settled, published, symbols.library(),
+                ValueAtAReference.SHARED_PER_REGION);
+        Map<TypeKey, SequencedSet<CopyTarget>> copiedBy = new LinkedHashMap<>();
+        Map<TypeKey, List<CallsLeftStanding>> standingBy = new LinkedHashMap<>();
+        SequencedSet<ReachName.Declaration> standingInEnsures = new LinkedHashSet<>();
+        Hir.Module inlined = withInlinedInvariants(inliner, settled, copiedBy, standingBy,
+                standingInEnsures);
+        // What these expansions could not remove comes back with what they produced, a clause at a
+        // time. A clause is the one place a module writes an expression that is not a definition,
+        // so a recursion reached from one is reached from nowhere a reader of the module's
+        // declarations would look.
+        return new SettledClauses(inlined, standingBy, standingInEnsures,
+                inliner.copiedFromElsewhere(), copiedBy);
     }
+
+    /**
+     * A module with its clauses settled, and what settling them left standing and copied.
+     *
+     * @param module            the module, its clauses settled
+     * @param standingBy        by each declaration that writes clauses, what each of them left
+     *                          standing, in the order they are written
+     * @param standingInEnsures what the behaviors' {@code ensures} left standing
+     * @param copied            what the settling copied of other modules' declarations, over the
+     *                          whole module
+     * @param copiedBy          by each declaration whose clauses copied anything, what they copied —
+     *                          which a type including that declaration checks, and so copies, along
+     *                          with them
+     */
+    record SettledClauses(Hir.Module module,
+                          Map<TypeKey, List<CallsLeftStanding>> standingBy,
+                          SequencedSet<ReachName.Declaration> standingInEnsures,
+                          SequencedSet<CopyTarget> copied,
+                          Map<TypeKey, SequencedSet<CopyTarget>> copiedBy) {}
 
     /**
      * Every declaration {@code m} makes, with its clauses expanded to what a reading of them takes:
@@ -93,11 +126,13 @@ public final class ClauseHelpers {
      */
     public static Map<TypeKey, ExpandedClauses> expandedClausesOf(
             Expandable expandable, Symbols symbols, PublishedDeclarations declarations,
-            DeclarationKinds kinds, Map<String, Hir.FnDef> published) {
+            DeclarationKinds kinds, DeclarationNewtypes newtypes,
+            Map<String, Hir.FnDef> published) {
         Hir.Module m = expandable.module();
         Hir.Module settled = settled(m, symbols, declarations, kinds);
         HelperInliner inliner = HelperInliner.forHelpers(m.name(), HelperInliner.helpersOf(settled),
-                published, InliningPolicy.DISCHARGE, symbols.library());
+                published, InliningPolicy.DISCHARGE, symbols.library(),
+                ValueAtAReference.SHARED_PER_REGION);
         Map<TypeKey, ExpandedClauses> out = new LinkedHashMap<>();
         for (Hir.Def def : settled.defs()) {
             TypeKey declares = def.declares().key();
@@ -114,7 +149,7 @@ public final class ClauseHelpers {
             List<Made> made = new ArrayList<>();
             Hir.Def expanded = withInlinedInvariants(inliner, def, made::add);
             out.put(declares,
-                    NewtypeDesugar.rewriteInvariantsOf(expanded, symbols) instanceof Hir.Data d
+                    NewtypeDesugar.rewriteInvariantsOf(expanded, newtypes) instanceof Hir.Data d
                             ? new ExpandedClauses(declares, paired(d.invariants(), made))
                             : ExpandedClauses.nothingToExpand(declares));
         }
@@ -166,15 +201,33 @@ public final class ClauseHelpers {
      * (e.g. {@code invariant 正の数(value)}) expands to its body before the invariant is type-checked
      * or emitted — the same lowering a behavior body gets (spec §blocks, §invariant-expressions).
      */
-    private static Hir.Module withInlinedInvariants(HelperInliner inliner, Hir.Module m) {
+    private static Hir.Module withInlinedInvariants(HelperInliner inliner, Hir.Module m,
+                                                    Map<TypeKey, SequencedSet<CopyTarget>> copiedBy,
+                                                    Map<TypeKey, List<CallsLeftStanding>> standingBy,
+                                                    SequencedSet<ReachName.Declaration> standingInEnsures) {
         List<Hir.Def> defs = new ArrayList<>();
         for (Hir.Def def : m.defs()) {
-            defs.add(withInlinedInvariants(inliner, def, _ -> { }));
+            List<CallsLeftStanding> standing = new ArrayList<>();
+            Expansion<Hir.Def> one = inliner.expanding(() -> withInlinedInvariants(inliner, def,
+                    made -> standing.add(made.standing())));
+            defs.add(one.value());
+            if (!one.copied().isEmpty()) {
+                copiedBy.put(def.declares().key(), one.copied());
+            }
+            if (!standing.isEmpty()) {
+                standingBy.put(def.declares().key(), List.copyOf(standing));
+            }
         }
         List<Hir.BehaviorDef> behaviors = new ArrayList<>();
         for (Hir.BehaviorDef behavior : m.behaviors()) {
-            behaviors.add(behavior instanceof Hir.SpecBehavior spec && !spec.ensures().isEmpty()
-                    ? withInlinedEnsures(inliner, m.name(), spec) : behavior);
+            if (behavior instanceof Hir.SpecBehavior spec && !spec.ensures().isEmpty()) {
+                Expansion<Hir.SpecBehavior> one =
+                        inliner.expanding(() -> withInlinedEnsures(inliner, m.name(), spec));
+                behaviors.add(one.value());
+                standingInEnsures.addAll(one.standing());
+            } else {
+                behaviors.add(behavior);
+            }
         }
         return m.withDefs(defs).withBehaviors(behaviors);
     }
@@ -193,9 +246,10 @@ public final class ClauseHelpers {
             return def;
         }
         BindingOwner declared = new BindingOwner.OfData(d.declares());
+        WrittenOwner.Declaration writer = new WrittenOwner.Declaration(d.declares().key());
         return new Hir.Data(d.written(), d.declares(), d.newtype(), d.includes(), d.fields(),
-                Hir.mapClauses(d.invariants(),
-                        clause -> inlinedClause(inliner, declared, met, clause)),
+                Hir.mapClauses(d.invariants(), (ordinal, clause) -> inlinedClause(inliner, declared,
+                        new MaterialisationSite.Invariant(writer, ordinal), met, clause)),
                 d.pos());
     }
 
@@ -207,10 +261,11 @@ public final class ClauseHelpers {
      * look.
      */
     private static Hir.Expr inlinedClause(HelperInliner inliner, BindingOwner declared,
-                                          Consumer<Made> met, Hir.Expr clause) {
+                                          MaterialisationSite root, Consumer<Made> met,
+                                          Hir.Expr clause) {
         AuthoredShape shape = shapeOf(clause);
         Expansion<Hir.Expr> one = inliner.expanding(() ->
-                expandedOver(shape, part -> inliner.inline(part, declared)));
+                expandedOver(shape, part -> inliner.inline(part, declared, root)));
         met.accept(new Made(CallsLeftStanding.of(one.standing()), shape));
         return one.value();
     }
@@ -232,11 +287,15 @@ public final class ClauseHelpers {
                                                        Hir.SpecBehavior spec) {
         BindingOwner owner = new BindingOwner.OfSignature(
                 new souther.compiler.types.ValueName.Behavior(module, spec.name()));
+        WrittenOwner.Stated stated = new WrittenOwner.Stated(module, spec.name());
         List<Hir.EnsuresClause> clauses = new ArrayList<>();
-        for (Hir.EnsuresClause clause : spec.ensures()) {
+        for (int at = 0; at < spec.ensures().size(); at++) {
+            Hir.EnsuresClause clause = spec.ensures().get(at);
             List<Hir.EnsuresArm> arms = new ArrayList<>();
-            for (Hir.EnsuresArm arm : clause.arms()) {
-                arms.add(arm.with(inliner.inline(arm.expr(), owner)));
+            for (int each = 0; each < clause.arms().size(); each++) {
+                Hir.EnsuresArm arm = clause.arms().get(each);
+                arms.add(arm.with(inliner.inline(arm.expr(), owner,
+                        new MaterialisationSite.Ensures(stated, at, each))));
             }
             clauses.add(new Hir.EnsuresClause(clause.name(), List.copyOf(arms),
                     clause.pos(), clause.region()));

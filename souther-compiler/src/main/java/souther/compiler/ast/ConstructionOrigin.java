@@ -1,5 +1,7 @@
 package souther.compiler.ast;
 
+import souther.compiler.RecordOfTheBuilding;
+
 /**
  * Where a construction standing in a body came from — what a permission check needs in order to tell
  * a construction the body makes from one that arrived in it already made.
@@ -24,5 +26,5 @@ package souther.compiler.ast;
  * would be a second place to ask and a second place to change: read through a pass's own reasoning
  * about a value it happens to hold, rather than through the form that knows what it is.
  */
-public sealed interface ConstructionOrigin
+public sealed interface ConstructionOrigin extends RecordOfTheBuilding
         permits Origins.Own, Origins.Published, Origins.ByValue { }

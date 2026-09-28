@@ -217,7 +217,7 @@ public final class Resolve {
         }
 
         /**
-         * What writing {@code name} here would mean.
+         * What writing {@code name} here would mean, over a table {@link #byName} already answered.
          *
          * <p>Three answers, and the third is why this is asked rather than looked up. A name an
          * import line was to bring in and could not is in scope denoting nothing: what is wrong was
@@ -225,16 +225,12 @@ public final class Resolve {
          * use is reported as a name nothing declares, and the author is sent to a body where
          * nothing is wrong — which is the same reasoning the type namespace was written to
          * ({@link Denotation}), and the same three answers.
+         *
+         * <p>Package-private, so the only readers are the ones that got the table from here: the
+         * rule about what a spelling means is this one, and a caller that assembled a table of its
+         * own would be asking it of something else. {@code Resolve} reads every name a module
+         * writes, and rebuilding the table for each of them is what taking the table saves.
          */
-        public Reach reach(String name) {
-            return reachIn(byName(), name);
-        }
-
-        /** The same, over a table {@link #byName} already answered. Package-private, so the only
-         *  readers are the ones that got the table from here: the rule about what a spelling means
-         *  is this one, and a caller that assembled a table of its own would be asking it of
-         *  something else. {@code Resolve} reads every name a module writes, and rebuilding the
-         *  table for each of them is what this saves. */
         Reach reachIn(Map<String, ValueName> reached, String name) {
             ValueName named = reached.get(name);
             if (named != null) {
@@ -572,7 +568,7 @@ public final class Resolve {
                         r.retType(spec.ret()), r.names(spec.constructs()),
                         r.required(spec.dependsOn(), spec.name()), r.ensures(spec), spec.pos());
                 case Ast.PipeBehavior pipe -> new Hir.PipeBehavior(pipe.written(),
-                        r.stages(pipe.stages()), r.retType(pipe.declaredOut()), pipe.pos());
+                        r.composition(pipe.composition()), pipe.pos());
             });
         }
         List<Hir.FnDef> fns = new ArrayList<>();
@@ -625,7 +621,7 @@ public final class Resolve {
                     "`" + m.name() + "` reached resolution having already taken helpers on");
         }
         return new Resolution(
-                new Hir.Module(m.name(), m.exposing(), exposedOutputs,
+                new Hir.Module(m.name(), m.exposing(), m.published(), exposedOutputs,
                         r.imports(m), defs, behaviors, fns, List.of(), examples, fakes,
                         m.exampleFileTarget(), m.pos()),
                 new ResolutionIndex(List.copyOf(r.denotations), List.copyOf(r.values0),
@@ -674,7 +670,22 @@ public final class Resolve {
         return out;
     }
 
-    /** The stages of a {@code >->} composition, each answered against the behavior namespace. */
+    /** A {@code >->} composition: its stages, each answered against the behavior namespace, or for
+     *  one read off the path the types it takes and answers. */
+    private Hir.Composition composition(Ast.Composition composition) {
+        return switch (composition) {
+            case Ast.Composition.Stages written -> new Hir.Composition.Stages(
+                    stages(written.stages()), retType(written.declaredOut()));
+            case Ast.Composition.Elsewhere elsewhere -> {
+                List<Hir.RetType> takes = new ArrayList<>();
+                for (Ast.RetType each : elsewhere.takes()) {
+                    takes.add(retType(each));
+                }
+                yield new Hir.Composition.Elsewhere(takes, retType(elsewhere.answers()));
+            }
+        };
+    }
+
     private List<Hir.Var> stages(List<Ast.Var> stages) {
         List<Hir.Var> out = new ArrayList<>();
         for (Ast.Var stage : stages) {
@@ -862,7 +873,8 @@ public final class Resolve {
         InForce bound = InForce.of(Reading.THE_MODELS_OWN);
         for (Ast.FnParam p : f.params()) {
             Answered a = bind(bound, p.binder());
-            params.add(new Hir.FnParam(a.binder(), paramType(p.type()), p.typeFromPattern()));
+            params.add(new Hir.FnParam(a.binder(), paramType(p.type()), p.typeFromPattern()
+                    ? Hir.ParameterTypeFrom.A_PATTERN : Hir.ParameterTypeFrom.WRITTEN));
             bound = a.bound();
         }
         Hir.FnBody body = switch (f.body()) {
@@ -939,7 +951,7 @@ public final class Resolve {
         for (Ast.TypeTerm c : ret.cases()) {
             cases.add(typeTerm(c));
         }
-        return new Hir.RetType(cases, ret.pos());
+        return Hir.RetType.of(cases, ret.pos());
     }
 
     private Hir.TypeTerm typeTerm(Ast.TypeTerm t) {
@@ -977,8 +989,8 @@ public final class Resolve {
             switch (symbols.scope().resolve(denoted.written())) {
                 case Denotation.Denotes d ->
                         denotations.add(new TypeUse(denoted.written(), d.type()));
-                case Denotation.StandsForNothing ignored -> failed++;
-                case Denotation.NotInScope ignored -> { }
+                case Denotation.StandsForNothing _ -> failed++;
+                case Denotation.NotInScope _ -> { }
             }
         }
         return denoted;
@@ -1115,7 +1127,8 @@ public final class Resolve {
             }
             case Ast.Block b -> {
                 AnsweredAll ps = bindAll(bound, b.params());
-                yield new Hir.Block(ps.binders(), expr(b.body(), ps.bound()), b.rule(), b.pos(),
+                yield new Hir.Block(ps.binders(), expr(b.body(), ps.bound()), b.rule(), null,
+                        b.pos(),
                         b.region());
             }
             // an attempt's binder names the value only where there is one to name — the success
@@ -1735,8 +1748,8 @@ public final class Resolve {
             // In scope standing for nothing: a name an import line could not bring in takes the
             // error type rather than being reported as an unknown name at every use. The import
             // line is where that was reported, so nothing more is said here.
-            case Denotation.StandsForNothing ignored -> unanswered(n);
-            case Denotation.NotInScope ignored -> nothingDenotes(n);
+            case Denotation.StandsForNothing _ -> unanswered(n);
+            case Denotation.NotInScope _ -> nothingDenotes(n);
         });
     }
 
@@ -1754,8 +1767,8 @@ public final class Resolve {
     private Hir.Name caseName(Ast.Name n) {
         return answered(switch (symbols.scope().resolveCase(n.name())) {
             case Denotation.Denotes d -> denoting(n, d.type());
-            case Denotation.StandsForNothing ignored -> unanswered(n);
-            case Denotation.NotInScope ignored -> {
+            case Denotation.StandsForNothing _ -> unanswered(n);
+            case Denotation.NotInScope _ -> {
                 TypeSymbol option = TypeSymbol.optionCase(n.written());
                 yield option != null ? denoting(n, option) : nothingDenotes(n);
             }

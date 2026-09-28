@@ -8,7 +8,11 @@ import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.CheckContext;
 import souther.compiler.check.DataChecker;
+import souther.compiler.check.DeclarationAccess;
+import souther.compiler.check.EffectiveFieldTypes;
+import souther.compiler.check.FieldLayout;
 import souther.compiler.check.ReqSig;
+import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -16,6 +20,7 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.check.Comparison;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Ordering;
+import souther.compiler.core.BlockReaches;
 import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
 import souther.compiler.core.KernelSignature;
@@ -24,6 +29,7 @@ import souther.compiler.coverage.ComparisonEmissionSite;
 
 import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.jvm.GeneratedClass;
+import souther.compiler.jvm.LinkageProjection;
 import souther.compiler.types.Refinement;
 import souther.compiler.types.ValueName;
 import java.lang.classfile.ClassFile;
@@ -38,9 +44,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Consumer;
 
@@ -71,15 +77,15 @@ final class BodyGen {
         return ctx.cd(typeName);
     }
 
-    private Map<String, Type> fieldTypes(Hir.Data data) {
-        return ctx.fieldTypes(data);
+    private SequencedMap<String, Type> fieldTypes(Hir.Data data) {
+        return ctx.laidOutFields(data);
     }
 
     private ClassDesc jvmType(Type type) {
         return JvmTypes.jvmType(type, ctx);
     }
 
-    private ClassDesc[] fieldDescs(Map<String, Type> fields) {
+    private ClassDesc[] fieldDescs(SequencedMap<String, Type> fields) {
         return JvmTypes.fieldDescs(fields, ctx);
     }
 
@@ -104,8 +110,6 @@ final class BodyGen {
         private final Map<BindingId, Var> locals = new HashMap<>();
         private int nextSlot;
         private Set<ValueName.Behavior> reqNames = Set.of();
-        private Map<ValueName.Behavior, Type> reqSuccess = Map.of();
-        private Map<ValueName.Behavior, List<Type>> reqParams = Map.of();
         /** The fields the class this body is emitted into keeps its injected behaviors in. */
         private InjectionSlots held = InjectionSlots.none();
         /** The last line already bound in this method's {@code LineNumberTable}; skips consecutive
@@ -116,7 +120,7 @@ final class BodyGen {
          * parameter slots and jumps to {@code tcoEntry} rather than recursing, so a self-tail-recursive
          * helper runs in constant stack. Null for any other body (a behavior never self-recurses). */
         private String tcoName;
-        private List<Hir.FnParam> tcoParams;
+        private List<Core.Binder> tcoParams;
         private Label tcoEntry;
         /** Members of this body's declared output union that reach it through a bridge case; empty
          * for every other body. @see #injectsInto */
@@ -167,11 +171,8 @@ final class BodyGen {
         }
 
         /** Makes injected required behaviors callable inline from this body (spec §unmarked-output, §fn). */
-        void requireds(Set<ValueName.Behavior> names, Map<ValueName.Behavior, Type> success,
-                       Map<ValueName.Behavior, List<Type>> params, InjectionSlots held) {
+        void requireds(Set<ValueName.Behavior> names, InjectionSlots held) {
             this.reqNames = names;
-            this.reqSuccess = success;
-            this.reqParams = params;
             this.held = held;
         }
 
@@ -187,11 +188,13 @@ final class BodyGen {
                     && reached.denotes() instanceof ValueName.Behavior behavior ? behavior : null;
         }
 
-        /** A {@code ReqSig} view of the injected behaviors in scope, for re-typing a closure body. */
+        /** A {@code ReqSig} view of the injected behaviors in scope, for re-typing a closure body:
+         *  what each takes and answers, as its projection says. */
         private Map<ValueName.Behavior, ReqSig> reqSigs() {
             Map<ValueName.Behavior, ReqSig> sigs = new HashMap<>();
             for (ValueName.Behavior n : reqNames) {
-                sigs.put(n, new ReqSig(reqParams.get(n), reqSuccess.get(n)));
+                LinkageProjection.Behavior linked = ctx.behavior(n);
+                sigs.put(n, new ReqSig(linked.takes(), linked.answers()));
             }
             return sigs;
         }
@@ -202,6 +205,30 @@ final class BodyGen {
 
         void bind(BindingId binding, String name, int slot, Type type) {
             put(locals, binding, new Var(slot, type, name));
+        }
+
+        /**
+         * Turns the value on the stack, held as {@code held}, into how a value standing as {@code as}
+         * is held. A value held as a reference is laid out as every type it may stand as: a case is
+         * an instance of its sum's interface, and a collection, an optional and a tuple hold
+         * references whatever they are of. A primitive is not. Standing as a union it is a case of,
+         * it is held as its box, which is the class every reader that tells the cases apart tests it
+         * against ({@link CodegenContext#caseCarrierClass}).
+         */
+        private void standAs(Type held, Type as) {
+            if (isReference(as) && !isReference(held)) {
+                box(code, held);
+            }
+        }
+
+        /** Stores the value a {@code let} was just emitted as, at {@code stored} — what is on the
+         * stack — and binds its name to that slot at {@link Core.LetIn#bindType}, the type the
+         * checker read the body with. The two differ where the value is one case of the sum the
+         * binding is read at. */
+        private void storeLet(Core.LetIn let, Type stored) {
+            int slot = slot(stored);
+            store(code, slot, stored);
+            bind(let.binder(), slot, let.bindType());
         }
 
         private <K> void put(Map<K, Var> where, K key, Var var) {
@@ -225,7 +252,12 @@ final class BodyGen {
          * as the Core the checker made (issue #1080).
          */
         CheckContext context() {
-            return new CheckContext(symbols, ctx.published, ctx.kinds, ctx.inners, data, reqSigs());
+            // What each field holds is read off the world here, for the reason the context this
+            // takes its other answers from reads what a name wraps off it: this backend is handed
+            // no answer of the compilation's to read either from.
+            return new CheckContext(symbols, new DeclarationAccess(ctx.published, ctx.kinds,
+                    ctx.inners, EffectiveFieldTypes.asWritten(symbols),
+                    FieldLayout.asWritten(symbols)), data, reqSigs());
         }
 
         /**
@@ -269,9 +301,7 @@ final class BodyGen {
         private byte[] generateLambdaClass(ClassDesc cd, List<Core.Binder> params, Core body,
                                            List<Type> paramTypes,
                                            List<Core.Read> captures,
-                                           List<ValueName.Behavior> injectedNames,
-                                           Map<ValueName.Behavior, Type> reqSuccess,
-                                           Map<ValueName.Behavior, List<Type>> reqParams) {
+                                           List<ValueName.Behavior> injectedNames) {
             // The lambda is a class of its own, so it keeps the behaviors it calls in fields of its
             // own — at its own positions, which are not the enclosing class's.
             InjectionSlots carried = InjectionSlots.of(injectedNames, ctx);
@@ -329,13 +359,7 @@ final class BodyGen {
                     if (!injectedNames.isEmpty()) {
                         // the captured behaviors live in this closure's own fields; requiredCall reads
                         // `this.<name>`, so route them the same way the enclosing behavior does
-                        Map<ValueName.Behavior, Type> succ = new HashMap<>();
-                        Map<ValueName.Behavior, List<Type>> parm = new HashMap<>();
-                        for (ValueName.Behavior inj : injectedNames) {
-                            succ.put(inj, reqSuccess.get(inj));
-                            parm.put(inj, reqParams.get(inj));
-                        }
-                        g.requireds(new HashSet<>(injectedNames), succ, parm, carried);
+                        g.requireds(new HashSet<>(injectedNames), carried);
                     }
                     for (int i = 0; i < paramTypes.size(); i++) {
                         Type pt = paramTypes.get(i);
@@ -354,8 +378,7 @@ final class BodyGen {
                         store(code, s, c.type());
                         g.bind(c.binding(), c.name(), s, c.type());
                     }
-                    Type rt = g.genExpr(body);
-                    box(code, rt);
+                    box(code, g.emitValue(body, null));
                     code.areturn();
                 });
             });
@@ -371,57 +394,43 @@ final class BodyGen {
          * Because a desugared {@code guard} (spec §guard) is an {@code if} whose branches are tail,
          * this is reached for constructions on both sides of a guard — there is no second, unchecked
          * construction path.
+         *
+         * <p>{@code expected} is the declared return/output type of the body being emitted: it is
+         * threaded to a tail-position fold the same way {@link #genExpr} threads it in value
+         * position, so a fold over an empty-collection seed materialises its step at the accumulator
+         * type the checker pinned rather than a bottom. Null when no declared type is in scope.
          */
         void emitTail(Core e, ClassDesc cdB, Set<ValueName.Behavior> requiredNames,
-                      Map<ValueName.Behavior, Type> requiredSuccess) {
-            emitTail(e, cdB, requiredNames, requiredSuccess, null);
-        }
-
-        // {@code expected} is the declared return/output type of the body being emitted (issue #70): it
-        // is threaded to a tail-position fold the same way {@link #genExpr} threads it in value
-        // position, so a fold over an empty-collection seed materialises its step at the accumulator
-        // type the checker pinned rather than a bottom. Null when no declared type is in scope.
-        void emitTail(Core e, ClassDesc cdB, Set<ValueName.Behavior> requiredNames,
-                      Map<ValueName.Behavior, Type> requiredSuccess,
                       Type expected) {
             emitLine(e);
             switch (e) {
                 case Core.LetIn li -> {
-                    if (li.value() instanceof Core.Call call && behaviorOf(call) != null
+                    if (Core.withoutStanding(li.value()) instanceof Core.Call call
+                            && behaviorOf(call) != null
                             && requiredNames.contains(behaviorOf(call))) {
                         // call an injected required behavior; requiredCall handles both the unary
                         // Behavior contract and a multi-input base (issue #57), leaving the success
                         // value cast on the stack
-                        Type letType = call.type();
                         requiredCall(call);
-                        int vSlot = slot(letType);
-                        store(code, vSlot, letType);
-                        bind(li.binder(), vSlot, letType);
+                        standAs(call.type(), li.value().type());
+                        storeLet(li, li.value().type());
                     } else {
                         Type vt = li.value().type();
-                        if (vt instanceof Type.FnOf fn) {
-                            // a lambda chosen at runtime (e.g. by an `if`) — a first-class Fn
-                            // (spec §blocks), at the parameter types the checker inferred for it
-                            emitFunctionValue(li.value(), fn.params());
-                        } else {
-                            genExpr(li.value(), vt);
-                        }
-                        int slot = slot(vt);
-                        store(code, slot, vt);
-                        bind(li.binder(), slot, vt);
+                        emitValue(li.value(), vt);
+                        storeLet(li, vt);
                     }
                     emitLine(li);   // re-pin: a bound value may have moved the line off the call
-                    emitTail(li.body(), cdB, requiredNames, requiredSuccess, expected);
+                    emitTail(li.body(), cdB, requiredNames, expected);
                 }
                 case Core.If iff -> {
                     genExpr(iff.cond());
                     Label elseL = code.newLabel();
                     code.ifeq(elseL);
                     probe(iff, 0);
-                    emitTail(iff.then(), cdB, requiredNames, requiredSuccess, expected);
+                    emitTail(iff.then(), cdB, requiredNames, expected);
                     code.labelBinding(elseL);
                     probe(iff, 1);
-                    emitTail(iff.els(), cdB, requiredNames, requiredSuccess, expected);
+                    emitTail(iff.els(), cdB, requiredNames, expected);
                 }
                 // Both branches stay in tail position, so a self-recursive helper guarded by an
                 // attempt loops exactly as one guarded by a plain condition does. Falling through to
@@ -430,28 +439,30 @@ final class BodyGen {
                     Attempt a = emitAttempt(ic);
                     bind(ic.binder(), a.slot(), ic.construct().type());
                     probe(ic, 0);
-                    emitTail(ic.then(), cdB, requiredNames, requiredSuccess, expected);
+                    emitTail(ic.then(), cdB, requiredNames, expected);
                     code.labelBinding(a.elseLabel());
                     // Each departure is in tail position too, so it returns on its own and needs no
                     // jump past the ones emitted after it.
                     emitDepartures(ic, a,
-                            body -> emitTail(body, cdB, requiredNames, requiredSuccess, expected),
+                            body -> emitTail(body, cdB, requiredNames, expected),
                             null);
                 }
-                case Core.Match m -> emitTailMatch(m, cdB, requiredNames, requiredSuccess, expected);
+                case Core.Match m -> emitTailMatch(m, cdB, requiredNames, expected);
+                // What it holds is in tail position: the value returned is the value it holds.
+                case Core.Widen w ->
+                        emitTail(w.value(), cdB, requiredNames, expected);
                 case Core.Call call when tcoName != null && call.name().equals(tcoName)
                         && call.args().size() == tcoParams.size() -> emitSelfTailCall(call);
                 case Core.Construct nd when DataChecker.isInvariantBearing(nd.typeName(), symbols) -> {
-                    ClassDesc cdType = cd(nd.typeName());
-                    Map<String, Type> flds = fieldTypes((Hir.Data) symbols.declaredNode(nd.typeName()));
+                    SequencedMap<String, Type> flds = fieldTypes((Hir.Data) symbols.declaredNode(nd.typeName()));
                     emitFieldValues(flds, nd.values());
                     emitLine(nd);   // re-pin: a field init may have moved the line off the construction
-                    code.invokestatic(cdType, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(flds)));
+                    invoke(ctx.construction(nd.typeName()));
                     code.invokestatic(CD_ConstraintViolation, "orThrow", MTD_orThrow);
                     returnValue();
                 }
                 default -> {
-                    Type rt = genExpr(e, expected);
+                    Type rt = emitValue(e, expected);
                     box(code, rt);
                     returnValue();
                 }
@@ -471,7 +482,7 @@ final class BodyGen {
         /** Marks the entry of a self-tail-recursive helper. The parameters are already bound to their
          * slots; a later tail-position self-call jumps back here after reassigning them, so the helper
          * loops instead of recursing (see {@link #emitTail} and {@link #emitSelfTailCall}). */
-        void beginSelfRecursion(String name, List<Hir.FnParam> params) {
+        void beginSelfRecursion(String name, List<Core.Binder> params) {
             this.tcoName = name;
             this.tcoParams = params;
             this.tcoEntry = code.newLabel();
@@ -484,15 +495,11 @@ final class BodyGen {
          * read (e.g. {@code loop(acc + n, n - 1)} reads both {@code acc} and {@code n}). */
         private void emitSelfTailCall(Core.Call call) {
             List<Var> params = new ArrayList<>(tcoParams.size());
-            for (Hir.FnParam p : tcoParams) {
-                params.add(locals.get(p.binder().id()));
+            for (Core.Binder p : tcoParams) {
+                params.add(locals.get(p.binding()));
             }
             for (int i = 0; i < call.args().size(); i++) {
-                Type at = genExpr(call.args().get(i));
-                Type pt = params.get(i).type();
-                if (isReference(pt) && !isReference(at)) {
-                    box(code, at);
-                }
+                standAs(emitArgument(call, i), params.get(i).type());
             }
             for (int i = call.args().size() - 1; i >= 0; i--) {
                 store(code, params.get(i).slot(), params.get(i).type());
@@ -527,13 +534,7 @@ final class BodyGen {
             code.invokespecial(CD_ArrayList, "<init>", MTD_void);
             for (Core el : lit.elements()) {
                 code.dup();
-                if (el.type() instanceof Type.FnOf fn) {
-                    // a function held in a list is a value like any other, so it is materialised as
-                    // an Fn here rather than expanded into a call site it does not have
-                    emitFunctionValue(el, fn.params());
-                } else {
-                    box(code, genExpr(el));
-                }
+                box(code, emitValue(el, null));
                 code.invokevirtual(CD_ArrayList, "add", MTD_ArrayList_add);
                 code.pop();
             }
@@ -550,8 +551,8 @@ final class BodyGen {
                 // the arity every fold-carried tuple has: built outright, with no array between
                 code.new_(CD_TuplePair);
                 code.dup();
-                box(code, genExpr(t.elements().get(0)));
-                box(code, genExpr(t.elements().get(1)));
+                box(code, emitValue(t.elements().get(0), null));
+                box(code, emitValue(t.elements().get(1), null));
                 code.invokespecial(CD_TuplePair, "<init>", MTD_TuplePair_init);
                 return;
             }
@@ -560,7 +561,7 @@ final class BodyGen {
             for (int i = 0; i < t.elements().size(); i++) {
                 code.dup();
                 pushInt(code, i);
-                box(code, genExpr(t.elements().get(i)));
+                box(code, emitValue(t.elements().get(i), null));
                 code.aastore();
             }
             code.invokestatic(CD_Tuple, "ofOwned", MTD_Tuple_ofOwned, true);
@@ -727,16 +728,20 @@ final class BodyGen {
                 // helper names that module's unit, which this module need not declare at all — and,
                 // if it declares one spelled the same, is not the same unit.
                 case Core.UnitValue u -> loadSharedInstance(code, cd(u.data()));
-                // Negating a Decimal goes to the runtime that owns Decimal arithmetic, as the
-                // binary operators do (ADR-0112). This one is total, so calling BigDecimal here
-                // would be sound — what it would cost is the next reader having to work out which
-                // of these are (BodyGen.java:1725).
+                // Negating a Decimal or a Rational goes to the runtime that owns its arithmetic, as
+                // the binary operators do (ADR-0112); both are total there, since neither changes
+                // scale nor exponent. Int is not: the smallest Int has no positive counterpart, so
+                // its negation goes through the same overflow-checked runtime as `+ - *` rather than
+                // the host's own (unchecked) `lneg` (spec §stdlib-int).
                 case Core.Neg n -> {
-                    if (genExpr(n.operand()) == Type.DECIMAL) {
+                    Type negated = genExpr(n.operand());
+                    if (negated == Type.DECIMAL) {
                         code.invokestatic(CD_DecimalMath, "negate",
                                 MethodTypeDesc.of(CD_BigDecimal, CD_BigDecimal));
+                    } else if (negated == Type.RATIONAL) {
+                        code.invokestatic(CD_RationalMath, "negate", MTD_ratNegate);
                     } else {
-                        code.lneg();               // Int is carried as a long
+                        code.invokestatic(CD_IntMath, "negateExact", MTD_intNegate);
                     }
                 }
                 case Core.FieldAccess fa -> {
@@ -744,30 +749,12 @@ final class BodyGen {
                     emitFieldRead(code, ((Type.Ref) targetType).name(), fa.field(), fa.type());
                 }
                 case Core.If iff -> {
-                    genExpr(iff.cond());
-                    Label elseL = code.newLabel();
-                    Label end = code.newLabel();
                     Type want = shapeOf(iff, expected);
-                    code.ifeq(elseL);
-                    probe(iff, 0);
-                    genExpr(iff.then(), want);
-                    code.goto_(end);
-                    code.labelBinding(elseL);
-                    probe(iff, 1);
-                    genExpr(iff.els(), want);
-                    code.labelBinding(end);
+                    fork(iff, arm -> genExpr(arm, want));
                 }
                 case Core.IfConstructed ic -> {
-                    Attempt a = emitAttempt(ic);
-                    Label end = code.newLabel();
-                    bind(ic.binder(), a.slot(), ic.construct().type());
-                    probe(ic, 0);
-                    genExpr(ic.then(), shapeOf(ic, expected));
-                    code.goto_(end);
-
-                    code.labelBinding(a.elseLabel());
-                    emitDepartures(ic, a, body -> genExpr(body, shapeOf(ic, expected)), end);
-                    code.labelBinding(end);
+                    Type want = shapeOf(ic, expected);
+                    attempt(ic, arm -> genExpr(arm, want));
                 }
                 case Core.OptionSome s -> {
                     // `Option.some` takes the value as an Object, so a primitive element boxes here
@@ -779,7 +766,16 @@ final class BodyGen {
                 }
                 case Core.OptionNone _ ->
                         code.invokestatic(CD_Option, "none", MethodTypeDesc.of(CD_Option), true);
+                // What the position asks for is handed on and nothing more. Standing as a type is
+                // not a position stating one: an `unreachable` a comparison or an operator is
+                // handed still has nothing that says what it leaves, whatever the checker let it
+                // stand as.
+                case Core.Widen w -> standAs(genExpr(w.value(), expected), w.type());
                 case Core.Unreachable u -> unreachable(u, expected);
+                // A build in the tree an analysis reads. What is emitted calls the value's method.
+                case Core.MaterialisedValue m -> throw new IllegalStateException(
+                        "the tree that is emitted holds no build of a value, and this holds one of "
+                                + m.value());
                 case Core.ListLit lit -> listLit(lit);
                 case Core.Tuple t -> tuple(t);
                 case Core.TupleGet tg -> tupleGet(tg);
@@ -789,26 +785,22 @@ final class BodyGen {
                     }
                 }
                 case Core.Construct nd -> construct(nd);
-                case Core.Match m -> match(m, expected);
+                case Core.Match m -> {
+                    Type want = shapeOf(m, expected);
+                    match(m, arm -> genExpr(arm, want));
+                }
                 case Core.Call c -> call(c);
                 case Core.Apply a -> applyFn(a, (Type.FnOf) a.fn().type());
                 case Core.LetIn li -> {
                     // a `let` outside tail position: bind, then value the body
                     Type vt = li.value().type();
-                    if (vt instanceof Type.FnOf fn) {
-                        // a lambda chosen at runtime (e.g. by an `if`): a first-class Fn (spec §blocks),
-                        // at the parameter types the checker inferred from its applications
-                        emitFunctionValue(li.value(), fn.params());
-                    } else {
-                        genExpr(li.value(), vt);
-                    }
-                    int s = slot(vt);
-                    store(code, s, vt);
-                    bind(li.binder(), s, vt);
+                    emitValue(li.value(), vt);
+                    storeLet(li, vt);
                     emitLine(li);   // re-pin: a bound value may have moved the line off the call
                     genExpr(li.body(), expected);
                 }
-                // a block has no value of its own; it is inlined by the call it is passed to
+                // A block is expanded where it is applied, and a position that keeps one asks for it
+                // through emitValue; one reaching here was handed to a position that does neither.
                 case Core.Block _ -> throw new IllegalStateException("a block is not a value");
             }
             // `unreachable` is typed Never, and what is on the stack is the shape the position asked
@@ -819,12 +811,8 @@ final class BodyGen {
             return e.type();
         }
 
-        /** The type the branches of {@code e} leave on the stack: what the position asked for, or —
-         * where it asked for nothing — the one the checker joined the branches at. A branch that
-         * answers {@code unreachable} has no type of its own to merge with the others, so it takes
-         * this one. */
         private Type shapeOf(Core e, Type expected) {
-            return expected != null ? expected : e.type();
+            return Core.shapeOf(e, expected);
         }
 
         /**
@@ -837,7 +825,7 @@ final class BodyGen {
          * rather than emitted.
          */
         private void unreachable(Core.Unreachable u, Type expected) {
-            Type shape = expected != null ? expected : u.type();
+            Type shape = u.shapeAt(expected);
             if (shape instanceof Type.Never) {
                 throw CompileException.of(Diagnostic
                                 .at(u.pos(), "unreachable".length())
@@ -845,7 +833,7 @@ final class BodyGen {
             }
             code.loadConstant(abortMessage(u));
             code.invokestatic(CD_UnreachableReached, "reached", MTD_reached);
-            stackCast(shape);
+            castFromObject(code, shape);
         }
 
         /**
@@ -866,12 +854,45 @@ final class BodyGen {
             return sits == null ? u.reason() : u.reason() + " (" + sits + ")";
         }
 
-        private void match(Core.Match m, Type expected) {
+        /** An {@code if} outside tail position, each branch emitted by {@code arm}, the two joining
+         *  after the second. Which branch a row took is the plan's to be told about whatever the
+         *  branches answer with. */
+        private void fork(Core.If iff, Consumer<Core> arm) {
+            genExpr(iff.cond());
+            Label elseL = code.newLabel();
+            Label end = code.newLabel();
+            code.ifeq(elseL);
+            probe(iff, 0);
+            arm.accept(iff.then());
+            code.goto_(end);
+            code.labelBinding(elseL);
+            probe(iff, 1);
+            arm.accept(iff.els());
+            code.labelBinding(end);
+        }
+
+        /** An attempt outside tail position, what follows it and each departure emitted by
+         *  {@code arm}, all joining after the last. */
+        private void attempt(Core.IfConstructed ic, Consumer<Core> arm) {
+            Attempt a = emitAttempt(ic);
+            Label end = code.newLabel();
+            bind(ic.binder(), a.slot(), ic.construct().type());
+            probe(ic, 0);
+            arm.accept(ic.then());
+            code.goto_(end);
+
+            code.labelBinding(a.elseLabel());
+            emitDepartures(ic, a, arm, end);
+            code.labelBinding(end);
+        }
+
+        /** A {@code match} outside tail position, each arm's body emitted by {@code arm}, the arms
+         *  joining after the last. */
+        private void match(Core.Match m, Consumer<Core> arm) {
             Type st = genExpr(m.scrutinee());
             int sSlot = slot(st);
             store(code, sSlot, st);
             Label end = code.newLabel();
-            Type want = shapeOf(m, expected);
             for (int i = 0; i < m.cases().size(); i++) {
                 Core.Case c = m.cases().get(i);
                 Label nextCase = code.newLabel();
@@ -880,7 +901,7 @@ final class BodyGen {
 
                 emitCaseGuard(c, sSlot, st, nextCase);
                 probe(m, i);
-                genExpr(c.body(), want);
+                arm.accept(c.body());
                 if (c.binder() != null) {
                 }
                 code.goto_(end);
@@ -895,8 +916,7 @@ final class BodyGen {
          * List.get}) loops rather than recursing. Each arm returns (or tail-loops), so no join label is
          * needed — the next arm's dispatch follows its predecessor's {@code nextCase}. */
         private void emitTailMatch(Core.Match m, ClassDesc cdB,
-                                   Set<ValueName.Behavior> requiredNames,
-                                   Map<ValueName.Behavior, Type> requiredSuccess, Type expected) {
+                                   Set<ValueName.Behavior> requiredNames, Type expected) {
             Type st = genExpr(m.scrutinee());
             int sSlot = slot(st);
             store(code, sSlot, st);
@@ -908,7 +928,7 @@ final class BodyGen {
 
                 emitCaseGuard(c, sSlot, st, nextCase);
                 probe(m, i);
-                emitTail(c.body(), cdB, requiredNames, requiredSuccess, expected);
+                emitTail(c.body(), cdB, requiredNames, expected);
                 if (c.binder() != null) {
                 }
                 code.labelBinding(nextCase);
@@ -932,37 +952,33 @@ final class BodyGen {
             bindArm(c, sSlot, st);
         }
 
-        /** Reads the arm's value out of the carrier and binds it. A wrapping carrier is opened
-         *  whether or not the arm names what it holds, as it always was: opening it is how the value
-         *  under it is reached at all. */
+        /** Reads the arm's value out of the carrier and binds it, where the arm names it. An arm that
+         *  binds nothing reads nothing: opening the carrier and casting what is under it would name
+         *  the class of a value nobody asked for. */
         private void bindArm(Core.Case c, int sSlot, Type st) {
-            switch (c.pattern().binding()) {
-                case Refinement.OptionPresent wrapped -> {
-                    Type element = wrapped.bound();
-                    CaseGen.pushBound(code, wrapped, sSlot);
-                    int bslot = slot(element);
-                    unbox(code, element, bslot);
-                    if (c.binder() != null) {
-                        bind(c.binder(), bslot, element);
-                    }
+            // What is cast is asked of the arm: the same question is asked of it wherever it matters
+            // which classes an emitted `match` names.
+            Type cast = c.castOnBinding(st);
+            switch (c.binding()) {
+                case Core.ArmBinding.Unbound _ -> { }
+                case Core.ArmBinding.Payload payload -> {
+                    CaseGen.pushBound(code, payload.carrier(), sSlot);
+                    int bslot = slot(cast);
+                    unbox(code, cast, bslot);
+                    bind(payload.binder(), bslot, cast);
                 }
-                case Refinement.Direct itself -> {
-                    Type bound = itself.bound();
-                    if (c.binder() == null || bound == null) {
-                        return;
-                    }
-                    if (bound.equals(st)) {
+                case Core.ArmBinding.Selected selected -> {
+                    if (cast == null) {
                         // nothing narrowed it: the value is the subject, where it already is
-                        bind(c.binder(), sSlot, st);
+                        bind(selected.binder(), sSlot, st);
                         return;
                     }
                     // a data case binds the instance; a primitive case (e.g. Int) unboxes the value
-                    CaseGen.pushBound(code, itself, sSlot);
-                    int bslot = slot(bound);
-                    unbox(code, bound, bslot);
-                    bind(c.binder(), bslot, bound);
+                    code.aload(sSlot);
+                    int bslot = slot(cast);
+                    unbox(code, cast, bslot);
+                    bind(selected.binder(), bslot, cast);
                 }
-                case Refinement.OptionAbsent _ -> { }
             }
         }
 
@@ -977,7 +993,7 @@ final class BodyGen {
 
         private void construct(Core.Construct nd) {
             Hir.Data owner = (Hir.Data) symbols.declaredNode(nd.typeName());
-            Map<String, Type> flds = fieldTypes(owner);
+            SequencedMap<String, Type> flds = fieldTypes(owner);
             ClassDesc cdType = cd(nd.typeName());
             TypeSymbol.AtModule built = nd.typeName();
             // A type of another module is built through its checked entry: `new` reaches a constructor
@@ -989,7 +1005,7 @@ final class BodyGen {
                 // ConstraintViolation. orThrow returns Object, so narrow it back to the value type.
                 emitFieldValues(flds, nd.values());
                 emitLine(nd);   // re-pin: a field init may have moved the line off the construction
-                finishInvariantConstruct(cdType, flds);
+                finishInvariantConstruct(built, cdType);
                 return;
             }
             MethodTypeDesc ctor = MethodTypeDesc.of(ConstantDescs.CD_void, fieldDescs(flds));
@@ -1049,11 +1065,11 @@ final class BodyGen {
          */
         private Attempt emitAttempt(Core.IfConstructed ic) {
             Core.Construct nd = ic.construct();
-            Map<String, Type> flds = fieldTypes((Hir.Data) symbols.declaredNode(nd.typeName()));
+            SequencedMap<String, Type> flds = fieldTypes((Hir.Data) symbols.declaredNode(nd.typeName()));
             ClassDesc cdType = cd(nd.typeName());
             emitFieldValues(flds, nd.values());
             emitLine(ic);   // re-pin: a field init may have moved the line off the construction
-            code.invokestatic(cdType, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(flds)));
+            invoke(ctx.construction(nd.typeName()));
 
             int rSlot = slot(Type.STRING);   // a reference slot, as the codecs take for the same Result
             code.astore(rSlot);
@@ -1135,17 +1151,13 @@ final class BodyGen {
             }
         }
 
-        /** Emits the checked-construction tail — {@code __construct(fields) -> Result}, {@code orThrow}
-         * (yield, or abort on invariant violation), and a narrowing cast — with the field values
-         * already on the stack. */
-        private void finishInvariantConstruct(ClassDesc cdType, Map<String, Type> flds) {
-            code.invokestatic(cdType, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(flds)));
+        /** Emits the checked-construction tail — the entry the type offers ({@code __construct(fields)
+         * -> Result}), {@code orThrow} (yield, or abort on invariant violation), and a narrowing cast
+         * — with the field values already on the stack. */
+        private void finishInvariantConstruct(TypeSymbol.AtModule built, ClassDesc cdType) {
+            invoke(ctx.construction(built));
             code.invokestatic(CD_ConstraintViolation, "orThrow", MTD_orThrow);
             code.checkcast(cdType);
-        }
-
-        Type varType(Core.Read read) {
-            return locals.get(read.binding()).type();
         }
 
         // --- the surface Intrinsics drives to emit a shipped primitive (ADR-0028) ---
@@ -1174,34 +1186,32 @@ final class BodyGen {
          * Emits a call to a kernel.
          *
          * <p>What is written here is what a table row cannot say, and it is of two kinds. An
-         * enumeration's order lives on its sum, so the ordered family is handed a comparator rather
-         * than reading a {@code Comparable} off the value (issue #161) — the arm puts the comparator
-         * on the stack and the row still says what is called with it. A partial Int division answers
+         * enumeration's order lives on its sum, and text's is not what a {@code java.lang.String}
+         * compares by, so for those the ordered family is handed a comparator rather than reading a
+         * {@code Comparable} off the value — the arm puts the comparator on the stack and the row
+         * still says what is called with it. A partial Int division answers
          * a case rather than a number when its divisor is zero, so it emits a branch, which the row
          * shape of one call with one result has nowhere to put; those two are the whole of what this
          * emits itself, and {@code WRITTEN_OUT} is where they are named. {@code Decimal.divide} was
          * a third: it is an ordinary kernel now, and its zero divisor is answered by the runtime
          * that owns the operation (ADR-0112).
          *
-         * <p>An ordered arm falls through to the table where its own condition does not hold — an
-         * element the JVM already compares, a {@code sortBy} whose key answers something with no sum
-         * to take an ordering off. What no arm and no row answers is this backend being behind the
-         * library, which {@link Intrinsics#emit} says.
+         * <p>An ordered arm falls through to the table where its own condition does not hold — the
+         * checker settled nothing to take a comparator off (an element the JVM already compares).
+         * What no arm and no row answers is this backend being behind the library, which {@link
+         * Intrinsics#emit} says.
          */
         private void kernel(Kernel kernel, Core.Call call) {
-            if (ORDERED_BY_COMPARATOR.contains(kernel)) {
-                TypeSymbol ordering = orderingFor(kernel, call);
-                // No sum to take an ordering off: an element the JVM already compares, or a `sortBy`
-                // whose key answers one. Those go to the table row, which is the same runtime method
-                // without the comparator.
-                if (ordering != null) {
-                    code.invokestatic(cd(ordering), ORDERING_METHOD, MTD_ordering, true);
+            if (call.settlement() instanceof Core.CallSettlement.AtKernel(
+                    _, Core.KernelFact.OrderingSubject ordered)) {
+                boolean pushed = comparatorFor(ordered);
+                if (pushed) {
                     Intrinsics.emitWithComparator(this, kernel, call);
                     return;
                 }
             }
             switch (kernel) {
-                case INT_DIVIDE -> {
+                case INT_TRUNCATING_DIVIDE -> {
                     intDivide(call, true);
                     return;
                 }
@@ -1209,37 +1219,42 @@ final class BodyGen {
                     intDivide(call, false);
                     return;
                 }
+                case STRING_MATCHES -> {
+                    matches(call);
+                    return;
+                }
                 default -> { }
             }
             Intrinsics.emit(this, kernel, call);
         }
 
-        /** The sum an ordered kernel takes its comparator off, or null where there is none.
-         *
-         * <p>{@code sortBy} orders by what its key answers, not by what the list holds, so its
-         * comparator is read off the key's result type; the rest order the elements themselves. */
-        private TypeSymbol orderingFor(Kernel kernel, Core.Call call) {
-            if (kernel == Kernel.LIST_SORT_BY) {
-                return call.args().get(0).type() instanceof Type.FnOf key
-                        ? sumOrdering(key.result()) : null;
-            }
-            return elementOrdering(call.args().get(0));
-        }
-
-        /** The kernels whose runtime method takes a comparator ahead of what the declaration names,
-         *  where the element has a sum to take an ordering off. Read by the arm above rather than
-         *  written out in it, so that the kernels routed there are the kernels this names — what
-         *  holds the derived boundary form of one is a test, and a test can only reach the ones it
-         *  can be told about. */
-        static final Set<Kernel> ORDERED_BY_COMPARATOR = Set.of(
-                Kernel.LIST_SORT, Kernel.LIST_MAX, Kernel.LIST_MIN, Kernel.LIST_SORT_BY);
-
         /** The kernels this emits itself, which are the kernels {@link Intrinsics}' table has no row
          *  for. Named rather than left to be read off the arms above, so the two sets can be held
          *  apart: a kernel emitted here and held there too would be one operation with two answers,
          *  and the one that ran would be whichever the arm above happened to reach first. */
-        static final Set<Kernel> WRITTEN_OUT =
-                Set.of(Kernel.INT_DIVIDE, Kernel.INT_TRUNCATING_REMAINDER);
+        static final Set<Kernel> WRITTEN_OUT = Set.of(Kernel.INT_TRUNCATING_DIVIDE,
+                Kernel.INT_TRUNCATING_REMAINDER, Kernel.STRING_MATCHES);
+
+        /**
+         * {@code String.matches}, run by the JVM's matcher over what the checker read the pattern
+         * as.
+         *
+         * <p>The pattern argument is not evaluated. It is text the checker folded at compile time,
+         * and what the call carries is what that text means ({@link JavaPatterns}), so the pattern
+         * handed to the runtime is written from the meaning and the author's text reaches no engine.
+         */
+        private void matches(Core.Call call) {
+            // The call cannot be built without this settlement, so a different one is the
+            // checker's contract broken and not something this backend lacks.
+            if (!(call.settlement() instanceof Core.CallSettlement.AtKernel(
+                    _, Core.KernelFact.StringMatches settled))) {
+                throw new IllegalStateException(
+                        "a String.matches call carries the pattern the checker read: " + call);
+            }
+            genExpr(call.args().get(1));
+            code.loadConstant(JavaPatterns.of(settled.meaning()));
+            code.invokestatic(CD_Strings, "matches", MTD_strings_matches);
+        }
 
         private void call(Core.Call call) {
             // Which kernel a call reaches is on the call, so what is emitted for one is asked of
@@ -1269,28 +1284,40 @@ final class BodyGen {
             // emitter happens to hold, the answer was whichever table the rendered name hit first —
             // and a helper the module holds under a name this call renders differently was no
             // helper at all.
-            if (!(call.fn() instanceof Core.Reached.OfDeclaration reached)) {
-                throw new IllegalStateException("unknown function `" + call.name() + "`");
-            }
-            switch (reached.reaches()) {
+            Core.Reaches reaches = switch (call.fn()) {
+                case Core.Reached.OfDeclaration reached -> reached.reaches();
+                case Core.Reached.OfValue value -> value.reaches();
+                case Core.Reached.OfPublishedValue published -> published.reaches();
+                default -> throw new IllegalStateException("unknown function `" + call.name() + "`");
+            };
+            Core.Reached reached = (Core.Reached) call.fn();
+            switch (reaches) {
+                case Core.Reaches.APublishedValue(ValueName.Helper value) -> {
+                    // The value runs in the module that declares it. What is called is that module's
+                    // entry, which is public and takes nothing, so no type the value is built from
+                    // is named here; what its answer is taken as is what the entry offers.
+                    LinkageProjection.Value entered = ctx.publishedValue(value);
+                    code.invokestatic(entered.entry().ownerClass(), entered.entry().method(),
+                            entered.entry().methodType());
+                    castFromObject(code, entered.answers());
+                }
                 case Core.Reaches.AHelper _ -> {
                     // The one loop the language has is emitted where it stands, not called.
                     if (!ctx.symbols.theWalk().equals(reached.denotes()) || !folded(call)) {
                         recursiveHelperCall(call);
                     }
                 }
+                // A value runs as a method of this module's `$Fns`, beside its recursions, and is
+                // called the way one of them is.
+                case Core.Reaches.AValue _ -> recursiveHelperCall(call);
                 // Which of the two it is, is where the value of the behavior stands in this frame:
                 // one supplied to the class being emitted is read off it, one implemented elsewhere
                 // is called. Neither is a question about what the call reaches.
                 case Core.Reaches.ABehavior(ValueName.Behavior behavior) -> {
                     if (reqNames.contains(behavior)) {
                         requiredCall(call);
-                    } else if (ctx.calleeSig(behavior) != null) {
-                        behaviorCall(call);
                     } else {
-                        throw new IllegalStateException("`" + call.name() + "` reaches the behavior "
-                                + behavior + ", which is neither supplied to this class nor"
-                                + " implemented by a module this one was told about");
+                        behaviorCall(call);
                     }
                 }
             }
@@ -1319,19 +1346,36 @@ final class BodyGen {
             // The checker resolved this call's type variables when it typed it — the accumulator a
             // fold's step runs at, the result the caller casts to — and left the decision on the
             // nodes, so nothing is resolved a second time here (issue #81).
-            for (Core arg : call.args()) {
-                if (arg.type() instanceof Type.FnOf fn) {
-                    if (stepNeverRuns(fn)) {
-                        code.getstatic(CD_Fn, "NEVER", CD_Fn);
-                    } else {
-                        emitFunctionValue(arg, fn.params());
-                    }
-                } else {
-                    box(code, genExpr(arg));
-                }
+            for (int i = 0; i < call.args().size(); i++) {
+                box(code, emitArgument(call, i));
             }
             invokeRecursiveHelper(call);
             castFromObject(code, call.type());
+        }
+
+        /**
+         * Emits what {@code call} hands over at {@code index}, and answers what is on the stack.
+         *
+         * <p>A function is handed over as {@link Core.Call#functionArgument} says: {@code Fn.NEVER}
+         * where it is never applied, and a value of its own otherwise. Asked here for every call a
+         * helper is entered by, whether it runs as a method call or, in tail position, as the jump
+         * back to the helper's own entry, so which of the two emits a call does not change what it
+         * hands over.
+         */
+        private Type emitArgument(Core.Call call, int index) {
+            Core arg = call.args().get(index);
+            if (!(arg.type() instanceof Type.FnOf)) {
+                return genExpr(arg);
+            }
+            switch (call.functionArgument(index, ctx.symbols.theWalk())) {
+                case NEVER_APPLIED -> code.getstatic(CD_Fn, "NEVER", CD_Fn);
+                case HANDED_OVER -> emitValue(arg, null);
+                // Run where it stands, the call is not emitted as a call at all.
+                case RUNS_WHERE_IT_STANDS -> throw new IllegalStateException(
+                        "the step of `" + call.name() + "` runs where it stands and is not"
+                                + " handed over");
+            }
+            return arg.type();
         }
 
         /**
@@ -1344,7 +1388,7 @@ final class BodyGen {
             if (walked(call, CD_Lists, MTD_Lists_builder, MTD_Lists_sealed)) {
                 return;
             }
-            emitStep(call.args().get(0));
+            emitStep(call);
             genExpr(call.args().get(1));      // the list walked
             genExpr(call.args().get(2));      // the index walked from (a long)
             code.invokestatic(CD_Lists, "build", MTD_Lists_build);
@@ -1358,8 +1402,9 @@ final class BodyGen {
         private void growList(Core.Call call) {
             genExpr(call.args().get(0));
             Core added = call.args().get(1);
-            if (added instanceof Core.ListLit lit && lit.elements().size() == 1) {
-                box(code, genExpr(lit.elements().get(0)));
+            if (Core.withoutStanding(added) instanceof Core.ListLit lit
+                    && lit.elements().size() == 1) {
+                box(code, emitValue(lit.elements().get(0), null));
                 code.invokestatic(CD_Lists, "grow", MTD_Lists_grow);
             } else {
                 genExpr(added);
@@ -1373,7 +1418,7 @@ final class BodyGen {
             if (walked(call, CD_Maps, MTD_Maps_builder, MTD_Maps_sealed)) {
                 return;
             }
-            emitStep(call.args().get(0));
+            emitStep(call);
             genExpr(call.args().get(1));      // the list walked
             genExpr(call.args().get(2));      // the index walked from (a long)
             code.invokestatic(CD_Maps, "build", MTD_Maps_build);
@@ -1395,12 +1440,12 @@ final class BodyGen {
          * {@code long} in its slot, and each walk is straight-line code the JIT sees on its own.
          */
         private boolean folded(Core.Call call) {
-            if (!(call.args().get(3) instanceof Core.Int from) || from.value() != 0) {
+            if (call.stepRunWhereItStands(ctx.symbols.theWalk()) == null) {
                 return false;
             }
             Core seed = call.args().get(1);
             return walked(call.args().get(0), call.args().get(2), () -> {
-                Type produced = genExpr(seed);
+                Type produced = emitValue(seed, null);
                 asAccumulator(produced, accumulatorOf(call.args().get(0)));
             }, () -> { });
         }
@@ -1430,12 +1475,12 @@ final class BodyGen {
         }
 
         private boolean walked(Core stepValue, Core walked, Runnable seed, Runnable answer) {
-            if (!(stepValue instanceof Core.Block step)
-                    || !(step.type() instanceof Type.FnOf fn) || stepNeverRuns(fn)) {
+            Core.Block step = Core.runsWhereItStands(stepValue);
+            if (step == null) {
                 return false;
             }
-            Type accType = fn.params().get(0);
-            Type elementType = fn.params().get(1);
+            Type accType = step.paramTypes().get(0);
+            Type elementType = step.paramTypes().get(1);
 
             int iterator = slot(Type.STRING);   // a reference slot; the type is not read back
             genExpr(walked);
@@ -1464,7 +1509,7 @@ final class BodyGen {
             code.aload(iterator);
             code.invokeinterface(CD_Iterator, "next", MTD_next);
             unbox(code, elementType, element);
-            Type stepped = genExpr(step.body());   // the accumulator the step answers with
+            Type stepped = emitValue(step.body(), null);   // the accumulator the step answers with
             asAccumulator(stepped, accType);
             store(code, acc, accType);
             countOneStep();
@@ -1482,35 +1527,14 @@ final class BodyGen {
         private void putIntoMap(Core.Call call) {
             genExpr(call.args().get(0));
             box(code, genExpr(call.args().get(1)));
-            box(code, genExpr(call.args().get(2)));
+            box(code, emitValue(call.args().get(2), null));
             code.invokestatic(CD_Maps, "put", MTD_Maps_put);
         }
 
         /** The step of a build, as the fold it was rewritten from would have materialised it — an
          *  empty list still hands over {@code Fn.NEVER}. */
-        private void emitStep(Core step) {
-            if (step.type() instanceof Type.FnOf fn && !stepNeverRuns(fn)) {
-                emitFunctionValue(step, fn.params());
-            } else {
-                code.getstatic(CD_Fn, "NEVER", CD_Fn);
-            }
-        }
-
-        /**
-         * Whether a step closure would never be applied: one of its parameters is the bare bottom, so
-         * it is the element of an empty-literal list and there are no elements — {@code foldFrom} over
-         * {@code []} yields the seed. Such a step is passed as {@link souther.runtime.Fn#NEVER} rather
-         * than materialised, since materialising it would unbox the bottom element (as {@code acc + x}
-         * does with {@code x}) and crash. An empty *seed* (a {@code List<Nothing>} accumulator) is a
-         * reference and still materialises.
-         */
-        private static boolean stepNeverRuns(Type.FnOf fn) {
-            for (Type p : fn.params()) {
-                if (p instanceof Type.Nothing) {
-                    return true;
-                }
-            }
-            return false;
+        private void emitStep(Core.Call build) {
+            emitArgument(build, 0);
         }
 
         private void invokeRecursiveHelper(Core.Call call) {
@@ -1521,15 +1545,13 @@ final class BodyGen {
         }
 
         /**
-         * {@code divide}/{@code remainder} on Int: a zero divisor takes the DivisionByZero case,
-         * otherwise the quotient/remainder is boxed (spec §stdlib-int).
+         * {@code truncatingDivide}/{@code truncatingRemainder} on Int: a zero divisor takes the
+         * DivisionByZero case, otherwise the quotient/remainder is boxed (spec §stdlib-int).
          *
-         * <p>The quotient is the operator's own. {@code Int.divide} answers a case where {@code /}
-         * aborts on a zero divisor and answers the same number everywhere else, which is what the
-         * check reads it as — so the one pair no {@code Int} holds a quotient of has to abort here
-         * as it does there. A raw {@code ldiv} stood here and wrapped {@code Long.MIN_VALUE / -1}
-         * back to {@code Long.MIN_VALUE}, which is the overflow §stdlib-int says aborts, answered as
-         * a quotient.
+         * <p>The quotient is truncated toward zero, which is the policy that operation's name states.
+         * The one pair no {@code Int} holds a quotient of aborts: a raw {@code ldiv} stood here and
+         * wrapped {@code Long.MIN_VALUE / -1} back to {@code Long.MIN_VALUE}, which is the overflow
+         * §stdlib-int says aborts, answered as a quotient.
          *
          * <p>The remainder is a raw {@code lrem}: it is exact for every pair, {@code MIN_VALUE}
          * against {@code -1} included, so there is no overflow for it to abort on.
@@ -1574,68 +1596,67 @@ final class BodyGen {
          */
         private void behaviorCall(Core.Call call) {
             ValueName.Behavior callee = behaviorOf(call);
-            ReqSig sig = ctx.calleeSig(callee);
-            ClassDesc impl = ctx.cdBehaviorImpl(callee);
-            code.new_(impl);
-            code.dup();
-            code.invokespecial(impl, "<init>", MTD_void);
-            if (sig.params().size() == 1) {
-                Type at = genExpr(call.args().get(0));
-                box(code, at);
-                code.invokeinterface(CD_Behavior, "apply", MTD_apply);
-                project(callee, sig.success());
-                stackCast(sig.success());
-                return;
+            LinkageProjection.Behavior linked = ctx.behavior(callee);
+            LinkageProjection.Construction built = linked.construction().orElseThrow(() ->
+                    new IllegalStateException("`" + call.name() + "` reaches the behavior "
+                            + callee + ", which is neither supplied to this class nor has an"
+                            + " implementation to build"));
+            if (!built.dependencies().isEmpty()) {
+                throw new IllegalStateException("`" + callee + "` is called by name and its"
+                        + " implementation is handed " + built.dependencies());
             }
+            code.new_(built.implementationClass());
+            code.dup();
+            code.invokespecial(built.implementationClass(), "<init>", built.constructorType());
             for (Core arg : call.args()) {
                 Type at = genExpr(arg);
                 box(code, at);
             }
-            code.invokeinterface(ctx.cdBehavior(callee), "apply",
-                    ctx.typedApplyDesc(callee, sig.params(), sig.success()));
-            project(callee, sig.success());
-            stackCast(sig.success());
+            invoke(linked.apply());
+            project(linked);
+            castFromObject(code, linked.answers());
+        }
+
+        /** Emits the instruction {@code invocation} describes. */
+        private void invoke(LinkageProjection.Invocation invocation) {
+            CodegenContext.invoke(code, invocation);
         }
 
         /** Emits an inline call to an injected required behavior, leaving its success value on
          * the stack cast to the success type (spec §unmarked-output, §fn). */
         private void requiredCall(Core.Call call) {
             ValueName.Behavior callee = behaviorOf(call);
-            Type success = reqSuccess.get(callee);
+            LinkageProjection.Behavior linked = ctx.behavior(callee);
+            Type success = linked.answers();
             // An injected behavior's body is supplied from outside, so there is no `apply` of this
             // compiler's to hold it to what it declared. The line is the one the Decoder draws: where
             // an answer enters the domain. What the arguments were has to survive the call to be
             // handed to the check, so they are put in slots first — the call consumes what it is
             // pushed.
+            //
+            // project, then canonicalize, then the ensures check, then the cast a caller reads: not
+            // project-check-canonicalize-cast, which would hold `ensures` to a value the carrier
+            // invariant has not established yet. CanonicalizeAtCrossing.emit runs on the Souther
+            // value project leaves, before checkAtCrossing hands anything to `Ensures.check`.
             List<Integer> saved = ctx.ensuresCheckOf(callee) instanceof EnsuresEnforcement.AtEachCrossing
                     ? new ArrayList<>() : null;
-            if (ctx.isStandaloneRequired(callee)) {
-                // other than one input: the required behavior is its own base class, called with a
-                // typed invokevirtual apply(A,B,…); each arg is left as its declared param type
-                // (issue #57). A `() -> R` produces, so the call hands it nothing.
-                MethodTypeDesc desc = ctx.requiredApplyDesc(callee);
-                code.aload(0);
-                code.getfield(cdName, held.of(callee).fieldName(), ctx.cdBehavior(callee));
-                for (Core arg : call.args()) {
-                    Type at = genExpr(arg);
-                    box(code, at);   // a primitive boxes to its apply-param type; a reference already matches
-                    keepForTheCheck(saved);
-                }
-                code.invokevirtual(ctx.cdBehavior(callee), "apply", desc);
-                project(callee, success);
-                checkAtCrossing(callee, saved);
-                stackCast(success);
-                return;
-            }
+            // Held as its projection says — the unary Behavior for one input, its own class for any
+            // other number — and applied by what it says a caller applies one held that way with: a
+            // base Java extends virtually, an interface through the interface. A `() -> R`
+            // produces, so the call hands it nothing.
+            InjectionSlots.Slot slot = held.of(callee);
             code.aload(0);
-            code.getfield(cdName, held.of(callee).fieldName(), CD_Behavior);
-            Type at = genExpr(call.args().get(0));
-            box(code, at);
-            keepForTheCheck(saved);
-            code.invokeinterface(CD_Behavior, "apply", MTD_apply);
-            project(callee, success);
+            code.getfield(cdName, slot.fieldName(), slot.type());
+            for (Core arg : call.args()) {
+                Type at = genExpr(arg);
+                box(code, at);   // a primitive boxes to its apply-param type; a reference already matches
+                keepForTheCheck(saved);
+            }
+            invoke(linked.apply());
+            project(linked);
+            CanonicalizeAtCrossing.emit(code, success);
             checkAtCrossing(callee, saved);
-            stackCast(success);
+            castFromObject(code, success);
         }
 
         /** Keeps a copy of the boxed argument on the stack in a slot of its own, where a check is
@@ -1691,22 +1712,8 @@ final class BodyGen {
          * the callee's module are not members of this module's union. Projected here, the value is a
          * Souther value again and this behavior's own return puts it into its own bridge case.
          */
-        private void project(ValueName.Behavior callee, Type calleeOut) {
-            List<TypeSymbol> bridged = ctx.bridgedMembersOf(callee, calleeOut);
-            ResultBoundary.project(code, ctx, callee, bridged, slot(Type.NOTHING));
-        }
-
-        /** Casts the {@code Object} on the stack to {@code type}, unboxing primitives. */
-        private void stackCast(Type type) {
-            if (type == Type.INT) {
-                code.checkcast(CD_Long);
-                code.invokevirtual(CD_Long, "longValue", MethodTypeDesc.of(ConstantDescs.CD_long));
-            } else if (type == Type.BOOL) {
-                code.checkcast(CD_Boolean);
-                code.invokevirtual(CD_Boolean, "booleanValue", MethodTypeDesc.of(ConstantDescs.CD_boolean));
-            } else if (!(type instanceof Type.Union)) {
-                code.checkcast(jvmType(type));
-            }
+        private void project(LinkageProjection.Behavior callee) {
+            ResultBoundary.project(code, callee, slot(Type.NOTHING));
         }
 
         /**
@@ -1750,11 +1757,14 @@ final class BodyGen {
                     code.labelBinding(end);
                     yield null;
                 }
-                // `+ - * /` work on two Int or two Decimal operands (spec
-                // §an-operator-takes-the-types-it-is-defined-for). Int aborts on overflow, and `/`
-                // aborts on a zero divisor; Decimal aborts at the ends of the scale range, and its
-                // `/` rounds by the default scale/mode and aborts on a zero divisor too. Case
-                // handling for a zero divisor is the divide/remainder functions, not the operator.
+                // `+ - * /` work on two numbers of one type — Int, Decimal or Rational (spec
+                // §an-operator-takes-the-types-it-is-defined-for). The two arms below are the
+                // carriers' kernels and so are reached by the first two; arithmetic any Rational
+                // takes part in is exact and went to the arm above. Int aborts on overflow, and `/`
+                // aborts on a zero divisor; Decimal aborts at the ends of the scale range, and `/`
+                // over two of them answers an exact quotient that leaves the type and aborts on a
+                // zero divisor as well. Case handling for a zero divisor is the divide/remainder
+                // functions, not the operator.
                 //
                 // Both go through the runtime that owns the arithmetic — IntMath and DecimalMath —
                 // rather than to a host method. What an operator means is the runtime's, and calling
@@ -1768,21 +1778,27 @@ final class BodyGen {
                 case ADD -> { arithmetic(bin, "add", "addExact"); yield null; }
                 case SUB -> { arithmetic(bin, "subtract", "subtractExact"); yield null; }
                 case MUL -> { arithmetic(bin, "multiply", "multiplyExact"); yield null; }
-                case DIV -> { arithmetic(bin, "divide", "divideExact"); yield null; }
+                // `/` answers an exact quotient over either pair of numbers (spec §stdlib-rational),
+                // so there is no kernel of either number for it to name: every pair goes to the
+                // exact arm above and nothing reaches the two below it.
+                case DIV -> { arithmetic(bin, null, null); yield null; }
                 case CONCAT -> {
                     Type lt = genExpr(bin.left());
                     // `++` over two strings is Elm's appendable on String; the checker guarantees both
-                    // sides are String here, so emit `a.concat(b)` rather than the list join.
+                    // sides are String here. `Strings.append`, not `String.concat`: NFC is not closed
+                    // under concatenation, and this is the same join `String.append` names — `a ++ b`
+                    // and `append(a, b)` cannot answer differently.
                     if (lt == Type.STRING) {
                         genExpr(bin.right());
-                        code.invokevirtual(CD_String, "concat",
-                                MethodTypeDesc.of(CD_String, CD_String));
-                    } else if (bin.right() instanceof Core.ListLit lit && lit.elements().size() == 1) {
+                        code.invokestatic(CD_Strings, "append",
+                                MethodTypeDesc.of(CD_String, CD_String, CD_String));
+                    } else if (Core.withoutStanding(bin.right()) instanceof Core.ListLit lit
+                            && lit.elements().size() == 1) {
                         // `acc ++ [x]` is how every fold-derived combinator grows its list
                         // (souther.list's map/filter), so it runs once per element. Push the element
                         // itself: building a one-element list for `concat` to immediately take apart
                         // costs an ArrayList, a copyOf, and an iterator on the hot path.
-                        box(code, genExpr(lit.elements().get(0)));
+                        box(code, emitValue(lit.elements().get(0), null));
                         code.invokestatic(CD_Lists, "append", MTD_Lists_append);
                     } else {
                         genExpr(bin.right());
@@ -1817,12 +1833,81 @@ final class BodyGen {
          *  and it was written as one where the tree was built (spec §newtype-arithmetic), so
          *  nothing is opened or re-wrapped at the operator. */
         private void arithmetic(Core.Binary bin, String onDecimal, String onInt) {
+            // An operation beside a Rational reads the other side at its exact value (ADR-0116),
+            // which the checker settled and the tree says; each operand is pushed as the Rational
+            // the operation reads it as.
+            switch (bin.reading()) {
+                case Core.BinaryReading.ExactNumbers _ -> {
+                    pushExact(bin.left());
+                    pushExact(bin.right());
+                    code.invokestatic(CD_RationalMath, exactly(bin.op()), MTD_ratArith);
+                    return;
+                }
+                // Newtype arithmetic is the operation over what the newtypes wrap, which the tree
+                // already holds as such, so nothing reaches here read in a newtype.
+                case Core.BinaryReading.In in -> throw new IllegalStateException(
+                        "arithmetic reads numbers, not values in " + Type.show(in.type()));
+                case Core.BinaryReading.AsTheyStand _ -> { }
+            }
+            // Read as they stand, the operator may still answer an exact value: a quotient of two
+            // whole numbers or two decimals leaves them (ADR-0116), and two Rationals are exact
+            // already. Each is computed as Rationals, which leaves one kind of value on the stack
+            // for the kernel and for every reader of the result.
+            if (bin.type() == Type.RATIONAL) {
+                if (bin.left().type() == Type.INT && bin.right().type() == Type.INT) {
+                    genExpr(bin.left());
+                    genExpr(bin.right());
+                    code.invokestatic(CD_RationalMath, "divideWholeNumbers", MTD_ratOfWholeNumbers);
+                    return;
+                }
+                pushExact(bin.left());
+                pushExact(bin.right());
+                code.invokestatic(CD_RationalMath, exactly(bin.op()), MTD_ratArith);
+                return;
+            }
             Type t = genExpr(bin.left());
             genExpr(bin.right());
-            if (t == Type.DECIMAL) {
-                code.invokestatic(CD_DecimalMath, onDecimal, MTD_bdArith);
-            } else {
-                code.invokestatic(CD_IntMath, onInt, MTD_intExact);
+            boolean decimal = t == Type.DECIMAL;
+            String kernel = decimal ? onDecimal : onInt;
+            if (kernel == null) {
+                // An operator with no kernel for this number reached it, which the exact arm above
+                // was to have taken. Said rather than emitted against: what the null stands for is
+                // that nothing comes here, and a call built from it would answer a number of its
+                // own.
+                throw new IllegalStateException(
+                        "no kernel for " + bin.op() + " over " + Type.show(t));
+            }
+            code.invokestatic(decimal ? CD_DecimalMath : CD_IntMath, kernel,
+                    decimal ? MTD_bdArith : MTD_intExact);
+        }
+
+        /** What the exact kernel for {@code op} is called. Named from the operator rather than handed
+         *  in beside the other two, so an operator that answers a Rational and has no exact kernel
+         *  says so here instead of being emitted as whichever name was passed. */
+        private static String exactly(BinOp op) {
+            return switch (op) {
+                case ADD -> "add";
+                case SUB -> "subtract";
+                case MUL -> "multiply";
+                case DIV -> "divide";
+                default -> throw new IllegalStateException("no exact arithmetic for " + op);
+            };
+        }
+
+        /**
+         * An operand of an exact operation, pushed as the Rational that operation reads it as.
+         *
+         * <p>The conversion is the operator's semantics and belongs where the carrier is known, which
+         * is here: an {@code Int} in a Rational position is refused where it is written, and the same
+         * {@code Int} beside a Rational operand is read at its exact value because that is what the
+         * operator means (ADR-0116).
+         */
+        private void pushExact(Core operand) {
+            Type t = genExpr(operand);
+            if (t == Type.INT) {
+                code.invokestatic(CD_RationalMath, "fromInt", MTD_ratFromInt);
+            } else if (t == Type.DECIMAL) {
+                code.invokestatic(CD_RationalMath, "fromDecimal", MTD_ratFromDecimal);
             }
         }
 
@@ -1853,30 +1938,42 @@ final class BodyGen {
          * added to {@link Ordering} would fall the same way through an {@code instanceof} chain.
          */
         private void ordered(Comparison comparison, ComparisonClaim.Cut cut) {
-            // Whether the two may be compared at all was settled by BinaryElaborator against the
-            // types as written; this reads what they open to.
-            Ordering how = Ordering.ofComparison(
-                    comparison.left().type(), comparison.right().type(), ctx.inners, symbols,
-                    ctx.kinds,
-                    ctx.published);
-            if (how == null) {
-                throw new IllegalStateException("a comparison the checker admitted has no order: "
-                        + comparison.left().type() + " " + cut.statedRelation() + " "
-                        + comparison.right().type());
-            }
-            switch (how.opened()) {
+            // Whether the two may be compared at all, and what orders them, was settled by
+            // BinaryElaborator against the types as written; this lowers that order.
+            Core.OrderingBasis basis = comparison.ordering().orElseThrow(
+                    () -> new IllegalStateException("a comparison the checker admitted says what"
+                            + " orders it: " + comparison.left().type() + " "
+                            + cut.statedRelation() + " " + comparison.right().type()));
+            switch (Ordering.ofBasis(basis)) {
                 case Ordering.Longs _ -> {
                     unwrapNewtypeValue(genExpr(comparison.left()));
                     unwrapNewtypeValue(genExpr(comparison.right()));
                     comparisonMaterialize(cut.statedRelation(), true);
                 }
-                case Ordering.Natural _ -> {
-                    // These all carry as Comparable — String, BigDecimal, LocalDate, LocalTime,
-                    // LocalDateTime, Instant — so one compareTo reduces the order to its sign
-                    // against 0. BigDecimal.compareTo ignores scale, which matches Decimal equality
-                    // (spec §equality); the others order lexicographically / in time.
+                case Ordering.Strings _ -> {
+                    // Text's own compareTo orders UTF-16 code units, which is not the language's
+                    // order on it (spec §equality).
                     unwrapNewtypeValue(genExpr(comparison.left()));
+                    code.checkcast(CD_String);
                     unwrapNewtypeValue(genExpr(comparison.right()));
+                    code.checkcast(CD_String);
+                    code.invokestatic(CD_Strings, "compare", MTD_Strings_compare);
+                    code.iconst_0();
+                    comparisonMaterialize(cut.statedRelation(), false);
+                }
+                case Ordering.Natural _ -> {
+                    // These all carry as a Comparable whose compareTo is the order — BigDecimal,
+                    // Rational, LocalDate, LocalTime, LocalDateTime, Instant — so one compareTo
+                    // reduces the order to its sign against 0. BigDecimal.compareTo ignores scale,
+                    // which matches Decimal equality (spec §equality); a Rational compares by exact
+                    // value; the others order in time.
+                    if (comparison.reading() instanceof Core.BinaryReading.ExactNumbers) {
+                        pushExact(comparison.left());
+                        pushExact(comparison.right());
+                    } else {
+                        unwrapNewtypeValue(genExpr(comparison.left()));
+                        unwrapNewtypeValue(genExpr(comparison.right()));
+                    }
                     code.invokeinterface(CD_Comparable, "compareTo", MTD_compareTo_Object);
                     code.iconst_0();
                     comparisonMaterialize(cut.statedRelation(), false);
@@ -1906,6 +2003,15 @@ final class BodyGen {
          * inverted.
          */
         private void same(Comparison comparison, ComparisonClaim.Singled singled) {
+            if (comparison.reading() instanceof Core.BinaryReading.ExactNumbers) {
+                // Equal by exact mathematical value, which is what the runtime value's own equality
+                // is: one representation per value, so `Values.equal` asking it is asking this.
+                pushExact(comparison.left());
+                pushExact(comparison.right());
+                emitValueEquals(code, false);
+                selecting(singled);
+                return;
+            }
             Type lt = unwrapNewtypeValue(genExpr(comparison.left()));
             unwrapNewtypeValue(genExpr(comparison.right()));
             if (lt == Type.STRING) {
@@ -1934,31 +2040,31 @@ final class BodyGen {
             }
         }
 
-        /** The enumeration a list's elements are ordered by, or null when they are ordered otherwise
-         * (an ordered primitive or a newtype over one, which carry their own {@code Comparable}). */
-        private TypeSymbol elementOrdering(Core arg) {
-            return arg.type() instanceof Type.ListOf lo ? sumOrdering(lo.element()) : null;
-        }
-
-        /** The sum that answers for values of {@code t}, or null where the value carries its own
-         * order. Asked of the value as the runtime is handed it, so a newtype over an enumeration
-         * answers null and sorts by the {@code compareTo} its own class carries — the sum's
-         * {@code __order} would be handed the wrapper and not the case.
+        /**
+         * Pushes the comparator the values of a sort are ordered by, where the value's own
+         * {@code compareTo} is not the order, and answers whether it pushed one.
          *
-         * <p>Every order is answered for rather than "everything but a {@code Places} sorts by
-         * natural order", so an order added to {@link Ordering} has to say which of the two it is
-         * instead of inheriting the answer that happens to be right for these three. */
-        private TypeSymbol sumOrdering(Type t) {
-            Ordering how = Ordering.of(t, ctx.inners, symbols, ctx.kinds, ctx.published);
-            if (how == null) {
-                return null;
+         * <p>An enumeration's order is on its sum, and text's is {@code Strings.ordering()}. Where
+         * the JVM value's own {@code compareTo} is the order nothing is pushed, and the call goes to
+         * the table row, which is the same runtime method without the comparator. Nothing is pushed
+         * either where the checker settled no order because there was no value to order.
+         */
+        private boolean comparatorFor(Core.KernelFact.OrderingSubject ordered) {
+            if (ordered.ordering().isEmpty()) {
+                return false;
             }
-            return switch (how.asHeld()) {
-                case Ordering.Places places -> places.enumeration();
-                // A long boxes to a Comparable and a newtype's own class carries a compareTo, so
-                // for both of these the runtime's natural order is the order.
-                case Ordering.Longs _, Ordering.Natural _ -> null;
-                // `asHeld` answers for the value as its own type holds it, which is never wrapped.
+            Type t = ordered.type();
+            Ordering held = Ordering.held(t, ordered.ordering().get(), ctx.inners);
+            return switch (held) {
+                case Ordering.Places places -> {
+                    code.invokestatic(cd(places.enumeration()), ORDERING_METHOD, MTD_ordering, true);
+                    yield true;
+                }
+                case Ordering.Strings _ -> {
+                    code.invokestatic(CD_Strings, "ordering", MTD_ordering);
+                    yield true;
+                }
+                case Ordering.Longs _, Ordering.Natural _ -> false;
                 case Ordering.Wrapped _ ->
                         throw new IllegalStateException("a held order is never a wrapped one: " + t);
             };
@@ -2028,35 +2134,45 @@ final class BodyGen {
             return bound().reaching(ctx.standingCalls);
         }
 
+        /**
+         * Emits {@code e} where the position keeps what it answers as a JVM value of its own: bound,
+         * returned, held in a list, a tuple or a map, or handed to a function value or to a kernel
+         * that may keep it.
+         *
+         * <p>A block is second-class and {@link #genExpr} refuses one, because an operand or a call
+         * it is expanded into never needs it as a value. A position that keeps the answer does, so a
+         * function answer is made an {@code Fn} here, and a block under it becomes a class of its
+         * own. The checker lets a block reach only a position whose type is a function, which is what
+         * decides it here too. Any other answer is what {@link #genExpr} leaves.
+         */
+        Type emitValue(Core e, Type expected) {
+            if (e.type() instanceof Type.FnOf fn) {
+                emitFunctionValue(e, fn.params());
+                return e.type();
+            }
+            return genExpr(e, expected);
+        }
+
         /** Emits a function value from its elaborated node: the parameter and result types are the
-         * ones the checker decided, so nothing is inferred here (issue #81). */
+         * ones the checker decided, so nothing is inferred here. A node that answers with one of its
+         * parts emits its own control flow and hands each part back here. */
         private void emitFunctionValue(Core value, List<Type> paramTypes) {
             switch (value) {
                 case Core.Block b -> emitLambda(b, paramTypes);
-                case Core.If iff -> {
-                    genExpr(iff.cond());
-                    Label elseL = code.newLabel();
-                    Label end = code.newLabel();
-                    code.ifeq(elseL);
-                    // A fork answering a function is a fork like any other: a row takes one of its
-                    // arms, and the arm it took is the plan's to be told about. What the arm answers
-                    // with is what differs here, and that is not something a count is about.
-                    probe(iff, 0);
-                    emitFunctionValue(iff.then(), paramTypes);
-                    code.goto_(end);
-                    code.labelBinding(elseL);
-                    probe(iff, 1);
-                    emitFunctionValue(iff.els(), paramTypes);
-                    code.labelBinding(end);
-                }
+                case Core.If iff -> fork(iff, arm -> emitFunctionValue(arm, paramTypes));
+                case Core.IfConstructed ic -> attempt(ic, arm -> emitFunctionValue(arm, paramTypes));
+                case Core.Match m -> match(m, arm -> emitFunctionValue(arm, paramTypes));
                 case Core.LetIn li -> {
                     // a capture binding around the function: bind it here so the lambda captures it
-                    Type vt = genExpr(li.value());
-                    int s = slot(vt);
-                    store(code, s, vt);
-                    bind(li.binder(), s, vt);
+                    Type vt = li.value().type();
+                    emitValue(li.value(), vt);
+                    storeLet(li, vt);
                     emitFunctionValue(li.body(), paramTypes);
                 }
+                // A function standing as one that answers more, or takes less, is the function it
+                // is, emitted at the parameter types it was checked at.
+                case Core.Widen w -> emitFunctionValue(w.value(),
+                        ((Type.FnOf) w.value().type()).params());
                 default -> genExpr(value);
             }
         }
@@ -2065,17 +2181,13 @@ final class BodyGen {
          * captured free variables (and any injected behaviors it calls) to its constructor. Its
          * parameter and result types are the ones the checker put on the block (issue #81). */
         private void emitLambda(Core.Block block, List<Type> paramTypes) {
-            emitLambda(block.params(), block.body(), paramTypes, freeVars(block));
-        }
-
-        private void emitLambda(List<Core.Binder> params, Core body, List<Type> paramTypes,
-                                Reaches free) {
-            List<Core.Read> captures = free.bindings();
-            List<ValueName.Behavior> injectedNames = free.injected();
+            BlockReaches reaches = BlockReaches.of(block, reqNames);
+            List<Core.Read> captures = reaches.bindings();
+            List<ValueName.Behavior> injectedNames = reaches.requirements();
             GeneratedClass.Lambda lambda = new GeneratedClass.Lambda(pkg, ctx.nextLambdaId());
             ClassDesc cd = ctx.cd(lambda);
-            ctx.addSynth(lambda, generateLambdaClass(cd, params, body, paramTypes,
-                    captures, injectedNames, reqSuccess, reqParams));
+            ctx.addSynth(lambda, generateLambdaClass(cd, block.params(), block.body(), paramTypes,
+                    captures, injectedNames));
 
             // the same condition generateLambdaClass interned on — it must stay the same one
             if (captures.isEmpty() && injectedNames.isEmpty()) {
@@ -2087,7 +2199,12 @@ final class BodyGen {
             code.dup();
             List<ClassDesc> ctorDescs = new ArrayList<>();
             for (Core.Read c : captures) {
-                load(code, locals.get(c.binding()).slot(), c.type());
+                Var local = locals.get(c.binding());
+                if (local == null) {
+                    throw new IllegalStateException("a block reaches binding " + c.binding()
+                            + " but the enclosing JVM frame does not hold it");
+                }
+                load(code, local.slot(), c.type());
                 ctorDescs.add(jvmType(c.type()));
             }
             for (ValueName.Behavior inj : injectedNames) {
@@ -2113,122 +2230,11 @@ final class BodyGen {
             for (int i = 0; i < args.size(); i++) {
                 code.dup();
                 pushInt(code, i);
-                Type at = genExpr(args.get(i));
-                box(code, at);
+                box(code, emitValue(args.get(i), null));
                 code.aastore();
             }
             code.invokeinterface(CD_Fn, "apply", MTD_Fn_apply);
-            stackCast(fnType.result());   // Object result -> the function's result type
-        }
-
-        /**
-         * What a lambda's body reaches outside itself, and so what its class must be handed.
-         *
-         * <p>Two different things, kept apart rather than told apart afterwards: the bindings of the
-         * enclosing body it reads, and the injected behaviors it calls. One is bound here and the
-         * other is declared elsewhere, which is why one is held by binding and the other by name.
-         */
-        private static final class Reaches {
-
-            private final LinkedHashMap<BindingId, Core.Read> reads = new LinkedHashMap<>();
-            private final LinkedHashSet<ValueName.Behavior> behaviors = new LinkedHashSet<>();
-
-            List<Core.Read> bindings() {
-                return new ArrayList<>(reads.values());
-            }
-
-            List<ValueName.Behavior> injected() {
-                return new ArrayList<>(behaviors);
-            }
-        }
-
-        /** What {@code block}'s body reaches outside itself, in first-seen order. */
-        private Reaches freeVars(Core.Block block) {
-            Reaches free = new Reaches();
-            Set<BindingId> bound = new HashSet<>();
-            block.params().forEach(p -> bound.add(p.binding()));
-            collectFree(block.body(), bound, free);
-            return free;
-        }
-
-        private void collectFree(Core e, Set<BindingId> bound, Reaches free) {
-            switch (e) {
-                case Core.PreservedCall p -> throw p.unexpectedIn("the emitter");
-                case Core.Read v -> reaches(v, bound, free);
-                case Core.Call c -> {
-                    // an injected behavior the body calls is handed over too: the lambda is a class
-                    // of its own, and what it reaches has to reach it
-                    ValueName.Behavior called = behaviorOf(c);
-                    if (called != null && reqNames.contains(called)) {
-                        free.behaviors.add(called);
-                    }
-                    c.args().forEach(a -> collectFree(a, bound, free));
-                }
-                case Core.Apply a -> {
-                    reaches(a.fn(), bound, free);
-                    a.args().forEach(x -> collectFree(x, bound, free));
-                }
-                case Core.FieldAccess fa -> collectFree(fa.target(), bound, free);
-                case Core.Binary bin -> {
-                    collectFree(bin.left(), bound, free);
-                    collectFree(bin.right(), bound, free);
-                }
-                case Core.Neg neg -> collectFree(neg.operand(), bound, free);
-                case Core.Construct nd ->
-                        nd.values().forEach(v -> collectFree(v.value(), bound, free));
-                case Core.If iff -> {
-                    collectFree(iff.cond(), bound, free);
-                    collectFree(iff.then(), bound, free);
-                    collectFree(iff.els(), bound, free);
-                }
-                case Core.IfConstructed ic -> {
-                    collectFree(ic.construct(), bound, free);
-                    collectFree(ic.then(), with(bound, ic.binder().binding()), free);
-                    ic.els().forEach(arm -> collectFree(arm.body(), bound, free));
-                }
-                case Core.LetIn li -> {
-                    collectFree(li.value(), bound, free);
-                    collectFree(li.body(), with(bound, li.binder().binding()), free);
-                }
-                case Core.Match m -> {
-                    collectFree(m.scrutinee(), bound, free);
-                    for (Core.Case c : m.cases()) {
-                        collectFree(c.body(), c.binder() == null
-                                ? bound : with(bound, c.binder().binding()), free);
-                    }
-                }
-                case Core.Block b -> {
-                    Set<BindingId> inner = new HashSet<>(bound);
-                    b.params().forEach(p -> inner.add(p.binding()));
-                    collectFree(b.body(), inner, free);
-                }
-                case Core.ListLit lit -> lit.elements().forEach(x -> collectFree(x, bound, free));
-                case Core.OptionSome so -> collectFree(so.value(), bound, free);
-                case Core.Tuple t -> t.elements().forEach(x -> collectFree(x, bound, free));
-                case Core.TupleGet tg -> collectFree(tg.tuple(), bound, free);
-                case Core.OptionNone _ -> { }
-                case Core.Int _ -> { }
-                case Core.Decimal _ -> { }
-                case Core.Str _ -> { }
-                case Core.Bool _ -> { }
-                case Core.Temporal _ -> { }
-                case Core.Unreachable _ -> { }
-                // reads nothing the enclosing body binds
-                case Core.UnitValue _ -> { }
-            }
-        }
-
-        private static Set<BindingId> with(Set<BindingId> bound, BindingId binding) {
-            Set<BindingId> inner = new HashSet<>(bound);
-            inner.add(binding);
-            return inner;
-        }
-
-        /** A read of something bound outside the lambda is captured; one of its own is not. */
-        private void reaches(Core.Read read, Set<BindingId> bound, Reaches free) {
-            if (!bound.contains(read.binding()) && locals.containsKey(read.binding())) {
-                free.reads.putIfAbsent(read.binding(), read);
-            }
+            castFromObject(code, fnType.result());   // Object result -> the function's result type
         }
 
     /** Where a value lives and what it is. {@code name} is what it is called — a diagnostic quotes

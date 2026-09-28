@@ -17,6 +17,7 @@ import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.DeclaredLine;
 import souther.compiler.check.InvariantStatementId;
 import souther.compiler.check.PartId;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReportAnchor;
 import souther.compiler.check.RuleReadings;
@@ -427,8 +428,9 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
                 .ask(new souther.compiler.query.Bodies.DeclaredSignatures(module)).value();
         assertNotNull(sigs.get(behavior), "the model under test compiles");
         souther.compiler.inputs.InputDomain domain =
-                souther.compiler.inputs.InputDomain.of(sigs.get(behavior), rules,
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+                souther.compiler.inputs.InputDomain.of(sigs.get(behavior),
+                        RuleReadingContext.unshared(rules,
+                                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
         Partitions.Partitioning partitioning = Partitions.of(behavior, domain, rules,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Axis axis = partitioning.axes().stream()

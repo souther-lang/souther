@@ -95,41 +95,6 @@ final class Automaton {
     }
 
     /**
-     * Whether a walk over this may stop having read a high surrogate and a low one in turn.
-     *
-     * <p>That pair of symbols is the one thing no string is read as, so a machine that stops on no
-     * sequence holding them already accepts nothing but strings and taking them out would change
-     * nothing.
-     *
-     * <p><b>Whether it stops, and not whether it has a step.</b> A canonical machine is complete —
-     * every symbol leads somewhere from every state — so every one of them has a step over a high
-     * surrogate and asking that says only that the machine is complete. Where such a step leads is
-     * the question: a pattern naming no surrogate leads to the state nothing stops at, and the
-     * sequence is refused there as it always was.
-     *
-     * <p>A walk over the states and nothing built. What it saves is a product every language would
-     * otherwise be put through.
-     */
-    boolean mayStopHavingReadALoneSurrogatePair() {
-        CodePoints high = CodePoints.between(0xD800, 0xDBFF);
-        CodePoints low = CodePoints.between(0xDC00, 0xDFFF);
-        boolean[] reaches = reachingSomewhereItStops();
-        for (int at = 0; at < steps.size(); at++) {
-            for (Step first : steps.get(at)) {
-                if (first.over().and(high).isEmpty()) {
-                    continue;
-                }
-                for (Step second : steps.get(first.to())) {
-                    if (!second.over().and(low).isEmpty() && reaches[second.to()]) {
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
-    }
-
-    /**
      * For each state, whether a walk from it may still reach one it stops at.
      *
      * <p>Here because it is a fact about the machine and about nothing else, and because more than
@@ -165,7 +130,7 @@ final class Automaton {
     }
 
     /**
-     * The machine for {@code syntax}, or null where building it would take more than
+     * The machine for {@code meaning}, or null where building it would take more than
      * {@code mostStates}.
      *
      * <p>Null rather than a smaller machine. A repetition written large is a language with a great
@@ -177,18 +142,11 @@ final class Automaton {
      * pattern is worth this many states is a question about the answer being built, and nothing here
      * knows what that answer is for.
      */
-    static Automaton of(PatternSyntax syntax, Meter meter) {
-        // What the anchors come to, worked out before anything is made of them. Whoever read the
-        // pattern has already asked whether they can be settled, so what comes back here is a tree.
-        PatternSyntax placed = PatternSyntax.withoutAnchors(syntax);
-        if (placed == null) {
-            throw new IllegalArgumentException(
-                    "a pattern whose anchors have no answer is not read, so nothing builds it");
-        }
+    static Automaton of(PatternMeaning meaning, Meter meter) {
         Building building = new Building(meter.making());
         try {
             int start = building.state();
-            int accept = building.build(placed, start);
+            int accept = building.build(meaning, start);
             BitSet accepting = new BitSet();
             accepting.set(accept);
             return new Automaton(building.frozenSteps(), building.frozenFree(), accepting);
@@ -200,10 +158,10 @@ final class Automaton {
     /**
      * Whether the whole of {@code value} is accepted.
      *
-     * <p>Walked a symbol at a time, where a symbol is what the engine reads: a code point where the
-     * string holds a well-formed pair, and half of one where it holds half. Read a unit at a time,
-     * a pattern naming a character past the basic plane would want two steps for what the engine
-     * takes in one.
+     * <p>Walked a symbol at a time, where a symbol is a scalar value — a pair of units is one. Read
+     * a unit at a time, a pattern naming a character past the basic plane would want two steps for
+     * what the pattern takes in one. Text holding half a pair is no {@code String} and is accepted by
+     * nothing: no step is over a surrogate.
      */
     boolean accepts(String value) {
         BitSet here = closure(only(START));
@@ -805,17 +763,15 @@ final class Automaton {
     /**
      * The symbols a value can be written out of and read back.
      *
-     * <p>A control character other than the three a literal spells reaches a source as itself, and
-     * half of a pair has nothing to be encoded as — so what a person pastes is not what was chosen.
-     * Nothing about the language: a rule admitting one of these admits it, and this is only which of
-     * them a value is preferably built from.
+     * <p>A control character other than the three a literal spells reaches a source as itself, so
+     * what a person pastes is not what was chosen. Nothing about the language: a rule admitting one
+     * of these admits it, and this is only which of them a value is preferably built from.
      */
     private static final CodePoints WRITABLE = CodePoints.EVERYTHING
             .less(CodePoints.between(0, 8))
             .less(CodePoints.between(0x0B, 0x0C))
             .less(CodePoints.between(0x0E, 0x1F))
-            .less(CodePoints.of(0x7F))
-            .less(CodePoints.between(0xD800, 0xDFFF));
+            .less(CodePoints.of(0x7F));
 
     /**
      * The shortest string it accepts out of {@code these} and no longer than {@code mostSymbols},
@@ -1039,26 +995,32 @@ final class Automaton {
         /**
          * The runs of symbols no label of this machine tells apart.
          *
-         * <p>Cut at every place a label begins or ends. Inside a run every symbol is over exactly
-         * the same steps, so one of them answers for all of them — which is what makes a
-         * deterministic machine over the whole of Unicode a small thing.
+         * <p>Cut at every place a label begins or ends, and at each end of the universe's runs.
+         * Inside a run every symbol is over exactly the same steps, so one of them answers for all
+         * of them — which is what makes a deterministic machine over the whole of Unicode a small
+         * thing. What lies between the universe's runs is the surrogates, which are no symbol, and
+         * no run of the alphabet is cut there.
          */
         private void cutTheAlphabet() {
             java.util.TreeSet<Integer> cuts = new java.util.TreeSet<>();
-            cuts.add(0);
+            List<CodePoints.Range> labels = new ArrayList<>(CodePoints.EVERYTHING.ranges());
             for (List<Step> out : steps) {
                 for (Step each : out) {
-                    for (CodePoints.Range run : each.over().ranges()) {
-                        cuts.add(run.from());
-                        if (run.to() < CodePoints.LAST) {
-                            cuts.add(run.to() + 1);
-                        }
-                    }
+                    labels.addAll(each.over().ranges());
+                }
+            }
+            for (CodePoints.Range run : labels) {
+                cuts.add(run.from());
+                if (run.to() < CodePoints.LAST) {
+                    cuts.add(run.to() + 1);
                 }
             }
             List<Integer> starts = new ArrayList<>(cuts);
             for (int i = 0; i < starts.size(); i++) {
                 int from = starts.get(i);
+                if (CodePoints.isSurrogate(from)) {
+                    continue;
+                }
                 int to = i + 1 < starts.size() ? starts.get(i + 1) - 1 : CodePoints.LAST;
                 alphabet.add(CodePoints.between(from, to));
             }
@@ -1094,43 +1056,40 @@ final class Automaton {
         }
 
         /**
-         * The states for {@code syntax}, walked into from {@code from}, and where it leaves off.
+         * The states for {@code meaning}, walked into from {@code from}, and where it leaves off.
          *
          * <p>One entry and one exit apiece, which is what makes the shapes compose without any of
-         * them knowing what it is inside. No {@code default}: a shape of syntax added and not built
-         * stops the compile rather than being read as whichever arm is nearest.
+         * them knowing what it is inside. No {@code default}: a shape added and not built stops the
+         * compile rather than being read as whichever arm is nearest.
          */
-        int build(PatternSyntax syntax, int from) {
-            return switch (syntax) {
-                case PatternSyntax.Nothing _ -> from;
+        int build(PatternMeaning meaning, int from) {
+            return switch (meaning) {
+                case PatternMeaning.Nothing _ -> from;
                 // Nothing leads out of it, so nothing after it is reached and no string gets to
                 // the end: a state made and left where it is says exactly that.
-                case PatternSyntax.Never _ -> state();
-                // Read before anything is built, so there are none left by the time this runs.
-                case PatternSyntax.Anchor _ -> throw new IllegalStateException(
-                        "an anchor is read into what it comes to before a machine is made of it");
-                case PatternSyntax.Symbols it -> {
+                case PatternMeaning.Never _ -> state();
+                case PatternMeaning.Symbols it -> {
                     int to = state();
                     step(from, it.held(), to);
                     yield to;
                 }
-                case PatternSyntax.InTurn it -> {
+                case PatternMeaning.InTurn it -> {
                     int at = from;
-                    for (PatternSyntax each : it.parts()) {
+                    for (PatternMeaning each : it.parts()) {
                         at = build(each, at);
                     }
                     yield at;
                 }
-                case PatternSyntax.EitherOf it -> {
+                case PatternMeaning.EitherOf it -> {
                     int out = state();
-                    for (PatternSyntax each : it.arms()) {
+                    for (PatternMeaning each : it.arms()) {
                         int in = state();
                         freely(from, in);
                         freely(build(each, in), out);
                     }
                     yield out;
                 }
-                case PatternSyntax.Repeated it -> repeated(it, from);
+                case PatternMeaning.Repeated it -> repeated(it, from);
             };
         }
 
@@ -1144,7 +1103,7 @@ final class Automaton {
          * repetition of a thing is that thing however many times — so the states are the cost of the
          * language, and the bound a caller passes is what says whether that cost is worth paying.
          */
-        int repeated(PatternSyntax.Repeated it, int from) {
+        int repeated(PatternMeaning.Repeated it, int from) {
             int at = from;
             for (int i = 0; i < it.least(); i++) {
                 at = build(it.what(), at);

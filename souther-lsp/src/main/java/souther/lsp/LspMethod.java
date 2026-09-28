@@ -1,6 +1,7 @@
 package souther.lsp;
 
 import souther.lsp.analysis.Analyzer;
+import souther.lsp.analysis.Workspace;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -36,7 +37,12 @@ public enum LspMethod {
     DID_OPEN("textDocument/didOpen", Announced.TEXT_DOCUMENT_SYNC),
     DID_CHANGE("textDocument/didChange", Announced.TEXT_DOCUMENT_SYNC),
     DID_CLOSE("textDocument/didClose", Announced.TEXT_DOCUMENT_SYNC),
-    DID_CHANGE_WATCHED_FILES("workspace/didChangeWatchedFiles", Announced.SOU_FILE_WATCHER),
+    DID_CHANGE_WATCHED_FILES("workspace/didChangeWatchedFiles", Announced.WORKSPACE_FILE_WATCHER),
+    // `changeNotifications` is what tells a client it may send this; `supported` alone says only
+    // that folders given at initialize are read.
+    DID_CHANGE_WORKSPACE_FOLDERS("workspace/didChangeWorkspaceFolders",
+            new Advertisement.StaticCapability(List.of("workspace", "workspaceFolders"),
+                    Map.of("supported", true, "changeNotifications", true))),
     DOCUMENT_SYMBOL("textDocument/documentSymbol",
             new Advertisement.StaticCapability("documentSymbolProvider", true)),
     SEMANTIC_TOKENS_FULL("textDocument/semanticTokens/full", Announced.SEMANTIC_TOKENS),
@@ -93,16 +99,30 @@ public enum LspMethod {
         static final Advertisement SEMANTIC_TOKENS =
                 new Advertisement.StaticCapability("semanticTokensProvider", semanticTokens());
 
-        static final Advertisement SOU_FILE_WATCHER = new Advertisement.DynamicRegistration(
-                "souther-sou-watcher",
-                Map.of("watchers", List.of(Map.of("globPattern", "**/*.sou"))));
+        static final Advertisement WORKSPACE_FILE_WATCHER = new Advertisement.DynamicRegistration(
+                "souther-workspace-watcher", Map.of("watchers", workspaceWatchers()));
+
+        /**
+         * Every change to a source, and every change to a class output.
+         *
+         * <p>Every kind of change, a class rewritten in place included: a build writes its classes
+         * over the ones it wrote before, and a compile that read the old ones has to hear of it.
+         */
+        private static List<Map<String, Object>> workspaceWatchers() {
+            List<Map<String, Object>> watchers = new ArrayList<>();
+            watchers.add(Map.of("globPattern", Workspace.sourceGlob()));
+            for (String glob : Workspace.classOutputGlobs()) {
+                watchers.add(Map.of("globPattern", glob));
+            }
+            return List.copyOf(watchers);
+        }
 
         private static Map<String, Object> semanticTokens() {
             Map<String, Object> options = new LinkedHashMap<>();
             options.put("legend", Map.of("tokenTypes", Analyzer.TOKEN_TYPES,
                     "tokenModifiers", List.of()));
             options.put("full", true);
-            return options;
+            return Collections.unmodifiableMap(options);
         }
 
         private Announced() {
@@ -117,6 +137,10 @@ public enum LspMethod {
      * before it has answered anything.
      */
     private static final Map<String, LspMethod> BY_WIRE = byWire();
+
+    /** Where the {@code souther} options the server reads are advertised. Before {@link #CAPABILITIES},
+     * which reads it as it is built. */
+    static final List<String> EXTENSIONS = List.of("experimental", "souther");
 
     private static final Map<String, Object> CAPABILITIES = capabilities();
 
@@ -163,27 +187,76 @@ public enum LspMethod {
      * what is answered and nothing else.
      *
      * <p>One field may announce several methods, and then it is the one advertisement all of them
-     * hold — not one written out again under the same key. Two methods reaching the same field by
+     * hold — not one written out again under the same path. Two methods reaching the same field by
      * different advertisements are refused even where both spell the same value: the field would
      * announce one of them, and the other would be answered without being announced, which is the
      * whole of what a capability rules out.
+     *
+     * <p>Nor may one field sit inside another's value. The outer one's value is the whole of what
+     * is there, so whichever were written second would replace or be replaced by the other.
+     *
+     * <p>The one field that announces no method is built here too: the {@code souther} options the
+     * server reads, at {@link #EXTENSIONS}, drawn from {@link SoutherExtension}. Built beside the
+     * methods rather than added to the object afterwards, so a method advertised at or around that
+     * path is refused by the same rule as two methods would be.
      */
     private static Map<String, Object> capabilities() {
-        Map<String, LspMethod> announcedBy = new LinkedHashMap<>();
-        Map<String, Object> capabilities = new LinkedHashMap<>();
+        Map<List<String>, LspMethod> announcedBy = new LinkedHashMap<>();
+        Map<List<String>, Object> fields = new LinkedHashMap<>();
         for (LspMethod method : values()) {
             if (!(method.advertisement instanceof Advertisement.StaticCapability capability)) {
                 continue;
             }
-            LspMethod first = announcedBy.putIfAbsent(capability.key(), method);
+            LspMethod first = announcedBy.putIfAbsent(capability.path(), method);
             if (first == null) {
-                capabilities.put(capability.key(), capability.value());
+                fields.put(capability.path(), capability.value());
             } else if (first.advertisement != method.advertisement) {
                 throw new IllegalStateException(first + " and " + method + " both advertise "
-                        + capability.key() + " without sharing one advertisement");
+                        + capability.path() + " without sharing one advertisement");
             }
         }
-        return Collections.unmodifiableMap(capabilities);
+        for (Map.Entry<List<String>, LspMethod> outer : announcedBy.entrySet()) {
+            for (Map.Entry<List<String>, LspMethod> inner : announcedBy.entrySet()) {
+                List<String> path = inner.getKey();
+                if (path.size() > outer.getKey().size()
+                        && path.subList(0, outer.getKey().size()).equals(outer.getKey())) {
+                    throw new IllegalStateException(inner.getValue() + " advertises " + path
+                            + " inside " + outer.getKey() + ", which " + outer.getValue()
+                            + " advertises as a whole");
+                }
+            }
+        }
+        for (Map.Entry<List<String>, LspMethod> announced : announcedBy.entrySet()) {
+            List<String> path = announced.getKey();
+            int shared = Math.min(path.size(), EXTENSIONS.size());
+            if (path.subList(0, shared).equals(EXTENSIONS.subList(0, shared))) {
+                throw new IllegalStateException(announced.getValue() + " advertises " + path
+                        + ", which overlaps " + EXTENSIONS + " where the options are advertised");
+            }
+        }
+        fields.put(EXTENSIONS, SoutherExtension.advertised());
+        return object(fields);
+    }
+
+    /**
+     * The object holding each value at its path, the objects on the way made here and unmodifiable.
+     *
+     * <p>No path runs through another's value, so a key is either a field or an object made here,
+     * never both.
+     */
+    private static Map<String, Object> object(Map<List<String>, Object> fields) {
+        Map<String, Object> object = new LinkedHashMap<>();
+        Map<String, Map<List<String>, Object>> below = new LinkedHashMap<>();
+        fields.forEach((path, value) -> {
+            if (path.size() == 1) {
+                object.put(path.getFirst(), value);
+            } else {
+                below.computeIfAbsent(path.getFirst(), _ -> new LinkedHashMap<>())
+                        .put(path.subList(1, path.size()), value);
+            }
+        });
+        below.forEach((key, inner) -> object.put(key, object(inner)));
+        return Collections.unmodifiableMap(object);
     }
 
     /** The registrations, whose {@code method} is the method holding each one, so what is registered

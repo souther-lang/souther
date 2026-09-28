@@ -1,10 +1,10 @@
 package souther.compiler.fmt;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.cst.CstParser;
 import souther.compiler.cst.SyntaxToken;
+import souther.test.ClosedWorldContract;
 
 import java.util.List;
 
@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * happen to ask about. Which of them a family asks is that family's to change, and a table that
  * agreed only where it is asked today would be one the next question can find a hole in.
  */
-@Tag("population")
+@ClosedWorldContract
 class WhereAnOffsetStandsAmongTheTokensIsWhatWalkingThemSaysTest {
 
     /** Which adjacency {@code at} stands in, by walking: the first one it is inside. */

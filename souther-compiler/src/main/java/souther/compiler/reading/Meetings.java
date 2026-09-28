@@ -148,7 +148,7 @@ final class Meetings {
 
     /** The values one run of {@code op} is over, and the nodes the run is written as. */
     private static void run(Core e, BinOp op, List<Core> operands, List<Core> inner) {
-        if (e instanceof Core.Binary binary && binary.op() == op) {
+        if (Core.withoutStanding(e) instanceof Core.Binary binary && binary.op() == op) {
             inner.add(binary);
             run(binary.left(), op, operands, inner);
             run(binary.right(), op, operands, inner);

@@ -1,15 +1,19 @@
 package souther.compiler.ast;
 
 import souther.compiler.types.BinOp;
+import souther.compiler.crossing.DelegatedEqualityIsTheCrossingAnswer;
+import souther.compiler.identity.DecidedByTheRest;
 import souther.compiler.diag.Region;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ExpansionSite;
+import souther.compiler.types.MaterialisationSite;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.SourceReferenceOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.ReferenceOrigin;
@@ -17,13 +21,18 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
+import souther.compiler.types.UnionMember;
 import souther.compiler.types.ValueName;
+import souther.compiler.types.WrittenTypeMeaning;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.function.UnaryOperator;
 
 /**
@@ -45,6 +54,21 @@ public interface Hir {
 
     /** The source position of this node. Every record below provides it. */
     SourcePos pos();
+
+    /**
+     * A shape the nodes hold as syntax, which is not a node in its own right.
+     *
+     * <p>Said by the shape rather than worked out about it. What a declaration is written as is the
+     * nodes here and the shapes they hold, and a reader that has to tell one of those from a value
+     * the compiler put beside a node has no way to: both are written wherever their own readers
+     * wanted them, and where a type sits says what its author found convenient rather than what it
+     * is. So a shape says so, and whoever writes one decides.
+     *
+     * <p>Nothing is carried. What is being said is which question a type answers, and a type that
+     * says it is syntax is read as syntax wherever the tree is read.
+     */
+    interface Shape {
+    }
 
     /**
      * A node an author wrote, which therefore has a stretch of source as well as an anchor.
@@ -315,10 +339,11 @@ public interface Hir {
     /**
      * A whole source file: its public surface, imports, and definitions.
      *
-     * <p>{@code exposedOutputs} maps an exposed composition behavior's name to the output signature written
-     * in the {@code exposing} list ({@code exposing ( name : A | B )}, spec §declared-composition-output). An
-     * exposed {@code >->} composition must have one, checked to match its inferred output (ADR-0024); other
-     * exposed names carry no signature (their type is at the definition).
+     * <p>{@code exposedOutputs} maps the name of a composition the {@code exposing} clause names to the
+     * output signature written for it there ({@code exposing ( name : A | B )}, spec
+     * §declared-composition-output). A composition the clause names must have one, checked to match its
+     * inferred output; other names in the clause carry no signature (their type is at the definition),
+     * and a composition published because no clause is written has none.
      *
      * <p>{@code fns} is what the source wrote, and it stays that at every stage. {@code takenOn} is
      * what the module emits as methods of its own without having written them, which is two kinds of
@@ -347,9 +372,15 @@ public interface Hir {
      * methods its bodies call missing, which is the failure this separation is here to make
      * impossible. The arity says something has to be passed; that it is this module's own is what a
      * reader of the rebuild has to see, which is why every one of them names it.
+     *
+     * <p>{@code exposing} is the clause as written and {@code published} is what the module
+     * publishes, worked out once from the declarations its source made ({@link Ast.Module#published})
+     * and carried from there. Carried and not worked out again here, so that which declarations may
+     * be published is decided by one rule and not by one per tree.
      */
     record Module(String name,
-                  List<String> exposing,
+                  ExposingClause exposing,
+                  Set<String> published,
                   Map<String, RetType> exposedOutputs,
                   List<Import> imports,
                   List<Def> defs,
@@ -361,6 +392,11 @@ public interface Hir {
                   String exampleFileTarget,
                   SourcePos pos) implements Hir {
 
+        public Module {
+            Objects.requireNonNull(exposing, "a module says whether it writes an exposing clause");
+            published = Set.copyOf(published);
+        }
+
         /**
          * This module with {@code replacement} standing where its declarations were.
          *
@@ -370,37 +406,37 @@ public interface Hir {
          * the ones it took on.
          */
         public Module withDefs(List<Def> replacement) {
-            return new Module(name, exposing, exposedOutputs, imports, replacement, behaviors, fns,
+            return new Module(name, exposing, published, exposedOutputs,imports, replacement, behaviors, fns,
                     takenOn, examples, fakes, exampleFileTarget, pos);
         }
 
         /** This module with its behavior declarations replaced. */
         public Module withBehaviors(List<BehaviorDef> replacement) {
-            return new Module(name, exposing, exposedOutputs, imports, defs, replacement, fns,
+            return new Module(name, exposing, published, exposedOutputs,imports, defs, replacement, fns,
                     takenOn, examples, fakes, exampleFileTarget, pos);
         }
 
         /** This module with {@code replacement} standing where its definitions were. */
         public Module withFns(List<FnDef> replacement) {
-            return new Module(name, exposing, exposedOutputs, imports, defs, behaviors, replacement,
+            return new Module(name, exposing, published, exposedOutputs,imports, defs, behaviors, replacement,
                     takenOn, examples, fakes, exampleFileTarget, pos);
         }
 
         /** This module with {@code replacement} standing where what it took on was. */
         public Module withTakenOn(List<FnDef> replacement) {
-            return new Module(name, exposing, exposedOutputs, imports, defs, behaviors, fns,
+            return new Module(name, exposing, published, exposedOutputs,imports, defs, behaviors, fns,
                     replacement, examples, fakes, exampleFileTarget, pos);
         }
 
         /** This module with {@code replacement} standing where its example blocks were. */
         public Module withExamples(List<Example> replacement) {
-            return new Module(name, exposing, exposedOutputs, imports, defs, behaviors, fns,
+            return new Module(name, exposing, published, exposedOutputs,imports, defs, behaviors, fns,
                     takenOn, replacement, fakes, exampleFileTarget, pos);
         }
 
         /** This module with {@code replacement} standing where its fake tables were. */
         public Module withFakes(List<Fake> replacement) {
-            return new Module(name, exposing, exposedOutputs, imports, defs, behaviors, fns,
+            return new Module(name, exposing, published, exposedOutputs,imports, defs, behaviors, fns,
                     takenOn, examples, replacement, exampleFileTarget, pos);
         }
     }
@@ -634,12 +670,6 @@ public interface Hir {
                         List<EnsuresClause> ensures,
                         SourcePos pos) implements BehaviorDef {
 
-        /** A behavior a pass wrote, named but written nowhere. */
-        public SpecBehavior(String name, List<Param> params, RetType ret, List<Name> constructs,
-                            List<Var> dependsOn, List<EnsuresClause> ensures, SourcePos pos) {
-            this(WrittenName.synthetic(name, pos), params, ret, constructs, dependsOn, ensures, pos);
-        }
-
         /**
          * Which behaviors the clause names, which is what a row stands in for.
          *
@@ -673,11 +703,6 @@ public interface Hir {
     /** A behavior parameter. Its type may be an anonymous union of cases (spec §unmarked-output). */
     record Param(WrittenName written, RetType type) implements Hir {
 
-        /** A parameter a pass wrote. */
-        public Param(String name, RetType type, SourcePos pos) {
-            this(WrittenName.synthetic(name, pos), type);
-        }
-
         /** What the parameter is called. */
         public String name() {
             return written.canonical();
@@ -691,17 +716,39 @@ public interface Hir {
     }
 
     /**
-     * {@code behavior name = f >-> g >-> ... [-> A | B]} — a composition (spec §sequential-composition).
-     * {@code declaredOut} is the optional trailing output declaration (§declared-composition-output): null
-     * when absent (output is inferred), else the declared cases, which must match the inferred output exactly
-     * (E1604).
+     * {@code behavior name = f >-> g >-> ... [-> A | B]} — a composition (spec §sequential-composition),
+     * as far as this compile can see it ({@link Composition}).
      */
-    record PipeBehavior(WrittenName written, List<Var> stages, RetType declaredOut, SourcePos pos)
-            implements BehaviorDef {
+    record PipeBehavior(WrittenName written, Composition composition, SourcePos pos)
+            implements BehaviorDef {}
 
-        /** A composition a pass wrote, named but written nowhere. */
-        public PipeBehavior(String name, List<Var> stages, RetType declaredOut, SourcePos pos) {
-            this(WrittenName.synthetic(name, pos), stages, declaredOut, pos);
+    /**
+     * What this compile holds of a composition.
+     *
+     * <p>A composition declares stages rather than a parameter list. A module compiled elsewhere
+     * publishes the signature those stages computed and leaves the stages behind (ADR-0063), so what
+     * a reader of it holds is a composition all the same — one that takes what it takes without a
+     * declaration naming its inputs — and not a behavior that declared parameters.
+     */
+    sealed interface Composition {
+
+        /**
+         * The stages as the composition writes them, and its optional trailing output declaration
+         * (§declared-composition-output): null when absent (output is inferred), else the declared
+         * cases, which must match the inferred output exactly (E1604).
+         */
+        record Stages(List<Var> stages, RetType declaredOut) implements Composition {
+            public Stages {
+                stages = List.copyOf(stages);
+            }
+        }
+
+        /** A composition another project compiled: what it takes and answers, as the module that
+         *  wrote it published them. Its stages are not here, and nothing names its inputs. */
+        record Elsewhere(List<RetType> takes, RetType answers) implements Composition {
+            public Elsewhere {
+                takes = List.copyOf(takes);
+            }
         }
     }
 
@@ -819,6 +866,12 @@ public interface Hir {
                     role, pos);
         }
 
+        /** The same definition taking {@code replacement} as its parameters. */
+        public FnDef withParams(List<FnParam> replacement) {
+            return new FnDef(written, declaredIn, replacement, declaredReturn, body, modifiers,
+                    role, pos);
+        }
+
         /**
          * The position this definition stands at, or null where it stands at none.
          *
@@ -895,13 +948,23 @@ public interface Hir {
 
     /** A {@code fn} parameter: a name, and a type only when the {@code fn} is a helper (spec §fn-declaration).
      * A helper's parameter type may be a function type {@link FnType}; a behavior fn's parameter
-     * carries no type ({@code type} is null). {@code typeFromPattern} marks a type read off a
-     * constructor pattern in parameter position rather than written beside the name — a behavior's
-     * implementation may write the pattern, and its type still comes from the behavior. */
-    record FnParam(Binder binder, RetType type, boolean typeFromPattern) implements Hir {
+     * carries no type ({@code type} is null). {@code typeFrom} says where the type came from. */
+    record FnParam(Binder binder, RetType type, ParameterTypeFrom typeFrom) implements Hir {
+
+        public FnParam {
+            Objects.requireNonNull(typeFrom, "a parameter says where its type came from");
+        }
+
         /** A parameter whose type, if any, the author wrote (the common case). */
         public FnParam(Binder binder, RetType type) {
-            this(binder, type, false);
+            this(binder, type, ParameterTypeFrom.WRITTEN);
+        }
+
+        /** Whether the type was read off a constructor pattern in parameter position rather than
+         *  written beside the name — a behavior's implementation may write the pattern, and its
+         *  type still comes from the behavior. */
+        public boolean typeFromPattern() {
+            return typeFrom == ParameterTypeFrom.A_PATTERN;
         }
 
         public String name() {
@@ -920,6 +983,24 @@ public interface Hir {
     }
 
     /**
+     * Where a parameter's type came from.
+     *
+     * <p>Kept on the parameter because the settling that infers a type writes it where a written one
+     * stands, and afterwards the two read alike. What the author said of a helper is part of what
+     * the helper is; what the checker worked out from its body follows from the body and from the
+     * rules it was worked out by, and a reader that holds the helper to what it is holds the first
+     * and not the second.
+     */
+    enum ParameterTypeFrom implements DelegatedEqualityIsTheCrossingAnswer {
+        /** Written beside the name, or not written and not yet worked out. */
+        WRITTEN,
+        /** Read off a constructor pattern in parameter position. */
+        A_PATTERN,
+        /** Worked out from the body where the author wrote none. */
+        INFERRED
+    }
+
+    /**
      * One term of a written type: a reference to a named type, or a function type. A type position
      * admits either, so what a name means does not depend on where it was written; whether a
      * function may stand in a given position is decided by what that position requires of a type,
@@ -927,17 +1008,160 @@ public interface Hir {
      */
     sealed interface TypeTerm extends Hir permits TypeRef, FnType {}
 
-    /** A function type {@code (A, ...) -> B}. Its parameters and result are whole types, so a
-     * function may take one and may return one. */
-    record FnType(List<RetType> params, RetType result, SourcePos pos) implements TypeTerm {}
+    /**
+     * A function type {@code (A, ...) -> B}. Its parameters and result are whole types, so a
+     * function may take one and may return one.
+     *
+     * <p>It answers something. A function type whose result was not written is a state of
+     * {@link Ast.FnType} — what the parser recovers to where the arrow or what follows it is
+     * missing — and a source that reads that way is refused where it is written, so it is not a
+     * state this tree is reached with. Refused here too, the way a {@link TypeRef} that denotes
+     * nothing is: what a reader below has to take apart is a written type and never an absence, and
+     * a tree that arrived holding one says the reading above it let something through.
+     */
+    record FnType(List<RetType> params, RetType result, SourcePos pos) implements TypeTerm {
 
-    /** A written type: one term, or the unmarked sum of several (spec §unmarked-output). */
-    record RetType(List<TypeTerm> cases, SourcePos pos) implements Hir {
+        public FnType {
+            if (result == null) {
+                throw new IllegalArgumentException("a function type answers something: " + pos);
+            }
+            // The same of what it takes, and for the same reason: a reading of this walks the
+            // parameters as it walks the result, and a parameter that says nothing is an absence
+            // every walk of them would have to carry a question about.
+            for (RetType takes : params) {
+                if (takes == null) {
+                    throw new IllegalArgumentException(
+                            "a function type takes written types: " + pos);
+                }
+            }
+        }
+    }
+
+    /**
+     * A written type: one term, or the unmarked sum of several (spec §unmarked-output).
+     *
+     * <p>What it comes to is settled here, once, out of the terms — each of which already carries
+     * what it denotes, resolution having happened before any check runs. A reader below asks rather
+     * than works it out, which is what {@link TypeRef} says of one term and this says of the type
+     * the terms add up to.
+     *
+     * <p>Not a record, so that the terms and what they come to cannot be handed in separately: one
+     * is worked out from the other, and a caller that could pass both could pass two that disagree.
+     * {@link #of} is the only way to make one, and it is where the reading happens.
+     */
+    final class RetType implements Hir {
+
+        private final List<TypeTerm> cases;
+        @DecidedByTheRest
+        private final WrittenTypeMeaning meaning;
+        private final SourcePos pos;
+
+        private RetType(List<TypeTerm> cases, SourcePos pos) {
+            this.cases = List.copyOf(cases);
+            this.pos = pos;
+            this.meaning = meaningOf(this.cases, pos);
+        }
+
+        /** The written type these terms make. */
+        public static RetType of(List<TypeTerm> cases, SourcePos pos) {
+            return new RetType(cases, pos);
+        }
+
+        /** The terms as they were written. */
+        public List<TypeTerm> cases() {
+            return cases;
+        }
+
+        /** What they come to. */
+        public WrittenTypeMeaning meaning() {
+            return meaning;
+        }
+
+        @Override
+        public SourcePos pos() {
+            return pos;
+        }
 
         /** The function type this stands for, or null when it is not a lone function type. A sum of
          * a function with anything else is not one, and has no case to be told apart by. */
         public FnType asFn() {
             return cases.size() == 1 && cases.get(0) instanceof FnType fn ? fn : null;
+        }
+
+        /**
+         * The reading: one term is what that term stands for, and several are the union of the names
+         * they go by.
+         *
+         * <p>A lone term is not asked whether it could be a union member, because it is not one. A
+         * sum is, and the two ways a member can fail to be one are different mistakes, of which the
+         * author owns one. A member resting on a name that denotes nothing was reported where that
+         * name was written, and finding one here says only that the sum has no case set at all, so
+         * it takes the type that absorbs. Finding one does not end the reading, because a member the
+         * author does own may be written after it.
+         */
+        private static WrittenTypeMeaning meaningOf(List<TypeTerm> cases, SourcePos pos) {
+            List<Type> members = new ArrayList<>(cases.size());
+            for (TypeTerm t : cases) {
+                WrittenTypeMeaning stands = stands(t);
+                if (!(stands instanceof WrittenTypeMeaning.Settled term)) {
+                    return stands;
+                }
+                members.add(term.type());
+            }
+            if (members.size() == 1) {
+                return new WrittenTypeMeaning.Settled(members.get(0));
+            }
+            Set<TypeSymbol> names = new LinkedHashSet<>();
+            boolean unknown = false;
+            for (Type m : members) {
+                switch (UnionMember.of(m)) {
+                    case UnionMember.Named named -> names.add(named.name());
+                    case UnionMember.NoType _ -> unknown = true;
+                    case UnionMember.NotAMember _ -> {
+                        return new WrittenTypeMeaning.NotAMember(m, pos);
+                    }
+                }
+            }
+            return new WrittenTypeMeaning.Settled(
+                    unknown ? Type.ERRONEOUS : Type.union(names));
+        }
+
+        /** What one term stands for, or the failure a type written inside it carries out. */
+        private static WrittenTypeMeaning stands(TypeTerm t) {
+            return switch (t) {
+                case TypeRef ref -> new WrittenTypeMeaning.Settled(ref.denotes());
+                case FnType ft -> standsFor(ft);
+            };
+        }
+
+        private static WrittenTypeMeaning standsFor(FnType ft) {
+            List<Type> params = new ArrayList<>(ft.params().size());
+            for (RetType p : ft.params()) {
+                if (!(p.meaning() instanceof WrittenTypeMeaning.Settled takes)) {
+                    return p.meaning();
+                }
+                params.add(takes.type());
+            }
+            if (!(ft.result().meaning() instanceof WrittenTypeMeaning.Settled answers)) {
+                return ft.result().meaning();
+            }
+            return new WrittenTypeMeaning.Settled(Type.fn(params, answers.type()));
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof RetType ret
+                    && cases.equals(ret.cases) && Objects.equals(pos, ret.pos);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(cases, pos);
+        }
+
+        @Override
+        public String toString() {
+            return "RetType[cases=" + cases + ", pos=" + pos + "]";
         }
     }
 
@@ -1167,11 +1391,6 @@ public interface Hir {
             return type;
         }
 
-        /** The same reference, standing for {@code type} instead. */
-        public TypeRef denoting(Type type) {
-            return new TypeRef(written, arg, tupleElems, type, anchor);
-        }
-
         @Override
         public String toString() {
             return name() == null ? String.valueOf(type) : name();
@@ -1185,17 +1404,10 @@ public interface Hir {
 
     sealed interface DecoderDef extends Hir permits PrimDecoder, ObjectDecoder, NewtypeDecoder {}
 
-    /** {@code decoder from Text|Int as <input> { <stmts> <construct> }} (single value). */
-    record PrimDecoder(RawKind from,
-                       Binder input,
-                       List<DecStmt> stmts,
-                       Construct result,
-                       SourcePos pos) implements DecoderDef {
-
-        public String inputName() {
-            return input.name();
-        }
-    }
+    /** A single-value decoder: reads one primitive {@code input} and constructs {@code result}
+     *  from it. */
+    record PrimDecoder(RawKind from, Binder input, Construct result, SourcePos pos)
+            implements DecoderDef {}
 
     /** {@code decoder from Object { <binds> <construct> }} (multi-field, accumulating). */
     record ObjectDecoder(List<Bind> binds, Construct result, SourcePos pos) implements DecoderDef {}
@@ -1207,12 +1419,7 @@ public interface Hir {
      * sum, not {@code {value: ...}}.
      */
     record NewtypeDecoder(DecRef inner, Binder input, Construct result, SourcePos pos)
-            implements DecoderDef {
-
-        public String inputName() {
-            return input.name();
-        }
-    }
+            implements DecoderDef {}
 
     /** One field an object decoder reads: the key it is found under, how the value there is read,
      *  and the name the construction below refers to it by. Built by {@code Deriver}; no source
@@ -1258,16 +1465,6 @@ public interface Hir {
      * type says as much and a reader that switches on it needs no arm for what cannot be there. It is
      * also the classification the checker already made, carried here rather than worked out again. */
     record MapDecRef(DecRef value, MapKeyRepresentation key, SourcePos pos) implements DecRef.Bare {}
-
-    /** A statement in a single-value decoder body. */
-    sealed interface DecStmt extends Hir permits Let {}
-
-    record Let(Binder binder, Expr value, SourcePos pos) implements DecStmt {
-
-        public String name() {
-            return binder.name();
-        }
-    }
 
     /**
      * The construction a decoder ends in: {@code TypeName { field: expr, ... }}, one value per field.
@@ -1324,12 +1521,7 @@ public interface Hir {
 
     // --- encoders ---
 
-    record EncoderDef(Binder self, RawExpr result, SourcePos pos) implements Hir {
-
-        public String selfName() {
-            return self.name();
-        }
-    }
+    record EncoderDef(Binder self, RawExpr result, SourcePos pos) implements Hir {}
 
     /** A Raw-building expression. */
     sealed interface RawExpr extends Hir
@@ -1342,13 +1534,8 @@ public interface Hir {
     record MapEnc(Expr source, EncElem elem, MapKeyRepresentation key, SourcePos pos) implements RawExpr {}
 
     /** Encodes an optional field: {@code None} becomes {@code Raw.Null}, {@code Some(v)} encodes
-     * {@code v} via {@code inner}, which reads the unwrapped value bound to {@code elemVar}. */
-    record OptionRaw(Expr access, RawExpr inner, Binder elem, SourcePos pos) implements RawExpr {
-
-        public String elemVar() {
-            return elem.name();
-        }
-    }
+     * {@code v} via {@code inner}, which reads the unwrapped value bound to {@code elem}. */
+    record OptionRaw(Expr access, RawExpr inner, Binder elem, SourcePos pos) implements RawExpr {}
 
     record TextRaw(Expr arg, SourcePos pos) implements RawExpr {}
 
@@ -1411,7 +1598,8 @@ public interface Hir {
     sealed interface Expr extends Written
             permits IntLit, DecimalLit, StringLit, BoolLit, Var, FieldAccess, Apply, Binary, Neg,
                     NewData, Match, If, IfConstructed, ListLit, RowCollection, ListComp, LetIn,
-                    Expansion, Block, Tuple, TupleGet, Unreachable {
+                    Expansion, Materialised, ValueBuild, ValueInvocation, Block, Tuple, TupleGet,
+                    Unreachable {
     }
 
     /**
@@ -1427,18 +1615,39 @@ public interface Hir {
     /**
      * {@code x -> expr}, or {@code (acc, x) -> expr} — a block (spec §blocks).
      *
-     * <p>Second-class: it may only be an argument, never a value that is returned, stored in a
-     * field, or bound by {@code let}. The parser only accepts one in an argument position, and
-     * because it cannot escape, the backend inlines it rather than building a closure.
+     * <p>Where a position or a declaration says what the block takes, it is a function value like
+     * any other: it may be returned, held in a collection or bound by {@code let}, and the backend
+     * builds a closure for it where it is kept rather than applied. Where nothing says, it is
+     * refused where it is written.
      *
      * <p>{@code rule} is which block of the source this is, minted where the syntax is read and
      * carried by every copy. A block handed to a function parameter is the rule the fork that
      * applies it decides by, and telling two of those apart has to survive the body being spliced —
      * which a position does not, being stamped with the call site wherever the body is one a reader
      * cannot open.
+     *
+     * <p>{@code expandedFrom} is the name this block was written out of, for the blocks no author
+     * wrote: a name standing where a value goes is the function it names, and what a pass puts
+     * there is the block applying it. Null for a block the author wrote, which its rule names.
+     *
+     * <p>{@code named} is what that name reaches and what the declaration says it takes, for the
+     * same blocks: null for one an author wrote, or one a pass built for another reason.
+     *
+     * <p>Said by whoever writes the block and not read back off what stands inside it. The body is
+     * walked again after it is written — a call in it becomes an {@link Expansion}, a binding may
+     * come to stand around it — so a reader working out which block this is from the shape it ended
+     * up with is asking a question the shape stopped answering.
      */
     record Block(List<Binder> params, Expr body, souther.compiler.types.RuleOrigin rule,
-                 SourcePos pos, Region region) implements Expr {
+                 SourceReferenceOrigin expandedFrom, NamedFunction named, SourcePos pos,
+                 Region region) implements Expr {
+
+        /** A block that is not a name written out: an author's lambda, or one a pass built for a
+         *  reason of its own. */
+        public Block(List<Binder> params, Expr body, souther.compiler.types.RuleOrigin rule,
+                     SourceReferenceOrigin expandedFrom, SourcePos pos, Region region) {
+            this(params, body, rule, expandedFrom, null, pos, region);
+        }
 
         /** How the parameters were written, in order. */
         public List<String> paramNames() {
@@ -1447,6 +1656,32 @@ public interface Hir {
                 names.add(p.name());
             }
             return names;
+        }
+    }
+
+    /**
+     * The function a name written where a value goes reaches, as the block that stands for it holds
+     * it.
+     *
+     * <p>{@code target} says which function it is, and the kinds of function say where its type
+     * is read: a binding holds its own, a behavior is typed by the requirements the body was
+     * checked under, and every other declaration says it in its parameters.
+     *
+     * <p>{@code declaredTakes} is what the declaration has settled for those parameters, resolved:
+     * the type its author wrote, or the one reading its body gave a parameter left unwritten. Null
+     * where the declaration is one of the first two, where a parameter has no type settled, and
+     * where one of them is not a type until something instantiates it. It is read off the declaration when the
+     * name is written out, the one place the declaration is at hand for every kind of function —
+     * whether the body is later expanded, left standing or bound is decided after, and none of the
+     * three changes what the function takes.
+     */
+    record NamedFunction(ValueName target, List<Type> declaredTakes) {
+
+        public NamedFunction {
+            if (target == null) {
+                throw new IllegalArgumentException("a function is the one a name reaches");
+            }
+            declaredTakes = declaredTakes == null ? null : List.copyOf(declaredTakes);
         }
     }
 
@@ -1464,11 +1699,6 @@ public interface Hir {
      */
     record LetIn(Binder binder, Expr value, RetType declaredType, boolean annotated, Name opens,
                  Expr body, SourcePos pos, Region region) implements Expr {
-        /** An ordinary {@code let x = e}: the bound name takes {@code e}'s inferred type. */
-        public LetIn(Binder binder, Expr value, Expr body, SourcePos pos, Region region) {
-            this(binder, value, null, false, null, body, pos, region);
-        }
-
         /** A binding carrying an inlined helper parameter's declared type. */
         public LetIn(Binder binder, Expr value, RetType declaredType, Expr body, SourcePos pos,
                      Region region) {
@@ -1489,7 +1719,137 @@ public interface Hir {
     }
 
     /**
-     * One application of a non-recursive helper, with the callee's body in place of the call.
+     * One build of a value's body, kept as evidence of which build it is.
+     *
+     * <p>What a value bound by the region that demands it is made of: the body, and the reason this
+     * build stands for the region and not for another ({@link MaterialisationSite}). The pass that
+     * shares builds knows the region and does not know which copy of a body it is walking in, and a
+     * walk that knows the copy does not know the region. So the first leaves what it settled in the
+     * tree, and the second reads it back as it descends.
+     *
+     * <p>Wraps the value a binding is given and not the binding: what belongs to this build is what
+     * computes the value, and what reads the binding belongs to the region around it. A value
+     * naming another builds that one inside its own body when a fork of the body demands it, and
+     * beside its own when the body itself does — the nesting says which.
+     *
+     * <p>It is no evaluation region of its own and no call: it adds nothing to what stands under it
+     * except which build that is.
+     *
+     * @param value which value's body this is a build of
+     * @param site  the region it was built for
+     */
+    record Materialised(ValueName value, MaterialisationSite site, Expr body, SourcePos pos,
+                        Region region) implements Expr {
+
+        public Materialised {
+            if (value == null || site == null || body == null) {
+                throw new IllegalArgumentException(
+                        "a build is of some value, for some region: " + value + " for " + site);
+            }
+        }
+
+        /**
+         * {@code e} as the value it computes, for a reader whose question is about what the value
+         * is and not about which build of it stands here.
+         */
+        public static Expr stripped(Expr e) {
+            Expr at = e;
+            while (at instanceof Materialised build) {
+                at = build.body();
+            }
+            return at;
+        }
+    }
+
+    /**
+     * A build of a value the tree an analysis reads holds once, as a reference to it.
+     *
+     * <p>Where {@link Materialised} is a build that carries the body it computes, this carries none:
+     * what the value means is its template, held once for every build of it, and this says only
+     * which value and for which region. It has no children, so a walk that goes into the parts of an
+     * expression meets no body under it; the value is asked of the templates by what it reaches.
+     *
+     * <p><b>What the value is a constant of travels with it.</b> A position that asks whether an
+     * expression is known at compile time — a {@code String.matches} pattern — folds the tree it is
+     * handed and resolves no name, and a build names a value without holding its body. So where the
+     * value folds to a constant, the literal that constant reads back as is carried here, as a
+     * substituted value is written out as one where it is named; the build is still what stands in
+     * the tree, and the literal is not a child of it.
+     *
+     * @param value    which value this is a build of
+     * @param reaches  the name the module reaches it by, which is what the template is held under
+     * @param site     the region it was built for
+     * @param constant the literal the value folds to, or null where it folds to none a literal
+     *                 spells
+     */
+    record ValueBuild(ValueName value, ReachName.Declaration reaches, MaterialisationSite site,
+                      Expr constant, SourcePos pos, Region region) implements Expr {
+
+        public ValueBuild {
+            if (value == null || reaches == null || site == null) {
+                throw new IllegalArgumentException(
+                        "a build is of some value, for some region: " + value + " for " + site);
+            }
+        }
+    }
+
+    /**
+     * A build of a value the emitted tree gets by calling the method the value is emitted as.
+     *
+     * <p>Where {@link Materialised} carries the body a build computes, this carries none: the value
+     * is run where its method is, and what stands here is the call. {@code arguments} are the
+     * bindings the method takes, each already bound in the region that builds this. They are name
+     * slots: nothing there is evaluated, and a walk over the names of a tree meets them as it meets
+     * a spread's. {@code target} is a declaration and no slot, so what a reader follows through
+     * the value graph is read off this node.
+     *
+     * @param target    the declaration of the value the method is emitted for, which is another
+     *                  module's where the value is declared there
+     * @param site      the region it was built for
+     * @param arguments the bindings the method takes, in order; empty where it takes nothing
+     */
+    record ValueInvocation(ReachName.Declaration target, MaterialisationSite site,
+                           List<Var.Denoting> arguments, SourcePos pos, Region region)
+            implements Expr {
+
+        public ValueInvocation {
+            if (target == null || site == null) {
+                throw new IllegalArgumentException(
+                        "a call is of some value's method, for some region: " + target
+                                + " for " + site);
+            }
+            if (!(target.denotes() instanceof ValueName.Helper)) {
+                throw new IllegalArgumentException(
+                        "only a value has a method to call, and " + target + " is not one");
+            }
+            for (Var.Denoting each : arguments) {
+                if (!(each.denotes() instanceof ValueName.Local)) {
+                    throw new IllegalArgumentException("a method is handed bindings, and `"
+                            + each.written() + "` is not one");
+                }
+            }
+            arguments = List.copyOf(arguments);
+        }
+
+        /** The value this is a build of. */
+        public ValueName value() {
+            return target.denotes();
+        }
+
+        /** {@link #target} rendered, which is what a table keyed by a declaration's name is looked
+         *  up with. */
+        public String reaches() {
+            return target.rendered();
+        }
+    }
+
+    /**
+     * One application whose callee's body is copied in place of the call: a non-recursive helper, a
+     * function the caller supplied, or a value that answers a function.
+     *
+     * <p>A helper carries its instantiated signature. A value takes no arguments of its own, so its
+     * expansion has no {@code bound} and no {@code given} and declares no result; it is an expansion
+     * because applying it copies a body, and two applications are two copies.
      *
      * <p>It is one node rather than the bindings it becomes because a signature is one statement.
      * {@code emptyLike (xs: List<'a>) : List<'a>} says the result holds what the argument held, and
@@ -1546,8 +1906,20 @@ public interface Hir {
     }
 
     /** A value argument. It becomes a binding, so the body reads a name rather than the argument's
-     * text, and the callee's declared type for it comes along. */
-    record Bound(Binder binder, RetType declaredType, Expr value) {}
+     * text, and the callee's declared type for it comes along. {@code argument} is which argument
+     * of the call it is, counted in the order the call writes them. */
+    record Bound(Binder binder, RetType declaredType, Expr value, int argument) {
+
+        /** The same argument, holding {@code rewritten}. */
+        public Bound with(Expr rewritten) {
+            return new Bound(binder, declaredType, rewritten, argument);
+        }
+
+        /** The same argument, bound as {@code renamed} and holding {@code rewritten}. */
+        public Bound with(Binder renamed, Expr rewritten) {
+            return new Bound(renamed, declaredType, rewritten, argument);
+        }
+    }
 
     /**
      * A function argument. It leaves no binding, so what the signature said about it reaches a
@@ -1563,8 +1935,19 @@ public interface Hir {
      * is for a function written in place. Where it does not — the callee named a function parameter
      * and never used it — the body says nothing about it at all, and this is the only place it can
      * be held to the type the callee declared for it.
+     *
+     * <p>{@code argument} is which argument of the call it is, counted in the order the call writes
+     * them. Which arguments are functions and which are values is the callee's to say, so what the
+     * call wrote, and in what order, is read off this and {@link Bound#argument} together.
      */
-    record Given(RetType declaredType, Expr value, boolean applied, RetType arrivesAs) {}
+    record Given(RetType declaredType, Expr value, boolean applied, RetType arrivesAs,
+                 int argument) {
+
+        /** The same argument, holding {@code rewritten}. */
+        public Given with(Expr rewritten) {
+            return new Given(declaredType, rewritten, applied, arrivesAs, argument);
+        }
+    }
 
     /** A list literal {@code [e1, e2, ...]} (one or more elements of the same type).
      *
@@ -1666,17 +2049,6 @@ public interface Hir {
     record IfConstructed(Expr construct, Binder binder, Expr then, List<ElseArm> els,
                          SourceConstructOrigin origin, SourcePos pos, Region region) implements Expr {
 
-        /** The attempt whose failure is not told apart: one arm, naming no clause. */
-        public IfConstructed(Expr construct, Binder binder, Expr then, Expr els,
-                             SourceConstructOrigin origin, SourcePos pos, Region region) {
-            this(construct, binder, then, List.of(ElseArm.any(els)), origin, pos, region);
-        }
-
-        /** How the binding was written. */
-        public String binderName() {
-            return binder.name();
-        }
-
         /** Whether the failure is departed from per clause, rather than by one value for any of them. */
         public boolean mapsClauses() {
             return els.size() > 1 || els.get(0).clause().isPresent();
@@ -1693,11 +2065,6 @@ public interface Hir {
      * order the clauses are declared in (spec §invariant-declaration).
      */
     record ElseArm(Optional<String> clause, Expr body, SourcePos pos) implements Hir {
-
-        /** The arm taken for any failure — what {@code else e} and {@code | _ -> e} both mean. */
-        public static ElseArm any(Expr body) {
-            return new ElseArm(Optional.empty(), body, body.pos());
-        }
 
         /** The same arm over a rewritten body, so a rewriting stage keeps the clause it answers. */
         public ElseArm with(Expr rewritten) {
@@ -1724,9 +2091,6 @@ public interface Hir {
      */
     record Case(List<Name> caseTypes, Binder binding, Expr body, List<Name> unwrapAsserts,
                 SourcePos pos) implements Hir {
-        public Case(List<Name> caseTypes, Binder binding, Expr body, SourcePos pos) {
-            this(caseTypes, binding, body, null, pos);
-        }
 
         /** How the binding was written, or null where the arm binds nothing. */
         public String bindingName() {
@@ -1870,7 +2234,7 @@ public interface Hir {
      * and a pass has nothing to spell that would make a construction say what it was not read as.
      * What {@link Reading} settles is which of these a construction gets, and it settles it once.
      */
-    enum Fields {
+    enum Fields implements DelegatedEqualityIsTheCrossingAnswer {
         /** Every field of the construction is written or spread — what a body writes. */
         EVERY_ONE_WRITTEN,
         /** A field the construction does not write is {@code None} where it declares an optional. */
@@ -1881,7 +2245,8 @@ public interface Hir {
 
     record DecimalLit(java.math.BigDecimal value, SourcePos pos, Region region) implements Expr {}
 
-    /** Unary minus {@code -operand} on an Int or Decimal (spec §an-operator-takes-the-types-it-is-defined-for). */
+    /** Unary minus {@code -operand} on a number, answering the type it was given (spec
+     *  §an-operator-takes-the-types-it-is-defined-for). */
     record Neg(Expr operand, SourcePos pos, Region region) implements Expr {}
 
     record StringLit(String value, SourcePos pos, Region region) implements Expr {}
@@ -2032,7 +2397,7 @@ public interface Hir {
          * a reader to work out, so it is given the binder it is reading and answers with that
          * binding. There is no way to write one of these without having the binding in hand.
          */
-        static Var local(Binder binder, SourcePos pos) {
+        static Denoting local(Binder binder, SourcePos pos) {
             ValueName.Local local = new ValueName.Local(binder.name(), binder.id());
             WrittenName written = WrittenName.synthetic(binder.name(), pos);
             // No source wrote it: what a pass reads here is a binding that pass put there.
@@ -2072,28 +2437,6 @@ public interface Hir {
          * answers and whether it answered cannot come apart. */
         default boolean unresolved() {
             return answered() == null;
-        }
-
-        /**
-         * The same name, as {@code reachedAs} reaches it.
-         *
-         * <p>One answer and not two. Which declaration this reaches and under what name it reaches
-         * it from here are the two halves of one question, and resolution answers them together;
-         * handed over separately, a caller could pair one name's denotation with another's route
-         * and nothing would say so. There is no state between: a name is answered or it is
-         * {@link Unanswered}.
-         */
-        default Var denoting(ReachName reachedAs) {
-            return new Var.Denoting(written(), reachedAs, origin(), region());
-        }
-
-        /** The same name, over {@code region} — whichever of the two it is. */
-        default Var over(Region region) {
-            return switch (this) {
-                case Var.Denoting d ->
-                        new Var.Denoting(d.written(), d.reachedAs(), d.origin(), region);
-                case Var.Unanswered u -> new Var.Unanswered(u.written(), u.origin(), region);
-            };
         }
 
         /** The same name, read and found to name nothing. */
@@ -2592,53 +2935,6 @@ public interface Hir {
     record Binary(BinOp op, Expr left, Expr right, SourceConstructOrigin origin, SourcePos pos,
                   Region region) implements Expr {}
 
-
-    /**
-     * {@code e} written over {@code region} instead of whatever it says now — for the one caller
-     * that knows a wider stretch of source than the node it is holding.
-     *
-     * <p>A form the parser reduces away is still characters in the file. {@code (a + 100)} leaves an
-     * {@code Hir.Binary} because the parentheses say nothing the tree needs to keep, and they are
-     * nine characters the author wrote as that argument all the same. A report that underlined seven
-     * of them would be pointing at an expression the reader has to work out is the one it means.
-     *
-     * <p>The reduction is the frontend's and so is this: nowhere downstream is there anything left
-     * saying the parentheses were ever there.
-     */
-    public static Expr withRegion(Expr e, Region region) {
-        return switch (e) {
-            case IntLit x -> new IntLit(x.value(), x.pos(), region);
-            case DecimalLit x -> new DecimalLit(x.value(), x.pos(), region);
-            case StringLit x -> new StringLit(x.value(), x.pos(), region);
-            case BoolLit x -> new BoolLit(x.value(), x.pos(), region);
-            case Var x -> x.over(region);
-            case Unreachable x -> new Unreachable(x.reason(), x.pos(), region);
-            case Neg x -> new Neg(x.operand(), x.pos(), region);
-            case FieldAccess x -> new FieldAccess(x.target(), x.name(), x.pos(), region);
-            case Binary x -> new Binary(x.op(), x.left(), x.right(), x.origin(), x.pos(), region);
-            case Apply x -> new Apply(x.function(), x.args(), x.origin(), x.applied(),
-                    x.application(), x.pos(), region);
-            case If x -> new If(x.cond(), x.then(), x.els(), x.origin(), x.pos(), region);
-            case IfConstructed x ->
-                    new IfConstructed(x.construct(), x.binder(), x.then(), x.els(), x.origin(), x.pos(),
-                            region);
-            case LetIn x -> new LetIn(x.binder(), x.value(), x.declaredType(), x.annotated(),
-                    x.opens(), x.body(), x.pos(), region);
-            case Expansion x -> new Expansion(x.callee(), x.application(), x.at(), x.bound(),
-                    x.given(),
-                    x.declaredReturn(), x.body(), x.pos(), region);
-            case Block x -> new Block(x.params(), x.body(), x.rule(), x.pos(), region);
-            case ListLit x -> new ListLit(x.elements(), x.origin(), x.pos(), region);
-            case RowCollection x -> new RowCollection(x.elements(), x.origin(), x.pos(), region);
-            case ListComp x -> new ListComp(x.element(), x.guards(), x.origin(), x.pos(), region);
-            case Tuple x -> new Tuple(x.elements(), x.pos(), region);
-            case TupleGet x -> new TupleGet(x.tuple(), x.index(), x.arity(), x.pos(), region);
-            case NewData x -> new NewData(x.typeName(), x.inits(), x.spreads(), x.origin(),
-                    x.fields(), x.pos(), region);
-            case Match x -> new Match(x.scrutinee(), x.cases(), x.origin(), x.pos(), region);
-        };
-    }
-
     /**
      * {@code e} with each of its slots replaced by what the operator for that slot answers, its own
      * kind and position kept — or {@code e} itself where every slot answered what it was given, so a
@@ -2663,6 +2959,21 @@ public interface Hir {
             case BoolLit x -> x;
             case Var x -> x;
             case Unreachable x -> x;
+            // No slots: what the value means is its template's, and this says only which value.
+            case ValueBuild x -> x;
+            // What it takes are names of bindings already made, so they are name slots: nothing
+            // there is evaluated, and a reader asking which bindings a tree reads finds them.
+            case ValueInvocation x -> {
+                List<Var.Denoting> arguments = each(x.arguments(), argument -> {
+                    if (!(atName.apply(argument) instanceof Var.Denoting named)) {
+                        throw new IllegalStateException("a value's method is handed a binding, and"
+                                + " `" + argument.written() + "` was made to name nothing");
+                    }
+                    return named;
+                });
+                yield arguments == x.arguments() ? x
+                        : new ValueInvocation(x.target(), x.site(), arguments, x.pos(), x.region());
+            }
             case Neg n -> {
                 Expr operand = atExpr.apply(n.operand());
                 yield operand == n.operand() ? n : new Neg(operand, n.pos(), n.region());
@@ -2716,18 +3027,23 @@ public interface Hir {
             case Expansion ex -> {
                 List<Bound> bound = each(ex.bound(), b -> {
                     Expr value = atExpr.apply(b.value());
-                    return value == b.value() ? b
-                            : new Bound(b.binder(), b.declaredType(), value);
+                    return value == b.value() ? b : b.with(value);
                 });
                 Expr body = atExpr.apply(ex.body());
                 yield bound == ex.bound() && body == ex.body() ? ex
                         : new Expansion(ex.callee(), ex.application(), ex.at(), bound, ex.given(),
                                 ex.declaredReturn(), body, ex.pos(), ex.region());
             }
+            case Materialised m -> {
+                Expr body = atExpr.apply(m.body());
+                yield body == m.body() ? m
+                        : new Materialised(m.value(), m.site(), body, m.pos(), m.region());
+            }
             case Block bl -> {
                 Expr body = atExpr.apply(bl.body());
                 yield body == bl.body() ? bl
-                        : new Block(bl.params(), body, bl.rule(), bl.pos(), bl.region());
+                        : new Block(bl.params(), body, bl.rule(), bl.expandedFrom(), bl.named(),
+                                bl.pos(), bl.region());
             }
             case ListLit l -> {
                 List<Expr> elements = each(l.elements(), atExpr);
@@ -2834,6 +3150,18 @@ public interface Hir {
         List<InvariantClause> out = new ArrayList<>();
         for (InvariantClause clause : clauses) {
             out.add(clause.with(f.apply(clause.expr())));
+        }
+        return out;
+    }
+
+    /** As {@link #mapClauses(List, UnaryOperator)}, telling {@code f} which clause it is given: its
+     * place among the clauses, counted from zero in the order they are held. */
+    public static List<InvariantClause> mapClauses(List<InvariantClause> clauses,
+                                                   BiFunction<Integer, Expr, Expr> f) {
+        List<InvariantClause> out = new ArrayList<>();
+        for (int ordinal = 0; ordinal < clauses.size(); ordinal++) {
+            InvariantClause clause = clauses.get(ordinal);
+            out.add(clause.with(f.apply(ordinal, clause.expr())));
         }
         return out;
     }

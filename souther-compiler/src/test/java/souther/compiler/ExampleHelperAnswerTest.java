@@ -62,7 +62,7 @@ class ExampleHelperAnswerTest {
 
                 let run (i) = taxed(i.n)
 
-                let taxed (n: Int) = Amount(n * 110 / 100)
+                let taxed (n: Int) = Amount(Rational.toInt(DOWN, n * 110 / 100))
 
                 example run
                     | "a newtype" : (In { n = 100 }) -> taxed(100)
@@ -221,7 +221,7 @@ class ExampleHelperAnswerTest {
 
                 let run (i) = Out { total = taxed(i.n) }
 
-                let taxed (n: Int) = Amount(n * 110 / 100)
+                let taxed (n: Int) = Amount(Rational.toInt(DOWN, n * 110 / 100))
 
                 example run
                     | "a helper inside a record" : (In { n = 100 }) -> Out { total = taxed(100) }

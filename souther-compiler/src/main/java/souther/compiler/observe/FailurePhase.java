@@ -49,6 +49,22 @@ public enum FailurePhase {
      */
     ANSWERER_ESTABLISHMENT,
 
+    /**
+     * This compile owned the behavior's implementation and the image the row runs in holds none.
+     *
+     * <p>A module whose bodies did not all come out is evaluated against the bodies that may be
+     * run, and a behavior reaching one that did not come out is not among them. Nothing about the
+     * row was found out, so it ends {@link Disposition#INCOMPLETE} — what it would have decided is
+     * exactly what was not decided.
+     *
+     * <p>Told apart from {@link #ANSWERER_ESTABLISHMENT}, which is an implementation that exists and
+     * may not be handed this module's values because it reads them by another build's declarations.
+     * Here there is nothing to hand them to, and the reason is this compile's own. And told apart
+     * from a behavior nothing implements, which is not a failure of any phase: that row is waiting
+     * for something to supply the behavior, and this one is not waiting for anything.
+     */
+    IMPLEMENTATION_NOT_MADE,
+
     /** Applying the behavior did not produce an answer. */
     INVOCATION,
 

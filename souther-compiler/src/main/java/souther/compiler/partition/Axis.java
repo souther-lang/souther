@@ -176,7 +176,8 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term,
     public NumberAt<TermPath> subject() {
         return switch (term) {
             case NumericTerm.ValueOf it -> NumberAt.valueOf(it.position());
-            case NumericTerm.TakenOf it -> NumberAt.takenOf(it.position(), it.operation());
+            case NumericTerm.TakenOf it ->
+                    NumberAt.takenOf(it.position(), it.operation(), it.arguments());
         };
     }
 

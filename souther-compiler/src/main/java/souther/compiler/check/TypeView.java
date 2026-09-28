@@ -4,7 +4,10 @@ import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.SequencedMap;
 
 /**
  * A position's type, read once: what it is, and what it is written as.
@@ -127,8 +130,22 @@ public record TypeView(Type declared, List<TypeSymbol> wrappers, Shape shape) {
                     new Shape.Sum(name, TypeOps.commonSpreadOf(sum, symbols, published));
             case Hir.UnitData _ -> new Shape.Unit(name);
             case Hir.Data data when data.newtype() -> new Shape.Unresolved(name);
-            case Hir.Data data -> new Shape.Product(name, TypeOps.fieldTypes(data, symbols));
+            // A product shape states an order, so the order is asked of what answers it and the
+            // types are read by name. Taken off however the mapping iterated, the sequence this
+            // hands on would be one nothing had promised.
+            case Hir.Data data -> new Shape.Product(name,
+                    laidOut(TypeOps.fieldLayout(data, symbols), TypeOps.fieldTypes(data, symbols)));
             case null -> new Shape.Unresolved(name);
         };
+    }
+
+    /** {@code types} in the order {@code layout} puts them, which is what a product shape holds. */
+    private static SequencedMap<String, Type> laidOut(List<String> layout,
+                                                      Map<String, Type> types) {
+        SequencedMap<String, Type> out = new LinkedHashMap<>();
+        for (String field : layout) {
+            out.put(field, types.get(field));
+        }
+        return out;
     }
 }

@@ -72,7 +72,7 @@ class ALineOfAClauseIsNamedWithinThePartThatDrewItTest {
         assertEquals(1, prepared.behaviors().stream()
                         .filter(each -> each.name().equals(behavior)).count(),
                 "the behavior under test is declared");
-        return EnsuresThresholds.of(stated == null ? null : stated.get(behavior), inputs, rules);
+        return ThresholdFixtures.clausesOf(stated == null ? null : stated.get(behavior), inputs, rules);
     }
 
     /** Each line, as the position it is on and the name the two decompositions gave it. */

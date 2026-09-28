@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.conformance.RepositoryModels;
@@ -12,6 +11,8 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Front;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.test.ClosedWorldContract;
+import souther.test.Nightly;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -38,8 +39,17 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * <p>The statement is what lets one reading serve a whole search. Without it a search that read the
  * declaration once would be answering about the rules as they stood before it chose anything, which
  * is the reading that leaves {@code b} its whole range while {@code a < b} is still open.
+ *
+ * <p>Asked once a night. The two sides are compared at every position of every model this
+ * repository carries, and the side that reads per settling builds the regex machines of every
+ * declaration again for each settling, which is what the comparison is about and so cannot be
+ * shared between the sides. Lending the machines across declarations would make the run cheaper by
+ * changing how much a {@code Meter} has spent, and that is observable, so it is not a saving this
+ * test may take. A disagreement between the two readings is found by the morning, on the branch a
+ * change landed on.
  */
-@Tag("population")
+@ClosedWorldContract
+@Nightly
 class ASettlingReadAgainAndASettlingTakenOnLeaveTheSameConstructionLimitsTest {
 
     /**
@@ -57,12 +67,12 @@ class ASettlingReadAgainAndASettlingTakenOnLeaveTheSameConstructionLimitsTest {
         int counted = 0;
         int deep = 0;
         for (Record record : recordsRead()) {
-            FieldDomains base = FieldDomains.of(record.declared(), record.source(), record.policy(),
-                    DeclarationReadings.NONE);
+            RuleReadingContext reading =
+                    RuleReadingContext.of(record.source(), record.policy(), record.lent());
+            FieldDomains base = FieldDomains.of(record.declared(), reading);
             List<RuleKey> coordinates = coordinatesOf(base, record.fields());
             for (Map<RuleKey, Count> settling : settlings(base, coordinates)) {
-                FieldDomains readUnder = FieldDomains.of(record.declared(), record.source(),
-                        record.policy(), settling, DeclarationReadings.NONE);
+                FieldDomains readUnder = FieldDomains.of(record.declared(), reading, settling);
                 FieldDomains.Composing takenOn = base.composing(named(settling));
                 for (RuleKey field : coordinates) {
                     NumericDomain.Bounds values = readUnder.at(field).bounds();
@@ -102,9 +112,18 @@ class ASettlingReadAgainAndASettlingTakenOnLeaveTheSameConstructionLimitsTest {
                 + " stopped, " + counted + " counted and " + deep + " named below a field");
     }
 
-    /** One record declaration, read where its rules are. */
+    /**
+     * One record declaration, read where its rules are, with what its model already knows.
+     *
+     * <p>The lender is the model's and not this record's. Where a set's strings stop is settled by
+     * the set, so it is the same answer under every declaration of one model and under every
+     * settling asked of one declaration — and a reading handed nothing walks it again for each of
+     * them. What is lent is that knowledge and nothing else: a reading of the declaration is what
+     * this compares, so neither derivation is handed one.
+     */
     private record Record(TypeSymbol.AtModule declared, RuleReadingSource source,
-                          ReadingPolicy policy, Map<String, Type> fields) {}
+                          ReadingPolicy policy, Map<String, Type> fields,
+                          DeclarationReadings lent) {}
 
     /**
      * The coordinates of one record that are asked about.
@@ -191,6 +210,7 @@ class ASettlingReadAgainAndASettlingTakenOnLeaveTheSameConstructionLimitsTest {
         List<Record> out = new ArrayList<>();
         for (Compilation compilation : RepositoryModels.all()) {
             ReadingPolicy policy = compilation.db().ask(new Front.Reading()).value();
+            DeclarationReadings lent = RepositoryModels.knownTo(compilation);
             for (String module : compilation.modules()) {
                 RuleReadingSource source = RuleReadings.of(compilation, module);
                 Set<TypeSymbol> seen = new LinkedHashSet<>();
@@ -198,7 +218,7 @@ class ASettlingReadAgainAndASettlingTakenOnLeaveTheSameConstructionLimitsTest {
                         : compilation.db().ask(new Bodies.DeclaredSignatures(module)).value()
                                 .values()) {
                     for (DeclaredSig.Input input : declared.inputs()) {
-                        under(input.type(), source, policy, seen, out);
+                        under(input.type(), source, policy, lent, seen, out);
                     }
                 }
             }
@@ -215,7 +235,7 @@ class ASettlingReadAgainAndASettlingTakenOnLeaveTheSameConstructionLimitsTest {
      * records only a case or an element leads to and would say it had walked them.
      */
     private static void under(Type type, RuleReadingSource source, ReadingPolicy policy,
-                              Set<TypeSymbol> seen, List<Record> out) {
+                              DeclarationReadings lent, Set<TypeSymbol> seen, List<Record> out) {
         Shape shape = TypeView.asWritten(type, source.symbols(), source.published()).shape();
         switch (shape) {
             case Shape.Product(TypeSymbol name, Map<String, Type> fields) -> {
@@ -223,21 +243,22 @@ class ASettlingReadAgainAndASettlingTakenOnLeaveTheSameConstructionLimitsTest {
                     return;
                 }
                 if (!fields.isEmpty()) {
-                    out.add(new Record(declared, source, policy, fields));
+                    out.add(new Record(declared, source, policy, fields, lent));
                 }
-                fields.values().forEach(field -> under(field, source, policy, seen, out));
+                fields.values().forEach(field -> under(field, source, policy, lent, seen, out));
             }
             case Shape.Cases(Set<TypeSymbol> members) ->
-                    members.forEach(each -> under(Type.ref(each), source, policy, seen, out));
+                    members.forEach(each ->
+                            under(Type.ref(each), source, policy, lent, seen, out));
             case Shape.Sequence(var _, Type element) ->
-                    under(element, source, policy, seen, out);
-            case Shape.Optional(Type element) -> under(element, source, policy, seen, out);
+                    under(element, source, policy, lent, seen, out);
+            case Shape.Optional(Type element) -> under(element, source, policy, lent, seen, out);
             case Shape.Mapping(Type key, Type value) -> {
-                under(key, source, policy, seen, out);
-                under(value, source, policy, seen, out);
+                under(key, source, policy, lent, seen, out);
+                under(value, source, policy, lent, seen, out);
             }
             case Shape.Tuple(List<Type> elements) ->
-                    elements.forEach(each -> under(each, source, policy, seen, out));
+                    elements.forEach(each -> under(each, source, policy, lent, seen, out));
             default -> { }
         }
     }

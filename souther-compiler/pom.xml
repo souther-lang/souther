@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.souther-lang</groupId>
         <artifactId>souther-parent</artifactId>
-        <version>0.2.0</version>
+        <version>0.2.1-SNAPSHOT</version>
     </parent>
 
     <artifactId>souther-compiler</artifactId>
@@ -42,15 +42,14 @@
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
-        <!-- souther-runtime is `provided`: the compiler loads a generated `$Ctfe.check` class to
-             verify a constant newtype construction at compile time (CTFE, ADR-0032), and a
-             lambda-bearing invariant's bytecode references the runtime `Fn`. It is not bundled;
-             CTFE degrades gracefully to the run-time check if it is absent. Raoh stays test-only —
-             CTFE runs the bare invariant, not the Raoh-returning decoder/__construct. -->
+        <!-- Compile scope, not `provided`: `Reserved.name` and a string literal both call
+             `Normalization.nfc` unconditionally (ADR-0120), so the compiler needs this present to
+             run at all, not only for CTFE's generated `$Ctfe.check` class and the `Fn` a
+             lambda-bearing invariant's bytecode references. Raoh stays test-only — CTFE runs the
+             bare invariant, not the Raoh-returning decoder/__construct. -->
         <dependency>
             <groupId>org.souther-lang</groupId>
             <artifactId>souther-runtime</artifactId>
-            <scope>provided</scope>
         </dependency>
         <!-- raoh core: the derived decoders/encoders `souther run` drives through (Runner), and the
              leaf codecs for primitive-typed inputs/outputs. -->
@@ -82,7 +81,7 @@
         <dependency>
             <groupId>org.jooq</groupId>
             <artifactId>jooq</artifactId>
-            <version>3.21.7</version>
+            <version>3.21.8</version>
             <scope>test</scope>
         </dependency>
         <dependency>

@@ -114,8 +114,16 @@ class OneDemandOverOnePositionIsOneRowHoweverItIsAskedTest {
                 readings.add(reading);
                 return Taking.Taken.AND_MORE;
             });
-            if (readings.size() == 1 && readings.get(0).pins().size() == 1) {
-                out.addAll(readings.get(0).pins().entrySet());
+            if (readings.size() == 1) {
+                List<Map.Entry<Integer, Integer>> pinned = new ArrayList<>();
+                for (int i = 0; i < axes.size(); i++) {
+                    if (readings.get(0).pins().containsKey(i)) {
+                        pinned.add(Map.entry(i, readings.get(0).pins().get(i)));
+                    }
+                }
+                if (pinned.size() == 1) {
+                    out.addAll(pinned);
+                }
             }
         }
         return out;
@@ -124,7 +132,7 @@ class OneDemandOverOnePositionIsOneRowHoweverItIsAskedTest {
     /** What one run of the search offered, by the values each row carries. */
     private static List<List<String>> rowsOf(Model model, List<ClassOfAPosition> classes,
                                              List<ArmProbe> arms) {
-        return Generator.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
+        return GenerationFixtures.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
                         model.read(), Generator.Trial.NOTHING_RUNS, List.of(), classes, arms,
                         Budgets.generation())
                 .rows().stream()

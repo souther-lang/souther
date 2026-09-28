@@ -45,14 +45,9 @@ public record Timing(List<Long> micros) {
     /**
      * The same, where each run is handed its round number because it must differ from the one before
      * it — an edit is measured this way, since applying the same edit twice is not an edit and the
-     * second one would measure a store that already holds the answer. Everything the run does is
-     * timed; there is no set-up phase here to leave out.
+     * second one would measure a store that already holds the answer. {@code measuring} is told when
+     * the rounds a figure is taken over begin.
      */
-    public static Timing ofRounds(int warmup, int measured, Consumer<Integer> work) {
-        return ofRounds(warmup, measured, work, () -> {});
-    }
-
-    /** The same, telling {@code measuring} when the rounds a figure is taken over begin. */
     public static Timing ofRounds(int warmup, int measured, Consumer<Integer> work,
                                   Runnable measuring) {
         List<Long> micros = new ArrayList<>();

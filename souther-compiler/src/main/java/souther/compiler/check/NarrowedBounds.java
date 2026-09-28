@@ -166,8 +166,8 @@ public abstract sealed class NarrowedBounds {
      *
      * <p>The ends as written, and not the ends. {@link Endpoint#sameAs} is what says two ends stop a
      * coordinate in one spot, and this is not it: {@code 3} and {@code 3.00} come back different
-     * here, because what the ends hold is what a report writes back and a caller comparing two of
-     * these is comparing what was read. Which of the two questions a reader wants is the reader's,
+     * here, because what the ends hold is the representation they were read with and a caller
+     * comparing two of these is comparing what was read. Which of the two questions a reader wants is the reader's,
      * and the one about where the coordinate stops is asked of the ends themselves.
      *
      * <p>This asks for the names, so comparing, hashing or printing one of these does the work the

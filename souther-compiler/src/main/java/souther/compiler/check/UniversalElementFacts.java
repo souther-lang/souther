@@ -116,7 +116,7 @@ record UniversalElementFacts(Map<RuleKey, Bounds> byPath) {
      */
     private static void writtenOut(Core container, Type element, Symbols symbols,
                                    Map<RuleKey, Bounds> held) {
-        if (element == null || !(container instanceof Core.ListLit list)
+        if (element == null || !(Core.withoutStanding(container) instanceof Core.ListLit list)
                 || list.elements().isEmpty()) {
             return;
         }
@@ -153,7 +153,7 @@ record UniversalElementFacts(Map<RuleKey, Bounds> byPath) {
      */
     private static void transferred(Core container, Denotations at, Terms terms,
                                     Map<RuleKey, Bounds> held) {
-        if (!(container instanceof Core.PreservedCall call)) {
+        if (!(Core.withoutStanding(container) instanceof Core.PreservedCall call)) {
             return;
         }
         DischargeRules.Kept kept = DischargeRules.keptFrom(call);
@@ -264,7 +264,7 @@ record UniversalElementFacts(Map<RuleKey, Bounds> byPath) {
                 holds(answered, under, bounds);
             }
         });
-        if (e instanceof Core.Construct construct) {
+        if (Core.withoutStanding(e) instanceof Core.Construct construct) {
             for (Core.FieldValue field : construct.values()) {
                 answeredBy(field.value(), reading, terms, root, kept).forEach((path, bounds) ->
                         holds(answered, path.readFrom(field.field()), bounds));
@@ -310,7 +310,7 @@ record UniversalElementFacts(Map<RuleKey, Bounds> byPath) {
      * A place whose spacing was never recorded is one no range can be asserted about, and is left
      * out rather than asserted into a domain that would refuse it. */
     private static NumericDomain<FactSubject> assuming(Map<FactSubject, Bounds> facts, Terms terms) {
-        NumericDomain<FactSubject> given = NumericDomain.top();
+        NumericDomain<FactSubject> given = NumericDomain.top(FactSubject.inOneOrder());
         for (Map.Entry<FactSubject, Bounds> one : facts.entrySet()) {
             Map<FactSubject, Granularity> spacing = terms.kindsOf(LinearForm.atom(one.getKey()));
             if (!spacing.isEmpty()) {

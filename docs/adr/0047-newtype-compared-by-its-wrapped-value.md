@@ -4,7 +4,11 @@ Status: Accepted. Amended three times — arithmetic, deferred at the time of th
 later (see the "Arithmetic" paragraph below and spec §newtype-arithmetic / §invariant-discharge), the
 sort family was brought onto the same reading (see "Sorting"), and the ordered set the rule composes
 with grew an enumeration (see "What the wrapped type may be"). The ordered primitives are
-eight since ADR-0103, not the five this reasons about.
+eight since ADR-0103, not the five this reasons about. Amended again by ADR-0116 — preserving the
+dimension is no longer enough for an inherited arithmetic operation, the base operation having to be
+closed over the wrapped type as well, so a newtype is not divided by a value of its base; and a
+newtype divided by itself answers the `Rational` its cancelled units leave, which this decision had
+no type for.
 
 ## Context
 

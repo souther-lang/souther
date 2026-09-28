@@ -8,10 +8,12 @@ import souther.compiler.types.SourceReferenceOrigin;
 import souther.compiler.types.TypeKey;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * The abstract syntax: a module as the characters that spell it were read, with every name still a
@@ -198,10 +200,11 @@ public interface Ast {
     /**
      * A whole source file: its public surface, imports, and definitions.
      *
-     * <p>{@code exposedOutputs} maps an exposed composition behavior's name to the output signature written
-     * in the {@code exposing} list ({@code exposing ( name : A | B )}, spec §declared-composition-output). An
-     * exposed {@code >->} composition must have one, checked to match its inferred output (ADR-0024); other
-     * exposed names carry no signature (their type is at the definition).
+     * <p>{@code exposedOutputs} maps the name of a composition the {@code exposing} clause names to the
+     * output signature written for it there ({@code exposing ( name : A | B )}, spec
+     * §declared-composition-output). A composition the clause names must have one, checked to match its
+     * inferred output; other names in the clause carry no signature (their type is at the definition),
+     * and a composition published because no clause is written has none.
      *
      * <p>{@code fns} is what the source wrote, and it stays that at every stage. {@code takenOn} is
      * what the module emits as methods of its own without having written them, which is two kinds of
@@ -223,7 +226,7 @@ public interface Ast {
      * reader of the rebuild has to see, which is why every one of them names it.
      */
     record Module(String name,
-                  List<String> exposing,
+                  ExposingClause exposing,
                   Map<String, RetType> exposedOutputs,
                   List<Import> imports,
                   List<Def> defs,
@@ -233,7 +236,46 @@ public interface Ast {
                   List<Example> examples,
                   List<Fake> fakes,
                   String exampleFileTarget,
-                  SourcePos pos) implements Ast {}
+                  SourcePos pos) implements Ast {
+
+        public Module {
+            Objects.requireNonNull(exposing, "a module says whether it writes an exposing clause");
+        }
+
+        /**
+         * The names this module publishes (spec §a-module-publishes-what-it-declares): of the
+         * declarations it makes itself, the ones its {@code exposing} clause publishes.
+         *
+         * <p>What may be published is asked of the declarations and not of the names in scope. Its
+         * data and behaviors are its own. Of its definitions, the ones its source wrote are, and a
+         * core module's {@code private let} is not; a value an attached file declares is the rows',
+         * and a definition this module takes on to emit is another module's
+         * (spec §only-a-modules-own-declarations-are-published).
+         *
+         * <p>Walked over those declarations, each asked of the clause, so what is published is a
+         * part of what may be whatever the clause writes: an entry naming anything else is not a
+         * declaration anybody asks about.
+         *
+         * <p>The one place this is worked out. What a reader outside the module may name, which
+         * classes are public on the JVM, and what a single-file run may reach all read it.
+         */
+        public Set<String> published() {
+            Set<String> publishable = new LinkedHashSet<>();
+            for (Def def : defs) {
+                publishable.add(def.name());
+            }
+            for (BehaviorDef behavior : behaviors) {
+                publishable.add(behavior.name());
+            }
+            for (FnDef fn : fns) {
+                if (fn.role() instanceof DefinitionRole.Ordinary && !fn.isPrivate()) {
+                    publishable.add(fn.name());
+                }
+            }
+            publishable.removeIf(declaration -> !exposing.admits(declaration));
+            return Set.copyOf(publishable);
+        }
+    }
 
     /**
      * {@code fake <injected> | (in) -> out | ...} — a test double for an injected behavior, used to
@@ -416,12 +458,6 @@ public interface Ast {
                         List<Var> dependsOn,
                         List<EnsuresClause> ensures,
                         SourcePos pos) implements BehaviorDef {
-
-        /** A behavior a pass wrote, named but written nowhere. */
-        public SpecBehavior(String name, List<Param> params, RetType ret, List<Name> constructs,
-                            List<Var> dependsOn, List<EnsuresClause> ensures, SourcePos pos) {
-            this(WrittenName.synthetic(name, pos), params, ret, constructs, dependsOn, ensures, pos);
-        }
     }
 
     /** One postcondition on a behavior. A single-output clause has one arm with no cases; a sum
@@ -433,11 +469,6 @@ public interface Ast {
 
     /** A behavior parameter. Its type may be an anonymous union of cases (spec §unmarked-output). */
     record Param(WrittenName written, RetType type) implements Ast {
-
-        /** A parameter a pass wrote. */
-        public Param(String name, RetType type, SourcePos pos) {
-            this(WrittenName.synthetic(name, pos), type);
-        }
 
         /** What the parameter is called. */
         public String name() {
@@ -452,17 +483,40 @@ public interface Ast {
     }
 
     /**
-     * {@code behavior name = f >-> g >-> ... [-> A | B]} — a composition (spec §sequential-composition).
-     * {@code declaredOut} is the optional trailing output declaration (§declared-composition-output): null
-     * when absent (output is inferred), else the declared cases, which must match the inferred output exactly
-     * (E1604).
+     * {@code behavior name = f >-> g >-> ... [-> A | B]} — a composition (spec §sequential-composition),
+     * as far as this compile can see it ({@link Composition}).
      */
-    record PipeBehavior(WrittenName written, List<Var> stages, RetType declaredOut, SourcePos pos)
+    record PipeBehavior(WrittenName written, Composition composition, SourcePos pos)
             implements BehaviorDef {
+    }
 
-        /** A composition a pass wrote, named but written nowhere. */
-        public PipeBehavior(String name, List<Var> stages, RetType declaredOut, SourcePos pos) {
-            this(WrittenName.synthetic(name, pos), stages, declaredOut, pos);
+    /**
+     * What this compile holds of a composition.
+     *
+     * <p>A composition declares stages rather than a parameter list. A module compiled elsewhere
+     * publishes the signature those stages computed and leaves the stages behind (ADR-0063), so what
+     * a reader of it holds is a composition all the same — one that takes what it takes without a
+     * declaration naming its inputs — and not a behavior that declared parameters.
+     */
+    sealed interface Composition {
+
+        /**
+         * The stages as the composition writes them, and its optional trailing output declaration
+         * (§declared-composition-output): null when absent (output is inferred), else the declared
+         * cases, which must match the inferred output exactly (E1604).
+         */
+        record Stages(List<Var> stages, RetType declaredOut) implements Composition {
+            public Stages {
+                stages = List.copyOf(stages);
+            }
+        }
+
+        /** A composition another project compiled: what it takes and answers, as the module that
+         *  wrote it published them. Its stages are not here, and nothing names its inputs. */
+        record Elsewhere(List<RetType> takes, RetType answers) implements Composition {
+            public Elsewhere {
+                takes = List.copyOf(takes);
+            }
         }
     }
 
@@ -536,16 +590,6 @@ public interface Ast {
                     DefinitionRole.AttachedValue.INSTANCE, pos);
         }
 
-        /** A block standing where a function goes, which no module declares: a lambda a binding
-         * holds, one handed to a function parameter. It has parameters and a body like a
-         * declaration, which is what lets an application of it expand like a call, and it is
-         * declared by nobody, which is what {@link #declaredIn} says of it. */
-        public static FnDef lambda(String name, List<FnParam> params, RetType declaredReturn,
-                                   FnBody body, SourcePos pos) {
-            return new FnDef(WrittenName.synthetic(name, pos), null, params, declaredReturn, body,
-                    Modifiers.NONE, pos);
-        }
-
         /**
          * The same declaration under the name a module reaches it by.
          *
@@ -560,12 +604,6 @@ public interface Ast {
         public FnDef reachedAs(String name) {
             return new FnDef(WrittenName.synthetic(name, pos), declaredIn, params, declaredReturn,
                     body, modifiers, role, pos);
-        }
-
-        /** The same declaration with {@code replacement} in place of its body. */
-        public FnDef withBody(FnBody replacement) {
-            return new FnDef(written, declaredIn, params, declaredReturn, replacement, modifiers,
-                    role, pos);
         }
 
         /** What the fn is called. */
@@ -622,11 +660,6 @@ public interface Ast {
      * constructor pattern in parameter position rather than written beside the name — a behavior's
      * implementation may write the pattern, and its type still comes from the behavior. */
     record FnParam(Binder binder, RetType type, boolean typeFromPattern) implements Ast {
-        /** A parameter whose type, if any, the author wrote (the common case). */
-        public FnParam(Binder binder, RetType type) {
-            this(binder, type, false);
-        }
-
         public String name() {
             return binder.name();
         }
@@ -960,12 +993,6 @@ public interface Ast {
             this(Binder.desugared(name, pos), value, null, false, null, body, pos, region);
         }
 
-        /** A binding carrying an inlined helper parameter's declared type. */
-        public LetIn(Binder binder, Expr value, RetType declaredType, Expr body, SourcePos pos,
-                     Region region) {
-            this(binder, value, declaredType, false, null, body, pos, region);
-        }
-
         /** {@code let x: T = value} — a binding the source annotated. */
         public static LetIn annotated(Binder binder, Expr value, RetType type, Expr body,
                                       SourcePos pos, Region region) {
@@ -986,14 +1013,6 @@ public interface Ast {
                                     Region region) {
             return new LetIn(Binder.desugared(name, pos), value, null, false, opens, body, pos,
                     region);
-        }
-
-        /** The type the source wrote on this binding, or null when it wrote none. What the source
-         * wrote and what a later pass put there are both held in {@code declaredType}, and
-         * {@code annotated} is what tells them apart: a carrier from inlining is not an annotation
-         * and is not answered here. */
-        public RetType annotation() {
-            return annotated ? declaredType : null;
         }
     }
 
@@ -1059,17 +1078,6 @@ public interface Ast {
     record IfConstructed(Expr construct, Binder binder, Expr then, List<ElseArm> els,
                          SourceConstructOrigin origin, SourcePos pos, Region region) implements Expr {
 
-        /** The attempt whose failure is not told apart: one arm, naming no clause. */
-        public IfConstructed(Expr construct, Binder binder, Expr then, Expr els,
-                             SourceConstructOrigin origin, SourcePos pos, Region region) {
-            this(construct, binder, then, List.of(ElseArm.any(els)), origin, pos, region);
-        }
-
-        /** How the binding was written. */
-        public String binderName() {
-            return binder.name();
-        }
-
         /** Whether the failure is departed from per clause, rather than by one value for any of them. */
         public boolean mapsClauses() {
             return els.size() > 1 || els.get(0).clause().isPresent();
@@ -1113,9 +1121,6 @@ public interface Ast {
      */
     record Case(List<Name> caseTypes, Binder binding, Expr body, List<Name> unwrapAsserts,
                 SourcePos pos) implements Ast {
-        public Case(List<Name> caseTypes, Binder binding, Expr body, SourcePos pos) {
-            this(caseTypes, binding, body, null, pos);
-        }
 
         /** How the binding was written, or null where the arm binds nothing. */
         public String bindingName() {
@@ -1141,7 +1146,8 @@ public interface Ast {
 
     record DecimalLit(java.math.BigDecimal value, SourcePos pos, Region region) implements Expr {}
 
-    /** Unary minus {@code -operand} on an Int or Decimal (spec §an-operator-takes-the-types-it-is-defined-for). */
+    /** Unary minus {@code -operand} on a number, answering the type it was given (spec
+     *  §an-operator-takes-the-types-it-is-defined-for). */
     record Neg(Expr operand, SourcePos pos, Region region) implements Expr {}
 
     record StringLit(String value, SourcePos pos, Region region) implements Expr {}
@@ -1251,19 +1257,6 @@ public interface Ast {
             this(target, WrittenName.synthetic(field, pos), pos, null);
         }
 
-        /**
-         * An access standing where the author wrote something else — a copy of a body from another
-         * source, stamped at the place it was carried to.
-         *
-         * <p>The field is named and written nowhere, the occurrence it was read from being in the
-         * file this copy is no longer being read against. The characters are still somebody's, and
-         * they are whatever stands at {@code region} in the file this is read in. The counterpart of
-         * {@link Hir.Var#respelled}, for the same reason.
-         */
-        public static FieldAccess restamped(Expr target, String field, SourcePos at, Region over) {
-            return new FieldAccess(target, WrittenName.synthetic(field, at), at, over);
-        }
-
         /** The field this reads. */
         public String field() {
             return name.canonical();
@@ -1288,12 +1281,6 @@ public interface Ast {
      */
     record Apply(Expr function, List<Expr> args, SourceConstructOrigin origin, SourcePos pos,
                  Region region) implements Expr {
-
-        /** The same application over rewritten arguments — a pass that touches only the arguments
-         *  says so here rather than listing the slots it is not changing. */
-        public Apply withArgs(List<Expr> args) {
-            return new Apply(function, args, origin, pos, region);
-        }
     }
 
     /** {@code origin} is where the comparison was written, which is not always where the fork

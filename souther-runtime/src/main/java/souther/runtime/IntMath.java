@@ -1,8 +1,8 @@
 package souther.runtime;
 
 /**
- * Overflow-checked {@code Int} arithmetic (spec §stdlib-int). {@code Int} is signed 64-bit; when a sum,
- * difference, or product leaves that range the computation aborts rather than wrapping. Overflow is a model
+ * Overflow-checked {@code Int} arithmetic (spec §stdlib-int). {@code Int} is signed 64-bit; when an
+ * operation requires a result outside that range it aborts rather than wrapping. Overflow is a model
  * bug, not a business result, so — like an invariant violation — it throws {@link ConstraintViolation} (spec
  * §algebraic-types, §violation-destination, §jvm-abort), which Souther code cannot catch.
  *
@@ -37,11 +37,24 @@ public final class IntMath {
         }
     }
 
+    /** Unary minus (spec §stdlib-int): the smallest {@code Int} has no positive counterpart, and
+     *  negating it aborts the same way a sum, a difference or a product outside the range does. */
+    public static long negateExact(long value) {
+        try {
+            return Math.negateExact(value);
+        } catch (ArithmeticException _) {
+            throw new ConstraintViolation("Int overflow: -(" + value + ")");
+        }
+    }
+
     /**
-     * The {@code /} operator on Int: truncating division that aborts on a zero divisor (and on the
-     * {@code Long.MIN_VALUE / -1} overflow), like the other arithmetic operators (spec §stdlib-int). Code
-     * that wants a zero divisor as a case uses the {@code Int.divide} function, which returns
-     * {@code Int | DivisionByZero} instead.
+     * The quotient {@code Int.truncatingDivide} answers, truncated toward zero: what its value case
+     * carries, once the zero divisor its other case is about has been ruled out (spec §stdlib-int).
+     *
+     * <p>Aborts on the one pair whose quotient no {@code Int} holds, as the overflow-checked
+     * operations above do — the case this operation has is about a divisor the model admits and not
+     * about a result that will not fit. The {@code /} operator does not come here: its quotient is
+     * exact and leaves {@code Int} (spec §stdlib-rational).
      */
     public static long divideExact(long a, long b) {
         if (b == 0) {

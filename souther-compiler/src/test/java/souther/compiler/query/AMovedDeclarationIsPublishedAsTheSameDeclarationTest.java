@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.check.DeclarationMeaning;
+import souther.compiler.check.PublishedDeclarationResult;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeKey;
 
@@ -11,6 +12,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -73,9 +75,9 @@ class AMovedDeclarationIsPublishedAsTheSameDeclarationTest {
 
     /** What the store says {@code shop.prices.Amount} says. */
     private static DeclarationMeaning published(Compilation c) {
-        Answer<DeclarationMeaning> answer = c.db().ask(new Shapes.MeaningOf(AMOUNT));
-        assertTrue(answer.present(), "the store has nothing to say about `" + AMOUNT + "`");
-        return answer.value();
+        Answer<PublishedDeclarationResult> answer = c.db().ask(new Shapes.MeaningOf(AMOUNT));
+        return assertInstanceOf(PublishedDeclarationResult.Found.class, answer.value(),
+                "the store has nothing to say about `" + AMOUNT + "`").said();
     }
 
     /** The same workspace with {@code prices} written into it. */

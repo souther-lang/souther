@@ -147,5 +147,5 @@ class WhatTheReadingsOfOneDebtComeToTogetherTest {
     }
 
     private static final WeakeningSet WEAKENED =
-            WeakeningSet.of(new Weakening.BodiesNotElaborated("example"));
+            WeakeningSet.of(new Weakening.BodyNotInEvaluation("decides"));
 }

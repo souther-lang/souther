@@ -7,7 +7,6 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -34,12 +33,16 @@ import java.util.Map;
  * diagnostic to quote and for a did-you-mean to offer. Nothing is found by it.
  */
 public record Scope(Map<BindingId, Binding> bindings, Map<String, Type> visible,
-                    Map<String, Type> standing, Substitution decisions) {
+                    Map<String, Type> standing, Substitution decisions, BoundValues values) {
 
-    /** A scope with no application's decisions in force over it. */
+    public Scope {
+        bindings = BindingMap.from(bindings);
+    }
+
+    /** A scope for a caller that has decisions in force and no values to carry. */
     public Scope(Map<BindingId, Binding> bindings, Map<String, Type> visible,
-                 Map<String, Type> standing) {
-        this(bindings, visible, standing, null);
+                 Map<String, Type> standing, Substitution decisions) {
+        this(bindings, visible, standing, decisions, BoundValues.NONE);
     }
 
     /**
@@ -51,7 +54,7 @@ public record Scope(Map<BindingId, Binding> bindings, Map<String, Type> visible,
      * it, and reads them from here rather than deciding them again.
      */
     public Scope deciding(Substitution decided) {
-        return new Scope(bindings, visible, standing, decided);
+        return new Scope(bindings, visible, standing, decided, values);
     }
 
     /** One binding in force: what it is, and what it is called. */
@@ -61,20 +64,20 @@ public record Scope(Map<BindingId, Binding> bindings, Map<String, Type> visible,
 
     /** The bindings a body starts with — a helper's parameters, a declaration's fields. */
     public static Scope of(Map<BindingId, Binding> bindings) {
-        return new Scope(Map.copyOf(bindings), Map.of(), Map.of(), null);
+        return new Scope(bindings, Map.of(), Map.of(), null);
     }
 
     /** The same, with the signatures a call left standing is typed against: a recursive helper,
      * which is emitted as a method rather than expanded. Not a vocabulary — the name one is reached
      * by here is not always a name that may be written here. */
     public Scope reaching(Map<String, Type> standingCalls) {
-        return new Scope(bindings, visible, Map.copyOf(standingCalls), decisions);
+        return new Scope(bindings, visible, Map.copyOf(standingCalls), decisions, values);
     }
 
     /** The same, with declarations an author can name here without a binding — an injected behavior
      * a block captured, reached by the name it is declared under. */
     public Scope naming(Map<String, Type> declarations) {
-        return new Scope(bindings, Map.copyOf(declarations), standing, decisions);
+        return new Scope(bindings, Map.copyOf(declarations), standing, decisions, values);
     }
 
     /**
@@ -111,16 +114,28 @@ public record Scope(Map<BindingId, Binding> bindings, Map<String, Type> visible,
     }
 
     public Scope with(BindingId binding, String name, Type type) {
-        Map<BindingId, Binding> next = new LinkedHashMap<>(bindings);
-        next.put(binding, new Binding(name, type));
-        return new Scope(next, visible, standing, decisions);
+        return new Scope(BindingMap.from(bindings).with(binding, new Binding(name, type)), visible,
+                standing, decisions, values);
     }
 
-    /** The same, for several at once. */
-    public Scope withAll(Map<BindingId, Binding> more) {
-        Map<BindingId, Binding> next = new LinkedHashMap<>(bindings);
-        next.putAll(more);
-        return new Scope(next, visible, standing, decisions);
+
+    /**
+     * This scope with {@code binder} bound to {@code type} and standing for {@code value}.
+     *
+     * <p>Beside {@link #with} rather than in place of it, because the two answer different
+     * questions and not every binding answers the second. A parameter has a type and stands for no
+     * expression the body can be read through; a {@code let} has both. A reader that wants what a
+     * name denotes asks {@link #values}, and one that wants what it types as asks the bindings.
+     */
+    public Scope binding(Hir.Binder binder, Type type, Hir.Expr value) {
+        return binding(binder, type, value, values);
+    }
+
+    /** The same, where the value was written outside this scope — an expansion's argument, which is
+     *  elaborated before the bindings the expansion makes are in force. */
+    public Scope binding(Hir.Binder binder, Type type, Hir.Expr value, BoundValues definedAt) {
+        return new Scope(BindingMap.from(bindings).with(binder.id(), new Binding(binder.name(), type)),
+                visible, standing, decisions, values.binding(binder, value, definedAt));
     }
 
     /** What the names in force are called — for a diagnostic that offers what the author might have

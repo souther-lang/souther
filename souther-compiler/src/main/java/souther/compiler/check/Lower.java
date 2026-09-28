@@ -1,14 +1,18 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.copied.CopyTarget;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.ValueName;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 
 /**
  * The Lower stage (ADR-0021): rewrites the surface AST toward the form the backend emits, so the
@@ -33,8 +37,33 @@ public final class Lower {
      * and the lowered module the backend emits from. The type check reads both — the surface one for
      * the declarations, the lowered one for the bodies — so they must be the same settling, which is
      * why they are handed back together rather than settled again downstream.
+     *
+     * <p>{@code carried} is what each parameter the lowering gave a value's method holds, by the
+     * binding of the parameter, across every method of the lowered module.
+     *
+     * <p>{@code roles} is what each non-behavior definition this module declares or takes on runs
+     * as, by its name — the answer {@link souther.compiler.query.Bodies.LoweringRoleOf} settled for
+     * it, so a reader that needs the role of one reads it from here rather than asking again. Not
+     * narrowed to what this module emits: most of a module's helpers are inlined at their call
+     * sites and never are, so a definition here having a role says nothing about whether {@code
+     * lowered} carries a method for it — {@link LoweringRole#emitted} is asked at the boundary that
+     * decides that, not here.
+     *
+     * <p>{@code copied} is every declaration of another module a method of {@code lowered} carries a
+     * copy of: what the expansions of those methods copied, and each method that is itself another
+     * module's recursive helper taken on here.
      */
-    public record Lowered(Hir.Module settled, Hir.Module lowered) {}
+    public record Lowered(Hir.Module settled, Hir.Module lowered,
+                          Map<BindingId, ValueName.Helper> carried,
+                          Map<String, LoweringRole> roles,
+                          SortedSet<CopyTarget> copied) {
+
+        public Lowered {
+            carried = Map.copyOf(carried);
+            roles = Map.copyOf(roles);
+            copied = Collections.unmodifiableSortedSet(new TreeSet<>(copied));
+        }
+    }
 
     /**
      * {@code module} with every helper parameter the author left unwritten carrying the type its body
@@ -63,19 +92,69 @@ public final class Lower {
     }
 
     /**
+     * {@code inliner}, refused unless it shares each value per evaluation region.
+     *
+     * <p>Every tree written here is one that runs or one a walk of regions reads, and both hold a
+     * value once where it is demanded. Copied at every reference instead, what a body holds is the
+     * product of its references rather than the sum of what the source wrote, so an inliner made to
+     * copy is a mistake of whoever made it and is said here and not answered.
+     */
+    private static void sharing(HelperInliner inliner) {
+        if (!inliner.sharesValuesPerRegion()) {
+            throw new IllegalArgumentException("a body is lowered by an inliner that shares values"
+                    + " per region, and this one copies them");
+        }
+    }
+
+    /**
      * The same, for a behavior's implementation, told what its behavior declares in {@code depends
      * on} — the names that arrive as the {@code let}'s trailing parameters (spec §depends-on). A
      * helper has none, and neither has a recursive helper's own body.
      */
     public static Expansion<Hir.FnDef> body(Hir.FnDef fn, HelperInliner inliner, boolean recursive,
                                             Set<String> dependencies) {
+        sharing(inliner);
         Hir.Expr expanded = recursive
                 ? inliner.inlineRecursiveBody(fn)
                 : inliner.inline(fn.writtenBody(), dependencies(fn, dependencies), inliner.bodyOf(fn.name()));
         // What this expansion could not remove travels with what it produced. The inliner was made
         // for this body, so what it left standing is this body's and nothing else's.
         return new Expansion<>(fn.withBody(new Hir.FnBody.Written(desugar(expanded))),
-                inliner.leftStanding(), inliner.provenance(), inliner.suppliedRules());
+                inliner.leftStanding(), inliner.copiedFromElsewhere(), inliner.provenance(),
+                inliner.suppliedRules());
+    }
+
+    /**
+     * The body of the value {@code fn} as the method it is emitted as, which takes the values its
+     * root region demands.
+     */
+    public static Expansion<LoweredDefinition> valueMethod(Hir.FnDef fn, HelperInliner inliner) {
+        sharing(inliner);
+        LoweredDefinition method = inliner.valueMethod(fn);
+        Hir.FnDef desugared = method.definition().withBody(
+                new Hir.FnBody.Written(desugar(method.definition().writtenBody())));
+        return new Expansion<>(new LoweredDefinition(desugared, method.carried()),
+                inliner.leftStanding(), inliner.copiedFromElsewhere(), inliner.provenance(),
+                inliner.suppliedRules());
+    }
+
+    /** {@code expansion} of a definition that runs as the body it was written with. */
+    public static Expansion<LoweredDefinition> asWritten(Expansion<Hir.FnDef> expansion) {
+        return new Expansion<>(LoweredDefinition.asWritten(expansion.value()), expansion.standing(),
+                expansion.copied(), expansion.provenance(), expansion.supplied());
+    }
+
+    /**
+     * The body of the value {@code fn} as the template an analysis reads it by, which builds the
+     * values it names and takes nothing.
+     */
+    public static Expansion<Hir.FnDef> valueTemplate(Hir.FnDef fn, HelperInliner inliner) {
+        sharing(inliner);
+        Hir.FnDef template = inliner.valueTemplate(fn);
+        return new Expansion<>(
+                template.withBody(new Hir.FnBody.Written(desugar(template.writtenBody()))),
+                inliner.leftStanding(), inliner.copiedFromElsewhere(), inliner.provenance(),
+                inliner.suppliedRules());
     }
 
     /** Which bindings the {@code depends on} names are: the trailing parameters that carry them. A

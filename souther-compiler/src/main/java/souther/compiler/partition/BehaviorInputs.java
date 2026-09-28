@@ -9,12 +9,12 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.observe.ElementsTaken;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -136,42 +136,17 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      * off the sets, the pairs one row covers are every combination of them, and a row is counted as
      * evidence for a combination none of its elements is in.
      *
-     * @param at which element was taken, by the step it was taken at — the path up to and
-     *           including that step inside a sequence. Empty where the path enters no sequence,
-     *           which is one occurrence and stands with every other
+     * @param at which element was taken at each step inside a sequence, outermost first. Empty
+     *           where the path enters no sequence, which is one occurrence and stands with every
+     *           other
      */
-    public record Occurrence(Map<TermPath, Integer> at, ObservedValue value) {
+    public record Occurrence(ElementsTaken at, ObservedValue value) {
 
         public Occurrence {
-            at = Map.copyOf(at);
+            Objects.requireNonNull(at, "an occurrence is reached through the elements it took");
             // An occurrence is a value the walk arrived at. Where none did, the walk says so with
             // its own answer and hands back no occurrences at all.
             Objects.requireNonNull(value, "an occurrence is a value standing at the path");
-        }
-
-        /**
-         * Whether this and {@code other} can be one reading of the row.
-         *
-         * <p>Every step the two took together was taken at the same element, and the steps they did
-         * not take together are free. Keyed by the step rather than counted, so the rule is one
-         * sentence and every case follows from it: two positions under one person agree about the
-         * person; a zip code and a phone number under one person agree about the person and not
-         * about the address or the phone; two positions under different parameters share nothing
-         * and stand with each other however they are spelled; and a position inside no sequence
-         * takes no step, so it stands with everything.
-         *
-         * <p>Counted instead — the first so many elements of one list against the first so many of
-         * another — two sibling collections would be zipped, which is a relation neither the row
-         * nor the model states.
-         */
-        public boolean agreesWith(Occurrence other) {
-            for (Map.Entry<TermPath, Integer> each : at.entrySet()) {
-                Integer beside = other.at().get(each.getKey());
-                if (beside != null && !beside.equals(each.getValue())) {
-                    return false;
-                }
-            }
-            return true;
         }
     }
 
@@ -189,7 +164,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
             return WalkResult.couldNotWalk();
         }
         List<Standing> standing = List.of(new Standing(inputs.get(at), types.get(at),
-                TermPath.of(path.head()), Map.of()));
+                TermPath.of(path.head()), ElementsTaken.NONE));
         for (TermPath.Step step : path.steps()) {
             List<Standing> next = new ArrayList<>();
             int took = 0;
@@ -315,7 +290,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      * one of them means to move, the other has to go on saying what it said.
      */
     private record Standing(ObservedValue value, Type type, TermPath reached,
-                            Map<TermPath, Integer> at) {
+                            ElementsTaken at) {
 
         /**
          * Takes {@code step}, adding what stands below. False where this type and value cannot take
@@ -373,9 +348,8 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
                     // that took it took the same one or they are not one reading of the row.
                     TermPath inside = reached.element();
                     for (int i = 0; i < written.elements().size(); i++) {
-                        Map<TermPath, Integer> deeper = new java.util.LinkedHashMap<>(at);
-                        deeper.put(inside, i);
-                        out.add(new Standing(written.elements().get(i), element, inside, deeper));
+                        out.add(new Standing(written.elements().get(i), element, inside,
+                                at.and(inside, i)));
                     }
                 }
                 // The value stays where it is and what may stand there narrows. A row whose value

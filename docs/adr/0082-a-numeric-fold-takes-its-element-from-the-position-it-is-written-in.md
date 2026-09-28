@@ -1,6 +1,8 @@
 # ADR-0082: A numeric fold takes its element from the position it is written in
 
-Status: Accepted (decided 2026-08-01).
+Status: Accepted (decided 2026-08-01). Amended by ADR-0116 — the numeric elements are three, a
+`Rational` being closed under `+` and `*` with identities the primitives construct. What this says
+about the empty list and about a newtype element is untouched.
 
 ## Context
 

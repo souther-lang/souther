@@ -46,6 +46,23 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
             let rename (t, to) = Todo { title = to, done = t.done }
             """;
 
+    /** A rule read through a helper, so the block it is written as belongs to a body. */
+    private static final String RULE_IN_A_HELPER = """
+            module example.rules exposing ( Item, Book, keep )
+
+            data Item = { product: String, name: String }
+
+            data Book = List<Item>
+                invariant distinct(value)
+
+            behavior keep : (b: Book) -> Book
+                constructs Book
+
+            let distinct (xs: List<Item>) : Bool = List.allDistinctBy(.product, xs)
+
+            let keep (b) = Book(b.value)
+            """;
+
     /** A model spread over two modules: what a field's type is declared by is imported. */
     private static final String SHARED = """
             module example.shared exposing ( Title, Note )
@@ -660,16 +677,15 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
     }
 
     /**
-     * A composition is compared as what it publishes, which is a signature.
+     * A composition is compared as what it publishes: that it is a composition, and what it takes
+     * and answers.
      *
-     * <p>A module publishes what a composition's stages compute rather than the stages, so what comes
-     * back is a signature like any other behavior's. This is what says so: the comparison refuses a
-     * composition outright, and a build whose behavior is one goes through here without meeting that
-     * refusal. A day when a composition does arrive is a day this fails rather than a day the stages
-     * are quietly compared by a rule nobody could read the truth of.
+     * <p>A module publishes what a composition's stages compute rather than the stages, so the
+     * stages are nothing two builds are held to — and a stage whose answer moved is a disagreement
+     * about that stage.
      */
     @Test
-    void aCompositionIsComparedAsTheSignatureItPublishes() {
+    void aCompositionIsComparedAsWhatItPublishes() {
         String moved = COMPOSING_MODEL.replace("data Priced = { of: Amount }",
                 "data Priced = { of: Amount, twice: Amount }")
                 .replace("let price (a) = Priced { of = a }",
@@ -683,6 +699,27 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                 DeclarationAgreement.of("example.composing", "price",
                         declarationsOf(moved), declarationsOf(COMPOSING_MODEL), DefaultStdlib.get()),
                 "and what a stage answers with having moved is a disagreement for that stage");
+    }
+
+    /**
+     * A behavior rewritten from a composition into one that declares its parameters, taking and
+     * answering the same types.
+     *
+     * <p>The two are not the same declaration: one is called by name and may be rested on in
+     * {@code depends on}, and the other is composed with. What crosses into them is the same values,
+     * but what a build may do with the behavior is not, so the builds disagree about it.
+     */
+    @Test
+    void aCompositionRewrittenAsADeclaredBehaviorIsADisagreement() {
+        String declared = COMPOSING_MODEL.replace("behavior priceAndSettle = price >-> settle",
+                "behavior priceAndSettle : (a: Amount) -> Amount")
+                .replace("let settle (p) = p.of",
+                        "let settle (p) = p.of\n\nlet priceAndSettle (a) = a");
+
+        assertInstanceOf(Agreement.Disagree.class,
+                DeclarationAgreement.of("example.composing", "priceAndSettle",
+                        declarationsOf(declared), declarationsOf(COMPOSING_MODEL),
+                        DefaultStdlib.get()));
     }
 
     /**
@@ -786,6 +823,70 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
     }
 
     /**
+     * A composition taking and answering the same in both builds, whose stages require different
+     * things.
+     *
+     * <p>What it requires is what an implementation of it is handed, in that order, and it comes
+     * from stages neither build publishes. Two builds that disagree about it hand a row's stand-ins
+     * to different dependencies, with nothing in the signature to show it.
+     */
+    @Test
+    void aCompositionRequiringSomethingElseIsADisagreement() {
+        String rated = """
+                module example.requiring
+
+                behavior rate : (n: Int) -> Int
+                behavior tax : (n: Int) -> Int
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                behavior priced = rate >-> double
+                """;
+        String taxed = rated.replace("priced = rate >-> double", "priced = tax >-> double");
+        PublishedClasses evaluated = declarationsOf(rated);
+
+        assertInstanceOf(Agreement.Agree.class,
+                DeclarationAgreement.of("example.requiring", "priced",
+                        declarationsOf(rated), evaluated, DefaultStdlib.get()),
+                "two builds of one composition agree");
+        assertInstanceOf(Agreement.Disagree.class,
+                DeclarationAgreement.of("example.requiring", "priced",
+                        declarationsOf(taxed), evaluated, DefaultStdlib.get()),
+                "one is handed `tax` and the other `rate`");
+    }
+
+    /**
+     * A composition requiring the same dependency in both builds, where that dependency is declared
+     * differently.
+     *
+     * <p>The dependency is held to both builds as a behavior a declaration names is. Nothing the
+     * composition publishes names it — its stages are not published — so it is reached through what
+     * the composition requires or not at all, and a dependency taking two inputs is handed in as
+     * another class than one taking one.
+     */
+    @Test
+    void whatACompositionRequiresIsHeldToBothBuildsAsWell() {
+        String unary = """
+                module example.requiring
+
+                behavior rate : (n: Int) -> Int
+                behavior charged : (n: Int) -> Int depends on rate
+                let charged (n, rate) = rate(n)
+                behavior double : (n: Int) -> Int
+                let double (n) = n + n
+                behavior priced = charged >-> double
+                """;
+        String binary = unary
+                .replace("behavior rate : (n: Int) -> Int", "behavior rate : (n: Int, m: Int) -> Int")
+                .replace("let charged (n, rate) = rate(n)", "let charged (n, rate) = rate(n, n)");
+
+        Agreement.Disagree said = assertInstanceOf(Agreement.Disagree.class,
+                DeclarationAgreement.of("example.requiring", "priced",
+                        declarationsOf(binary), declarationsOf(unary), DefaultStdlib.get()),
+                "the two take the same `rate` and do not agree about what it is");
+        assertEquals("rate", said.declaration());
+    }
+
+    /**
      * A module only an unread helper reaches is not held to.
      *
      * <p>It has to be read — a name in that helper is answered against it, and resolution answers
@@ -827,6 +928,43 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                 "the module the rows are written for agrees, and what it imports does not");
         assertEquals("example.shared", said.module(), "it names the module that moved");
         assertEquals("Title", said.declaration());
+    }
+
+    /**
+     * A rule written where a row can meet it is compared by what it says.
+     *
+     * <p>Which rule a source wrote is an identity, and the reader that needs one is the coverage
+     * that files what a row exercised: a helper's body spliced into two call sites carries the rule
+     * it was written as. A crossing is not that reader. What it depends on is what a rule admits,
+     * and two builds that admit the same values over the same parts have not moved whatever number
+     * either gave the block.
+     *
+     * <p>So it is the block and not the number of it. These are the two edits a crossing must
+     * report about a rule read through a helper — what it applies, and which part it reads — and
+     * reporting them is what says the identity was dropped without the block going with it.
+     */
+    @Test
+    void aRuleIsComparedByWhatItSaysAndNotByWhichBlockOfItsOwnerItIs() {
+        Agreement itself = DeclarationAgreement.of("example.rules", "keep",
+                declarationsOf(RULE_IN_A_HELPER), declarationsOf(RULE_IN_A_HELPER),
+                DefaultStdlib.get());
+        assertInstanceOf(Agreement.Agree.class, itself,
+                "two builds of one model agree about the rule they both hold");
+
+        String reads = RULE_IN_A_HELPER.replace("allDistinctBy(.product, xs)",
+                "allDistinctBy(.name, xs)");
+        Agreement other = DeclarationAgreement.of("example.rules", "keep",
+                declarationsOf(RULE_IN_A_HELPER), declarationsOf(reads), DefaultStdlib.get());
+        assertInstanceOf(Agreement.Disagree.class, other,
+                "a rule reading another part of what it is handed admits other values, which is a"
+                        + " difference a row meets");
+
+        String applies = RULE_IN_A_HELPER.replace("List.allDistinctBy(.product, xs)",
+                "List.length(List.map(.product, xs)) >= 0");
+        Agreement wider = DeclarationAgreement.of("example.rules", "keep",
+                declarationsOf(RULE_IN_A_HELPER), declarationsOf(applies), DefaultStdlib.get());
+        assertInstanceOf(Agreement.Disagree.class, wider,
+                "and one applying something else admits others again, blocks and all");
     }
 
     /** Two builds of a model spread over two modules agree, one import deep. */

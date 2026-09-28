@@ -47,10 +47,13 @@ public final class Compositions {
             Map<ValueName.Behavior, List<Hir.Var>> stages = PipelineSigs.pipelineStages(module);
             Map<ValueName.Behavior, souther.compiler.core.Composition> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : module.behaviors()) {
-                if (behavior instanceof Hir.PipeBehavior pipe) {
+                // A composition read off the path routes nothing here: its stages stayed with the
+                // module that wrote them, which is where it runs.
+                if (behavior instanceof Hir.PipeBehavior pipe
+                        && pipe.composition() instanceof Hir.Composition.Stages written) {
                     try {
                         out.put(new ValueName.Behavior(module.name(), pipe.name()),
-                                PipelineSigs.composition(pipe, sigs.value(),
+                                PipelineSigs.composition(pipe, written, sigs.value(),
                                         Shapes.publishedDeclarations(db), stages));
                     } catch (Unanswerable _) {
                         // A stage that names nothing was reported where it was written, and this

@@ -61,8 +61,8 @@ public final class Prepared {
      * reached from a row and from nothing a source can spell, and the walk that minted it is the one
      * that knows which method is whose.
      */
-    public List<Hir.FnDef> rowDefs() {
-        return surface.rowDefs();
+    public List<Hir.FnDef> mintedDefs() {
+        return surface.mintedDefs();
     }
 
     /**
@@ -136,17 +136,15 @@ public final class Prepared {
      * <p>The state and not a flag, so that a reader says which of the two questions about a
      * body-less behavior it is asking: whether there is anything here to run, or whether Java is the
      * one supplying it. Those are the same answer for a behavior with no {@code depends on} and
-     * different answers for one that declares it (issue #936).
+     * different answers for one that declares it.
+     *
+     * <p>Asked by the declaration's identity, and answered from where the module was classified —
+     * the assembly's, handed on.
+     *
+     * @throws IllegalArgumentException where {@code behavior} is not one this module declares
      */
-    public BehaviorImplementation implementationOf(Hir.BehaviorDef behavior) {
-        return Requirements.implementationOf(module(), behavior);
-    }
-
-    /** Whether {@code behavior}'s body is written here as a {@code let} of its own name, which a
-     *  {@code >->} composition's is not. Read from the declarations, so it answers whether or not
-     *  this module was elaborated ({@link Requirements#writesItsOwnBody}). */
-    public boolean writesItsOwnBody(Hir.BehaviorDef behavior) {
-        return Requirements.writesItsOwnBody(module(), behavior);
+    public BehaviorImplementation implementationOf(ValueName.Behavior behavior) {
+        return surface.implementationOf(behavior);
     }
 
     /** Whether {@code behavior} is a {@code >->} composition, whose positions, lines and arms are
@@ -155,9 +153,9 @@ public final class Prepared {
         return Requirements.isComposition(behavior);
     }
 
-    /** The names its source offers to whatever reads it, which no stage rewrites. */
-    public List<String> exposing() {
-        return surface.exposing();
+    /** The names it publishes to whatever reads it, which no stage rewrites. */
+    public Set<String> published() {
+        return surface.published();
     }
 
     /**
@@ -207,6 +205,12 @@ public final class Prepared {
      */
     public Map<Hir.Expr, String> operandMethods() {
         return surface.operandMethods();
+    }
+
+    /** Which method every value a fixture may call by name runs as, by the value's own declaration —
+     *  {@link FixtureValueEntries#emitted}'s correspondence, mint and reuse alike. */
+    public Map<ValueName.Helper, String> fixtureValueMethods() {
+        return surface.fixtureValueMethods();
     }
 
     /**
@@ -325,7 +329,7 @@ public final class Prepared {
         /** Where {@code behavior}'s body comes from. How it is written, and no answer to what will
          *  run it. A fake stands in for an injection target; a row waits for either state with no
          *  body here. */
-        public BehaviorImplementation implementationOf(Hir.BehaviorDef behavior) {
+        public BehaviorImplementation implementationOf(ValueName.Behavior behavior) {
             return module.implementationOf(behavior);
         }
 
@@ -405,6 +409,12 @@ public final class Prepared {
          * emission constructed rather than numbering its own subset from zero. */
         public Map<Hir.Expr, String> operandMethods() {
             return module.operandMethods();
+        }
+
+        /** Which method every value a fixture may call by name runs as, by the value's own
+         *  declaration, whole-module like {@link #operandMethods}. */
+        public Map<ValueName.Helper, String> fixtureValueMethods() {
+            return module.fixtureValueMethods();
         }
 
         /** The artifact the rows run in. */

@@ -39,8 +39,6 @@ final class Clauses {
      *  not one this reader makes out of the tree it was handed. Which clauses it has, what each of
      *  them states, and what it spreads all come from here. */
     private final PublishedDeclarations published;
-    /** Which form each of those declarations was written in. */
-    private final DeclarationKinds kinds;
     private final Map<TypeSymbol.AtModule, Map<String, Type>> fields = new HashMap<>();
     private final Map<TypeSymbol.AtModule, Map<String, BindingId>> bindings =
             new HashMap<>();
@@ -69,7 +67,6 @@ final class Clauses {
         this.expandedClauses = source.invariants();
         this.written = source.written();
         this.published = source.published();
-        this.kinds = source.kinds();
     }
 
 
@@ -87,7 +84,7 @@ final class Clauses {
     /** Every rule that applies to {@code named}, as the declarations that wrote them publish them,
      * with whether every one of them was reached. */
     PublishedRules of(TypeSymbol.AtModule named) {
-        return PublishedRules.governing(named, symbols, published, effective);
+        return PublishedRules.governing(named, published, effective);
     }
 
     /**
@@ -149,7 +146,7 @@ final class Clauses {
         // declaration's own text is checked, and a clause reached from another module is not that.
         return () -> new SecondaryClauseReading.Over(
                 DataChecker.fieldScope(named, fieldsOf(named), source().bindings()),
-                CheckContext.of(symbols, published, kinds, source().inners()).forDischarge());
+                CheckContext.of(symbols, source().declarations()).forDischarge());
     }
 
     /**
@@ -387,7 +384,10 @@ final class Clauses {
         return Core.mapAll(e, child -> substituted(child, given),
                 // A name slot holds a binding and nothing else, so a value put there would be
                 // something the reader of that slot cannot load. Only another name may stand there.
-                name -> substituted(name, given) instanceof Core.Read r ? r : name);
+                // It identifies a binding and is no typed value position: a type the substituted
+                // value stands as belongs to the value, and not to this slot.
+                name -> Core.withoutStanding(substituted(name, given)) instanceof Core.Read r
+                        ? r : name);
     }
 
     /** Every binding {@code e} reads, at any depth. */

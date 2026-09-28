@@ -51,15 +51,25 @@ public final class HelperTyping {
                                      PublishedDeclarations published, DeclarationKinds kinds,
                                      Map<ValueName.Behavior, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns,
                                      Map<String, Hir.Expr> loweredBodies,
+                                     Set<String> valuesWithAnEntry,
                                      TypeChecker.Elaborated elaborated) {
         // What each value of this module was settled as, filled in as they are checked. A value is
         // checked against these rather than against a copy of the body each of them stands for,
         // which is the same answer worked out once instead of once per name that reaches it.
-        Preserved.Settling settledSignatures = new Preserved.Settling();
+        Preserved.Settling settledSignatures = elaborated.settledValues;
         Map<ValueName, Object> settledConstants = new HashMap<>();
         Preserved standing = Preserved.valuesAlreadySettled(settledSignatures);
         for (Hir.FnDef h : valuesBeforeTheValuesThatNameThem(inliner, symbols.library(), toCheck)) {
             boolean recursive = recursiveHelperFns.containsKey(h.name());
+            // What it runs as, settled once where this module was lowered and read here rather than
+            // answered again from the definition. Not narrowed to what is emitted: most of what is
+            // checked here is inlined at its call sites and never is, so this is answered whether or
+            // not a method follows — narrowing waits for the answer to that, below.
+            LoweringRole role = elaborated.roles.get(h.name());
+            if (role == null) {
+                throw new IllegalStateException("`" + h.name() + "` is checked standalone and the"
+                        + " lowering settled no role for it");
+            }
             // Where this definition stands, or null where it stands nowhere: the one thing every
             // rule below that is about a row's operand asks, read off the definition the rule is
             // holding rather than off a set of names travelling beside it.
@@ -70,17 +80,29 @@ public final class HelperTyping {
             // compiled as is nullary and static, with nothing injected into it. Handed the same
             // requirement table a body gets, a call to a required behavior types here and reaches
             // no implementation at all.
-            Map<ValueName.Behavior, ReqSig> reachable = standsAt != null ? Map.of() : reqSigs;
+            // The entry a module publishes for a value is the same: it is nullary and static, called
+            // from another module, and has no dependency in force to reach a behavior through.
+            //
+            // Neither a behavior's implementation nor a value declared elsewhere is ever checked
+            // here (toCheck holds neither), so the compiler would be disagreeing with itself about
+            // what it settled if one of them turned up — the same disagreement LoweringRole#emitted
+            // refuses below.
+            Map<ValueName.Behavior, ReqSig> reachable = switch (role) {
+                case LoweringRole.RowValue _, LoweringRole.PublishedValueEntry _,
+                     LoweringRole.FixtureValueEntry _ -> Map.of();
+                case LoweringRole.ValueHome _, LoweringRole.Helper _ -> reqSigs;
+                case LoweringRole.Behavior _, LoweringRole.ValueDeclaredElsewhere _ ->
+                        throw new IllegalStateException("`" + h.name() + "` is checked standalone as"
+                                + " `" + inliner.moduleName() + "`'s own, and its role is " + role);
+            };
             // A helper reads a settled value as a value does. A helper's body is expanded into
             // whoever calls it, and a value it names is expanded into that expansion, so a chain of
             // values written through helpers reaches every link exactly as one written without them
             // — and would copy every link, once per helper, for the same reason.
             //
-            // What settles one is narrower: a value of this module, which is what has an answer to
-            // read. A helper settles nothing, and neither does a value the module took on to emit.
-            boolean settles = h.params().isEmpty() && h.declaredBy(inliner.moduleName());
-            ValueName settled = settles
-                    ? new ValueName.Helper(inliner.moduleName(), h.name()) : null;
+            // What settles one is a value of this module: it has an answer to read. A value another
+            // module declares was settled by that module's check, and a helper settles nothing.
+            ValueName settled = role instanceof LoweringRole.ValueHome home ? home.value() : null;
             Scope env = Scope.NONE;
             List<Integer> inferred = new ArrayList<>();
             for (int i = 0; i < h.params().size(); i++) {
@@ -99,6 +121,35 @@ public final class HelperTyping {
                     continue;
                 }
                 env = env.with(p.binder(), TypeOps.resolveParamType(p.type()));
+            }
+            // What a value emitted as a method takes: the values its root region demands, each a
+            // binding of the type that value's own check settled. Those are checked first, so the
+            // answer is here.
+            // What the emitted method takes is read off the parameters the lowered module gives it,
+            // which are not always the ones `h` was written with: a value was written with none.
+            List<EmittedDefinition.Parameter> takes = null;
+            List<Hir.FnParam> loweredParams = elaborated.loweredParams.get(h.name());
+            if (loweredParams != null) {
+                takes = new ArrayList<>();
+                for (Hir.FnParam p : loweredParams) {
+                    ValueName.Helper carries = elaborated.carried.get(p.binder().binding());
+                    if (carries != null) {
+                        CompleteSignature carried = standing.valueKept(carries);
+                        if (carried == null) {
+                            throw new IllegalStateException("`" + h.name() + "` takes `" + p.name()
+                                    + "`, whose value was not settled before it");
+                        }
+                        env = env.with(p.binder(), carried.result());
+                        takes.add(new EmittedDefinition.Handover(CoreBinders.of(p.binder()),
+                                carried.result(), carries));
+                    } else if (p.type() == null) {
+                        throw new IllegalStateException("`" + h.name() + "` is emitted and its"
+                                + " parameter `" + p.name() + "` has no type to take it from");
+                    } else {
+                        takes.add(new EmittedDefinition.Declared(CoreBinders.of(p.binder()),
+                                TypeOps.resolveParamType(p.type())));
+                    }
+                }
             }
             Elaborator.rejectBuiltinShadowing(h.writtenBody());
             // A definition the lowered module carries is one the backend emits — a recursive helper,
@@ -153,7 +204,19 @@ public final class HelperTyping {
             // that produces a function is elaborated against it and refused as a block is anywhere
             // it escapes — skipped, the claim would go unheld and the backend would be left a
             // method to emit with no elaborated body to emit it from.
+            //
+            // Such a definition is typed in each copy expanded into what reads it, and a top-level
+            // definition is not typed from what applies it. A value some entry reaches — published,
+            // or a fixture's own — is read as it stands, by an entry that is no copy of it, so there
+            // is no copy to type it in: it is refused here, at the value. Which values an entry
+            // reaches is settled in lowering, and does not move with which of them this check happens
+            // to meet first.
             if (declaredReturn == null && Elaborator.producesFunction(body)) {
+                if (valuesWithAnEntry.contains(h.name())) {
+                    throw CompileException.of(Diagnostic.at(h.pos())
+                            .say(new HelperMessage.TheValuesFunctionTypeIsNotWritten(h.name()))
+                            .build());
+                }
                 continue;
             }
 
@@ -163,9 +226,10 @@ public final class HelperTyping {
                 rejectInjectedCalls(body, h.name(), reqSigs.keySet());
             }
             Core elaboratedBody = Elaborator.elaborate(body, tenv,
-                    new CheckContext(symbols, published, kinds,
-                            NewtypeInners.asWritten(symbols), null, reachable)
-                            .preserving(reading ? standing : Preserved.NONE),
+                    new CheckContext(symbols,
+                            DeclarationAccess.asWritten(symbols, published, kinds), null,
+                            reachable)
+                            .preserving(emitted != null || reading ? standing : Preserved.NONE),
                     declaredReturn);
             Type bodyType = elaboratedBody.type();
             // A definition standing at a row's position computes what the row writes there, and a
@@ -184,27 +248,17 @@ public final class HelperTyping {
                         .hint(new NameMessage.WriteItWhereTheTypeIsStated())
                         .say(new NameMessage.NothingSaysWhatThisPositionHolds()).build());
             }
-            elaborated.definitionTypes.put(h.name(), bodyType);
-            if (settled != null) {
-                // Both halves of what a reference to it is held to, said where both are in hand:
-                // the empty parameter list is why this is a value at all, and the result is what
-                // checking its body just answered. A reader given the type alone would have to
-                // decide for itself that a value takes no arguments.
-                settledSignatures.settled(CompleteSignature.ofSettledValue(settled, bodyType));
-                // What it is a constant of, read off the body it was checked as. A reference to it
-                // is written out as that constant, so every position that asks whether an
-                // expression is known at compile time goes on reading a literal.
-                ConstEval.against(symbols).eval(body)
-                        .ifPresent(c -> settledConstants.put(settled, c));
-            }
-            if (emitted != null) {
-                elaborated.helpers.put(h.name(), elaboratedBody);   // the backend emits this
-            }
-            // a declared return type — required on a recursive helper, allowed on any helper — must
-            // match the body; a lying annotation is not silently ignored. What a row's operand
-            // answers with is the position's contribution and not a claim of its own where the
-            // position requires nothing: a row may state what the behavior does not answer with,
-            // and reporting that disagreement is what the row is for.
+            // What the definition answers, decided once and read by everything below: its body, what
+            // it is recorded to answer, and the signature a reference to it is held to.
+            //
+            // A declared return type — required on a recursive helper, allowed on any helper — must
+            // match the body; a lying annotation is not silently ignored, and a body it admits
+            // answers as what was declared. What a row's operand answers with is the position's
+            // contribution and not a claim of its own where the position requires nothing: a row
+            // may state what the behavior does not answer with, and reporting that disagreement is
+            // what the row is for. So there the body answers as itself.
+            Type answers = bodyType;
+            Core definition = elaboratedBody;
             if (declaredReturn != null && (standsAt == null || standsAt.required() != null)) {
                 Type declared = declaredReturn;
                 if (!TypeOps.assignable(bodyType, declared, published)) {
@@ -220,6 +274,28 @@ public final class HelperTyping {
                                             Type.show(declared), Type.show(bodyType)))
                             .build());
                 }
+                answers = declared;
+                definition = Core.standingAs(elaboratedBody, declared);
+            }
+            elaborated.definitionTypes.put(h.name(), answers);
+            if (settled != null) {
+                // Both halves of what a reference to it is held to, said where both are in hand:
+                // the empty parameter list is why this is a value at all, and the result is what
+                // checking its body just answered. A reader given the type alone would have to
+                // decide for itself that a value takes no arguments.
+                settledSignatures.settled(CompleteSignature.ofSettledValue(settled, answers));
+                // What it is a constant of, read off the body it was checked as. A reference to it
+                // is written out as that constant, so every position that asks whether an
+                // expression is known at compile time goes on reading a literal.
+                ConstEval.against(symbols).eval(body)
+                        .ifPresent(c -> settledConstants.put(settled, c));
+            }
+            if (emitted != null) {
+                // The one place this narrows to what the module emits: a role that reached here
+                // without narrowing all the way is a value or a helper by construction, and the
+                // narrowing states that rather than assumes it.
+                elaborated.helpers.put(h.name(), new EmittedDefinition(definition, takes,
+                        LoweringRole.emitted(role, h.name(), inliner.moduleName())));
             }
         }
     }
@@ -376,6 +452,36 @@ public final class HelperTyping {
             }
             throw CompileException.of(d.build());
         }
+    }
+
+    /**
+     * The scope {@code body} of {@code h} is read in: each parameter with the type it was written
+     * with, and each one that was not with the type the body settles for it (ADR-0092).
+     *
+     * <p>What the standalone check does with a helper's parameters, for a reader that has a body to
+     * type and not a helper to check: a parameter that takes its type from the body is one whichever
+     * of the helper's parameters are written, and is settled the same way.
+     *
+     * @throws CompileException where the body settles no type for a parameter
+     */
+    static Scope parameterScope(Hir.FnDef h, Hir.Expr body, Symbols symbols,
+                                PublishedDeclarations published, DeclarationKinds kinds,
+                                Map<String, Type> recursiveHelperFns) {
+        Scope env = Scope.NONE;
+        List<Integer> open = new ArrayList<>();
+        for (int i = 0; i < h.params().size(); i++) {
+            Hir.FnParam p = h.params().get(i);
+            if (p.type() == null) {
+                open.add(i);
+                continue;
+            }
+            env = env.with(p.binder(), TypeOps.resolveParamType(p.type()));
+        }
+        if (!open.isEmpty()) {
+            typeFromBody(h, open, env, body, symbols, published, kinds, Map.of(),
+                    recursiveHelperFns);
+        }
+        return env;
     }
 
     /** A call in {@code body} to a behavior, which no helper reaches (spec [#calling-a-behavior]). */
@@ -682,8 +788,9 @@ public final class HelperTyping {
             }
             try {
                 Type at = Elaborator.typeOf(inliner.inline(call.args().get(i), inliner.bodyOf(h.name())),
-                        env, new CheckContext(symbols, published, kinds,
-                                NewtypeInners.asWritten(symbols), null, reqs));
+                        env, new CheckContext(symbols,
+                                DeclarationAccess.asWritten(symbols, published, kinds), null,
+                                reqs));
                 if (TypeOps.unify(declared.get(i), at, bind, published) instanceof Fit.Disagrees) {
                     return;   // the argument does not fit; leave it to the inlined check
                 }
@@ -764,8 +871,9 @@ public final class HelperTyping {
             Type got;
             try {
                 got = Elaborator.typeOf(inliner.inline(lambda.body(), inliner.bodyOf(h.name())), lenv,
-                        new CheckContext(symbols, published, kinds,
-                                NewtypeInners.asWritten(symbols), null, reqs));
+                        new CheckContext(symbols,
+                                DeclarationAccess.asWritten(symbols, published, kinds), null,
+                                reqs));
             } catch (CompileException _) {
                 return;   // best-effort; the inlined check reports a genuine error with full context
             }
@@ -838,6 +946,14 @@ public final class HelperTyping {
         if (e instanceof Hir.Apply call && call.answered() != null
                 && names.contains(call.answered().reaches())) {
             out.add(call.answered().reaches());
+        }
+        // A call to the method a value is emitted as is an edge of the same graph.
+        if (e instanceof Hir.ValueInvocation call && names.contains(call.reaches())) {
+            out.add(call.reaches());
+        }
+        // A value another module declares, left where it is named.
+        if (e instanceof Hir.Var.Denoting named && names.contains(named.reaches())) {
+            out.add(named.reaches());
         }
         TypeChecker.forEachChild(e, c -> collectCalls(c, out, names));
     }

@@ -91,6 +91,8 @@ class ADefinitionReachingOneThatWasNotBuiltIsNotBuiltTest {
                 .map(d -> d.code() + " " + d.said()).toList();
 
         assertEquals(1, said.size(), "the unknown name, and nothing about `Line`: " + said);
+        assertTrue(said.get(0).startsWith("E1023"),
+                "said as the name that denotes nothing, and nothing about what holds it: " + said);
     }
 
 }

@@ -1,6 +1,5 @@
 package souther.compiler.core;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.conformance.RepositoryModels;
@@ -10,8 +9,10 @@ import souther.compiler.query.Compilation;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ValueName;
+import souther.test.ClosedWorldContract;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -40,7 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * rather than one arm to be told apart by the module it is spelled in. Nothing here asks the
  * inlining policy, which is why a tree has the expansions it has and not what any one of them is.
  */
-@Tag("population")
+@ClosedWorldContract
 class WhereTheTwoReadingsOfABodyPartIsAnOperationOfTheLanguageTest {
 
     /** A comparison written in a block handed to one of the language's own operations. */
@@ -338,6 +339,10 @@ class WhereTheTwoReadingsOfABodyPartIsAnOperationOfTheLanguageTest {
     }
 
     /** The copies of {@code lineage}, outermost first. */
+    private static List<ExpansionLineage.Expansion> stepsOf(OccurrenceLineage lineage) {
+        return stepsOf(lineage.expansionProjection());
+    }
+
     private static List<ExpansionLineage.Expansion> stepsOf(ExpansionLineage lineage) {
         List<ExpansionLineage.Expansion> out = new ArrayList<>();
         for (ExpansionLineage each = lineage;

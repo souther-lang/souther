@@ -3,7 +3,6 @@ package souther.compiler.check;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.Reserved;
 import souther.compiler.ast.Ast;
-import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeSymbol;
@@ -233,6 +232,14 @@ public final class Scoping {
                                ModuleUniverse.InSight.Read there, List<Refusal> refused) {
         String imported = named.text();
         boolean written = named.pos() != null;
+        // Declared, then published, in the order the two questions depend on each other: what a
+        // module publishes is taken from what it declares, so a name it never declared is a
+        // mistake about what is there and not about what it keeps (spec
+        // §a-reached-name-is-declared-by-its-module).
+        if (!there.declares(imported)) {
+            refused.add(new Refusal.NoSuchName(imp, imported));
+            return new Claim.DoesNot(imp, imported, written);
+        }
         if (!there.exposes(imported)) {
             refused.add(new Refusal.NotExposed(imp, imported));
             return new Claim.DoesNot(imp, imported, written);
@@ -252,14 +259,10 @@ public final class Scoping {
             return new Claim.Stands(imp, imported, written,
                     new Brought.AHelper(published.get()));
         }
-        if (there.declaresValue(imported)) {
-            // Declared and exposed, and nothing to hand over. Nothing is wrong with the line and
-            // nothing arrived, so no claim is made on the spelling at all — it is not in scope
-            // here, and a use of it is a name this module never had.
-            return null;
-        }
-        refused.add(new Refusal.NoSuchName(imp, imported));
-        return new Claim.DoesNot(imp, imported, written);
+        // A value declared and exposed with nothing to hand over. Nothing is wrong with the line and
+        // nothing arrived, so no claim is made on the spelling at all — it is not in scope here,
+        // and a use of it is a name this module never had.
+        return null;
     }
 
     /** Every name a line asks for, claimed by nothing — the line could not do its job at all. */
@@ -455,11 +458,6 @@ public final class Scoping {
          *  written. */
         public SyntaxSymbols writtenSymbols(Registry<Ast.Def> registry, Stdlib stdlib) {
             return SyntaxSymbols.of(module, registry, denoting(), stdlib);
-        }
-
-        /** The same over a stage of the declarations something has resolved. */
-        public ResolvedSymbols symbolsOver(Registry<Hir.Def> registry, Stdlib stdlib) {
-            return ResolvedSymbols.over(module, registry, denoting(), stdlib);
         }
 
         /** These meanings as the operations a scope performs on them — what a reader that already
@@ -680,33 +678,46 @@ public final class Scoping {
      */
     public static List<Ast.Import> importsOf(ModuleUniverse universe, Ast.Module m) {
         List<Ast.Import> imports = new ArrayList<>(m.imports());
-        Map<String, Set<String>> borrowed = borrowed(universe, m);
-        for (Map.Entry<String, Set<String>> reached : borrowed.entrySet()) {
+        List<Borrowed> reached = borrowed(universe, m);
+        // One line per module reached, in the order the first reference to each is written — and
+        // the names on it in the order they are written too. An import list is a sequence and a
+        // reader is offered it as one, so what says what that sequence is has to be a sequence
+        // itself rather than a mapping somebody walked.
+        for (String target : reached.stream().map(Borrowed::module).distinct().toList()) {
             Set<String> already = new LinkedHashSet<>();
             for (Ast.Import imp : m.imports()) {
-                if (imp.module().equals(reached.getKey())) {
+                if (imp.module().equals(target)) {
                     already.addAll(imp.names());
                 }
             }
-            List<Ast.ImportedName> names = new ArrayList<>();
-            for (String bare : reached.getValue()) {
-                if (!already.contains(bare)) {
-                    // No position on a synthesized name: nobody wrote it on an import list. The
-                    // qualified reference that asked for it is where it came from.
-                    names.add(new Ast.ImportedName(bare, null));
-                }
-            }
+            // No position on a synthesized name: nobody wrote it on an import list. The qualified
+            // reference that asked for it is where it came from.
+            List<Ast.ImportedName> names = reached.stream()
+                    .filter(each -> each.module().equals(target)
+                            && !already.contains(each.behavior()))
+                    .map(each -> new Ast.ImportedName(each.behavior(), null))
+                    .toList();
             if (!names.isEmpty()) {
-                imports.add(new Ast.Import(reached.getKey(), null, names, m.pos()));
+                imports.add(new Ast.Import(target, null, names, m.pos()));
             }
         }
         return imports;
     }
 
-    /** The behaviors this module names through another module's name, by that module. */
-    private static Map<String, Set<String>> borrowed(ModuleUniverse universe, Ast.Module m) {
+    /** One behavior this module names through another module's name, and the module it is of. */
+    private record Borrowed(String module, String behavior) {}
+
+    /**
+     * The behaviors this module names through another module's name, in the order the references
+     * are written.
+     *
+     * <p>Once apiece and in that order: the set keeps the once-apiece, the list is what says what
+     * the order is. A module reached by two references brings its names in where the first of them
+     * is written, which is where an author reading down the file first asked for it.
+     */
+    private static List<Borrowed> borrowed(ModuleUniverse universe, Ast.Module m) {
         Map<String, String> qualifiers = qualifiersWritten(m);
-        Map<String, Set<String>> out = new LinkedHashMap<>();
+        Set<Borrowed> out = new LinkedHashSet<>();
         for (Ast.Var ref : qualifiedBehaviorRefs(m)) {
             String written = ref.name();
             String target = moduleNamedBy(written, qualifiers);
@@ -716,10 +727,10 @@ public final class Scoping {
             }
             String bare = written.substring(written.lastIndexOf('.') + 1);
             if (read.declaresBehavior(bare)) {
-                out.computeIfAbsent(target, k -> new LinkedHashSet<>()).add(bare);
+                out.add(new Borrowed(target, bare));
             }
         }
-        return out;
+        return List.copyOf(out);
     }
 
     /**
@@ -762,7 +773,10 @@ public final class Scoping {
         List<Ast.Var> out = new ArrayList<>();
         for (Ast.BehaviorDef b : m.behaviors()) {
             List<Ast.Var> refs = switch (b) {
-                case Ast.PipeBehavior pipe -> pipe.stages();
+                case Ast.PipeBehavior pipe -> switch (pipe.composition()) {
+                    case Ast.Composition.Stages written -> written.stages();
+                    case Ast.Composition.Elsewhere _ -> List.of();
+                };
                 case Ast.SpecBehavior spec -> spec.dependsOn();
             };
             for (Ast.Var ref : refs) {

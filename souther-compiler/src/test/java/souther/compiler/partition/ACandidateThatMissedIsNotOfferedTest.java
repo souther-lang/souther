@@ -92,10 +92,10 @@ class ACandidateThatMissedIsNotOfferedTest {
 
         FillResult filled = fill(model, _ -> missed(model));
 
-        assertTrue(filled.unresolved().stream().anyMatch(each -> each.reason()
+        assertTrue(filled.unresolved().stream().anyMatch(each -> each.why().reason()
                         == Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS),
                 "the combinations were left untried: " + filled.unresolved());
-        assertTrue(filled.unresolved().stream().noneMatch(each -> each.reason()
+        assertTrue(filled.unresolved().stream().noneMatch(each -> each.why().reason()
                         == Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE),
                 "and nothing was said to be impossible: " + filled.unresolved());
     }
@@ -109,7 +109,7 @@ class ACandidateThatMissedIsNotOfferedTest {
         FillResult filled =
                 fill(model, _ -> new Generator.Watched.Ran(everything));
 
-        assertTrue(filled.unresolved().stream().noneMatch(each -> each.reason()
+        assertTrue(filled.unresolved().stream().noneMatch(each -> each.why().reason()
                         == Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS),
                 "nothing missed: " + filled.unresolved());
         assertFalse(filled.rows().isEmpty(), "and the rows are offered");
@@ -169,14 +169,14 @@ class ACandidateThatMissedIsNotOfferedTest {
     }
 
     private static FillResult fill(Model model, Generator.Trial trial) {
-        return Generator.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
+        return GenerationFixtures.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
                 model.read(), trial, Budgets.generation());
     }
 
     /** Every claim any combination of the model makes, so that one run answers all of them. */
     private static List<ControlClaim> everyClaimOf(Model model) {
         List<ControlClaim> out = new ArrayList<>();
-        for (InteractionCells.Group group : InteractionCells.of(model.groups(), model.subject().axes().axes(), Budgets.generation()).groups()) {
+        for (InteractionCells.Group group : InteractionCells.of(model.groups(), model.subject().axes().axes(), Budgets.generation().cellsPerGroup()).groups()) {
             for (int index = 0; index < group.size(); index++) {
                 CellSelection selection = group.at(index);
                 if (selection != null) {

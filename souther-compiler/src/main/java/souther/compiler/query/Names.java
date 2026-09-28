@@ -7,6 +7,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.DeclarationKind;
+import souther.compiler.check.DeclarationReads;
 import souther.compiler.check.DeclarationRefusals;
 import souther.compiler.check.Derived;
 import souther.compiler.check.DerivedSymbols;
@@ -19,7 +20,6 @@ import souther.compiler.check.Scoping;
 import souther.compiler.check.Registry;
 import souther.compiler.check.Requirements;
 import souther.compiler.check.Resolve;
-import souther.compiler.check.SyntaxSymbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
@@ -73,6 +73,30 @@ public final class Names {
     }
 
     /**
+     * What a registry over a rung below the source has, in the order the source writes them.
+     *
+     * <p>The order is the module's own and is asked of the one answer that has it. A rung below is
+     * a mapping from the same names to what that rung made of each, and the order it is walked in
+     * belongs to the source rather than to whatever the rung's own answer was built in — so a
+     * declaration this rung could not make for is left out rather than moved.
+     */
+    private static <D> List<D> inTheOrderTheSourceWritesThem(Db db, String moduleName,
+                                                             Map<String, D> made) {
+        Answer<DeclaredNames.Index<Ast.Def>> source = db.ask(new Declarations(moduleName));
+        if (!source.present()) {
+            return List.of();
+        }
+        List<D> out = new ArrayList<>();
+        for (String name : source.value().asDeclared()) {
+            D def = made.get(name);
+            if (def != null) {
+                out.add(def);
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
      * A registry over this compilation, reading each module's declarations as resolution left them.
      *
      * <p>One of the two declaration worlds a module can be read against, and which one a reader gets
@@ -101,10 +125,15 @@ public final class Names {
             }
 
             @Override
+            public List<Hir.Def> inDeclarationOrder(String moduleName) {
+                return inTheOrderTheSourceWritesThem(db, moduleName, declaredIn(moduleName));
+            }
+
+            @Override
             public Set<String> exposedBy(String moduleName) {
                 // `exposing` is written in the source and no pass rewrites it, so which stage this
                 // registry reads makes no difference to the answer.
-                Set<String> exposed = db.ask(new Front.Exposes(moduleName)).value();
+                Set<String> exposed = db.ask(new Front.PublishedNames(moduleName)).value();
                 return exposed == null ? Set.of() : exposed;
             }
 
@@ -137,13 +166,19 @@ public final class Names {
 
             @Override
             public Map<String, Ast.Def> declaredIn(String moduleName) {
-                Answer<Map<String, Ast.Def>> defs = db.ask(new Declarations(moduleName));
-                return defs.present() ? defs.value() : Map.of();
+                Answer<DeclaredNames.Index<Ast.Def>> defs = db.ask(new Declarations(moduleName));
+                return defs.present() ? defs.value().declarations() : Map.of();
+            }
+
+            @Override
+            public List<Ast.Def> inDeclarationOrder(String moduleName) {
+                Answer<DeclaredNames.Index<Ast.Def>> defs = db.ask(new Declarations(moduleName));
+                return defs.present() ? defs.value().inDeclarationOrder() : List.of();
             }
 
             @Override
             public Set<String> exposedBy(String moduleName) {
-                Set<String> exposed = db.ask(new Front.Exposes(moduleName)).value();
+                Set<String> exposed = db.ask(new Front.PublishedNames(moduleName)).value();
                 return exposed == null ? Set.of() : exposed;
             }
 
@@ -184,8 +219,13 @@ public final class Names {
             }
 
             @Override
+            public List<Normalized.Def> inDeclarationOrder(String moduleName) {
+                return inTheOrderTheSourceWritesThem(db, moduleName, declaredIn(moduleName));
+            }
+
+            @Override
             public Set<String> exposedBy(String moduleName) {
-                Set<String> exposed = db.ask(new Front.Exposes(moduleName)).value();
+                Set<String> exposed = db.ask(new Front.PublishedNames(moduleName)).value();
                 return exposed == null ? Set.of() : exposed;
             }
 
@@ -234,8 +274,13 @@ public final class Names {
             }
 
             @Override
+            public List<Derived.Def> inDeclarationOrder(String moduleName) {
+                return inTheOrderTheSourceWritesThem(db, moduleName, declaredIn(moduleName));
+            }
+
+            @Override
             public Set<String> exposedBy(String moduleName) {
-                Set<String> exposed = db.ask(new Front.Exposes(moduleName)).value();
+                Set<String> exposed = db.ask(new Front.PublishedNames(moduleName)).value();
                 return exposed == null ? Set.of() : exposed;
             }
 
@@ -264,14 +309,14 @@ public final class Names {
      * the author of the project importing it — {@code E1011}, under the caret of their own
      * {@code import} line, about a file they do not have and did not write.
      */
-    public record Declarations(String name) implements Key<Map<String, Ast.Def>> {
+    public record Declarations(String name) implements Key<DeclaredNames.Index<Ast.Def>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<String, Ast.Def>> compute(Db db) {
+        public Answer<DeclaredNames.Index<Ast.Def>> compute(Db db) {
             if (cyclic(db, name)) {
                 // What this module declares depends on the module it names, which depends on this
                 // one. Reported by InCycle; nothing below here can be answered, and going on would
@@ -288,10 +333,14 @@ public final class Names {
                 for (DeclaredNames.Refusal<Ast.Def> refused : declared.refusals()) {
                     reports.add(Report.of(DeclarationRefusals.reportedAsWritten(refused)));
                 }
-                return Answer.of(declared.declarations(), reports);
+                return Answer.of(declared, reports);
             }
             Front.FromPath.OnThePath fromPath = Front.onThePath(db, name);
-            return fromPath == null ? Answer.absent() : Answer.of(fromPath.declarations());
+            // Indexed where it was read back, and a set of declarations a module may not have is an
+            // artifact this compiler refused to read — so there is nothing left here to refuse.
+            return fromPath == null ? Answer.absent()
+                    : Answer.of(new DeclaredNames.Index<>(fromPath.declarations(),
+                            fromPath.asDeclared(), List.of()));
         }
     }
 
@@ -334,11 +383,11 @@ public final class Names {
 
         @Override
         public Answer<Ast.Def> compute(Db db) {
-            Answer<Map<String, Ast.Def>> defs = db.ask(new Declarations(named.module()));
+            Answer<DeclaredNames.Index<Ast.Def>> defs = db.ask(new Declarations(named.module()));
             if (!defs.present()) {
                 return Answer.absent();
             }
-            Ast.Def def = defs.value().get(named.name());
+            Ast.Def def = defs.value().declarations().get(named.name());
             return def == null ? Answer.absent() : Answer.of(def);
         }
     }
@@ -730,19 +779,19 @@ public final class Names {
      */
     public static Answer<DerivedSymbols> derivedSymbols(
             Db db, String name) {
-        return symbols(db, name, (names, stdlib) -> DerivedSymbols
-                .over(name, derivedRegistry(db), normalizedRegistry(db), resolvedRegistry(db),
-                        names, stdlib));
+        return derivedSymbols(db, name, DeclarationReads.NOBODY);
     }
 
-    /** The same, over the declarations as they were written — what {@code Resolve} resolves
-     * against. */
-    static Answer<SyntaxSymbols> writtenSymbols(Db db, String name) {
-        if (!db.ask(new HasScope(name)).value()) {
-            return Answer.absent();
-        }
-        return Answer.of(SyntaxSymbols.of(name, writtenRegistry(db), asked(db, name),
-                library(db)));
+    /**
+     * The same, telling {@code reads} of every declaration a reader of it is answered about — for a
+     * reader whose output records which declarations it was built against.
+     */
+    public static Answer<DerivedSymbols> derivedSymbols(Db db, String name,
+                                                        DeclarationReads reads) {
+        return symbols(db, name, (names, stdlib) -> DerivedSymbols
+                .over(name, reads.readingRegistry(derivedRegistry(db)),
+                        reads.readingRegistry(normalizedRegistry(db)),
+                        reads.readingRegistry(resolvedRegistry(db)), names, stdlib));
     }
 
     /**
@@ -1028,7 +1077,10 @@ public final class Names {
             }
             for (Hir.BehaviorDef b : m.behaviors()) {
                 List<Hir.Var> named = switch (b) {
-                    case Hir.PipeBehavior pipe -> pipe.stages();
+                    case Hir.PipeBehavior pipe -> switch (pipe.composition()) {
+                        case Hir.Composition.Stages written -> written.stages();
+                        case Hir.Composition.Elsewhere _ -> List.of();
+                    };
                     case Hir.SpecBehavior spec -> spec.dependsOn();
                 };
                 for (Hir.Var ref : named) {
@@ -1391,9 +1443,11 @@ public final class Names {
             if (name == null) {
                 return Answer.absent();
             }
-            Answer<Map<String, Ast.Def>> defs = db.ask(new Declarations(name));
+            Answer<DeclaredNames.Index<Ast.Def>> defs = db.ask(new Declarations(name));
             if (defs.present()) {
-                for (Ast.Def def : defs.value().values()) {
+                // Walked in the order the module writes them, because what is looked for is the
+                // declaration a place falls inside and the places are the module's own.
+                for (Ast.Def def : defs.value().inDeclarationOrder()) {
                     if (spans(def.written(), at)) {
                         // Asked of the declaration world this came out of, rather than made from the
                         // address it answers to.
@@ -1664,14 +1718,14 @@ public final class Names {
 
         @Override
         public Answer<WrittenName> compute(Db db) {
-            Answer<Map<String, Ast.Def>> defs = db.ask(new Declarations(denoted.module()));
+            Answer<DeclaredNames.Index<Ast.Def>> defs = db.ask(new Declarations(denoted.module()));
             if (!defs.present()) {
                 return Answer.absent();
             }
             // The occurrence of the name, not where the declaration starts: a reader sent to a
             // declaration is being sent to the name it declares, the keyword in front of it is not
             // what they asked about, and how far the name reaches is the characters that spell it.
-            Ast.Def def = defs.value().get(denoted.name());
+            Ast.Def def = defs.value().declarations().get(denoted.name());
             return def == null || !def.written().authored()
                     ? Answer.absent() : Answer.of(def.written());
         }
@@ -1841,7 +1895,16 @@ public final class Names {
                 }
                 collectRetType(spec.ret(), refs);
             } else if (b instanceof Ast.PipeBehavior pipe) {
-                collectRetType(pipe.declaredOut(), refs);
+                switch (pipe.composition()) {
+                    case Ast.Composition.Stages written ->
+                            collectRetType(written.declaredOut(), refs);
+                    case Ast.Composition.Elsewhere elsewhere -> {
+                        for (Ast.RetType takes : elsewhere.takes()) {
+                            collectRetType(takes, refs);
+                        }
+                        collectRetType(elsewhere.answers(), refs);
+                    }
+                }
             }
         }
         for (Ast.FnDef fn : m.fns()) {

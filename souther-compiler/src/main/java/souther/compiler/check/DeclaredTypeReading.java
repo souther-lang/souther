@@ -235,6 +235,11 @@ public record DeclaredTypeReading(DeclarationFacts facts,
                 }
                 case Hir.Apply call -> applied(call);
                 case Hir.Expansion ex -> ofExpansion(ex);
+                // A build of a value is that value, whichever region it was built for.
+                case Hir.Materialised m -> of(m.body());
+                // A build by reference names no type: what the value is typed as is what its own
+                // check settled, which is the elaboration's to say.
+                case Hir.ValueBuild _, Hir.ValueInvocation _ -> null;
                 case Hir.LetIn let -> ofLet(let);
                 case Hir.Var v -> ofVar(v);
                 // It answers no value, which is a type and is this one.
@@ -252,8 +257,8 @@ public record DeclaredTypeReading(DeclarationFacts facts,
                 // A tuple carries several values through a computation and is written in no
                 // declaration (ADR-0036), so nothing states what one is.
                 case Hir.Tuple _, Hir.TupleGet _ -> null;
-                // A block is second-class: it is an argument and never a value, so no declaration
-                // states a type for one standing here.
+                // A block is the function the position it stands in expects, so its type is that
+                // position's and no declaration states one for it.
                 case Hir.Block _ -> null;
             };
         }
@@ -352,7 +357,7 @@ public record DeclaredTypeReading(DeclarationFacts facts,
                             boundBy(bound, required, arrived.get(i))));
                 }
                 Type answers = ex.declaredReturn() == null
-                        ? null : TypeOps.resolveParamType(ex.declaredReturn());
+                        ? null : TypeOps.successType(ex.declaredReturn());
                 if (answers == null) {
                     return of(ex.body());
                 }
@@ -546,7 +551,7 @@ public record DeclaredTypeReading(DeclarationFacts facts,
                         : TypeOps.resolveParamType(parameter.type()));
             }
             Type answers = definition.declaredReturn() == null
-                    ? null : TypeOps.resolveParamType(definition.declaredReturn());
+                    ? null : TypeOps.successType(definition.declaredReturn());
             if (!(admits(written, answers, call) instanceof Settlement.Settled(var bindings))) {
                 return null;
             }

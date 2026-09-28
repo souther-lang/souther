@@ -71,8 +71,8 @@ class BranchCoverageDoesNotReplaceAnEqualAnswerDistinctionTest {
 
         assertTrue(branchLine(report).endsWith("4/4"),
                 () -> "every arm the author wrote is reached:\n" + report);
-        assertTrue(report.contains("unknown"),
-                () -> "and a combination of the two forks is untried:\n" + report);
+        assertTrue(report.contains("uncovered"),
+                () -> "and a combination of the two forks is one no row is in:\n" + report);
     }
 
     /**

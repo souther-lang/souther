@@ -165,13 +165,33 @@ public final class StructuralCost {
      * than the expansion that finds the cycle by re-entering it.
      */
     public static Composed composed(Hir.Expr root, Reaches reaches) {
-        return counted(root, reaches, MAX);
+        return counted(root, reaches, MAX, new java.util.HashMap<>(), 0);
     }
+
+    /**
+     * What one value's substituted body comes to, held for the rest of the walk.
+     *
+     * <p>What a value costs is the same wherever it is named — the count begins at the body and
+     * nothing above it is part of it — so a value named twice is measured once. Without that, a
+     * chain of values each naming the one before it twice is walked once per way down to it, which
+     * is a count that doubles per link over a source that grows by a line.
+     *
+     * <p>Capped and not exact. {@link #MAX} is the most any of it may come to, so a value past it is
+     * held at one more than the bound: what every caller asks is which side of the bound it puts
+     * them on, and a value already past it puts every caller past it.
+     */
+    private static final int PAST = MAX + 1;
+
+    /** What a value's cost is held at while it is being worked out, so that a module whose values
+     *  reach each other is a walk that stops rather than one that goes round. Such a module is
+     *  refused as the cycle it is, and not by this. */
+    private static final int WORKING = -1;
 
     /** As above, giving up once the count is past {@code cap} — which is the bound where what is
      *  being asked is which side of it this falls on, and nothing where the number itself is the
      *  answer. */
-    private static Composed counted(Hir.Expr root, Reaches reaches, int cap) {
+    private static Composed counted(Hir.Expr root, Reaches reaches, int cap,
+                                    Map<String, Integer> known, int depth) {
         List<Step> todo = new ArrayList<>();
         todo.add(new Step(root, 0, null, null));
         int most = 0;
@@ -188,6 +208,16 @@ public final class StructuralCost {
             if (node instanceof Hir.Var.Denoting name) {
                 Hir.Expr body = reaches.substitutedAt(name);
                 if (body != null && !Path.holds(step.path(), name.reaches())) {
+                    Integer held = costOf(name, body, reaches, known, depth);
+                    if (held != null) {
+                        int at = step.above() + held;
+                        most = Math.max(most, at);
+                        if (at > cap) {
+                            return new Composed(at, took(name, body, reaches, cap - step.above(),
+                                    known, depth));
+                        }
+                        continue;
+                    }
                     todo.add(new Step(body, step.above(), name,
                             new Path(name.reaches(), step.path())));
                     continue;
@@ -202,6 +232,40 @@ public final class StructuralCost {
                     todo.add(new Step(child, at, step.by(), step.path())));
         }
         return new Composed(most, null);
+    }
+
+    /**
+     * What substituting {@code name} comes to, worked out once and held — or null where it is to be
+     * walked in place.
+     *
+     * <p>In place for the two a held answer would be wrong for: a value already being worked out,
+     * which is a module whose values reach each other, and one reached further down than the bound
+     * itself. The second is what keeps this off the stack — a chain longer than the bound is past
+     * the bound, and the walk that says so is the one above rather than a recursion as long as the
+     * chain.
+     */
+    private static Integer costOf(Hir.Var.Denoting name, Hir.Expr body, Reaches reaches,
+                                  Map<String, Integer> known, int depth) {
+        Integer held = known.get(name.reaches());
+        if (held != null) {
+            return held == WORKING ? null : held;
+        }
+        if (depth >= MAX) {
+            return null;
+        }
+        known.put(name.reaches(), WORKING);
+        int costs = Math.min(counted(body, reaches, MAX, known, depth + 1).costs(), PAST);
+        known.put(name.reaches(), costs);
+        return costs;
+    }
+
+    /** The name whose substitution took the count past the bound, worked out where the held answer
+     *  says it did. Held answers say how much and not where, because where depends on what stood
+     *  above the reference and a value is named from more than one place. */
+    private static Hir.Var took(Hir.Var.Denoting name, Hir.Expr body, Reaches reaches, int left,
+                                Map<String, Integer> known, int depth) {
+        Composed inside = counted(body, reaches, left, known, depth + 1);
+        return inside.past() != null ? inside.past() : name;
     }
 
     /** Whether applying this splices a body here, which is what makes its arguments bindings. */

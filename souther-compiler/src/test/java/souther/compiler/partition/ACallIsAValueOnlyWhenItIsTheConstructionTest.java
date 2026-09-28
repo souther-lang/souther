@@ -65,7 +65,7 @@ class ACallIsAValueOnlyWhenItIsTheConstructionTest {
         Core body = checked.behaviorBodies().get("pick");
         assertNotNull(body);
         CoverageSites.Plan plan = checked.plan();
-        return GuardThresholds.of("pick", checked.analysisBodies().get("pick"), body, plan,
+        return ThresholdFixtures.guardsOf("pick", checked.analysisBodies().get("pick"), body, plan,
                 compilation.db()
                 .ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("pick"), rules);
     }

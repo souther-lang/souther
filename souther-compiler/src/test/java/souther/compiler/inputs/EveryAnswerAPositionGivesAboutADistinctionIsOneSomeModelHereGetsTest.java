@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.ReadingPolicy;
@@ -66,7 +67,8 @@ class EveryAnswerAPositionGivesAboutADistinctionIsOneSomeModelHereGetsTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         assertNotNull(sigs);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
-        Position k = InputDomain.of(sigs.get("take"), rules, policy).positions().stream()
+        Position k = InputDomain.of(sigs.get("take"), RuleReadingContext.unshared(rules, policy))
+                .positions().stream()
                 .filter(p -> p.path().toString().equals("r.k"))
                 .findFirst().orElseThrow();
         return k.admissionOf(TypeSymbols.declared(new TypeKey(rules.symbols().module(), case_)));

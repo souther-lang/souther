@@ -106,6 +106,9 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
                 block.append(line).append('\n');
             }
         }
+        // Every check here reads what the block leaves out, so an empty one would pass them all.
+        assertFalse(block.isEmpty(),
+                () -> "the report has a block for " + behavior + ":\n" + human);
         return block.toString();
     }
 

@@ -347,6 +347,9 @@ public final class Compilation {
      */
     public void answerWarnings(String module) {
         db.ask(new Names.UnusedImports(module));
+        // What the invariant check found, said where the rules it is about are written now. The
+        // bodies were checked without asking that, so this is where it is asked.
+        db.ask(new Bodies.InvariantWarnings(module));
         // A defect in the model rather than a gap in its rows, so it is asked whether or not this
         // build wanted a coverage report.
         db.ask(new Adequacy.DeadBranches(module));
@@ -371,6 +374,34 @@ public final class Compilation {
      * memoised, so a later change would leave one measured and the next not. */
     public void measure(Adequacy.Asked asked) {
         db.set(new Adequacy.Requested(), asked);
+        // A report over the rows is one of the things that needs them observed, so asking for it is
+        // asking for that. Said here rather than read off the level wherever the rows are run: what
+        // a level decides is what the report says, and what a run observes is decided before a row
+        // is run and by everything that will read one.
+        observe(observationFor(asked.level()));
+    }
+
+    /** What a report at {@code level} needs of the rows, which is this level's whole part in it. */
+    private static RowObservation observationFor(Adequacy.Level level) {
+        if (level.runsInstrumentedRows()) {
+            return RowObservation.RECORD_ARMS;
+        }
+        return level.readsRows() ? RowObservation.READ : RowObservation.NONE;
+    }
+
+    /**
+     * That something reaching this compilation needs its rows observed this much.
+     *
+     * <p>Said before anything is asked, for the reason {@link #measure} is: the rows run once, and
+     * what they were observed with cannot be changed once one has.
+     *
+     * <p>What everything needs between them. Two consumers of one compilation get that one run, so
+     * this widens what was asked for and never narrows it — a caller needing less does not take the
+     * observation away from one that needed more, and a caller needing more is answered whichever
+     * order they arrived in.
+     */
+    public void observe(RowObservation asked) {
+        db.set(new Adequacy.Observing(), Adequacy.observationAsked(db).and(asked));
     }
 
     /** Measured and warned about, at {@code level}. */
@@ -558,6 +589,20 @@ public final class Compilation {
             }
             for (Report report : db.ask(new Names.InCycle(module)).reports()) {
                 found.add(new Db.Found(module, null, report));
+            }
+        }
+        // Every module the path carries is held to what it was built against, whatever of it this
+        // compilation goes on to use: a module built against another version of a dependency is one
+        // whose classes stop when they reach it, and which of them a row reaches is not the question.
+        Front.FromPath.Of path = db.ask(new Front.FromPath()).value();
+        if (path != null) {
+            for (String module : path.modules().keySet()) {
+                for (Report report : db.ask(new Bodies.BuiltAgainst(module)).reports()) {
+                    found.add(new Db.Found(module, null, report));
+                }
+                for (Report report : db.ask(new Linkages.Held(module)).reports()) {
+                    found.add(new Db.Found(module, null, report));
+                }
             }
         }
         return found;

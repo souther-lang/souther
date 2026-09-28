@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Towards;
 
 /**
@@ -71,6 +72,16 @@ public record Band(BandEnd lower, BandEnd upper) {
         return where(first()) + "|" + where(last());
     }
 
+    /**
+     * The same two values as coordinates written out as text.
+     *
+     * <p>The pair {@link #key()} is: one tells two runs apart and the other says which values they
+     * are, each end spelled as a level is ({@link Level#spelled}).
+     */
+    public String spelled() {
+        return written(first()) + "|" + written(last());
+    }
+
     /** The same run with every level written the one way, for an identity to be built from.
      *
      * <p>Not {@link #key()}, which reads the run off the values at its ends and so says nothing
@@ -121,7 +132,7 @@ public record Band(BandEnd lower, BandEnd upper) {
         return switch (end) {
             case BandEnd.AtParting parted -> asAnEnd(parted.seam(), inward);
             case BandEnd.AtDomain domain -> new souther.compiler.numeric.Endpoint(
-                    placeOf(valueOrRefuse(domain.reaches())), domain.reaches().inclusive());
+                    valueOrRefuse(domain.reaches()).asAPlace(), domain.reaches().inclusive());
             case BandEnd.AtOrderEnd _ -> leaves;
         };
     }
@@ -138,7 +149,7 @@ public record Band(BandEnd lower, BandEnd upper) {
     private static souther.compiler.numeric.Endpoint asAnEnd(Seam parted, Towards side) {
         Level line = parted.attainedLine();
         if (line != null) {
-            return new souther.compiler.numeric.Endpoint(placeOf(line),
+            return new souther.compiler.numeric.Endpoint(line.asAPlace(),
                     side == Towards.ABOVE ? !parted.keepsItsOwnValueBelow()
                             : parted.keepsItsOwnValueBelow());
         }
@@ -150,15 +161,8 @@ public record Band(BandEnd lower, BandEnd upper) {
             return null;
         }
         boolean below = named == parted.below();
-        return new souther.compiler.numeric.Endpoint(placeOf(named),
+        return new souther.compiler.numeric.Endpoint(named.asAPlace(),
                 side == Towards.ABOVE ? !below : below);
-    }
-
-    private static souther.compiler.numeric.Place placeOf(Level level) {
-        return switch (level) {
-            case Level.ACount count -> count.at();
-            case Level.OnACarrier on -> on.at();
-        };
     }
 
     /** The first value in this run, or null where the order names none there. */
@@ -226,14 +230,15 @@ public record Band(BandEnd lower, BandEnd upper) {
      *
      * <p>A multiple and not a name, because an end only the rule that drew it can name says how much
      * of the quantity that rule wrote — and how a quantity says twice itself is the quantity's own
-     * answer ({@link BorderQuantity#left(java.math.BigDecimal)}).
+     * answer ({@link BorderQuantity#left(ExactRatio)}).
      *
      * <p>The levels are still the reading's to write, because the order they are on is what knows
      * how to spell them, and it is the same order at every reading of one line.
      */
     public String written(BorderQuantity of, Level except,
-                          java.util.function.Function<java.math.BigDecimal, String> much) {
-        String left = much.apply(java.math.BigDecimal.ONE);
+                          java.util.function.Function<ExactRatio,
+                                  String> much) {
+        String left = much.apply(ExactRatio.ONE);
         Seam under = lower.seam();
         Seam over = upper.seam();
         String low = except != null && same(except, first())
@@ -343,7 +348,7 @@ public record Band(BandEnd lower, BandEnd upper) {
      * <p>Null where they do not, and then the two conditions are said as two: a run between a line
      * on the position and a line on a multiple of it relates a row to both.
      */
-    public java.math.BigDecimal sharedMultiple() {
+    public ExactRatio sharedMultiple() {
         Seam under = lower.seam();
         Seam over = upper.seam();
         if (under == null || over == null
@@ -352,10 +357,13 @@ public record Band(BandEnd lower, BandEnd upper) {
                 || over.below() != null || over.above() != null) {
             return null;
         }
-        java.math.BigDecimal[] below = under.at().asARule();
-        java.math.BigDecimal[] above = over.at().asARule();
-        return below != null && above != null && below[0].compareTo(above[0]) == 0
-                ? below[0] : null;
+        ExactRatio.Terms below = under.at().asARule();
+        ExactRatio.Terms above = over.at().asARule();
+        if (below == null || above == null) {
+            return null;
+        }
+        // How much of the quantity each rule wrote, in the terms each end is named in.
+        return below.per().equals(above.per()) ? below.per() : null;
     }
 
     /** Whether the line below this run keeps its own value, which decides whether the run starts
@@ -490,5 +498,9 @@ public record Band(BandEnd lower, BandEnd upper) {
 
     private static String where(Level at) {
         return at == null ? "" : at.key();
+    }
+
+    private static String written(Level at) {
+        return at == null ? "" : at.spelled();
     }
 }

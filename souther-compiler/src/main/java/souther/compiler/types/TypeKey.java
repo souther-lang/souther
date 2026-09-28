@@ -1,5 +1,8 @@
 package souther.compiler.types;
 
+import souther.compiler.SettledAnswer;
+import souther.compiler.crossing.ObjectEqualityIsTheCrossingAnswer;
+
 /**
  * Which declaration, written down: the module that declares it and the name written there.
  *
@@ -14,7 +17,8 @@ package souther.compiler.types;
  * a key is what you have when you have read a name off a class file, and looking it up is a
  * question for whatever knows the declarations.
  */
-public record TypeKey(String module, String name) implements Comparable<TypeKey> {
+public record TypeKey(String module, String name)
+        implements SettledAnswer, Comparable<TypeKey>, ObjectEqualityIsTheCrossingAnswer {
 
     public TypeKey {
         if (module == null || name == null) {

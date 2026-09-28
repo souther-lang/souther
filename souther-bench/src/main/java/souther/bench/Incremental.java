@@ -58,6 +58,27 @@ final class Incremental {
     /** What the rule already says, said again — see {@link #restated}. */
     private static final String RESTATED_CONJUNCT = " && accountHasDomain(domain, value)";
 
+    /**
+     * The rule stating alternatives that a choice edit rewrites, as the corpus writes it.
+     *
+     * <p>Matched as text for the reason the rule above is. What it is here for is a different one:
+     * the other edits leave every declaration that states a choice where it was, so the store
+     * re-reads none of them and no figure in the series answers for what a choice costs. An edit
+     * that adds a definition does not reach one either — the declaration list grows and the
+     * declarations themselves stand — so reaching a choice takes rewriting the rule that states it.
+     *
+     * <p>That the corpus still writes these lines is held by
+     * {@code CorpusTest.settlingAChoiceIsWorkSomeTimedEditDoes}: a corpus that stopped writing them
+     * leaves no edit reading a choice, and that is what fails there.
+     */
+    static final String STATED_CHOICE =
+            "    invariant String.matches(\"[A-Z]{2}-[0-9]{4}\", value)\n"
+                    + "           || String.matches(\"[0-9]{6}\", value)";
+
+    /** One alternative the rule already offers, offered again — see {@link #rechosen}. */
+    private static final String RESTATED_ALTERNATIVE =
+            "\n           || String.matches(\"[0-9]{6}\", value)";
+
     private Incremental() {}
 
     /**
@@ -134,18 +155,23 @@ final class Incremental {
         edits.add(new Edit("definition in a leaf", round ->
                 apply(compilation, byId, leaf, added(byId.get(leaf), round))));
 
-        String stating = statingSource(byId);
+        String stating = sourceWriting(byId, STATED_RULE);
         if (stating != null) {
             edits.add(new Edit("a rule of a relation its callers read", round ->
                     apply(compilation, byId, stating, restated(byId.get(stating), round))));
         }
+        String choosing = sourceWriting(byId, STATED_CHOICE);
+        if (choosing != null) {
+            edits.add(new Edit("a rule stating alternatives", round ->
+                    apply(compilation, byId, choosing, rechosen(byId.get(choosing), round))));
+        }
         return new Edits(compilation, edits);
     }
 
-    /** Which source states the rule, or null where this corpus states none. */
-    private static String statingSource(Map<String, String> byId) {
+    /** Which source writes {@code line}, or null where this corpus writes it nowhere. */
+    private static String sourceWriting(Map<String, String> byId, String line) {
         for (Map.Entry<String, String> source : byId.entrySet()) {
-            if (source.getValue().contains(STATED_RULE)) {
+            if (source.getValue().contains(line)) {
                 return source.getKey();
             }
         }
@@ -169,6 +195,21 @@ final class Incremental {
     static String restated(String source, int round) {
         return round % 2 != 0 ? source
                 : source.replace(STATED_RULE, STATED_RULE + RESTATED_CONJUNCT);
+    }
+
+    /**
+     * {@code source} with one alternative of the choice offered a second time, alternating between
+     * rounds for the reason {@link #restated} alternates.
+     *
+     * <p>An alternative the rule already offers, offered again. What the rule admits is the same set
+     * of values either way, so every reading of the corpus that rests on that set is the one it
+     * was, and what the round times is the store re-reading a declaration whose rule states
+     * alternatives. An edit that offered a shape the rule did not admit would move what the values
+     * of the position are, and the round would be timing that as well.
+     */
+    static String rechosen(String source, int round) {
+        return round % 2 != 0 ? source
+                : source.replace(STATED_CHOICE, STATED_CHOICE + RESTATED_ALTERNATIVE);
     }
 
     private static String added(String source, int round) {

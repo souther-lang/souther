@@ -92,7 +92,7 @@ public sealed interface DeclarationMessage extends Message {
     record UpdateTheOutputOrHandleTheCase() implements DeclarationMessage, Supporting {}
 
     @Code(DiagnosticCode.E1605)
-    record AnExposedCompositionDeclaresItsOutput(String composition) implements DeclarationMessage, Reported {}
+    record ACompositionTheClauseNamesDeclaresItsOutput(String composition) implements DeclarationMessage, Reported {}
 
     record WriteTheOutputSignature(String composition, String output) implements DeclarationMessage, Supporting {}
 
@@ -136,6 +136,10 @@ public sealed interface DeclarationMessage extends Message {
     record AMethodIsLargerThanTheJvmHolds(String owner, String method, String bytes, String holds) implements DeclarationMessage, Reported {}
 
     record SplitTheWorkOrMoveTheTable() implements DeclarationMessage, Supporting {}
+
+    /** Beside it, because the two say different things: that one is what divides an emitted method,
+     * and this one is what a reader reaches for first and what it does instead. */
+    record NamingPartsDoesNotDivideTheMethod() implements DeclarationMessage, Supporting {}
 
     @Code(DiagnosticCode.E2103)
     record AClassNeedsMoreConstantsThanItHolds(String owner, String needs, String holds) implements DeclarationMessage, Reported {}

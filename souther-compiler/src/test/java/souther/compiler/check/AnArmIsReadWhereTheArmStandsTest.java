@@ -195,7 +195,9 @@ class AnArmIsReadWhereTheArmStandsTest {
         Core.Case arm = new Core.Case(
                 new Core.ResolvedPattern.Single(ResolvedCase.of(CaseSelector.direct(PERSON),
                         List.of(PERSON))),
-                CoreBinders.of(BINDERS.binder("it", POS)), read("it", 3), POS);
+                new Core.ArmBinding.Selected(CoreBinders.of(BINDERS.binder("it", POS)),
+                        Type.ref(PERSON)),
+                read("it", 3), POS);
         ValueOrigin.OneOf<String> choice = choiceIn(new Core.Match(read("subject", 4), List.of(arm),
                 Core.ForkPlace.asWritten(ConstructOccurrence.asWritten(ORIGIN)), Type.STRING, POS));
 

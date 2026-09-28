@@ -34,10 +34,10 @@ import java.util.List;
  * outside in. A precedence between rules would be a second thing to state and to keep true; the
  * traversal is one thing, and it is the one the author reads their own declaration in.
  *
- * <p>Reached from {@link SignatureDeclarations} for a written declaration and from
- * {@link PipelineSigs} for what a composition answers: this is how a signature is made, not a
- * question about a type that anything may ask again. Those are the two origins there are, and each
- * is admitted once.
+ * <p>Reached from {@link SignatureDeclarations} for a written declaration, and from
+ * {@link PipelineSigs} for what a composition answers and for what a composition another project
+ * compiled published: this is how a signature is made, not a question about a type that anything
+ * may ask again. Those are the origins there are, and each is admitted once.
  */
 final class SignatureBoundary {
 
@@ -61,6 +61,25 @@ final class SignatureBoundary {
         Type out = TypeOps.successType(spec.ret());
         return new DeclaredSig(ins,
                 output(out, out, Where.output(spec.name(), spec.pos()), symbols, kinds, published));
+    }
+
+    /**
+     * The signature of a composition another project compiled: the inputs and the answer its module
+     * published, admitted as they arrive. It declares no parameters, so what comes out is a
+     * {@link Sig} and not a {@link DeclaredSig}.
+     */
+    static Sig publishedComposition(Hir.PipeBehavior pipe, Hir.Composition.Elsewhere elsewhere,
+                                    Symbols symbols, DeclarationKinds kinds,
+                                    PublishedDeclarations published) {
+        List<BoundaryInput> ins = new ArrayList<>(elsewhere.takes().size());
+        for (Hir.RetType takes : elsewhere.takes()) {
+            Type t = TypeOps.successType(takes);
+            ins.add(input(t, t, Where.publishedInput(pipe.name(), pipe.pos()), symbols, kinds,
+                    published));
+        }
+        Type out = TypeOps.successType(elsewhere.answers());
+        return new Sig(ins,
+                output(out, out, Where.output(pipe.name(), pipe.pos()), symbols, kinds, published));
     }
 
     /**
@@ -110,7 +129,7 @@ final class SignatureBoundary {
         return switch (t) {
             case Type.Prim p -> new BoundaryOutput.Scalar(scalar(p, where));
             case Type.Ref r -> new BoundaryOutput.Nominal(nominal(r.name(), where, symbols));
-            case Type.Union u -> new BoundaryOutput.Cases(members(u, where, symbols));
+            case Type.Union u -> new BoundaryOutput.Cases(admittedCases(u, where, symbols));
             case Type.ListOf l ->
                     new BoundaryOutput.ListOf(output(l.element(), whole, where, symbols, kinds, published));
             case Type.SetOf s ->
@@ -125,12 +144,13 @@ final class SignatureBoundary {
         };
     }
 
-    /** The scalar a primitive stands for. {@code Raw} is written like one and is the language's own
-     *  vocabulary rather than a model's, so it is refused as the name it is. */
+    /** The scalar a primitive stands for. A primitive with no leaf codec, {@code Rational}, has no
+     *  external representation, which is what it is refused for: no declaration of the model's own
+     *  would give it one. */
     private static LeafScalar scalar(Type.Prim prim, Where where) {
         LeafScalar scalar = LeafScalar.of(prim);
         if (scalar == null) {
-            throw foreignName(TypeSymbol.primitive("Raw"), where);
+            throw noExternalForm(prim, where);
         }
         return scalar;
     }
@@ -149,36 +169,42 @@ final class SignatureBoundary {
     }
 
     /**
-     * The members of the union a behavior answers with, each a name in what crosses.
+     * The union a behavior answers with, once every member is a name in what crosses.
      *
      * <p>The one position where a name may be a scalar's. {@code Int | DivisionByZero} answers a
      * primitive beside a case, and a union holds its members as names, so the primitive arrives
      * spelled like a declaration. Which of the two a member is decides which rule it is held to —
      * a scalar the boundary writes, or a name a model declares — and neither answers for the other.
+     *
+     * <p>The union goes on as it arrived. Each member is admitted or the walk refuses, and what
+     * admission settles is that the member may cross rather than anything about the type, so the
+     * shape below is handed the union that was asked about.
      */
-    private static List<TypeSymbol> members(Type.Union union, Where where, Symbols symbols) {
-        List<TypeSymbol> members = new ArrayList<>(union.members().size());
+    private static Type.Union admittedCases(Type.Union union, Where where, Symbols symbols) {
         for (TypeSymbol member : union.members()) {
-            members.add(member.isPrimitive()
-                    ? scalarMember(member, where)
-                    : nominal(member, where, symbols).name());
+            if (member.isPrimitive()) {
+                scalarMember(member, where);
+            } else {
+                nominal(member, where, symbols);
+            }
         }
-        return members;
+        return union;
     }
 
     /**
      * A member written in the language's own namespace, which crosses when it is a scalar the
      * boundary writes.
      *
-     * <p>{@code Raw} is spelled like a primitive and stands for no scalar, and {@code Some} and
-     * {@code None} are names of that namespace standing for no primitive at all. Each is the
-     * language's own word rather than a model's, which is what the report says.
+     * <p>{@code Some} and {@code None} are names of that namespace standing for no primitive at all,
+     * which makes them the language's own word rather than a model's. A primitive with no leaf
+     * codec is a different refusal: it is a primitive, and it has no external representation.
      */
     private static TypeSymbol scalarMember(TypeSymbol member, Where where) {
         Type.Prim prim = member.primitiveKind();
-        if (prim == null || LeafScalar.of(prim) == null) {
+        if (prim == null) {
             throw foreignName(member, where);
         }
+        scalar(prim, where);
         return member;
     }
 
@@ -208,6 +234,18 @@ final class SignatureBoundary {
     private static CompileException union(Type.Union u, Where where) {
         String shown = Type.show(u);
         return where.refusal(new TypeMessage.AParameterIsAnAnonymousUnion(where.name(), shown));
+    }
+
+    /** A primitive computation holds and no boundary writes. Said of the primitive, wherever in the
+     *  type it stands, because what the author has to change is that part and no name of theirs
+     *  would stand in for it. */
+    private static CompileException noExternalForm(Type.Prim prim, Where where) {
+        String shown = Type.show(prim);
+        return where.parameter()
+                ? where.refusal(new TypeMessage.AParameterCarriesAPrimitiveWithNoExternalForm(
+                        where.name(), shown))
+                : where.refusal(new TypeMessage.AnOutputCarriesAPrimitiveWithNoExternalForm(
+                        where.name(), shown));
     }
 
     /** A tuple is expression-level only: it has no external representation, so it cannot cross a
@@ -282,18 +320,26 @@ final class SignatureBoundary {
      * Where a refusal is reported and how it names what it refuses. A parameter is underlined where
      * it was written; an answer is reported on the behavior, which is what names it.
      */
-    private record Where(boolean parameter, String name, Region region, SourcePos pos) {
+    private record Where(boolean parameter, String name, Region region, SourcePos pos,
+                         boolean published) {
 
         static Where param(Hir.Param p, SourcePos behavior) {
-            return new Where(true, p.name(), p.written().region(), behavior);
+            return new Where(true, p.name(), p.written().region(), behavior, false);
         }
 
         static Where output(String behavior, SourcePos pos) {
-            return new Where(false, behavior, null, pos);
+            return new Where(false, behavior, null, pos, false);
+        }
+
+        /** An input of a composition another project compiled. It has no name to report, and a
+         *  compiler that agrees with this one about the boundary already admitted it. */
+        static Where publishedInput(String behavior, SourcePos pos) {
+            return new Where(true, behavior, null, pos, true);
         }
 
         <M extends souther.compiler.diag.msg.Message & souther.compiler.diag.msg.Reported>
                 CompileException refusal(M said) {
+            refuseOnlyWhatWasWritten();
             Diagnostic.Builder builder = Diagnostic.say(said);
             return CompileException.of(
                     (region == null ? builder.at(pos) : builder.at(region)).build());
@@ -302,9 +348,18 @@ final class SignatureBoundary {
         <M extends souther.compiler.diag.msg.Message & souther.compiler.diag.msg.Reported,
                 H extends souther.compiler.diag.msg.Message & souther.compiler.diag.msg.Supporting>
                 CompileException hinted(M said, H hint) {
+            refuseOnlyWhatWasWritten();
             Diagnostic.Builder builder = Diagnostic.say(said).hint(hint);
             return CompileException.of(
                     (region == null ? builder.at(pos) : builder.at(region)).build());
+        }
+
+        private void refuseOnlyWhatWasWritten() {
+            if (published) {
+                throw new IllegalStateException("`" + name + "` was published taking an input"
+                        + " this compiler does not admit, by a compiler that agrees with it about"
+                        + " the boundary");
+            }
         }
 
     }

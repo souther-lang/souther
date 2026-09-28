@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermOrdersFixtures;
@@ -42,7 +43,7 @@ class OrdersAreHeldBesideTheNumberTheyAreOfTest {
     void aClassOfACountIsNotBuiltOnAnotherNumbersOrders() {
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> new Recognition.OfACount(CHARGE, OF_THE_CEILING,
-                        new Recognition.CountIs.At(Count.of(1))));
+                        new NumericSet.At(Count.of(1))));
 
         assertTrue(refused.getMessage().contains("charge")
                 && refused.getMessage().contains("ceiling"), refused.getMessage());
@@ -77,10 +78,9 @@ class OrdersAreHeldBesideTheNumberTheyAreOfTest {
 
         assertThrows(IllegalArgumentException.class,
                 () -> new BorderQuantity.OverAForm("weigh",
-                        new souther.compiler.numeric.LinearForm<>(
-                                java.math.BigDecimal.ZERO,
-                                Map.of(CHARGE, java.math.BigDecimal.ONE,
-                                        CEILING, java.math.BigDecimal.ONE.negate())),
+                        new souther.compiler.numeric.LinearForm<>(ExactRatio.ZERO,
+                                Map.of(CHARGE, ExactRatio.ONE,
+                                        CEILING, ExactRatio.ONE.negated())),
                         swapped));
     }
 

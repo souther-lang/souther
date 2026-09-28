@@ -101,17 +101,6 @@ public final class Allowance<A> {
     }
 
     /**
-     * What {@code plan} admits, worked out on its own under this allowance.
-     *
-     * <p>For an answer about the plan and not about any position: what is built is charged to the
-     * part of this allowance that belongs to no block ({@link #elsewhere}), and what a part of the
-     * plan comes to is borrowed where somebody has made it already.
-     */
-    public Realization realized(AdmittedPlan plan) {
-        return elsewhere().of(plan);
-    }
-
-    /**
      * The same, beside another question of the same positions whose machines this one may use.
      *
      * <p>A machine exists or it does not, and one that does is not made twice: what {@code answers}

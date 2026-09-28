@@ -57,7 +57,8 @@ class AnExpansionAfterARefusalIsWhatItWouldHaveBeenTest {
 
     private static HelperInliner inliner() {
         Ast.Module parsed = CstFrontend.parse(MODULE);
-        return HelperInliner.forModule(Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get())), DefaultStdlib.get());
+        return HelperInliner.forModule(Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get())), DefaultStdlib.get(),
+                ValueAtAReference.COPIED);
     }
 
     private static Hir.Expr expand(HelperInliner inliner, String helper) {

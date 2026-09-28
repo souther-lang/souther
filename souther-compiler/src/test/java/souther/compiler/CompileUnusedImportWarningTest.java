@@ -48,6 +48,8 @@ class CompileUnusedImportWarningTest {
             let priced (line) = line.quantity
 
             let unit (n: Int) : Int = n
+
+            data NotExposed = Int
             """;
 
     /** Every unused-import warning a compile of these sources reports, as `name` at line:column. */

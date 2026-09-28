@@ -1,6 +1,8 @@
 # ADR-0033: Decimal literals carry an `m` suffix; `+ - * /` work on Int and Decimal
 
-Status: Accepted
+Status: Accepted. Amended by ADR-0116 — `/` no longer yields the operand type, and the implicit
+precision this one gave the Decimal operator is gone with it; the quotient is exact and answers a
+`Rational`. The literal rule and the zero-divisor distinction below stand.
 
 ## Context
 
@@ -19,7 +21,9 @@ integer digits are `Int`, a fractional literal was `Decimal`. Two gaps showed up
 ## Decision
 
 **Numeric literals.** A `Decimal` literal carries an `m` suffix, as in F# / C#: `500m`,
-`1.5m`, `0.5m`. Bare digits are `Int` (`500`). A fractional literal without `m` (`1.5`) is a
+`1.5m`, `0.5m`. Bare digits are `Int` (`500`) up to the greatest `Int`; the least `Int` is written
+`-9223372036854775808`, a minus before the one magnitude that has no literal of its own, and any
+other literal past the range is refused. A fractional literal without `m` (`1.5`) is a
 compile error — Souther has no floating-point type, so `Decimal` is stated at the literal
 rather than defaulted into. This makes the `Int`/`Decimal` choice explicit in the source.
 
@@ -52,9 +56,11 @@ function form; the operator trades that for convenience).
   default rounding, abort on zero), alongside `BigDecimal` `add`/`subtract`/`multiply` for the
   Decimal operators.
 - Existing source that wrote a bare `Decimal` literal must add `m` (`0.08` → `0.08m`).
-- Compile-time constant folding (ADR-0032 CTFE) does not fold `/`; a constant division in an
-  invariant is checked at run time, avoiding a second definition of the rounding and
-  zero-divisor semantics.
+- Compile-time constant folding (ADR-0032 CTFE) folds an `Int` `/` over written numbers to the
+  truncating quotient the operator computes, and folds no other divide: a `Decimal` `/`, a zero
+  divisor and the one quotient outside the `Int` range are left to the run time, so the rounding
+  and the aborts keep their single definition. What is folded is what `IntMath.divideExact`
+  returns rather than aborts on.
 
 ## References
 

@@ -5,7 +5,10 @@ import souther.compiler.diag.PhysicalPos;
 import souther.compiler.cst.SourceLayout;
 import souther.compiler.source.SourceId;
 
+import souther.compiler.CompilationSources;
 import souther.compiler.Compiler;
+import souther.compiler.ImplicitModuleName;
+import souther.compiler.meta.ModulePath;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Requirements;
@@ -17,11 +20,13 @@ import souther.compiler.examples.ExampleProvisioning;
 import souther.compiler.query.Abandonment;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.ArmSummary;
+import souther.compiler.query.RowObservation;
 import souther.compiler.query.Measurement;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
 import souther.compiler.query.ObligationAssessment;
+import souther.compiler.query.RowWork;
 import souther.compiler.query.Shapes;
 import souther.compiler.check.CapabilityResult;
 import souther.compiler.check.ClauseDischarge;
@@ -32,7 +37,7 @@ import souther.compiler.check.ContractDischarge;
 import souther.compiler.check.ContractDischarge.RuleDischarge;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
-import souther.compiler.Reserved;
+import souther.compiler.CanonicalNames;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
@@ -124,9 +129,11 @@ public final class Analyzer {
      * one, because it is a compile of one file with nothing else in sight.
      */
     private Compilation workspaceCompile;
-    /** Which module path {@link #workspaceCompile} was built for. A different one is a different
-     * set of modules to resolve an import against, so the compile is started again. */
-    private souther.compiler.meta.ModulePath compiledAgainst;
+    /** Which modules on the path {@link #workspaceCompile} was built for, and only that: the modules
+     * a compile uses are the ones the graph it is asked about carries. Different ones — another
+     * place, or the same place written again — are a different set of modules to resolve an import
+     * against, so the compile is started again. */
+    private ModulesOnThePath compiledAgainst;
 
     /** What each open document reaches from outside itself, as the last compile that could answer
      * said. Held across edits so completion has something to offer while the document being typed in
@@ -227,16 +234,12 @@ public final class Analyzer {
         }
 
         try {
-            Ast.Module module = CstFrontend.parse(text, "Main");
-            if (!module.imports().isEmpty()) {
-                return out;   // a multi-module program can't be resolved from a single file yet
-            }
-            if (module.exampleFileTarget() != null) {
-                return out;   // an `examples for` file needs its target module, absent from one file
-            }
-            // A self-contained module compiles fully here, so its inline `example`s are evaluated
-            // on save and a failing one (E1805) surfaces as an editor diagnostic.
-            for (Located w : Compiler.compileWithWarnings(text, "Main").locatedWarnings()) {
+            // The document compiles fully here, so its inline `example`s are evaluated on save and a
+            // failing one (E1805) surfaces as an editor diagnostic. What it imports is resolved like
+            // any other import, against a path this document is given none of.
+            List<Located> warnings = new ArrayList<>();
+            Compiler.compiled(CompilationSources.text(text), ModulePath.EMPTY, warnings);
+            for (Located w : warnings) {
                 out.add(fromDiagnostic(text, lines, w.diagnostic()));
             }
         } catch (CompileException e) {
@@ -284,16 +287,12 @@ public final class Analyzer {
      * syntax error stays out of the shared compile (it cannot join the graph). The remaining files are
      * compiled together, and each semantic diagnostic is published on the file of the module that owns
      * it — so an error in an imported module lands on that module's document, not on its importer.
+     *
+     * <p>An import that names no module in the workspace is resolved against the graph's path —
+     * what the projects beside this one have already built — so an import the build resolves is
+     * not reported here as unknown.
      */
     public Map<String, List<LspDiagnostic>> diagnostics(ModuleGraph graph) {
-        return diagnostics(graph, souther.compiler.meta.ModulePath.EMPTY);
-    }
-
-    /** As {@link #diagnostics(ModuleGraph)}, resolving an import that names no module in the
-     * workspace against {@code path} — what the projects beside this one have already built — so
-     * an import the build resolves is not reported here as unknown. */
-    public Map<String, List<LspDiagnostic>> diagnostics(ModuleGraph graph,
-                                                       souther.compiler.meta.ModulePath path) {
         Map<String, List<LspDiagnostic>> out = new LinkedHashMap<>();
         Map<String, String> compileSet = new LinkedHashMap<>();   // uri -> text, syntactically clean only
         Set<String> brokenModules = new HashSet<>();   // names of files held out for their syntax errors
@@ -323,7 +322,7 @@ public final class Analyzer {
 
         Map<SourceId, List<Located>> byUri;
         try {
-            byUri = compileOf(graph, path, compileSet, brokenModules).diagnostics();
+            byUri = compileOf(graph, compileSet, brokenModules).diagnostics();
         } catch (RuntimeException | StackOverflowError e) {
             // Which file broke the walk is not known here, so every file that entered the compile is
             // marked. Silence would leave the whole workspace looking clean.
@@ -370,13 +369,13 @@ public final class Analyzer {
      * with a workspace comes through here, and a file created or deleted on disk reaches it as a
      * diagnose, so the gap is observed wherever there is one.
      */
-    private Compilation compileOf(ModuleGraph graph, souther.compiler.meta.ModulePath path,
-                                  Map<String, String> sources, Set<String> broken) {
+    private Compilation compileOf(ModuleGraph graph, Map<String, String> sources, Set<String> broken) {
         elsewhere.forgetAllBut(graph.uris());
         behaviorsOwed.forgetAllBut(graph.uris());
         readings.keySet().retainAll(Set.copyOf(graph.uris()));
+        ModulesOnThePath path = graph.onThePath();
         if (workspaceCompile == null || !path.equals(compiledAgainst)) {
-            workspaceCompile = Compilation.ofDocuments(sources, broken, path);
+            workspaceCompile = Compilation.ofDocuments(sources, broken, path.path());
             workspaceCompile.measure(measure);
             compiledAgainst = path;
         } else {
@@ -389,14 +388,40 @@ public final class Analyzer {
     }
 
     /**
-     * The same compile, for a request that arrives with a graph and no path — navigation. A file
-     * that will not parse is left out of it, as it is for diagnostics: it cannot join a module set.
-     * The path is whichever the last diagnose used, which is current, because a diagnose runs on
-     * every change.
+     * The same compile, for a request — navigation. A file that will not parse is left out of it,
+     * as it is for diagnostics: it cannot join a module set.
      */
     private Compilation compileOf(ModuleGraph graph) {
-        Sorted sorted = sorted(graph);
-        return compileOf(graph, pathCompiledAgainst(), sorted.joining(), sorted.broken());
+        return compileOf(graph, sorted(graph));
+    }
+
+    /** The same, for a request that has already read which documents can join a compile. */
+    private Compilation compileOf(ModuleGraph graph, Sorted sorted) {
+        return compileOf(graph, sorted.joining(), sorted.broken());
+    }
+
+    /**
+     * A compile of the same documents whose rows record where each of them went.
+     *
+     * <p>Its own and not the workspace's. What a run records is settled before a row runs and holds
+     * for every reader of it, so asking the workspace compile for it would put the cost of the
+     * instrumented classes on every keystroke — and asking this one for anything else would be a
+     * second reading of the same documents where the workspace already has one.
+     *
+     * <p>Handed the documents rather than sorting them again: which of them can join a compile is
+     * one answer per request, and the workspace compile beside this one was built from it.
+     *
+     * <p>Kept for nothing after the block is written. What it is for happens once, when somebody
+     * takes the offer, and a compile held between two of those would answer from the documents as
+     * they were when the first one was taken.
+     */
+    private Compilation composingRowsOf(ModuleGraph graph, Sorted sorted) {
+        Compilation composing = Compilation.ofDocuments(sorted.joining(), sorted.broken(),
+                graph.onThePath().path());
+        composing.observe(RowObservation.RECORD_ARMS);
+        composing.measure(measure);
+        composing.abandonWhen(abandonment);
+        return composing;
     }
 
     /** The workspace as a compile takes it: what can join one, and the modules of what cannot. */
@@ -426,9 +451,6 @@ public final class Analyzer {
         return new Sorted(joining, broken);
     }
 
-    private souther.compiler.meta.ModulePath pathCompiledAgainst() {
-        return compiledAgainst == null ? souther.compiler.meta.ModulePath.EMPTY : compiledAgainst;
-    }
 
     /**
      * What one document was found to be: whether it can join a compile, and — where it cannot — the
@@ -845,11 +867,11 @@ public final class Analyzer {
             if (!isWrittenIn(behavior, uri, graph) || !declaredBy(lines, behavior, declaredAt)) {
                 continue;
             }
-            // Whether the model owes this behavior anything a row could answer. Asked of the
-            // findings, which the report beside this has already worked out, and not of the
-            // generator: composing a value costs a decoder run for each point it settles, and an
-            // editor asks what is available here every time the cursor moves.
-            if (!anythingARowCouldAnswer(compilation, module, behavior.name())) {
+            // Whether a generation asked about this behavior would look for anything. Asked of
+            // what it would be asked for and not of the generation itself: composing a value costs
+            // a decoder run for each point it settles, and an editor asks what is available here
+            // every time the cursor moves.
+            if (!thereAreRowsToWrite(compilation, module, behavior.name())) {
                 continue;
             }
             CodeAction.Deferred offer = new CodeAction.Deferred(
@@ -895,79 +917,30 @@ public final class Analyzer {
         return lines.offsetOf(pos) == declaredAt;
     }
 
-    /** Whether anything this behavior is short of is a thing writing a row could answer. */
-    private static boolean anythingARowCouldAnswer(Compilation compilation, String module,
-                                                   String behavior) {
-        List<souther.compiler.query.Adequacy.Finding> findings =
-                compilation.db().ask(new souther.compiler.query.Adequacy.Findings(module)).value();
-        if (findings == null) {
-            return false;
-        }
-        // This behavior's own, and the lines its type declarations are owed that a row written here
-        // would settle. A line an `invariant` drew is not this behavior's finding — what `UserId`
-        // says is the same wherever the type is carried — and a row written for a behavior carrying
-        // the type is what discharges it, so an offer standing beside that behavior is an offer to
-        // do that work (issue #1062). Read as the behavior's own alone, the offer went quiet as
-        // soon as the only work left was a line a declaration is owed.
-        //
-        // Asked of the finding and never of what a search has composed. Whether a value has been
-        // built turns on how much the build was measuring, and an offer that read it would appear
-        // at one level and not at another for work that is there either way.
-        for (souther.compiler.query.Adequacy.Finding each : findings) {
-            if (souther.compiler.query.Adequacy.whereNoRowCouldAnswer(each.about()) != null) {
-                continue;
-            }
-            // A finding at a point of a line is not by itself work. A line is owed one row however
-            // many positions read it, so a coordinate of a line another position answered is a
-            // finding standing over nothing to write — and counted here, an offer is made that
-            // resolves to no rows. What is owed is the point's own answer and is asked below.
-            if (each.about() instanceof souther.compiler.query.About.APointOfABorder
-                    || each.about() instanceof souther.compiler.query.About
-                            .APointOfADeclaredBorder) {
-                continue;
-            }
-            if (each.subject().isBehavior(behavior)) {
-                return true;
-            }
-        }
-        return anyLineIsOwedARow(compilation, module, behavior);
-    }
-
     /**
-     * Whether a line this behavior reads is owed a row nothing has written.
+     * Whether the generation behind this offer would look for anything.
      *
-     * <p>Asked of what is owed rather than of the findings that stand at it. A report counts a line
-     * once per coordinate it was read at and a row is owed once for the line, so the two answer
-     * different questions — and the question an offer to write rows is putting is the second one.
+     * <p>Asked of the criterion a generation is made on ({@link Adequacy.RowsOwed}) and of nothing
+     * else. The block behind this offer is composed against that same criterion, so an offer made
+     * on it stands beside every declaration a person taking it has rows to be handed. Answered here
+     * from the findings and the lines instead, the two were separate readings of one account: this
+     * one read half of it, and a behavior whose only work was the classes of its position was
+     * offered nothing and had a block written for it.
      *
-     * <p>This behavior's lines and its declarations' alike. A line an {@code invariant} drew is not
-     * this behavior's finding — what {@code UserId} says is the same wherever the type is carried —
-     * and a row written for a behavior carrying the type is what discharges it, so an offer standing
-     * beside that behavior is an offer to do that work.
+     * <p>One direction, and it is the one worth having. A search asked for here may compose
+     * nothing — which is news about the search, and what {@link #resolve} answers with none — so
+     * what this promises is that nothing worth writing goes unoffered, not that everything offered
+     * can be written.
      *
-     * <p>And only the lines this module answers for
-     * ({@link souther.compiler.query.BorderObligationPointAssessment#keptBy}). A module that carries
-     * an imported type reads its lines and owes rows at none of them: the row belongs where the
-     * declaration is. Offered here, the offer is made and the search that follows it leaves the
-     * point out, so there is nothing to hand back.
-     *
-     * <p>What is asked is whether the point is worth looking for a row at, which is the measurement
-     * saying no row stands there. Whether one can be composed is a further question and costs a
-     * decoder run to answer, so it is left to whoever takes the offer: an offer made here and
-     * resolved to nothing is a search that could not compose the row somebody asked for, which is
-     * news, and one never made would have been the same search decided in advance.
+     * <p>Asked of what is owed and never of what a search has composed. Whether a value has been
+     * built turns on how much the build was measuring, and an offer that read it would appear at
+     * one level and not at another for work that is there either way. What it costs to look for
+     * one is paid by whoever takes the offer.
      */
-    private static boolean anyLineIsOwedARow(Compilation compilation, String module,
-                                             String behavior) {
-        List<souther.compiler.query.BorderObligationPointAssessment> owed = compilation.db()
-                .ask(new souther.compiler.query.Adequacy.Obligations(module,
-                        new souther.compiler.query.GenerationScope.Behavior(behavior))).value();
-        if (owed == null) {
-            return false;
-        }
-        return owed.stream().anyMatch(point -> point.carriedBy(behavior)
-                && point.keptBy(module)
-                && point.owed().worthSearching());
+    private static boolean thereAreRowsToWrite(Compilation compilation, String module,
+                                               String behavior) {
+        RowWork work = compilation.db().ask(new Adequacy.RowsOwed(module, behavior)).value();
+        return work != null && !work.isEmpty();
     }
 
     /**
@@ -990,7 +963,11 @@ public final class Analyzer {
         if (graph == null || text == null) {
             return null;
         }
-        Compilation compilation = compileOf(graph);
+        // Which documents can join a compile, read once for this request: the compile that says
+        // whether the offer still stands and the compile that composes the rows are of the same
+        // workspace, and two readings of that are free to differ.
+        Sorted sorted = sorted(graph);
+        Compilation compilation = compileOf(graph, sorted);
         // The whole of what the offer names, and not the part of it a module happens to answer. An
         // offer is about a behavior of a module written in a document, and a document can be given
         // another module's header while a behavior of that name goes on existing somewhere else —
@@ -1006,13 +983,24 @@ public final class Analyzer {
                         && isWrittenIn(each, offer.uri(), graph))) {
             return null;   // what the offer was made about is not there any more
         }
+        // Composed against a compile of its own, whose rows record where each of them went. What a
+        // row is offered for includes the meetings of a body that no row makes, and finding those
+        // out takes the classes having recorded it — which the workspace compile does not do,
+        // because every keystroke would pay for it.
+        //
+        // A second compile of the same documents and not a second run inside this one. The rows of
+        // a compile run once and what they recorded is settled before they do, so a block built
+        // half from each would hold this compile's readings beside that one's account of the arms.
+        // Everything the block is made of comes from the compile below.
+        //
         // An id stands for itself here: a workspace compilation is keyed on the document URIs this
         // server was given, so what identifies a source is already what this server calls it.
+        Compilation composing = composingRowsOf(graph, sorted);
         souther.compiler.report.GeneratedRows.Block block =
-                souther.compiler.report.GeneratedRows.of(compilation, offer.module(),
+                souther.compiler.report.GeneratedRows.of(composing, offer.module(),
                         offer.behavior(),
                         souther.compiler.diag.SourceRendering.namedByIdentity(
-                                compilation.texts()));
+                                composing.texts()));
         if (block.rowCount() == 0) {
             return null;
         }
@@ -1388,7 +1376,7 @@ public final class Analyzer {
      * not a thing an editor may answer differently.
      */
     private static String nameOf(SyntaxToken token) {
-        return token == null ? null : Reserved.name(token.text());
+        return token == null ? null : CanonicalNames.name(token.text());
     }
 
     /** Whether an identifier token spells {@code name}, which is canonical. */
@@ -1643,7 +1631,7 @@ public final class Analyzer {
         // The buffer as it stands where it parses, and finished off where it does not: a call is
         // asked about while its closing bracket is not typed, which is most of the time.
         SemanticProbe.Reading reading =
-                probe.of(rest, sorted.broken(), pathCompiledAgainst(), uri, text, cursor,
+                probe.of(rest, sorted.broken(), graph.onThePath(), uri, text, cursor,
                         abandonment);
         Compilation compilation = reading == null ? compileOf(graph) : reading.compilation();
         String parsed = reading == null ? text : reading.repaired();
@@ -1960,7 +1948,7 @@ public final class Analyzer {
         Map<String, String> rest = new LinkedHashMap<>(sorted.joining());
         rest.remove(uri);
         SemanticProbe.Reading reading =
-                probe.of(rest, sorted.broken(), pathCompiledAgainst(), uri, text, cursor,
+                probe.of(rest, sorted.broken(), graph.onThePath(), uri, text, cursor,
                         abandonment);
         if (reading == null) {
             return List.of();
@@ -2076,8 +2064,9 @@ public final class Analyzer {
      * What the behaviors of {@code module} are still owed, as declarations to write.
      *
      * <p>Two sets, not one. An implementation is owed by a behavior written as a signature with
-     * nothing implementing it, which is {@link Requirements#injectedNames} — the same question the
-     * emitter asks about what it has to be given. A row may be written for any behavior at all: a
+     * nothing implementing it, which is what {@link Prepared#implementationOf} says has no body
+     * here — the module's classification, which the emitter reads too. A row may be written for any
+     * behavior at all: a
      * composition has no implementation to offer, since it is its own, and has rows like anything
      * else.
      */
@@ -2123,7 +2112,8 @@ public final class Analyzer {
     private static Optional<CompletionItem> implementationToWrite(
             Prepared prepared, Hir.BehaviorDef declared, String module) {
         if (!(declared instanceof Hir.SpecBehavior behavior)
-                || prepared.implementationOf(behavior).hasBody()) {
+                || prepared.implementationOf(new ValueName.Behavior(module, behavior.name()))
+                        .hasBody()) {
             return Optional.empty();
         }
         List<SpecImplementation.Parameter> parameters = SpecImplementation.parameters(behavior);
@@ -2145,11 +2135,10 @@ public final class Analyzer {
      * {@link Bodies.Requirements} carries a composition's stages' requirements as its own, so a row
      * for one supplies what the stages want.
      *
-     * <p>A behavior that is itself injected requires nothing and is not a key there — the one place
-     * a name being missing says something rather than being something missing. Which of the two it
-     * is, is asked of the behavior rather than read off the absence: a name that is not there for
-     * any other reason is an answer that does not hold together, and a row written as though it
-     * required nothing would state no stand-in for what it depends on.
+     * <p>A behavior that is itself injected is there requiring nothing, like every other behavior
+     * the module declares. A name that is not there is an answer that does not hold together, and
+     * nothing is offered for it: a row written as though it required nothing would state no
+     * stand-in for what it depends on.
      */
     private static Optional<CompletionItem> rowToWrite(
             Prepared prepared, Hir.BehaviorDef declared, Map<String, Sig> signatures,
@@ -2159,14 +2148,11 @@ public final class Analyzer {
         if (sig == null) {
             return Optional.empty();
         }
-        List<BehaviorRequirement> required = List.of();
         // A behavior that takes dependencies as arguments is offered a row that supplies them,
-        // whether or not its `let` has been written yet. An injection target takes none.
-        if (!prepared.implementationOf(declared).isInjectionTarget()) {
-            required = requirements.get(declared.name());
-            if (required == null) {
-                return Optional.empty();
-            }
+        // whether or not its `let` has been written yet.
+        List<BehaviorRequirement> required = requirements.get(declared.name());
+        if (required == null) {
+            return Optional.empty();
         }
         List<String> unsupplied = ExampleProvisioning.unsupplied(List.of(),
                         Requirements.names(required), prepared.forExamples().fakes()).stream()
@@ -2575,7 +2561,7 @@ public final class Analyzer {
     /** The module a name is imported from in {@code text}, or {@code null} if no import exposes it. */
     private String importedFrom(String text, String name) {
         try {
-            for (Ast.Import imp : CstFrontend.parse(text, "Main").imports()) {
+            for (Ast.Import imp : CstFrontend.parse(text, ImplicitModuleName.OF_A_TEXT).imports()) {
                 if (imp.names().contains(name)) {
                     return imp.module();
                 }
@@ -3251,10 +3237,6 @@ public final class Analyzer {
         if (parent == SyntaxKind.PATTERN_FIELD) {
             return afterFirstIdent ? T_VARIABLE : T_PROPERTY;
         }
-        // `depends on f`: the `on` lexes as an identifier but is the second word of the keyword
-        if (parent == SyntaxKind.DEPENDS_CLAUSE && !afterFirstIdent) {
-            return T_KEYWORD;
-        }
         return switch (parent) {
             case TYPE_REF, TYPE_ARGS, SUM_BODY, NEWTYPE_BODY, CONSTRUCTS_CLAUSE, DEPENDS_CLAUSE,
                  ENSURES_ARM,
@@ -3267,13 +3249,9 @@ public final class Analyzer {
         };
     }
 
+    /** A reserved word, or a contextual one the parse read as a keyword where it stands. */
     private static boolean isKeyword(SyntaxKind k) {
-        return switch (k) {
-            case MODULE_KW, IMPORT_KW, EXPOSING_KW, DATA_KW, INVARIANT_KW, ENSURES_KW, AS_KW, LET_KW, GUARD_KW,
-                 ELSE_KW, TRUE_KW, FALSE_KW, IF_KW, THEN_KW, BEHAVIOR_KW, DEPENDS_KW, CONSTRUCTS_KW,
-                 MATCH_KW, WITH_KW, UNREACHABLE_KW -> true;
-            default -> false;
-        };
+        return k == SyntaxKind.CONTEXTUAL_KW || CstLexer.keywordKinds().contains(k);
     }
 
 

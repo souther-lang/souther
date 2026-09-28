@@ -46,9 +46,9 @@ public interface DeclarationReadings {
     }
 
     /**
-     * The declaration's canonical reading as {@code source} and {@code policy} decide it: the one
-     * somebody has already made under those terms, or the one {@code read} makes, kept for whoever
-     * asks next. A lender that keeps none does the reading every time.
+     * The declaration's canonical reading as the source {@code origin} names and {@code policy}
+     * decide it: the one somebody has already made under those terms, or the one {@code read} makes,
+     * kept for whoever asks next. A lender that keeps none does the reading every time.
      *
      * <p>Borrowing and making are one act because what is shared is one thing. A reading is work,
      * and the work was done by reading what the store answers; a question handed the result read
@@ -61,9 +61,10 @@ public interface DeclarationReadings {
      * the clauses are read from and what the names in them mean: a reader may hand over one that
      * answers for fewer clauses than the store holds — a count asking what it would come to without
      * one declaration's rules does exactly that — and what comes back is a reading of what that
-     * source left, which is not the declaration's own.
+     * source left, which is not the declaration's own. Which source it is, is what its origin says
+     * ({@link RuleReadingSource.Origin}), so that is what is handed here and not the source.
      */
-    default DeclarationReading reading(TypeKey declaration, RuleReadingSource source,
+    default DeclarationReading reading(TypeKey declaration, RuleReadingSource.Origin origin,
                                        ReadingPolicy policy,
                                        Supplier<InvariantChecker.Seeded> read) {
         return DeclarationReading.of(read.get());
@@ -77,7 +78,8 @@ public interface DeclarationReadings {
      * nothing. What it makes is kept, because it is the declaration's canonical reading and the
      * question that asked for the answer is the next to want it.
      */
-    default DeclarationReading readingForAnAnswer(TypeKey declaration, RuleReadingSource source,
+    default DeclarationReading readingForAnAnswer(TypeKey declaration,
+                                                  RuleReadingSource.Origin origin,
                                                   ReadingPolicy policy,
                                                   Supplier<InvariantChecker.Seeded> read) {
         return DeclarationReading.of(read.get());
@@ -119,18 +121,19 @@ public interface DeclarationReadings {
             }
 
             @Override
-            public DeclarationReading reading(TypeKey declaration, RuleReadingSource source,
+            public DeclarationReading reading(TypeKey declaration,
+                                              RuleReadingSource.Origin origin,
                                               ReadingPolicy policy,
                                               Supplier<InvariantChecker.Seeded> read) {
-                return lender.readingForAnAnswer(declaration, source, policy, read);
+                return lender.readingForAnAnswer(declaration, origin, policy, read);
             }
 
             @Override
             public DeclarationReading readingForAnAnswer(TypeKey declaration,
-                                                         RuleReadingSource source,
+                                                         RuleReadingSource.Origin origin,
                                                          ReadingPolicy policy,
                                                          Supplier<InvariantChecker.Seeded> read) {
-                return lender.readingForAnAnswer(declaration, source, policy, read);
+                return lender.readingForAnAnswer(declaration, origin, policy, read);
             }
         };
     }

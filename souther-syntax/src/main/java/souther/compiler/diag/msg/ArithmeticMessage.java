@@ -46,4 +46,11 @@ public sealed interface ArithmeticMessage extends Message {
     record AReciprocalChangesDimension(String value, String newtype) implements ArithmeticMessage, Reported {}
 
     record ComputeOnValueAndBuildTheReciprocal() implements ArithmeticMessage, Supporting {}
+
+    @Code(DiagnosticCode.E1324)
+    record AQuotientLeavesTheWrappedType(String newtype, String base)
+            implements ArithmeticMessage, Reported {}
+
+    record ComputeOnValueAndStateTheQuantisation(String base)
+            implements ArithmeticMessage, Supporting {}
 }

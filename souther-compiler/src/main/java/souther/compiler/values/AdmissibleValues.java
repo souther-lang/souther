@@ -266,7 +266,7 @@ public final class AdmissibleValues<A> {
                 if (boxes.isEmpty()) {
                     throw new IllegalArgumentException("a reading holding no alternative is Nothing");
                 }
-                this.boxes = Collections.unmodifiableSet(new LinkedHashSet<>(boxes));
+                this.boxes = PlanOrder.canonical(boxes, PlanOrder::orderOf);
                 this.commonSameness = commonSameness;
                 this.across = Collections.unmodifiableMap(new LinkedHashMap<>(across));
             }
@@ -887,7 +887,9 @@ public final class AdmissibleValues<A> {
                 out.put(block, set);
             }
         });
-        return Collections.unmodifiableMap(out);
+        // In the order the work over these is done, which is theirs and not the writing's — see
+        // PlanOrder. Held here so that a walk cannot be written that does not have it.
+        return PlanOrder.canonical(out, PlanOrder::orderOf);
     }
 
     /** What was said, which is what is not {@link ValueSet#ANY}: a position nothing narrowed is

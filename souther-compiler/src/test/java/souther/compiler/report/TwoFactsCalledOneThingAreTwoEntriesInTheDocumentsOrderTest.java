@@ -94,15 +94,19 @@ class TwoFactsCalledOneThingAreTwoEntriesInTheDocumentsOrderTest {
                 [ {
                   "kind" : "observation_absent",
                   "about" : {
-                    "kind" : "source",
-                    "source" : "1"
+                    "kind" : "row",
+                    "behavior" : "take",
+                    "source" : "1",
+                    "ordinal" : 1
                   },
                   "runSensitivity" : "unaffected"
                 }, {
                   "kind" : "observation_absent",
                   "about" : {
-                    "kind" : "source",
-                    "source" : "2"
+                    "kind" : "row",
+                    "behavior" : "take",
+                    "source" : "2",
+                    "ordinal" : 1
                   },
                   "runSensitivity" : "unaffected"
                 } ]""",
@@ -120,12 +124,28 @@ class TwoFactsCalledOneThingAreTwoEntriesInTheDocumentsOrderTest {
         assertEquals("""
                 [ {
                   "code" : "observation_absent",
-                  "scope" : "source",
-                  "subject" : "1"
+                  "scope" : "row",
+                  "subject" : "take/1/#1",
+                  "at" : {
+                    "sourceId" : "1",
+                    "line" : 6,
+                    "column" : 7,
+                    "writtenAt" : {
+                      "kind" : "here"
+                    }
+                  }
                 }, {
                   "code" : "observation_absent",
-                  "scope" : "source",
-                  "subject" : "2"
+                  "scope" : "row",
+                  "subject" : "take/2/#1",
+                  "at" : {
+                    "sourceId" : "2",
+                    "line" : 6,
+                    "column" : 7,
+                    "writtenAt" : {
+                      "kind" : "here"
+                    }
+                  }
                 } ]""",
                 written().get("modules").get(0).get("incompleteness").toPrettyString());
     }
@@ -137,13 +157,18 @@ class TwoFactsCalledOneThingAreTwoEntriesInTheDocumentsOrderTest {
      * table comes out in the order the entries above did — which is a consequence of those being
      * arranged before anything was written, and would be the order a comparison happened to ask
      * about them in if a place were chosen while writing.
+     *
+     * <p>The module's own source comes last and not first, which is the whole of what this asks.
+     * Nothing was read from the two beside it and both are named before any behavior is written;
+     * the module's own is named where the row it writes is, under the behavior.
      */
     @Test
     void theSourcesThisDocumentExplainsFollowFromWritingThem() {
         assertEquals("""
                 {
                   "1" : "1",
-                  "2" : "2"
+                  "2" : "2",
+                  "0" : "0"
                 }""", written().get("sources").toPrettyString());
     }
 

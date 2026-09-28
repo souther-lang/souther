@@ -83,13 +83,13 @@ class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
         // Held by there being nowhere to inherit it from: the contexts a clause is elaborated in are
         // built rather than derived from whatever context reached them (issue #1080). This used to
         // be a context you could carry across the boundary and a method that emptied it on the way.
+        Symbols symbols = Symbols.none(DefaultStdlib.get());
+        DeclarationAccess declarations = DeclarationAccess.asWritten(symbols,
+                PublishedDeclarations.NONE, DeclarationKinds.NONE);
         assertEquals(Preserved.NONE,
-                CheckContext.executableInvariant(Symbols.none(DefaultStdlib.get()),
-                                PublishedDeclarations.NONE, DeclarationKinds.NONE, null)
-                        .preserved());
+                CheckContext.executableInvariant(symbols, declarations, null).preserved());
         assertEquals(Preserved.NONE,
-                CheckContext.executableEnsures(Symbols.none(DefaultStdlib.get()),
-                                PublishedDeclarations.NONE, DeclarationKinds.NONE).preserved(),
+                CheckContext.executableEnsures(symbols, declarations).preserved(),
                 "and a rule is read at an entry of its own, as a clause is");
     }
 

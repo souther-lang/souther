@@ -63,10 +63,13 @@ class WhoMayAskWhetherAClauseWentUnreadTest {
      * <p>One row and not two, which is the whole of it. Asked at a second site, one reading's flag
      * stands beside a set of positions reached by whichever reading the writer had in hand, and
      * that composes without a complaint: an author is sent to a choice on the strength of an
-     * alternative the reading that named the positions read to the end.
+     * alternative the reading that named the positions read to the end. A second overload of the
+     * method is a second site, which is why the row names what it takes ({@link AMethod}).
      */
-    private static final List<String> MAY_ASK =
-            List.of("souther/compiler/check/StatedByClauses#openedBy");
+    private static final List<String> MAY_ASK = List.of(AMethod.of(
+            "souther/compiler/check/StatedByClauses", "openedBy",
+            "(Lsouther/compiler/check/Settlement$Width;Lsouther/compiler/check/Adoption;"
+                    + "Lsouther/compiler/check/Adoption;)Lsouther/compiler/check/Opening;"));
 
     @Test
     void onlyWhereAnUnreadAlternativeBecomesWhatItLeftOpen() {
@@ -97,13 +100,12 @@ class WhoMayAskWhetherAClauseWentUnreadTest {
         Set<String> found = new TreeSet<>();
         for (Path module : COMPILED.modules()) {
             for (ClassModel each : COMPILED.classesOf(module)) {
-                String reader = each.thisClass().asInternalName();
-                if (reader.equals(ACCOUNT)) {
+                if (each.thisClass().asInternalName().equals(ACCOUNT)) {
                     continue;
                 }
                 for (MethodModel method : each.methods()) {
                     if (reads(method)) {
-                        found.add(reader + "#" + method.methodName().stringValue());
+                        found.add(AMethod.of(each, method));
                     }
                 }
             }

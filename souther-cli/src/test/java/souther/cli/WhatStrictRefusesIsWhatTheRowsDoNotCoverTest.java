@@ -279,39 +279,28 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
     }
 
     /**
-     * Every kind about an obligation has something to be told under.
-     *
-     * <p>What the account owes and what a kind carries are written out separately so that neither
-     * is read off the other. A kind a build can be refused over and nobody gave a code to would be
-     * a gap a report prints and a build is never told about.
-     */
-    @Test
-    void everyKindAboutAnObligationHasADiagnosticCode() {
-        for (Adequacy.Kind kind : Adequacy.Kind.values()) {
-            if (kind.isAboutAnObligation()) {
-                assertTrue(kind.code().isPresent(), kind + " is about an obligation");
-            }
-        }
-    }
-
-    /**
-     * And it is told as a warning, which is the other half of being able to refuse over it.
+     * A code a kind carries is one a build is warned about.
      *
      * <p>Whether a code is reported as an error or a warning is a set written by hand a package
      * away, and nothing tied it to this. A gap a build refuses over that is not among them is raised
      * as an error out of the measure that found it, which is not a compile error and is not the
      * warning `--warnings` decides about — the state E1917 was in until it was noticed by running
      * the command.
+     *
+     * <p>Asked of the codes there are rather than of which kinds are about an obligation. A kind
+     * does not answer the second: whether a row is owed is what the finding is about, and two
+     * subjects one kind covers need not agree. The other half — that a finding a build acts on has
+     * a code at all — is asked of the findings, where both of those are in hand.
      */
     @Test
-    void everyKindAboutAnObligationIsToldAsAWarning() {
+    void everyCodeAKindCarriesIsToldAsAWarning() {
         for (Adequacy.Kind kind : Adequacy.Kind.values()) {
-            if (!kind.isAboutAnObligation()) {
+            if (kind.code().isEmpty()) {
                 continue;
             }
             assertEquals(souther.compiler.diag.Severity.WARNING,
                     kind.code().orElseThrow().severity(),
-                    kind + " is about an obligation, so its code is one a build is"
+                    kind + " carries a code, so it is one a build is"
                             + " warned about rather than one a compile fails on");
         }
     }

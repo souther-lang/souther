@@ -1,5 +1,7 @@
 package souther.compiler.observe;
 
+import souther.compiler.diag.QuotedFrom;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.source.SourceId;
 
 import java.util.Objects;
@@ -35,19 +37,30 @@ public record RowRef(String behavior, SourceId source, RowIdentity identity) {
 
     /** The one this outcome is of, taking the source from where the row is written. */
     public static RowRef of(RowOutcome row) {
-        return new RowRef(row.target(), sourceOf(row), row.identity());
+        return of(row.target(), row.at(), row.identity());
+    }
+
+    /**
+     * The one written at {@code at}, for a caller holding the row rather than an outcome of it.
+     *
+     * <p>The one place a row's source is taken from its place. Which source a row is written in is
+     * part of saying which row, and a second caller working that out would be a second answer to
+     * what an identity is made of — so the rows read off the text and the rows that came back from
+     * a run arrive under identities that cannot disagree.
+     */
+    public static RowRef of(String behavior, SourcePos at, RowIdentity identity) {
+        return new RowRef(behavior, sourceOf(behavior, at, identity), identity);
     }
 
     /** Where the row is written, which every row of a compile has: it was read from a source that
      *  compile was handed. A row with no such place is this compiler having built one from nothing,
      *  and is said here rather than left to arrive as a reason nobody can act on. */
-    private static SourceId sourceOf(RowOutcome row) {
-        if (row.at().quotedFrom()
-                instanceof souther.compiler.diag.QuotedFrom.ASourceThisCompileHolds(SourceId file)) {
+    private static SourceId sourceOf(String behavior, SourcePos at, RowIdentity identity) {
+        if (at.quotedFrom() instanceof QuotedFrom.ASourceThisCompileHolds(SourceId file)) {
             return file;
         }
-        throw new IllegalArgumentException("a row of `" + row.target()
-                + "` is written in no source this compile holds: " + row.identity().shown());
+        throw new IllegalArgumentException("a row of `" + behavior
+                + "` is written in no source this compile holds: " + identity.shown());
     }
 
     /**

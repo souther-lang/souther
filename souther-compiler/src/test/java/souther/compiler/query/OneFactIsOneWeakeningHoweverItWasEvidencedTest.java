@@ -198,6 +198,34 @@ class OneFactIsOneWeakeningHoweverItWasEvidencedTest {
                 "and it was met at all three places");
     }
 
+    /**
+     * And two sets of several facts each come to one set whichever of them is folded first.
+     *
+     * <p>A reason holding nothing but its fact is the same value on either side already, so it
+     * arrives once; one holding evidence puts both sides' citations together. Laying the two sides
+     * out end to end to fold them would make an order out of sets that have none.
+     */
+    @Test
+    void twoSetsOfSeveralFactsComeToOneSetWhicheverIsFoldedFirst() {
+        WeakeningSet one = WeakeningSet.of(new Weakening.BodyNotInEvaluation("a"),
+                metAt(new SourcePos(1, 0)));
+        WeakeningSet other = WeakeningSet.of(new Weakening.BodyNotInEvaluation("b"),
+                metAt(new SourcePos(2, 0)));
+
+        assertEquals(one.union(other), other.union(one),
+                "two sets of reasons put together are the same either way round");
+        assertEquals(3, one.union(other).causes().size(),
+                "and the reason both sides hold arrives once");
+        assertEquals(2, one.union(other).observationCauses().iterator().next().citations().size(),
+                "cited at both the places either side met it");
+    }
+
+    private static Weakening.ObservationIncomplete metAt(SourcePos where) {
+        return Weakening.ObservationIncomplete.of(
+                Incompleteness.at(Incompleteness.Code.INSTRUMENTATION_ABSENT,
+                        Incompleteness.Scope.MODULE, "m", where));
+    }
+
     /** The one question that stands, out of a set holding nothing else. */
     private static ClosureGap.QuestionUnanswered questionIn(WeakeningSet weakened) {
         return (ClosureGap.QuestionUnanswered) modelReadingIn(weakened);
@@ -209,9 +237,7 @@ class OneFactIsOneWeakeningHoweverItWasEvidencedTest {
     }
 
     private static WeakeningSet observed(SourcePos where) {
-        return of(Weakening.ObservationIncomplete.of(
-                Incompleteness.at(Incompleteness.Code.INSTRUMENTATION_ABSENT,
-                        Incompleteness.Scope.MODULE, "m", where)));
+        return of(metAt(where));
     }
 
     private static WeakeningSet ruleWithoutALine(RuleCitation cited) {

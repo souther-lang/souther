@@ -1,7 +1,6 @@
 package souther.bench;
 
 import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.AssumedContract;
@@ -12,6 +11,7 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.ValueName;
+import souther.test.ClosedWorldContract;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -38,7 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * an answer to re-establish rather than one it finds unchanged. And it leaves the other readings the
  * corpus is held to where they were, so the round times one edit and not two.
  */
-@Tag("population")
+@ClosedWorldContract
 class TheRelationAnEditRestatesIsOneACallerReadsTest {
 
     private static final String MODULE = "example.crm";

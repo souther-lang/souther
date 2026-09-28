@@ -5,6 +5,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Severity;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.OrderedInterval;
@@ -17,8 +18,6 @@ import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
 import org.junit.jupiter.api.Test;
-
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -164,23 +163,23 @@ class WhetherAPathIsReachedIsAskedOfEveryDomainTest {
     }
 
     private static Known reaching(ConstraintState<FactSubject> constraints) {
-        return new Known(constraints, List.of(), Set.of(), new Known.Unguarded(ConstraintState.<FactSubject>top()));
+        return new Known(constraints, List.of(), Set.of(), new Known.Unguarded(ConstraintState.top(FactSubject.inOneOrder())));
     }
 
     private static ConstraintState<FactSubject> numbersAtBottom() {
-        return ConstraintState.<FactSubject>top()
-                .taking(LinearForm.constant(BigDecimal.ONE), Rel.LE, Map.of());
+        return ConstraintState.top(FactSubject.inOneOrder())
+                .taking(LinearForm.constant(ExactRatio.ONE), Rel.LE, Map.of());
     }
 
     private static ConstraintState<FactSubject> factsAtBottom() {
-        return ConstraintState.<FactSubject>top().taking(A_PREDICATE, true).taking(A_PREDICATE, false);
+        return ConstraintState.top(FactSubject.inOneOrder()).taking(A_PREDICATE, true).taking(A_PREDICATE, false);
     }
 
     private static ConstraintState<FactSubject> valuesAtBottom() {
         // Met as one reading and handed over as one. Two readings are combined where the
         // clauses of a declaration are read, and never at the state's boundary.
         Allowance<FactSubject> sets = AsACompilationAllows.forAdmittedValues();
-        return ConstraintState.<FactSubject>top().takingRead(
+        return ConstraintState.top(FactSubject.inOneOrder()).takingRead(
                 new Confinement.Planned<>(says("A").meet(says("B")), OrderedIntervals.top(),
                         Map.<FactSubject, Carrier>of()).resolve(sets), sets);
     }
@@ -191,7 +190,7 @@ class WhetherAPathIsReachedIsAskedOfEveryDomainTest {
     }
 
     private static ConstraintState<FactSubject> orderedAtBottom() {
-        return ConstraintState.<FactSubject>top()
+        return ConstraintState.top(FactSubject.inOneOrder())
                 .taking(OrderedIntervals.at(A_POSITION,
                         new OrderedInterval(Endpoint.inclusive(Count.of(6)), null)), Map.of())
                 .taking(OrderedIntervals.at(A_POSITION,

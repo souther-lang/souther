@@ -78,6 +78,9 @@ public final class CoreStructure {
 
         record SomeValue() implements Edge {}
 
+        /** The value a {@code Widen} holds, which is the value standing at the widened position. */
+        record WidenedValue() implements Edge {}
+
         record TupleElement(int index) implements Edge {}
 
         /** The tuple a {@code TupleGet} reads from. */
@@ -111,7 +114,8 @@ public final class CoreStructure {
         List<Child> out = new ArrayList<>();
         switch (e) {
             case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
-                 Core.Read _, Core.UnitValue _, Core.OptionNone _, Core.Unreachable _ -> { }
+                 Core.Read _, Core.UnitValue _, Core.OptionNone _, Core.Unreachable _,
+                 Core.MaterialisedValue _ -> { }
             case Core.Neg n -> out.add(new Child(new Edge.NegOperand(), n.operand()));
             case Core.FieldAccess fa -> out.add(new Child(new Edge.FieldTarget(), fa.target()));
             case Core.Binary b -> {
@@ -143,6 +147,7 @@ public final class CoreStructure {
             case Core.Block b -> out.add(new Child(new Edge.BlockBody(), b.body()));
             case Core.ListLit lit -> indexed(out, lit.elements(), Edge.ListElement::new);
             case Core.OptionSome s -> out.add(new Child(new Edge.SomeValue(), s.value()));
+            case Core.Widen w -> out.add(new Child(new Edge.WidenedValue(), w.value()));
             case Core.Tuple t -> indexed(out, t.elements(), Edge.TupleElement::new);
             case Core.TupleGet tg -> out.add(new Child(new Edge.TupleSource(), tg.tuple()));
             case Core.Construct nd -> {

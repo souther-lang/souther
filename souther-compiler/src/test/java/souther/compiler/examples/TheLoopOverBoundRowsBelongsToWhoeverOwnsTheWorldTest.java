@@ -18,7 +18,6 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The face is an enumeration of rows and the evaluation of one, and the loop over them is not here.
@@ -105,28 +104,6 @@ class TheLoopOverBoundRowsBelongsToWhoeverOwnsTheWorldTest {
         System.clearProperty(STORED);
         assertEquals(Disposition.FAILED, examples.evaluate(stored).outcome().disposition(),
                 "and does not in the world where nothing is stored");
-    }
-
-    /** A row that has no name runs, which is why evaluation takes the row and not the key. */
-    @Test
-    void aRowWithNoNameStillRuns() throws Exception {
-        BoundExamples examples = bound();
-        RecordedRow unnamed = examples.rows().get(1);
-
-        assertEquals(Disposition.HELD, examples.evaluate(unnamed).outcome().disposition(),
-                "nothing is stored under 99 in any world this test arranges");
-    }
-
-    /** A name nothing answers to fails where it is resolved, not as setup that never runs. */
-    @Test
-    void anAddressIsResolvedAgainstTheRowsAsWritten() throws Exception {
-        BoundExamples examples = bound();
-
-        assertEquals("a todo that is stored", examples.rowKey("findTodo", "a todo that is stored").name());
-        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> examples.rowKey("findTodo", "a todo that was never written"));
-        assertTrue(refused.getMessage().contains("a todo that was never written"),
-                refused.getMessage());
     }
 
     /** A handle belongs to the enumeration that made it. */

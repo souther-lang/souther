@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.core.CompleteSignature;
 import souther.compiler.core.DeclaredOperation;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.ArgumentsStand;
@@ -18,8 +19,6 @@ import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
-
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -146,14 +145,11 @@ final class OperationFactBinder {
             // declarations are held to each other.
             case OperationFact.MeansTheSameAsASizeOfNought means ->
                     holdSizeEquivalence(stdlib, declaration, means.size());
-            // Neither of these names anything beyond the operation it is about — a silence names
-            // nothing by definition — so there is nothing about one to hold to a signature beyond
-            // the declaration every fact is held to above. What each comes to bound is the fact
-            // about that declaration.
+            // Names nothing beyond the operation it is about, so there is nothing about it to hold
+            // to a signature beyond the declaration every fact is held to above. What it comes to
+            // bound is the fact about that declaration.
             case OperationFact.StatesItsPredicateOfEveryElement _ ->
                     new BoundOperationFact.StatesItsPredicateOfEveryElement(operation);
-            case OperationFact.SaysNothingOf silence ->
-                    new BoundOperationFact.SaysNothingOf(operation, silence.subject());
             // Stated of the number an operation answers, so an operation that answers none is
             // one the proposition is not about. Waved through, it was a fact anything could
             // carry (#1027).
@@ -162,7 +158,7 @@ final class OperationFactBinder {
                         "what every answer of it has a value for");
                 yield new BoundOperationFact.EveryAnswerItCanGiveHasASourceValue(operation);
             }
-            case OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven taken ->
+            case OperationFact.AnswersANumberTakenOfAValueItIsGiven taken ->
                     holdTakenOf(declaration, taken.how());
             case OperationFact.AccumulatesItsContainer accumulates ->
                     new BoundOperationFact.AccumulatesItsContainer(operation,
@@ -262,7 +258,8 @@ final class OperationFactBinder {
         holdTheResultToTheDeclaration(declaration, TypeRequirement.COUNTED,
                 "what a form of its arguments is about");
         LinearForm<DeclaredArgument> bound = LinearForm.constant(form.constant());
-        for (Map.Entry<ArgumentRef, BigDecimal> each : form.coefs().entrySet()) {
+        for (Map.Entry<ArgumentRef, ExactRatio> each
+                : form.coefs().entrySet()) {
             DeclaredArgument argument = holdToTheDeclaration(declaration, each.getKey(), null,
                     TypeRequirement.COUNTED, "an argument the result is a form of");
             bound = bound.plus(LinearForm.<DeclaredArgument>atom(argument).times(each.getValue()));
@@ -655,9 +652,13 @@ final class OperationFactBinder {
     }
 
     /**
-     * Holds a declared account of what an operation takes of the one value it is given to the
-     * operation: it takes exactly one value, since what such a term is read off is one location and
-     * a term names one path; and it answers a number, since a boundary is drawn on one.
+     * Holds a declared account of what an operation takes of a value it is given to the operation:
+     * it takes at least one value, since what such a term is read off is a location and a term
+     * names one path; and it answers a number, since a boundary is drawn on one.
+     *
+     * <p>The number is taken of the first argument. Whether an operation takes others is not what
+     * settles such an account: what stands at them may decide which number of the first is taken,
+     * and a taking whose arguments say is read where a call is read rather than here.
      *
      * <p>Two of the four things such an account is held to, the two that are about this fact and
      * this declaration alone. The other two are about the operation — that its number is read by
@@ -667,26 +668,27 @@ final class OperationFactBinder {
      * representation may already read, and asked the other way round the exclusivity would be
      * reachable only through accounts that happen to fit.
      */
-    private static BoundOperationFact.AnswersANumberTakenOfTheOneValueItIsGiven holdTakenOf(
+    private static BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven holdTakenOf(
             CompleteSignature declaration, TakenAs how) {
         String named = ((ValueName.Stdlib) declaration.declaring().operation()).qualified();
-        if (declaration.params().size() != 1) {
-            throw new IllegalStateException(named + " takes " + declaration.params().size()
-                    + " arguments, and a number taken of the one value an operation is given is"
-                    + " taken of one");
+        if (declaration.params().isEmpty()) {
+            throw new IllegalStateException(named + " takes no arguments, and a number taken of a"
+                    + " value an operation is given is taken of one it was given");
         }
         // A number and not a number at one case of a union. A term names one path and stands for
         // what the operation answered there, and what an operation answering `Int | NotANumber`
-        // answers at that path is the union — which case it is in is a question this account has no
-        // room for. Narrower than the range of whatever asks for such an account, and deliberately:
-        // what may be declared and what is asked about are two ranges.
+        // answers at that path is the union — which case it is in is a question a declared account
+        // has no room for. An operation that reports a case may still be read as a term of its
+        // number, and where that holds is a fact about a call rather than about the operation: the
+        // account for one is derived where the call's own arguments are known
+        // ({@link BoundOperationFacts#takenAs(ValueName, TakenArguments)}), not declared here.
         holdTheResultToTheDeclaration(declaration, TypeRequirement.NUMBER,
                 "what a term of its answer is about");
         // The one value, as the declaration has it, carried so that what the account is held to
         // fit is read off the bound fact and not off the declaration a second time.
         DeclaredArgument of = holdToTheDeclaration(declaration, new ArgumentRef.At(0), null,
-                TypeRequirement.ANY, "the one value a number is taken of");
-        return new BoundOperationFact.AnswersANumberTakenOfTheOneValueItIsGiven(
+                TypeRequirement.ANY, "the value a number is taken of");
+        return new BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven(
                 declaration.declaring(), of, declaration.result(), how);
     }
 
@@ -723,7 +725,7 @@ final class OperationFactBinder {
             }
         }
         for (BoundOperationFact fact : facts.all()) {
-            if (!(fact instanceof BoundOperationFact.AnswersANumberTakenOfTheOneValueItIsGiven
+            if (!(fact instanceof BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven
                     taken)) {
                 continue;
             }

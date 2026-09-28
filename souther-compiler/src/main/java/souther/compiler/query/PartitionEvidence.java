@@ -245,7 +245,8 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                         .OfItsOwnValue _ -> null;
                                 case NumberAt.OfWhatNumber
                                         .OfWhatAnOperationAnswers taken ->
-                                        named(taken.operation()) + "(" + at() + ")";
+                                        named(taken.operation())
+                                                + taken.arguments().writtenWith(at());
                             };
                 };
                 // The number the walk had named when it stopped, where it named one. Not what the
@@ -532,6 +533,21 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
     }
 
     /**
+     * Every class of every position this behavior is owed a row at.
+     *
+     * <p>The measure's own answer, and the one thing that reads it is what a generation is asked
+     * for ({@link Adequacy.RowsOwed}). The block a generation writes and the offer standing in
+     * front of it are both made from that, so they cannot part over what a position is short of —
+     * which they did, the block taking its classes from here and the offer from the findings.
+     *
+     * <p>In the order the measure holds the positions and their classes in, which is the order the
+     * walk reached them.
+     */
+    public List<AxisClass> classesOwed() {
+        return axes().stream().flatMap(axis -> axis.owed().stream()).toList();
+    }
+
+    /**
      * How many two-class combinations the rows reach, taken between the two positions each is
      * between.
      *
@@ -592,7 +608,15 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
             }
         }
 
-        /** One relation of the model, and how many combinations it holds. */
+        /**
+         * One relation of the model: which two positions, and what each divides into.
+         *
+         * <p>The classes and not a list of the combinations. How many a relation holds is the
+         * product of its sides, and which one a row sits in is a pair of them — so the space is
+         * said by what it is made of, and a combination is made where something asks for one. Held
+         * as the product, a behavior of a few wide positions would carry a list nobody walks in
+         * every value a measure passes around.
+         */
         public record AxisPair(Between between, long total) {
 
             public AxisPair {
@@ -603,6 +627,35 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                     throw new IllegalArgumentException("a relation holds no negative number of"
                             + " combinations: " + total);
                 }
+            }
+        }
+
+        /**
+         * One combination of a relation: a class of each of its two positions.
+         *
+         * <p>What tells one from another within the relation, and what a row is read against. The
+         * relation beside it because a class id is unique within its axis and not across two —
+         * carried without it, two relations sharing a position would count one combination twice.
+         */
+        public record Cell(Between between, String one, String other) {
+
+            public Cell {
+                if (between == null || one == null || other == null) {
+                    throw new IllegalArgumentException(
+                            "a combination of a relation is a class of each of its positions");
+                }
+            }
+
+            /** What a row is owed for here, in the words the account keys on. */
+            public souther.compiler.partition.ObligationIdentity.OfAFallbackPairCell owedBy(
+                    String behavior) {
+                return new souther.compiler.partition.ObligationIdentity.OfAFallbackPairCell(
+                        behavior,
+                        java.util.Set.of(
+                                new souther.compiler.partition.ClassOfAPosition(
+                                        between.one(), one),
+                                new souther.compiler.partition.ClassOfAPosition(
+                                        between.other(), other)));
             }
         }
 
@@ -621,15 +674,24 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
          * outside — so {@link PairSpace#unknown()} answers that, and nothing here keeps a second
          * copy of the sizes to answer it from.
          */
-        public record CoveredBetween(SequencedMap<Between, Integer> byPair) {
+        public record CoveredBetween(SequencedMap<Between, java.util.Set<Cell>> byPair) {
 
             public CoveredBetween {
-                byPair = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(byPair));
+                SequencedMap<Between, java.util.Set<Cell>> copy = new LinkedHashMap<>();
+                byPair.forEach((between, in) ->
+                        copy.put(between, Collections.unmodifiableSet(new LinkedHashSet<>(in))));
+                byPair = Collections.unmodifiableSequencedMap(copy);
             }
 
-            /** How many combinations the rows reach of one relation. */
-            public int covered(Between between) {
-                Integer said = byPair.get(between);
+            /**
+             * Which combinations of one relation the rows reach.
+             *
+             * <p>The combinations and not how many. What is left is what a row is owed for, and a
+             * count cannot be subtracted from a space to say which ones those are — which is what
+             * this measure used to hold, and why nothing could be asked for at a combination.
+             */
+            public java.util.Set<Cell> reached(Between between) {
+                java.util.Set<Cell> said = byPair.get(between);
                 if (said == null) {
                     throw new IllegalArgumentException(
                             "a relation this count is not over was read for its count: " + between);
@@ -637,9 +699,30 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                 return said;
             }
 
+            /** How many combinations the rows reach of one relation. */
+            public int covered(Between between) {
+                return reached(between).size();
+            }
+
             /** And of all of them, which is the one number the whole space is spoken of by. */
             public int covered() {
-                return byPair.values().stream().mapToInt(Integer::intValue).sum();
+                return byPair.values().stream().mapToInt(java.util.Set::size).sum();
+            }
+        }
+
+        /**
+         * Why a walk that was asked for came back with no account of the rows.
+         *
+         * <p>One reason, and it is about this run rather than about the model: the space is as
+         * large as the positions make it, and a compilation allowed more would walk it.
+         */
+        public enum TooLarge implements FailureReason {
+            /** More combinations than this compilation counts off the rows. */
+            TOO_MANY_COMBINATIONS;
+
+            @Override
+            public MeasureReason.About about() {
+                return MeasureReason.About.THE_BEHAVIOR;
             }
         }
 
@@ -677,15 +760,20 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         /**
          * A space too large to walk to the end of.
          *
-         * <p>The pairs are known and none of them was walked, so what is written of each is what
-         * was reached of it: none. What it is measured in part by is the fact that stopped it, said
-         * once.
+         * <p>The pairs are known and not one row was placed in any of them, so there is no account
+         * of the rows here at all. Written as an account that reached none of the combinations, it
+         * said the rows are in nothing — which every reader then had to know to disbelieve by
+         * looking at what weakened the measurement first, and a reader that read the account
+         * straight took the whole space for a space of gaps.
+         *
+         * <p>Failed rather than not measured: this was asked for, and what surrounds it is worth
+         * less for its not having been finished. So the weakening stays, beside a reason saying
+         * what kind of nothing came back.
          */
         public static PairSpace truncated(String behavior, List<AxisPair> space, long size,
                                           int limit) {
-            SequencedMap<Between, Integer> none = new LinkedHashMap<>();
-            space.forEach(pair -> none.put(pair.between(), 0));
-            return new PairSpace(space, new Measurement.Partial<>(new CoveredBetween(none),
+            return new PairSpace(space, new Measurement.FailedToMeasure<>(
+                    TooLarge.TOO_MANY_COMBINATIONS,
                     WeakeningSet.of(new Weakening.PairSpaceTruncated(behavior, size, limit))));
         }
 
@@ -909,10 +997,53 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
             // Empty where nothing was measured here. An absence of evidence is not a set of gaps:
             // the classes nothing sits in are not classes nothing reaches, and the measurement
             // beside this says which of the two a reader is looking at.
-            return reached.made()
-                    .map(it -> classes.stream().filter(c -> !it.covered().contains(c))
-                            .map(c -> new AxisClass(this, c)).toList())
-                    .orElseGet(List::of);
+            return reached.made().map(this::notIn).orElseGet(List::of);
+        }
+
+        /**
+         * The classes of this position a row is owed at, which is not the classes no row is in.
+         *
+         * <p>The two part over a position nothing was measured at. {@link #uncovered()} is what a
+         * measurement established and says nothing where there was none; a behavior no row names
+         * has no gaps, which is not the same as having nothing to write, and what it is owed is a
+         * row at every class it has.
+         *
+         * <p><b>Read over the states rather than through the value.</b> Two of them carry no set of
+         * covered classes and they mean opposite things here: a behavior nobody wrote a row for is
+         * owed one at every class, and a position this build never looked at is owed nothing
+         * anybody can act on. Projected to the value and an absent one read as an empty set, the
+         * two are one answer — and the second of them hands an author a specific row for every
+         * class of a behavior whose file may already hold them.
+         *
+         * <p>Which is the reading a point of a line gets as well
+         * ({@link ObligationAssessment#worthSearching}). A state added to {@link Measurement}
+         * arrives here as a compile error rather than as a silent nothing.
+         */
+        public List<AxisClass> owed() {
+            return switch (reached) {
+                // Read to the end, or as far as it got: either way the classes it did not reach
+                // are classes no row sits in.
+                case Measurement.Complete<Reached> it -> notIn(it.value());
+                case Measurement.Partial<Reached> it -> notIn(it.value());
+                // No row names the behavior, so every class of the position is one nothing sits
+                // in. Any other reason is this build not having asked, and a question nobody put
+                // is not work to hand to an author.
+                case Measurement.NotMeasured<Reached> it ->
+                        it.why() == NoRows.NO_ROWS ? every() : List.of();
+                // Nothing to read the classes against, which a composed row would not settle.
+                case Measurement.FailedToMeasure<Reached> _ -> List.of();
+            };
+        }
+
+        /** The classes of this position the rows did not reach, where they were counted. */
+        private List<AxisClass> notIn(Reached counted) {
+            return classes.stream().filter(name -> !counted.covered().contains(name))
+                    .map(name -> new AxisClass(this, name)).toList();
+        }
+
+        /** And all of them, for a position no row was placed at. */
+        private List<AxisClass> every() {
+            return classes.stream().map(name -> new AxisClass(this, name)).toList();
         }
     }
 

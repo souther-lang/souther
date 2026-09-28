@@ -1,7 +1,11 @@
 package souther.compiler.semantics;
 
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.types.BinOp;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.List;
 
 /**
@@ -26,6 +30,26 @@ public sealed interface Arithmetic {
      * of them is read as the scale.
      */
     List<Reads> reads();
+
+    /**
+     * The operator the language writes this arithmetic as, or null where it writes none.
+     *
+     * <p>Declared with the arithmetic because it is a fact about which arithmetic it is: what
+     * {@code +} computes over whole numbers is what {@code Int.add} answers, and a reader holding
+     * the operator and wanting the operation that owns the account is asking exactly this. Kept
+     * anywhere else, which operation an operator reaches would be a second list beside the one the
+     * declarations already are.
+     *
+     * <p>Not every arithmetic has one. A remainder is written as a call only, and so are the two
+     * quotients that name how their fraction goes — what {@code /} answers is exact, and an
+     * operation that truncates or rounds is a different number from the one the operator computes.
+     * What an operator names is the arithmetic and not the operation: two operations computing one
+     * arithmetic are two the operator reaches, and a reader that needs one of them has nothing here
+     * to pick with.
+     */
+    default BinOp writtenAs() {
+        return null;
+    }
 
     /** Two numbers of the kind the operation answers, which is what all the arithmetic over a pair
      *  of them takes. */
@@ -60,15 +84,67 @@ public sealed interface Arithmetic {
         public List<Reads> reads() {
             return TWO_OF_ITS_OWN;
         }
+
+        @Override
+        public BinOp writtenAs() {
+            return op;
+        }
     }
 
-    /** A division of whole numbers truncated toward zero — the quotient {@code /} answers, reached
-     *  where the divisor is one the model admits as zero. */
+    /** A division of whole numbers truncated toward zero, answered in the case carrying a number
+     *  and not where the divisor is one the model admits as zero. Written as a call: the operator's
+     *  quotient is exact, and this is the number a model asks for when it says where the fraction
+     *  goes. */
     record ATruncatingQuotient() implements Arithmetic {
 
         @Override
         public List<Reads> reads() {
             return TWO_OF_ITS_OWN;
+        }
+
+        /**
+         * Which of the numbers it reads is the one it divides by, which is the second of them.
+         *
+         * <p>Said here because it is a fact about this arithmetic and nowhere else is. What each
+         * argument has to be travels with the arithmetic and is read by position (above), so which
+         * position is the divisor is the same statement one step further in — and a reader working
+         * it out from something beside the arithmetic would be answering it from a place that has
+         * no say.
+         */
+        public int divisor() {
+            return 1;
+        }
+
+        /**
+         * What dividing {@code value} by {@code by} answers: the whole number left by truncating
+         * toward zero.
+         *
+         * <p><b>Here because it is this arithmetic's own answer, and every direction reads it.</b>
+         * Reading a row's value off an observation and solving for a value that answers a number
+         * are the same division asked twice, and a second spelling of "toward zero" is two
+         * roundings somebody keeps in step by hand — which is a row offered at a number it reads
+         * back as something else, the day they part.
+         *
+         * <p>Said of the arithmetic rather than of the account that takes it. Which numbers an
+         * operation's answer names and which of its arguments is the divisor are the account's;
+         * what the operator computes is written down once, here, where the operator is named.
+         *
+         * <p>Divided as numbers, so the answer is the whole number the operator computes whatever
+         * places either was written to. An observation is read as a count of whatever scale it
+         * came with, and a quotient of two decimals far apart in scale can be a whole number no
+         * host holds — which is said, with which way, rather than let the decimal division throw.
+         */
+        public static ExactAnswer<BigDecimal> quotientOf(BigDecimal value, BigDecimal by) {
+            if (by.signum() == 0) {
+                throw new IllegalArgumentException(
+                        "a truncating quotient's divisor of nought is refused where the term is"
+                                + " made, and is never one this reads");
+            }
+            return switch (ExactRatio.of(value).dividedBy(ExactRatio.of(by)).truncated()) {
+                case ExactAnswer.Held<BigInteger> held ->
+                        ExactAnswer.held(new BigDecimal(held.value()));
+                case ExactAnswer.Unheld<BigInteger> unheld -> ExactAnswer.unheld(unheld.why());
+            };
         }
     }
 
@@ -81,8 +157,8 @@ public sealed interface Arithmetic {
         }
     }
 
-    /** A division of decimals rounded where the call says to round it. Not {@code /} over
-     *  {@code Decimal}, which rounds at a significant-digit precision the run time sets. */
+    /** A division of decimals rounded where the call says to round it. Not {@code /}, which answers
+     *  the exact quotient and rounds nowhere. */
     record AQuotientRoundedToAScale() implements Arithmetic {
 
         @Override

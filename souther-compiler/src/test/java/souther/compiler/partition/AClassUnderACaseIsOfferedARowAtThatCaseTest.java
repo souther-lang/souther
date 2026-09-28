@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputDomain;
@@ -61,7 +62,8 @@ class AClassUnderACaseIsOfferedARowAtThatCaseTest {
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
-        InputDomain domain = InputDomain.of(sigs.get("read"), rules, ReadAs.THE_COMPILATION_DOES);
+        InputDomain domain = InputDomain.of(sigs.get("read"),
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES));
         Partitions.Partitioning partitioning =
                 Partitions.of("read", domain, rules, ReadAs.THE_COMPILATION_DOES);
         return new Model(
@@ -85,7 +87,7 @@ class AClassUnderACaseIsOfferedARowAtThatCaseTest {
     /** Every class of every position, including the ones only one case has. */
     @Test
     void aClassUnderACaseIsOfferedARow() {
-        FillResult filled = Generator.fill(model().subject(), List.of(),
+        FillResult filled = GenerationFixtures.fill(model().subject(), List.of(),
                 Generator.CandidateCheck.ANY, Budgets.generation());
 
         assertEquals(List.of(), filled.unresolved(), filled.unresolved().toString());
@@ -98,7 +100,7 @@ class AClassUnderACaseIsOfferedARowAtThatCaseTest {
     /** And the row written for it is that case, because the class under it says so. */
     @Test
     void theRowWrittenForItIsThatCase() {
-        FillResult filled = Generator.fill(model().subject(), List.of(),
+        FillResult filled = GenerationFixtures.fill(model().subject(), List.of(),
                 Generator.CandidateCheck.ANY, Budgets.generation());
 
         for (Generator.GeneratedRow row : filled.rows()) {

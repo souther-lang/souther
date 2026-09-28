@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.partition.BorderObligationPoint;
+import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.ObligationIdentity;
@@ -380,10 +381,13 @@ public record BorderAccount(String module, GenerationScope scope,
      * at the one reading it was about would have reported it as the line refusing a row.
      */
     private static GenerationOutcome.CannotGenerate cannot(SearchCoverage coverage) {
-        List<Generator.UnresolvedCombination> said = new ArrayList<>();
+        List<CameToNothing> said = new ArrayList<>();
         coverage.came().forEach((_, search) -> {
             if (search instanceof SearchCoverage.ReadingSearch.Attempted(var why)) {
-                said.add(why);
+                // The words alone. What a search of a point met of this compiler's is the point's
+                // own to say and is said at the point's account, where a reader asks about the
+                // point — carried here as well, one figure would arrive twice and read as two.
+                said.add(CameToNothing.metNothing(why));
             }
         });
         // Where no reading was searched there is nothing any of them said, and the run says that
@@ -392,11 +396,12 @@ public record BorderAccount(String module, GenerationScope scope,
         // row; named by the point instead, a line a body drew would be named by a word the model
         // does not have for what it was drawn on.
         return new GenerationOutcome.CannotGenerate(said.isEmpty()
-                ? List.of(new Generator.UnresolvedCombination(
-                        coverage.came().keySet().stream()
-                                .map(each -> each.target().label()).toList(),
-                        Generator.UnresolvedCombination.Reason
-                                .NO_READING_OF_THE_LINE_COULD_BE_SEARCHED))
+                ? List.of(CameToNothing.metNothing(
+                        new Generator.UnresolvedCombination(
+                                coverage.came().keySet().stream()
+                                        .map(each -> each.target().label()).toList(),
+                                Generator.UnresolvedCombination.Reason
+                                        .NO_READING_OF_THE_LINE_COULD_BE_SEARCHED)))
                 : List.copyOf(said));
     }
 }

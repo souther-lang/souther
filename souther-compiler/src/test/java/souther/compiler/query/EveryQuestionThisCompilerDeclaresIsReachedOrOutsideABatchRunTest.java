@@ -1,16 +1,17 @@
 package souther.compiler.query;
 
-import souther.compiler.diag.SourceRendering;
 import souther.compiler.Compiler;
 import souther.compiler.conformance.ConformanceCorpus;
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
-import org.junit.jupiter.api.Tag;
+import souther.test.ClosedWorldContract;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -51,7 +52,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * the suite would be a list of stimuli invented to reach a list, and a question added to one of these
  * operations would arrive uncovered while the arithmetic still added up.
  */
-@Tag("population")
+@ClosedWorldContract
 class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
 
     /**
@@ -102,13 +103,36 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
     private static final Map<String, String> NO_BATCH_CONSUMER = Map.of(
             Sites.Authored.class.getName(),
             "where a module's source was written, occurrence by occurrence — a projection for a"
-                    + " reader outside the compiler, and no answer of a batch compilation reads it");
+                    + " reader outside the compiler, and no answer of a batch compilation reads it",
+            Bodies.DeclaredParameters.class.getName(),
+            "what a module's behaviors declare their parameters to be, worked out once per"
+                    + " revision so that the answers an editor asks about one buffer share it. What"
+                    + " a batch compile reads a parameter's type through is the reading of the body"
+                    + " it is in, and nothing it produces rests on this list",
+            Bodies.DeclaredParameterBindings.class.getName(),
+            "the same facts under the binding each is for, which is the table the walk that says"
+                    + " what an expression is declared to be looks a name up in. That walk is"
+                    + " reached from the editor's snapshot, and no answer of a batch compilation"
+                    + " reads it",
+            Shapes.TypeAlternatives.class.getName(),
+            "how a sum or a behavior's answer union travels at a boundary, read by"
+                    + " program.CheckedProgramAssembler for the snapshot an output outside this"
+                    + " compiler reads — CheckedProgram.of has no caller among this project's own"
+                    + " operations, so nothing a batch run performs builds one");
+
+    /** What the scan counted, worked out when a test first asks and kept for the rest: nothing it
+     *  reads changes while the tests run, and each of them would otherwise scan again. */
+    private static Set<String> declaredOnce;
 
     /** What the scan counted, whether or not it read everything it found. */
-    private static Set<String> declared() throws Exception {
-        Set<String> out = new TreeSet<>();
-        DeclaredQuestions.found(DeclaredQuestions.scan()).forEach(each -> out.add(each.getName()));
-        return out;
+    private static synchronized Set<String> declared() throws Exception {
+        if (declaredOnce == null) {
+            Set<String> out = new TreeSet<>();
+            DeclaredQuestions.found(DeclaredQuestions.scan())
+                    .forEach(each -> out.add(each.getName()));
+            declaredOnce = Collections.unmodifiableSet(out);
+        }
+        return declaredOnce;
     }
 
     /** Where the query vocabulary is kept. */
@@ -153,8 +177,19 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
                         + " one that is there");
     }
 
+    /** What the operations below reached, worked out when a test first asks and kept for the rest:
+     *  three tests read it, and each would otherwise run every operation over every corpus. */
+    private static Set<String> reachedOnce;
+
+    private static synchronized Set<String> reached() {
+        if (reachedOnce == null) {
+            reachedOnce = Collections.unmodifiableSet(workedOutWhatIsReached());
+        }
+        return reachedOnce;
+    }
+
     /** And every question this project's own operations put over the corpus. */
-    private static Set<String> reached() {
+    private static Set<String> workedOutWhatIsReached() {
         Set<String> out = new TreeSet<>();
         for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
             // Analysing a corpus and writing the report, which is `souther examples`.
@@ -182,7 +217,48 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
         // And the same operation over a model that reads a module this compile holds no source for,
         // which is the other world this compiler works in.
         into(readingWhatIsPublished(), out);
+        // And over a model stating a rule this compiler cannot carry whole, which is the third.
+        into(readingARuleThisCannotCarry(), out);
         return out;
+    }
+
+    /**
+     * Analysing a model one of whose rules this compiler has no words for, and writing the report.
+     *
+     * <p><b>A world and not a stimulus.</b> Every source of the corpus is written so that what it
+     * says is read, which leaves out everything a report does when a rule arrives and the reading
+     * stops on it: where an author is sent is the part of the clause they wrote rather than the
+     * rule, and a condition met on the way to a point is placed where it stands rather than where
+     * the reading met it. Both are ordinary report paths over an ordinary model, and no corpus
+     * source reaches either — so the model is written here, the way the published one is.
+     *
+     * <p>The rule is a conditional standing as one part of a clause. It is a shape this reading
+     * has no words for, and it is not a comparison or a call, so what an author is sent to is the
+     * part it stands in; the comparison beside it is one a search meets on the way to a border
+     * point and declines, and that one the module that wrote it places.
+     */
+    private static Compilation readingARuleThisCannotCarry() {
+        Compilation compilation = Compilation.ofSource("""
+                module unreadable
+
+                data Flagged = { on: Bool, n: Int }
+                    invariant (if n > 0 then on else on) && n > 0
+
+                data Res = { m: Int }
+
+                behavior act : (f: Flagged) -> Res
+                    constructs Res
+
+                let act (f) = Res { m = f.n }
+
+                example act
+                    | "one" : (Flagged { on = true, n = 3 }) -> Res { m = 3 }
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(compilation.texts()));
+        return compilation;
     }
 
     /**
@@ -203,13 +279,26 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
      * <p>The rule inside the published module is read at two calls, because that is what a reader
      * out here has to be able to be sent to: one rule, out of sight, met twice, and where a report
      * points for each is what the reading that met it says rather than what the rule does.
+     *
+     * <p>The published module's classes build a behavior of another published module, because a
+     * module read off the path is held to how the modules it was built against build what it
+     * builds, whatever the reader goes on to use of it.
      */
     private static Compilation readingWhatIsPublished() {
-        Map<String, ClassFileImage> published = Compiler.compile("""
-                module lib exposing ( wide )
+        Map<String, ClassFileImage> published = Compiler.compileModules(List.of("""
+                module base exposing ( twice )
+
+                behavior twice : (n: Int) -> Int
+                let twice (n) = n + n
+                """, """
+                module lib exposing ( wide, doubled )
+                import base ( twice )
 
                 let wide (n: Int): Bool = n > 10
-                """, "lib.sou");
+
+                behavior doubled : (n: Int) -> Int
+                let doubled (n) = twice(n)
+                """));
         Compilation compilation = Compilation.ofSources(List.of("""
                 module reader
 

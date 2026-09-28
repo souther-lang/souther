@@ -11,6 +11,7 @@ import souther.compiler.types.BindingOwner;
 import souther.compiler.types.CaseSelector;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ReachName;
+import souther.compiler.types.Refinement;
 import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
@@ -218,7 +219,7 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
                 .binder("v", POS).binding();
         Core states = new Core.Binary(BinOp.GT,
                 new Core.Read("v", value, Type.INT, POS), new Core.Int(0, Type.INT, POS),
-                ConstructOccurrence.unwritten(), Type.BOOL, POS);
+                Core.BinaryReading.AS_THEY_STAND, ConstructOccurrence.unwritten(), Type.BOOL, POS);
         RuleRef.Ensures ref = new RuleRef.Ensures(new RuleId(FIND, 0, 0, AN_INT), AN_INT.name());
         return new StatedContract(FIND, List.of(), Type.INT,
                 List.of(new StatedContract.StatedRule(
@@ -231,28 +232,40 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
     }
 
     private Core.Case arm(Core.ResolvedPattern pattern, Core.Binder binder) {
-        return new Core.Case(pattern, binder, new Core.Read(binder.name(), binder.binding(),
-                pattern.bindType(), POS), POS);
+        Core.ArmBinding binding = switch (pattern) {
+            case Core.ResolvedPattern.Single(var selected) -> switch (selected.refinement()) {
+                case Refinement.OptionPresent present ->
+                        new Core.ArmBinding.Payload(binder, present);
+                case Refinement.Direct direct -> new Core.ArmBinding.Selected(binder, direct.bound());
+                case Refinement.OptionAbsent _ -> throw new IllegalArgumentException("names nothing");
+            };
+            case Core.ResolvedPattern.AnyOf(var _, var subject) ->
+                    new Core.ArmBinding.Selected(binder, subject);
+        };
+        return new Core.Case(pattern, binding, new Core.Read(binder.name(), binder.binding(),
+                binding.type(), POS), POS);
     }
 
     private static Core answer() {
         return new Core.Call(new Core.Reached.OfDeclaration(
                 new ReachName.Own(FIND)), List.of(),
-                ConstructOccurrence.unwritten(), Type.ref(FOUND), POS);
+                ConstructOccurrence.unwritten(), Core.CallSettlement.None.INSTANCE,
+                Type.ref(FOUND), POS);
     }
 
     /** The same call, answering an optional — what an arm naming a present carrier is written over. */
     private static Core optionalAnswer() {
         return new Core.Call(new Core.Reached.OfDeclaration(
                 new ReachName.Own(FIND)), List.of(),
-                ConstructOccurrence.unwritten(), Type.option(Type.INT), POS);
+                ConstructOccurrence.unwritten(), Core.CallSettlement.None.INSTANCE,
+                Type.option(Type.INT), POS);
     }
 
     /** A call answering {@code Int | Missing}, which an arm may name either case of. */
     private static Core numericAnswer() {
         return new Core.Call(new Core.Reached.OfDeclaration(
                 new ReachName.Own(FIND)), List.of(),
-                ConstructOccurrence.unwritten(),
+                ConstructOccurrence.unwritten(), Core.CallSettlement.None.INSTANCE,
                 Type.union(new java.util.LinkedHashSet<>(List.of(AN_INT, MISSING))), POS);
     }
 

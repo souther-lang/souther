@@ -6,6 +6,7 @@ import souther.compiler.types.ValueName;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * What a module's import lines turned out to mean here, settled once.
@@ -37,6 +38,16 @@ import java.util.Map;
  */
 public final class ResolvedImports {
 
+    /**
+     * What each spelling settled as, and nothing about the order they settled in.
+     *
+     * <p>The four projections below are asked by name and answer by name, and each of them walks
+     * this to be built. What order that walk went in was whatever the pass that assembled the
+     * spellings happened to hand them over in — which is not an answer about a module's imports,
+     * and was reaching the answers through the containers they were filled into. Each of them is
+     * ordered by the spelling it is keyed on now, so the order they come back in is a function of
+     * what they hold and nothing a walk did can move it.
+     */
     private final Map<String, ResolvedImport> byName;
 
     ResolvedImports(Map<String, ResolvedImport> byName) {
@@ -55,7 +66,7 @@ public final class ResolvedImports {
      * more.
      */
     public Map<String, Denotation> types() {
-        Map<String, Denotation> out = new LinkedHashMap<>();
+        Map<String, Denotation> out = new TreeMap<>();
         byName.forEach((spelling, resolved) -> {
             if (resolved.held().asAType()) {
                 return;   // the declaration written here is what the spelling denotes
@@ -79,7 +90,7 @@ public final class ResolvedImports {
      * two answers, and which of them a reader got would depend on the order the two were consulted.
      */
     public Map<String, Reach> values() {
-        Map<String, Reach> out = new LinkedHashMap<>();
+        Map<String, Reach> out = new TreeMap<>();
         byName.forEach((spelling, resolved) -> {
             if (resolved.held().asAValue()) {
                 return;   // the declaration written here is what the spelling reaches
@@ -109,7 +120,7 @@ public final class ResolvedImports {
      * answers yes for a module that declares one and does not offer it.
      */
     public Map<String, ValueName.Behavior> behaviors() {
-        Map<String, ValueName.Behavior> out = new LinkedHashMap<>();
+        Map<String, ValueName.Behavior> out = new TreeMap<>();
         byName.forEach((spelling, resolved) -> {
             if (!resolved.held().asAValue()
                     && resolved instanceof ResolvedImport.Brings(
@@ -129,7 +140,7 @@ public final class ResolvedImports {
      * refused — and the leave would be granted a second time to a claim that did not stand.
      */
     public Map<String, ModuleUniverse.InSight.Read.PublishedHelper> leaves() {
-        Map<String, ModuleUniverse.InSight.Read.PublishedHelper> out = new LinkedHashMap<>();
+        Map<String, ModuleUniverse.InSight.Read.PublishedHelper> out = new TreeMap<>();
         byName.forEach((spelling, resolved) -> {
             if (!resolved.held().asAValue()
                     && resolved instanceof ResolvedImport.Brings(

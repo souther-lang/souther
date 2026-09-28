@@ -95,9 +95,10 @@ class WhatCrossesIsAValueNothingCanChangeTest {
         //
         // `Entry` is what a stand-in states one call to a dependency as: the arguments it answers
         // for are a list because a dependency takes as many as it declares, and an output holding
-        // one asks what it answers by handing over as many.
-        assertEquals(List.of("Mismatch", "Entry", "Built", "Elements", "Entries",
-                        "Constructed", "Sequence", "Mapping"),
+        // one asks what it answers by handing over as many. `Supplies` and `Handover` are what a
+        // row that states values is handed and holds to run it with, whichever arm it is.
+        assertEquals(List.of("Mismatch", "Handover", "Supplies", "Entry", "Built", "Elements",
+                        "Entries", "Constructed", "Sequence", "Mapping"),
                 asked, "what an output holds that keeps a collection");
     }
 

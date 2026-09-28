@@ -118,7 +118,7 @@ class CompileValueDefinitionTest {
                 let bump (i) = Out { n = read(i) }
                 """));
 
-        assertTrue(e.getMessage().contains("block is not a value"), e.getMessage());
+        assertTrue(e.getMessage().contains("Nothing says what this function takes"), e.getMessage());
     }
 
     @Test

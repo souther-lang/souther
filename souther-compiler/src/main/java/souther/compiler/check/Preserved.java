@@ -50,27 +50,67 @@ public final class Preserved {
     public static final class Settling {
 
         private final Map<ValueName, CompleteSignature> settled = new LinkedHashMap<>();
+        /** What was settled before this was made, read as it stands and not copied into this. */
+        private final SettledValues already;
+
+        public Settling() {
+            this.already = null;
+        }
+
+        private Settling(SettledValues already) {
+            this.already = already;
+        }
+
+        /** A table that answers with what {@code settled} holds, and holds nothing itself. */
+        static Settling over(SettledValues settled) {
+            return new Settling(settled);
+        }
 
         /** Records what a value's own check settled it as. */
         public void settled(CompleteSignature signature) {
             settled.put(signature.declaring().operation(), signature);
         }
 
+        /** What has been settled so far, as an answer. */
+        public SettledValues snapshot() {
+            return already != null ? already : new SettledValues(settled);
+        }
+
         private CompleteSignature settledAs(ValueName name) {
-            return settled.get(name);
+            return already != null ? already.signatures().get(name) : settled.get(name);
+        }
+    }
+
+    /**
+     * What each value of a module was settled as, as an answer.
+     *
+     * <p>A value and not the {@link Settling} it is read off: what a module's check answers with has
+     * to be the same answer when it is asked twice, and a table that is still being filled is not.
+     */
+    public record SettledValues(Map<ValueName, CompleteSignature> signatures) {
+
+        public SettledValues {
+            signatures = Map.copyOf(signatures);
         }
     }
 
     private final Map<ValueName, CompleteSignature> operations;
     private final Settling values;
+    private final boolean valuesAreTemplates;
 
     private Preserved(Map<ValueName, CompleteSignature> operations, Settling values) {
-        this.operations = Map.copyOf(operations);
-        this.values = values;
+        this(operations, values, false);
     }
 
-    /** Every representation that keeps nothing standing — the tree the backend emits from, and every
-     *  expression checked outside one. */
+    private Preserved(Map<ValueName, CompleteSignature> operations, Settling values,
+                      boolean valuesAreTemplates) {
+        this.operations = Map.copyOf(operations);
+        this.values = values;
+        this.valuesAreTemplates = valuesAreTemplates;
+    }
+
+    /** The representation that keeps nothing standing, which is what an expression checked outside
+     *  a module's own check is read under. */
     public static final Preserved NONE = new Preserved(Map.of(), new Settling());
 
     /**
@@ -105,6 +145,27 @@ public final class Preserved {
      */
     public static Preserved valuesAlreadySettled(Settling settled) {
         return new Preserved(Map.of(), settled);
+    }
+
+    /** The same, over values a module's check has already settled. */
+    public static Preserved valuesAlreadySettled(SettledValues settled) {
+        return new Preserved(Map.of(), Settling.over(settled));
+    }
+
+    /**
+     * This, with a value of the module built where it is named and meaning what its template is.
+     *
+     * <p>What the tree an analysis reads holds of a value is where it is built and the type it
+     * comes to, and the type is what the value's own check settled. Kept beside the operations the
+     * analysis keeps standing, since it reads both.
+     */
+    public Preserved withValuesBuiltAsTemplates(SettledValues settled) {
+        return new Preserved(operations, Settling.over(settled), true);
+    }
+
+    /** Whether a build of a value is what stands for it in the tree, its body being the template's. */
+    public boolean valuesAreTemplates() {
+        return valuesAreTemplates;
     }
 
     /**

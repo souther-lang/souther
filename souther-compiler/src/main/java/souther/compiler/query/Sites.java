@@ -543,6 +543,23 @@ public final class Sites {
      * @throws NothingPlacesIt where the question the anchor names has no answer
      */
     public static Citation placeOf(Db db, ConditionReportAnchor anchor) {
+        Citation at = placeIfKnown(db, anchor);
+        if (at == null) {
+            throw new NothingPlacesIt("a condition reported at " + anchor);
+        }
+        return at;
+    }
+
+    /**
+     * The same, as an answer that may be missing.
+     *
+     * <p>For a reader that names conditions it did not choose. What a search was composed without
+     * is every condition on its way, and a condition of a reading that holds no place for it — a
+     * shape this compiler had no words for is one — is still one such a reader is owed the word
+     * for. Asked through the one above, the reader would lose the conditions it can place along
+     * with the one it cannot.
+     */
+    public static Citation placeIfKnown(Db db, ConditionReportAnchor anchor) {
         Answer<Citation> at = switch (anchor) {
             case ConditionReportAnchor.WhereItIsWritten(WrittenCondition condition) ->
                     db.ask(new WhereAConditionIsWritten(condition));
@@ -550,10 +567,7 @@ public final class Sites {
                     ConditionOccurrence condition) ->
                     metIn(db, module, condition);
         };
-        if (!at.present()) {
-            throw new NothingPlacesIt("a condition reported at " + anchor);
-        }
-        return at.value();
+        return at.present() ? at.value() : null;
     }
 
     /** Where the reading of {@code condition}'s body met it, as an answer that may be missing. */

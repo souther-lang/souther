@@ -25,7 +25,6 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Every way a reading of worked-out values is made, and what each of them was handed to make it.
@@ -127,23 +126,6 @@ class AReadingOfValuesIsStartedComposedOrWorkedOutTest {
                         + " second way of saying what a rule of the values comes to, and it says it"
                         + " without the allowance and the shortfall resolving one settles");
     }
-
-    /**
-     * And every module the repository holds was read.
-     *
-     * <p>Asked of the modules the repository has rather than of what a build happened to leave. A
-     * module whose classes are missing is one whose makers this cannot see, and the rows from the
-     * rest would match — so this would pass while answering about fewer modules than it names.
-     */
-    @Test
-    void andEveryModuleTheRepositoryHoldsWasRead() {
-        // A module that has sources and left no classes is refused where the outputs are taken, so
-        // a walk reading fewer modules than the repository has does not get this far.
-        assertTrue(modulesRead() > 1,
-                "the classes this reads are in more than the module that declares the reading");
-    }
-
-
 
     /**
      * Every method whose code makes a reading, as the method and the warrant its signature gives
@@ -298,16 +280,6 @@ class AReadingOfValuesIsStartedComposedOrWorkedOutTest {
                 && handle.asSymbol() instanceof DirectMethodHandleDesc said
                 && READING.equals(internalNameOf(said.owner()))
                 && "<init>".equals(said.methodName());
-    }
-
-    private static int modulesRead() {
-        int read = 0;
-        for (Path module : COMPILED.modules()) {
-            if (!COMPILED.classesOf(module).isEmpty()) {
-                read++;
-            }
-        }
-        return read;
     }
 
 

@@ -157,42 +157,35 @@ class ARowOfferedForACombinationIsRunWhereAnythingCanRunItTest {
 
 
     /**
-     * A row the author already wrote is not offered back to them because nothing watched it.
+     * A row the author already wrote is not offered back to them, at either level.
      *
      * <p>Where nothing can say what a row did, the two kinds of row part. An author's row is in the
      * file whatever this establishes about it, so passing over a combination it may fill costs a
      * combination left owed; offering one costs them work they have already done. A row this search
      * composed is in nobody's file and gets no such benefit.
+     *
+     * <p><b>Held over the values and not over the two levels agreeing.</b> They do not agree here,
+     * and should not: this body's decisions meet, a meeting is settled by a run, and a build that
+     * watches none establishes nothing about which of them the rows make. What that costs is
+     * combinations left unasked-about, never a row handed back to whoever wrote it.
      */
     @Test
     void aWrittenRowIsNotOfferedBackWhereNothingCouldWatchIt() {
-        assertEquals(offeredBy(Adequacy.Level.ALL), offeredBy(Adequacy.Level.WITNESS),
-                "what is left to write does not turn on whether the build was measuring");
-    }
-
-    /**
-     * Nothing is held back over a combination, nobody being owed one.
-     *
-     * <p>This used to count the combinations a written row might have filled and say how many, so
-     * that silence did not read as coverage. What made the count necessary was the search treating
-     * a combination as a thing owed a row: it could neither offer one over a row that might already
-     * fill it nor pass over it in silence. Neither question arises now — an arm is owed a row only
-     * where the measure established that no row reaches it, and a row that might have is a row that
-     * was read.
-     */
-    @Test
-    void nothingIsHeldBackOverACombination() {
         for (Adequacy.Level level : List.of(Adequacy.Level.WITNESS, Adequacy.Level.ALL)) {
-            assertEquals(List.of(),
-                    generationOf(WRITTEN, "shippingFee", level).composed().reasons().stream()
-                            .filter(GenerationReason.SearchLimit.class::isInstance).toList(),
-                    level::name);
+            assertEquals(List.of(), valuesOfferedBy(level).stream()
+                            .filter(List.of(List.of("Premium", "Express"),
+                                    List.of("Standard", "Regular"))::contains)
+                            .toList(),
+                    () -> "the rows in the file are not offered back at " + level);
         }
     }
 
-    private static List<List<String>> offeredBy(Adequacy.Level level) {
+    /** The values of each row the search offers, as a person reads them in the block. */
+    private static List<List<String>> valuesOfferedBy(Adequacy.Level level) {
         return generationOf(WRITTEN, "shippingFee", level).composed().rows().stream()
-                .map(souther.compiler.partition.Generator.GeneratedRow::labels).toList();
+                .map(row -> row.inputs().stream()
+                        .map(souther.compiler.partition.FixtureTemplate::text).toList())
+                .toList();
     }
 
     private static List<GenerationReason> unconfirmed(Adequacy.Filling filling) {
@@ -213,7 +206,7 @@ class ARowOfferedForACombinationIsRunWhereAnythingCanRunItTest {
         assertNotNull(filled, "the model under test compiles and is measured");
         Adequacy.Filling filling = filled.get(behavior);
         assertNotNull(filling, "the behavior under test was generated for");
-        assertTrue(filling.composed().unresolved().stream().noneMatch(each -> each.reason()
+        assertTrue(filling.composed().unresolved().stream().noneMatch(each -> each.why().reason()
                         == souther.compiler.partition.Generator.UnresolvedCombination.Reason
                                 .NO_CERTIFIED_WITNESS),
                 "nothing missed: " + filling.composed().unresolved());

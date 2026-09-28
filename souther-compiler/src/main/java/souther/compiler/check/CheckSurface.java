@@ -1,6 +1,9 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.stdlib.Stdlib;
+import souther.compiler.types.ReachName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -8,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * The module a best-effort reading of a compilation runs over, assembled once.
@@ -42,7 +46,11 @@ public final class CheckSurface implements Assembly {
     /** What the module declares a stand-in for, and how many blocks declare each: read once, where
      *  the names were, and carried rather than worked out again from the blocks. */
     private final FakeTables fakes;
-    private final List<Hir.FnDef> rowDefs;
+    /** What this compilation writes for its own purposes and no source declares: the definition of
+     *  each row operand, the entry of each value the module publishes, and the entry of each value
+     *  a fixture names bare that has no published one. Each says which it is by its role, and every
+     *  rule that cares asks that. */
+    private final List<Hir.FnDef> mintedDefs;
     /**
      * The definitions this was joined from, as they were handed in.
      *
@@ -53,21 +61,38 @@ public final class CheckSurface implements Assembly {
      */
     private final List<Desugared.Fn> desugaredFrom;
     private final Map<Hir.Expr, String> operandMethods;
+    /** Which method every value a fixture may call by name runs as, by the value's own declaration —
+     *  {@link FixtureValueEntries#emitted}'s correspondence, mint and reuse alike. */
+    private final Map<ValueName.Helper, String> fixtureValueMethods;
+    /** Every nullary value this module declares whose body states a type one of this module's own
+     *  behaviors declares a parameter at, keyed by that type — {@link TypedFixtureValues#of}'s
+     *  answer, read once here and never recomputed by a search reading it later. */
+    private final Map<TypeSymbol, List<ReachName.Declaration>> typedFixtureValues;
+    /** Where each behavior gets its body, as the module was classified. Not in the tree: a tree
+     *  read off the path has no {@code let} to say, so two surfaces whose trees are the same can
+     *  still disagree about this. */
+    private final BehaviorBodies bodies;
     /** Worked out once, as the rungs beside this work theirs out. */
     private volatile Hir.Module projected;
 
     private CheckSurface(InvariantSettled settling, List<Normalized.Def> declarations,
                          List<Desugared.Fn> fns, List<Desugared.Fn> desugaredFrom,
                          List<Hir.Example> examples, FakeTables fakes,
-                         List<Hir.FnDef> rowDefs, Map<Hir.Expr, String> operandMethods) {
+                         List<Hir.FnDef> mintedDefs, Map<Hir.Expr, String> operandMethods,
+                         Map<ValueName.Helper, String> fixtureValueMethods,
+                         Map<TypeSymbol, List<ReachName.Declaration>> typedFixtureValues,
+                         BehaviorBodies bodies) {
         this.settling = settling;
         this.declarations = List.copyOf(declarations);
         this.fns = List.copyOf(fns);
         this.desugaredFrom = List.copyOf(desugaredFrom);
         this.examples = List.copyOf(examples);
         this.fakes = fakes;
-        this.rowDefs = List.copyOf(rowDefs);
+        this.mintedDefs = List.copyOf(mintedDefs);
         this.operandMethods = operandMethods;
+        this.fixtureValueMethods = fixtureValueMethods;
+        this.typedFixtureValues = typedFixtureValues;
+        this.bodies = bodies;
     }
 
     /**
@@ -79,9 +104,10 @@ public final class CheckSurface implements Assembly {
      * this surface could differ from the same one read anywhere else. {@code desugared} is the same
      * of the definitions, answered for by {@code Shapes.DesugaredFns}.
      *
-     * <p>{@code scope} is what a name means below the derivation, which is what a definition is held
-     * to after it is rewritten; {@code signatures} is what each behavior takes and answers with,
-     * which says where a row's values stand.
+     * <p>{@code newtypes} is which names were declared wrapping one value, which is what deciding
+     * whether an application is a construction comes to; {@code signatures} is what each behavior
+     * takes and answers with, which says where a row's values stand. {@code bodies} is where each
+     * behavior gets its body, which is carried beside the tree rather than read off it.
      *
      * <p>Which answer stands in for which part is checked and not taken from the key it arrived
      * under. Both tables are keyed by the name written here, and a name is a name in some module —
@@ -97,13 +123,42 @@ public final class CheckSurface implements Assembly {
      *
      * @throws IllegalArgumentException where an answer is for a part other than the one it stands in
      *     for
+     * @param importedForEvidence what a name this module imports bare denotes, closed over every
+     *     further definition its own body reaches in turn ({@code Bodies.publishedByQualifiedName})
+     *     — for {@link TypedFixtureValues#of} to read past a call a candidate's body makes of an
+     *     imported helper. Wider than a candidate may be: a value only a leaf's own body reaches
+     *     travels here so that call can be read, without becoming a candidate itself
+     * @param importedLeaves the declarations this module's own import lines admit — the imported
+     *     half of what {@link TypedFixtureValues#of} may offer as a candidate, narrower than {@code
+     *     importedForEvidence} for the reason above
+     * @param stdlib               the library, so {@link TypedFixtureValues#of} can leave it out of
+     *     the candidates it discovers
+     * @param symbols    what the names a candidate's body wears denote
+     * @param published  what a declaration a candidate reaches states of itself
+     * @param kinds      which form each of those declarations was written in
+     * @param fieldWraps what a newtype a candidate's body builds wraps
      */
     public static CheckSurface assemble(InvariantSettled settling,
                                         Map<String, Normalized.Def> normalized,
-                                        Map<String, Desugared.Fn> desugared, Symbols scope,
+                                        Map<String, Desugared.Fn> desugared,
+                                        DeclarationNewtypes newtypes,
                                         Map<ValueName.Behavior, Sig> signatures,
-                                        FakeTables declared) {
+                                        FakeTables declared,
+                                        BehaviorBodies bodies,
+                                        Map<String, Hir.FnDef> importedForEvidence,
+                                        Set<ValueName.Helper> importedLeaves,
+                                        Stdlib stdlib,
+                                        Symbols symbols,
+                                        PublishedDeclarations published,
+                                        DeclarationKinds kinds,
+                                        NewtypeInners fieldWraps) {
         Hir.Module settled = settling.module();
+        // The same check for the table: a module's classification under the name of another would
+        // answer about behaviors this surface does not declare.
+        if (!bodies.module().equals(settled.name())) {
+            throw new IllegalArgumentException("where the behaviors of `" + bodies.module()
+                    + "` get their bodies is not an answer about `" + settled.name() + "`");
+        }
         List<Normalized.Def> declarations = new ArrayList<>();
         for (InvariantSettled.Def def : settling.defs()) {
             Normalized.Def came = normalized.get(def.name());
@@ -145,7 +200,7 @@ public final class CheckSurface implements Assembly {
             }
             desugaredFrom.add(came);
             fns.add(Desugared.Fn.reestablish(
-                    HelperNames.qualifyImportsIn(came.read(), self), scope));
+                    HelperNames.qualifyImportsIn(came.read(), self), newtypes));
         }
         List<Hir.Example> examples = new ArrayList<>();
         for (Hir.Example block : settled.examples()) {
@@ -156,14 +211,44 @@ public final class CheckSurface implements Assembly {
         // read, and writing a name out does not touch either.
         FakeTables fakes = FakeTables.namesWrittenOut(declared, self);
         CheckSurface written = new CheckSurface(settling, declarations, fns, desugaredFrom, examples, fakes,
-                List.of(), Map.of());
+                List.of(), Map.of(), Map.of(), Map.of(), bodies);
+        // Every value this module reaches whose body states a type, discovered before any row or
+        // fake names one: a search offering one as a baseline reads the same candidates
+        // FixtureValueEntries mints entries for below, rather than finding one only later and
+        // falling back to interpreting its body.
+        Map<TypeSymbol, List<ReachName.Declaration>> typedFixtureValues = TypedFixtureValues.of(
+                written.module(), importedForEvidence, importedLeaves, stdlib, symbols, published,
+                kinds, fieldWraps, signatures);
+        // Every operand a row or a fake writes, walked once: RowFixtures.emitted mints a method for
+        // each and FixtureValueEntries reads the same list for the names among them, rather than
+        // each asking RowFixtures.placed for its own copy.
+        List<RowFixtures.Placed> placed = RowFixtures.placed(written, signatures);
         // What each row operand computes, emitted beside the module's own so a row runs its operand
         // in the program the behavior it is about is applied in. Which method is whose is kept with
         // the assembly: it is decided here and read wherever a row is run, never counted out again.
-        RowFixtures.Emitted rows = RowFixtures.emitted(written, scope, signatures);
-        return rows.defs().isEmpty() ? written
-                : new CheckSurface(settling, declarations, fns, desugaredFrom, examples, fakes,
-                        List.copyOf(rows.defs().values()), rows.methods());
+        RowFixtures.Emitted rows = RowFixtures.emitted(written, newtypes, placed);
+        // And what another module reads a value it publishes through: a definition of the same
+        // family, emitted for the same reason, and kept apart from the rows in that no row runs it.
+        Map<String, Hir.FnDef> entries = ValueEntries.emitted(written, newtypes);
+        // And what a fixture reads a named value through, whether or not the module publishes it —
+        // reusing the entry above where one already exists rather than minting a second — and
+        // whether a row named it bare or TypedFixtureValues discovered it by type.
+        FixtureValueEntries.Emitted fixtureEntries =
+                FixtureValueEntries.emitted(written, newtypes, placed, typedFixtureValues);
+        // fixtureEntries.methods(), not fixtureEntries.defs(): a value already published needs no
+        // new definition, but its method still has to be carried past `written`, whose table is
+        // empty — checking `defs()` here would silently drop that correspondence.
+        // fixtureEntries.methods() carries a candidate TypedFixtureValues discovered even where it
+        // mints no new definition (the module already publishes it), so this is empty only where
+        // typedFixtureValues is too.
+        if (rows.defs().isEmpty() && entries.isEmpty() && fixtureEntries.methods().isEmpty()) {
+            return written;
+        }
+        List<Hir.FnDef> minted = new ArrayList<>(rows.defs().values());
+        minted.addAll(entries.values());
+        minted.addAll(fixtureEntries.defs().values());
+        return new CheckSurface(settling, declarations, fns, desugaredFrom, examples, fakes,
+                minted, rows.methods(), fixtureEntries.methods(), typedFixtureValues, bodies);
     }
 
     /** What the module is called. */
@@ -175,6 +260,11 @@ public final class CheckSurface implements Assembly {
      *  compares this against is what a settling answered rather than half of it. */
     InvariantSettled settling() {
         return settling;
+    }
+
+    /** Where each behavior gets its body, as the module was classified and handed in. */
+    BehaviorBodies bodies() {
+        return bodies;
     }
 
     /** The declarations joined here, as the one producer of that form answered for them. */
@@ -193,24 +283,24 @@ public final class CheckSurface implements Assembly {
         return settling.module().behaviors();
     }
 
-    /** The names it exposes. */
-    public List<String> exposing() {
-        return settling.module().exposing();
+    /** The names it publishes ({@link Hir.Module#published}). */
+    public Set<String> published() {
+        return settling.module().published();
     }
 
-    /** Whether {@code behavior}'s body is written here as a {@code let} of its own name, which a
-     *  composition's is not. Read from the declarations, so it answers whether or not this module
-     *  was elaborated. */
-    public boolean writesItsOwnBody(Hir.BehaviorDef behavior) {
-        return Requirements.writesItsOwnBody(module(), behavior);
+    /** Whether {@code behavior} is a {@code >->} composition, whose arms, positions and lines are
+     *  its stages' ({@link Requirements#isComposition}). */
+    public boolean isComposition(Hir.BehaviorDef behavior) {
+        return Requirements.isComposition(behavior);
     }
 
     /** Where {@code behavior}'s body comes from. How the behavior is written, which is a question
-     *  about the source and not about what a compile made of it. */
-    public BehaviorImplementation implementationOf(Hir.BehaviorDef behavior) {
-        return Requirements.implementationOf(module(), behavior);
+     *  about the source and not about what a compile made of it.
+     *
+     *  @throws IllegalArgumentException where {@code behavior} is not one this module declares */
+    public BehaviorImplementation implementationOf(ValueName.Behavior behavior) {
+        return bodies.of(behavior);
     }
-
 
     /** Its definitions, as they came out. */
     public List<Desugared.Fn> fns() {
@@ -228,14 +318,29 @@ public final class CheckSurface implements Assembly {
         return fakes;
     }
 
-    /** The definitions minted for this module's row operands, in the order they were emitted. */
-    public List<Hir.FnDef> rowDefs() {
-        return rowDefs;
+    /** The definitions this compilation minted for the module, in the order they were emitted: the
+     *  rows' operands, the entries of the values it publishes, and the entries of the values a
+     *  fixture names bare that no published entry already answers for. */
+    public List<Hir.FnDef> mintedDefs() {
+        return mintedDefs;
     }
 
     /** Which method each row operand's value runs as, by the operand. */
     public Map<Hir.Expr, String> operandMethods() {
         return operandMethods;
+    }
+
+    /** Which method every value a fixture may call by name runs as, by the value's own declaration. */
+    public Map<ValueName.Helper, String> fixtureValueMethods() {
+        return fixtureValueMethods;
+    }
+
+    /** Every nullary value this module declares whose body states a type one of this module's own
+     *  behaviors declares a parameter at, keyed by that type — what a search may offer as a
+     *  baseline for a parameter of that type, before any row or fake ever names one ({@link
+     *  TypedFixtureValues#of}). */
+    public Map<TypeSymbol, List<ReachName.Declaration>> typedFixtureValues() {
+        return typedFixtureValues;
     }
 
     /** Which module each imported name was written out to. */
@@ -280,11 +385,15 @@ public final class CheckSurface implements Assembly {
 
     /** What it answers with. The tree covers the parts that were written back into it; what it was
      *  joined from is answered beside the tree and is compared beside it, since two surfaces made
-     *  from different answers are two surfaces however alike the trees came out. */
+     *  from different answers are two surfaces however alike the trees came out. Where each
+     *  behavior gets its body is one of those: a module on the path republished with one behavior
+     *  now left to Java reads back as the same tree. */
     @Override
     public boolean equals(Object o) {
         return o instanceof CheckSurface other && module().equals(other.module())
-                && rowDefs.equals(other.rowDefs) && desugaredFrom.equals(other.desugaredFrom);
+                && mintedDefs.equals(other.mintedDefs) && desugaredFrom.equals(other.desugaredFrom)
+                && bodies.equals(other.bodies)
+                && typedFixtureValues.equals(other.typedFixtureValues);
     }
 
     @Override

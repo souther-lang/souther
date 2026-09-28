@@ -101,7 +101,8 @@ public final class ProducedCases {
         if (seen.anythingUnreadable) {
             return;   // nothing further can be taken away
         }
-        switch (e) {
+        // Which case is produced is the value's, whatever type it stands as.
+        switch (Core.withoutStanding(e)) {
             case Core.Unreachable _ -> { }   // answers nothing, so it produces nothing
             case Core.LetIn li -> walk(li.body(), under, plan, arrives, declared, seen);
             case Core.If iff -> {

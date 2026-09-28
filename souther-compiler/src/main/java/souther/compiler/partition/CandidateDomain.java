@@ -3,11 +3,13 @@ package souther.compiler.partition;
 import souther.compiler.numeric.AffinePreimage;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
-import souther.compiler.numeric.Rational;
+import souther.compiler.numeric.UnheldNumber;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
+import java.math.BigInteger;
 
 /**
  * The values one position of a form may stand at, and whether they can be walked to the end.
@@ -30,12 +32,32 @@ import java.math.RoundingMode;
  *   <li>{@link Somewhere} — a value out of a coset whose values fill. Between any two of them lies
  *       another, so there is no next value at all and the whole of what can be done with one is take
  *       the value it names.
+ *   <li>{@link NotWorkedOut} — neither of the above: the exact arithmetic could not hold a number
+ *       this needed to cut the coset to the run. Never a proof, and never {@link None}.
  * </ul>
  */
 sealed interface CandidateDomain {
 
     /** No value of the position is both inside its run and on the coset. A proof. */
     record None() implements CandidateDomain {}
+
+    /**
+     * Neither a proof nor a set: a model's own decimals put a number this needed — an end of the
+     * run, a multiplier, a step — far enough apart in scale from another that the exact arithmetic
+     * could not hold it.
+     *
+     * <p>Told apart from {@link None} for the reason every such answer in this compiler is: a walk
+     * that read this as empty would be a proof the rules do not license, over a position that may
+     * hold values this simply could not name.
+     */
+    record NotWorkedOut(UnheldNumber why) implements CandidateDomain {
+
+        public NotWorkedOut {
+            if (why == null) {
+                throw new IllegalArgumentException("not worked out, in one of the two ways it is not");
+            }
+        }
+    }
 
     /** Exactly one value is, and nothing else has to be tried. */
     record One(Count at) implements CandidateDomain {}
@@ -81,7 +103,7 @@ sealed interface CandidateDomain {
      */
     static CandidateDomain of(AffinePreimage on, NumericDomain.Bounds within) {
         return switch (on) {
-            case AffinePreimage.None ignored -> new None();
+            case AffinePreimage.None _ -> new None();
             case AffinePreimage.Stepping stepping -> stepping(stepping, within);
             case AffinePreimage.Filling filling -> filling(filling, within);
         };
@@ -99,43 +121,80 @@ sealed interface CandidateDomain {
      */
     private static CandidateDomain stepping(AffinePreimage.Stepping on,
                                             NumericDomain.Bounds within) {
-        // Both are values of the position, which {@link AffinePreimage.Stepping} requires of every
-        // member it names. Asked here instead, this read the progression's own two numbers and
-        // called a set with witnesses in it empty: `1/3 + (2/3)k` is one, three and five, and none
-        // of those is what either of its numbers is written as.
-        BigDecimal from = on.from().asWrittenDecimal();
-        BigDecimal by = on.by().asWrittenDecimal();
-        BigDecimal least = stepsTo(within.min(), from, by, true);
-        BigDecimal most = stepsTo(within.max(), from, by, false);
-        if (least != null && most != null) {
-            if (least.compareTo(most) > 0) {
+        ExactRatio from = on.from();
+        ExactRatio by = on.by();
+        Multiplied least = stepsTo(within.min(), from, by, true);
+        if (least.unheld() != null) {
+            return new NotWorkedOut(least.unheld());
+        }
+        Multiplied most = stepsTo(within.max(), from, by, false);
+        if (most.unheld() != null) {
+            return new NotWorkedOut(most.unheld());
+        }
+        if (least.at() != null && most.at() != null) {
+            if (least.at().compareTo(most.at()) > 0) {
                 return new None();
             }
-            BigDecimal first = from.add(by.multiply(least));
-            return least.compareTo(most) == 0
-                    ? new One(new Count(first))
-                    : new Walking(first, by, from.add(by.multiply(most)));
+            Multiplied first = at(from, by, least.at());
+            if (first.unheld() != null) {
+                return new NotWorkedOut(first.unheld());
+            }
+            if (least.at().compareTo(most.at()) == 0) {
+                return new One(new Count(first.at().asWrittenDecimal()));
+            }
+            Multiplied last = at(from, by, most.at());
+            return last.unheld() != null
+                    ? new NotWorkedOut(last.unheld())
+                    : new Walking(first.at().asWrittenDecimal(), by.asWrittenDecimal(),
+                            last.at().asWrittenDecimal());
         }
-        BigDecimal start = least != null ? least : most != null ? most : BigDecimal.ZERO;
-        return new Outward(from.add(by.multiply(start)), by, within);
+        ExactRatio start = least.at() != null ? least.at() : most.at() != null ? most.at() : ExactRatio.ZERO;
+        Multiplied startingAt = at(from, by, start);
+        return startingAt.unheld() != null
+                ? new NotWorkedOut(startingAt.unheld())
+                : new Outward(startingAt.at().asWrittenDecimal(), by.asWrittenDecimal(), within);
     }
 
     /**
-     * How many steps from {@code from} an end of the run lies, rounded inward, or null where the run
-     * has no end that way.
+     * How many steps from {@code from} an end of the run lies, rounded inward, or which way the
+     * exact arithmetic could not hold it, or {@link #noEnd} where the run has no end that way.
      *
      * <p>The division is asked for a whole number and never for a quotient, so a step that does not
      * divide the distance is no reason to lose the end. An end the rules exclude that falls exactly
      * on a step is one step further in.
+     *
+     * <p>Divided in ratios throughout, and never narrowed to a written decimal first: a distance the
+     * exact arithmetic held is not thereby one a decimal of any particular scale holds, and dividing
+     * two such decimals directly is the same scale-difference hazard this file exists to keep out of
+     * a model's own sums. {@link ExactRatio#dividedBy} refuses only a divisor of nought, which
+     * {@code by} is never; {@link ExactRatio#floor}/{@link ExactRatio#ceiling} are where the
+     * quotient's own room to be held is actually asked.
      */
-    private static BigDecimal stepsTo(Endpoint end, BigDecimal from, BigDecimal by, boolean low) {
+    private static Multiplied stepsTo(Endpoint end, ExactRatio from, ExactRatio by, boolean low) {
         if (end == null || !(end.at() instanceof Count count)) {
-            return null;
+            return noEnd();
         }
-        BigDecimal away = count.at().subtract(from);
-        BigDecimal steps = away.divide(by, 0, low ? RoundingMode.CEILING : RoundingMode.FLOOR);
-        boolean onIt = from.add(by.multiply(steps)).compareTo(count.at()) == 0;
-        return end.inclusive() || !onIt ? steps : steps.add(BigDecimal.valueOf(low ? 1 : -1));
+        Multiplied away = switch (ExactRatio.of(count.at()).minus(from)) {
+            case ExactAnswer.Unheld<ExactRatio> unheld -> new Multiplied(null, unheld.why());
+            case ExactAnswer.Held<ExactRatio> apart -> new Multiplied(apart.value(), null);
+        };
+        if (away.unheld() != null) {
+            return away;
+        }
+        ExactRatio quotient = away.at().dividedBy(by);
+        ExactAnswer<BigInteger> rounded = low ? quotient.ceiling() : quotient.floor();
+        if (!(rounded instanceof ExactAnswer.Held<BigInteger> heldSteps)) {
+            return new Multiplied(null, ((ExactAnswer.Unheld<BigInteger>) rounded).why());
+        }
+        ExactRatio steps = ExactRatio.of(heldSteps.value());
+        boolean onIt = by.times(steps).compareTo(away.at()) == 0;
+        if (end.inclusive() || !onIt) {
+            return new Multiplied(steps, null);
+        }
+        return switch (steps.plus(ExactRatio.of(low ? 1 : -1))) {
+            case ExactAnswer.Unheld<ExactRatio> unheld -> new Multiplied(null, unheld.why());
+            case ExactAnswer.Held<ExactRatio> held -> new Multiplied(held.value(), null);
+        };
     }
 
     /**
@@ -155,71 +214,135 @@ sealed interface CandidateDomain {
      * member, both of which are decided on the numbers themselves.
      */
     private static CandidateDomain filling(AffinePreimage.Filling on, NumericDomain.Bounds within) {
-        Rational from = on.from();
-        Rational by = on.by();
-        Rational least = multiplier(within.min(), from, by);
-        Rational most = multiplier(within.max(), from, by);
+        ExactRatio from = on.from();
+        ExactRatio by = on.by();
+        Multiplied least = multiplier(within.min(), from, by);
+        if (least.unheld() != null) {
+            return new NotWorkedOut(least.unheld());
+        }
+        Multiplied most = multiplier(within.max(), from, by);
+        if (most.unheld() != null) {
+            return new NotWorkedOut(most.unheld());
+        }
         boolean leastIsItsOwn = within.min() == null || within.min().inclusive();
         boolean mostIsItsOwn = within.max() == null || within.max().inclusive();
-        if (least == null && most == null) {
-            return new Somewhere(at(from, by, Rational.ZERO));
+        if (least.at() == null && most.at() == null) {
+            return somewhere(from, by, ExactRatio.ZERO);
         }
-        if (least == null) {
-            return new Somewhere(at(from, by, wholeAt(most, mostIsItsOwn, false)));
+        if (least.at() == null) {
+            Multiplied whole = wholeAt(most.at(), mostIsItsOwn, false);
+            return whole.unheld() != null
+                    ? new NotWorkedOut(whole.unheld()) : somewhere(from, by, whole.at());
         }
-        if (most == null) {
-            return new Somewhere(at(from, by, wholeAt(least, leastIsItsOwn, true)));
+        if (most.at() == null) {
+            Multiplied whole = wholeAt(least.at(), leastIsItsOwn, true);
+            return whole.unheld() != null
+                    ? new NotWorkedOut(whole.unheld()) : somewhere(from, by, whole.at());
         }
-        int order = least.compareTo(most);
+        int order = least.at().compareTo(most.at());
         if (order > 0 || (order == 0 && !(leastIsItsOwn && mostIsItsOwn))) {
             return new None();
         }
         if (order == 0) {
             // One point, and whether it is a member is decided rather than looked for.
-            return least.asWrittenDecimal() == null ? new None() : new One(at(from, by, least));
+            if (!least.at().fitsWrittenDecimal()) {
+                return new None();
+            }
+            Multiplied one = at(from, by, least.at());
+            return one.unheld() != null ? new NotWorkedOut(one.unheld())
+                    : new One(new Count(one.at().asWrittenDecimal()));
         }
-        return new Somewhere(at(from, by, between(least, leastIsItsOwn, most)));
+        Multiplied inside = between(least.at(), leastIsItsOwn, most.at());
+        return inside.unheld() != null
+                ? new NotWorkedOut(inside.unheld()) : somewhere(from, by, inside.at());
     }
 
-    /** Where an end of the run falls on the multiplier, or null where the run has no end there or
-     *  none this reads a number off. */
-    private static Rational multiplier(Endpoint end, Rational from, Rational by) {
-        return end == null || !(end.at() instanceof Count count)
-                ? null
-                : Rational.of(count.at()).minus(from).dividedBy(by);
+    private static CandidateDomain somewhere(ExactRatio from, ExactRatio by, ExactRatio multiplier) {
+        Multiplied member = at(from, by, multiplier);
+        return member.unheld() != null ? new NotWorkedOut(member.unheld())
+                : new Somewhere(new Count(member.at().asWrittenDecimal()));
     }
 
-    /** The member at one multiplier. Whole plus whole times a decimal is a decimal, so this is
-     *  always a value a model writes. */
-    private static Count at(Rational from, Rational by, Rational multiplier) {
-        return new Count(from.plus(by.times(multiplier)).asWrittenDecimal());
+    /** A value the arithmetic held, or which way it could not hold one — never both, and neither
+     *  where there was nothing to ask for in the first place ({@link #multiplier} on an end nothing
+     *  bounds). An interface's members are public regardless, so this is one for the same reason
+     *  every case of this sealed interface is — but it is not one of them, and no caller outside
+     *  this file has a reason to name it. */
+    record Multiplied(ExactRatio at, UnheldNumber unheld) {}
+
+    private static Multiplied noEnd() {
+        return new Multiplied(null, null);
     }
 
-    /** The whole number at or past one end of the multiplier's run, which is a decimal and needs no
-     *  places written out. */
-    private static Rational wholeAt(Rational end, boolean itsOwn, boolean upward) {
-        Rational on = Rational.of(upward ? end.ceiling() : end.floor());
-        return itsOwn || on.compareTo(end) != 0
-                ? on
-                : on.plus(Rational.of(upward ? 1 : -1));
+    /** Where an end of the run falls on the multiplier, or which way the exact arithmetic could not
+     *  hold it, or {@link #noEnd} where the run has no end there or none this reads a number off. */
+    private static Multiplied multiplier(Endpoint end, ExactRatio from, ExactRatio by) {
+        if (end == null || !(end.at() instanceof Count count)) {
+            return noEnd();
+        }
+        return switch (ExactRatio.of(count.at()).minus(from)) {
+            case ExactAnswer.Unheld<ExactRatio> unheld -> new Multiplied(null, unheld.why());
+            case ExactAnswer.Held<ExactRatio> apart -> new Multiplied(apart.value().dividedBy(by), null);
+        };
+    }
+
+    /** The member at one multiplier, or which way the exact arithmetic could not hold it. Whole plus
+     *  whole times a decimal is a decimal, so this is always a value a model writes once held. */
+    private static Multiplied at(ExactRatio from, ExactRatio by, ExactRatio multiplier) {
+        return switch (from.plus(by.times(multiplier))) {
+            case ExactAnswer.Unheld<ExactRatio> unheld -> new Multiplied(null, unheld.why());
+            case ExactAnswer.Held<ExactRatio> at -> new Multiplied(at.value(), null);
+        };
+    }
+
+    /** The whole number at or past one end of the multiplier's run, or which way the exact
+     *  arithmetic could not hold it. A decimal and needs no places written out. */
+    private static Multiplied wholeAt(ExactRatio end, boolean itsOwn, boolean upward) {
+        ExactAnswer<java.math.BigInteger> rounded = upward ? end.ceiling() : end.floor();
+        if (!(rounded instanceof ExactAnswer.Held<java.math.BigInteger> held)) {
+            return new Multiplied(null, ((ExactAnswer.Unheld<java.math.BigInteger>) rounded).why());
+        }
+        ExactRatio on = ExactRatio.of(held.value());
+        if (itsOwn || on.compareTo(end) != 0) {
+            return new Multiplied(on, null);
+        }
+        return switch (on.plus(ExactRatio.of(upward ? 1 : -1))) {
+            case ExactAnswer.Unheld<ExactRatio> unheld -> new Multiplied(null, unheld.why());
+            case ExactAnswer.Held<ExactRatio> moved -> new Multiplied(moved.value(), null);
+        };
     }
 
     /**
-     * A decimal strictly inside a run of multipliers wider than nothing.
+     * A decimal strictly inside a run of multipliers wider than nothing, or which way the exact
+     * arithmetic could not hold it.
      *
      * <p>At however many places it takes: past the point where a place is half the width, the value
      * rounded up to one lands under the far end whatever the near end excludes. Which is why there
      * is no allowance here to run out — the number of places is read off the ends rather than fixed,
      * and the two are exact ratios.
      */
-    private static Rational between(Rational least, boolean leastIsItsOwn, Rational most) {
+    private static Multiplied between(ExactRatio least, boolean leastIsItsOwn, ExactRatio most) {
+        if (most.minus(least) instanceof ExactAnswer.Unheld<ExactRatio> unheldApart) {
+            return new Multiplied(null, unheldApart.why());
+        }
+        ExactRatio apart = most.minus(least).orNull();
         java.math.BigInteger places = java.math.BigInteger.ONE;
-        Rational half = most.minus(least).dividedBy(Rational.of(2));
-        while (Rational.of(java.math.BigInteger.ONE, places).compareTo(half) > 0) {
+        ExactRatio half = apart.dividedBy(ExactRatio.of(2));
+        while (ExactRatio.of(java.math.BigInteger.ONE, places).compareTo(half) > 0) {
             places = places.multiply(java.math.BigInteger.TEN);
         }
-        Rational step = Rational.of(java.math.BigInteger.ONE, places);
-        Rational on = Rational.of(least.times(Rational.of(places)).ceiling()).times(step);
-        return leastIsItsOwn || on.compareTo(least) != 0 ? on : on.plus(step);
+        ExactRatio step = ExactRatio.of(java.math.BigInteger.ONE, places);
+        ExactAnswer<java.math.BigInteger> ceiling = least.times(ExactRatio.of(places)).ceiling();
+        if (!(ceiling instanceof ExactAnswer.Held<java.math.BigInteger> held)) {
+            return new Multiplied(null, ((ExactAnswer.Unheld<java.math.BigInteger>) ceiling).why());
+        }
+        ExactRatio on = ExactRatio.of(held.value()).times(step);
+        if (leastIsItsOwn || on.compareTo(least) != 0) {
+            return new Multiplied(on, null);
+        }
+        return switch (on.plus(step)) {
+            case ExactAnswer.Unheld<ExactRatio> unheld -> new Multiplied(null, unheld.why());
+            case ExactAnswer.Held<ExactRatio> moved -> new Multiplied(moved.value(), null);
+        };
     }
 }

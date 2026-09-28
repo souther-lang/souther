@@ -92,18 +92,7 @@ class AnAbsentValueIsWrittenWhereItStandsTest {
     // no external representation (spec [#what-has-no-external-representation]). It is refused where
     // one is required, and refused as a diagnostic — reaching the backend with it was an internal
     // error escaping to the author.
-    @Test
-    void anOptionalUnderAnOptionalIsRefusedOnAField() {
-        Diagnostic d = diagnosticOf("module demo\ndata Hold = { xs: Option<Option<Int>> }\n");
-        assertInstanceOf(DataMessage.NoCodecCanBeDerived.class, d.said());
-    }
-
-    @Test
-    void anOptionalUnderAnOptionalIsRefusedInsideACollection() {
-        Diagnostic d = diagnosticOf("module demo\ndata Hold = { xs: List<Option<Option<Int>>> }\n");
-        assertInstanceOf(DataMessage.NoCodecCanBeDerived.class, d.said());
-    }
-
+    //
     // `?` marks where an optional is made and is written on a whole type only, so an optional inside
     // another type is named `Option<T>` (spec [#an-optional-is-not-written-inside-another-type]).
     // A message spelling it `Int??` or `Option<Int>?` would name a form the author cannot write.
@@ -111,14 +100,14 @@ class AnAbsentValueIsWrittenWhereItStandsTest {
     void aRefusedNestedOptionalIsNamedTheWayItIsWritten() {
         Diagnostic d = diagnosticOf("module demo\ndata Hold = { xs: List<Option<Option<Int>>> }\n");
         assertEquals("Option<Option<Int>>",
-                ((DataMessage.NoCodecCanBeDerived) d.said()).carries());
+                assertInstanceOf(DataMessage.NoCodecCanBeDerived.class, d.said()).carries());
     }
 
     @Test
     void aRefusedOptionalUnderAnOptionalOnAFieldIsNamedTheSameWay() {
         Diagnostic d = diagnosticOf("module demo\ndata Hold = { xs: Option<Option<Int>> }\n");
         assertEquals("Option<Option<Int>>",
-                ((DataMessage.NoCodecCanBeDerived) d.said()).carries());
+                assertInstanceOf(DataMessage.NoCodecCanBeDerived.class, d.said()).carries());
     }
 
     // A helper's signature is not a codec boundary, so none of this is asked of it.

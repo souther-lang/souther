@@ -77,6 +77,10 @@ class NothingReachableFromACheckedProgramNamesTheCompilerTest {
         // carries — reached off the program itself rather than through a body.
         assertTrue(reached.contains("souther.compiler.core.KernelSignature"),
                 () -> "no kernel signature in " + reached);
+        // And what a pattern means, reached through the fact a String.matches call carries — the
+        // form an output lowers a pattern from, since none of them reads the text.
+        assertTrue(reached.contains("souther.compiler.regex.PatternMeaning"),
+                () -> "no pattern meaning in " + reached);
         // And what a behavior's rows said: the row, what it states, the values it states them with,
         // and what asking whether an answer keeps one comes to. Each is reached through the arm
         // that carries it, which is the walk going down into a behavior rather than reading the top

@@ -52,22 +52,31 @@ more, and both existed only because develop had been made to claim a number it w
    server are distributed through GitHub Releases, and the benchmarks are not an artifact anyone
    depends on.
 
-6. Move develop to the next snapshot, committed to develop and pushed:
+6. Take main into develop and move develop to the next snapshot, in one commit straight to develop:
 
    ```sh
    git switch develop && git pull
+   git merge --no-commit --no-ff main
    bin/set-version.sh <next version>-SNAPSHOT
    git commit -am "Take develop to the snapshot after the release"
    git push
    ```
 
-   No pull request. The whole of it is what `set-version.sh` wrote, there is nothing in it to
-   review, and it is the tail of a release rather than work anyone is proposing. This is the one
-   change to develop that goes straight there; anything carrying a decision still opens one.
+   The merge is what keeps the next release to one pull request. Both branches write the version
+   line, so unless develop holds the commit that set the released number, each side has changed that
+   line since their common ancestor and every module's pom comes back as a conflict. With the merge
+   here, the next release's merge base is the bump on main, main has not touched the line since, and
+   only develop has.
 
-   Nothing of the release goes back — what this carries is that the version just released is behind
-   develop rather than ahead of it. `souther-lang/examples` names the snapshot, so it moves with
-   this.
+   `set-version.sh` runs before the commit so that no commit on develop ever carries a release
+   version: what the merge brings in is written over while it is still staged. What develop ends up
+   with is the version just released being behind it rather than ahead.
+
+   No pull request. The whole of it is a merge and what `set-version.sh` wrote, there is nothing in
+   it to review, and it is the tail of a release rather than work anyone is proposing. This is the
+   one change to develop that goes straight there; anything carrying a decision still opens one.
+
+   `souther-lang/examples` names the snapshot, so it moves with this.
 
 ## The examples
 

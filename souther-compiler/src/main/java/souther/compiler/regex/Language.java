@@ -29,10 +29,12 @@ public final class Language {
     /**
      * The one machine that accepts these strings, which is what everything here is read off.
      *
-     * <p>Canonical, and stopping on nothing but strings. Both are the type's invariant rather than
-     * things a caller arranges, and every way to a language goes through {@link #canonical} — so
-     * two of these hold the same table exactly when they hold the same strings, and the questions
-     * below are a look at what is in front of them rather than a search nobody counted.
+     * <p>Canonical, which is the type's invariant rather than a thing a caller arranges: every way
+     * to a language goes through {@link #canonical} — so two of these hold the same table exactly
+     * when they hold the same strings, and the questions below are a look at what is in front of
+     * them rather than a search nobody counted. Every sequence of symbols a machine reads is a
+     * string, since a symbol is a scalar value ({@link CodePoints}), so the sequences it stops on
+     * are the strings it holds.
      */
     private final Automaton machine;
 
@@ -50,52 +52,13 @@ public final class Language {
      * <p>Null and never a machine short of canonical. What is being decided is whether this
      * compiler can afford to answer exactly, and a half-made answer handed out is one whose next
      * question does the rest of the work somewhere nobody is counting.
-     *
-     * <p><b>The sequences no string is read as are taken out by {@link #holdingOnlyStrings}, and
-     * nowhere else.</b> Every way to one of these ends there, this one and {@link #not}. A machine
-     * steps over what a matcher reads, and a high surrogate followed by a low one is one symbol
-     * rather than two — so there are sequences of symbols no string is written as, and a complement
-     * holds them like anything else. Left in, two machines telling each other apart only over those
-     * would be two languages holding the same strings and comparing unequal, and a machine holding
-     * nothing but them would say it holds something. Every question below would then be about
-     * sequences where the type says it is about strings, and each of its callers would have to know
-     * that and take them out for itself — which is the reading of one thing in two places this file
-     * exists to stop.
-     *
-     * <p>Skipped where it can change nothing, which is asked of the one machine and not of the
-     * steps it is written with. A canonical machine is complete, so every one of them has a step
-     * over a high surrogate and having one says nothing; what says something is whether such a step
-     * leads anywhere a walk that then reads a low surrogate may stop. A pattern naming no surrogate
-     * leads to the state nothing stops at, and nothing is built for it.
-     *
-     * <p>Which is why the one machine is made first and made again only where the answer is yes.
-     * Asked of what came in, the walk would have to follow the steps that cost no symbol, and what
-     * it is looking for is two symbols in turn.
      */
     static Language canonical(Automaton made, Meter meter) {
         if (made == null) {
             return null;
         }
         Automaton one = made.canonical(meter);
-        return one == null ? null : holdingOnlyStrings(one, meter);
-    }
-
-    /**
-     * The strings {@code one} stops on, where {@code one} is already the one machine for the
-     * sequences it stops on.
-     *
-     * <p>Beside {@link #canonical} rather than inside it, because there is a way to a canonical
-     * machine that is not a construction: see {@link #not}. Both end here, which is what makes this
-     * the one place the sequences come out; why they have to and where the walk is skipped is
-     * written on {@link #canonical}, which is where a reader arrives from.
-     */
-    private static Language holdingOnlyStrings(Automaton one, Meter meter) {
-        if (!one.mayStopHavingReadALoneSurrogatePair()) {
-            return new Language(one);
-        }
-        Automaton held = one.and(RuntimeOrder.READS_ONLY_STRINGS, meter);
-        Automaton settled = held == null ? null : held.canonical(meter);
-        return settled == null ? null : new Language(settled);
+        return one == null ? null : new Language(one);
     }
 
     /** Whether the whole of {@code value} is in it. A walk over the value, which builds nothing. */
@@ -107,10 +70,10 @@ public final class Language {
      * Every string that comes before {@code than} on the strings' own order, or null past what
      * {@code meter} allows.
      *
-     * <p>The order the runtime makes and a model's {@code <} is, which is not the order the symbols
-     * of a machine are in — so this is built rather than read off an alphabet, and where it is built
-     * is {@link RuntimeOrder}. Metered like every other way to a language: what a caller is told
-     * past the allowance is that this was not made.
+     * <p>The order the runtime makes and a model's {@code <} is, which compares strings symbol by
+     * symbol — so this is a machine built out of {@code than}, and where it is built is
+     * {@link RuntimeOrder}. Metered like every other way to a language: what a caller is told past
+     * the allowance is that this was not made.
      *
      * <p>Here rather than in the layer that reasons about where a language stops, because a language
      * is what this returns and a machine is what makes one. What such a caller does with it — meet
@@ -173,12 +136,12 @@ public final class Language {
      * the walk that numbers them where it was. Made canonical again, the construction would arrive
      * where it started, having paid for the walk.
      *
-     * <p>The sequences no string is read as still have to come out. A complement holds them like
-     * anything else, which is why this ends where every other way to one of these ends.
+     * <p>And it holds nothing but strings, the complement of a set of symbols being taken within
+     * the scalar values ({@link CodePoints#not}).
      */
     public Language not(Meter meter) {
         Automaton turned = machine.not(meter);
-        return turned == null ? null : holdingOnlyStrings(turned, meter);
+        return turned == null ? null : new Language(turned);
     }
 
     /**
@@ -197,10 +160,6 @@ public final class Language {
      * <p>Asked of the strings and not of how it was written. {@code .*} is not everything — the
      * five line terminators are outside it — and a reader answering from the shape of a pattern
      * would say it was.
-     *
-     * <p>Which is the one machine every string stops at and not the one state every symbol does:
-     * the sequences no string is read as are not in any language here, so a language holding every
-     * string is a machine that turns those away and stops on the rest.
      */
     public boolean isEverything() {
         return equals(EVERY_STRING);

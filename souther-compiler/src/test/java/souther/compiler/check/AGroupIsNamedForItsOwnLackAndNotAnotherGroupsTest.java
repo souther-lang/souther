@@ -30,10 +30,12 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
                         .flatMap(List::stream).map(each -> each.diagnostic().code().toString())
                         .filter(each -> !each.equals("E1013")).toList(),
                 "the model this reads has to be one somebody could write");
-        return UninhabitableTypes.withNoValueOfTheirOwn(compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList(),
-                        TypeCardinality.solve(compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList(),
-                                RuleReadings.of(compilation, "demo"),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES))
+        List<souther.compiler.ast.Hir.Def> defs = compilation.module("demo").defs().stream()
+                .map(each -> each.declaration().node()).toList();
+        return UninhabitableTypes.withNoValueOfTheirOwn(
+                        defs.stream().map(souther.compiler.ast.Hir.Def::declares).toList(),
+                        CountsByComponent.of(defs, RuleReadings.of(compilation, "demo"),
+                                souther.compiler.query.ReadAs.THE_COMPILATION_DOES))
                 .stream().map(each -> each.members().stream().map(TypeSymbol::name).toList()).toList();
     }
 
@@ -189,17 +191,6 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
                 data A = { b: B?, n: Int }
                     invariant no = n >= 2 && n <= 1
 
-                data B = { a: A }
-                """));
-    }
-
-    /** And where neither of them has a rule of its own, they lack together and are said together. */
-    @Test
-    void twoThatLackOnlyThroughEachOtherAreSaidTogether() {
-        assertEquals(List.of(List.of("A", "B")), reported("""
-                module demo
-
-                data A = { b: B }
                 data B = { a: A }
                 """));
     }

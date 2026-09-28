@@ -3,8 +3,6 @@ package souther.compiler.numeric;
 import souther.compiler.numeric.NumericDomain.Bounds;
 
 import org.junit.jupiter.api.Test;
-
-import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -30,7 +28,7 @@ class WhatADomainProvesOfAWholeFormTest {
     }
 
     private static LinearForm<String> num(long n) {
-        return LinearForm.<String>constant(BigDecimal.valueOf(n));
+        return LinearForm.<String>constant(ExactRatio.of(n));
     }
 
     private static Map<String, Granularity> whole(String... atoms) {
@@ -44,7 +42,7 @@ class WhatADomainProvesOfAWholeFormTest {
     /** A form of one atom and a constant: the atom's own range, shifted. */
     @Test
     void aShiftedAtomLiesWhereItsAtomDoesPlusTheShift() {
-        NumericDomain<String> d = NumericDomain.<String>top()
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom(A).minus(num(2)), Rel.GE, whole(A));
 
         Bounds bounds = d.boundsOf(atom(A).plus(num(10)));
@@ -56,7 +54,7 @@ class WhatADomainProvesOfAWholeFormTest {
     /** A sum of two bounded atoms, which is what asking one atom at a time cannot answer. */
     @Test
     void aSumLiesBetweenTheSumsOfItsAtomsEnds() {
-        NumericDomain<String> d = NumericDomain.<String>top()
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom(A).minus(num(1)), Rel.GE, whole(A))
                 .assume(atom(A).minus(num(4)), Rel.LE, whole(A))
                 .assume(atom(B).minus(num(10)), Rel.GE, whole(B))
@@ -77,7 +75,7 @@ class WhatADomainProvesOfAWholeFormTest {
      */
     @Test
     void aDifferenceIsReadThroughTheRelationRatherThanOffTheAtoms() {
-        NumericDomain<String> d = NumericDomain.<String>top()
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom(A).minus(atom(B)), Rel.LE, whole(A, B));
 
         Bounds bounds = d.boundsOf(atom(A).minus(atom(B)));
@@ -89,7 +87,7 @@ class WhatADomainProvesOfAWholeFormTest {
     /** A form over an atom nothing was said about lies nowhere in particular. */
     @Test
     void aFormOverAnUnboundedAtomIsUnbounded() {
-        Bounds bounds = NumericDomain.<String>top().boundsOf(atom(A));
+        Bounds bounds = NumericDomain.top(CanonicalOrder.asTheyAreSpelled()).boundsOf(atom(A));
 
         assertTrue(bounds.saysNothing());
     }
@@ -98,7 +96,7 @@ class WhatADomainProvesOfAWholeFormTest {
      * answering with the ends of a path nothing takes. */
     @Test
     void anInfeasiblePathBoundsNothing() {
-        NumericDomain<String> d = NumericDomain.<String>top()
+        NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom(A).minus(num(5)), Rel.GE, whole(A))
                 .assume(atom(A).minus(num(1)), Rel.LE, whole(A));
 

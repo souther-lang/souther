@@ -79,7 +79,16 @@ public final class ExampleStatements {
                             souther.compiler.check.PublishedDeclarations published,
                             souther.compiler.check.DeclarationKinds kinds,
                             FieldTypes fields,
-                            Map<String, Hir.FnDef> values) {}
+                            Map<String, Hir.FnDef> values) {
+
+        public Declaring {
+            if (published == null || kinds == null) {
+                throw new IllegalArgumentException("a statement about an example names"
+                        + " declarations, so it is handed what they say and which form each of"
+                        + " them is");
+            }
+        }
+    }
 
     private final souther.compiler.check.Prepared.ForExamples module;
     private final Symbols symbols;

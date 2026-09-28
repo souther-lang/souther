@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputDomain;
@@ -32,8 +33,8 @@ class APositionWithAFloorIsOfferedAValueThatMeetsItTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         assertNotNull(sigs, "the model did not compile");
-        InputDomain domain = InputDomain.of(sigs.get(behavior), rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        InputDomain domain = InputDomain.of(sigs.get(behavior), RuleReadingContext.unshared(rules,
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
         Partitions.Partitioning partitioning = Partitions.of(behavior, domain, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return MeasuredInput.of(behavior, domain.reading(rules), partitioning);
     }
@@ -41,7 +42,7 @@ class APositionWithAFloorIsOfferedAValueThatMeetsItTest {
     /** The value at the position the row wrote, which is the one the search reached first. */
     private static String firstValueAt(String source, String behavior, int position) {
         FillResult filled =
-                Generator.fill(subjectOf(source, behavior), List.of(), Generator.CandidateCheck.ANY, Budgets.generation());
+                GenerationFixtures.fill(subjectOf(source, behavior), List.of(), Generator.CandidateCheck.ANY, Budgets.generation());
         assertEquals(List.of(), filled.unresolved(), "nothing should have gone unresolved");
         return filled.rows().get(0).inputs().get(position).text();
     }

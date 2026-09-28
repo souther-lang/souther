@@ -110,12 +110,12 @@ public final class LentReadings implements DeclarationReadings {
     };
 
     @Override
-    public DeclarationReading reading(TypeKey declaration, RuleReadingSource source,
+    public DeclarationReading reading(TypeKey declaration, RuleReadingSource.Origin origin,
                                       ReadingPolicy policy,
                                       Supplier<InvariantChecker.Seeded> read) {
-        Shared held = current().get(new OfDeclarationUnder(declaration, source.origin(), policy));
+        Shared held = current().get(new OfDeclarationUnder(declaration, origin, policy));
         if (held == null) {
-            return readingForAnAnswer(declaration, source, policy, read);
+            return readingForAnAnswer(declaration, origin, policy, read);
         }
         // What the making read is what whoever is being answered out of it read: they are getting
         // the reading rather than doing it, and an edit to what it was made from has to reach them.
@@ -124,12 +124,13 @@ public final class LentReadings implements DeclarationReadings {
     }
 
     @Override
-    public DeclarationReading readingForAnAnswer(TypeKey declaration, RuleReadingSource source,
+    public DeclarationReading readingForAnAnswer(TypeKey declaration,
+                                                 RuleReadingSource.Origin origin,
                                                  ReadingPolicy policy,
                                                  Supplier<InvariantChecker.Seeded> read) {
         StoreWork.Made<InvariantChecker.Seeded> made = work.watching(read);
         DeclarationReading reading = DeclarationReading.of(made.value());
-        current().put(new OfDeclarationUnder(declaration, source.origin(), policy),
+        current().put(new OfDeclarationUnder(declaration, origin, policy),
                 new Shared(reading, made.reads()));
         return reading;
     }

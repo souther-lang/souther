@@ -204,7 +204,7 @@ class ALimitIsAnsweredForByWhatAskedForItTest {
                 .toList(), "the model this reads has to be one somebody could write");
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), "N"));
-        return FieldDomains.of(name, RuleReadings.of(compilation, "demo"),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        return FieldDomains.of(name, RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
     }
 }

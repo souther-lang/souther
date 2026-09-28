@@ -5,6 +5,7 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.InputReading;
+import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.PositionId;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.TermPath;
@@ -62,14 +63,30 @@ public final class MeasuredInput {
      * again was another reading.
      */
     private final DeclarationReadings machines;
+    /**
+     * Where the walk that read this input saw a name of one value stand at a position of another.
+     *
+     * <p>Held because composing a value has to tell a position this reading was left short of from
+     * a path it answers for no position at: a name every case of a sum spreads is written above the
+     * values answering it, and a rule may be written at that name. What says which of the two a
+     * path is is where the walk saw the name stand, and that is an observation of the reading
+     * rather than something a later reader could work out from how the path is spelled.
+     *
+     * <p>This projection of the reading and not the reading. A search that could reach the reading
+     * could look a construction plan's coordinate up in it, which is the thing this class keeps
+     * impossible.
+     */
+    private final NameReach reach;
 
     private MeasuredInput(String behavior, BehaviorInputs written, Quantities quantities,
-                          Partitions.Partitioning divided, DeclarationReadings machines) {
+                          Partitions.Partitioning divided, DeclarationReadings machines,
+                          NameReach reach) {
         this.machines = machines;
         this.behavior = behavior;
         this.written = written;
         this.quantities = quantities;
         this.divided = divided;
+        this.reach = reach;
     }
 
     /**
@@ -109,7 +126,7 @@ public final class MeasuredInput {
             read.quantities().ordersOf(axis.term());
         }
         return new MeasuredInput(behavior, BehaviorInputs.of(read), read.quantities(), divided,
-                read.domain().machines());
+                read.domain().machines(), read.domain().reach());
     }
 
     /**
@@ -118,6 +135,10 @@ public final class MeasuredInput {
      * <p>Written out because this is held in an answer, and what an answer holds is compared by
      * whatever decides that a compile changed nothing. The reading itself compares as the capability
      * it is — one per behavior per compile — so what this says is what the record it replaced said.
+     *
+     * <p>Where a name stands is one of these and not a capability. It decides what a search
+     * composes a value from, so two of these that answer unlike are not one measurement, whatever
+     * the lists beside it say.
      */
     @Override
     public boolean equals(Object other) {
@@ -125,12 +146,13 @@ public final class MeasuredInput {
                 && behavior.equals(that.behavior)
                 && written.equals(that.written)
                 && quantities.equals(that.quantities)
-                && divided.equals(that.divided);
+                && divided.equals(that.divided)
+                && reach.equals(that.reach);
     }
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(behavior, written, quantities, divided);
+        return java.util.Objects.hash(behavior, written, quantities, divided, reach);
     }
 
     @Override
@@ -169,6 +191,21 @@ public final class MeasuredInput {
     }
 
     /**
+     * Where the walk that read this input saw a name of one value stand at a position of another.
+     *
+     * <p>For a reader deciding where a row writes to move a number. A number is read where the
+     * rules name it and the value answering it is written where a row puts one, and the two part at
+     * a name every case of a sum spreads — so a reader that has to write asks this rather than
+     * taking the place a term names for the place a value goes.
+     *
+     * <p>This projection of the reading and not a way to ask the reading anything else, which is
+     * what the whole of this class is about.
+     */
+    NameReach reach() {
+        return reach;
+    }
+
+    /**
      * Where the model divides its positions, whole.
      *
      * <p>For a reader whose question is about the measurement rather than about a row: which
@@ -198,7 +235,8 @@ public final class MeasuredInput {
 
     /**
      * What a search composing a value at one of its positions is given beside the region: the sets
-     * the declarations leave those positions, and what looking in one may cost.
+     * the declarations leave those positions, where a name of one value stands in another, and what
+     * looking in one may cost.
      *
      * <p>Off this measurement and not worked out again by whoever searches. The sets are the
      * reading's answer about the model, and the region a search runs inside is arithmetic — a caller
@@ -213,7 +251,7 @@ public final class MeasuredInput {
      * it once.
      */
     public WitnessSearch witnessSearch() {
-        return Partitions.witnessSearch(divided.measurements());
+        return Partitions.witnessSearch(divided.measurements(), reach);
     }
 
     /** Every measure of its positions, in the order the rules name the numbers. */

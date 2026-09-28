@@ -1,13 +1,11 @@
 package souther.compiler;
 
-import souther.compiler.diag.CompileException;
-
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
-/** End-to-end test for {@code if cond then a else b} expressions (spec §if). */
+/** End-to-end test for {@code if cond then a else b} expressions (spec §if). Branches that disagree
+ *  on type are held in {@link HighValueDiagnosticTest}. */
 class CompileIfTest {
 
     private static final String MODULE = """
@@ -34,17 +32,5 @@ class CompileIfTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(MODULE), getClass().getClassLoader());
         assertEquals("high", classify(loader, 200));
         assertEquals("low", classify(loader, 5));
-    }
-
-    @Test
-    void branchesMustAgreeOnType() {
-        String src = """
-                module demo
-                data Out = Int
-                behavior bad : (x: Int) -> Out constructs Out
-
-                let bad (x) = Out { value = if x >= 0 then 1 else "no" }
-                """;
-        assertThrows(CompileException.class, () -> Compiler.compile(src));
     }
 }

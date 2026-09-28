@@ -169,8 +169,9 @@ class WarningReportingTest {
         Path file = write("probe.sou", UNPROVEN);
         List<Located> warnings = new ArrayList<>();
 
-        assertThrows(Runner.RunException.class, () -> Runner.runCli(
-                new String[]{file.toString(), "--input", "-1"}, warnings));
+        Runner.Invocation invocation = Runner.parse(new String[]{file.toString(), "--input", "-1"});
+        assertThrows(Runner.RunException.class,
+                () -> Runner.run(invocation, invocation.sources(), warnings));
 
         assertEquals(1, warnings.size(), warnings.toString());
         assertEquals("E2011", warnings.get(0).diagnostic().code());

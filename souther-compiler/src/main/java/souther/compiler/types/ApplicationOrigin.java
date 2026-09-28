@@ -1,5 +1,7 @@
 package souther.compiler.types;
 
+import souther.compiler.RecordOfTheBuilding;
+
 /**
  * Why an application is in the body, said by whoever put it there.
  *
@@ -23,7 +25,7 @@ package souther.compiler.types;
  * the readers below stop compiling until it is given an arm. A name meaning "some pass composed it"
  * is how the question would go unasked.
  */
-public sealed interface ApplicationOrigin {
+public sealed interface ApplicationOrigin extends RecordOfTheBuilding {
 
     /**
      * An application that can be told from every other of its kind.

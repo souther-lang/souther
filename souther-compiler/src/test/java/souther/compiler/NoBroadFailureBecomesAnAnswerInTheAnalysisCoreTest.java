@@ -253,7 +253,7 @@ class NoBroadFailureBecomesAnAnswerInTheAnalysisCoreTest {
                     "java.lang.ArithmeticException",
                     "whether the whole numbers between two ends fit in a count, asked of"
                             + " longValueExact — answered as a count nothing here can name"),
-            new Permission("souther.compiler.check.ConstEval", "arith",
+            new Permission("souther.compiler.check.ConstantAlgebra", "arith",
                     "(Lsouther/compiler/types/BinOp;Ljava/lang/Object;Ljava/lang/Object;)"
                             + "Ljava/util/Optional;",
                     "java.lang.ArithmeticException",
@@ -261,26 +261,20 @@ class NoBroadFailureBecomesAnAnswerInTheAnalysisCoreTest {
                             + " one the run time computes, asked of the exact methods the operators"
                             + " emit — answered as a fold that does not settle it, so the run time"
                             + " is what refuses it"),
+            new Permission("souther.compiler.check.ConstantAlgebra", "arith",
+                    "(Lsouther/compiler/types/BinOp;Ljava/lang/Object;Ljava/lang/Object;)"
+                            + "Ljava/util/Optional;",
+                    "java.lang.ArithmeticException",
+                    "the same, of two written decimals, asked of the BigDecimal methods the run time"
+                            + " calls — answered as a fold that does not settle it"),
             new Permission("souther.compiler.check.ScaleRange", "receivedUnchanged",
                     "(Ljava/math/BigDecimal;)Ljava/lang/Integer;",
                     "java.lang.ArithmeticException",
                     "whether a scale is a number the run time can be handed as the number it is,"
                             + " asked of intValueExact — answered as no place count"),
-            new Permission("souther.compiler.check.ConstEval", "matches",
-                    "(Ljava/lang/String;Ljava/lang/String;)Ljava/util/Optional;",
-                    "java.util.regex.PatternSyntaxException",
-                    "whether the platform's engine will compile a pattern an author wrote —"
-                            + " answered as a fold that does not settle the match, which the"
-                            + " run-time check does"),
-            new Permission("souther.compiler.check.ConstEval", "matches",
-                    "(Ljava/lang/String;Ljava/lang/String;)Ljava/util/Optional;",
-                    "java.lang.StackOverflowError",
-                    "whether the engine finishes matching inside the budget it was handed. The"
-                            + " budget is what makes this a question: a matcher given one answers"
-                            + " by not finishing, and the fold declines the same way it declines a"
-                            + " pattern the engine refused"),
             new Permission("souther.compiler.query.Adequacy$ARowBuiltAndRun", "attempt",
                     "(Ljava/lang/String;Ljava/util/Map;"
+                            + "Lsouther/compiler/partition/NumbersAskedFor;"
                             + "Lsouther/compiler/partition/Reachability$Reaching;"
                             + "Lsouther/compiler/partition/AnswersDemanded;)"
                             + "Ljava/util/List;",

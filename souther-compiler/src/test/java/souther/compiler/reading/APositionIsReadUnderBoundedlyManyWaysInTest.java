@@ -2,19 +2,11 @@ package souther.compiler.reading;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.RuleReadingSource;
-import souther.compiler.check.RuleReadings;
-import souther.compiler.core.Core;
-import souther.compiler.inputs.InputDomain;
-import souther.compiler.query.Adequacy;
-import souther.compiler.query.Bodies;
-import souther.compiler.query.Compilation;
-
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static souther.compiler.reading.ReadInteractions.read;
 
 /**
  * How many ways in one position is read under is bounded, and by its own bound.
@@ -97,20 +89,6 @@ class APositionIsReadUnderBoundedlyManyWaysInTest {
                     else 0
                 else 0
             """;
-
-    private static List<Interaction> read(String source, String behavior) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        String module = compilation.modules().get(0);
-        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
-        assertNotNull(checked, "the model under test compiles");
-        Core body = checked.behaviorBodies().get(behavior);
-        assertNotNull(body, "the behavior under test has a body");
-        RuleReadingSource rules = RuleReadings.of(compilation, module);
-        InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
-        return CoverageRead.of(behavior, body,
-                checked.plan(), inputs, rules).interactions();
-    }
 
     /** Whether any decision on any of these ways in is one that places at no class. */
     private static boolean namesAnArm(List<Interaction> found) {

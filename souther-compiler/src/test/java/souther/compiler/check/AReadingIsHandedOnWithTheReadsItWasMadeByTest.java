@@ -63,13 +63,12 @@ class AReadingIsHandedOnWithTheReadsItWasMadeByTest {
         Watched store = new Watched();
         LentReadings lender = new LentReadings(DeclarationReadings.NONE, () -> 1, store);
 
-        InvariantChecker.Seeded made =
-                InvariantChecker.seedFields(amount, source, AS_THE_COMPILE_READS, lender);
+        RuleReadingContext reading = RuleReadingContext.of(source, AS_THE_COMPILE_READS, lender);
+        InvariantChecker.Seeded made = InvariantChecker.seedFields(amount, reading);
         assertEquals(1, store.watched, "the making is what the store watched");
         assertEquals(List.of(), store.handedOn, "and nothing was handed on to make it");
 
-        InvariantChecker.Seeded lent =
-                InvariantChecker.seedFields(amount, source, AS_THE_COMPILE_READS, lender);
+        InvariantChecker.Seeded lent = InvariantChecker.seedFields(amount, reading);
         assertTrue(made == lent, "the second reader is handed the reading the first made");
         assertEquals(1, store.watched, "which is not made again");
         assertEquals(List.of("read again"), store.handedOn,

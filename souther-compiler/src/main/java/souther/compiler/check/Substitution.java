@@ -221,10 +221,8 @@ final class Substitution {
         }
         // A reading that carried the bottom said what the value was made of and not what it holds —
         // `Option.withDefault([], xs)` reads the variable as a list of nothing first — so a later
-        // reading that says what it holds is what stands. The same rule as widening a bare bottom
-        // (ADR-0028), asked at whatever depth the bottom turned up.
-        if (Type.mentions(held, x -> x instanceof Type.Nothing)
-                && TypeOps.assignable(held, at, published)) {
+        // reading that says what it holds is what stands.
+        if (BottomInfer.refines(held, at, published)) {
             owner.decided.put(m, at);
             return Fit.FITS;
         }

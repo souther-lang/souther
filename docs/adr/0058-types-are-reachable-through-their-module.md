@@ -1,6 +1,22 @@
 # ADR-0058: A type is reachable through the module that declares it
 
-Status: Accepted (decided 2026-07-26). Supersedes the sentence in `[#imports]` that said a type has no qualified form.
+Status: Accepted (decided 2026-07-26). Supersedes the sentence in `[#imports]` that said a type has no qualified form. Revised 2026-09-17 — see *Revision*.
+
+## Revision (2026-09-17)
+
+The restriction on construction expressions is removed. A record literal names the type it
+constructs, so that name may be qualified for the same reason a type written in a type position
+may be: which spellings reach a type is settled once, and a construction is one of the places a
+type is named.
+
+Without it, qualified reachability stops short of the term level. Two modules of one compilation
+may each declare `Amount`; a reader may name both as types, take both as parameters, and write
+both in a `constructs` clause — and could build only whichever of them it imported bare. A module
+able to say which one it means everywhere else could not say it where it made one.
+
+`Thing { ... }`, `Parts.Thing { ... }` and `example.parts.Thing { ... }` are therefore one
+construction. Whether a name reaches a type is resolution's answer, as it is wherever a type is
+named; the grammar reads the name to its end and the brace after it says what the two are.
 
 ## Context
 
@@ -23,7 +39,7 @@ Elm, OCaml and Java all give a name its home before anything else uses it. Elm c
 - A name written inside a declaration is resolved in the module that wrote it, not in the module reading it.
 - A dependency counts however it is written, so a cycle closed by a qualified reference is E1501 like one closed by an `import`.
 
-Qualified form is accepted in type positions and as a `match` arm's case name. A construction expression takes the bare name of an imported type, which is enough to reach it; the qualified form there is not accepted yet.
+Qualified form is accepted in type positions and as a `match` arm's case name. A construction expression takes the bare name of an imported type, which is enough to reach it; the qualified form there is not accepted yet. *(Withdrawn by the Revision above: a construction names its type as a type is named anywhere.)*
 
 ## Alternatives considered
 

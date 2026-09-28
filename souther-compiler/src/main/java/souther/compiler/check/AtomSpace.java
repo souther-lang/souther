@@ -44,7 +44,7 @@ public final class AtomSpace {
      * What a value of {@code t} can be, descending every case that is itself a sum.
      *
      * <p>Answers for anything, not only a sum: a type that is no sum is the one atom it is, and a
-     * type that names no case at all — {@code Raw}, an optional, a type the compiler could not work
+     * type that names no case at all — an optional, a type the compiler could not work
      * out — has none. Which of those a reader treats as an answer and which as a refusal is the
      * reader's, and asking here does not decide it.
      *
@@ -101,7 +101,8 @@ public final class AtomSpace {
             // What the language declares is a case and never a sum, and it has no address to ask
             // about: a name that is not a module's is an atom without anything being asked.
             if (name instanceof TypeSymbol.AtModule at
-                    && published.of(at.key()) instanceof DeclarationMeaning.Sum sum) {
+                    && published.of(at.key())
+                        instanceof PublishedDeclarationResult.Found(DeclarationMeaning.Sum sum)) {
                 if (expanded.add(name)) {
                     descend(declaredCases(sum), published, atoms, expanded);
                 }

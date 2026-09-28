@@ -25,11 +25,30 @@ public sealed interface Place extends Comparable<Place> permits Count, Text {
     /**
      * What makes two places one line: what they are, and not how they were written.
      *
-     * <p>{@code 0.00} and {@code 0} are one line. Keyed by their own spelling they are two, and then
-     * a position has two classes both holding zero — which is not a partition, and the classifier
-     * that reads a row against it has no answer.
+     * <p>{@code 0.00} and {@code 0} are one line. Named by the way they were written they are two,
+     * and then a position has two classes both holding zero — which is not a partition, and the
+     * classifier that reads a row against it has no answer.
+     *
+     * <p>A name and not a number to read: it is built from the parts of the canonical value, so
+     * it costs what those parts cost and no reader should expect digits in it.
      */
     String key();
+
+    /**
+     * This place's coordinate written out as text: the number for a count, the string itself for a
+     * string.
+     *
+     * <p>Three questions are asked of a place and this answers one of them. {@link #key()} names
+     * it, this writes the coordinate the algebra holds — a day count is the number of days — and
+     * what the carrier over it would show an author, a date for that day count, is the carrier's
+     * to say ({@code Carrier#written}).
+     *
+     * <p>The value and not how it was written to the model: {@code 0.00} and {@code 0} come back the
+     * same, which is the rule {@link #canonical()} states. A count held at a wide scale is a value
+     * the algebra carries as cheaply as any other, and writing it is a character per place, so this
+     * is for the reader that asked for the digits and for nothing that only tells two places apart.
+     */
+    String spelled();
 
     /** Whether this is the same place on the order as {@code other}, which is {@link #key()}'s
      * question asked of two rather than of one. */
@@ -38,15 +57,15 @@ public sealed interface Place extends Comparable<Place> permits Count, Text {
     }
 
     /**
-     * This place spelled the one way {@link #key()} names it.
+     * This place in the one representation {@link #key()} names.
      *
      * <p>For a caller that has to compare places it cannot ask {@link #sameAs} — a value used as a
      * map key, or held inside a larger value that is. Two places of one line come back equal here,
      * so the derived equality of whatever holds them answers the question the order would.
      *
-     * <p>Beside the two above rather than replacing them: what a rule wrote is what a report writes
-     * back, and {@code 0.00m} is written as the author wrote it. This is the same place said the one
-     * way, and it is only ever what an identity is built from.
+     * <p>Beside the two above rather than replacing them: a place keeps the representation it was
+     * read with, so {@code 0.00m} stays {@code 0.00m} where it is held. This is the same place in
+     * the one representation, and it is only ever what an identity is built from.
      */
     Place canonical();
 

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
@@ -65,15 +66,15 @@ class AnArmsBinderNamesTheNarrowedPositionTest {
         Core body = checked.behaviorBodies().get("read");
         assertNotNull(body, "the behavior under test has a body");
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get("read");
-        GuardThresholds.Guards guards = GuardThresholds.of("read",
+        GuardThresholds.Guards guards = ThresholdFixtures.guardsOf("read",
                 checked.analysisBodies().get("read"), body,
                 checked.plan(),
                 inputs, rules);
-        InputDomain read = InputDomain.of(sigs.get("read"), rules,
-                ReadAs.THE_COMPILATION_DOES);
+        InputDomain read = InputDomain.of(sigs.get("read"),
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES));
         Partitions.Partitioning base = Partitions.of("read", read, rules,
                 ReadAs.THE_COMPILATION_DOES);
-        return Partitions.withThresholds(base, read.quantities(rules), guards.thresholds(),
+        return ThresholdFixtures.withThresholds(base, read.quantities(rules), guards.thresholds(),
                 RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),
                 guards.noLine(), guards.singled(), guards.between(),
                 souther.compiler.values.Allowance.of(souther.compiler.regex.PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS)).axes();

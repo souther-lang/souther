@@ -52,6 +52,33 @@ public sealed interface ReachabilityGap {
     }
 
     /**
+     * The walk stated it, and the rules of the way it is on leave nothing.
+     *
+     * <p>Apart from {@link Uncomposed} and not one of its reasons, because it is not one. Every
+     * {@link Why} says what this composer did not manage, and a reader may act on none of them; this
+     * says what the model settles, and a reader may act on it (ADR-0091). Held as a fourth reason,
+     * the two kinds of news would be one list that a reader has to sort by hand — and the sentence
+     * saying a figure could be raised would be written for a condition no figure reaches.
+     *
+     * <p>No figure travels with it. Nothing was walked: the proof was there before any value was
+     * chosen, which is what makes it worth saying rather than what a search came to.
+     *
+     * <p><b>The condition is where the proof was met and not what the proof is about.</b> What was
+     * shown empty is the region the way narrowed — every condition on it taken together, and
+     * whatever the row has fixed — so this one is the place a reader is sent and not the one that
+     * closed it. Attributing the proof to the way itself is {@link Reachability}'s to do and is not
+     * done here; until it is, what a report says of this has to stay what is known, which is that
+     * the way's conditions leave nothing standing together.
+     */
+    record ProvedImpossible(OnTheWay.TakenIn condition) implements ReachabilityGap {
+
+        @Override
+        public ConditionReportAnchor anchor() {
+            return condition.anchor();
+        }
+    }
+
+    /**
      * What stopped a stated condition from being composed against.
      *
      * <p>Each says what this composer did rather than what the model says. A row is written without
@@ -72,8 +99,8 @@ public sealed interface ReachabilityGap {
         record NoValueComposedForItsPositions() implements Why {}
 
         /**
-         * The same, where a budget of this compiler's is what stopped the walk that would have
-         * placed the positions.
+         * The same, where a budget of this compiler's, or a value it could not hold, is what stopped
+         * the walk that would have placed the positions.
          *
          * <p>A case beside the one above rather than a field on it. The two are different news: one
          * says nothing was found in what was walked, the other says the walking stopped, and only
@@ -84,20 +111,28 @@ public sealed interface ReachabilityGap {
          * the budget cost is one condition on the way being composed against, and reporting it as a
          * point nothing could be established at would say more than happened.
          */
-        record TheWalkForItsPositionsWasStopped(CanonicalSelection<CompositionBudget> by)
+        record TheWalkForItsPositionsWasStopped(CanonicalSelection<CompositionBudget> by,
+                                                CanonicalSelection<CompositionCapacity> unheld)
                 implements Why {
 
+            /**
+             * Stopped by a figure, by a value it could not hold, or by both: the walk that would
+             * have placed the positions did not reach its end either way, and each is said in its
+             * own vocabulary since what a reader does about them differs.
+             */
             public TheWalkForItsPositionsWasStopped {
-                if (by == null || by.isEmpty()) {
-                    throw new IllegalArgumentException(
-                            "a walk this compiler stopped says which budget stopped it");
+                if (by == null || unheld == null || (by.isEmpty() && unheld.isEmpty())) {
+                    throw new IllegalArgumentException("a walk this compiler stopped says what"
+                            + " stopped it: a budget, or a value it could not hold");
                 }
             }
 
-            /** The budgets a walk met, in the order a report says them. */
-            public static TheWalkForItsPositionsWasStopped by(Collection<CompositionBudget> met) {
+            /** What a walk met, in the order a report says it. */
+            public static TheWalkForItsPositionsWasStopped by(Collection<CompositionBudget> met,
+                                                              Collection<CompositionCapacity> unheld) {
                 return new TheWalkForItsPositionsWasStopped(
-                        PublicationOrders.COMPOSITION_BUDGETS.keep(met));
+                        PublicationOrders.COMPOSITION_BUDGETS.keep(met),
+                        PublicationOrders.COMPOSITION_CAPACITIES.keep(unheld));
             }
         }
 
@@ -105,11 +140,22 @@ public sealed interface ReachabilityGap {
          * Two numbers taken at one location, one of which the row is already being written for.
          *
          * <p>A row writes one value where a location is, and that one value would have to answer
-         * both — the length of a string beside the string. Which other number it meets is not part
+         * both — two of the totals inside one container. Which other number it meets is not part
          * of it: the row may be writing that location for the item it is composed at, or for a
          * condition on the way that was taken in before this one. Told apart from the one above
          * because only this one is about two demands meeting at a location rather than about what
          * could be built at a position.
+         *
+         * <p>Which pairs those are is the realizer's answer and not a list here. A pair it composes
+         * one value for reaches this reader as a location placed and not as a gap, and the pairs it
+         * composes one for are every pair the models of this repository write.
+         *
+         * <p><b>Which is why this stays.</b> What the realizer answers of a group it has no way for
+         * is a population it writes some of, and this is the word for that answer on the way to a
+         * point. Taken out, a group of a kind nobody has written the composing for would fall to
+         * the reader beside it — a condition on positions nothing composed a value at — and the
+         * author of a model whose numbers this compiler cannot put together would be told that its
+         * positions hold no value.
          */
         record TwoNumbersAtOneLocation() implements Why {}
     }

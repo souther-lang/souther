@@ -47,7 +47,7 @@ class AProvenanceAPairIsHeldInIsRefusedWhereItIsMissingTest {
         out.put("Match", () -> new Core.Match(one(), List.of(), null, Type.INT, POS));
         out.put("PreservedCall", () -> new Core.PreservedCall(
                 KeptCalls.declared(ValueName.Stdlib.operation("List", "isEmpty")),
-                List.of(one()), null, Type.BOOL, POS));
+                List.of(one()), null, Core.KernelFact.None.INSTANCE, Type.BOOL, POS));
         return out;
     }
 

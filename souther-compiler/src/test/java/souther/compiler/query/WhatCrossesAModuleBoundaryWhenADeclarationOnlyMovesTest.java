@@ -60,9 +60,23 @@ class WhatCrossesAModuleBoundaryWhenADeclarationOnlyMovesTest {
                 invariant value >= 0
             """;
 
-    /** Imports it, names it in a signature, and writes a row about it, so the importer measures. */
+    /**
+     * Imports it, names it in a signature, and writes a row about it, so the importer measures.
+     *
+     * <p>Two bodies, because reading a value of an imported type and building one are different
+     * questions of the declaration. {@code paidOn} reads a field and asks what the type is;
+     * {@code again} builds an {@code Amount} and so is judged against the rules the imported
+     * declaration states, which is the body a reader of those rules is. A fixture with only the
+     * first is a fixture that cannot tell the boundary holding from the boundary never being
+     * crossed.
+     *
+     * <p>{@code again} re-wraps a value that is already an {@code Amount}, so what it is handed
+     * seeds the rule it is judged against and the construction discharges. Nothing is reported
+     * about this workspace either way — the reading of the imported rules is what is measured, and
+     * a body has it whether or not the rules are left standing.
+     */
     private static final String IMPORTING = """
-            module shop.cart exposing ( Basket, paidOn )
+            module shop.cart exposing ( Basket, paidOn, again )
 
             import shop.prices ( Amount )
 
@@ -71,8 +85,15 @@ class WhatCrossesAModuleBoundaryWhenADeclarationOnlyMovesTest {
             behavior paidOn : (t: Basket) -> Int
             let paidOn (t) = t.paid.value
 
+            behavior again : (a: Amount) -> Amount
+                constructs Amount
+            let again (a) = Amount(a.value)
+
             example paidOn
                 | "one" : (Basket { paid = Amount { value = 1 } }) -> 1
+
+            example again
+                | "one" : (Amount { value = 1 }) -> Amount { value = 1 }
             """;
 
     private static final TypeKey AMOUNT = new TypeKey("shop.prices", "Amount");
@@ -82,6 +103,7 @@ class WhatCrossesAModuleBoundaryWhenADeclarationOnlyMovesTest {
         Compilation c = started();
         Answer<?> inputs = c.db().ask(new Adequacy.Inputs("shop.cart"));
         Answer<?> checked = c.db().ask(new Bodies.CheckedBehavior("shop.cart", "paidOn"));
+        Answer<?> judged = c.db().ask(new Bodies.CheckedBehavior("shop.cart", "again"));
         Answer<?> published = c.db().ask(new Shapes.MeaningOf(AMOUNT));
         Answer<?> expanded = c.db().ask(new Shapes.ClausesExpandedFor(AMOUNT));
 
@@ -93,6 +115,8 @@ class WhatCrossesAModuleBoundaryWhenADeclarationOnlyMovesTest {
                 "and so are the clauses it was expanded into: a comment is not a token");
         assertSame(checked, c.db().ask(new Bodies.CheckedBehavior("shop.cart", "paidOn")),
                 "so the importer's body was not checked again");
+        assertSame(judged, c.db().ask(new Bodies.CheckedBehavior("shop.cart", "again")),
+                "nor was the body judged against the rules the declaration states");
         assertSame(inputs, c.db().ask(new Adequacy.Inputs("shop.cart")),
                 "and what its rows are measured over was not worked out again");
     }
@@ -110,6 +134,7 @@ class WhatCrossesAModuleBoundaryWhenADeclarationOnlyMovesTest {
         Compilation c = started();
         Answer<?> inputs = c.db().ask(new Adequacy.Inputs("shop.cart"));
         Answer<?> checked = c.db().ask(new Bodies.CheckedBehavior("shop.cart", "paidOn"));
+        Answer<?> judged = c.db().ask(new Bodies.CheckedBehavior("shop.cart", "again"));
         Answer<?> module = c.db().ask(new Bodies.Checked("shop.cart"));
         Answer<?> published = c.db().ask(new Shapes.MeaningOf(AMOUNT));
         Answer<?> written = c.db().ask(new Names.ResolvedDeclaration(AMOUNT));
@@ -122,6 +147,8 @@ class WhatCrossesAModuleBoundaryWhenADeclarationOnlyMovesTest {
                 "and what it says is the same");
         assertSame(checked, c.db().ask(new Bodies.CheckedBehavior("shop.cart", "paidOn")),
                 "so the importer's body was not checked again");
+        assertSame(judged, c.db().ask(new Bodies.CheckedBehavior("shop.cart", "again")),
+                "nor was the body judged against the rules the declaration states");
         assertSame(module, c.db().ask(new Bodies.Checked("shop.cart")),
                 "nor was the module it is written in");
         assertSame(inputs, c.db().ask(new Adequacy.Inputs("shop.cart")),
@@ -139,6 +166,7 @@ class WhatCrossesAModuleBoundaryWhenADeclarationOnlyMovesTest {
         Compilation c = started();
         Answer<?> published = c.db().ask(new Shapes.MeaningOf(AMOUNT));
         Answer<?> checked = c.db().ask(new Bodies.CheckedBehavior("shop.cart", "paidOn"));
+        Answer<?> judged = c.db().ask(new Bodies.CheckedBehavior("shop.cart", "again"));
 
         edit(c, DECLARING.replace("invariant value >= 0", "invariant value >= 1"));
 
@@ -146,6 +174,8 @@ class WhatCrossesAModuleBoundaryWhenADeclarationOnlyMovesTest {
                 "the declaration was given a rule it did not have");
         assertNotSame(checked, c.db().ask(new Bodies.CheckedBehavior("shop.cart", "paidOn")),
                 "a body checked against the declaration was not checked again");
+        assertNotSame(judged, c.db().ask(new Bodies.CheckedBehavior("shop.cart", "again")),
+                "nor was the body judged against the rule that changed");
     }
 
     /**

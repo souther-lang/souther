@@ -47,7 +47,7 @@ class APublishedResultIsWrittenTheWayItWasDeclaredTest {
         for (TypeSymbol each : cases) {
             terms.add(written(each));
         }
-        return new Hir.RetType(List.copyOf(terms), POS);
+        return Hir.RetType.of(List.copyOf(terms), POS);
     }
 
     private static Set<TypeSymbol> members(TypeSymbol... names) {

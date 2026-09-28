@@ -1,8 +1,9 @@
 package souther.compiler.partition;
 
+import souther.compiler.carrier.Lookup;
+
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -20,25 +21,21 @@ import java.util.Set;
  * was spent before the reading's second meaning was ever tried.
  *
  * @param pins the class each position the combination is about must hold, by the index of the
- *             position in the order the axes are ordered
+ *             position among the axes. What this answers is which position a class is pinned at and
+ *             what that class is — a reader wanting the positions in the axes' own order asks the
+ *             axes, one index at a time, rather than walking this.
  */
-public record Interpretation(Map<Integer, Integer> pins) {
-
-    public Interpretation {
-        pins = Map.copyOf(pins);
-    }
-
-    /** The positions this is about. */
-    public Set<Integer> at() {
-        return pins.keySet();
-    }
+public record Interpretation(Lookup<Integer, Integer> pins) {
 
     /** Which parameters this is about, which is what an origin either states a value of or does
-     *  not. */
+     *  not. Asked of the axes, one at a time, rather than of {@code pins} — {@code pins} answers
+     *  what is bound to a position and not which positions there are. */
     public Set<String> heads(List<Axis> axes) {
         Set<String> out = new LinkedHashSet<>();
-        for (int i : pins.keySet()) {
-            out.add(axes.get(i).path().head());
+        for (int i = 0; i < axes.size(); i++) {
+            if (pins.containsKey(i)) {
+                out.add(axes.get(i).path().head());
+            }
         }
         return out;
     }

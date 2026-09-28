@@ -26,30 +26,16 @@ import java.util.Set;
 public final class ReportedReason {
 
     /**
-     * The words for what the parts of a rule left a question standing on, in the order they were
-     * written.
-     *
-     * <p><b>Carried and not claimed.</b> The order arrives already said — it was said where a
-     * reading's own record of a clause was still in hand — and this maps each member to the word a
-     * document writes. Handed a bare list instead, this stated an order it had nothing to see: it
-     * was right while every member came from one producer, and stopped being right when a second
-     * arrived with nobody in a position to notice.
-     *
-     * <p>Each projected on its own and the words made distinct afterwards, never the other way
-     * round. What a document promises is deliberately coarser than what this compiler records, so
-     * two reasons a reader is not offered to tell apart come out as one word — and that is this
-     * projection saying they are one thing to lift, rather than a reader dropping one of them.
-     */
-    public static SourceOrdered<Stop> asWritten(AuthoredOrder<RuleReasons.Said> stopped) {
-        return SourceOrdered.carrying(stopped.map(ReportedReason::stop));
-    }
-
-    /**
      * One thing a question stands on, in the words a document promises, and where to go about it.
      *
      * <p>The pair and not the word, because the word is deliberately coarser than what produced it
      * and two things to lift can come out under one of them. A clause whose ends two choices left
      * open leaves two, and a list of words says the reader has one thing to do.
+     *
+     * <p>A candidate for an entry of a document, not an entry. {@code about} is what an author's
+     * order is asked of and is never written, and {@code sentTo} is a site that a document may or
+     * may not be able to point at, so two of these that differ are not thereby two entries. What
+     * is compared for a repeat is what the document writes.
      *
      * @param reason what kind of thing stopped the derivation, at the coarseness promised
      * @param sentTo where inside the rule a reader goes about it — the rule itself for a reason
@@ -118,9 +104,11 @@ public final class ReportedReason {
     /**
      * Each of them once, keeping where it first stood, which is what a coarsening leaves.
      *
-     * <p>Told apart by the word and by where it sends a reader. Two producers a document offers one
-     * word for are one thing to lift where they are about the same part of the rule, and two where
-     * they are not — folded on the word alone, a clause with two choices in it came out as one.
+     * <p>Told apart by the word, what it is about and where it sends a reader. Two producers a
+     * document offers one word for are one thing to lift where they are about the same part of the
+     * rule, and two where they are not — folded on the word alone, a clause with two choices in it
+     * came out as one. Whether two of these are one entry of a document is a later question, asked
+     * of what the document writes.
      *
      * <p>Kept in a set, because how many of these there are is how many parts of the rule a reader
      * is sent to and not how many words the vocabulary has. A scan of what is already held was
@@ -240,11 +228,6 @@ public final class ReportedReason {
             case BlockReason.PatternTooCostly _, BlockReason.ExactValuesTooCostly _,
                  BlockReason.OrderedExtentTooCostly _, BlockReason.RulesNotHandedOnAsSets _ ->
                     UndividedPosition.Reason.EXACT_VALUES_TOO_COSTLY;
-            // And its own word again, because this one never reached the values at all. A reader
-            // told the values were too much would go looking for what makes them so, and what is
-            // the matter is how far in the rule goes.
-            case BlockReason.PatternTooDeeplyNested _ ->
-                    UndividedPosition.Reason.PATTERN_TOO_DEEPLY_NESTED;
             // Its own word, and not the one above. Both are rules this reading did not turn into a
             // line, and a reader acting on them is doing different work: one wants a reader for a
             // form that was seen, and one wants the gathering to reach the rules at all. Collapsed

@@ -1,12 +1,14 @@
 package souther.compiler.flow;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.Choice;
+import souther.compiler.check.ScopeStep;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.test.ClosedWorldContract;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -35,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the ways to a truth that holds none of them says the value is never settled that way, so it is only
  * ever answered where the reading of what the body does agrees.
  */
-@Tag("population")
+@ClosedWorldContract
 class ANamingDecidesHowAWayIsWrittenAndNotWhetherThereIsOneTest {
 
     /**
@@ -276,12 +278,7 @@ class ANamingDecidesHowAWayIsWrittenAndNotWhetherThereIsOneTest {
         }
 
         @Override
-        public Naming<Marks> under(Core.Binder binder, Core value) {
-            return this;
-        }
-
-        @Override
-        public Naming<Marks> insideArm(Core.Match match, Core.Case arm) {
+        public Naming<Marks> entering(ScopeStep step) {
             return this;
         }
 
@@ -298,7 +295,9 @@ class ANamingDecidesHowAWayIsWrittenAndNotWhetherThereIsOneTest {
 
         @Override
         public Marks forkArm(Core fork, int part) {
-            return mark(fork, fork instanceof Core.If iff ? iff.cond() : fork, "arm", part);
+            return mark(fork, Choice.decidingArm(fork, part)
+                    instanceof Choice.Decides.ACondition(Core cond, boolean _) ? cond : fork,
+                    "arm", part);
         }
 
         private Marks mark(Core at, Core about, String what, int part) {

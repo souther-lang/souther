@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.RuleReadings;
@@ -67,7 +68,8 @@ class APositionSaysWhichOfItsRulesWentUnansweredTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         assertNotNull(sigs);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
-        return InputDomain.of(sigs.get("price"), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).positions().stream()
+        return InputDomain.of(sigs.get("price"), RuleReadingContext.unshared(rules,
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES)).positions().stream()
                 .filter(p -> p.path().toString().equals("length"))
                 .findFirst().orElseThrow();
     }

@@ -106,7 +106,8 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
     void anArmOpeningAnAnswerOpensNoText() {
         Core answer = new Core.Call(new Core.Reached.OfDeclaration(
                 new ReachName.Own(FIND)), List.of(),
-                ConstructOccurrence.unwritten(), Type.ref(FOUND), POS);
+                ConstructOccurrence.unwritten(), Core.CallSettlement.None.INSTANCE,
+                Type.ref(FOUND), POS);
         Core.Binder x = CoreBinders.of(binders.binder("x", POS));
 
         Denotations at = engine.enteringArm(
@@ -149,14 +150,15 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
     }
 
     private Denotations given(Core.Binder binder, Core value, Denotations at) {
-        return engine.bindLet(new Core.LetIn(binder, value,
+        return engine.bindLet(new Core.LetIn(binder, value.type(), value,
                 new Core.Read(binder.name(), binder.binding(), value.type(), POS), value.type(), POS),
                 Known.top(), at).at();
     }
 
     private Core.Case arm(Core.ResolvedPattern pattern, Core.Binder binder) {
-        return new Core.Case(pattern, binder, new Core.Read(binder.name(), binder.binding(),
-                pattern.bindType(), POS), POS);
+        Type held = pattern.selectedCase().orElseThrow().selector().bound();
+        return new Core.Case(pattern, new Core.ArmBinding.Selected(binder, held),
+                new Core.Read(binder.name(), binder.binding(), held, POS), POS);
     }
 
     private static Core read(Core.Binder binder) {

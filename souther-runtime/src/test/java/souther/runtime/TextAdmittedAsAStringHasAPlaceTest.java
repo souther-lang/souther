@@ -1,0 +1,70 @@
+package souther.runtime;
+
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+/**
+ * Text from outside is a {@code String} only where its canonical value has a place (spec
+ * §what-a-string-holds). The bound is in code points, so these ask {@link Strings#admission} of a
+ * bound of a few: text as long as the real one cannot be built to ask it.
+ */
+class TextAdmittedAsAStringHasAPlaceTest {
+
+    private static final String HIGH = String.valueOf((char) 0xD800);
+
+    /** U+0344 canonicalizes to two marks, so what arrives one unit long is two units as a String. */
+    private static final String EXPANDS = "̈́";
+
+    /** {@code e} and a combining acute, which canonicalize to the one character {@code é}. */
+    private static final String SHRINKS = "é";
+
+    @Test
+    void textWithinTheBoundIsAdmittedCanonical() {
+        assertEquals(new TextAdmission.Admitted("abc"), Strings.admission("abc", 3));
+        assertEquals(new TextAdmission.Admitted("é"), Strings.admission(SHRINKS, 1));
+    }
+
+    @Test
+    void whatIsMeasuredIsTheCanonicalValueAndNotTheTextThatArrived() {
+        // The text is longer than the bound and the String it is, is not.
+        assertEquals(2, SHRINKS.length());
+        assertInstanceOf(TextAdmission.Admitted.class, Strings.admission(SHRINKS, 1));
+        // The other way round: one unit arrived, and two are what it would be.
+        assertEquals(1, EXPANDS.length());
+        assertInstanceOf(TextAdmission.NoPlace.class, Strings.admission(EXPANDS, 1));
+        assertInstanceOf(TextAdmission.Admitted.class, Strings.admission(EXPANDS, 2));
+    }
+
+    @Test
+    void textLongerThanTheBoundHasNoPlace() {
+        assertEquals(new TextAdmission.NoPlace(), Strings.admission("abcd", 3));
+        assertEquals(new TextAdmission.Admitted(""), Strings.admission("", 0));
+        assertEquals(new TextAdmission.NoPlace(), Strings.admission("a", 0));
+    }
+
+    @Test
+    void halfAPairIsNotTextWhateverTheBound() {
+        assertEquals(new TextAdmission.NotText(0), Strings.admission(HIGH, 0));
+        assertEquals(new TextAdmission.NotText(1), Strings.admission("a" + HIGH, 100));
+    }
+
+    /** What a String is admitted as is what every operation over it can answer: an identity for
+     *  {@code append} is not refused for want of a place. */
+    @Test
+    void whatIsAdmittedIsAnIdentityForAppend() {
+        for (String text : new String[] {"", "abc", SHRINKS, EXPANDS, "𠮷"}) {
+            String admitted = Strings.admit(text);
+            assertEquals(admitted, Strings.append("", admitted));
+            assertEquals(admitted, Strings.append(admitted, ""));
+        }
+    }
+
+    @Test
+    void aCrossingFromJavaAbortsWhereAdmissionRefuses() {
+        assertEquals("abc", Strings.admit("abc"));
+        assertThrows(ConstraintViolation.class, () -> Strings.admit(HIGH));
+    }
+}

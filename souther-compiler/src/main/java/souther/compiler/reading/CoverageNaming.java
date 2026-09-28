@@ -1,6 +1,8 @@
 package souther.compiler.reading;
 
+import souther.compiler.check.Choice;
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ControlClaim;
@@ -30,7 +32,7 @@ import java.util.List;
  * comparison with no value, and everything standing under it went with it.
  *
  * <p>A value per position and not one object walked along: what a name reads widens inside a
- * {@code let}, so {@link #under} answers a new one and the reading holds each where it belongs.
+ * {@code let}, so {@link #entering} answers a new one and the reading holds each where it belongs.
  */
 final class CoverageNaming implements Naming<Outcome> {
 
@@ -82,14 +84,9 @@ final class CoverageNaming implements Naming<Outcome> {
     // The environment moves and the reading of the comparisons does not: what a name reads here is
     // this naming's own, and what each comparison came to is one answer for the whole body.
     @Override
-    public CoverageNaming under(Core.Binder binder, Core value) {
-        return new CoverageNaming(plan, symbols, newtypes, reads.and(binder, value), numbers);
-    }
-
-    @Override
-    public CoverageNaming insideArm(Core.Match match, Core.Case arm) {
-        return new CoverageNaming(plan, symbols, newtypes,
-                reads.insideArm(match, arm, symbols, newtypes), numbers);
+    public CoverageNaming entering(ScopeStep step) {
+        InputReads inside = reads.entering(step, symbols, newtypes);
+        return inside == reads ? this : new CoverageNaming(plan, symbols, newtypes, inside, numbers);
     }
 
     /**
@@ -103,7 +100,7 @@ final class CoverageNaming implements Naming<Outcome> {
      */
     @Override
     public Outcome side(Core value, boolean held) {
-        if (!(value instanceof Core.Binary comparison)) {
+        if (!(Core.withoutStanding(value) instanceof Core.Binary comparison)) {
             // A position holding a truth comes out both ways and the plan places no comparison at
             // it, so there is nothing here to say. The fork on it is named where the way in is.
             return null;
@@ -167,6 +164,9 @@ final class CoverageNaming implements Naming<Outcome> {
      *
      * <p>An arm places at no class of any input, so a group offered under one of these goes. That it
      * is here at all is what says the reading found a way in it could not name.
+     *
+     * <p>An attempt's arms are always this: whether the invariant held is decided by nothing
+     * written in the body, so there is no position to say it of and the arm is what names it.
      */
     @Override
     public Outcome forkArm(Core fork, int part) {
@@ -175,17 +175,26 @@ final class CoverageNaming implements Naming<Outcome> {
         if (claim == null) {
             return null;
         }
-        if (fork instanceof Core.If iff) {
-            TermPath read = switch (reads.pathOf(iff.cond(), newtypes)) {
-                case PathResolution.At(var stands) -> stands;
-                case PathResolution.NotAPosition _ -> null;
-                case PathResolution.MayStandAt _ -> null;
-            };
-            Condition what = read == null ? new Condition.Arm(place.arm())
-                    : new Condition.Case(read, part == 0 ? "true" : "false");
-            return one(new Decision(what, claim));
-        }
-        return one(new Decision(new Condition.Arm(place.arm()), claim));
+        Condition what = switch (Choice.decidingArm(fork, part)) {
+            case Choice.Decides.ACondition(Core cond, boolean holding) -> {
+                TermPath read = switch (reads.pathOf(cond, newtypes)) {
+                    case PathResolution.At(var stands) -> stands;
+                    case PathResolution.NotAPosition _ -> null;
+                    case PathResolution.MayStandAt _ -> null;
+                };
+                yield read == null ? new Condition.Arm(place.arm())
+                        : new Condition.Case(read, holding ? "true" : "false");
+            }
+            case Choice.Decides.ItWasBuilt _ -> new Condition.Arm(place.arm());
+            case Choice.Decides.ItDeparted _ -> new Condition.Arm(place.arm());
+            // Named by matchCase, which is asked of the match and not of a fork in general.
+            case Choice.Decides.ACase _ -> throw new IllegalStateException(
+                    "a case of a match at " + fork.pos() + " was asked of as an arm of a fork");
+            case Choice.Decides.ByArgumentRelations _ -> throw new IllegalStateException(
+                    "an operation the library defines by cases at " + fork.pos()
+                            + " was asked of as an arm of a fork, and no walk enters one");
+        };
+        return one(new Decision(what, claim));
     }
 
     @Override

@@ -1,5 +1,6 @@
 package souther.compiler.types;
 
+import souther.compiler.SettledAnswer;
 import souther.compiler.hash.KeepsTheNumberItIsAskedFor;
 import souther.compiler.hash.ValueHash;
 
@@ -15,7 +16,7 @@ import souther.compiler.hash.ValueHash;
  * <p>The interface is sealed and the switches over it carry no {@code default}, so a case added here
  * is a compile error at every place that reads one.
  */
-public sealed interface BindingOwner {
+public sealed interface BindingOwner extends SettledAnswer {
 
     /** The module that declares what this belongs to. A copy is owned where it was placed, so it
      * answers with the module that reads it rather than the one the body was written in. */
@@ -27,6 +28,7 @@ public sealed interface BindingOwner {
             case OfFields f -> f.declared().module();
             case Expansion e -> e.within().module();
             case Synthesized s -> s.within().module();
+            case Build b -> b.within().module();
         };
     }
 
@@ -231,6 +233,76 @@ public sealed interface BindingOwner {
         @Override
         public String toString() {
             return parts.within() + "/" + parts.pass() + "#" + parts.ordinal();
+        }
+    }
+
+    /**
+     * One build of {@code value}, made for the region {@code site} names, inside {@code within}: what
+     * the calls in the value's body are expanded under.
+     *
+     * <p>A value named on paths that share no region is built once per region, and each build is a
+     * copy of one written body. A call in it is one site and one expansion per build, so the
+     * expansions have to stand inside something that says which build they are in — otherwise the
+     * bindings of two of them are filed under one owner.
+     *
+     * <p>Told by the region and not by the reference that asked first or by a count of builds: what
+     * {@link MaterialisationSite} is settled by is what the author wrote, so the same build is the
+     * same owner in the tree a backend emits and in the one an analysis reads.
+     *
+     * <p>Its number is kept for the reason an expansion's is: what it stands inside is an owner.
+     */
+    final class Build implements BindingOwner, KeepsTheNumberItIsAskedFor {
+
+        /** The whole of what one build is. */
+        record Parts(BindingOwner within, ValueName value, MaterialisationSite site) {
+        }
+
+        private final Build.Parts parts;
+
+        private final int hash;
+
+        public Build(BindingOwner within, ValueName value, MaterialisationSite site) {
+            if (within == null || value == null || site == null) {
+                throw new IllegalArgumentException(
+                        "a build is of some value, for some region, inside some owner");
+            }
+            this.parts = new Build.Parts(within, value, site);
+            this.hash = ValueHash.ofOnePart(Build.class, parts.hashCode());
+        }
+
+        /** What this build stands inside. */
+        public BindingOwner within() {
+            return parts.within();
+        }
+
+        /** The value that was built. */
+        public ValueName value() {
+            return parts.value();
+        }
+
+        /** The region it was built for. */
+        public MaterialisationSite site() {
+            return parts.site();
+        }
+
+        @Override
+        public Build.Parts standsFor() {
+            return parts;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Build that && hash == that.hash && parts.equals(that.parts);
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
+        }
+
+        @Override
+        public String toString() {
+            return parts.within() + "/build " + parts.value() + " for " + parts.site();
         }
     }
 

@@ -6,13 +6,17 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionCapacity;
 import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.partition.RulesTaken;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.ObligationDisposition;
+
+import tools.jackson.databind.node.ObjectNode;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -69,17 +73,20 @@ public final class PublicationOrders {
      * What an observation met instead of a value, from what was nearest an answer to what never
      * started.
      *
-     * <p>A value in hand that could not be read comes first, then the two about the row that would
-     * have held one, then what the row was to be run against, then the run itself, and last the two
-     * that say nothing was observed at all. So the reasons a wider budget would change are said
-     * before the ones nothing about this compiler's own limits would.
+     * <p>A value in hand that could not be read or worked out comes first, then the two about the
+     * row that would have held one, then what the row was to be run against, then the run itself,
+     * and last the two that say nothing was observed at all. So the reasons a wider budget would
+     * change are said before the ones nothing about this compiler's own limits would.
      */
     private static final List<Incompleteness.Code> OBSERVATION_CODES_IN_ORDER = List.of(
             Incompleteness.Code.VALUE_UNREADABLE,
             Incompleteness.Code.VALUE_TRUNCATED,
+            Incompleteness.Code.VALUE_NOT_WORKED_OUT,
+            Incompleteness.Code.VALUE_ROOM_EXCEEDED,
             Incompleteness.Code.ROW_UNDECIDED,
             Incompleteness.Code.ROW_EVALUATION_LIMIT_REACHED,
             Incompleteness.Code.ANSWERER_NOT_ESTABLISHED,
+            Incompleteness.Code.IMPLEMENTATION_NOT_MADE,
             Incompleteness.Code.LINKAGE_FAILED,
             Incompleteness.Code.OBSERVATION_ABSENT,
             Incompleteness.Code.INSTRUMENTATION_ABSENT);
@@ -208,15 +215,28 @@ public final class PublicationOrders {
                                     Comparator.nullsFirst(PLACES))));
 
     /**
+     * The decisions the identity of a combination writes, by what each is written as.
+     *
+     * <p>Every field of a decision is in what it is written as, so two that compare equal are the
+     * same decision, and two documents of one model write the set the same way round for a
+     * consumer to join on. Arranged here and not sorted where it is written, so that a tie is
+     * refused rather than left to the order a walk met the decisions in.
+     */
+    public static final CanonicalArrangement.Order<ObjectNode> DECISIONS_OF_A_COMBINATION =
+            CanonicalArrangement.Order.by(Comparator.comparing(Object::toString));
+
+    /**
      * What a reading of a number met instead of one.
      *
      * <p>Composed from the order above and not written again. A reading that met an observation's
      * code is that code, so the two orders agreeing is not something to keep in step — there is one
-     * order, and this is it with the one reason that is no observation's put after them. A walk
-     * that reached no value is last for the same reason the codes are in the order they are: it is
-     * the furthest from an answer. The two that never reached a value to begin with follow it, a
-     * step further out again — a position that was read and holds nothing is nearer a number than a
-     * position nothing arrived at, and a walk that was refused is nearer than a row that never came.
+     * order, and this is it with the reasons that are no observation's put after them. First of
+     * those is a number the values came to and this could not work out: every value arrived, which
+     * is nearer an answer than a position holding none. A walk that reached no value comes next for
+     * the same reason the codes are in the order they are: it is further from an answer. The two
+     * that never reached a value to begin with follow it, a step further out again — a position that
+     * was read and holds nothing is nearer a number than a position nothing arrived at, and a walk
+     * that was refused is nearer than a row that never came.
      */
     public static final CanonicalSelection.Order<ReadingGap> READING_GAPS =
             CanonicalSelection.Order.overValues(everyReadingGap());
@@ -225,6 +245,9 @@ public final class PublicationOrders {
         List<ReadingGap> out = new ArrayList<>();
         for (Incompleteness.Code code : OBSERVATION_CODES_IN_ORDER) {
             out.add(ReadingGap.of(code));
+        }
+        for (UnheldNumber why : UnheldNumber.values()) {
+            out.add(ReadingGap.of(why));
         }
         out.add(ReadingGap.NO_VALUE);
         out.add(ReadingGap.COULD_NOT_WALK);
@@ -254,6 +277,15 @@ public final class PublicationOrders {
                     CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT,
                     CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT,
                     CompositionBudget.VALUES_A_POINT_IS_TRIED_WITH,
+                    // After the figures for how many times a thing was tried, because the walking
+                    // is what a reader raises once the trying turns out not to have been what
+                    // stopped the search. Each sits by the trying figure it was split from.
+                    CompositionBudget.PLACES_A_PAIR_IS_LOOKED_AT,
+                    CompositionBudget.PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT,
+                    // Beside the one above it, and for the same reason: both bound how many times
+                    // the thing a reader asked about is tried, where the ones before them bound
+                    // what building one value is worth.
+                    CompositionBudget.NUMBERS_OF_A_SET_TRIED,
                     CompositionBudget.LEVELS_A_SIDE_IS_ASKED_AT,
                     CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES,
                     CompositionBudget.TIMES_THE_RULES_ARE_ASKED_AGAIN,
@@ -271,7 +303,23 @@ public final class PublicationOrders {
     public static final CanonicalSelection.Order<CompositionRepertoire> COMPOSITION_REPERTOIRES =
             CanonicalSelection.Order.overValues(
                     List.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD,
+                            // Nearest the value a reader wanted: how a total is spread is about
+                            // what one value holds, where the three below are about which value out
+                            // of a range, a line or a group of numbers this compiler names at all.
+                            CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS,
+                            CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED,
                             CompositionRepertoire.PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE));
+
+    /**
+     * What this compiler worked out and could not hold, in the order a reader meets them.
+     *
+     * <p>Its own order for the reason the two above have theirs: a number the arithmetic could not
+     * hold is neither a figure to raise nor work nobody has done. Grouped by what was being worked
+     * out, in the order the searches reach them, and within that the number a wider run holds first,
+     * since that is the one a reader can do something about.
+     */
+    public static final CanonicalSelection.Order<CompositionCapacity> COMPOSITION_CAPACITIES =
+            CanonicalSelection.Order.overValues(CompositionCapacity.every());
 
     /**
      * What stopped this compiler showing a row can be written, by how far it had got.
@@ -331,7 +379,15 @@ public final class PublicationOrders {
                 WeakeningWord.BORDER_VALUE_UNREADABLE,
                 WeakeningWord.BORDER_VALUE_ABSENT,
                 WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE,
-                WeakeningWord.BODIES_NOT_ELABORATED,
+                WeakeningWord.BORDER_VALUE_NOT_WORKED_OUT,
+                WeakeningWord.BORDER_READINGS_NOT_EXHAUSTED,
+                WeakeningWord.LINES_BESIDE_A_BORDER_NOT_TRIED,
+                WeakeningWord.A_BORDERS_ROWS_ARE_ALL_ON_ONE_SIDE,
+                WeakeningWord.A_BORDERS_RUN_NOT_WATCHED,
+                WeakeningWord.NO_REACHABLE_DISTINGUISHER_FOR_A_BORDER,
+                WeakeningWord.A_BORDERS_FAULT_FAMILY_NOT_WORKED_OUT,
+                WeakeningWord.ITEMS_PLACE_NOT_WORKED_OUT,
+                WeakeningWord.BODY_NOT_IN_EVALUATION,
                 WeakeningWord.BEHAVIOR_INPUT_NOT_READ,
                 WeakeningWord.BEHAVIOR_BOUNDARY_NOT_DERIVED,
                 WeakeningWord.RULE_UNREAD,
@@ -339,9 +395,11 @@ public final class PublicationOrders {
                 WeakeningWord.RULES_NOT_REACHED,
                 WeakeningWord.QUESTION_UNANSWERED,
                 WeakeningWord.PAIR_SPACE_TRUNCATED,
+                WeakeningWord.MEETINGS_NOT_WALKED,
                 WeakeningWord.PROOF_CONTRADICTED,
                 WeakeningWord.ARMS_UNSETTLED,
                 WeakeningWord.DECISION_NOT_FULLY_READ,
+                WeakeningWord.DECISION_RULE_READ_SHORT,
                 WeakeningWord.DECISION_OF_ROW_UNREADABLE,
                 WeakeningWord.DECISION_RUN_NOT_WATCHED)) {
             out.add(new WeakeningVocabulary.AWordOfThisDocuments(word));

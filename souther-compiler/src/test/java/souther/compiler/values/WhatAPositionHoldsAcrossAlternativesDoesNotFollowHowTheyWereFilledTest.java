@@ -33,7 +33,7 @@ class WhatAPositionHoldsAcrossAlternativesDoesNotFollowHowTheyWereFilledTest {
     private static ValueSet matching(String regex) {
         PatternRead said = PatternParser.read(regex);
         return ValueSet.matching(PatternPlan.of(
-                assertInstanceOf(PatternRead.Read.class, said, regex).syntax())
+                assertInstanceOf(PatternRead.Read.class, said, regex).meaning())
                 .compile(PatternPlan.Budget.OF_ADMITTED_VALUES.meter()));
     }
 

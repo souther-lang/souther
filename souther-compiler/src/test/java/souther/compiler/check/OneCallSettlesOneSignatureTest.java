@@ -54,7 +54,8 @@ class OneCallSettlesOneSignatureTest {
     /** {@code List.filter(x -> true, [])} — nothing in the call says what the list holds. */
     private static Hir.Expr filterOverAnEmptyList() {
         Hir.Block predicate = new Hir.Block(List.of(BINDERS.binder("x", POS)),
-                new Hir.BoolLit(true, POS, null), souther.compiler.types.RuleOrigin.unwritten(), POS, null);
+                new Hir.BoolLit(true, POS, null), souther.compiler.types.RuleOrigin.unwritten(),
+                null, POS, null);
         return Hir.Apply.synthetic("List.filter",
                 new ReachName.OfLibrary(ValueName.Stdlib.operation("List", "filter")), REF, WROTE,
                 List.of(predicate, new Hir.ListLit(List.of(), COMPOSED, POS, null)), POS, null);
@@ -79,7 +80,7 @@ class OneCallSettlesOneSignatureTest {
 
         Core.PreservedCall kept = assertInstanceOf(Core.PreservedCall.class, typed);
         Core.Block predicate = assertInstanceOf(Core.Block.class, kept.args().get(0));
-        assertEquals(List.of(Type.INT), ((Type.FnOf) predicate.type()).params(),
+        assertEquals(List.of(Type.INT), predicate.paramTypes(),
                 "a predicate over `Nothing` is one the author's own body cannot use");
     }
 

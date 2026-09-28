@@ -1,6 +1,7 @@
 package souther.compiler.codegen;
 
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 import java.lang.classfile.Annotation;
 import java.lang.classfile.ClassBuilder;
 import java.lang.classfile.ClassFile;
@@ -11,8 +12,9 @@ import java.lang.constant.ConstantDescs;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+import java.util.SequencedMap;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import static souther.compiler.codegen.Descriptors.*;
 
@@ -38,23 +40,40 @@ final class JvmTypes {
     }
 
     /** The boxed JVM class for a boxable primitive, or {@code null} where the type has none —
-     * a non-primitive, or {@code Raw}, which no stage produces. */
+     * a non-primitive. */
     static ClassDesc boxedPrim(Type t) {
         return switch (t) {
             case Type.Prim p -> switch (p) {
                 case INT -> CD_Long;
                 case BOOL -> CD_Boolean;
-                case DECIMAL -> CD_BigDecimal;
-                case STRING -> CD_String;
-                case DATE -> CD_LocalDate;
-                case TIME -> CD_LocalTime;
-                case DATETIME -> CD_LocalDateTime;
-                case INSTANT -> CD_Instant;
-                case RAW -> null;
+                case DECIMAL, STRING, DATE, TIME, DATETIME, INSTANT, RATIONAL -> primCarrier(p);
             };
             case Type.Ref _, Type.ListOf _, Type.MapOf _, Type.SetOf _, Type.OptionOf _,
                  Type.Union _, Type.FnOf _, Type.Open _, Type.Nothing _, Type.Never _,
                  Type.TupleOf _, Type.Erroneous _ -> null;
+        };
+    }
+
+    /**
+     * The JVM class carrying a value of {@code p}.
+     *
+     * <p>One fact read at two boundaries. A value a body computes is in this form, and a kernel of
+     * the runtime is called with a primitive in this form too: {@code Intrinsics} boxes an argument
+     * only where its slot is {@code Object} and hands anything else over as it was produced. Written
+     * twice, the two could name different classes, and a call would leave on the stack what its
+     * descriptor does not say.
+     */
+    static ClassDesc primCarrier(Type.Prim p) {
+        return switch (p) {
+            case INT -> ConstantDescs.CD_long;
+            case BOOL -> ConstantDescs.CD_boolean;
+            case DECIMAL -> CD_BigDecimal;
+            case STRING -> CD_String;
+            case DATE -> CD_LocalDate;
+            case TIME -> CD_LocalTime;
+            case DATETIME -> CD_LocalDateTime;
+            case INSTANT -> CD_Instant;
+            case RATIONAL -> CD_Rational;
         };
     }
 
@@ -194,19 +213,13 @@ final class JvmTypes {
     /** The JVM class carrying a value of {@code type}: primitives unboxed, containers as their raw
      * interface, a data reference through {@link CodegenContext#caseClass}. */
     static ClassDesc jvmType(Type type, CodegenContext ctx) {
+        return jvmType(type, name -> ctx.caseClass(name));
+    }
+
+    /** The same, with a declared type's class answered by {@code classOf}. */
+    static ClassDesc jvmType(Type type, Function<TypeSymbol, ClassDesc> classOf) {
         return switch (type) {
-            case Type.Prim p -> switch (p) {
-                case INT -> ConstantDescs.CD_long;
-                case STRING -> CD_String;
-                case BOOL -> ConstantDescs.CD_boolean;
-                case DECIMAL -> CD_BigDecimal;
-                case DATE -> CD_LocalDate;
-                case TIME -> CD_LocalTime;
-                case DATETIME -> CD_LocalDateTime;
-                case INSTANT -> CD_Instant;
-                // reserved: no stage produces one, so none reaches codegen
-                case RAW -> throw new IllegalStateException("no JVM carrier for Raw");
-            };
+            case Type.Prim p -> primCarrier(p);
             case Type.OptionOf _ -> CD_Option;
             case Type.ListOf _ -> CD_List;
             case Type.MapOf _ -> CD_Map;
@@ -223,14 +236,22 @@ final class JvmTypes {
             // a pair is typed as the pair, so its elements are read as fields rather than through
             // the Tuple interface: every fold-carried tuple is one, and that read is per element
             case Type.TupleOf tu -> tu.elements().size() == 2 ? CD_TuplePair : CD_Tuple;
-            case Type.Ref r -> ctx.caseClass(r.name());
+            case Type.Ref r -> classOf.apply(r.name());
             // the checker refuses both before emitting a module, so meeting one is a compiler fault
             case Type.Never _ -> throw new IllegalStateException("no JVM carrier for Never");
             case Type.Erroneous _ -> throw new IllegalStateException("no JVM carrier for ?");
         };
     }
 
-    static ClassDesc[] fieldDescs(Map<String, Type> fields, CodegenContext ctx) {
+    /**
+     * The parameters a data's constructor takes, in the order it takes them.
+     *
+     * <p>Handed something that has an order rather than a mapping, because the order is the answer
+     * here: a parameter list is positional. What decides it is
+     * {@code CodegenContext.laidOutFields}, which asks what answers where a field stands; nothing
+     * takes an order off a question about what the fields hold.
+     */
+    static ClassDesc[] fieldDescs(SequencedMap<String, Type> fields, CodegenContext ctx) {
         List<ClassDesc> descs = new ArrayList<>();
         for (Type t : fields.values()) {
             descs.add(jvmType(t, ctx));
@@ -315,22 +336,18 @@ final class JvmTypes {
     /** Unboxes/casts the {@code Object} on the stack to {@code type}'s JVM form and stores it in
      * {@code slot}. */
     static void unbox(CodeBuilder code, Type type, int slot, CodegenContext ctx) {
-        if (type == Type.INT) {
-            code.checkcast(CD_Long);
-            code.invokevirtual(CD_Long, "longValue", MethodTypeDesc.of(ConstantDescs.CD_long));
-            code.lstore(slot);
-        } else if (type == Type.BOOL) {
-            code.checkcast(CD_Boolean);
-            code.invokevirtual(CD_Boolean, "booleanValue", MethodTypeDesc.of(ConstantDescs.CD_boolean));
-            code.istore(slot);
-        } else {
-            code.checkcast(jvmType(type, ctx));
-            code.astore(slot);
-        }
+        castFromObject(code, type, ctx);
+        store(code, slot, type);
     }
 
-    /** Casts the {@code Object} on the stack to {@code type}'s JVM form, unboxing Int/Bool — the
-     * stack-only counterpart of {@link #unbox}, used to read a boxed tuple element (ADR-0036). */
+    /**
+     * Casts the {@code Object} on the stack to {@code type}'s JVM form, unboxing Int/Bool.
+     *
+     * <p>The one spelling of taking a value out of an {@code Object}: a boxed tuple element, a
+     * function's result, what a bridge case holds and a local being bound all come through here.
+     * A type carried as {@code Object} — a union, a type variable — is already in its form, and
+     * gets no cast.
+     */
     static void castFromObject(CodeBuilder code, Type type, CodegenContext ctx) {
         if (type == Type.INT) {
             code.checkcast(CD_Long);
@@ -339,7 +356,10 @@ final class JvmTypes {
             code.checkcast(CD_Boolean);
             code.invokevirtual(CD_Boolean, "booleanValue", MethodTypeDesc.of(ConstantDescs.CD_boolean));
         } else {
-            code.checkcast(jvmType(type, ctx));
+            ClassDesc carrier = jvmType(type, ctx);
+            if (!carrier.equals(CD_Object)) {
+                code.checkcast(carrier);
+            }
         }
     }
 }

@@ -315,8 +315,14 @@ public final class AuthoredSites {
                 }
                 // The stages of a composition are names, and each is an occurrence like any other.
                 case Hir.PipeBehavior pipe -> {
-                    for (Hir.Var stage : pipe.stages()) {
-                        expr(stage);
+                    switch (pipe.composition()) {
+                        case Hir.Composition.Stages written -> {
+                            for (Hir.Var stage : written.stages()) {
+                                expr(stage);
+                            }
+                        }
+                        // What another project published writes nothing in this text.
+                        case Hir.Composition.Elsewhere _ -> { }
                     }
                 }
             }
@@ -434,8 +440,21 @@ public final class AuthoredSites {
                     take(e);
                     wrote(attempt.origin(), attempt.pos());
                     expr(attempt.construct());
+                    // An arm of an attempt is a condition as an arm of a match is: that the
+                    // invariant held, or that it failed the way the departure answers. The
+                    // success is written as its body and each departure where the departure is.
+                    boolean written = attempt.origin() != null && attempt.origin().isWritten();
+                    if (written && attempt.then() != null) {
+                        wroteCondition(new WrittenCondition.ForkArm(attempt.origin(), 0),
+                                attempt.then().pos());
+                    }
                     expr(attempt.then());
-                    for (Hir.ElseArm arm : attempt.els()) {
+                    for (int i = 0; i < attempt.els().size(); i++) {
+                        Hir.ElseArm arm = attempt.els().get(i);
+                        if (written) {
+                            wroteCondition(new WrittenCondition.ForkArm(attempt.origin(), i + 1),
+                                    arm.pos());
+                        }
                         expr(arm.body());
                     }
                 }
@@ -478,7 +497,8 @@ public final class AuthoredSites {
                     take(e);
                     expr(block.body());
                 }
-                case Hir.Expansion _ -> { }
+                case Hir.Expansion _, Hir.Materialised _, Hir.ValueBuild _,
+                     Hir.ValueInvocation _ -> { }
             }
         }
 

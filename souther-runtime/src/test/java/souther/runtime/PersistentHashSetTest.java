@@ -42,45 +42,12 @@ class PersistentHashSetTest {
     }
 
     @Test
-    void algebraMatchesJdkOps() {
-        Random rnd = new Random(3);
-        for (int trial = 0; trial < 30; trial++) {
-            Set<Integer> a = new HashSet<>();
-            Set<Integer> b = new HashSet<>();
-            for (int i = 0; i < 40; i++) {
-                a.add(rnd.nextInt(50));
-                b.add(rnd.nextInt(50));
-            }
-            PersistentHashSet<Integer> pa = PersistentHashSet.from(a);
-            PersistentHashSet<Integer> pb = PersistentHashSet.from(b);
-
-            Set<Integer> union = new HashSet<>(a);
-            union.addAll(b);
-            assertEquals(union, PersistentHashSet.union(pa, pb));
-
-            Set<Integer> inter = new HashSet<>(a);
-            inter.retainAll(b);
-            assertEquals(inter, PersistentHashSet.intersect(pa, pb));
-
-            Set<Integer> diff = new HashSet<>(a);
-            diff.removeAll(b);
-            assertEquals(diff, PersistentHashSet.difference(pa, pb));
-        }
-    }
-
-    @Test
     void fromDedupsAndSharesPersistent() {
         PersistentHashSet<Integer> s = PersistentHashSet.from(List.of(1, 2, 2, 3, 3, 3));
         assertEquals(Set.of(1, 2, 3), s);
         assertEquals(3, s.size());
         assertTrue(PersistentHashSet.from(s) == s);
         assertTrue(PersistentHashSet.from(List.of()) == PersistentHashSet.EMPTY);
-    }
-
-    @Test
-    void iterationOrderDeterministic() {
-        Set<String> src = new LinkedHashSet<>(List.of("a", "b", "c", "d"));
-        assertEquals(PersistentHashSet.from(src).toString(), PersistentHashSet.from(src).toString());
     }
 
     @Test

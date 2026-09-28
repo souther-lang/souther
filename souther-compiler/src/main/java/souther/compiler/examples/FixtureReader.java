@@ -9,6 +9,7 @@ import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.Symbols;
 import souther.compiler.cst.SyntaxKind;
+import souther.compiler.core.IntNegation;
 import souther.compiler.core.Kernel;
 import souther.compiler.observe.Asserted;
 import souther.compiler.observe.Expectation;
@@ -136,16 +137,20 @@ public final class FixtureReader {
     }
 
     /** The value the method emitted under {@code emittedAs} answers with. What a failure inside it
-     *  is said of is the operand — the row's own account of itself — and not the method's name,
-     *  which no source spells. */
-    Object ran(String emittedAs) {
+     *  is said of is {@code what} — the caller's own account of what it was running — and not the
+     *  method's name, which no source spells. A row names its own operand; a named value's entry is
+     *  named by the value, which is not what a row wrote and is told apart from one for that reason. */
+    Object ran(String emittedAs, String what) {
         try {
             return operands.run(emittedAs);
         } catch (InvocationFailure f) {
-            // The row's reading of it, said of the operand rather than of the method it was emitted
-            // as: what a report names is what the author wrote.
-            throw RowFailures.of(f, "the value the row writes");
+            throw RowFailures.of(f, what);
         }
+    }
+
+    /** {@link #ran(String, String)}, for a row's own operand. */
+    Object ran(String emittedAs) {
+        return ran(emittedAs, "the value the row writes");
     }
 
     Object built(Hir.Expr written, Type type) {
@@ -960,9 +965,8 @@ public final class FixtureReader {
             case Hir.DecimalLit d -> d.value();
             case Hir.StringLit s -> text(s, at);
             case Hir.BoolLit b -> b.value();
-            // An operand of an arithmetic fold is a literal, so nothing reads it as anything.
+            // A negation's operand is a literal, so nothing reads it as anything.
             case Hir.Neg n -> negate(raw(n.operand(), Position.UNREAD));
-            case Hir.Binary bin -> fold(bin);
             // The three that go on at this same position, so what this frame is read under travels
             // with them: a name stands for a body, a `let` for its own body, and an application for
             // the value it answers with.
@@ -988,6 +992,13 @@ public final class FixtureReader {
                 }
                 yield out;
             }
+            // Never a fixture's own text: a written row or fake's operand runs as the method
+            // RowFixtures.emitted mints for it, and a named value's as the entry FixtureValueEntries
+            // mints — both generated code, neither this interpreter. A binary reaching here is that
+            // correspondence broken, not an author's fixture to refuse.
+            case Hir.Binary _ -> throw new IllegalStateException(
+                    "a binary reached FixtureReader.raw; a fixture reads a computed value by"
+                            + " running its generated code, never by interpreting an operator here");
             // A field taken off another value is one of the forms this does not read, and it is
             // refused here as they all are. Reading it would be a second reading of what a `.`
             // names, answering beside the one the language is checked by: a row's operand is
@@ -1061,7 +1072,7 @@ public final class FixtureReader {
         /** A construction, or a name denoting a case: this name, said here. */
         record Name(TypeSymbol name) implements Stated {}
 
-        /** A value under no name: a literal, a written collection, a temporal, an arithmetic fold. */
+        /** A value under no name: a literal, a written collection, a temporal. */
         record NoName() implements Stated {}
 
         /** Absence, which the optional a position holds takes and which names no type. */
@@ -1250,13 +1261,7 @@ public final class FixtureReader {
                 }
                 yield expandedValue(local, held, at, admission);
             }
-            case ValueName.Helper helper -> {
-                Hir.Expr value = valueBody(v.name());
-                if (value == null) {
-                    throw new FixtureException("`" + v.name() + "` is not a value a fixture can name");
-                }
-                yield expandedValue(helper, value, at, admission);
-            }
+            case ValueName.Helper helper -> namedValue(helper, at);
             // `Map.empty` / `Set.empty`: a library value, not a library call, so there is no method to
             // run and its value is known from the name alone. It is the empty collection, which a row
             // writes `[]` — admitted for the reason `fromList` is (see `collectionOrNewtype`), so a
@@ -1267,6 +1272,32 @@ public final class FixtureReader {
             case null, default ->
                     throw new FixtureException("`" + v.name() + "` is not a value a fixture can name");
         };
+    }
+
+    /**
+     * {@code helper}'s value, as {@code v} named it. {@link souther.compiler.check.FixtureValueEntries}
+     * minted or reused an entry for it, and this runs that entry and puts the live result back into
+     * fixture notation rather than interpreting the value's written body a second time. Which method
+     * that is, and whether it belongs to this module or was reused from a published entry of the
+     * module {@code helper} names, is decided once where the entry was minted and read here off
+     * {@link souther.compiler.check.Prepared.ForExamples#fixtureValueMethods}, keyed on {@code helper}
+     * — the value's canonical identity, which is the same whichever module names it.
+     *
+     * <p>Every value {@code v} can denote here has one: a row or fake naming it bare is minted one by
+     * {@code FixtureValueEntries.referencedValues}, and a value the class-partitioning search offers
+     * as a baseline before any row names it is minted one from {@link
+     * souther.compiler.check.TypedFixtureValues} the same way — {@code Adequacy.Generated.named}
+     * reads no candidate this did not also read. A miss is that correspondence broken, not a value to
+     * fall back to reading by its own written body a second time.
+     */
+    private Object namedValue(ValueName.Helper helper, Position at) {
+        String method = module.fixtureValueMethods().get(helper);
+        if (method == null) {
+            throw new IllegalStateException("`" + helper.name() + "` has no fixture entry, and every"
+                    + " value a fixture can name bare is minted one at assembly time");
+        }
+        String what = "the value `" + helper.name() + "`";
+        return neutral.of(ran(method, what), at, what);
     }
 
     /** A unit case as a fixture writes it: a unit's decoder ignores the input, so an empty map
@@ -1469,19 +1500,28 @@ public final class FixtureReader {
             // name, one another module published by that module's name and its own. `bare()` is the
             // name it was *declared* under, which is not that key for an imported value (issue #212).
             String spread = ref.name();
-            Hir.Expr value = ref.denotes() instanceof ValueName.Local local
-                    ? bindings.get(local.id()) : valueBody(spread);
-            if (value == null) {
-                throw new FixtureException("`" + spread
-                        + "` is not a value a fixture can spread");
-            }
+            Position spreadAt = Position.at(Type.ref(nd.typeName().answered().type()));
             // The fields of a value of another type, which is how the language writes one record from
             // another (`Filed { ...d, filedOn = on }`, where `d` is a `Document`). So the frame this
             // opens states no value of the construction's type, while the fields it copies were
             // written at their own positions and hold there.
-            Object copied = expandedValue(ref.denotes(), value,
-                    Position.at(Type.ref(nd.typeName().answered().type())),
-                    admission == Admission.UNHELD ? admission : Admission.HELD_BELOW);
+            //
+            // A binding is still read from the fixture's own text — it names a frame this reading is
+            // already inside, not a module's. A value is read the way `named` reads one: through the
+            // entry minted for it.
+            Admission below = admission == Admission.UNHELD ? admission : Admission.HELD_BELOW;
+            Object copied;
+            if (ref.denotes() instanceof ValueName.Local local) {
+                Hir.Expr value = bindings.get(local.id());
+                if (value == null) {
+                    throw new FixtureException("`" + spread + "` is not a value a fixture can spread");
+                }
+                copied = expandedValue(local, value, spreadAt, below);
+            } else if (ref.denotes() instanceof ValueName.Helper helper) {
+                copied = namedValue(helper, spreadAt);
+            } else {
+                throw new FixtureException("`" + spread + "` is not a value a fixture can spread");
+            }
             if (!(copied instanceof Map<?, ?> fields)) {
                 throw new FixtureException("`" + spread + "` is not a record, so it has no fields to"
                         + " spread");
@@ -1517,34 +1557,15 @@ public final class FixtureReader {
 
     private static Object negate(Object v) {
         if (v instanceof Long l) {
+            if (!IntNegation.hasValue(l)) {
+                throw new FixtureException("arithmetic in a fixture has no value: -(" + l + ")");
+            }
             return -l;
         }
         if (v instanceof BigDecimal d) {
             return d.negate();
         }
         throw new FixtureException("only a number can be negated in a fixture");
-    }
-
-    private Object fold(Hir.Binary b) {
-        Object l = raw(b.left(), Position.UNREAD);
-        Object r = raw(b.right(), Position.UNREAD);
-        if (l instanceof Long x && r instanceof Long y) {
-            return switch (b.op()) {
-                case ADD -> x + y;
-                case SUB -> x - y;
-                case MUL -> x * y;
-                default -> throw new FixtureException("unsupported arithmetic in a fixture");
-            };
-        }
-        if (l instanceof BigDecimal x && r instanceof BigDecimal y) {
-            return switch (b.op()) {
-                case ADD -> x.add(y);
-                case SUB -> x.subtract(y);
-                case MUL -> x.multiply(y);
-                default -> throw new FixtureException("unsupported arithmetic in a fixture");
-            };
-        }
-        throw new FixtureException("a fixture can only combine numbers of the same kind");
     }
 
     // --- decode a raw value into the parameter/expected type ----------------------------------

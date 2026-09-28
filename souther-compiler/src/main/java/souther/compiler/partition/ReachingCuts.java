@@ -1,7 +1,9 @@
 package souther.compiler.partition;
 
+import souther.compiler.carrier.Lookup;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.core.Core;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
@@ -18,6 +20,7 @@ import souther.compiler.types.ModelOccurrence;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * What a row has already had to satisfy by the time it arrives at one comparison.
@@ -54,12 +57,12 @@ import java.util.Map;
  * the list is what lets a report say a condition is unaccounted for; it is not what the region is
  * built from.
  */
-public record ReachingCuts(Map<ModelOccurrence, List<OnTheWay>> byComparison) {
+public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison) {
 
-    public static final ReachingCuts NONE = new ReachingCuts(Map.of());
+    public static final ReachingCuts NONE = new ReachingCuts(Lookup.built(_ -> { }));
 
     public ReachingCuts {
-        byComparison = Map.copyOf(byComparison);
+        Objects.requireNonNull(byComparison, "what a walk collected, comparison by comparison");
     }
 
     /**
@@ -73,7 +76,8 @@ public record ReachingCuts(Map<ModelOccurrence, List<OnTheWay>> byComparison) {
      * are looking at.
      */
     public WayToTheBorder wayTo(ModelOccurrence states) {
-        return new WayToTheBorder(byComparison.getOrDefault(states, List.of()));
+        List<OnTheWay> found = byComparison.get(states);
+        return new WayToTheBorder(found == null ? List.of() : found);
     }
 
     /**
@@ -182,6 +186,26 @@ public record ReachingCuts(Map<ModelOccurrence, List<OnTheWay>> byComparison) {
     }
 
     /**
+     * What reaching arm {@code part} of {@code attempt} establishes about this input, which this
+     * reading cannot say.
+     *
+     * <p>The arm is decided by whether the construction's invariant held of the values it was
+     * given, and what that says of the input is the invariant read over those values. That is a
+     * reading of the invariant and not of anything this walk met, so the arm is declined rather than
+     * given a narrowing the walk did not establish. Declined and not left out: a rule through the
+     * arm still turns on it, and it is named so that the success and each departure are distinctions
+     * apart.
+     *
+     * @param at where the arm is written, which is its body since an attempt writes no arm of its own
+     */
+    static OnTheWay attempting(Core.IfConstructed attempt, int part, SourcePos at,
+                               ConditionNumbering numbering) {
+        ConditionOccurrence met = numbering.metEntering(attempt, part);
+        return new OnTheWay.Declined(met, numbering.anchorOfArm(attempt.origin(), part, at, met),
+                new OnTheWay.Why.ForkArmNotReadAsANarrowing());
+    }
+
+    /**
      * What {@code comparison} states about this input, coming out {@code holding} — or a decline
      * where the arithmetic reads nothing here.
      *
@@ -214,8 +238,19 @@ public record ReachingCuts(Map<ModelOccurrence, List<OnTheWay>> byComparison) {
                 // `f rel 0`.
                 LinearForm<NumericTerm> against =
                         affine.form().minus(LinearForm.constant(affine.cut()));
-                yield new OnTheWay.TakenIn(at,
-                        new TakenConstraint.Affine(against, holding ? states : states.denied()));
+                Rel met = holding ? states : states.denied();
+                // And whether a region can carry it, asked of a region rather than decided from
+                // the shape of the form. That a reading reached the end of a comparison is a fact
+                // about the arithmetic's reading; whether the values it is over stand on anything
+                // a region measures them on is the region's, and the two are not each other — a
+                // difference between two positions holding records is read perfectly and is a
+                // distance on nothing.
+                yield switch (read.quantities().region().assuming(against, met)) {
+                    case SearchRegion.Assumption.Taken _ ->
+                            new OnTheWay.TakenIn(at, new TakenConstraint.Affine(against, met));
+                    case SearchRegion.Assumption.Refused(var why) ->
+                            new OnTheWay.Declined(comparison.occurrence(), at, whyDeclined(why));
+                };
             }
             // Read from end to end, and the quantity it cuts is nothing. `a - a > 0` constrains no
             // position, so there is nothing for a region to be narrowed by and nothing this
@@ -231,6 +266,21 @@ public record ReachingCuts(Map<ModelOccurrence, List<OnTheWay>> byComparison) {
                         : new OnTheWay.Declined(comparison.occurrence(), at,
                                 new OnTheWay.Why.ComparisonNotRepresentedAsACut());
             }
+        };
+    }
+
+    /**
+     * A region's refusal in the words an account of the way is written in.
+     *
+     * <p>Two vocabularies because they answer to two readers. What a region says is about its own
+     * algebra and names the term it has no order for; what an account of the way says is what an
+     * author is to make of a condition that narrowed nothing. Written as one, either the region
+     * would be naming conditions or the report would be reading terms.
+     */
+    private static OnTheWay.Why whyDeclined(SearchRegion.Refusal why) {
+        return switch (why) {
+            case SearchRegion.Refusal.NoOrderUnderATerm _ ->
+                    new OnTheWay.Why.QuantityStandsOnNoOrder();
         };
     }
 
@@ -287,7 +337,7 @@ public record ReachingCuts(Map<ModelOccurrence, List<OnTheWay>> byComparison) {
         }
 
         ReachingCuts made() {
-            return new ReachingCuts(byComparison);
+            return new ReachingCuts(Lookup.built(put -> byComparison.forEach(put::put)));
         }
     }
 

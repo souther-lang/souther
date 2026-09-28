@@ -109,20 +109,23 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " asked about, and hands the figure over with whatever the planning"
                             + " gave up at"),
             Map.entry("souther.compiler.partition.LevelRealizer#<clinit>()V",
-                    "the places a pair is tried at, the steps, the progression — and the re-reads,"
+                    "the places a pair is tried at and the places of its line looked at to find"
+                            + " them, the steps, the progression — and the re-reads,"
                             + " which travel nowhere because reaching that one gives nothing up:"
                             + " the walk carries on against the wider box, which offers every"
                             + " assignment the narrowing would have and skips none of them"),
             Map.entry("souther.compiler.partition.LevelRealizer#ofTwo("
                             + "Lsouther/compiler/partition/Standing$OfTwoOnOneCarrier;"
                             + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Ljava/util/Map;"
                             + "Lsouther/compiler/partition/WitnessSearch;"
                             + "Lsouther/compiler/partition/ValuesTried;)"
                             + "Lsouther/compiler/partition/Realization;",
                     "stops walking a line at the places it tries and says which figure"),
-            Map.entry("souther.compiler.query.Coverages$2#search("
-                            + "Lsouther/compiler/partition/Criterion;Ljava/lang/String;)"
-                            + "Lsouther/compiler/query/SearchOutcomes;",
+            Map.entry("souther.compiler.query.Coverages$2#looked("
+                            + "Lsouther/compiler/partition/Criterion;Ljava/lang/String;"
+                            + "Ljava/util/function/UnaryOperator;)"
+                            + "Lsouther/compiler/query/Coverages$2$Looked;",
                     "stops asking a point for another value to stand a row on, and answers with"
                             + " what the values it did try came to"),
             Map.entry("souther.compiler.query.Coverages$2#endedBy("
@@ -135,6 +138,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.LevelRealizer#ofAForm("
                             + "Lsouther/compiler/partition/Standing$OfAForm;"
                             + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Ljava/util/Map;"
                             + "Lsouther/compiler/partition/ValuesTried;)"
                             + "Lsouther/compiler/partition/Realization;",
                     "collects what the level walks ran out of, and the levels it was offered"),
@@ -142,17 +146,21 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "the steps a search may take, marked where there is no room for another"),
             Map.entry("souther.compiler.partition.LevelRealizer$Search#outward("
                             + "ILsouther/compiler/partition/CandidateDomain$Outward;"
-                            + "Ljava/math/BigDecimal;Ljava/math/BigDecimal;"
+                            + "Lsouther/compiler/numeric/ExactRatio;"
+                            + "Lsouther/compiler/numeric/ExactRatio;"
                             + "Lsouther/compiler/inputs/SearchRegion;)"
                             + "Lsouther/compiler/partition/LevelRealizer$Reached;",
                     "walks a progression as far as this walks one, and says that is why"),
             Map.entry("souther.compiler.partition.LevelCandidateSource#<clinit>()V",
                     "how many levels a side is asked at"),
             Map.entry("souther.compiler.partition.NumericWitness#<clinit>()V",
-                    "how many values a position on the way is tried at"),
+                    "how many values a position on the way is tried at, and how many places of its"
+                            + " run are looked at to find them"),
             Map.entry("souther.compiler.partition.NumericWitness#walk("
                             + "Lsouther/compiler/inputs/SearchRegion;Ljava/util/List;I"
-                            + "Ljava/util/function/Function;Ljava/util/Map;Ljava/util/Set;)Z",
+                            + "Ljava/util/function/Function;"
+                            + "Lsouther/compiler/partition/WitnessSearch;"
+                            + "Ljava/util/Map;Ljava/util/Set;Ljava/util/Set;)Z",
                     "stops trying values of a position on the way and says which figure"),
             Map.entry("souther.compiler.partition.Generator#<clinit>()V",
                     "how many assignments a search composes"),
@@ -190,24 +198,65 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.DecisionReading#<clinit>()V",
                     "how many paths through one body a decision is read for"),
             Map.entry("souther.compiler.partition.DecisionReading#of("
-                            + "Ljava/lang/String;Lsouther/compiler/core/Core;"
+                            + "Ljava/lang/String;Lsouther/compiler/check/AnalysisBody;"
                             + "Lsouther/compiler/inputs/InputReading;"
                             + "Lsouther/compiler/inputs/InputReads;Ljava/util/Set;)"
                             + "Lsouther/compiler/partition/DecisionReading;",
                     "hands the figure to the reading of the ways, and says which it reached"),
+
+            // The numbers of a set an account walks. Each of these is an account whose numbers are
+            // whole and whose window is wider than the figure, so the figure bounds how many it
+            // tries and what it hands over beside them is whether it ran out of numbers first.
+            Map.entry("souther.compiler.partition.TermRealizations#holding("
+                            + "Lsouther/compiler/types/Type;"
+                            + "Lsouther/compiler/partition/AskedAt;"
+                            + "Lsouther/compiler/inputs/TermOrders;"
+                            + "Lsouther/compiler/check/RuleReadingContext;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
+                    "how many counts a container is asked to hold, and whether they were all the"
+                            + " set admits"),
+            Map.entry("souther.compiler.partition.TermRealizations#dateOn("
+                            + "Ljava/util/Map;Lsouther/compiler/check/Carrier;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Search;",
+                    "how many years a date is looked for in, and whether they were all of them"),
+            Map.entry("souther.compiler.partition.TermRealizations#wholeNumbers("
+                            + "Lsouther/compiler/numeric/NumericDomain$Bounds;"
+                            + "Ljava/util/function/Predicate;"
+                            + "Ljava/math/BigInteger;Ljava/math/BigInteger;I)"
+                            + "Lsouther/compiler/partition/TermRealizations$Tried;",
+                    "names the figure as what left more of the set untried, where the walk filled"
+                            + " what it was allowed before the window ran out"),
+            // The numbers a place may be where several of its quotients are asked for. The run the
+            // demands leave is walked as whole numbers, so the figure bounds how many of them are
+            // tried — and what it hands over is that walk's own answer.
+            Map.entry("souther.compiler.partition.TermRealizations#numbersInside("
+                            + "Lsouther/compiler/numeric/NumericDomain$Bounds;"
+                            + "Lsouther/compiler/check/Carrier;Ljava/util/function/Predicate;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Tried;",
+                    "how many numbers of the run the demands leave are tried, and whether they"
+                            + " were all of it"),
+            Map.entry("souther.compiler.partition.TermRealizations#onThoseParts("
+                            + "Ljava/util/Map;Lsouther/compiler/types/Type;"
+                            + "Lsouther/compiler/check/Carrier;"
+                            + "Lsouther/compiler/check/RuleReadingSource;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
+                    "names the figure where no date was found and the years were not all walked"),
 
             // The readings. Each takes a figure that was handed over and says what it comes to.
             Map.entry("souther.compiler.partition.Generator$UnresolvedCombination$Reason#wordFor("
                             + "Ljava/util/Collection;)"
                             + "Lsouther/compiler/partition/Generator$UnresolvedCombination$Reason;",
                     "the word a search stopped by these comes back with"),
-            Map.entry("souther.compiler.report.AdequacyReport#said("
+            Map.entry("souther.compiler.report.Reasons#said("
                             + "Lsouther/compiler/publish/CanonicalSelection;)Ljava/lang/String;",
                     "what a figure is called where a reader meets one"),
             // The order. It reaches every figure and hands none of them anywhere: what it decides
             // is which of them a reader is told about first, where two were reached.
             Map.entry("souther.compiler.publish.PublicationOrders#<clinit>()V",
-                    "the order the figures are said in, where a search met more than one")));
+                    "the order the figures are said in, where a search met more than one"),
+            Map.entry("souther.compiler.query.EstablishmentGap$Composition#runSensitivity()"
+                            + "Lsouther/compiler/observe/RunSensitivity;",
+                    "asks each figure of a gap whether a wider run goes past it")));
 
     /**
      * The places that read a figure are the places that say they do.

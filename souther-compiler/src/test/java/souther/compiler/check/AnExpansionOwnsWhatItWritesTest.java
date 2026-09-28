@@ -76,7 +76,8 @@ class AnExpansionOwnsWhatItWritesTest {
                 %s
                 let f (x) = x
                 """.formatted(defs));
-        HelperInliner inliner = HelperInliner.forModule(m, DefaultStdlib.get());
+        HelperInliner inliner = HelperInliner.forModule(m, DefaultStdlib.get(),
+                ValueAtAReference.COPIED);
         return inliner.inline(inliner.held().get(new souther.compiler.ast.DefinitionName(of))
                 .definition().writtenBody(), inliner.bodyOf(of));
     }

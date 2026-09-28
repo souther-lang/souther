@@ -1,12 +1,12 @@
 package souther.compiler.query;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.check.DeclaredNames;
 import souther.compiler.check.ModuleUniverse;
 import souther.compiler.check.Registry;
 import souther.compiler.check.Scoping;
-import java.util.List;
 
-import java.util.Map;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -69,10 +69,10 @@ public record CompilationUniverse(Db db) implements ModuleUniverse {
      * built on it.
      *
      * <p>Both halves asked of the questions that already answer them — a name written twice is
-     * refused once, where declarations are indexed, and what a module exposes is read off its
-     * source in one place ({@link Front.Exposes}). Worked out here instead, the {@code exposing}
-     * list would have a second reader, which is what left one walk taking {@code Amount.decoder}
-     * for a name and another taking it for {@code Amount}.
+     * refused once, where declarations are indexed, and what a module publishes is worked out in
+     * one place ({@link Front.PublishedNames}). Worked out here instead, the {@code exposing}
+     * clause would have a second reader, which is what left one walk taking
+     * {@code Amount.decoder} for a name and another taking it for {@code Amount}.
      */
     private static Registry.Declared<Ast.Def> declaredBy(Db db, String name) {
         // Asked only once the caller has a module to ask it of, which is why every caller reads
@@ -80,12 +80,13 @@ public record CompilationUniverse(Db db) implements ModuleUniverse {
         // workspace, and a name nothing here has is not a question about the shape of the
         // workspace — an import of a misspelt module would otherwise put every module's imports on
         // the far side of this one's answer.
-        Answer<Map<String, Ast.Def>> declarations = db.ask(new Names.Declarations(name));
+        Answer<DeclaredNames.Index<Ast.Def>> declarations = db.ask(new Names.Declarations(name));
         if (!declarations.present()) {
             return null;
         }
-        Set<String> exposed = db.ask(new Front.Exposes(name)).value();
-        return exposed == null ? null : new Registry.Declared<>(declarations.value(), exposed);
+        Set<String> exposed = db.ask(new Front.PublishedNames(name)).value();
+        return exposed == null ? null : new Registry.Declared<>(declarations.value().declarations(),
+                declarations.value().asDeclared(), exposed);
     }
 
     @Override

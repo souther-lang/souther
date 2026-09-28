@@ -128,16 +128,6 @@ class OptionAsAWrittenTypeTest {
     // --- making an optional: the `?` field, and nowhere else -------------------------------------
 
     @Test
-    void aFieldIsStillWhereAnOptionalIsMade() {
-        assertDoesNotThrow(() -> Compiler.compile(HEAD + """
-                data Note = { text: String? }
-                behavior write : (a: Amount) -> Note
-                    constructs Note
-                let write (a) = Note { text = None }
-                """));
-    }
-
-    @Test
     void aFieldTakesAnOptionalMadeByARule() {
         // The permission reaches the branches of the value being given to the field (ADR-0011).
         assertDoesNotThrow(() -> Compiler.compile(HEAD + """

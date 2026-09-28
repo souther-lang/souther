@@ -50,10 +50,10 @@ class TheApiCommandAnswersTheStdlibSurfaceTest {
      */
     @Test
     void aResultOfSeveralCasesIsAnsweredAsItsDeclarationWritesIt() {
-        Answer answer = run("Int.divide");
+        Answer answer = run("Int.truncatingDivide");
 
         assertEquals(0, answer.code());
-        assertEquals("Int.divide(dividend: Int, divisor: Int) : Int | DivisionByZero",
+        assertEquals("Int.truncatingDivide(dividend: Int, divisor: Int) : Int | DivisionByZero",
                 answer.out().strip());
     }
 

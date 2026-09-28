@@ -84,7 +84,8 @@ public record Location(BindingId root, List<String> path) {
      */
     public static Location of(Core e, DeclarationNewtypes newtypes,
                               java.util.function.Function<BindingId, Location> rooted) {
-        return switch (e) {
+        // A value is where it is whatever type it stands as.
+        return switch (Core.withoutStanding(e)) {
             case Core.Read read -> rooted.apply(read.binding());
             case Core.FieldAccess fa -> {
                 Location base = of(fa.target(), newtypes, rooted);

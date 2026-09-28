@@ -37,10 +37,12 @@ a local decision by whoever wrote the site, and nothing made the next site take 
 
 **A backend never changes a Souther value to make it fit a host API.**
 
-Where a host operation has a narrower value domain, a different representation, or failure modes
-that are not Souther values, the call is mediated by a runtime kernel that owns that operation.
-Representation conversion is exact. Failure is translated to the result or the abort that operation
-specifies.
+Where a host operation has a narrower value domain, a different representation, failure modes that
+are not Souther values, or an acceptance grammar that is not the language's, the call is mediated by
+a runtime kernel that owns that operation. Representation conversion is exact. Failure is translated
+to the result or the abort that operation specifies. A host parser may convert text the language
+has already accepted into its representation; which text is accepted is the operation's grammar,
+stated in the specification, and the parser does not decide it.
 
 A direct JDK intrinsic (`Intrinsics.JdkVirtual`) is allowed only where passing the value requires no
 semantic conversion and the JDK operation answers on every Souther value admitted there.
@@ -117,8 +119,8 @@ what this issue is is nobody thinking of one; written that way it would pass a l
   it named went on being emitted. A structural test states an invariant, and an invariant nothing
   exercises is a sentence.
 - The rule reaches past this issue by construction — a code point against a UTF-16 offset, a
-  temporal range, a size or a count narrowed to a host `int`. Each is the same meeting, and the
-  answer at each is the operation's to state.
+  temporal range, a size or a count narrowed to a host `int`, the text a host parser reads as a
+  number. Each is the same meeting, and the answer at each is the operation's to state.
 
 ## References
 - Issue #976

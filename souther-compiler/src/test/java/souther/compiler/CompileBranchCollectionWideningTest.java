@@ -36,26 +36,6 @@ class CompileBranchCollectionWideningTest {
     }
 
     @Test
-    void oneArmEmptyWithADeclaredReturnType() {
-        // the declared return reaches both arms, so `[]` is already a List<Reason> and no longer the
-        // bottom the merge used to absorb — the widening has to carry the join on its own
-        assertDoesNotThrow(() -> Compiler.compile(makeBuilding("Costly") + """
-                let reasons (total: Int): List<Reason> =
-                    if total >= 100 then [ Costly { threshold = 100 } ] else []
-                let make (total) = Reasons { reasons = reasons(total) }
-                """));
-    }
-
-    @Test
-    void bothArmsNonEmptyListsOfDifferentCases() {
-        assertDoesNotThrow(() -> Compiler.compile(makeBuilding("Costly") + """
-                let reasons (total: Int): List<Reason> =
-                    if total >= 100 then [ Costly { threshold = 100 } ] else [ NoAuthority ]
-                let make (total) = Reasons { reasons = reasons(total) }
-                """));
-    }
-
-    @Test
     void matchArmsOfDifferentCaseLists() {
         assertDoesNotThrow(() -> Compiler.compile(makeBuilding("Costly") + """
                 data Big
@@ -183,8 +163,10 @@ class CompileBranchCollectionWideningTest {
 
     @Test
     void theWidenedListRunsWhenOneArmIsEmpty() throws Exception {
-        // the join is List<Costly | Reason> here, not a plain List<Reason>: the case built on one
-        // arm and the sum the empty arm adopted, unioned. The backend has to emit from that too.
+        // the declared return reaches both arms, so `[]` is already a List<Reason> rather than an
+        // empty-collection bottom, and the widening carries the join on its own. The join is
+        // List<Costly | Reason> here, not a plain List<Reason>: the case built on one arm and the
+        // sum the empty arm adopted, unioned. The backend has to emit from that too.
         String src = """
                 module demo
                 data Costly = { threshold: Int }

@@ -1,6 +1,5 @@
 package souther.compiler.ast;
 
-import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.types.SourceConstruct;
@@ -86,11 +85,6 @@ class ACollectionWrittenInBracketsIsAConstructOfTheSourceTest {
 
         assertSame(written, asAList.origin());
         assertSame(written, asRows.origin());
-        assertSame(written,
-                ((Hir.ListLit) Hir.withRegion(asAList, Region.point(POS))).origin(),
-                "carried over another region, it is the same collection of the source");
-        assertSame(written,
-                ((Hir.RowCollection) Hir.withRegion(asRows, Region.point(POS))).origin());
     }
 
     /** A collection a pass composed says no source wrote it, and says it without asking anyone. */

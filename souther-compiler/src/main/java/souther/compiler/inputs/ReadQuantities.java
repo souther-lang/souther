@@ -9,17 +9,16 @@ import souther.compiler.check.RuleKey;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactCut;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
-import souther.compiler.numeric.Rational;
 import souther.compiler.numeric.Rel;
-import souther.compiler.numeric.RationalCut;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
-
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -135,6 +134,12 @@ final class ReadQuantities implements Quantities {
      *  asked for on their own: a proof of emptiness names a place out of the first and shows what
      *  it shows out of the second. */
     private final Map<StructuralContext, ConstraintState<InputAtom>> answered =
+            new ConcurrentHashMap<>();
+    /** The same, of those rules with this value's fixings standing in them. Beside the one above
+     *  and not in place of it: how a term is spaced is asked of what the declarations say, and a
+     *  reading that asked the conditioned rules for it would be asking about a number a fixing had
+     *  already settled. */
+    private final Map<StructuralContext, ConstraintState<InputAtom>> withTheFixings =
             new ConcurrentHashMap<>();
 
     /**
@@ -352,7 +357,8 @@ final class ReadQuantities implements Quantities {
             if (under.holds(opened.opening())) {
                 made.put(root, opened.rules().given(under(root)).constraintsOver(
                         at -> called(root, at, under),
-                        subject -> new InputAtom.Anonymous(root.toString(), subject)));
+                        subject -> new InputAtom.Anonymous(root.toString(), subject),
+                        InputAtom.inOneOrder()));
             }
         });
         Map<TermPath, FieldDomains.Carried<InputAtom>> answer = Collections.unmodifiableMap(made);
@@ -366,32 +372,59 @@ final class ReadQuantities implements Quantities {
     }
 
     /**
-     * The same rules, with {@code form rel 0} taken in as well.
+     * The same rules, with {@code form rel 0} taken in as well — or that this cannot carry it.
      *
-     * <p>Reached only through {@link ReadRegion}, so what comes back is a region and never a reading
-     * of the declarations. What is kept is the assertion and not what it came to: two of them said
-     * in either order are the same two, and one said twice is one.
+     * <p>Reached only through {@link ReadRegion}, so what comes back is about a region and never a
+     * reading of the declarations. What is kept is the assertion and not what it came to: two of
+     * them said in either order are the same two, and one said twice is one.
      *
-     * <p>This value back where the arithmetic cannot take the assertion in — a form over a position
+     * <p><b>Refused where the arithmetic cannot take the assertion in</b> — a form over a position
      * whose values it has no spacing for. Kept anyway, it would sit in the state as a rule about a
      * number nothing knows how to space, which {@link souther.compiler.numeric.NumericDomain#assume}
-     * refuses outright; declined here, the region still holds everything that reaches the border,
+     * refuses outright; refused here, the region still holds everything that reaches the border,
      * which is the direction every reader of it depends on.
+     *
+     * <p>And said rather than shown by what comes back. Nothing about these rules tells a refusal
+     * from a second taking of a constraint already in them — both leave the rules where they were —
+     * so which of the two it was is the answer itself.
      */
-    ReadQuantities assuming(LinearForm<NumericTerm> form, Rel rel) {
+    Taking assuming(LinearForm<NumericTerm> form, Rel rel) {
+        // A form weighing no term states nothing, so there is no constraint here to take in or to
+        // refuse. Answered either way it would be an entry about nothing — recorded as taken in, a
+        // condition a reader is told the search was narrowed by; refused, a shortfall of this
+        // compiler where no rule was written. Every caller has a comparison that named a position,
+        // so it is the question that is wrong and it is said here.
         if (form == null || form.coefs().isEmpty()) {
-            return this;
+            throw new IllegalArgumentException(
+                    "a form weighing no term is no constraint to take in: " + form);
         }
         form.coefs().keySet().forEach(this::held);
         // Refused where the form is over positions no one value has, the same as a question about
         // where it runs: what would be taken in is a condition on a row nobody can write.
         StructuralContext under = asked(form.coefs().keySet());
-        for (NumericTerm term : form.coefs().keySet()) {
+        // Walked by the terms, because which term is named in the refusal is the answer here and a
+        // form holds its terms without holding an order they were written in.
+        for (NumericTerm term : NumericTerms.inOrder(form.coefs().keySet())) {
             if (spacingOf(constraints(under).numbers(), term, called(term, under)) == null) {
-                return this;
+                return new Taking.Refused(new SearchRegion.Refusal.NoOrderUnderATerm(term));
             }
         }
-        return alsoAssuming(new Assumed.OverAForm(form, rel));
+        return new Taking.Taken(alsoAssuming(new Assumed.OverAForm(form, rel)));
+    }
+
+    /**
+     * What taking a form in came to, in the rules rather than in the region.
+     *
+     * <p>The region's own answer ({@link SearchRegion.Assumption}) with the reading in it, since
+     * which face a caller is holding is {@link ReadRegion}'s to say and not this one's.
+     */
+    sealed interface Taking {
+
+        /** The rules with it taken in, which are these rules again where it was already in them. */
+        record Taken(ReadQuantities rules) implements Taking {}
+
+        /** The rules cannot carry it, and are unchanged. */
+        record Refused(SearchRegion.Refusal why) implements Taking {}
     }
 
     /**
@@ -421,9 +454,13 @@ final class ReadQuantities implements Quantities {
      * The same rules, with {@code term} held away from {@code at}.
      *
      * <p>Kept beside the bounds rather than folded into them, because a range says where a run
-     * stops and this says what the run does not hold. What reads it back is the proof that nothing
-     * is left ({@link #emptiness}): a value standing here is one the rules refuse, and that is the
-     * whole of what a hole changes about what this answers.
+     * stops and this says what the run does not hold.
+     *
+     * <p>Two things read it back and they are not one answer. The proof that nothing is left
+     * ({@link #emptiness}) refuses a value already standing here; {@link #apartAt} is what a search
+     * narrows by, so that it never offers one. Left to the first alone, a position whose order has
+     * no step is offered the one place a run gives up and has nothing to offer once that place is
+     * the hole.
      */
     ReadQuantities apartFrom(NumericTerm.FromOnePosition term, souther.compiler.numeric.Place at) {
         if (term == null || at == null) {
@@ -433,8 +470,14 @@ final class ReadQuantities implements Quantities {
         return alsoAssuming(new Assumed.ApartFrom(term, at));
     }
 
-    /** Which places the rules hold {@code term} away from. */
-    private souther.compiler.numeric.PlacesApart apartAt(NumericTerm term) {
+    /**
+     * Which places the rules hold {@code term} away from.
+     *
+     * <p>Read back by the proof that nothing is left and by whatever is choosing a value, which are
+     * the two things a hole is for: one refuses a row already standing at the place, and the other
+     * never offers it.
+     */
+    souther.compiler.numeric.PlacesApart apartAt(NumericTerm term) {
         List<souther.compiler.numeric.Place> out = new ArrayList<>();
         for (Assumed taken : assumed) {
             if (taken instanceof Assumed.ApartFrom each && each.term().equals(term)) {
@@ -502,7 +545,7 @@ final class ReadQuantities implements Quantities {
         if (had != null) {
             return had;
         }
-        ConstraintState<InputAtom> made = ConstraintState.top();
+        ConstraintState<InputAtom> made = ConstraintState.top(InputAtom.inOneOrder());
         // What the values of this space cost to work out. One for the space and not one per
         // parameter: what each parameter was read under is the allowance of its own declaration,
         // and the set a position finally admits here is met out of all of them — so this is the
@@ -538,7 +581,7 @@ final class ReadQuantities implements Quantities {
                 continue;
             }
             Map<InputAtom, souther.compiler.numeric.Granularity> spacing = new LinkedHashMap<>();
-            for (NumericTerm term : each.form().coefs().keySet()) {
+            for (NumericTerm term : NumericTerms.inOrder(each.form().coefs().keySet())) {
                 souther.compiler.numeric.Granularity spaced =
                         spacingOf(made.numbers(), term, called(term, under));
                 if (spaced == null) {
@@ -547,11 +590,61 @@ final class ReadQuantities implements Quantities {
                 }
                 spacing.put(called(term, under), spaced);
             }
-            if (spacing != null) {
-                made = made.taking(over(each.form(), under), each.rel(), spacing);
+            // Where the caller's own form cannot be carried into this input's terms, this rule is one
+            // the state is not narrowed by — an unheld sum is a step short, and the sound answer
+            // with less is not to take a step at all.
+            LinearForm<InputAtom> over = spacing == null ? null : over(each.form(), under);
+            if (over != null) {
+                made = made.taking(over, each.rel(), spacing);
             }
         }
         answered.put(under, made);
+        return made;
+    }
+
+    /**
+     * The same rules, with what a caller has fixed standing in them.
+     *
+     * <p><b>Which is what fixing a position does.</b> {@code given} moves the space every question
+     * after it is answered against, and is not extra information for whichever term a question
+     * happens to name. A rule relating two positions is in neither of their ranges, so a form asked
+     * about one of a pair runs where the other's value puts it and an assignment the pair's rule
+     * refuses is refused nowhere else — read as a bound of the asked-about term alone, the first
+     * question came back unbounded and the second came back with nothing shown.
+     *
+     * <p>Onto the rules and never met against the answer, which is {@link #holding}'s rule and the
+     * reason it is a rule: what a relation leaves a position is not something a range met afterwards
+     * can say.
+     *
+     * <p>Only what stands under this context, through the same gate the forms taken in go through
+     * ({@link #stands}). A fixing at a position no value under this context has is a rule about a
+     * row other than the one being asked about.
+     *
+     * <p>And what this puts on is only what one value was fixed at. A term fixed at two is a
+     * contradiction and is said as one where the fixings are read ({@link #emptiness}); carried
+     * here as the range between them, it would be a second account of that, and one that reads as a
+     * position with room to move. Which is not a promise about the rules a question is answered
+     * against: a term the question itself names is put on by {@link #runsIn} whatever it was fixed
+     * at, and that is the older reading of the same helper.
+     */
+    private ConstraintState<InputAtom> effectiveConstraints(StructuralContext under) {
+        // Nothing fixed, which is every reading that answers about the declarations rather than
+        // about a row being written. The same rules, and kept as the one answer rather than as a
+        // second entry saying the same thing under a second key.
+        if (fixed.isEmpty()) {
+            return constraints(under);
+        }
+        ConstraintState<InputAtom> had = withTheFixings.get(under);
+        if (had != null) {
+            return had;
+        }
+        ConstraintState<InputAtom> made = constraints(under);
+        for (Map.Entry<NumericTerm, Fixed> each : fixed.entrySet()) {
+            if (each.getValue().isOne() && stands(Set.of(each.getKey()), under)) {
+                made = holding(made, each.getKey(), under);
+            }
+        }
+        withTheFixings.put(under, made);
         return made;
     }
 
@@ -590,7 +683,8 @@ final class ReadQuantities implements Quantities {
                         spacingOf(rules.numbers(), counted, atom);
                 return spaced == null ? rules : rules.taking(
                         LinearForm.<InputAtom>atom(atom)
-                                .minus(LinearForm.constant(BigDecimal.ONE)),
+                                .minus(LinearForm.constant(
+                                        ExactRatio.ONE)),
                         Rel.GE, Map.of(atom, spaced));
             }
         }
@@ -827,19 +921,18 @@ final class ReadQuantities implements Quantities {
      * and that end survives where a form is one term taken as itself ({@link #runsBetween}), which
      * is the only shape such a position is ever asked in.
      */
-    private souther.compiler.numeric.NumericDomain<InputAtom> holding(
-            souther.compiler.numeric.NumericDomain<InputAtom> rules, NumericTerm term,
-            StructuralContext under) {
+    private ConstraintState<InputAtom> holding(ConstraintState<InputAtom> rules, NumericTerm term,
+                                               StructuralContext under) {
         NumericDomain.Bounds runs = whereOneTermRuns(term);
         if (runs == null || (asCut(runs.min()) == null && asCut(runs.max()) == null)) {
             return rules;
         }
         InputAtom atom = called(term, under);
-        souther.compiler.numeric.Granularity spaced = spacingOf(rules, term, atom);
+        souther.compiler.numeric.Granularity spaced = spacingOf(rules.numbers(), term, atom);
         if (spaced == null) {
             return rules;
         }
-        return rules.assuming(atom, numbersOf(runs), Map.of(atom, spaced));
+        return rules.taking(atom, numbersOf(runs), Map.of(atom, spaced));
     }
 
     /** A range with only the ends the arithmetic has a number for. */
@@ -885,6 +978,27 @@ final class ReadQuantities implements Quantities {
         if (form.coefs().isEmpty()) {
             return null;
         }
+        // What the declarations were read to prove, which is what a reader drawing the lines of a
+        // position wants: where they admit no value there are no lines owed, and that is answered
+        // where a value's own emptiness is rather than by a range here. A caller looking for
+        // somewhere to put a value asks the region face, and that one keeps the difference
+        // ({@link #projectionOf}).
+        return switch (projectionOf(form)) {
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds) -> bounds;
+            case NumericDomain.FormProjection.NothingIsLeft _ -> NumericDomain.Bounds.OPEN;
+        };
+    }
+
+    /**
+     * The region's face of the same question, which keeps the answer a range cannot hold.
+     *
+     * <p>Null where the form weighs no term, which is a question about nothing rather than an answer
+     * about a form.
+     */
+    public NumericDomain.FormProjection projectionOf(LinearForm<NumericTerm> form) {
+        if (form.coefs().isEmpty()) {
+            return null;
+        }
         form.coefs().keySet().forEach(this::held);
         // Projected out of the rules, which is one question with one answer. The rules of every
         // parameter are said together and what each number is on its own is said onto them, so what
@@ -903,19 +1017,39 @@ final class ReadQuantities implements Quantities {
      * value accumulated — which is the fold that asks how many a container holds under a case, where
      * the context is the one the fold has reached and not the one anybody fixed.
      */
-    private NumericDomain.Bounds runsIn(StructuralContext under,
-                                        LinearForm<NumericTerm> form) {
-        souther.compiler.numeric.NumericDomain<InputAtom> rules = constraints(under).numbers();
-        for (NumericTerm term : form.coefs().keySet()) {
+    private NumericDomain.FormProjection runsIn(StructuralContext under,
+                                                LinearForm<NumericTerm> form) {
+        ConstraintState<InputAtom> rules = effectiveConstraints(under);
+        // Walked by the terms: what each one brings in is taken onto the state the one before it
+        // left, and a form says which terms it weighs without saying which was written first.
+        for (NumericTerm term : NumericTerms.inOrder(form.coefs().keySet())) {
             rules = holding(rules, term, under);
         }
-        NumericDomain.Bounds projected = rules.boundsOf(over(form, under));
+        // What the rules leave, carried as what it is. A reading that admits no assignment says so
+        // here and goes on saying it: read back as a range with neither end, it would widen whoever
+        // met it and the proof would leave with it — and every search downstream would spend what it
+        // is allowed on a region these rules already refuse.
+        // Where this input's own form cannot be carried — a caller's two spellings of one number
+        // weighed by coefficients too far apart in scale for the exact arithmetic to add — nothing
+        // here is refused: an open range is the sound answer with less, and never `NothingIsLeft`,
+        // which this method's own callers already read as a proof.
+        LinearForm<InputAtom> over = over(form, under);
+        NumericDomain.Bounds projected;
+        if (over == null) {
+            projected = NumericDomain.Bounds.OPEN;
+        } else if (rules.numbers().projectionOf(over)
+                instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)) {
+            projected = within;
+        } else {
+            return new NumericDomain.FormProjection.NothingIsLeft();
+        }
         // One term taken as itself, which is the arithmetic being the identity rather than a second
         // answer to the same question. It is also the only shape a position the arithmetic cannot
         // count is ever asked in — a form adds its terms together and two strings have no sum — so
         // this is where a floor written as a value rather than as a number survives at all.
         NumericTerm only = onlyTermOf(form);
-        return only == null ? projected : meeting(projected, whereOneTermRuns(only));
+        return new NumericDomain.FormProjection.Within(
+                only == null ? projected : meeting(projected, whereOneTermRuns(only)));
     }
 
     /**
@@ -935,10 +1069,22 @@ final class ReadQuantities implements Quantities {
      */
     private LinearForm<InputAtom> over(
             LinearForm<NumericTerm> form, StructuralContext under) {
-        Map<InputAtom, BigDecimal> coefs = new LinkedHashMap<>();
-        form.coefs().forEach((term, coef) ->
-                coefs.merge(called(term, under), coef, BigDecimal::add));
-        return new LinearForm<>(form.constant(), coefs);
+        Map<InputAtom, ExactRatio> coefs = new LinkedHashMap<>();
+        // A caller's own two spellings of one number can weigh it by two coefficients a model's own
+        // decimals put too far apart in scale for the exact arithmetic to add. Null, then, in the
+        // one word every reader of a `LinearForm` already has for "not a form" — this is a fold and
+        // not a renaming, so there is no single coefficient to fall back on that would not be a
+        // second answer to a question the caller did not ask.
+        boolean[] everyTermWasComposed = {true};
+        form.coefs().forEach((term, coef) -> coefs.merge(called(term, under), coef, (a, b) -> {
+            ExactAnswer<ExactRatio> sum = a.plus(b);
+            if (sum instanceof ExactAnswer.Held<ExactRatio> held) {
+                return held.value();
+            }
+            everyTermWasComposed[0] = false;
+            return a;
+        }));
+        return everyTermWasComposed[0] ? new LinearForm<>(form.constant(), coefs) : null;
     }
 
     @Override
@@ -1024,6 +1170,11 @@ final class ReadQuantities implements Quantities {
         // answers it. Every parameter's reading is in here, renamed, so there is nothing a
         // per-parameter reading could add — and a contradiction between two parameters, or between a
         // declaration and something a caller took in, can be seen nowhere else.
+        //
+        // The fixings are in there too ({@link #effectiveConstraints}), and this is the only place
+        // that can see what they contradict. The sentences above hold a fixing against the position
+        // it is at; what a rule relating two positions refuses is a fact about the assignment, and
+        // neither position's own range holds it.
         return switch (viability(asked(List.of()), null)) {
             case Viability.ProvedImpossible it ->
                     Optional.of(new EmptyInput.ProvedByTheRules(it.why()));
@@ -1058,7 +1209,7 @@ final class ReadQuantities implements Quantities {
      */
     private Viability viability(StructuralContext under, TermPath below) {
         Optional<Emptiness> here =
-                constraints(under).holdsNothing(positions(under));
+                effectiveConstraints(under).holdsNothing(positions(under));
         if (here.isPresent()) {
             return new Viability.ProvedImpossible(here.get());
         }
@@ -1130,7 +1281,14 @@ final class ReadQuantities implements Quantities {
         if (counted == null) {
             return new Viability.MayStand();
         }
-        NumericDomain.Bounds many = runsIn(under, LinearForm.atom(counted));
+        // A floor under how many it holds, where the rules leave one. Rules that admit no assignment
+        // leave no floor to read, and what nothing stands under is answered where the rules are
+        // asked whether they hold anything — said here, this would be a container proved non-empty
+        // out of a reading that proves nothing at all.
+        NumericDomain.Bounds many =
+                runsIn(under, LinearForm.atom(counted))
+                        instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds)
+                        ? bounds : null;
         if (many == null || CountDomain.leastFrom(many.min()) < 1) {
             return new Viability.MayStand();
         }
@@ -1267,7 +1425,7 @@ final class ReadQuantities implements Quantities {
         return switch (term) {
             case NumericTerm.ValueOf _ -> NumberAt.valueOf(at.named());
             case NumericTerm.TakenOf taken ->
-                    NumberAt.takenOf(at.named(), taken.operation());
+                    NumberAt.takenOf(at.named(), taken.operation(), taken.arguments());
             case NumericTerm.TakenOver over ->
                     NumberAt.takenOf(at.named(), over.operation());
         };
@@ -1278,8 +1436,10 @@ final class ReadQuantities implements Quantities {
         if (form.coefs().size() != 1 || form.constant().signum() != 0) {
             return null;
         }
-        Map.Entry<NumericTerm, BigDecimal> one = form.coefs().entrySet().iterator().next();
-        return one.getValue().compareTo(BigDecimal.ONE) == 0 ? one.getKey() : null;
+        Map.Entry<NumericTerm, ExactRatio> one =
+                form.coefs().entrySet().iterator().next();
+        return one.getValue().equals(ExactRatio.ONE)
+                ? one.getKey() : null;
     }
 
     /**
@@ -1376,9 +1536,9 @@ final class ReadQuantities implements Quantities {
 
     /** An end as a number the arithmetic can cut at, or null where it stops at a value there is no
      *  number for — a text position has a floor and nothing for the arithmetic to relate. */
-    private static RationalCut asCut(Endpoint end) {
+    private static ExactCut asCut(Endpoint end) {
         return end == null || !(end.at() instanceof Count at) ? null
-                : new RationalCut(Rational.of(at.at()), end.inclusive());
+                : new ExactCut(ExactRatio.of(at.at()), end.inclusive());
     }
 
 }

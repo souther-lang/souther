@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.derive.CodecShape;
 import souther.compiler.derive.Deriver;
 import souther.compiler.types.TypeKey;
 
@@ -129,11 +130,13 @@ public final class Derived {
         private final Normalized.Data declaration;
         private final Hir.DecoderDef decoder;
         private final Hir.EncoderDef encoder;
+        private final Map<String, CodecShape> fieldShapes;
 
         private Data(Normalized.Data declaration, Deriver.Codecs codecs) {
             this.declaration = declaration;
             this.decoder = codecs.decoder();
             this.encoder = codecs.encoder();
+            this.fieldShapes = codecs.shapes();
         }
 
         /** How a value of it is read at the boundary. */
@@ -144,6 +147,13 @@ public final class Derived {
         /** And how one is written. */
         public Hir.EncoderDef encoder() {
             return encoder;
+        }
+
+        /** What each field carries across the boundary, in the order a value lays its fields out —
+         *  the one walk {@link #decoder} and {@link #encoder} are both lowered from, held here for
+         *  a reader that wants the shape and not the {@code Hir}. */
+        public Map<String, CodecShape> fieldShapes() {
+            return fieldShapes;
         }
 
         @Override
@@ -157,7 +167,8 @@ public final class Derived {
         @Override
         public boolean equals(Object o) {
             return o instanceof Data other && declaration.equals(other.declaration)
-                    && decoder.equals(other.decoder) && encoder.equals(other.encoder);
+                    && decoder.equals(other.decoder) && encoder.equals(other.encoder)
+                    && fieldShapes.equals(other.fieldShapes);
         }
 
         @Override

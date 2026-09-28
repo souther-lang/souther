@@ -1,6 +1,5 @@
 package souther.compiler.coverage;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.conformance.ConformanceCorpus;
@@ -8,6 +7,7 @@ import souther.compiler.core.Core;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.test.ClosedWorldContract;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * wants is to be told, not to be handed a place that was invented for the occasion — so it throws,
  * and this is where the corpus says whether it ever has to.
  */
-@Tag("population")
+@ClosedWorldContract
 class EveryNameABodyReadsIsBoundSomewhereThisCanPointAtTest {
 
     private static final String SPLICED = """

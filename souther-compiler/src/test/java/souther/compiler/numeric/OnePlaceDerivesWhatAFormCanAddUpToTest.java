@@ -43,7 +43,7 @@ class OnePlaceDerivesWhatAFormCanAddUpToTest {
      */
     private static final Set<String> MAY_DERIVE_IT = Set.of(
             "souther/compiler/numeric/AdditiveImage.java",
-            "souther/compiler/numeric/Rational.java");
+            "souther/compiler/numeric/ExactRatio.java");
 
     /** Taking the factors of ten out of a number, which is what makes a divisor over the finite
      *  decimals canonical. Two and five named together in one file is what the copy looked like. */
@@ -58,7 +58,7 @@ class OnePlaceDerivesWhatAFormCanAddUpToTest {
     /** And the divisor the coefficients share, which is the other half of the same answer. */
     @Test
     void theDivisorCoefficientsShareIsFoundInOnePlace() throws IOException {
-        assertEquals(Set.of(), sourcesMatching(code -> code.contains("Rational.gcd(")),
+        assertEquals(Set.of(), sourcesMatching(code -> code.contains("ExactRatio.gcd(")),
                 "the divisor of a form's coefficients is what its values are multiples of; ask"
                         + " AdditiveImage for it rather than folding one alongside");
     }

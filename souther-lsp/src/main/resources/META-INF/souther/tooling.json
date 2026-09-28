@@ -1,0 +1,22 @@
+{
+  "compilerVersion": "${project.version}",
+  "language": {
+    "id": "souther",
+    "extensions": [".sou"]
+  },
+  "runtime": {
+    "java": {
+      "minimumFeature": ${souther.java.minimum},
+      "requiredJvmArgs": ["-Xss${souther.jvm.stack}"]
+    }
+  },
+  "contracts": {
+    "syntax": {
+      "resource": "META-INF/souther/syntax/"
+    },
+    "lspInitializationOptions": {
+      "schemaVersion": 1,
+      "resource": "META-INF/souther/lsp/initialization-options-1.schema.json"
+    }
+  }
+}

@@ -10,11 +10,13 @@ import souther.compiler.check.Registry;
 import souther.compiler.check.Resolve;
 import souther.compiler.check.Scoping;
 import souther.compiler.query.Front;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -119,7 +121,7 @@ public final class PublishedUniverse {
         return resolutions.get(module);
     }
 
-    /** Reads {@code module} and everything its declarations name, as far as these classes go. */
+    /** Reads {@code module} and everything it reaches, as far as these classes go. */
     private void readReaching(String module) {
         Deque<String> toRead = new ArrayDeque<>(Set.of(module));
         Set<String> tried = new LinkedHashSet<>(Set.of(module));
@@ -136,10 +138,10 @@ public final class PublishedUniverse {
             if (!(readback instanceof Readback.Ready<ReadableModule>(ReadableModule readable))) {
                 continue;
             }
-            // Which modules a module's declarations name, answered where the compiler answers it:
-            // an import line names one, and so does a type or a behavior written with a qualifier,
-            // which needs no import at all.
-            for (String reaches : Front.reaches(readable.module()).keySet()) {
+            // Which modules a module reaches, answered where the compiler answers it: an import line
+            // names one, and so does a type or a behavior written with a qualifier, which needs no
+            // import at all, and so does a dependency one of its behaviors is constructed with.
+            for (String reaches : Front.reaches(readable)) {
                 if (tried.add(reaches)) {
                     toRead.addLast(reaches);
                 }
@@ -154,21 +156,12 @@ public final class PublishedUniverse {
      * source, so it travels beside the module ({@link ReadableModule}). It decides whether an
      * implementation may be supplied for a behavior at all, which is as much a fact about a crossing
      * as the behavior's signature is — so it travels this far too, rather than being dropped where a
-     * reading turns into declarations.
+     * reading turns into declarations. What constructing a behavior requires travels for the same
+     * reason: it is what an implementation of the behavior is handed, in that order.
      */
     public record Read(Hir.Module module,
-                       Map<String, BehaviorImplementation> behaviorImplementations) {
-
-        /** The behaviors of it Java supplies, read off the states. */
-        public Set<String> injectedBehaviors() {
-            Set<String> injected = new java.util.LinkedHashSet<>();
-            behaviorImplementations.forEach((name, implementation) -> {
-                if (implementation.isInjectionTarget()) {
-                    injected.add(name);
-                }
-            });
-            return injected;
-        }
+                       Map<String, BehaviorImplementation> behaviorImplementations,
+                       Map<String, List<ValueName.Behavior>> behaviorRequirements) {
     }
 
     /**
@@ -214,11 +207,11 @@ public final class PublishedUniverse {
         return Registry.ofRead(declared);
     }
 
-    /** What a registry has under one reading's name. The {@code exposing} list is read here, on
+    /** What a registry has under one reading's name. What the module publishes is read here, on
      *  this side of the seam, and by nothing downstream of it. */
     private static Registry.Declared<Ast.Def> declaredBy(ReadableModule readable) {
-        return new Registry.Declared<>(readable.declarations(),
-                Registry.baseNames(readable.module().exposing()));
+        return new Registry.Declared<>(readable.declarations(), readable.asDeclared(),
+                readable.module().published());
     }
 
     /**
@@ -278,6 +271,6 @@ public final class PublishedUniverse {
                     new Readback.Failure.UnresolvedPublishedNames());
         }
         return new Readback.Ready<>(new Read(resolution.module(),
-                readable.behaviorImplementations()));
+                readable.behaviorImplementations(), readable.behaviorRequirements()));
     }
 }

@@ -78,6 +78,24 @@ public final class BoundaryDerivation {
         }
     }
 
+    /**
+     * Nothing read the body, so what lines its own rules draw was never asked.
+     *
+     * <p>This measure's own, for the reason every reason here is: what a reader does about a border
+     * measure that is short of a reading is not what they do about a partition one, and a word
+     * shared between them would be one sentence for two pieces of work. The same fact behind both,
+     * and the same distinction from {@link TheReadingDidNotRunOut}: that one was made and stopped
+     * on something it can name.
+     */
+    public enum BodyWasNotRead implements FailureReason {
+        BODY_WAS_NOT_READ;
+
+        @Override
+        public MeasureReason.About about() {
+            return MeasureReason.About.THE_BEHAVIOR;
+        }
+    }
+
     /** What a behavior measured at its stages rather than at itself comes to. */
     public static Measure<List<BorderAssessment>> noSubject() {
         return new Measure.NotApplicable<>(NoSubject.NO_SUBJECT);
@@ -96,17 +114,65 @@ public final class BoundaryDerivation {
         if (inputIsEmpty != null) {
             return new Measure.NotApplicable<>(new NoFeasibleInput(inputIsEmpty));
         }
-        if (closure instanceof MeasureClosure.OfTheBorder.Closed closed) {
-            return at.isEmpty()
-                    ? new Measure.NotApplicable<>(new NoRuleDrawsALine(closed))
-                    : new Measurement.Complete<>(List.copyOf(at));
+        // A switch over the three, for the reason the partition beside it is one.
+        return switch (closure) {
+            case MeasureClosure.OfTheBorder.Closed closed -> {
+                if (at.isEmpty()) {
+                    yield new Measure.NotApplicable<>(new NoRuleDrawsALine(closed));
+                }
+                WeakeningSet beside = whatHoldingThemAgainstTheirNeighboursWentWithout(at);
+                yield beside.isEmpty() ? new Measurement.Complete<>(List.copyOf(at))
+                        : new Measurement.Partial<>(List.copyOf(at), beside);
+            }
+            // Nothing read the body. What a closed border with nothing at it says is that no rule
+            // of this model draws a line, and one rule of a body draws a line at every number it
+            // names — so answering that here would prove it off a reading nobody made.
+            case MeasureClosure.OfTheBorder.BodyNotRead unread -> {
+                // What it went without: the reading of the body, and whatever the readings that
+                // were made found beside it. Those are theirs to name and are not about the body.
+                WeakeningSet without = WeakeningSet.of(
+                        new Weakening.BodyNotInEvaluation(unread.behavior()))
+                        .union(PartitionDerivation.weakening(unread.besides()));
+                yield at.isEmpty()
+                        ? new Measurement.FailedToMeasure<>(
+                                BodyWasNotRead.BODY_WAS_NOT_READ, without)
+                        : new Measurement.Partial<>(List.copyOf(at), without.union(
+                                whatHoldingThemAgainstTheirNeighboursWentWithout(at)));
+            }
+            case MeasureClosure.OfTheBorder.Open open -> {
+                WeakeningSet by = PartitionDerivation.weakening(open.by());
+                yield at.isEmpty()
+                        ? new Measurement.FailedToMeasure<>(
+                                TheReadingDidNotRunOut.THE_READING_DID_NOT_RUN_OUT, by)
+                        : new Measurement.Partial<>(List.copyOf(at),
+                                by.union(whatHoldingThemAgainstTheirNeighboursWentWithout(at)));
+            }
+        };
+    }
+
+    /**
+     * What holding these lines against the lines beside them went without.
+     *
+     * <p>Part of this measure and not a measure of its own, because it is the same value: an
+     * assessment of a line answers what a row stands at each of its points, whether that could be
+     * decided at all, and what the rows leave standing beside it — and a reading that came back
+     * short of any of those is a reading of these lines that came back short. What is missing is
+     * said in words of its own ({@link Weakening.ABorderNotHeldAgainstTheLinesBesideIt},
+     * {@link Weakening.ItemsPlaceNotWorkedOut}), so a reader is told which of the questions fell
+     * short rather than being left to read it off the measure's name.
+     *
+     * <p>Empty for every settled answer, whichever way it settled and however few rows it took. A
+     * walk short of a row that left no line standing has established that, because reading more
+     * rows leaves fewer lines standing and never more — so being short is not what makes this
+     * partial, and coming back unsettled is.
+     */
+    private static WeakeningSet whatHoldingThemAgainstTheirNeighboursWentWithout(
+            List<BorderAssessment> at) {
+        WeakeningSet out = WeakeningSet.none();
+        for (BorderAssessment line : at) {
+            out = out.union(line.besideWeakening()).union(line.itemsWeakening());
         }
-        WeakeningSet by =
-                PartitionDerivation.weakening(((MeasureClosure.OfTheBorder.Open) closure).by());
-        return at.isEmpty()
-                ? new Measurement.FailedToMeasure<>(
-                        TheReadingDidNotRunOut.THE_READING_DID_NOT_RUN_OUT, by)
-                : new Measurement.Partial<>(List.copyOf(at), by);
+        return out;
     }
 
     /** The lines this behavior is measured at, empty where the measure has none to show. */

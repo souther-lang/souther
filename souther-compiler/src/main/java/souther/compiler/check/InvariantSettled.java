@@ -1,12 +1,16 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.copied.CopyTarget;
 import souther.compiler.diag.CompileException;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.TypeKey;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedSet;
 
 /**
  * An expandable module whose invariants say what they say — every clause is the rule it states,
@@ -51,11 +55,17 @@ import java.util.Map;
 public final class InvariantSettled {
 
     private final Hir.Module module;
-    private final java.util.SequencedSet<souther.compiler.types.ReachName.Declaration> standing;
+    private final Map<TypeKey, List<CallsLeftStanding>> standingBy;
+    private final SequencedSet<ReachName.Declaration> standingInEnsures;
+    private final SequencedSet<CopyTarget> copied;
+    private final Map<TypeKey, SequencedSet<CopyTarget>> copiedBy;
 
-    private InvariantSettled(Expansion<Hir.Module> expanded) {
-        this.module = expanded.value();
-        this.standing = expanded.standing();
+    private InvariantSettled(ClauseHelpers.SettledClauses settled) {
+        this.module = settled.module();
+        this.standingBy = Map.copyOf(settled.standingBy());
+        this.standingInEnsures = Collections.unmodifiableSequencedSet(settled.standingInEnsures());
+        this.copied = settled.copied();
+        this.copiedBy = Map.copyOf(settled.copiedBy());
     }
 
     /**
@@ -74,15 +84,44 @@ public final class InvariantSettled {
     }
 
     /**
-     * Every recursive helper the clauses of this module left a call to standing.
+     * Every recursive helper the {@code ensures} of this module's behaviors left a call to standing.
      *
      * <p>A module's declarations are in the table a call graph is built over, so what one of their
      * bodies reaches is answered by following edges. A clause is not a declaration and is in no
      * table, so what it reaches is known only to the expansion that read it — which is here, and is
      * why this travels with the settled module rather than being looked for again afterwards.
+     *
+     * <p>Only the behaviors' clauses. What a declaration's {@code invariant} left standing travels
+     * with that clause ({@link Def}), because a declaration's clauses are checked wherever a type
+     * includes it, and the module that runs them is the one that has to emit what they call.
      */
-    public java.util.SequencedSet<souther.compiler.types.ReachName.Declaration> standingRecursiveCalls() {
-        return standing;
+    public SequencedSet<ReachName.Declaration> standingInEnsures() {
+        return standingInEnsures;
+    }
+
+    /**
+     * Every declaration of another module the clauses of this module copied: a helper or a value a
+     * clause names, expanded into it.
+     *
+     * <p>Here for the reason {@link #standingInEnsures} is. The clauses are what this module's
+     * constructions and decoders check, so what they copied is part of what its classes are built
+     * against, and only the expansion that read them knows it.
+     */
+    public SequencedSet<CopyTarget> copiedFromElsewhere() {
+        return copied;
+    }
+
+    /**
+     * What settling the clauses of {@code declaration} copied of other modules' declarations.
+     *
+     * <p>Asked by a reader that checks those clauses because a type of its own includes the
+     * declaration: the clauses it checks hold what those declarations said, so it copies them along
+     * with the clauses. None where the clauses copied nothing, or the declaration is not this
+     * module's.
+     */
+    public SequencedSet<CopyTarget> copiedBy(TypeKey declaration) {
+        SequencedSet<CopyTarget> found = copiedBy.get(declaration);
+        return found == null ? Collections.emptySortedSet() : found;
     }
 
 
@@ -119,7 +158,7 @@ public final class InvariantSettled {
     public List<Def> defs() {
         List<Def> out = new ArrayList<>();
         for (Hir.Def def : module.defs()) {
-            out.add(new Def(def));
+            out.add(new Def(def, standingBy.getOrDefault(def.declares().key(), List.of())));
         }
         return out;
     }
@@ -151,9 +190,16 @@ public final class InvariantSettled {
     public static final class Def {
 
         private final Hir.Def def;
+        private final List<CallsLeftStanding> standing;
 
-        private Def(Hir.Def def) {
+        private Def(Hir.Def def, List<CallsLeftStanding> standing) {
+            int clauses = def instanceof Hir.Data data ? data.invariants().size() : 0;
+            if (standing.size() != clauses) {
+                throw new IllegalStateException("`" + def.name() + "` writes " + clauses
+                        + " clauses and settling them answered for " + standing.size());
+            }
             this.def = def;
+            this.standing = standing;
         }
 
         /** The name it is declared under. */
@@ -171,33 +217,43 @@ public final class InvariantSettled {
             return def;
         }
 
+        /** What settling each of its clauses left standing, in the order they are written. */
+        List<CallsLeftStanding> standing() {
+            return standing;
+        }
+
         @Override
         public boolean equals(Object o) {
-            return o instanceof Def other && def.equals(other.def);
+            return o instanceof Def other && def.equals(other.def)
+                    && standing.equals(other.standing);
         }
 
         @Override
         public int hashCode() {
-            return def.hashCode();
+            return def.hashCode() * 31 + standing.hashCode();
         }
     }
 
     /**
-     * Both of what this answers with. The standing set is not derived from the tree by anything that
-     * reads this — it is what the expansion that produced the tree met on the way — so a state
-     * carrying a different one is a different answer, whatever the trees compare as. Left out, the
-     * store would find a recomputed answer equal to the one it held and leave everything that reads
-     * the standing set on the old one.
+     * All of what this answers with. What was left standing and what was copied are not derived
+     * from the tree by anything that reads this — they are what the expansion that produced the tree
+     * met on the way — so a state carrying a different one is a different answer, whatever the trees
+     * compare as. Left out, the store would find a recomputed answer equal to the one it held and
+     * leave everything that reads them on the old one.
      */
     @Override
     public boolean equals(Object o) {
         return o instanceof InvariantSettled other && module.equals(other.module)
-                && standing.equals(other.standing);
+                && standingBy.equals(other.standingBy)
+                && standingInEnsures.equals(other.standingInEnsures)
+                && copied.equals(other.copied) && copiedBy.equals(other.copiedBy);
     }
 
     @Override
     public int hashCode() {
-        return module.hashCode() * 31 + standing.hashCode();
+        return (((module.hashCode() * 31 + standingBy.hashCode()) * 31
+                + standingInEnsures.hashCode()) * 31 + copied.hashCode()) * 31
+                + copiedBy.hashCode();
     }
 
     @Override

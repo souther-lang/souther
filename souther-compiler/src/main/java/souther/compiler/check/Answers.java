@@ -38,14 +38,21 @@ final class Answers {
     private static final Answer AT_BOTTOM = new Answer.AtBottom();
 
     private final Map<TypeSymbol, Answer> by;
+    private final TypeCardinality.Counts outside;
 
-    private Answers(Map<TypeSymbol, Answer> by) {
+    private Answers(Map<TypeSymbol, Answer> by, TypeCardinality.Counts outside) {
         this.by = by;
+        this.outside = outside;
     }
 
     /** Nothing known of anything. */
     static Answers empty() {
-        return new Answers(new HashMap<>());
+        return new Answers(new HashMap<>(), TypeCardinality.Counts.NONE);
+    }
+
+    /** Nothing known here, and what is known elsewhere asked of {@code outside}. */
+    static Answers over(TypeCardinality.Counts outside) {
+        return new Answers(new HashMap<>(), outside);
     }
 
     /** The counts already worked out, with nothing standing at the bottom. */
@@ -79,12 +86,20 @@ final class Answers {
      */
     Cardinality of(TypeSymbol name) {
         return switch (by.get(name)) {
-            case null -> Cardinality.UNKNOWN;
+            case null -> atTheName(name, outside.of(name));
             case Answer.AtBottom _ -> Cardinality.none(new Emptiness.TheNameHasNone(name));
-            case Answer.Settled settled -> settled.count() instanceof Cardinality.None
-                    ? Cardinality.none(new Emptiness.TheNameHasNone(name))
-                    : settled.count();
+            case Answer.Settled settled -> atTheName(name, settled.count());
         };
+    }
+
+    /** A count as a reading that reached it by name takes it: nothing known of a name nobody
+     *  answers for, and a proof that stops at the name where it has none. */
+    private static Cardinality atTheName(TypeSymbol name, Cardinality count) {
+        if (count == null) {
+            return Cardinality.UNKNOWN;
+        }
+        return count instanceof Cardinality.None
+                ? Cardinality.none(new Emptiness.TheNameHasNone(name)) : count;
     }
 
     /**

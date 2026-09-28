@@ -47,10 +47,18 @@ public final class ArmEmissionIndex {
         this.emitted = emitted;
     }
 
-    /** The index of one emitted body, against the plan that numbered it. */
+    /**
+     * The index of one emitted body, against the plan that numbered it.
+     *
+     * <p>Of the body and of the methods it calls, which is what a behavior emits: an arm the model
+     * states is in the body it was written in, and a value's is in the value's method.
+     */
     public static ArmEmissionIndex ofBody(Core body, CoverageSites.Plan plan) {
         Map<ArmOfTheModel, Map<ArmOccurrence, ControlPlace.Arm>> emitted = new LinkedHashMap<>();
         walk(body, plan, emitted);
+        for (Core method : plan.methods().calledFrom(body)) {
+            walk(method, plan, emitted);
+        }
         Map<ArmOfTheModel, List<ControlPlace.Arm>> out = new LinkedHashMap<>();
         emitted.forEach((arm, made) -> out.put(arm, List.copyOf(made.values())));
         return new ArmEmissionIndex(Map.copyOf(out));

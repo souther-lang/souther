@@ -95,9 +95,9 @@ class ALineFallsInAClassOnTheOrderItWasDrawnOnTest {
 
         /** The line the rules drew at {@code place}, of however many they drew. */
         Cut lineAt(String place) {
-            return axis.cuts().stream().filter(each -> each.key().equals(place)).findFirst()
+            return axis.cuts().stream().filter(each -> each.spelled().equals(place)).findFirst()
                     .orElseThrow(() -> new AssertionError("no line at " + place + ", among "
-                            + axis.cuts().stream().map(Cut::key).toList()));
+                            + axis.cuts().stream().map(Cut::spelled).toList()));
         }
 
         Carrier carrier() {
@@ -225,7 +225,7 @@ class ALineFallsInAClassOnTheOrderItWasDrawnOnTest {
         Measured named = measured(NAMED, "gate/slot.level");
 
         assertEquals(List.of("1", "2", "3"),
-                named.axis().cuts().stream().map(Cut::key).sorted().toList(),
+                named.axis().cuts().stream().map(Cut::spelled).sorted().toList(),
                 "the guard cuts at two and the invariant stops the level at the outermost of the"
                         + " values it names, so those are the lines this model draws");
         assertEquals(List.of("2"),

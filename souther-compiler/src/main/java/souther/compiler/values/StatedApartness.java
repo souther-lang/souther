@@ -3,12 +3,11 @@ package souther.compiler.values;
 import souther.compiler.hash.ValueHash;
 
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
 
 /**
@@ -231,16 +230,12 @@ final class StatedApartness<A> {
         // between one block say one thing about it, and a lack is claimed once with every route
         // that reached it — which the relation these come to says by being a set of pairs, and is
         // said here because nothing builds one on the way to this.
-        Set<Sameness.Block<A>> itself = new LinkedHashSet<>();
+        Set<Shown<A>> out = new HashSet<>();
         for (Denial<A> denial : denials()) {
             Sameness.Block<A> block = heldAsOne.blockOf(denial.one());
             if (block.equals(heldAsOne.blockOf(denial.other()))) {
-                itself.add(block);
+                out.add(Shown.of(new RelationalLack.ABlockApartFromItself<>(block)));
             }
-        }
-        List<Shown<A>> out = new ArrayList<>(itself.size());
-        for (Sameness.Block<A> block : itself) {
-            out.add(Shown.of(new RelationalLack.ABlockApartFromItself<>(block)));
         }
         return Lacks.of(out);
     }

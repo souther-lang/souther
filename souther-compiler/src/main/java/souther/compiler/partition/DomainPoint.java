@@ -2,6 +2,10 @@ package souther.compiler.partition;
 
 import souther.compiler.numeric.Towards;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+
 /**
  * Which point of a border, as a place on the quantity's order rather than as what that place is.
  *
@@ -63,6 +67,40 @@ public sealed interface DomainPoint {
                 throw new IllegalArgumentException("a run beside the line lies one way of it");
             }
         }
+    }
+
+    /**
+     * Every place a line can have a point at, in the order the technique names them.
+     *
+     * <p>Written out rather than gathered, because the places are a closed set: this interface is
+     * sealed over three shapes and two of them are over a closed set of sides, so these five are
+     * all of them and a sixth cannot be written without coming through here.
+     *
+     * <p>{@link Border#pointsOf} says which of these a line has, which is the rule's answer and a
+     * different question. This is the order they stand in wherever several are shown together.
+     */
+    static List<DomainPoint> everyPlace() {
+        List<DomainPoint> places = new ArrayList<>();
+        places.add(new AtTheLine());
+        for (Towards side : Towards.values()) {
+            places.add(new BesideTheLine(side));
+        }
+        for (Towards side : Towards.values()) {
+            places.add(new InTheRegion(side));
+        }
+        return List.copyOf(places);
+    }
+
+    /**
+     * These places, in the one order.
+     *
+     * <p>For a reader shown several of them at once. What a mapping keyed by a place is equal to is
+     * which answer stands at which place, and it says nothing about the order it was filled in — so
+     * a reader taking the places off such a mapping reads the order whoever built it happened to
+     * use, while nothing comparing two of them can see a difference.
+     */
+    static List<DomainPoint> inOneOrder(Collection<DomainPoint> places) {
+        return everyPlace().stream().filter(places::contains).toList();
     }
 
     /**

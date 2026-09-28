@@ -34,13 +34,13 @@ class WhatTheRunsCameToAtOneObligationIsWhatAllOfThemFoundTest {
 
     private static final ArmProbe ANOTHER_PLACE_OF_IT = PLACES.get(2);
 
-    private static final Generator.UnresolvedCombination NO_CANDIDATE =
-            new Generator.UnresolvedCombination(List.of("days=low"),
-                    Generator.UnresolvedCombination.Reason.NO_CANDIDATE_WAS_OFFERED);
+    private static final CameToNothing NO_CANDIDATE =
+            CameToNothing.metNothing(new Generator.UnresolvedCombination(List.of("days=low"),
+                    Generator.UnresolvedCombination.Reason.NO_CANDIDATE_WAS_OFFERED));
 
-    private static final Generator.UnresolvedCombination THE_SEARCH_STOPPED =
-            new Generator.UnresolvedCombination(List.of("days=high"),
-                    Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED);
+    private static final CameToNothing THE_SEARCH_STOPPED =
+            CameToNothing.metNothing(new Generator.UnresolvedCombination(List.of("days=high"),
+                    Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED));
 
     private static final PathAccess NOTHING_ARRIVES = new PathAccess.Unreachable(
             PathAccess.Unreachable.Why.THE_CONDITION_NEVER_COMES_OUT_THAT_WAY);
@@ -61,6 +61,33 @@ class WhatTheRunsCameToAtOneObligationIsWhatAllOfThemFoundTest {
                 new ArmDisposition.Unresolved(List.of(NO_CANDIDATE))));
 
         assertEquals(oneWay, theOther, "the reasons of two runs, whichever run was made first");
+    }
+
+    /**
+     * And what the runs met of this compiler's is every one of them, though the word is one.
+     *
+     * <p>How far a run got is the run's own: a way of standing the dependencies in reaches what it
+     * reaches, and a figure one run ran into is a number somebody can raise whether or not the next
+     * run got that far. So these add up, where the word they come back with has to agree — one is
+     * an answer about the model and the other is how far this compiler went.
+     */
+    @Test
+    void whatTheRunsMetOfThisCompilersIsEveryOneOfThem() {
+        CameToNothing stoppedAtOne = new CameToNothing(NO_CANDIDATE.why(),
+                CompositionShortfall.of(List.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED)));
+        CameToNothing stoppedAtAnother = new CameToNothing(NO_CANDIDATE.why(),
+                CompositionShortfall.of(List.of(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)));
+
+        ClassDisposition.AcrossRuns both = ClassDisposition.acrossRuns(List.of(
+                new ClassDisposition.Unresolved(stoppedAtOne),
+                new ClassDisposition.Unresolved(stoppedAtAnother)));
+
+        assertEquals(new ClassDisposition.AcrossRuns.Unresolved(new CameToNothing(
+                        NO_CANDIDATE.why(),
+                        CompositionShortfall.of(List.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED,
+                                CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)))),
+                both,
+                "both figures, so a reader is told everything raising would reach");
     }
 
     /** And the same answer for one run asked about twice, which is the one run's answer. */

@@ -149,7 +149,8 @@ class ALineReadUnderEachCaseIsOneRowToWriteTest {
     private static List<BorderObligationPointAssessment> theGuardsPoints(String rows) {
         List<BorderObligationPointAssessment> points =
                 compiled(rows).db().ask(new Adequacy.Obligations("example.line",
-                        new GenerationScope.Module())).value();
+                        new GenerationScope.Module(),
+                        HowALineIsRead.VALUES_COMPOSED)).value();
         assertNotNull(points, "the model under test compiles");
         return points.stream().filter(BorderObligationPointAssessment::owedToTheReading).toList();
     }

@@ -1,5 +1,7 @@
 package souther.compiler.ast;
 
+import souther.compiler.RecordOfTheBuilding;
+
 /**
  * What a definition of a module was made as, which is what decides the rules it is held to.
  *
@@ -17,12 +19,15 @@ package souther.compiler.ast;
  * a question about that position — what it contributes to reading the value, whether it requires
  * the value to be of its type — asks the position rather than a set of names kept beside the tree.
  *
- * <p>What divides these is whether the definition is the model's or the rows'. A definition another
- * module declared is the model's here and says which module wrote it in the one place that answers
- * that ({@link Hir.FnDef#declaredIn}); the other two are there so that rows can be written, and
- * {@link #isTheModels} is what a rule about the difference asks.
+ * <p>A role answers which rules apply to a definition. Some definitions are the model's — one the
+ * module wrote, and one another module declared and this one emits — and others are made by this
+ * compilation for its own purposes: a value a row writes at a position, the value an attached
+ * file declares for its rows, and the entry a module publishes for a value another module calls.
+ * {@link #isTheModels} is what a rule about declarations asks, and a rule that differs between
+ * the compilation's own definitions asks which of them it is. A definition another module declared
+ * says which module wrote it in the one place that answers that ({@link Hir.FnDef#declaredIn}).
  */
-public sealed interface DefinitionRole {
+public sealed interface DefinitionRole extends RecordOfTheBuilding {
 
     /**
      * Whether the definition is the model's: what the module's own source declares, what a jar of
@@ -86,6 +91,59 @@ public sealed interface DefinitionRole {
         public RowValue {
             if (position == null) {
                 throw new IllegalArgumentException("a row's value stands at a position");
+            }
+        }
+
+        @Override
+        public boolean isTheModels() {
+            return false;
+        }
+    }
+
+    /**
+     * The entry a module publishes for one of its values, which another module calls in place of
+     * holding a copy of the value.
+     *
+     * <p>Not a row's value and not the module's own {@code let}: nothing wrote it, no row stands
+     * behind it and no position is read from it. It is the module's, since another module reaches
+     * the value through it, but it declares nothing a rule about declarations applies to — the
+     * value it enters is what is declared.
+     *
+     * <p>{@code of} is the value it enters. Carried here rather than read back out of the name the
+     * entry is emitted under, which says nothing a reader may rely on.
+     */
+    record PublishedValueEntry(souther.compiler.types.ValueName.Helper of) implements DefinitionRole {
+
+        public PublishedValueEntry {
+            if (of == null) {
+                throw new IllegalArgumentException("an entry is for a value");
+            }
+        }
+
+        @Override
+        public boolean isTheModels() {
+            return false;
+        }
+    }
+
+    /**
+     * The entry a fixture reads one of this module's values through, in place of interpreting the
+     * value's own body a second time.
+     *
+     * <p>Not {@link PublishedValueEntry}: publication answers what another module may call, and this
+     * answers what a fixture may call, and the two sets are not one — a value kept private to its
+     * module, or declared by an attached file, has no published entry and still needs this one. Not a
+     * row's value and not the module's own {@code let} either, for the same reasons
+     * {@code PublishedValueEntry} is neither.
+     *
+     * <p>{@code of} is the value it enters, carried here for the reason {@code PublishedValueEntry#of}
+     * is: the name an entry is emitted under says nothing a reader may rely on.
+     */
+    record FixtureValueEntry(souther.compiler.types.ValueName.Helper of) implements DefinitionRole {
+
+        public FixtureValueEntry {
+            if (of == null) {
+                throw new IllegalArgumentException("an entry is for a value");
             }
         }
 

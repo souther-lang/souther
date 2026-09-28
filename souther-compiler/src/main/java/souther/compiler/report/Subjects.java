@@ -47,14 +47,32 @@ final class Subjects {
             case Weakening.InputCasesUnreadable it ->
                     new Subject.AtAnInput(it.behavior(), it.at());
             case Weakening.BorderValueUnreadable it -> new Subject.AtABorder(it.border());
+            // The border, as the reading of it is. What the readings were stopped against is the
+            // figure this compiler walks to and is what the walk met; one border is one place to
+            // go back to however many rows stopped the walk there.
+            case Weakening.BorderReadingsNotExhausted it -> new Subject.AtABorder(it.border());
+            // The border, and not the lines beside it. Which lines those are is the same at every
+            // run; what a reader acts on is which border was not held against them.
+            case Weakening.ABorderNotHeldAgainstTheLinesBesideIt it ->
+                    new Subject.AtABorder(it.border());
+            // The border, and not the point within it: which point could not be worked out is
+            // carried in the words a report writes about the border's own items, not in a second
+            // place to send a reader.
+            case Weakening.ItemsPlaceNotWorkedOut it -> new Subject.AtABorder(it.border());
             case Weakening.ModelReadingIncomplete it -> of(it.cause());
-            case Weakening.BodiesNotElaborated it -> new Subject.OfAModule(it.module());
+            // Named by the behavior, which is what this answer is of.
+            case Weakening.BodyNotInEvaluation it ->
+                    new Subject.OfABehavior(it.behavior());
             case Weakening.BoundaryNotDerived it -> new Subject.OfABehavior(it.behavior());
             case Weakening.InputNotRead it -> new Subject.OfABehavior(it.behavior());
             // The behavior, and not how large the space was or what it was walked against. Those
             // are what the walk met and are the reason; a behavior has one pair space, so they
             // tell no two of these apart.
             case Weakening.PairSpaceTruncated it -> new Subject.OfABehavior(it.behavior());
+            // The same of the other criterion, and the behavior for the same reason: how many of
+            // its groups went unwalked is what the walk met, and a behavior has one reading of its
+            // meetings.
+            case Weakening.MeetingsNotWalked it -> new Subject.OfABehavior(it.behavior());
             // The arm as the source wrote it, which is what the fact now carries: the number a run
             // through it was recorded at is resolved where the sites are, and nothing this far
             // along has them.
@@ -71,6 +89,9 @@ final class Subjects {
             // is what happened and travels as the reason; one body has one decision, so it tells
             // no two of these apart.
             case Weakening.DecisionReadingIncomplete it -> new Subject.OfABehavior(it.behavior());
+            // The behavior one of whose rules was read short. Which rule is each rule's own
+            // answer, and one fact of the reading is one subject however many rules it bears on.
+            case Weakening.DecisionRuleReadShort it -> new Subject.OfABehavior(it.behavior());
         };
     }
 

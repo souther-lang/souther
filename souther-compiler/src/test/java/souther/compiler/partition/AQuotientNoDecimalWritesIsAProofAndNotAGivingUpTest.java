@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Carrier;
@@ -9,14 +10,12 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.check.DeclaredSig;
-
-import java.math.BigDecimal;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -57,11 +56,11 @@ class AQuotientNoDecimalWritesIsAProofAndNotAGivingUpTest {
     @Test
     void aLevelNoValueOfThePositionReachesIsOutOfReachAndNotUnsettled() {
         Standing.OfAForm aThird = new Standing.OfAForm(
-                new LinearForm<>(BigDecimal.ZERO,
-                        Map.of(value("b"), new BigDecimal("3"))),
+                new LinearForm<>(ExactRatio.ZERO,
+                        Map.of(value("b"), ExactRatio.of(3))),
                 Map.of(value("b"), new Carrier.Dense()),
-                LevelSpace.overFiniteDecimals(new BigDecimal("3")),
-                new Criterion.AtTheLevel(new Level.ACount(Count.of(BigDecimal.ONE))));
+                LevelSpace.overFiniteDecimals(ExactRatio.of(3)),
+                new Criterion.AtTheLevel(Level.OfTheQuantity.of(1)));
 
         assertInstanceOf(Realization.Impossible.class, new LevelRealizer().realize(aThird, region(),
                         NothingTheDeclarationsRefuse.at()));
@@ -72,11 +71,11 @@ class AQuotientNoDecimalWritesIsAProofAndNotAGivingUpTest {
     @Test
     void aLevelAValueDoesReachComesBackAsARow() {
         Standing.OfAForm aWhole = new Standing.OfAForm(
-                new LinearForm<>(BigDecimal.ZERO,
-                        Map.of(value("b"), new BigDecimal("3"))),
+                new LinearForm<>(ExactRatio.ZERO,
+                        Map.of(value("b"), ExactRatio.of(3))),
                 Map.of(value("b"), new Carrier.Dense()),
-                LevelSpace.overFiniteDecimals(new BigDecimal("3")),
-                new Criterion.AtTheLevel(new Level.ACount(Count.of(new BigDecimal("6")))));
+                LevelSpace.overFiniteDecimals(ExactRatio.of(3)),
+                new Criterion.AtTheLevel(Level.OfTheQuantity.of(6)));
 
         assertInstanceOf(Realization.Found.class, new LevelRealizer().realize(aWhole, region(),
                         NothingTheDeclarationsRefuse.at()));
@@ -93,7 +92,8 @@ class AQuotientNoDecimalWritesIsAProofAndNotAGivingUpTest {
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
-        return InputDomain.of(sigs.get("take"), rules, ReadAs.THE_COMPILATION_DOES)
+        return InputDomain.of(sigs.get("take"),
+                        RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES))
                 .quantities(rules).region();
     }
 }

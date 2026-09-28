@@ -11,6 +11,7 @@ import souther.compiler.types.Type;
 import souther.compiler.check.TypeOps;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -36,13 +37,20 @@ public final class Deriver {
 
     /**
      * The decoder and the encoder of one product, which are two halves of one reading and are
-     * carried together for that reason.
+     * carried together for that reason, beside the shape each field carries that both were lowered
+     * from ({@code shapes}, in the order a value lays its fields out).
+     *
+     * <p>Held here rather than worked out again by a reader that wants the shape and not the
+     * lowered {@code Hir}: asked separately, what a reader below the derivation reads and what the
+     * decoder and the encoder were built from would agree only by coincidence — the same risk this
+     * class's own doc gives for the decoder and the encoder disagreeing with each other.
      */
-    public record Codecs(Hir.DecoderDef decoder, Hir.EncoderDef encoder) {
+    public record Codecs(Hir.DecoderDef decoder, Hir.EncoderDef encoder, Map<String, CodecShape> shapes) {
 
         public Codecs {
             java.util.Objects.requireNonNull(decoder, "a derived representation reads");
             java.util.Objects.requireNonNull(encoder, "a derived representation writes");
+            shapes = Collections.unmodifiableMap(new LinkedHashMap<>(shapes));
         }
     }
 
@@ -67,11 +75,15 @@ public final class Deriver {
         // from it. Asked separately they would agree only by coincidence: a builder with an arm the
         // other lacks reports the shape it did not implement as one the language refuses, which is
         // how an unimplemented case comes to look like a rule (see CodecShape).
+        //
+        // In the order a value lays its fields out, asked of what answers that: what comes out of
+        // here is a list of binds and a list of field inits, so the order is carried into what is
+        // emitted. Taken off `fields`, a codec would be laid out by however a mapping iterated.
         Map<String, CodecShape> shapes = new LinkedHashMap<>();
         try {
-            for (Map.Entry<String, Type> f : fields.entrySet()) {
-                shapes.put(f.getKey(), CodecShape.of(f.getValue(), d, f.getKey(),
-                        fieldPos(d, f.getKey()), symbols, kinds, published));
+            for (String field : TypeOps.fieldLayout(d, symbols)) {
+                shapes.put(field, CodecShape.of(fields.get(field), d, field,
+                        fieldPos(d, field), symbols, kinds, published));
             }
         } catch (CodecShape.Unnamed _) {
             return null;
@@ -85,7 +97,7 @@ public final class Deriver {
         Hir.EncoderDef encoder = deriveEncoder(d, shapes,
                 new Hir.Binders(new BindingOwner.Synthesized(declared,
                         BindingOwner.Pass.DERIVER, 1)));
-        return new Codecs(decoder, encoder);
+        return new Codecs(decoder, encoder, shapes);
     }
 
     // --- decoder derivation ---
@@ -102,7 +114,7 @@ public final class Deriver {
             Hir.Binder input = binders.binder("__in", pos);
             Hir.Construct result = new Hir.Construct(self,
                     List.of(new Hir.FieldInit(single.getKey(), Hir.Var.local(input, pos), pos)), pos);
-            return new Hir.PrimDecoder(kind, input, List.of(), result, pos);
+            return new Hir.PrimDecoder(kind, input, result, pos);
         }
         // a newtype over a non-primitive Y delegates the whole input to Y's decoder (spec §newtype)
         if (d.newtype()) {

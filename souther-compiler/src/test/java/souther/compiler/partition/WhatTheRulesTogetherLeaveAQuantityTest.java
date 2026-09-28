@@ -9,6 +9,7 @@ import souther.compiler.check.InvariantStatementId;
 import souther.compiler.check.PartId;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.EndSide;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Towards;
 
 import java.util.List;
@@ -59,7 +60,7 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
         return QuantityArrangement.of(NUMBERS, byItsOwnRule(parted),
                         between(low == null ? null : Bound.at(at(low), true),
                                 high == null ? null : Bound.at(at(high), true)))
-                .bands().stream().map(Band::key).toList();
+                .bands().stream().map(Band::spelled).toList();
     }
 
     /**
@@ -195,12 +196,12 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
      */
     @Test
     void aRunOpenAtItsLineIsReadInTheQuantitysOwnUnits() {
-        java.math.BigDecimal three = new java.math.BigDecimal("3");
+        ExactRatio three = ExactRatio.of(3);
         souther.compiler.check.Carrier dense = new souther.compiler.check.Carrier.Dense();
         LevelSpace decimals = LevelSpace.onACarrier(dense);
         Seam third = Seam.of(
                 LevelSpace.overFiniteDecimals(LevelSpace.generatorOverFiniteDecimals(three)),
-                new Level.ACount(new Count(java.math.BigDecimal.ONE)), Towards.BELOW,
+                Level.OfTheQuantity.of(1), Towards.BELOW,
                 new Seam.Scale(three, dense));
         Band below = QuantityArrangement.of(decimals, byItsOwnRule(third)).bands().get(0);
 
@@ -235,7 +236,7 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
             assertEquals(List.of("|", "0.5|0.5", "|"),
                     QuantityArrangement.of(decimals,
                                     byItsOwnRule(order.toArray(new Seam[0]))).bands().stream()
-                            .map(Band::key).toList(),
+                            .map(Band::spelled).toList(),
                     "read in either order, the number itself is a run of its own: " + order);
         }
     }
@@ -259,7 +260,7 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
         assertEquals(1, arranged.partings().size(), "the values part once");
         assertEquals(List.of(aLine(0), aLine(1)), arranged.partings().get(0).alternatives(),
                 "and each of the two lines is against that place");
-        assertEquals(List.of("|10", "11|"), arranged.bands().stream().map(Band::key).toList(),
+        assertEquals(List.of("|10", "11|"), arranged.bands().stream().map(Band::spelled).toList(),
                 "so there are two runs and not three");
     }
 

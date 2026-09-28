@@ -25,6 +25,19 @@ import java.util.Set;
  * the point across its readings ({@link BorderObligationPointAssessment}), which is gathered from
  * these and never read off one of them.
  *
+ * <p><b>And what the rows leave standing beside the line.</b> The points say whether a row stands
+ * where the line is and beside it, which is what shows a line has not moved; what shows it has not
+ * turned is that no other line the model's own weights put one step away answers alike at every row
+ * ({@link AnotherLineTheRowsAllow}). Both come off this one reading of these rows, so what a build
+ * refuses over is one measurement read two ways rather than two measurements made to different
+ * rules.
+ *
+ * <p><b>And what a search for a row that would tell them apart came to.</b> Beside the line the rows
+ * allow rather than inside it: which lines these rows leave standing is what this compilation
+ * measured, and whether a row can be composed at one of the inputs that would settle it is work
+ * somebody asked for. Written into the measurement, a reading nobody asked to compose for would
+ * have had to carry a search that never ran.
+ *
  * <p><b>Total over the points its border has, the way that border is.</b> A border answers at every
  * point its rule gives it and so does this, so a reader asking what one of them came to is never
  * answered by an entry that is not there. Which of the four each point is is the line's answer
@@ -32,8 +45,16 @@ import java.util.Set;
  * two points of one border can be the same one, so a measure keyed on the role would hold one entry
  * where there are two.
  */
-public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> items)
+public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> items,
+                               AnotherLineTheRowsAllow beside, ARowTellingTheLinesApart toldApart)
         implements RuleCitations {
+
+    /** One reading of a line, before anybody asked for a row that would tell it from the lines
+     *  beside it. */
+    public BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> items,
+                            AnotherLineTheRowsAllow beside) {
+        this(border, items, beside, ARowTellingTheLinesApart.notAsked());
+    }
 
     /**
      * The one handle this reading holds, which is the one the rule that drew the line was cited by.
@@ -47,7 +68,98 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
         return Set.of(origin().cited());
     }
 
+    /**
+     * What deciding whether a row is owed at each of this border's points went without.
+     *
+     * <p>Apart from {@link #besideWeakening}, which is the lines beside this one and not this one's
+     * own points. A point whose own place on the order the exact arithmetic could not read is
+     * neither owed nor refused ({@link ItemAssessment.NotWorkedOut}), and what a reader is told is
+     * this border's — an item carries no behavior or position of its own to be told by.
+     *
+     * <p>Only that fact, and not an owed item's own coverage weakening: that one already reaches
+     * whichever of the declaration or behavior accounts this border belongs to
+     * ({@code ArmAccount}), and unioning it again here, into a set built the same way for both
+     * accounts, would answer it into both — the same leak this fact was added to stop.
+     */
+    public WeakeningSet itemsWeakening() {
+        WeakeningSet out = WeakeningSet.none();
+        for (ItemAssessment item : items.values()) {
+            if (item instanceof ItemAssessment.NotWorkedOut not) {
+                out = out.union(WeakeningSet.of(new Weakening.ItemsPlaceNotWorkedOut(border, not.why())));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * What holding this line against the lines beside it went without, where it came back unsettled.
+     *
+     * <p>Empty for every settled answer, whichever way it settled and however few rows it took. A
+     * walk short of a row that left no line standing has established that, because reading more
+     * rows leaves fewer lines standing and never more — so a measure weakened by every partial walk
+     * would hold a verdict open over a question that was answered.
+     *
+     * <p>Made here because the facts are about this border and the answer does not hold one. A
+     * reading that came to nothing and readings nobody made are the same two facts the points of
+     * this border carry, said in the same words, so a reader is told them once however many
+     * questions over these rows went without them.
+     */
+    public WeakeningSet besideWeakening() {
+        if (!(beside instanceof AnotherLineTheRowsAllow.CouldNotTell(var why))) {
+            return WeakeningSet.none();
+        }
+        return switch (why) {
+            case AnotherLineTheRowsAllow.Unsettled.RowsIncomplete(ReadingReasons met) -> {
+                WeakeningSet out = WeakeningSet.none();
+                for (souther.compiler.partition.ReadingGap gap : met.eachKindOnce().written()) {
+                    out = out.union(
+                            WeakeningSet.of(new Weakening.BorderValueUnreadable(border, gap)));
+                }
+                yield met.tried() instanceof souther.compiler.partition.StandingAtAPoint
+                        .ReadingsTried.StoppedAtTheLimit(int limit)
+                        ? out.union(WeakeningSet.of(
+                                new Weakening.BorderReadingsNotExhausted(border, limit)))
+                        : out;
+            }
+            // The reading's own, which is what a measure over these lines is worth.
+            case AnotherLineTheRowsAllow.Unsettled.TheRowsWereNotRead(var as) -> as.weakening();
+            case AnotherLineTheRowsAllow.Unsettled.TheRowsAreAllOnOneSide _ ->
+                    WeakeningSet.of(new Weakening.ABorderNotHeldAgainstTheLinesBesideIt(border,
+                            Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why
+                                    .THE_ROWS_ARE_ALL_ON_ONE_SIDE));
+            case AnotherLineTheRowsAllow.Unsettled.NoStrategyForIt _ ->
+                    WeakeningSet.of(new Weakening.ABorderNotHeldAgainstTheLinesBesideIt(border,
+                            Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why
+                                    .NO_STRATEGY_FOR_THE_RULE));
+            // The two lines part company only where nothing here can say a row arrives, which is a
+            // question about the way to the border rather than about the rows.
+            case AnotherLineTheRowsAllow.Unsettled.NoReachableDistinguisher _ ->
+                    WeakeningSet.of(new Weakening.ABorderNotHeldAgainstTheLinesBesideIt(border,
+                            Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why
+                                    .NO_REACHABLE_DISTINGUISHER));
+            case AnotherLineTheRowsAllow.Unsettled.TheRunsWereNotWatched _ ->
+                    WeakeningSet.of(new Weakening.ABorderNotHeldAgainstTheLinesBesideIt(border,
+                            Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why
+                                    .NOTHING_WATCHED_THE_RUNS));
+            // A model's own decimals put a step of the fault family out of the exact arithmetic's
+            // reach, so the family this border would be held against is not known whole.
+            case AnotherLineTheRowsAllow.Unsettled.AFaultFamilyMemberWasNotComposed _ ->
+                    WeakeningSet.of(new Weakening.ABorderNotHeldAgainstTheLinesBesideIt(border,
+                            Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why
+                                    .ARITHMETIC_COULD_NOT_HOLD_A_FAMILY_MEMBER));
+        };
+    }
+
     public BorderAssessment {
+        if (beside == null) {
+            throw new IllegalArgumentException("a border says what the rows leave standing beside"
+                    + " it, and a border that was not asked says that: " + border);
+        }
+        if (toldApart == null) {
+            throw new IllegalArgumentException("a reading says what a search for a row telling this"
+                    + " line from the ones beside it came to, and a reading nobody asked says"
+                    + " that: " + border);
+        }
         if (items == null || !items.keySet().equals(border.answers().keySet())) {
             throw new IllegalArgumentException(
                     "a border assessed at some of its points and not others: " + items);
@@ -79,6 +191,13 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
                 if (!(demand instanceof Demand.NotOwed owed) || owed.reason() != not.reason()) {
                     throw new IllegalArgumentException("the " + point + " of " + border.label()
                             + " is assessed as not owed for " + not.reason()
+                            + ", and its border says " + demand);
+                }
+            }
+            case ItemAssessment.NotWorkedOut not -> {
+                if (!(demand instanceof Demand.NotWorkedOut)) {
+                    throw new IllegalArgumentException("the " + point + " of " + border.label()
+                            + " is assessed as not worked out for " + not.why()
                             + ", and its border says " + demand);
                 }
             }

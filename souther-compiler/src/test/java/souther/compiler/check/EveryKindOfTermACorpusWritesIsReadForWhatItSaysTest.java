@@ -5,8 +5,8 @@ import souther.compiler.core.Core;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.test.ClosedWorldContract;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -37,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * a module numbers its constructs after the ones the blank lines did not add — so what says where a
  * construct stands among its neighbours is held by the fixtures and not here.
  */
-@Tag("population")
+@ClosedWorldContract
 class EveryKindOfTermACorpusWritesIsReadForWhatItSaysTest {
 
     /**
@@ -136,6 +136,12 @@ class EveryKindOfTermACorpusWritesIsReadForWhatItSaysTest {
                             c.db().ask(new Bodies.CheckedBehavior(module, behavior)).value();
                     if (checked != null && checked.body() != null) {
                         out.add(checked.body());
+                    }
+                    // What an analysis reads is a term as well: the body, and the template of each
+                    // value it builds, which is where a build of one stands.
+                    if (checked != null && checked.analysis() != null) {
+                        out.add(checked.analysis().core());
+                        out.addAll(checked.analysis().templatesAfterTheirBuilders());
                     }
                 }
                 Map<String, StatedContract> stated =

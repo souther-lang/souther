@@ -2,10 +2,14 @@ package souther.compiler.partition;
 
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.NarrowedBounds;
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.publish.PublishedRuleHandle;
 import souther.compiler.publish.PublishedSentence;
 
@@ -13,11 +17,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.SequencedSet;
 
 /**
  * One line a rule drew, and what a row is owed at each of the points it has.
@@ -55,27 +57,33 @@ import java.util.SequencedSet;
 public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, PointAnswer> answers) {
 
     public Border {
-        if (answers == null || !answers.keySet().equals(pointsOf(origin))) {
+        if (answers == null || !answersEveryPoint(answers, pointsOf(origin))) {
             throw new IllegalArgumentException("a border that does not answer at every point its"
-                    + " line has: " + answers + ", where its rule has " + pointsOf(origin));
+                    + " line has: "
+                    + (answers == null ? null : DomainPoint.inOneOrder(answers.keySet()))
+                    + ", where its rule has " + pointsOf(origin));
         }
         // And an answer at every one of them. A key with nothing under it is the same silence the
         // point set was made total to stop, wearing the shape that was supposed to have refused it.
         if (answers.containsValue(null)) {
             throw new IllegalArgumentException(
-                    "a border with a point it names and does not answer: " + answers);
+                    "a border with a point it names and does not answer: "
+                            + DomainPoint.inOneOrder(answers.keySet()));
         }
         // And an answer of the kind the place is. Whether a point names a value or a run of them is
         // the place's own answer, and a border that came back with a region where a value belongs
         // would have every reader of it deciding what it was holding from the shape it happened to
         // have.
-        for (Map.Entry<DomainPoint, PointAnswer> each : answers.entrySet()) {
-            boolean atTheLine = each.getValue() instanceof PointAnswer.AtLine;
-            boolean inARegion = each.getValue() instanceof PointAnswer.InRegion;
-            if ((atTheLine && !each.getKey().againstTheLine())
-                    || (inARegion && each.getKey().againstTheLine())) {
-                throw new IllegalArgumentException("the " + each.getKey() + " of a border,"
-                        + " answered as " + each.getValue());
+        // Walked by the places, because which of them a refusal names is the answer here and a
+        // mapping keyed by a place says nothing about the order it was filled in.
+        for (DomainPoint point : DomainPoint.inOneOrder(answers.keySet())) {
+            PointAnswer answer = answers.get(point);
+            boolean atTheLine = answer instanceof PointAnswer.AtLine;
+            boolean inARegion = answer instanceof PointAnswer.InRegion;
+            if ((atTheLine && !point.againstTheLine())
+                    || (inARegion && point.againstTheLine())) {
+                throw new IllegalArgumentException("the " + point + " of a border,"
+                        + " answered as " + answer);
             }
         }
         // Walked the one way, whatever order the branch that built them filled them in. Everything
@@ -89,6 +97,20 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
     }
 
     /**
+     * Whether a border answers at each of the points its line has and at no other.
+     *
+     * <p>Asked of what the points are and not of the order they come in. Which points a line has is
+     * one question and which order they are walked in is another, and the check that a border is
+     * total is the first of them: a border whose entries were built in some other order answers at
+     * the same places. Written as an equality between the keys and the points, it read whichever
+     * of the two the collection on the right happened to have.
+     */
+    private static boolean answersEveryPoint(Map<DomainPoint, PointAnswer> answers,
+                                             List<DomainPoint> points) {
+        return answers.size() == points.size() && answers.keySet().containsAll(points);
+    }
+
+    /**
      * Every point this line has, which is what its rule says and not what a reading found.
      *
      * <p>One derivation, asked where a border is built and again where one is assessed, so that a
@@ -98,7 +120,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * have a run either way — which one of them is inside the partition the border bounds is the
      * rule's answer and no part of which point it is.
      */
-    public static SequencedSet<DomainPoint> pointsOf(LineOrigin origin) {
+    public static List<DomainPoint> pointsOf(LineOrigin origin) {
         List<DomainPoint> points = new ArrayList<>();
         points.add(new DomainPoint.AtTheLine());
         switch (origin.lineFacts().claim()) {
@@ -112,14 +134,16 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         points.add(new DomainPoint.InTheRegion(Towards.BELOW));
         points.add(new DomainPoint.InTheRegion(Towards.ABOVE));
         // Walked in the order the technique names them, and the two sides of a role in the order
-        // the values are in. Which point is which is the set; this is how a reader is walked
-        // through it, and a report that showed a line's points in the order a switch happened to
-        // fill them in would move them about as the shapes of line changed.
+        // the values are in. A report that showed a line's points in the order a switch happened
+        // to fill them in would move them about as the shapes of line changed, so the order is
+        // part of what this answers — and the answer is a sequence, whose own equality sees it.
+        // Answered as a set, two orders of these points were one value and nothing downstream
+        // could have disagreed with a walk that had them the other way round.
         points.sort(Comparator
                 .comparing((DomainPoint point) ->
                         PointRole.of(point, origin.lineFacts().holdsAt(point)))
                 .thenComparingInt(point -> point.side() == Towards.BELOW ? 0 : 1));
-        return new LinkedHashSet<>(points);
+        return List.copyOf(points);
     }
 
     /** What this border asks of the rows at one of its points. */
@@ -296,7 +320,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         // point.
         PointContributions own = PointContributions.by(origin.authoredLine());
         return switch (answer(point)) {
-            case PointAnswer.NotOwed _ -> List.of();
+            case PointAnswer.NotOwed _, PointAnswer.NotWorkedOut _ -> List.of();
             case PointAnswer.AtLine _ -> List.of(
                     new OwedPoint(new BorderObligationPoint.AtLine(line, point),
                             PointAttribution.of(own)));
@@ -715,11 +739,40 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         return admits(within, leaves == null ? cut : leaves);
     }
 
-    /** Whether {@code within} holds the value at {@code level}. */
+    /**
+     * Whether the extent of {@code within} reaches the place {@code level} is at.
+     *
+     * <p><b>Not {@link NumericDomain.Bounds#admits}, and the difference is the ends' strictness.</b>
+     * That one asks whether a row may hold the value, so an end it stops short of refuses it. This
+     * asks whether a line is inside the range at all, and a strict end is at the place its own rule
+     * drew — so a rule refusing its own threshold on an order that names no value beside it would
+     * be read as drawing nothing, which is what the account above says this exists not to do. Two
+     * questions, and a reading shared between them answers one of them wrongly.
+     *
+     * <p>Compared as numbers wherever the level is one. What the rules leave is written as places,
+     * because it is read off the declarations, and a level of a quantity stepping by a third is a
+     * number no place is — so the range comes up to the level rather than the level going down to
+     * the range ({@link Level#asANumber}). Both are on the quantity's own order by construction: the
+     * bounds handed in are the bounds of the thing being cut.
+     *
+     * <p>And as places where it is not a number, which is an order whose only level is where two
+     * positions meet. Nothing there has a number for an end to be lifted to.
+     */
     private static boolean admits(NumericDomain.Bounds within, Level level) {
-        Place at = placeOf(level);
-        return (within.min() == null || at.compareTo(within.min().at()) >= 0)
-                && (within.max() == null || at.compareTo(within.max().at()) <= 0);
+        ExactRatio number = level.asANumber();
+        if (number == null) {
+            Place at = level.asAPlace();
+            return (within.min() == null || at.compareTo(within.min().at()) >= 0)
+                    && (within.max() == null || at.compareTo(within.max().at()) <= 0);
+        }
+        return (within.min() == null || reaching(within.min()).compareTo(number) <= 0)
+                && (within.max() == null || reaching(within.max()).compareTo(number) >= 0);
+    }
+
+    /** One end of a range as the number it stops at. Lifted and never lowered: every count is a
+     *  ratio, and a level of a quantity whose own step is no decimal is a number no count is. */
+    private static ExactRatio reaching(Endpoint end) {
+        return Count.number(end.at()).exactly();
     }
 
     /**
@@ -771,7 +824,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
             // And read back into the units this rule wrote, which is what its own quantity measures
             // a row in. A border reads rows through the form it was written as, so a run handed to
             // it in another scale would be held against numbers of a different size.
-            java.math.BigDecimal per = each.cuts().per();
+            ExactRatio per = each.cuts().per();
             List<Parting> beside =
                     byQuantity.getOrDefault(each.cuts().quantity().key(), List.of())
                             .stream().map(parting -> parting.scaledBy(per)).toList();
@@ -844,8 +897,23 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         // What the run is owed to, from the same reading that said what it asks: the line this point
         // is named for is the border's own, and the far side is where the run stops — which is the
         // end lying the way the run does.
-        return inside.region().parts().stream().anyMatch(part -> space.inspect(part).any())
-                ? new PointAnswer.InRegion(inside, run.endsAt(away))
+        //
+        // Walked rather than asked with anyMatch, since a part the exact arithmetic could not read
+        // is not a part with nothing in it: a region every part of which answered so has not been
+        // shown to hold nothing, and only a part this did find something in settles that a row is
+        // owed here without waiting for the rest.
+        UnheldNumber notWorkedOut = null;
+        for (LevelInterval part : inside.region().parts()) {
+            switch (space.inspect(part)) {
+                case Occupancy.Inhabited _ -> {
+                    return new PointAnswer.InRegion(inside, run.endsAt(away));
+                }
+                case Occupancy.NotWorkedOut not -> notWorkedOut = not.why();
+                case Occupancy.Empty _ -> { }
+            }
+        }
+        return notWorkedOut != null
+                ? new PointAnswer.NotWorkedOut(notWorkedOut)
                 : new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT);
     }
 
@@ -867,30 +935,54 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      */
     private static PointAnswer pointAt(LevelSpace space, Level cut, Towards towards,
                                        boolean isTheThreshold, NumericDomain.Bounds reach) {
-        if (isTheThreshold && space.attainable(cut)) {
-            // Admitted already: a threshold the rules refuse is a line this never made.
-            return new PointAnswer.AtLine(new Criterion.AtTheLevel(cut));
+        if (isTheThreshold) {
+            switch (space.attainable(cut)) {
+                case ExactAnswer.Unheld<Boolean> unheld -> {
+                    return new PointAnswer.NotWorkedOut(unheld.why());
+                }
+                case ExactAnswer.Held<Boolean> held -> {
+                    // Admitted already: a threshold the rules refuse is a line this never made.
+                    if (held.value()) {
+                        return new PointAnswer.AtLine(new Criterion.AtTheLevel(cut));
+                    }
+                }
+            }
         }
-        Optional<Level> at = beyond(space, cut, towards);
+        ExactAnswer<Optional<Level>> beyondAnswer = beyond(space, cut, towards);
+        if (beyondAnswer instanceof ExactAnswer.Unheld<Optional<Level>> unheld) {
+            return new PointAnswer.NotWorkedOut(unheld.why());
+        }
+        Optional<Level> at = ((ExactAnswer.Held<Optional<Level>>) beyondAnswer).value();
         if (at.isEmpty()) {
             return new PointAnswer.NotOwed(NotOwedReason.THE_CARRIER_NAMES_NO_NEIGHBOUR);
         }
-        return reach.admits(placeOf(at.get()))
+        // Whether a row may be written at it, which is the range's own reading and takes its ends
+        // as they are written — unlike whether the line is inside the range at all ({@link
+        // #admits}). Asked of the number the level is: a quantity stepping by a third stands at one
+        // and no place is it, and what the range says about a number does not depend on which
+        // arithmetic it is asked in.
+        ExactRatio number = at.get().asANumber();
+        return (number == null ? reach.admits(at.get().asAPlace()) : reach.admits(number))
                 ? new PointAnswer.AtLine(new Criterion.AtTheLevel(at.get()))
                 : new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT);
     }
 
     /**
-     * The nearest level the quantity takes on one side of the threshold.
+     * The nearest level the quantity takes on one side of the threshold, or which way the exact
+     * arithmetic could not tell.
      *
      * <p>The value beside the threshold where the quantity takes the threshold, and the first value
      * it does take otherwise. Two questions the order answers apart: {@code 2 * a <= 9} has no
      * neighbour of 9 to ask for, because 9 is not a level it stands at, and the level it stands at
      * below 9 is not one step from anything.
      */
-    static Optional<Level> beyond(LevelSpace space, Level cut, Towards towards) {
-        return space.attainable(cut) ? space.neighbour(cut, towards)
-                : space.nearestAtOrBeyond(cut, towards);
+    static ExactAnswer<Optional<Level>> beyond(LevelSpace space, Level cut, Towards towards) {
+        return switch (space.attainable(cut)) {
+            case ExactAnswer.Unheld<Boolean> unheld -> ExactAnswer.unheld(unheld.why());
+            case ExactAnswer.Held<Boolean> held -> held.value()
+                    ? space.neighbour(cut, towards)
+                    : space.nearestAtOrBeyond(cut, towards);
+        };
     }
 
     /**
@@ -996,27 +1088,11 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         // the two agree wherever a rule admits its threshold and are one count apart wherever it
         // does not, which is half the operators an author can write.
         Level leaves = Seam.of(space, cut, valueBelongs(origin)).leaving(kept);
-        if (end == null || !end.at().sameAs(placeOf(leaves))) {
+        if (end == null || !end.at().sameAs(leaves.asAPlace())) {
             throw new IllegalStateException(
                     "a bound whose line is not where what it leaves stops: "
                             + origin.saidWithoutAPlace());
         }
-    }
-
-    /**
-     * A level as a place on the order it is a level of.
-     *
-     * <p>The one narrowing, so that what the rules leave — which is written as places, because it is
-     * read off the declarations — can be held against what the quantity takes. Both are on the
-     * quantity's own order by construction: the bounds handed in are the bounds of the thing being
-     * cut, and a caller that handed in a position's bounds for a border over something else would be
-     * answering a different question here as well.
-     */
-    private static Place placeOf(Level level) {
-        return switch (level) {
-            case Level.OnACarrier on -> on.at();
-            case Level.ACount count -> count.at();
-        };
     }
 
     /**

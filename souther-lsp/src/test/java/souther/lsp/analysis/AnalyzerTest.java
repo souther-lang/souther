@@ -75,6 +75,33 @@ class AnalyzerTest {
     }
 
     /**
+     * A document is compiled whatever it imports. With no path to resolve against, an import of a
+     * module that is not there is what the compile says, and the editor says it too.
+     */
+    @Test
+    void aDocumentThatImportsIsCompiledLikeAnyOther() {
+        String src = "module demo\nimport shared.money ( Amount )\ndata X = { v: Amount }\n";
+
+        List<LspDiagnostic> diags = analyzer.diagnostics(src);
+
+        assertTrue(diags.stream().anyMatch(d -> d.message().contains("shared.money")),
+                diags.toString());
+    }
+
+    /**
+     * An {@code examples for} document is compiled too. Handed on its own, the module its rows are
+     * for is not there, and that is what the compile says.
+     */
+    @Test
+    void anExamplesForDocumentIsCompiledLikeAnyOther() {
+        String src = "examples for demo\nexample f\n  | (1) -> 2\n";
+
+        List<LspDiagnostic> diags = analyzer.diagnostics(src);
+
+        assertTrue(diags.stream().anyMatch(d -> d.message().contains("demo")), diags.toString());
+    }
+
+    /**
      * And it is marked where it is written, not at the head of the document.
      *
      * <p>The compile behind this route reads the document without a name for it, so what it reports

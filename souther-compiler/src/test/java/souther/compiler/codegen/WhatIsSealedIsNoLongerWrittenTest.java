@@ -2,6 +2,7 @@ package souther.compiler.codegen;
 
 import souther.compiler.Emitted;
 import souther.compiler.EmittedBytes;
+import souther.compiler.copied.CopyContract;
 import souther.compiler.generated.ProbeImage;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.GeneratedClass;
@@ -17,6 +18,7 @@ import java.lang.reflect.Modifier;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
@@ -75,18 +77,28 @@ class WhatIsSealedIsNoLongerWrittenTest {
         ways.put("putAll", out -> out.putAll(Map.of(LAMBDA, EmittedBytes.of(LAMBDA))));
         ways.put("putAll, of nothing", out -> out.putAll(Map.of()));
         ways.put("rewrite", out -> out.rewrite(QUOTE, _ -> EmittedBytes.of(QUOTE, "afterwards")));
+        // What the manifest says about a behavior is part of what a reader holds, so recording one
+        // after the classes were handed over would change an answer somebody already has.
+        ways.put("leftOut", out -> out.leftOut("quote"));
+        // What the classes offer and what they were built against is published with them, so it is
+        // said before they are handed over or not at all.
+        ways.put("linked", out -> out.linked(new TreeMap<>(), new TreeMap<>()));
+        // What they offer to be copied and what they copied is published with them for the same
+        // reason.
+        ways.put("copied", out -> out.copied(new CopyContract(new TreeMap<>(), new TreeMap<>())));
         return ways;
     }
 
     /**
      * What this holds beside writing: what it was written for, whose numbers a run through it
-     * leaves, and the sealing itself.
+     * leaves, what its classes offer and were built against, and the sealing itself.
      *
      * <p>{@code probes} is settled when the classes are first asked for and never afterwards — it is
      * what the generation numbered, and a generation numbers once. So there is no write for the
      * sealing to refuse, and no order of calls under which two readers are told different things.
      */
-    private static final Set<String> WHICH_DO_NOT_WRITE = Set.of("implemented", "probes", "seal");
+    private static final Set<String> WHICH_DO_NOT_WRITE =
+            Set.of("implemented", "probes", "provides", "requires", "copies", "seal");
 
     @TestFactory
     Stream<DynamicTest> everyWayOfWritingIsRefusedAfterwards() {

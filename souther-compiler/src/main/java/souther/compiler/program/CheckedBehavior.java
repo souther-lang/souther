@@ -7,22 +7,23 @@ import java.util.List;
 
 /**
  * One behavior of a checked module: what it is called, what it takes and answers, where its
- * implementation comes from, what it declares of its answer, and what its examples said.
+ * implementation comes from, what constructing it requires, what it declares of its answer, and
+ * what its examples said.
  *
- * <p>The first three are its {@link BehaviorTarget}, which is what a call to it reaches and what
- * {@link CheckedProgram#behavior} answers with. Read through here as well, because a reader
- * emitting this module has the behavior in hand and would otherwise ask the program for what it is
- * already holding. It is the same value both ways: what a behavior takes and answers is one fact of
- * the program, not one per route to it.
+ * <p>What it takes and answers, where its implementation comes from and what constructing it
+ * requires are its {@link BehaviorTarget}, which is what {@link CheckedProgram#behavior} answers
+ * with. Read through here as well, because a reader emitting this module has the behavior in hand
+ * and would otherwise ask the program for what it is already holding. It is the same value both
+ * ways: each of those is one fact of the program, not one per route to it.
  *
  * <p>The rest is here and nowhere else, and that is why a call is not answered with one of these. A
  * behavior a module on the path declares is reached by calls in this program and its rows were
  * never read here — handed over as a behavior with no rows it would read as one nothing says what
  * it owes, which is a different program.
  *
- * <p>A class and not a record. What a checked behavior is known to be will grow — what it requires,
- * what it declares cannot arrive — and each of those is something a reader asks for rather than a
- * place in a constructor every existing reader would have to be recompiled against.
+ * <p>A class and not a record. What a checked behavior is known to be will grow — what it declares
+ * cannot arrive is one such thing still owed — and each of those is something a reader asks for
+ * rather than a place in a constructor every existing reader would have to be recompiled against.
  */
 public final class CheckedBehavior {
 
@@ -60,13 +61,15 @@ public final class CheckedBehavior {
         return target.implementation();
     }
 
+
     /**
-     * The call boundary this behavior is reached by, which is the one
-     * {@link CheckedProgram#behavior} answers with.
+     * The target this behavior is reached by, which is the one {@link CheckedProgram#behavior}
+     * answers with.
      *
-     * <p>The same value and not a copy. What a behavior takes, answers, and where its
-     * implementation comes from is one fact of the program, and a call to it reaches that fact
-     * whether it is reached through the module being emitted or through the identity it carries.
+     * <p>The same value and not a copy. What a behavior takes, answers, where its implementation
+     * comes from and what constructing it requires is one fact of the program, and a call to it
+     * reaches that fact whether it is reached through the module being emitted or through the
+     * identity it carries.
      */
     BehaviorTarget target() {
         return target;
@@ -110,6 +113,12 @@ public final class CheckedBehavior {
      */
     public List<CheckedRow> rows() {
         return rows;
+    }
+
+    /** The behaviors constructing this one requires injected, in the order its constructor takes
+     *  them ({@link BehaviorTarget#requirements}). */
+    public List<ValueName.Behavior> requirements() {
+        return target.requirements();
     }
 
     @Override

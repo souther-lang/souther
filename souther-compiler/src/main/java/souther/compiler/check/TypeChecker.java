@@ -3,8 +3,8 @@ package souther.compiler.check;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.ast.Hir;
-import souther.compiler.core.Core;
 import souther.compiler.core.ValueShape;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -35,7 +35,7 @@ public final class TypeChecker {
 
     /** The bodies elaborated so far, filled as the check walks them. */
     static final class Elaborated {
-        final Map<String, Core> helpers = new LinkedHashMap<>();
+        final Map<String, EmittedDefinition> helpers = new LinkedHashMap<>();
         /** What each of the module's own definitions turned out to be, by name — a value's type and a
          * helper's return type, settled from the body (ADR-0066). Recorded because the exposed-surface
          * check asks what a published definition is, and the answer is a type: reading the body for
@@ -43,6 +43,22 @@ public final class TypeChecker {
          * names something it does not build. A definition that returns a function has none: there is
          * no application here to settle the lambda from (spec §blocks). */
         final Map<String, Type> definitionTypes = new LinkedHashMap<>();
+        /** What each value of the module was settled as, by the check of its own body. Kept for the
+         * readers that stand a call to the value's method where the value was named, which are
+         * typed by it. */
+        final Preserved.Settling settledValues = new Preserved.Settling();
+        /** What each definition the lowered module carries takes, by name: the parameters the
+         * method is emitted with, which are the ones a lowering added as well as the ones written. */
+        final Map<String, List<Hir.FnParam>> loweredParams = new LinkedHashMap<>();
+        /** The value each parameter a lowering gave a value's method holds, by the binding of the
+         * parameter. A parameter the source wrote is not in here. */
+        final Map<BindingId, ValueName.Helper> carried = new LinkedHashMap<>();
+        /** What each non-behavior definition this module declares or takes on runs as, by name —
+         * settled once at {@link souther.compiler.query.Bodies.LoweringRoleOf} and read here rather
+         * than answered again from the definition's shape. Not narrowed to what is emitted: most of
+         * these are inlined at their call sites, and {@link LoweringRole#emitted} is asked where an
+         * {@link EmittedDefinition} is actually made. */
+        final Map<String, LoweringRole> roles = new LinkedHashMap<>();
     }
 
     /**
@@ -61,11 +77,13 @@ public final class TypeChecker {
      *                later phase reads — the {@code fns} map, the {@code exposed} set — so when one
      *                fails there is nothing left to check the rest against, and a body checked all
      *                the same reports being unable to see what was already reported missing.
-     * @param emittedHelpers the recursive helper bodies it elaborated, which the backend emits as
-     *                         methods
+     * @param emittedDefinitions the definitions it elaborated, which the backend emits as methods,
+     *                           each with its body and the types of what it takes
+     * @param settledValues what each value of the module was settled as
      */
     public record Reported(List<CompileException> errors, List<Unanswerable> abandoned,
-                           boolean stopped, Map<String, Core> emittedHelpers) {}
+                           boolean stopped, Map<String, EmittedDefinition> emittedDefinitions,
+                           Preserved.Settling settledValues) {}
 
     /**
      * Everything the check has to say about a module that is not one behavior's body: its
@@ -73,30 +91,41 @@ public final class TypeChecker {
      * asked for on its own ({@link #checkBehavior}), so what one of them says is not in here.
      *
      * <p>{@code reqSigs} and {@code recursiveHelperFns} are handed over rather than worked out here,
-     * because the body check reads the same two and they must be the same two.
+     * because the body check reads the same two and they must be the same two. {@code bodies} is
+     * where each behavior of the module gets its body, handed over for the same reason: the module's
+     * tree does not say, and for a module read off the path it has no {@code let} to count.
      */
     public static Reported checkModule(Hir.Module module, DerivedSymbols symbols,
-                                       PublishedDeclarations published, DeclarationKinds kinds,
-                                       NewtypeInners inners,
+                                       DeclarationAccess declarations,
                                        UninhabitableTypes.WithNoValue withNoValue,
                                        DeclarationLocations declaredAt,
                                        ReadingPolicy policy,
                                        Map<String, Sig> sigs,
-                                       Set<ValueName.Behavior> importedInjected,
+                                       BehaviorBodies bodies,
                                        Set<ValueName.Behavior> importedUnwritten,
-                                       Hir.Module lowered, Map<ValueName.Behavior, ReqSig> reqSigs,
+                                       Hir.Module lowered, Map<BindingId, ValueName.Helper> carried,
+                                       Map<String, LoweringRole> roles,
+                                       Map<ValueName.Behavior, ReqSig> reqSigs,
                                        Map<ValueName.Behavior, ReqSig> calleeSigs,
                                        Map<String, Type> recursiveHelperFns,
                                        Map<String, Hir.FnDef> imported, Set<String> settled,
-                                       Map<TypeSymbol.AtModule, ValueShape> shapes) {
+                                       Map<TypeSymbol.AtModule, ValueShape> shapes,
+                                       Preserved.SettledValues declaredElsewhere) {
         Elaborated elaborated = new Elaborated();
+        elaborated.carried.putAll(carried);
+        elaborated.roles.putAll(roles);
+        // What the modules that declare the values this one reads settled them as: their answer,
+        // which is the only one there is, and not a check of a copy of their bodies made here.
+        declaredElsewhere.signatures().values().forEach(elaborated.settledValues::settled);
         List<Unanswerable> abandoned = new ArrayList<>();
         List<CompileException> errors = new ArrayList<>();
         boolean stopped = false;
         try {
-            checkRecovering(module, symbols, published, kinds, inners, withNoValue, declaredAt,
+            checkRecovering(module, symbols, declarations,
+                    withNoValue,
+                    declaredAt,
                     policy, sigs,
-                    importedInjected,
+                    bodies,
                     importedUnwritten,
                     lowered, calleeSigs, errors,
                     elaborated, abandoned, reqSigs, recursiveHelperFns, imported, settled, shapes);
@@ -113,7 +142,8 @@ public final class TypeChecker {
             errors.add(e);
             stopped = true;
         }
-        return new Reported(deduped(errors), List.copyOf(abandoned), stopped, elaborated.helpers);
+        return new Reported(deduped(errors), List.copyOf(abandoned), stopped, elaborated.helpers,
+                elaborated.settledValues);
     }
 
     /**
@@ -126,16 +156,16 @@ public final class TypeChecker {
                                      Hir.Expr loweredBody,
                                     ReadingPolicy policy,
                                      InvariantChecker.Source discharge,
-                                     Symbols symbols, PublishedDeclarations published,
-                                     DeclarationKinds kinds, NewtypeInners inners,
+                                     Symbols symbols, DeclarationAccess declarations,
                                      Map<ValueName.Behavior, ReqSig> calleeSigs,
                                      Map<ValueName.Behavior, ReqSig> reqSigs, HelperInliner inliner,
                                      Map<String, Type> recursiveHelperFns,
                                      Map<String, DataChecker.Constructs> recHelperConstructs,
-                                     List<Diagnostic> warnings) {
-        return SpecChecker.checkSpecFn(spec, fn, loweredBody, discharge, symbols, published, kinds,
-                inners, policy,
-                calleeSigs, reqSigs, inliner, recursiveHelperFns, recHelperConstructs, warnings);
+                                     Preserved.SettledValues settledValues) {
+        return SpecChecker.checkSpecFn(spec, fn, loweredBody, discharge, symbols, declarations,
+                policy,
+                calleeSigs, reqSigs, inliner, recursiveHelperFns, recHelperConstructs,
+                settledValues);
     }
 
     /**
@@ -213,13 +243,12 @@ public final class TypeChecker {
      * throw straight out — its caller treats that as fail-fast and abandons the module.
      */
     static void checkRecovering(Hir.Module module, DerivedSymbols symbols,
-                                        PublishedDeclarations published, DeclarationKinds kinds,
-                                        NewtypeInners inners,
+                                        DeclarationAccess declarations,
                                         UninhabitableTypes.WithNoValue withNoValue,
                                         DeclarationLocations declaredAt,
                                        ReadingPolicy policy,
                                         Map<String, Sig> sigs,
-                                       Set<ValueName.Behavior> importedInjected,
+                                       BehaviorBodies bodies,
                                        Set<ValueName.Behavior> importedUnwritten,
                                         Hir.Module lowered, Map<ValueName.Behavior, ReqSig> calleeSigs,
                                         List<CompileException> errors,
@@ -229,6 +258,8 @@ public final class TypeChecker {
                                         Map<String, Hir.FnDef> publishedToHere,
                                         Set<String> settled,
                                         Map<TypeSymbol.AtModule, ValueShape> shapes) {
+        PublishedDeclarations published = declarations.published();
+        DeclarationKinds kinds = declarations.kinds();
         // Both components, because what reads this walks both: a helper is checked whether the module
         // declared it or took it on to emit, and one missing here is a helper checked against a body
         // it does not have.
@@ -249,9 +280,11 @@ public final class TypeChecker {
         toCheck.putAll(HelperInliner.takenOnBy(lowered));
         for (Hir.FnDef fn : lowered.fns()) {
             loweredBodies.put(fn.name(), fn.writtenBody());
+            elaborated.loweredParams.put(fn.name(), fn.params());
         }
         for (Hir.FnDef fn : lowered.takenOn()) {
             loweredBodies.put(fn.name(), fn.writtenBody());
+            elaborated.loweredParams.put(fn.name(), fn.params());
         }
         // The imported definitions join the table this module's bodies are expanded against: a
         // published helper is expanded at its call sites here exactly as one of this module's own is,
@@ -261,7 +294,8 @@ public final class TypeChecker {
         // readings answer the same about a behavior's name: it becomes the function value it names,
         // which a helper may then not apply (E1818). Told nothing, the standalone reading would
         // refuse the name for being a name rather than for being a behavior a helper cannot reach.
-        HelperInliner inliner = HelperInliner.forModule(module, publishedToHere, symbols.library())
+        HelperInliner inliner = HelperInliner.forModule(module, publishedToHere, symbols.library(),
+                        ValueAtAReference.SHARED_PER_REGION)
                 .namingBehaviors(InjectionSigs.arities(calleeSigs));
         // Which declarations reach a `partial` helper, asked once for the two checks that ask it: the
         // invariant rule just below and the totality rule further down.
@@ -330,8 +364,7 @@ public final class TypeChecker {
                         if (symbols.declarations().declaration(data.declares())
                                 instanceof Derived.Data derived) {
                             DataChecker.checkData(derived,
-                                    CheckContext.of(symbols, published, kinds, inners)
-                                            .forData(data));
+                                    CheckContext.of(symbols, declarations).forData(data));
                         }
                     }
                     case Hir.SumData sum -> DataChecker.checkSum(sum, symbols, kinds, published);
@@ -395,17 +428,17 @@ public final class TypeChecker {
                 DataChecker.rejectDuplicateTypes(spec.constructs(), "`constructs`", spec.pos());
             }
         }
-        // A data is Java-buildable from outside iff the whole module is public (no `exposing`) or
-        // its name is exposed. Used by the injection constructs check (E1305).
-        boolean exposeAll = module.exposing().isEmpty();
-        // `exposing` lists a module's own public surface. A module's own type names, as opposed to
-        // `symbols`, which also holds the data it imports — an imported name is not re-exported.
+        // What the module publishes, which is what every rule below about its surface reads: a data
+        // is Java-buildable from outside when it is published (E1305), and what is published may not
+        // rest on what is kept. The names the clause itself writes are held to its own rules first.
+        Set<String> exposed = module.published();
+        // A name the clause writes is one of the module's own. A module's own type names, as opposed
+        // to `symbols`, which also holds the data it imports — an imported name is not re-exported.
         Set<String> ownTypes = new HashSet<>();
         for (Hir.Def d : module.defs()) {
             ownTypes.add(d.name());
         }
-        Set<String> exposed = new HashSet<>();
-        for (String e : module.exposing()) {
+        for (String e : module.exposing().named()) {
             int dot = e.indexOf('.');
             // `exposing` is type-granular: a data's decoder/encoder are always public API once the
             // data itself is exposed (spec §jvm-codec), so there is nothing a `.decoder`/`.encoder` member
@@ -415,8 +448,9 @@ public final class TypeChecker {
                 throw CompileException.of(Diagnostic.say(new ModuleMessage.ExposingIsTypeGranular(e.substring(0, dot), e))
                                 .at(module.pos()).build());
             }
-            // an exposed name must be one of this module's own definitions. An imported name that is
-            // merely visible here is not re-exported — importers reach it from its declaring module.
+            // a name the clause writes must be one of this module's own definitions. An imported name
+            // that is merely visible here is not re-exported — importers reach it from its declaring
+            // module.
             if (!ownTypes.contains(e) && !allBehaviors.contains(e)) {
                 // A value and a helper are both part of what a module offers: a limit a rule is
                 // written against, and the rule itself. A behavior's own `let` is not — what a reader
@@ -435,7 +469,6 @@ public final class TypeChecker {
                                 .hint(new ExampleMessage.MoveTheValueIntoTheModuleItself(e))
                                 .build());
                     }
-                    exposed.add(e);
                     continue;
                 }
                 boolean imported = symbols.scope().inScope(e);
@@ -447,9 +480,8 @@ public final class TypeChecker {
                                         .ExposingNamesSomethingThisModuleDoesNotDeclare(e))
                         .build());
             }
-            exposed.add(e);
         }
-        // Injection targets (spec §injected-behavior): a SpecBehavior with no matching fn. Its name and
+        // Injection targets (spec §injected-behavior): the behaviors `bodies` says Java supplies. Its name and
         // success type let a fn call it inline (spec §unmarked-output); it is the "required" behavior of the
         // old form. An imported injection target is one here too (spec §composition-with-requirements): the
         // module that names it injects and binds it, whether it named it as a `>->` stage or as a `depends
@@ -466,7 +498,7 @@ public final class TypeChecker {
         List<Diagnostic> unitEntries = new ArrayList<>();
         for (Hir.BehaviorDef b : module.behaviors()) {
             if (b instanceof Hir.SpecBehavior any) {
-                unitEntries.addAll(SpecChecker.unitDataNamedInConstructs(any, symbols));
+                unitEntries.addAll(SpecChecker.unitDataNamedInConstructs(any, kinds));
             }
         }
         if (!unitEntries.isEmpty()) {
@@ -479,8 +511,9 @@ public final class TypeChecker {
             // Java supplies is the behavior that writes no clause and no `let` (§injected-behavior),
             // and only that one gets a base for an implementation to extend.
             if (b instanceof Hir.SpecBehavior spec
-                    && Requirements.implementationOf(b, fns.keySet()).isInjectionTarget()) {
-                SpecChecker.checkInjectionConstructs(spec, symbols, exposeAll, exposed);
+                    && bodies.of(new ValueName.Behavior(module.name(), b.name()))
+                            .isInjectionTarget()) {
+                SpecChecker.checkInjectionConstructs(spec, symbols, exposed);
                 injectionTargets.add(spec.name());
             }
         }
@@ -503,7 +536,8 @@ public final class TypeChecker {
         // untypeable, and the body check would report it as a call to an unknown name (E1023).
         SpecChecker.checkRequiresAreInjectionTargets(module, reqSigs, calleeSigs);
         // Nothing that is built here may hold a behavior nobody has written (spec §unwritten-behavior).
-        SpecChecker.checkNothingBuiltHereRestsOnAnUnwrittenBehavior(module, importedUnwritten);
+        SpecChecker.checkNothingBuiltHereRestsOnAnUnwrittenBehavior(module, bodies,
+                importedUnwritten);
         // Fail-fast too: a behavior reaching itself has no first element to build, and the code that
         // works out requirement sets and emits classes would walk the loop.
         SpecChecker.checkBehaviorsDoNotRecurse(module);
@@ -520,7 +554,8 @@ public final class TypeChecker {
         // declares, which is the same check every other definition of this module gets. There is
         // nothing left here for a reading of its own to ask.
         collect(errors, abandoned, () -> HelperTyping.checkHelpers(inliner, toCheck, symbols,
-                published, kinds, reqSigs, recursiveHelperFns, loweredBodies, elaborated));
+                published, kinds, reqSigs, recursiveHelperFns, loweredBodies,
+                LoweringRole.valuesWithAnEntry(elaborated.roles, module.name()), elaborated));
         // Recursion is total by default (spec §fn-declaration): a non-`partial` recursive helper must
         // be structurally recursive, so its examples terminate at compile time.
         collect(errors, abandoned, () -> TotalityChecker.check(inliner));
@@ -552,19 +587,19 @@ public final class TypeChecker {
                 }
             }
         });
-        // an exposed composition must declare its output in `exposing`, matching the inferred one
+        // a composition named by `exposing` must declare its output there, matching the inferred one
         // (spec §declared-composition-output, ADR-0024), so a far-away change cannot grow a published output silently.
         collect(errors, abandoned, () -> SpecChecker.checkUnionMemberNames(module, sigs, published));
         collect(errors, abandoned, () -> SpecChecker.checkUnionMemberFields(module, sigs, symbols,
                 kinds, published));
         collect(errors, abandoned, () -> SpecChecker.checkExposedPipeOutputs(module,
-                exposed, sigs, published));
+                sigs, published));
         // What this module reaches out with may not rest on what it keeps to itself — a name in
         // `exposing`, and an injection target, whose base is public whatever `exposing` says. After
         // the exposing signature checks: a signature that should not be there at all (E1605), or one
         // that disagrees with the pipeline (E1604), is the more particular thing to say.
         collect(errors, abandoned, () -> SpecChecker.checkExposedSurface(module, injectionTargets,
-                sigs, symbols, exposeAll, exposed, elaborated.definitionTypes));
+                sigs, symbols, exposed, elaborated.definitionTypes));
     }
 
     /** Applies {@code f} to every direct subexpression of {@code e}. Delegates to the one

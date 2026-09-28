@@ -51,11 +51,12 @@ The three are separate predicates. That a function is the only type failing all 
 the types there are now, not a claim that they are one question; a type carrying a representation but
 no ordering would separate them, and only their shared walk would move.
 
-**A module's published surface requires none of them.** A published value and a published helper
-cross as source, expanded at the reader's call sites (ADR-0075), so nothing is encoded and a
-published function-typed value is a published helper by another spelling. This holds under the
-current source-expansion scheme; introducing an ABI that passes run-time values between modules would
-put the question back.
+**A module's published surface requires none of them.** A published helper crosses as source,
+expanded at the reader's call sites (ADR-0075). A published value runs in the module that declares
+it and is read through that module's entry (ADR-0074), which hands the reader a JVM reference inside
+one program; nothing is encoded on the way. A function-typed value is a published helper by another
+spelling (ADR-0072). An ABI that passed run-time values
+between processes, or through a codec, would put the question back.
 
 **A name in a value position is the function it names.** A helper written where a value goes is the
 lambda that applies it. A recursive helper expands the same way, since the call inside stays a call.

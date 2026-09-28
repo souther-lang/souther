@@ -85,8 +85,8 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
     enum Held { OF_THE_VALUE, ON_THE_PATH }
 
     static Known top() {
-        return new Known(ConstraintState.<FactSubject>top(), List.of(), Set.of(),
-                new Unguarded(ConstraintState.<FactSubject>top()));
+        return new Known(ConstraintState.top(FactSubject.inOneOrder()), List.of(), Set.of(),
+                new Unguarded(ConstraintState.top(FactSubject.inOneOrder())));
     }
 
     /** This, with {@code f rel 0} taken as holding as far as {@code held} reaches. */

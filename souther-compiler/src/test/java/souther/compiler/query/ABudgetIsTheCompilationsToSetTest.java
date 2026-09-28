@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -35,7 +36,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ABudgetIsTheCompilationsToSetTest {
 
-    /** Two positions of two classes each, which is four pairs — one more than a budget of three. */
+    /**
+     * Two positions of two classes each, which is four pairs — one more than a budget of three.
+     *
+     * <p>Injected, so that the space is over both positions whatever either is decided on. What
+     * this file is about is what a budget does to a measurement; a behavior with a body has its
+     * pair space over the positions its decisions are about, and a fixture with one would be
+     * asking two questions at once.
+     */
     private static final String FOUR_PAIRS = """
             module example.pairs
 
@@ -45,29 +53,35 @@ class ABudgetIsTheCompilationsToSetTest {
             data Res = { n: Int }
 
             behavior pick : (x: Flag, y: Flag) -> Res
-                constructs Res
-            let pick (x, y) = Res { n = 1 }
 
             example pick
                 | "one" : (A, A) -> Res { n = 1 }
             """;
 
     /**
-     * A pair space past the budget leaves the measure partial and says which limit did it.
+     * A pair space past the budget comes back with no account of the rows, and says which limit.
      *
      * <p>The same model twice, and only the budget differs — so the two answers are the budget's
-     * and not the model's. Read with one compilation, a partial measurement is as good an account
-     * of a model this cannot read at all.
+     * and not the model's.
+     *
+     * <p><b>No account rather than an account of nothing.</b> Not one row was placed, so there is
+     * nothing to say about where the rows sit. Written as a reading that reached no combination, it
+     * is a reading every consumer has to disbelieve by consulting what weakened it first — and the
+     * whole space reads as a space of gaps to any of them that does not.
      */
     @Test
-    void aPairSpacePastTheBudgetIsReportedAsPartial() {
+    void aPairSpacePastTheBudgetHasNoAccountOfTheRows() {
         PartitionEvidence wide = evidenceFor(FOUR_PAIRS, Budgets.measures().pairSpace());
         PartitionEvidence narrow = evidenceFor(FOUR_PAIRS, 3);
 
         assertInstanceOf(Measurement.Complete.class, wide.pairs().counted(),
                 () -> "at the standard budget the space is walked: " + wide.pairs());
-        assertInstanceOf(Measurement.Partial.class, narrow.pairs().counted(),
+        assertInstanceOf(Measurement.FailedToMeasure.class, narrow.pairs().counted(),
                 () -> "and past a budget of three it is not: " + narrow.pairs());
+        assertTrue(narrow.pairs().counted().made().isEmpty(),
+                () -> "with nothing said about where the rows sit: " + narrow.pairs());
+        assertFalse(narrow.pairs().counted().weakening().isEmpty(),
+                "and what it went without is still said, because it was asked for");
         assertEquals(4, narrow.pairs().total(),
                 "the size of the space is what the model says, whatever was walked of it");
     }
@@ -83,10 +97,14 @@ class ABudgetIsTheCompilationsToSetTest {
     @Test
     void aBudgetBelowOneIsRefused() {
         assertThrows(IllegalArgumentException.class,
-                () -> new AdequacyPolicy.OfTheMeasures(0,
+                () -> new AdequacyPolicy.OfTheMeasures(0, 4096,
                         PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS), "a pair space of nought");
         assertThrows(IllegalArgumentException.class,
-                () -> new AdequacyPolicy.OfTheMeasures(20_000, null),
+                () -> new AdequacyPolicy.OfTheMeasures(20_000, 0,
+                        PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS),
+                "no combination of a group");
+        assertThrows(IllegalArgumentException.class,
+                () -> new AdequacyPolicy.OfTheMeasures(20_000, 4096, null),
                 "nothing to build a behavior's distinctions with");
         assertThrows(IllegalArgumentException.class,
                 () -> new AdequacyPolicy.OfTheGeneration(0, 4096), "no rows");
@@ -150,6 +168,7 @@ class ABudgetIsTheCompilationsToSetTest {
         Compilation compilation = Compilation.ofSource(TELLS_STRINGS_APART, "Main")
                 .withAdequacyPolicy(new AdequacyPolicy(
                         new AdequacyPolicy.OfTheMeasures(Budgets.measures().pairSpace(),
+                                Budgets.measures().cellsPerGroup(),
                                 new PatternPlan.Budget(1, 1)),
                         Budgets.generation()));
         compilation.measure(Adequacy.Asked.fullReport());
@@ -233,6 +252,7 @@ class ABudgetIsTheCompilationsToSetTest {
         Compilation compilation = Compilation.ofSource(source, "Main")
                 .withAdequacyPolicy(new AdequacyPolicy(
                         new AdequacyPolicy.OfTheMeasures(pairSpace,
+                                Budgets.measures().cellsPerGroup(),
                                 PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS),
                         Budgets.generation()));
         compilation.measure(Adequacy.Asked.fullReport());

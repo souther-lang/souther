@@ -1,15 +1,18 @@
 package souther.compiler.query;
 
 import souther.compiler.check.Sig;
-import souther.compiler.coverage.ArmProbe;
-import souther.compiler.coverage.CoverageSites;
 import souther.compiler.execute.BoundaryValues;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.numeric.Place;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.ClassOfAPosition;
+import souther.compiler.partition.GenerationObligation;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.InputClassifications;
+import souther.compiler.partition.MeasuredInput;
 import souther.compiler.partition.ObservedInputs;
+import souther.compiler.partition.OrderedAffineBoundary;
 import souther.compiler.partition.RowToRun;
 import souther.compiler.partition.RulesTaken;
 import souther.compiler.partition.StandingAtAPoint;
@@ -41,12 +44,79 @@ import java.util.Set;
  */
 public record Settlements(List<ObligationIdentity> requested,
                           SequencedMap<ObligationIdentity, RowKey> composedFor,
-                          SequencedMap<RowKey, Map<ObligationIdentity, Settlement>> byRow) {
+                          SequencedMap<RowKey, Map<ObligationIdentity, Settlement>> byRow,
+                          SequencedMap<RowKey, Map<ObligationIdentity,
+                                  InputOfARowForALine>> standsAt,
+                          Map<ObligationIdentity, InputOfARowForALine> composedAt) {
 
     public Settlements {
         requested = List.copyOf(requested);
         composedFor = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(composedFor));
         byRow = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(byRow));
+        standsAt = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(standsAt));
+        composedAt = Collections.unmodifiableMap(new LinkedHashMap<>(composedAt));
+        // A row composed for a line was composed somewhere, and what a person is shown for such a
+        // line is that. Held here because the two are separate maps a caller fills: a line with a
+        // row and no input is one this would show the measurement's own answer for while the block
+        // hands the row over, which is the pair of sentences all of this exists to keep together.
+        // Asked of the lines alone — a class is where a value falls and an arm is a place a run
+        // went, and neither is somewhere a report sends a reader.
+        for (Map.Entry<ObligationIdentity, RowKey> each : composedFor.entrySet()) {
+            if (each.getKey() instanceof ObligationIdentity.OfABorder
+                    && !composedAt.containsKey(each.getKey())) {
+                throw new IllegalArgumentException("a row composed for a line and composed nowhere: "
+                        + each.getKey() + " by " + each.getValue());
+            }
+        }
+    }
+
+    /**
+     * The input of the row a person is handed for each line, once the reduction has settled which
+     * rows those are.
+     *
+     * <p><b>After {@link #keeping()} and never before it.</b> What is composed for a line and what
+     * is offered for it are two answers: a row that tells the two lines apart answers the line
+     * whoever it was composed for, so the row composed for it goes when another one already does
+     * that ({@link #offers}). A place read off the search is a place from before that was decided,
+     * and a report naming it sends a reader to an input the block does not hand them.
+     *
+     * <p><b>Two rules, and each has its own source for the input.</b> They are the two halves of
+     * {@link #offers}: the row composed for the line is what a person was offered for it, and a row
+     * that settles the line answers it whoever it was composed for. The first is known from the
+     * search — the values it asked for are what the row was built from — and the second from
+     * reading that row against the line. Only the second of those is a reading, and a row this
+     * compiler could not read back is offered all the same
+     * ({@link ItemAssessment.Attempt.Unverified}), so a walk that took its input from the reading
+     * alone had nothing to name for exactly the rows the second half of {@code offers} keeps.
+     *
+     * <p>The row composed for the line first, where the reduction kept it, and otherwise whichever
+     * kept row settles it — in the order the rows are offered, which is the order a person reads
+     * them in.
+     *
+     * <p>Empty for a line no kept row is offered for, which is a line the block says nothing offers
+     * a row for. What is shown then is what the measurement saw, and that is the measurement's to
+     * say.
+     */
+    public Map<ObligationIdentity, InputOfARowForALine> shownFor(Set<RowKey> kept) {
+        Map<ObligationIdentity, InputOfARowForALine> out = new LinkedHashMap<>();
+        for (ObligationIdentity item : requested) {
+            RowKey composed = composedFor.get(item);
+            InputOfARowForALine at = null;
+            if (composed != null && kept.contains(composed)) {
+                at = composedAt.get(item);
+            } else {
+                for (RowKey rowKey : byRow.keySet()) {
+                    if (kept.contains(rowKey) && byRow.get(rowKey).get(item).settles()) {
+                        at = standsAt.getOrDefault(rowKey, Map.of()).get(item);
+                        break;
+                    }
+                }
+            }
+            if (at != null) {
+                out.put(item, at);
+            }
+        }
+        return Collections.unmodifiableMap(out);
     }
 
     /** What the row {@code rowKey} addresses would do about {@code item}, for a reader holding
@@ -200,6 +270,15 @@ public record Settlements(List<ObligationIdentity> requested,
         List<ObligationIdentity> requested = new ArrayList<>();
         SequencedMap<ObligationIdentity, RowKey> composedFor = new LinkedHashMap<>();
         SequencedMap<RowKey, Map<ObligationIdentity, Settlement>> byRow = new LinkedHashMap<>();
+        // And where each row stands on each line it answers, which is what a report names when it
+        // sends a reader to an input. Kept beside the settlements and made with them: the row was
+        // read once, and a place worked out again afterwards is a second reading of it.
+        SequencedMap<RowKey, Map<ObligationIdentity, InputOfARowForALine>> standsAt =
+                new LinkedHashMap<>();
+        // And the input each search composed at, for the lines it composed a row for. The other
+        // half of what a person may be shown: a row the reading above could not read back is one
+        // this offers all the same, and what it was composed at is what there is to name for it.
+        Map<ObligationIdentity, InputOfARowForALine> composedAt = new LinkedHashMap<>();
         // How each behavior reads the lines the module's declarations own. A behavior's own account
         // holds the lines it is owed a row at and none of these — that is what the account is for —
         // so a walk that looked only there would find no reading of a declared line anywhere and
@@ -226,6 +305,10 @@ public record Settlements(List<ObligationIdentity> requested,
             requested.addAll(read.owed());
             if (filling != null) {
                 composedFor.putAll(read.composed(filling));
+                // The row and the input it was composed at, from the one value that holds both.
+                // Taken from two askings, a line could end up with a row from one reading and an
+                // input from another — which is the pair a report would then show a person.
+                read.composedForALine().forEach((item, made) -> composedAt.put(item, made.at()));
             }
         }
         // And the points the module's declarations are owed, which are no behavior's own. A row of
@@ -259,13 +342,23 @@ public record Settlements(List<ObligationIdentity> requested,
                 // happens to be asked about, at the price of running it that many times.
                 RowAsRead one = read == null ? RowAsRead.nothingRead() : read.read(row.toRun());
                 Map<ObligationIdentity, Settlement> here = new LinkedHashMap<>();
+                Map<ObligationIdentity, InputOfARowForALine> where = new LinkedHashMap<>();
                 for (ObligationIdentity item : items) {
-                    here.put(item, read == null ? undetermined(one) : read.settlementOf(one, item));
+                    ToldApartAt answered = read == null
+                            ? new ToldApartAt(undetermined(one), null)
+                            : read.answerFor(one, item);
+                    here.put(item, answered.said());
+                    if (answered.at() != null) {
+                        where.put(item, answered.at());
+                    }
                 }
                 byRow.put(row.key(), Collections.unmodifiableMap(here));
+                if (!where.isEmpty()) {
+                    standsAt.put(row.key(), Collections.unmodifiableMap(where));
+                }
             }
         });
-        return new Settlements(items, composedFor, byRow);
+        return new Settlements(items, composedFor, byRow, standsAt, composedAt);
     }
 
     /**
@@ -302,12 +395,14 @@ public record Settlements(List<ObligationIdentity> requested,
     private record OneBehavior(String behavior,
                                souther.compiler.partition.MeasuredInput subject, Sig sig,
                                BoundaryValues building, Generator.Trial trial,
-                               List<ClassOfAPosition> classes, List<Generator.ArmOwed> arms,
-                               Map<ArmProbe, CoverageSites.Obligation> armsOf,
-                               Map<CoverageSites.Obligation, List<ArmProbe>> occurrencesOf,
+                               List<GenerationObligation> obligations,
+                               Map<Generator.ArmOwed, ObligationIdentity.OfAnArm> identityOfArm,
+                               Map<ObligationIdentity.OfAnArm, Generator.ArmOwed> targetOfArm,
                                RulesTaken rules,
+                               souther.compiler.partition.InteractionRequirements combinations,
                                Adequacy.Generated.RowsForRules ruleRows,
-                               Map<ObligationIdentity.OfALine, List<AtAPoint>> reads) {
+                               Map<ObligationIdentity.OfALine, List<AtAPoint>> reads,
+                               Map<ObligationIdentity.OfABorder, List<ALineBesideOne>> besides) {
 
         /**
          * A reader for one behavior, and what this run asked of that behavior.
@@ -348,7 +443,8 @@ public record Settlements(List<ObligationIdentity> requested,
             // resolving its own points beside that would be one search made twice, free to come to
             // two answers about one row.
             List<BorderObligationPointAssessment> points = db.ask(
-                    new Adequacy.Obligations(module, new GenerationScope.Behavior(behavior)))
+                    new Adequacy.Obligations(module, new GenerationScope.Behavior(behavior),
+                            Adequacy.OFFERED_ROWS_READ_AS))
                     .value();
             for (BorderObligationPointAssessment point
                     : points == null ? List.<BorderObligationPointAssessment>of() : points) {
@@ -370,21 +466,56 @@ public record Settlements(List<ObligationIdentity> requested,
                     }
                 }
             });
-            // Which arm each place a run is recorded at is one of, both ways round. A search names
-            // an occurrence because that is where a run is recorded; what a row is owed for is the
-            // arm the author wrote, and one arm has as many occurrences as there are call sites of
-            // the helper carrying it. Read off the plan that numbered them, which is where the two
-            // are already related — worked out here, it would be a second answer to which arm a
-            // probe is one of.
-            Map<ArmProbe, CoverageSites.Obligation> armsOf = new LinkedHashMap<>();
-            Map<CoverageSites.Obligation, List<ArmProbe>> occurrencesOf = new LinkedHashMap<>();
-            Bodies.Elaborated checked = db.ask(new Bodies.Checked(module)).value();
-            CoverageSites.Plan plan =
-                    checked == null ? CoverageSites.Plan.NONE : checked.plan();
-            for (CoverageSites.ArmSite site : plan.arms(behavior)) {
-                armsOf.put(site.index(), site.obligation());
-                occurrencesOf.computeIfAbsent(site.obligation(), _ -> new ArrayList<>())
-                        .add(site.index());
+            // Which occurrence each arm's search target is, both ways round. Read off
+            // {@link Adequacy.RowsOwed} — the one place a fork's occurrences and the account
+            // identity a row is offered under were bound together — and not off a second reading
+            // of the body: worked out again here, from whatever this module's bodies happen to
+            // elaborate to, it would be a second answer that a partial elaboration elsewhere in the
+            // module could disagree with.
+            //
+            // Asked only where something was asked of this behavior, for the reason the lines
+            // below are: a carrier with no filling owns no arm of its own — {@link #owed} and
+            // {@link #composed} read no arm off an empty obligation list, and {@link #throughArm}
+            // never reaches this behavior's own binding for an arm behind another behavior's item —
+            // so asking here for a behavior nothing was asked of would be a search this run decided
+            // not to make, paid for a map neither method would ever read.
+            Map<Generator.ArmOwed, ObligationIdentity.OfAnArm> identityOfArm = new LinkedHashMap<>();
+            Map<ObligationIdentity.OfAnArm, Generator.ArmOwed> targetOfArm = new LinkedHashMap<>();
+            if (filling != null) {
+                RowWork owed = db.ask(new Adequacy.RowsOwed(module, behavior)).value();
+                if (owed != null) {
+                    for (RowWork.Arm arm : owed.arms()) {
+                        identityOfArm.put(arm.target(), arm.identity());
+                        targetOfArm.put(arm.identity(), arm.target());
+                    }
+                }
+            }
+            // And the lines of this behavior that the rows do not tell from the lines beside them,
+            // which are the lines a row is offered for as whole lines rather than at a point.
+            // Asked only where something was asked of this behavior: a carrier that composed a row
+            // for somebody else's line was asked for none of its own, and reading them would make
+            // the search this run decided not to make.
+            //
+            // One entry per reading of the line, the way the points above are. A row is composed
+            // under one reading and is read back at every one of them: kept as one reading, a row
+            // composed where one call site's conditions allow it would be read at another's and
+            // answer nothing, and the line would be offered a second row it already has.
+            Map<ObligationIdentity.OfABorder, List<ALineBesideOne>> besides = new LinkedHashMap<>();
+            if (filling != null) {
+                List<BorderAssessment> lines =
+                        db.ask(new Adequacy.BoundarySearch(module, behavior)).value();
+                for (BorderAssessment at : lines == null ? List.<BorderAssessment>of() : lines) {
+                    if (!(at.beside() instanceof AnotherLineTheRowsAllow.OneDoes named)) {
+                        continue;
+                    }
+                    ObligationIdentity.OfABorder item =
+                            new ObligationIdentity.OfABorder(at.border().obligation());
+                    for (ARowTellingTheLinesApart.AtOneReading one : at.toldApart().each()) {
+                        besides.computeIfAbsent(item, _ -> new ArrayList<>())
+                                .add(new ALineBesideOne(subject.at(one.reading()),
+                                        OrderedAffineBoundary.of(one.reading()), named, one));
+                    }
+                }
             }
             // What this behavior was asked to offer a row for, which is the search's answer and
             // is nothing where nothing asked it.
@@ -393,11 +524,38 @@ public record Settlements(List<ObligationIdentity> requested,
                             : Adequacy.runningRowsOf(trials, behavior, sig,
                                     Adequacy.numberingOf(db, module),
                                     RequiredDependencies.of(db, module, behavior)),
-                    filling == null ? List.of() : filling.composed().plan().classesOwed(),
-                    filling == null ? List.of() : filling.composed().plan().armsOwed(),
-                    armsOf, occurrencesOf, rulesOf(db, module, behavior),
+                    filling == null ? List.of() : filling.composed().plan().obligations(),
+                    identityOfArm, targetOfArm, rulesOf(db, module, behavior),
+                    combinationsOf(db, module, behavior, subject),
                     filling == null ? Adequacy.Generated.RowsForRules.NOTHING : filling.rules(),
-                    reads);
+                    reads, besides);
+        }
+
+        /**
+         * The combinations of this body's decisions, and what a run that made each would be seen
+         * doing.
+         *
+         * <p>Read off the one walk of the body this module holds, and under the measurement's own
+         * budget: what the generation may spend on a group is a different question from how much of
+         * the model is measured, and a behavior would otherwise be asked for what one dial allows
+         * and measured against what the other does.
+         *
+         * <p>Nothing where the body was not lowered, which is a behavior with no meetings to state
+         * requirements rather than one whose meetings state none.
+         */
+        private static souther.compiler.partition.InteractionRequirements combinationsOf(
+                Db db, String module, String behavior,
+                souther.compiler.partition.MeasuredInput subject) {
+            Map<String, souther.compiler.reading.CoverageRead.Read> met =
+                    db.ask(new Adequacy.Meets(module)).value();
+            souther.compiler.reading.CoverageRead.Read here =
+                    met == null ? null : met.get(behavior);
+            if (here == null) {
+                return souther.compiler.partition.InteractionRequirements.NONE;
+            }
+            return souther.compiler.partition.InteractionRequirements.of(behavior,
+                    here.interactions(), subject.axes().axes(),
+                    db.ask(new Front.Adequacy()).value().measures().cellsPerGroup());
         }
 
         /**
@@ -419,51 +577,128 @@ public record Settlements(List<ObligationIdentity> requested,
          * <p>Read off what the searches answered with and never off the rows. A row carries the
          * classes and arms it may be named after and never a line, so a walk from the rows would
          * have every line in the block composed for nothing.
+         *
+         * <p>One switch over every kind the plan can hold, rather than one loop apiece. A kind
+         * added to {@link GenerationObligation} without a case here does not compile, which is what
+         * keeps this in step with what a run was actually asked for — three loops agreeing with
+         * each other said nothing about whether either agreed with a fourth this held and never
+         * walked.
          */
         Map<ObligationIdentity, RowKey> composed(Adequacy.Filling filling) {
             Map<ObligationIdentity, RowKey> out = new LinkedHashMap<>();
-            for (ClassOfAPosition each : classes) {
-                if (filling.composed().discharge().at(each)
-                        instanceof souther.compiler.partition.ClassDisposition.Built built) {
-                    out.put(new ObligationIdentity.OfAClass(each),
-                            RowKey.of(behavior, filling.composed().rowFor(built.rowId())));
-                }
-            }
-            for (Generator.ArmOwed each : arms) {
-                CoverageSites.Obligation arm = armsOf.get(each.occurrences().getFirst());
-                if (arm != null && filling.composed().discharge().at(each)
-                        instanceof souther.compiler.partition.ArmDisposition.Built built) {
-                    out.put(new ObligationIdentity.OfAnArm(arm),
-                            RowKey.of(behavior, filling.composed().rowFor(built.rowId())));
+            for (GenerationObligation each : obligations) {
+                switch (each) {
+                    case GenerationObligation.Class(var target) -> {
+                        if (filling.composed().discharge().at(target)
+                                instanceof souther.compiler.partition.ClassDisposition.Built built) {
+                            out.put(new ObligationIdentity.OfAClass(target),
+                                    RowKey.of(behavior, filling.composed().rowFor(built.rowId())));
+                        }
+                    }
+                    case GenerationObligation.Arm(var target) -> {
+                        ObligationIdentity.OfAnArm identity = identityOfArm.get(target);
+                        if (identity == null) {
+                            throw new IllegalStateException(
+                                    "the generation plan asks for an arm RowsOwed did not bind: "
+                                            + target);
+                        }
+                        if (filling.composed().discharge().at(target)
+                                instanceof souther.compiler.partition.ArmDisposition.Built built) {
+                            out.put(identity,
+                                    RowKey.of(behavior, filling.composed().rowFor(built.rowId())));
+                        }
+                    }
+                    // The combination and not the space it sits in: the plan says which were
+                    // asked for and the discharge says which got a row; read off the rows
+                    // instead, a row that happens to sit in a combination nobody asked about
+                    // would be published as having been composed for it.
+                    case GenerationObligation.Pair(var target) -> {
+                        if (filling.composed().discharge().at(target)
+                                instanceof souther.compiler.partition.ClassDisposition.Built built) {
+                            out.put(target,
+                                    RowKey.of(behavior, filling.composed().rowFor(built.rowId())));
+                        }
+                    }
+                    case GenerationObligation.Meeting(var target) -> {
+                        if (filling.composed().discharge().at(target)
+                                instanceof souther.compiler.partition.ClassDisposition.Built built) {
+                            out.put(target,
+                                    RowKey.of(behavior, filling.composed().rowFor(built.rowId())));
+                        }
+                    }
                 }
             }
             filling.rules().byRule().forEach((rule, row) ->
                     out.put(new ObligationIdentity.OfADecisionRule(behavior, rule),
                             RowKey.of(behavior, row)));
+            // And the row composed at a line the rows do not tell from another, where one was. The
+            // reading that composed it says which row it is, and the first of them is the row the
+            // block offers — read off any reading that has one, a line searched twice would be
+            // said to have been composed for by a row nobody is offered.
+            composedForALine().forEach((item, made) -> out.put(item, made.key()));
+            return out;
+        }
+
+        /**
+         * The row composed for each line the rows do not tell from another, and the input it was
+         * composed at.
+         *
+         * <p><b>One value, because the two have to be one asking.</b> Which reading composed the
+         * row and which input that reading composed it at are the same answer read twice, and two
+         * walks arriving at it are two walks somebody has to keep in step — a report would then be
+         * able to name the input of a row nobody is handed. There is nothing to keep in step here.
+         *
+         * <p>The input off the search and not off a reading of the row. What the realizer asked for
+         * is what the row was built from, and it is the only thing there is to name for a row
+         * nothing read back — which is a row a person is offered like any other.
+         */
+        Map<ObligationIdentity, ARowComposedForALine> composedForALine() {
+            Map<ObligationIdentity, ARowComposedForALine> out = new LinkedHashMap<>();
+            besides.forEach((item, readings) -> readings.stream()
+                    .filter(one -> one.toldApart().composed().isPresent()).findFirst()
+                    .ifPresent(one -> out.put(item, new ARowComposedForALine(
+                            RowKey.of(behavior, one.toldApart().composed().orElseThrow().row()),
+                            new InputOfARowForALine(one.reading().border(),
+                                    one.toldApart().composedAt())))));
             return out;
         }
 
         /**
          * What this behavior was asked to offer a row for.
          *
-         * <p>Its classes and its arms, and no point of a line. A row at a point is owed once
-         * however many readings there are, and it is offered from the module's account of them —
-         * so a behavior listing its own points here would put one piece of work into a run twice
-         * and let the two answer differently.
+         * <p>Every kind the plan can hold, in one switch, and no point of a line. A row at a point
+         * is owed once however many readings there are, and it is offered from the module's
+         * account of them — so a behavior listing its own points here would put one piece of work
+         * into a run twice and let the two answer differently.
          */
         List<ObligationIdentity> owed() {
             List<ObligationIdentity> out = new ArrayList<>();
-            classes.forEach(each -> out.add(new ObligationIdentity.OfAClass(each)));
-            // The arm and not the place a search steers a row to. A helper carrying a fork is
-            // spliced into each call site, so what the plan names is one of those occurrences —
-            // the one a run through this arm would be recorded at, chosen where the finding was
-            // made. What a row is offered for is the arm.
-            for (Generator.ArmOwed each : arms) {
-                CoverageSites.Obligation arm = armsOf.get(each.occurrences().getFirst());
-                if (arm == null) {
-                    continue;
+            for (GenerationObligation each : obligations) {
+                switch (each) {
+                    case GenerationObligation.Class(var target) ->
+                            out.add(new ObligationIdentity.OfAClass(target));
+                    // The arm and not the place a search steers a row to. A helper carrying a
+                    // fork is spliced into each call site, so what the plan names is one of
+                    // those occurrences — the one a run through this arm would be recorded at,
+                    // chosen where the finding was made. What a row is offered for is the arm.
+                    case GenerationObligation.Arm(var target) -> {
+                        ObligationIdentity.OfAnArm identity = identityOfArm.get(target);
+                        if (identity == null) {
+                            throw new IllegalStateException(
+                                    "the generation plan asks for an arm RowsOwed did not bind: "
+                                            + target);
+                        }
+                        out.add(identity);
+                    }
+                    // The combination this run was asked about, which is the plan's answer: what
+                    // the criterion states is the account's, and a universe read off the space
+                    // here would hold what nobody asked for.
+                    case GenerationObligation.Pair(var target) -> out.add(target);
+                    // A meeting is not an arm — rows through every arm of a body can leave one
+                    // unmade — so it is owed in its own right and not reached through the arms
+                    // it claims.
+                    case GenerationObligation.Meeting(var target) -> out.add(target);
                 }
-                out.add(new ObligationIdentity.OfAnArm(arm));
             }
             // And every rule of this behavior's decision a row was asked for, which is not the
             // rules a row was composed for. A row composed for a class may take a rule as well,
@@ -472,6 +707,10 @@ public record Settlements(List<ObligationIdentity> requested,
             // rule its own row already discharges.
             ruleRows.asked().forEach(rule ->
                     out.add(new ObligationIdentity.OfADecisionRule(behavior, rule)));
+            // And every line the rows do not tell from a line beside it. The whole line and not a
+            // point of it: what a row here shows is which of two lines the model draws, and a line
+            // is what two lines are two of.
+            out.addAll(besides.keySet());
             return out;
         }
 
@@ -480,7 +719,26 @@ public record Settlements(List<ObligationIdentity> requested,
             return RowAsRead.of(sig, building, trial, row);
         }
 
-        Settlement settlementOf(RowAsRead asRead, ObligationIdentity item) {
+        /**
+         * What this row would do about {@code item}, and where it stands if the item is a line it
+         * answers.
+         *
+         * <p>One question, because reading the row is the expensive half and the two answers come
+         * out of one reading. Asked apart, a caller wanting the place would put the row through the
+         * line a second time — and could be handed a place from a reading the settlement was not
+         * made at.
+         *
+         * <p>{@code at} is empty for every item but a whole line. A class is where a value falls
+         * and an arm is a place a run went, and neither is somewhere a report sends a reader.
+         */
+        ToldApartAt answerFor(RowAsRead asRead, ObligationIdentity item) {
+            if (item instanceof ObligationIdentity.OfABorder line) {
+                return tellingTheLinesApart(asRead, line);
+            }
+            return new ToldApartAt(settlementOf(asRead, item), null);
+        }
+
+        private Settlement settlementOf(RowAsRead asRead, ObligationIdentity item) {
             return switch (item) {
                 case ObligationIdentity.OfAClass(var owed) -> inClass(asRead, owed);
                 // A case of an input of a behavior that divides no position of its own. Nothing
@@ -489,12 +747,77 @@ public record Settlements(List<ObligationIdentity> requested,
                 // the signature measure counts off the row's own text. Answered here as well, that
                 // would be a second reading of one relation, made from the values a row builds
                 // rather than from what it states.
-                case ObligationIdentity.OfAnInputCase owed -> throw new IllegalStateException(
-                        "no row is offered for " + owed + ", so none is weighed against it");
-                case ObligationIdentity.OfAnArm(var owed) -> throughArm(asRead, owed);
+                //
+                // A case of the output is the same relation read the other way round, and what
+                // discharges it is what a row states as well.
+                //
+                // And a row waiting for its answer is discharged by nothing composed at all: what
+                // it is owed is what the system does, written where that row is by somebody who
+                // knows it, and a row composed here would be a second row rather than that answer.
+                case ObligationIdentity.OfAnInputCase _, ObligationIdentity.OfAnOutputCase _,
+                     ObligationIdentity.OfARow _ -> throw new IllegalStateException(
+                        "no row is offered for " + item + ", so none is weighed against it");
+                case ObligationIdentity.OfABorder at -> tellingTheLinesApart(asRead, at).said();
+                case ObligationIdentity.OfAnArm owed -> throughArm(asRead, owed);
                 case ObligationIdentity.OfALine at -> atThePoint(asRead, at);
                 case ObligationIdentity.OfADecisionRule owed -> takingTheRule(asRead, owed);
+                case ObligationIdentity.OfACombinationOfDecisions owed ->
+                        makingTheDecisions(asRead, owed);
+                case ObligationIdentity.OfAFallbackPairCell owed -> inBothClasses(asRead, owed);
             };
+        }
+
+        /**
+         * Whether running the row made the decisions the combination is of.
+         *
+         * <p>The run and not the values. What a combination of a body's decisions asks for is that
+         * they were settled those ways together, and a row whose values sit where a search would
+         * have steered it may have gone elsewhere — which is the reading this measure exists to
+         * stop standing in for the fact.
+         *
+         * <p>Some one way of arriving at them, which {@link InteractionRequirements} answers. Where
+         * this behavior states no way to the combination it is another behavior's, and a row
+         * written here does not settle it.
+         */
+        private Settlement makingTheDecisions(RowAsRead asRead,
+                                              ObligationIdentity.OfACombinationOfDecisions owed) {
+            if (!behavior.equals(owed.behavior())) {
+                return new Settlement.DoesNotSettle();
+            }
+            return switch (asRead.watched()) {
+                case Generator.Watched.Ran(var account) ->
+                        combinations.met(owed, claim -> claim.satisfiedBy(account))
+                                ? new Settlement.Settles() : new Settlement.DoesNotSettle();
+                case Generator.Watched.NoAccount _ ->
+                        new Settlement.Undetermined(Settlement.Reason.NO_ACCOUNT_OF_THE_RUN);
+            };
+        }
+
+        /**
+         * Whether the row's values sit in both classes of the pair.
+         *
+         * <p>The values and not the run, which is where this parts from the combination above. A
+         * fallback pair is the criterion of a behavior whose decisions meet nowhere — and of one
+         * with no body at all — so there is nothing for a run to have been seen doing, and where a
+         * row sits is the whole of the evidence there is.
+         *
+         * <p>Undetermined where either position could not be read. A row placed at one class and
+         * unreadable at the other says nothing about the pair, and reading the second as a miss
+         * would report a combination as untried on the strength of a value nobody could classify.
+         */
+        private Settlement inBothClasses(RowAsRead asRead,
+                                         ObligationIdentity.OfAFallbackPairCell owed) {
+            Settlement answer = new Settlement.Settles();
+            for (ClassOfAPosition each : owed.inOrder()) {
+                Settlement here = inClass(asRead, each);
+                if (here instanceof Settlement.DoesNotSettle) {
+                    return here;
+                }
+                if (here instanceof Settlement.Undetermined) {
+                    answer = here;
+                }
+            }
+            return answer;
         }
 
         /**
@@ -563,17 +886,105 @@ public record Settlements(List<ObligationIdentity> requested,
          * — and where there is none, this says so rather than reading the absence as a row that
          * missed.
          */
-        private Settlement throughArm(RowAsRead asRead, CoverageSites.Obligation owed) {
+        private Settlement throughArm(RowAsRead asRead, ObligationIdentity.OfAnArm owed) {
+            // The whole table asks every row about every item, including an arm of a behavior
+            // other than the one the row was composed for — and this behavior's own binding has
+            // nothing to say about such an arm, which is not the same as this behavior having lost
+            // track of one of its own.
+            if (!behavior.equals(owed.arm().behavior())) {
+                return new Settlement.DoesNotSettle();
+            }
+            Generator.ArmOwed target = targetOfArm.get(owed);
+            if (target == null) {
+                throw new IllegalStateException(
+                        "this behavior is asked about an arm with no search target: " + owed);
+            }
             return switch (asRead.watched()) {
                 // Any occurrence of it. The arm is what the author wrote and a helper carrying it
                 // stands in the running tree once per call site, so a run through any of those is
                 // a run through the arm — which is the reading the arm account already takes.
                 case Generator.Watched.Ran(var account) ->
-                        occurrencesOf.getOrDefault(owed, List.of()).stream().anyMatch(account::lit)
+                        target.occurrences().stream().anyMatch(account::lit)
                                 ? new Settlement.Settles() : new Settlement.DoesNotSettle();
                 case Generator.Watched.NoAccount _ ->
                         new Settlement.Undetermined(Settlement.Reason.NO_ACCOUNT_OF_THE_RUN);
             };
+        }
+
+        /**
+         * Whether writing this row would show which of the two lines the model draws.
+         *
+         * <p>The question the finding asks and nothing narrower. What settles it is a row the
+         * model's own rule refuses and the line beside it keeps, or the other way about — so it is
+         * asked of the row's values under both lines, and never of where the row was composed. A
+         * row composed elsewhere that happens to answer this settles it as much as the one composed
+         * for it, which is what every entry of this table is for.
+         *
+         * <p>Over the readings this behavior has of the line, existentially: a row answering the
+         * two lines differently at any position the behavior reads the line at is a row that shows
+         * which of them it is.
+         */
+        private ToldApartAt tellingTheLinesApart(RowAsRead asRead,
+                                                 ObligationIdentity.OfABorder at) {
+            List<ALineBesideOne> here = besides.get(at);
+            if (here == null || here.isEmpty()) {
+                // No line of this behavior. A row written here says nothing about a line it is not
+                // read against, which is a row that does not settle it rather than one nothing
+                // could tell about.
+                return new ToldApartAt(new Settlement.DoesNotSettle(), null);
+            }
+            if (asRead.values() == null) {
+                return new ToldApartAt(undetermined(asRead), null);
+            }
+            // Existential over the readings, the way a point met at one position of a behavior is:
+            // a row answering the two lines differently anywhere the behavior reads the line is a
+            // row that shows which of them it is. A reading that could not tell is carried and does
+            // not decide, so a run nothing watched does not turn a row that settles into one that
+            // is open.
+            ToldApartAt answer = new ToldApartAt(new Settlement.DoesNotSettle(), null);
+            for (ALineBesideOne one : here) {
+                ToldApartAt said = tellsThemApartAt(asRead, one);
+                if (said.said().settles()) {
+                    return said;
+                }
+                if (said.said() instanceof Settlement.Undetermined) {
+                    answer = said;
+                }
+            }
+            return answer;
+        }
+
+        /**
+         * The same question at one reading of the line.
+         *
+         * <p>The row read at the positions that reading names, and the two lines put to those
+         * values. Which is why the reading is what this is asked of rather than the line: how far
+         * apart two positions stand is a number a reading has, and another reading of the same line
+         * is over other positions.
+         */
+        private ToldApartAt tellsThemApartAt(RowAsRead asRead, ALineBesideOne one) {
+            StandingAtAPoint.RowsRead read = StandingAtAPoint.valuesOf(one.reading(),
+                    List.of(asRead.asInputs()), one.reading().border().origin().recordedAt());
+            if (read.each().isEmpty()) {
+                // The row holds no value on this line at all, whether because nothing watched its
+                // run or because its positions could not be read there. Which of those it is is
+                // the reading's own answer and is what a reader is told.
+                return new ToldApartAt(read.everyOne() ? new Settlement.DoesNotSettle()
+                        : new Settlement.Undetermined(read.unwatched()
+                                ? Settlement.Reason.NO_ACCOUNT_OF_THE_RUN
+                                : Settlement.Reason.THE_VALUES_COULD_NOT_BE_READ), null);
+            }
+            for (Map<NumericTerm, Place> values : read.each()) {
+                if (one.drawn().satisfiedBy(values) != one.beside().keeps(values)) {
+                    // Where it answered them differently, kept beside the answer. What a person is
+                    // shown for this line is where the row they are handed stands, and that is this
+                    // — worked out again by whoever shows it, it would be a second reading of the
+                    // row, free to name a reading this one did not settle at.
+                    return new ToldApartAt(new Settlement.Settles(),
+                            new InputOfARowForALine(one.reading().border(), values));
+                }
+            }
+            return new ToldApartAt(new Settlement.DoesNotSettle(), null);
         }
 
         /**
@@ -627,6 +1038,69 @@ public record Settlements(List<ObligationIdentity> requested,
      *  what a row there has to do. */
     private record AtAPoint(souther.compiler.partition.Border line,
                             souther.compiler.partition.Criterion criterion) {}
+
+    /**
+     * The row a search composed for one line, and the input it composed it at.
+     *
+     * <p>Two facts about one asking, so they travel as one value. Which reading composed the row
+     * decides both, and a caller holding them apart is a caller that can hand over the row from one
+     * reading beside the input from another.
+     */
+    private record ARowComposedForALine(RowKey key, InputOfARowForALine at) {
+
+        private ARowComposedForALine {
+            if (key == null || at == null) {
+                throw new IllegalArgumentException(
+                        "a row composed for a line was composed somewhere: " + key);
+            }
+        }
+    }
+
+    /**
+     * What a row does about one line, and where it stands on it where that is the answer.
+     *
+     * <p>The two together because one reading of the row produced both. A place beside a settlement
+     * that is not {@link Settlement.Settles} would be a row shown as answering a line it does not.
+     */
+    private record ToldApartAt(Settlement said, InputOfARowForALine at) {
+
+        private ToldApartAt {
+            if (at != null && !said.settles()) {
+                throw new IllegalArgumentException("a row shown standing on a line it does not"
+                        + " answer: " + at.said());
+            }
+        }
+    }
+
+    /**
+     * One line the rows do not tell from a line beside it, as a row is put to it.
+     *
+     * <p>The line the model drew, the line these rows leave standing beside it, and what a search
+     * for a row telling the two apart came to. All three, because the question a row is put here is
+     * about the pair: a row settles this by answering differently under the two, which neither of
+     * them says alone.
+     *
+     * <p><b>The line as this behavior reads it, and as the inequality it is, worked out once.</b>
+     * Both are settled by the border and by nothing a row says, and a row is put to this once per
+     * row a run offers — derived where the question is asked, finding the reading walks every line
+     * of the behavior and reading the inequality folds the quantity's own step, once per row for an
+     * answer that was the same every time.
+     */
+    private record ALineBesideOne(MeasuredInput.BorderReading reading, OrderedAffineBoundary drawn,
+                                  AnotherLineTheRowsAllow.OneDoes beside,
+                                  ARowTellingTheLinesApart.AtOneReading toldApart) {
+
+        ALineBesideOne {
+            if (drawn == null) {
+                // A rule that names a value orders nothing, so no line beside it is ever named.
+                // Refused where the pair is put together rather than where a row is weighed against
+                // it: what it says is that the measurement and this account disagree about the
+                // line, which is true of the pair whether or not a row is ever offered.
+                throw new IllegalStateException("a line the rows allow beside a rule that orders"
+                        + " nothing: " + reading.border().obligation());
+            }
+        }
+    }
 
     /** What an item that needs the values is told, where they are not here. */
     private static Settlement undetermined(RowAsRead asRead) {

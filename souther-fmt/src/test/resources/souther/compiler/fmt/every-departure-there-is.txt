@@ -38,6 +38,7 @@ at no column at all of a group's own break / APPLY_EXPR / a group's own break at
 at no column at all of a group's own break / BINARY_EXPR / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 2 and column 4
 at no column at all of a group's own break / FIELD_ACCESS / a group's own break at depth 3 and column 8
 at no column at all of a group's own break / IF_EXPR / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 2 and column 4
+at no column at all of a group's own break / INTRINSIC_BODY / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 2 and column 4
 at no column at all of a group's own break / INTRINSIC_BODY / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 at no column at all of a group's own break / LAMBDA_EXPR / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 3 and column 8
 at no column at all of a group's own break / LAMBDA_EXPR / a group's own break at depth 3 and column 8
@@ -91,6 +92,7 @@ one column back of a group's own break / APPLY_EXPR / a group's own break at dep
 one column back of a group's own break / BINARY_EXPR / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 2 and column 4
 one column back of a group's own break / FIELD_ACCESS / a group's own break at depth 3 and column 8
 one column back of a group's own break / IF_EXPR / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 2 and column 4
+one column back of a group's own break / INTRINSIC_BODY / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 2 and column 4
 one column back of a group's own break / INTRINSIC_BODY / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 one column back of a group's own break / LAMBDA_EXPR / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 3 and column 8
 one column back of a group's own break / LAMBDA_EXPR / a group's own break at depth 3 and column 8
@@ -171,6 +173,7 @@ one column further in of a group's own break / APPLY_EXPR / a group's own break 
 one column further in of a group's own break / BINARY_EXPR / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 2 and column 4
 one column further in of a group's own break / FIELD_ACCESS / a group's own break at depth 3 and column 8
 one column further in of a group's own break / IF_EXPR / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 2 and column 4
+one column further in of a group's own break / INTRINSIC_BODY / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 2 and column 4
 one column further in of a group's own break / INTRINSIC_BODY / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 one column further in of a group's own break / LAMBDA_EXPR / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 3 and column 8
 one column further in of a group's own break / LAMBDA_EXPR / a group's own break at depth 3 and column 8
@@ -313,6 +316,7 @@ with a blank line under it of a group's own break / APPLY_EXPR / a group's own b
 with a blank line under it of a group's own break / BINARY_EXPR / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 2 and column 4
 with a blank line under it of a group's own break / FIELD_ACCESS / a group's own break at depth 3 and column 8
 with a blank line under it of a group's own break / IF_EXPR / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 2 and column 4
+with a blank line under it of a group's own break / INTRINSIC_BODY / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 2 and column 4
 with a blank line under it of a group's own break / LAMBDA_EXPR / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 3 and column 8
 with a blank line under it of a group's own break / LAMBDA_EXPR / a group's own break at depth 3 and column 8
 with a blank line under it of a group's own break / LIST_EXPR / a group's own break at depth 3 and column 8
@@ -394,6 +398,7 @@ with a space at the end of it of a group's own break / APPLY_EXPR / a group's ow
 with a space at the end of it of a group's own break / BINARY_EXPR / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 2 and column 4
 with a space at the end of it of a group's own break / FIELD_ACCESS / a group's own break at depth 3 and column 8
 with a space at the end of it of a group's own break / IF_EXPR / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 2 and column 4
+with a space at the end of it of a group's own break / INTRINSIC_BODY / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 2 and column 4
 with a space at the end of it of a group's own break / INTRINSIC_BODY / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 with a space at the end of it of a group's own break / LAMBDA_EXPR / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 3 and column 8
 with a space at the end of it of a group's own break / LAMBDA_EXPR / a group's own break at depth 3 and column 8
@@ -462,6 +467,7 @@ with a space doubled in it of a group's own break / APPLY_EXPR / A_BLANK_LINE_SE
 with a space doubled in it of a group's own break / APPLY_EXPR / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 with a space doubled in it of a group's own break / BINARY_EXPR / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 2 and column 4
 with a space doubled in it of a group's own break / IF_EXPR / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 2 and column 4
+with a space doubled in it of a group's own break / INTRINSIC_BODY / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 2 and column 4
 with a space doubled in it of a group's own break / INTRINSIC_BODY / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 with a space doubled in it of a group's own break / LAMBDA_EXPR / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 3 and column 8
 with a space doubled in it of a group's own break / LAMBDA_EXPR / a group's own break at depth 3 and column 8
@@ -493,6 +499,7 @@ with a space taken out of it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / no place / MEM
 with a space taken out of it of a group's own break / APPLY_EXPR / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 2 and column 4
 with a space taken out of it of a group's own break / APPLY_EXPR / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 with a space taken out of it of a group's own break / BINARY_EXPR / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 2 and column 4
+with a space taken out of it of a group's own break / INTRINSIC_BODY / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 2 and column 4
 with a space taken out of it of a group's own break / INTRINSIC_BODY / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 with a space taken out of it of a group's own break / LAMBDA_EXPR / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 3 and column 8
 with a space taken out of it of a group's own break / LAMBDA_EXPR / a group's own break at depth 3 and column 8

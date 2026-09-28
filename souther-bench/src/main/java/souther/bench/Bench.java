@@ -14,6 +14,7 @@ import java.util.List;
  *   cold    one compile in a JVM that has not compiled before
  *   warm    the same compile in steady state
  *   phase   where a warm compile's time goes
+ *   offer   what looking for the rows a model does not cover costs
  *   edit    what an edit costs a store that already holds the answers
  *   run     what the generated code costs to run, per element
  *   scale   how a whole-workspace compile grows with the number of modules
@@ -33,8 +34,8 @@ public final class Bench {
     public static void main(String[] args) {
         Report report = new Report(System.out);
         List<String> wanted = args.length == 0
-                ? List.of("cold", "warm", "phase", "edit", "run", "scale", "values", "choice",
-                        "report")
+                ? List.of("cold", "warm", "phase", "offer", "edit", "run", "scale", "values",
+                        "choice", "report")
                 : new ArrayList<>(List.of(args));
 
         List<Corpus> corpora = Corpus.all();
@@ -61,6 +62,12 @@ public final class Bench {
         if (wanted.contains("phase")) {
             for (Corpus corpus : corpora) {
                 Phases.measure(report, corpus);
+            }
+            report.blank();
+        }
+        if (wanted.contains("offer")) {
+            for (Corpus corpus : corpora) {
+                RowOffering.measure(report, corpus);
             }
             report.blank();
         }

@@ -58,9 +58,4 @@ public sealed interface Admits {
     default boolean isNone() {
         return this instanceof These it && it.values().isEmpty();
     }
-
-    /** Whether which values these are is written down, which is what a count can be taken of. */
-    default boolean isCounted() {
-        return this instanceof These;
-    }
 }

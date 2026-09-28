@@ -23,6 +23,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -74,11 +75,11 @@ class APositionStandsAtAPlaceAndNotAtANumberTest {
         EmptyInput.TwoValuesAtOnePosition text = twoValues("s",
                 Text.of("autumn"), Text.of("spring"));
         assertEquals(List.of("autumn", "spring"),
-                List.of(text.one().key(), text.other().key()));
+                List.of(text.one().spelled(), text.other().spelled()));
         EmptyInput.TwoValuesAtOnePosition counted = twoValues("n",
                 new Count(BigDecimal.ONE), new Count(BigDecimal.TWO));
         assertEquals(List.of("1", "2"),
-                List.of(counted.one().key(), counted.other().key()));
+                List.of(counted.one().spelled(), counted.other().spelled()));
     }
 
     /**
@@ -97,12 +98,51 @@ class APositionStandsAtAPlaceAndNotAtANumberTest {
                 "the value composed for a string position is a place of its own order");
     }
 
+    /**
+     * And two walks over the same positions in two orders come to two values.
+     *
+     * <p>The order the walk fixed them in is what a reader tells the region of them in, so it is part
+     * of what the walk came to and not something its equality can pass over.
+     */
+    @Test
+    void twoWalksOverThePositionsInTwoOrdersAreTwoValues() {
+        NumericTerm.FromOnePosition text = new NumericTerm.ValueOf(TermPath.of("s"));
+        NumericTerm.FromOnePosition counted = new NumericTerm.ValueOf(TermPath.of("n"));
+
+        NumericWitness.Standing.Found textFirst = walkedOver(List.of(text, counted));
+        NumericWitness.Standing.Found countedFirst = walkedOver(List.of(counted, text));
+
+        assertEquals(List.of(text, counted), positionsOf(textFirst));
+        assertEquals(List.of(counted, text), positionsOf(countedFirst));
+        assertNotEquals(textFirst, countedFirst,
+                "the same two positions placed in two orders are two ways of telling a region");
+        assertEquals(textFirst, walkedOver(List.of(text, counted)));
+    }
+
+    private static NumericWitness.Standing.Found walkedOver(
+            List<NumericTerm.FromOnePosition> terms) {
+        Quantities quantities = quantities();
+        return assertInstanceOf(NumericWitness.Standing.Found.class,
+                NumericWitness.of(quantities.region(), terms,
+                        each -> quantities.ordersOf(each).answered(),
+                        NothingTheDeclarationsNarrow.LOOKING));
+    }
+
+    private static List<NumericTerm.FromOnePosition> positionsOf(
+            NumericWitness.Standing.Found found) {
+        return found.inFixingOrder().stream()
+                .map(NumericWitness.Standing.Found.Placed::position).toList();
+    }
+
     /** Where {@code path} runs once it has been fixed at {@code at}, as the two ends. */
     private static String runsAfterFixing(String path, Place at) {
         NumericTerm.FromOnePosition term = new NumericTerm.ValueOf(TermPath.of(path));
-        NumericDomain.Bounds runs = region().given(term, at).runsBetween(term);
+        NumericDomain.Bounds runs = assertInstanceOf(
+                NumericDomain.FormProjection.Within.class,
+                region().given(term, at).projectionOf(term),
+                "a fixed position runs somewhere").bounds();
         assertNotNull(runs, "a fixed position runs somewhere");
-        return "[" + runs.min().at().key() + ", " + runs.max().at().key() + "]";
+        return "[" + runs.min().at().spelled() + ", " + runs.max().at().spelled() + "]";
     }
 
     /** The proof that fixing {@code path} at both places leaves nothing. */
@@ -118,8 +158,9 @@ class APositionStandsAtAPlaceAndNotAtANumberTest {
         NumericTerm.FromOnePosition term = new NumericTerm.ValueOf(TermPath.of(path));
         Quantities quantities = quantities();
         NumericWitness.Standing stood = NumericWitness.of(quantities.region(), List.of(term),
-                each -> quantities.ordersOf(each).answered());
-        return stood.at() == null ? null : stood.at().get(term);
+                each -> quantities.ordersOf(each).answered(),
+                NothingTheDeclarationsNarrow.LOOKING);
+        return stood instanceof NumericWitness.Standing.Found found ? found.placeOf(term) : null;
     }
 
     private static SearchRegion region() {

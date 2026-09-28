@@ -3,7 +3,6 @@ package souther.compiler.values;
 import souther.compiler.hash.ValueHash;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -42,7 +41,7 @@ sealed interface PlannedHeld<A> {
             if (boxes.isEmpty()) {
                 throw new IllegalArgumentException("a reading holding no alternative is Nothing");
             }
-            boxes = Collections.unmodifiableSet(new LinkedHashSet<>(boxes));
+            boxes = PlanOrder.canonical(boxes, PlanOrder::orderOf);
         }
 
         /**
@@ -253,7 +252,9 @@ sealed interface PlannedHeld<A> {
                     said.put(block, plan);
                 }
             });
-            at = Collections.unmodifiableMap(said);
+            // In the order the work over these is done — see {@link PlanOrder}, and
+            // {@link AdmissibleValues.Box}, which holds its own the same way.
+            at = PlanOrder.canonical(said, PlanOrder::orderOfADescription);
             // Read as the relation they are the classes of — see {@link AdmissibleValues.Box}.
             Sameness.of(at.keySet());
         }

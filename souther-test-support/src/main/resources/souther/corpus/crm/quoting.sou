@@ -112,7 +112,9 @@ data QuoteLine =
     // The rule is net = quantity × list × (1 − discount), rounded to two places. It is written as that
     // multiplication rather than as a ratio, and the reason is not that a ratio cannot be written: the bare
     // `/` aborts on a zero denominator and a zero list price is representable, but a guarded helper —
-    // `if b == 0.0m then fallback else a / b` — is total, invariant-legal, and answers with a Decimal.
+    // `if b == 0.0m then fallback else Rational.toDecimal(2, HALF_UP, a / b)` — is total,
+    // invariant-legal, and answers with a Decimal. The quotient itself is exact and is no Decimal, so a
+    // field holding one says at which scale the fraction stops.
     //
     // What the product form saves is the fallback. A ratio needs a value to stand for "no list price to take
     // a fraction of", and every candidate lies about something; the multiplication needs none, because the

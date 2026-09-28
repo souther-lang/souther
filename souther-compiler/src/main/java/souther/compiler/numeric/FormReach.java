@@ -57,11 +57,15 @@ final class FormReach<A> {
     private final Box<A> ends;
     private final DifferenceBounds<A> differences;
 
+    /** The one order a walk of a form's positions takes them in — see {@link CanonicalOrder}. */
+    private final CanonicalOrder<A> order;
+
     private FormReach(List<AffineConstraint<A>> rules, Box<A> ends,
-                      DifferenceBounds<A> differences) {
+                      DifferenceBounds<A> differences, CanonicalOrder<A> order) {
         this.rules = rules;
         this.ends = ends;
         this.differences = differences;
+        this.order = order;
     }
 
     /**
@@ -74,12 +78,12 @@ final class FormReach<A> {
      * before it ever builds a round.
      */
     static <A> FormReach<A> over(List<AffineConstraint<A>> rules, Box<A> ends,
-                                 DifferenceBounds<A> differences) {
+                                 DifferenceBounds<A> differences, CanonicalOrder<A> order) {
         if (differences.holdsNothing()) {
             throw new IllegalStateException(
                     "nothing is left, so there is no reach to read; ask holdsNothing first");
         }
-        return new FormReach<>(rules, ends, differences);
+        return new FormReach<>(rules, ends, differences, order);
     }
 
     /** The ends this was handed, for a reader that needs them as well and must not derive a second
@@ -96,7 +100,7 @@ final class FormReach<A> {
     }
 
     /** What {@code Σ coefs·position + constant} runs between. */
-    Reach of(Map<A, Rational> coefs, Rational constant) {
+    Reach of(Map<A, ExactRatio> coefs, ExactRatio constant) {
         return between(coefs, constant, null);
     }
 
@@ -117,7 +121,7 @@ final class FormReach<A> {
      * the differences afresh for every rule, which is a cost for a distinction nothing has asked
      * for.
      */
-    Reach ofTheRestOf(AffineConstraint<A> asking, Map<A, Rational> coefs, Rational constant) {
+    Reach ofTheRestOf(AffineConstraint<A> asking, Map<A, ExactRatio> coefs, ExactRatio constant) {
         return between(coefs, constant, asking);
     }
 
@@ -127,35 +131,35 @@ final class FormReach<A> {
      * <p>A different question from what the rules leave it, and the one an account of what was
      * derived wants — and not the product of the ranges either, which holds less than this does.
      */
-    RationalCut mostFromTheEndsAndTheDifferences(Map<A, Rational> coefs, Rational constant) {
+    ExactCut mostFromTheEndsAndTheDifferences(Map<A, ExactRatio> coefs, ExactRatio constant) {
         return fromTheEnds(coefs, constant);
     }
 
     /** The highest the form is proven to come to, or null where nothing bounds it above. */
-    RationalCut most(Map<A, Rational> coefs, Rational constant) {
+    ExactCut most(Map<A, ExactRatio> coefs, ExactRatio constant) {
         return highest(coefs, constant, null);
     }
 
-    private Reach between(Map<A, Rational> coefs, Rational constant, AffineConstraint<A> without) {
-        RationalCut most = highest(coefs, constant, without);
+    private Reach between(Map<A, ExactRatio> coefs, ExactRatio constant, AffineConstraint<A> without) {
+        ExactCut most = highest(coefs, constant, without);
         // The least a form comes to is the highest its negation comes to, on the other side of
         // nought. Asked that way rather than derived a second time, so the two ends are one reading
         // and cannot come apart.
-        RationalCut flipped = highest(negated(coefs), constant.negated(), without);
-        RationalCut least = flipped == null ? null
-                : new RationalCut(flipped.at().negated(), flipped.inclusive());
+        ExactCut flipped = highest(negated(coefs), constant.negated(), without);
+        ExactCut least = flipped == null ? null
+                : new ExactCut(flipped.at().negated(), flipped.inclusive());
         return new Reach(least, most);
     }
 
-    private static <A> Map<A, Rational> negated(Map<A, Rational> coefs) {
-        Map<A, Rational> out = new LinkedHashMap<>();
+    private static <A> Map<A, ExactRatio> negated(Map<A, ExactRatio> coefs) {
+        Map<A, ExactRatio> out = new LinkedHashMap<>();
         coefs.forEach((position, weight) -> out.put(position, weight.negated()));
         return out;
     }
 
-    private RationalCut highest(Map<A, Rational> coefs, Rational constant,
+    private ExactCut highest(Map<A, ExactRatio> coefs, ExactRatio constant,
                                 AffineConstraint<A> without) {
-        RationalCut best = fromTheEnds(coefs, constant);
+        ExactCut best = fromTheEnds(coefs, constant);
         if (coefs.size() <= 1) {
             // A form naming one position is answered by the ends and by nothing else, because the
             // ends *are* this step at one position, run until they stop moving or until the rounds
@@ -171,12 +175,20 @@ final class FormReach<A> {
                 continue;
             }
             for (AffineConstraint.HalfSpace<A> premise : rule.halfSpaces()) {
-                RationalCut residual = fromTheEnds(withoutThe(premise, coefs),
-                        constant.plus(premise.bound().at()));
+                // A model's own decimals can put this premise's bound, or one of its own
+                // coefficients, far enough apart in scale from what it is being merged with that the
+                // exact arithmetic cannot hold the sum. Where that happens this premise composes no
+                // route this round — the same as a premise this form does not name — which costs a
+                // tighter bound this route might have found and claims nothing this route did not.
+                Map<A, ExactRatio> without1 = withoutThe(premise, coefs);
+                ExactRatio residualConstant =
+                        without1 == null ? null : constant.plus(premise.bound().at()).orNull();
+                ExactCut residual = residualConstant == null ? null
+                        : fromTheEnds(without1, residualConstant);
                 if (residual != null) {
                     // The form reaches the sum only where the residual reaches its own end and the
                     // premise reaches its bound.
-                    best = RationalCut.tighterUpper(best, new RationalCut(residual.at(),
+                    best = ExactCut.tighterUpper(best, new ExactCut(residual.at(),
                             residual.inclusive() && premise.bound().inclusive()));
                 }
             }
@@ -185,29 +197,47 @@ final class FormReach<A> {
     }
 
     /** {@code coefs} with {@code premise}'s form taken off it, which is what is left to bound once
-     *  the premise has been used. */
-    private Map<A, Rational> withoutThe(AffineConstraint.HalfSpace<A> premise,
-                                        Map<A, Rational> coefs) {
-        Map<A, Rational> left = new LinkedHashMap<>(coefs);
-        premise.form().coefs().forEach((position, weight) ->
-                left.merge(position, weight.negated(), Rational::plus));
-        left.values().removeIf(Rational::isZero);
+     *  the premise has been used — or {@code null} where a coefficient the merge combines is one the
+     *  exact arithmetic cannot sum. */
+    private Map<A, ExactRatio> withoutThe(AffineConstraint.HalfSpace<A> premise,
+                                          Map<A, ExactRatio> coefs) {
+        Map<A, ExactRatio> left = new LinkedHashMap<>(coefs);
+        // The premise walked in the one order its positions decide. What comes of the merge is the
+        // same whichever order it is taken in, and the walk is what would let the next change here
+        // start depending on one the premise does not hold.
+        boolean[] everyMergeWasComposed = {true};
+        premise.form().entriesIn(order).forEach(each -> left.merge(each.getKey(),
+                each.getValue().negated(), (a, b) -> {
+                    ExactAnswer<ExactRatio> sum = a.plus(b);
+                    if (sum instanceof ExactAnswer.Held<ExactRatio> held) {
+                        return held.value();
+                    }
+                    everyMergeWasComposed[0] = false;
+                    return a;
+                }));
+        if (!everyMergeWasComposed[0]) {
+            return null;
+        }
+        left.values().removeIf(ExactRatio::isZero);
         return left;
     }
 
     /** What the ends and the closed differences leave the form, which is where every route starts. */
-    private RationalCut fromTheEnds(Map<A, Rational> coefs, Rational constant) {
+    private ExactCut fromTheEnds(Map<A, ExactRatio> coefs, ExactRatio constant) {
         if (coefs.isEmpty()) {
-            return RationalCut.inclusive(constant);
+            return ExactCut.inclusive(constant);
         }
-        RationalCut best = Reach.of(coefs, constant,
+        ExactCut best = Reach.of(coefs, constant,
                 position -> Reach.between(ends.leastOf(position), ends.mostOf(position))).most();
         Apart<A> apart = difference(coefs);
         if (apart != null) {
-            RationalCut held = differences.differenceBound(apart.above(), apart.below());
-            if (held != null) {
-                best = RationalCut.tighterUpper(best, new RationalCut(
-                        held.at().times(apart.by()).plus(constant), held.inclusive()));
+            ExactCut held = differences.differenceBound(apart.above(), apart.below());
+            // Where the difference and the constant are too far apart in scale for the exact
+            // arithmetic to sum, this route bounds nothing this round rather than composing a value
+            // it cannot hold.
+            ExactRatio at = held == null ? null : held.at().times(apart.by()).plus(constant).orNull();
+            if (at != null) {
+                best = ExactCut.tighterUpper(best, new ExactCut(at, held.inclusive()));
             }
         }
         return best;
@@ -221,21 +251,32 @@ final class FormReach<A> {
      * so recognising the shape only when it is spelled with ones is the same trap
      * {@link CanonicalForm} removed from the rules, one level down in the reading.
      */
-    private static <A> Apart<A> difference(Map<A, Rational> coefs) {
+    private static <A> Apart<A> difference(Map<A, ExactRatio> coefs) {
         if (coefs.size() != 2) {
             return null;
         }
-        java.util.Iterator<Map.Entry<A, Rational>> both = coefs.entrySet().iterator();
-        Map.Entry<A, Rational> one = both.next();
-        Map.Entry<A, Rational> other = both.next();
-        if (!one.getValue().equals(other.getValue().negated())) {
+        // Which of the two is taken away from the other is read off the sign of what each weighs,
+        // and not off which of them the mapping hands over first. The two readings agree wherever
+        // the weights really are one of each sign, which is the only shape this answers about — and
+        // one of them is an answer about the form while the other is about the walk.
+        A above = null;
+        A below = null;
+        ExactRatio by = null;
+        for (Map.Entry<A, ExactRatio> each : coefs.entrySet()) {
+            if (each.getValue().signum() > 0) {
+                above = each.getKey();
+                by = each.getValue();
+            } else {
+                below = each.getKey();
+            }
+        }
+        if (above == null || below == null
+                || !coefs.get(above).equals(coefs.get(below).negated())) {
             return null;
         }
-        return one.getValue().signum() > 0
-                ? new Apart<>(one.getKey(), other.getKey(), one.getValue())
-                : new Apart<>(other.getKey(), one.getKey(), other.getValue());
+        return new Apart<>(above, below, by);
     }
 
     /** {@code by · (above - below)}, with {@code by} positive. */
-    private record Apart<A>(A above, A below, Rational by) {}
+    private record Apart<A>(A above, A below, ExactRatio by) {}
 }

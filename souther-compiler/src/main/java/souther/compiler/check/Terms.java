@@ -10,6 +10,7 @@ import souther.compiler.types.ReferenceOrigin;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
@@ -27,6 +28,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -167,11 +169,10 @@ final class Terms {
 
     /** The subject each evaluation this could not name is, made once per occurrence. Identity-keyed:
      * an occurrence is a node, and two nodes are two evaluations however alike they are written. */
-    private final java.util.IdentityHashMap<Core, EvaluationId> evaluations =
-            new java.util.IdentityHashMap<>();
+    private final IdentityHashMap<Core, EvaluationId> evaluations = new IdentityHashMap<>();
 
     /** What each node a rewrite built stands for, so an occurrence keeps its identity through one. */
-    private final java.util.IdentityHashMap<Core, Core> builtFrom = new java.util.IdentityHashMap<>();
+    private final IdentityHashMap<Core, Core> builtFrom = new IdentityHashMap<>();
 
     /**
      * What this knows about {@code atom}, which is never null: an atom nothing was recorded about is
@@ -364,6 +365,18 @@ final class Terms {
      * of a declaration there is ({@link TypeGuarantees}).
      */
     Terms(Of reading, RuleReadingContext ruleReading) {
+        this(reading, ruleReading, ValueTemplates.NONE);
+    }
+
+    /**
+     * The same, over a tree that builds values it does not hold the bodies of.
+     *
+     * <p>What such a build is is what its template is, so this asks {@code templates} where a build
+     * is entered or named, and nowhere else: a reader of this class meets the meaning of a value and
+     * not the edge that stands for it.
+     */
+    Terms(Of reading, RuleReadingContext ruleReading, ValueTemplates templates) {
+        this.templates = templates;
         this.ruleReading = ruleReading;
         this.symbols = ruleReading.source().symbols();
         this.reading = reading;
@@ -399,6 +412,22 @@ final class Terms {
 
     private final Of reading;
 
+    /** What a value built in the tree this reads comes to. */
+    private final ValueTemplates templates;
+
+    /** What each template is called, by the reading it was asked for: named once however many
+     *  builds of it there are. */
+    private final Map<Leaf, Map<Core, Naming>> namedTemplates = new HashMap<>();
+
+    /** The environment a template is read in: what a value means does not turn on where it is
+     *  built, so one environment answers for every build of it. */
+    private final Denotations insideATemplate = Denotations.none();
+
+    /** The environment a template is read in. */
+    Denotations insideATemplate() {
+        return insideATemplate;
+    }
+
     /**
      * Where a test in this package reads the shapes this had no term for, and null everywhere else.
      *
@@ -411,17 +440,23 @@ final class Terms {
 
     /** The operator {@code e} is, where it is a library call written as a function, or {@code e}
      * itself. Reading it as the operator is what puts it on the one path the operator already has,
-     * rather than on a second path that would have to be kept saying the same thing. */
-    static Core asOperator(Core e) {
+     * rather than on a second path that would have to be kept saying the same thing.
+     *
+     * <p>What is read is the value evaluated, so a type the value stands as at its position is set
+     * aside first: what the value is does not turn on it. */
+    static Core asOperator(Core standing) {
+        Core e = Core.withoutStanding(standing);
         ValueName operation = operationOf(e);
         List<Core> args = argsOf(e);
         if (operation == null || args.size() != 2) {
             return e;
         }
         BinOp op = DischargeRules.operator(operation);
-        // Not a comparison any source wrote: a call read as the operator it stands for.
+        // Not a comparison any source wrote: a call read as the operator it stands for, over its
+        // arguments as they were passed.
         return op == null ? e : new Core.Binary(op, args.get(0), args.get(1),
-                ConstructOccurrence.unwritten(), e.type(), e.pos());
+                Core.BinaryReading.AS_THEY_STAND, ConstructOccurrence.unwritten(), e.type(),
+                e.pos());
     }
 
     /**
@@ -434,7 +469,7 @@ final class Terms {
      * unread. {@link NumericMeasures} already asks about a size call this way.
      */
     static ValueName operationOf(Core e) {
-        return switch (e) {
+        return switch (Core.withoutStanding(e)) {
             case Core.Call call when call.fn() instanceof Core.Reached reached
                     && reached.name() instanceof souther.compiler.types.ReachName.OfLibrary library ->
                     library.denotes();
@@ -445,7 +480,7 @@ final class Terms {
 
     /** What {@code e} hands over, where it is a call, and nothing where it is not. */
     static List<Core> argsOf(Core e) {
-        return switch (e) {
+        return switch (Core.withoutStanding(e)) {
             case Core.Call call -> call.args();
             case Core.PreservedCall preserved -> preserved.args();
             case null, default -> List.of();
@@ -473,26 +508,33 @@ final class Terms {
      * to be written.
      */
     LinearForm<FactSubject> affineOf(Core raw, Denotations at) {
-        return AffineForms.of(raw, at, affineReading);
+        return AffineForms.of(raw, at, affineReading, affineAnswers);
     }
 
     /**
-     * The same, saying where the reading stopped where it did.
+     * What each name the affine reading followed came to, by the value it was given and the
+     * environment it was read in.
+     *
+     * <p>Held for as long as this is, because the reading is this one's and the same question has
+     * the same answer every time it is asked. It is asked again from inside itself — the facts an
+     * operation states of what it was given and what a condition compares are read while a value
+     * is being read — and a value named twice by the value before it, over a chain of them, is read
+     * once for each question rather than once for each way down to it.
+     */
+    private final BindingWalk.Answers<AffineForms.Outcome<FactSubject, Denotations>> affineAnswers =
+            new BindingWalk.Answers<>();
+
+    /**
+     * The same, saying where the reading stopped where it did, and naming only the atoms
+     * {@code names} accepts.
      *
      * <p>Beside the above and carrying what it discards. Which expression had no rule here is a
      * fact about that expression, and a caller handed nothing back had to reconstruct it from the
      * shape of what it asked about — which is a second account of this walk, written by whoever
      * needed one. The environment travels with the expression for the reason
      * {@link AffineForms.ReadThrough} gives.
-     */
-    AffineForms.Outcome<FactSubject, Denotations> outcomeOf(Core raw, Denotations at) {
-        return outcomeOf(raw, at, subject -> true);
-    }
-
-    /**
-     * The same, naming only the atoms {@code names} accepts.
      *
-     * <p>For a reader whose subjects are narrower than this one's. What may be named here is what
+     * <p>The narrowing is for a reader whose subjects are narrower than this one's. What may be named here is what
      * the discharge procedure can carry a fact about, which is every number it can identify; what a
      * measure may name is a coordinate of the value a clause is written about, which is fewer. A
      * reader that took this one's atoms and then found it had no coordinate for one of them was
@@ -653,21 +695,61 @@ final class Terms {
      * can be said about it later and not whether the binding may be entered at all.
      */
     Denotations inside(Core.LetIn li, Denotations at) {
+        // What the binder is given: the value, or where it is a build of one, what that value is.
+        // Asked once and handed to every question below, so the environment holds the body it
+        // answered about and not the edge that stood for it. The type the binding is in force at
+        // says nothing about which value it holds, so that is set aside.
+        Core value = Core.withoutStanding(li.value());
+        Core given = value instanceof Core.MaterialisedValue build
+                ? templates.bodyOf(build) : value;
         // Entering a binding a walk is already inside is not a second binding of it. A branch is
         // read from where its conditional stood, which is inside these, over a tree that still holds
         // them.
-        if (at.valueOf(li.binder().binding()) == li.value()) {
+        if (at.valueOf(li.binder().binding()) == given) {
             return at;
         }
+        Map<Denotations, Denotations> under =
+                entered.computeIfAbsent(li, _ -> new IdentityHashMap<>());
+        Denotations had = under.get(at);
+        if (had != null) {
+            return had;
+        }
+        // The names a value's body holds are its own, so it is read where nothing outside it is in
+        // force, and the same environment answers for every build of it.
+        Denotations reading = value instanceof Core.MaterialisedValue ? insideATemplate : at;
         // What the name is about is what it was given is about. Where even the identity reading has
         // nothing to name — an expression answering nothing at all — the name is what there is, and
         // it is one value however many times it is read.
-        FactSubject about = subjectOf(li.value(), at);
-        return at.binding(li.binder().binding(), li.value(),
+        FactSubject about = subjectOf(given, reading);
+        Denotations made = at.binding(li.binder().binding(), given,
                 about != null ? about : placeSubject(li.binder().binding()),
-                locationOf(li.value(), at), bodyKey(li.value(), at),
-                numericMeaningOf(li.value(), at));
+                locationOf(given, reading), bodyKey(given, reading),
+                numericMeaningOf(given, reading));
+        under.put(at, made);
+        return made;
     }
+
+    /**
+     * What each binding this has entered means, under each environment it was entered in.
+     *
+     * <p>One binding under one environment means one thing. Which value the name is about, where it
+     * is, what the term grammar calls it and which arithmetic it is are all decided by the binder,
+     * its initializer and what the names around it mean — so the second reader to enter it is
+     * asking a question that already has an answer rather than asking for a second one.
+     *
+     * <p>Which is what keeps an initializer from being read once per reader of the binding. Naming
+     * a {@code let} reads the initializer to name it and then enters the binding, and entering it
+     * reads the initializer twice over — once for which value it is and once for what the term
+     * grammar calls it. Where an initializer holds a binding of its own, each of those three
+     * readings reaches the inner one and starts the three again, so a chain of bindings would be
+     * read three times to the length of the chain.
+     *
+     * <p>Held by identity on both. Two environments equal to each other are two answers to one
+     * question and either will do; what this holds is the one environment the three readings of a
+     * binding are handed, which arrives as the object the walk above them stands in.
+     */
+    private final IdentityHashMap<Core.LetIn, Map<Denotations, Denotations>> entered =
+            new IdentityHashMap<>();
 
     /**
      * What {@code e} folds to where every part of it is written out, or {@code null} where any part
@@ -684,8 +766,7 @@ final class Terms {
      * author wrote.
      */
     static Object folded(Core e, Symbols symbols, Denotations at) {
-        Hir.Expr written = asWrittenValue(e, at);
-        return written == null ? null : ConstEval.against(symbols).eval(written).orElse(null);
+        return CoreConstantEval.against(symbols, at).eval(e).orElse(null);
     }
 
     /**
@@ -716,6 +797,30 @@ final class Terms {
         return b.coefs().isEmpty() ? a.times(b.constant()) : null;
     }
 
+    /**
+     * A linear form over a constant divisor, which is that form scaled by the divisor's reciprocal;
+     * null where the divisor is no constant, or is the constant nought.
+     *
+     * <p><b>Constant is what the divisor was read as and not how it was spelled.</b> A form with no
+     * coefficients is a number whatever expression came to it, so {@code x / 2}, {@code x / (1 + 1)}
+     * and {@code x / two} are one reading — which is what keeps naming a value from changing what is
+     * made of the expression it was named out of. A divisor with an atom in it is a form no scalar
+     * scales, and it is not arithmetic this composes.
+     *
+     * <p>Unlike a product, which is a scalar multiply from either side: {@code 1 / x} states an
+     * inverse and is outside this fragment however plain it looks.
+     *
+     * <p>A divisor of nought has no reciprocal to scale by, and the operation it was written in
+     * aborts wherever it is reached — so there is no value for a form to be about, and composing one
+     * would state an arithmetic meaning for an expression that answers nothing.
+     */
+    static <A> LinearForm<A> overAConstant(LinearForm<A> a, LinearForm<A> b) {
+        if (a == null || b == null || !b.coefs().isEmpty() || b.constant().isZero()) {
+            return null;
+        }
+        return a.times(ExactRatio.ONE.dividedBy(b.constant()));
+    }
+
     /** A node the affine walk composes nothing out of, as a form: a numeric atom, what a name was
      * given, or {@code null}. */
     private LinearForm<FactSubject> leafOf(Core n, Denotations at) {
@@ -726,7 +831,7 @@ final class Terms {
         // A list written out has as many elements as it is written with, whatever they are.
         BigDecimal counted = writtenSize(n, at);
         if (counted != null) {
-            return LinearForm.constant(counted);
+            return LinearForm.constant(ExactRatio.of(counted));
         }
         FactSubject atom = atomOf(n, at);
         return atom == null ? null : LinearForm.atom(atom);
@@ -776,7 +881,7 @@ final class Terms {
         if (container == null) {
             return null;
         }
-        return given(container, at).value() instanceof Core.ListLit list
+        return Core.withoutStanding(given(container, at).value()) instanceof Core.ListLit list
                 ? BigDecimal.valueOf(list.elements().size()) : null;
     }
 
@@ -807,14 +912,16 @@ final class Terms {
      * are not made one, however alike the shapes they peel look.
      */
     Given given(Core e, Denotations at) {
-        if (e instanceof Core.Read r) {
-            Core given = at.valueOf(r.binding());
-            return given == null || given == e ? new Given(e, at) : given(given, at);
-        }
-        if (e instanceof Core.LetIn li) {
-            return given(li.body(), inside(li, at));
-        }
-        return new Given(e, at);
+        return switch (e) {
+            // A value standing as a wider type is still that value, built the way it was built.
+            case Core.Widen w -> given(w.value(), at);
+            case Core.Read r -> {
+                Core given = at.valueOf(r.binding());
+                yield given == null || given == e ? new Given(e, at) : given(given, at);
+            }
+            case Core.LetIn li -> given(li.body(), inside(li, at));
+            case null, default -> new Given(e, at);
+        };
     }
 
     static <A> LinearForm<A> negate(LinearForm<A> f) {
@@ -1107,8 +1214,8 @@ final class Terms {
      * reading has no number for, which is a fact about this reading. */
     private LinearForm<FactSubject> startedFrom(Accumulation.Identity identity) {
         return switch (identity) {
-            case ZERO -> LinearForm.constant(java.math.BigDecimal.ZERO);
-            case ONE -> LinearForm.constant(java.math.BigDecimal.ONE);
+            case ZERO -> LinearForm.constant(ExactRatio.ZERO);
+            case ONE -> LinearForm.constant(ExactRatio.ONE);
             case EMPTY -> null;
         };
     }
@@ -1144,8 +1251,8 @@ final class Terms {
      *
      * <p>Two questions and not one. What was computed is {@link NumericMeaning} and is the
      * operation's own semantics; what of it this can prove in is a recipe, and it is less — a
-     * meaning with no recipe is arithmetic this reads and derives nothing from, which is what
-     * {@code /} over {@code Decimal} has always been.
+     * meaning with no recipe is arithmetic this reads and derives nothing from, which the exact
+     * quotient {@code /} answers is.
      */
     private Derivation recipeFor(NumericMeaning meaning, Denotations at) {
         if (meaning == null) {
@@ -1213,9 +1320,9 @@ final class Terms {
     Chose chose(Choice.Decides decidedBy, Denotations at) {
         return switch (decidedBy) {
             // A condition binds nothing. What it settles is read where the arm is read.
-            case Choice.Decides.ACondition ignored -> new Chose(at, null);
+            case Choice.Decides.ACondition _ -> new Chose(at, null);
             // A departure is taken where nothing was built, so it has nothing to enter.
-            case Choice.Decides.ItDeparted ignored -> new Chose(at, null);
+            case Choice.Decides.ItDeparted _ -> new Chose(at, null);
             case Choice.Decides.ACase(Core.Case arm, Core scrutinee) ->
                     new Chose(opening(arm, scrutinee, at), openedByArm(arm));
             case Choice.Decides.ItWasBuilt(Core.IfConstructed ic) -> {
@@ -1224,15 +1331,14 @@ final class Terms {
             }
             // An operation defined by cases answers a value the call was already given, written
             // where the call is. It introduces no name, so there is nothing to enter.
-            case Choice.Decides.ByArgumentRelations ignored -> new Chose(at, null);
+            case Choice.Decides.ByArgumentRelations _ -> new Chose(at, null);
         };
     }
 
     /** What a {@code match} arm binds, or null where it binds nothing — which is the same condition
      * {@link #opening} leaves the reading where it found it under. */
     private static Core.Read openedByArm(Core.Case arm) {
-        return arm.binder() == null || arm.bindType() == null
-                ? null : read(arm.binder(), arm.bindType(), arm.pos());
+        return arm.binder() == null ? null : read(arm.binder(), arm.bindType(), arm.pos());
     }
 
     /**
@@ -1253,7 +1359,7 @@ final class Terms {
      * the two agreed only for as long as nothing could tell them apart (#824).
      */
     private Denotations opening(Core.Case arm, Core scrutinee, Denotations at) {
-        if (arm.binder() == null || arm.bindType() == null) {
+        if (arm.binder() == null) {
             return at;
         }
         Core.Read root = read(arm.binder(), arm.bindType(), arm.pos());
@@ -1292,22 +1398,21 @@ final class Terms {
     /**
      * What the arm's binding opens, or null where nothing here says.
      *
-     * <p>Asked of what the pattern binds and not of what the arm looks like. A case whose carrier is
-     * the value binds that value, so the binding stands for the scrutinee and is about it. An
-     * optional's present carrier binds what stands under it: a different value, named as what that
+     * <p>Asked of what the arm's name stands for and not of what the arm looks like. A name for the
+     * matched value stands for the scrutinee and is about it, whichever carrier was tested. A name
+     * for what stands under an optional's present carrier is a different value, named as what that
      * optional holds, and one no expression here is — so it is about something while standing for
-     * nothing. An absent carrier binds nothing at all. That is the whole of it — {@link Refinement}
-     * has three answers and each one settles this.
+     * nothing. An arm with no name opens nothing.
      */
     private Opens opens(Core.Case arm, Core scrutinee, Denotations at) {
         FactSubject of = subjectOf(scrutinee, at);
         if (of == null) {
             return null;
         }
-        return switch (arm.pattern().binding()) {
-            case Refinement.Direct(Type carried) -> arithmetic(carried, scrutinee, at);
-            case Refinement.OptionPresent ignored -> new Opens(null, heldBy(of), null);
-            case Refinement.OptionAbsent ignored -> null;
+        return switch (arm.binding()) {
+            case Core.ArmBinding.Selected selected -> arithmetic(selected.type(), scrutinee, at);
+            case Core.ArmBinding.Payload _ -> new Opens(null, heldBy(of), null);
+            case Core.ArmBinding.Unbound _ -> null;
         };
     }
 
@@ -1322,7 +1427,7 @@ final class Terms {
      * would be a third.
      *
      * <p>Read through the names the call was given, as everything else about a scrutinee is: {@code
-     * let q = Int.divide(a, b)} and a {@code match} written straight over the call are the same
+     * let q = Int.truncatingDivide(a, b)} and a {@code match} written straight over the call are the same
      * program, and a binding between the two is a name for the call rather than a step away from it.
      */
     private Opens arithmetic(Type carried, Core scrutinee, Denotations at) {
@@ -1346,7 +1451,8 @@ final class Terms {
     /** The call {@code value} came from, through however many names it was given, or null where it
      * came from something else. What an operation computes is a question about the operation, not
      * about which tree is being read, so a call in either representation is one. */
-    Core originating(Core value, Denotations at, Set<BindingId> seen) {
+    Core originating(Core standing, Denotations at, Set<BindingId> seen) {
+        Core value = Core.withoutStanding(standing);
         if (operationOf(value) != null) {
             return value;
         }
@@ -1446,9 +1552,11 @@ final class Terms {
      * The quotient {@code b} is, or null where there is no rule about it.
      *
      * <p>Only over whole numbers, which is what having a {@link NumericMeaning.TruncatingQuotient}
-     * at all says: {@code /} on {@code Int} truncates toward zero, and on {@code Decimal} it rounds
-     * to a precision the run time sets (spec §stdlib-decimal), which is other arithmetic and not a
-     * quotient this reads. That choice is the operation's and not the path's.
+     * at all says: what {@code Int.truncatingDivide} answers is the whole number left by truncating
+     * toward zero, and a quotient rounded to a scale ({@code Decimal.divide}) is other arithmetic
+     * and not a quotient this reads. That choice is the operation's and not the path's — the
+     * operator's own quotient is exact and has no fraction to place, so it is not among these at
+     * all.
      *
      * <p>The divisor is a form, as the factors of a product are. Whether the path holds it away from
      * zero, and whether it is the kind of value the operator's divisor could be at all, are asked
@@ -1535,7 +1643,7 @@ final class Terms {
      * read as, which is what it is here. */
     private static boolean sameComputation(AtomKnowledge.Computation a, AtomKnowledge.Computation b) {
         return switch (a) {
-            case AtomKnowledge.Computation.None ignored ->
+            case AtomKnowledge.Computation.None _ ->
                     b instanceof AtomKnowledge.Computation.None;
             case AtomKnowledge.Computation.Derived(Derivation recipe) ->
                     b instanceof AtomKnowledge.Computation.Derived it
@@ -1766,16 +1874,6 @@ final class Terms {
         return kindsOfAtoms(f.coefs().keySet());
     }
 
-    /** The same, for a name being given a form: the name is an atom too, and its own type says how
-     * its values are spaced. */
-    Map<FactSubject, Granularity> kindsOf(LinearForm<FactSubject> f, FactSubject atom, Type type) {
-        Map<FactSubject, Granularity> out = new HashMap<>(kindsOf(f));
-        Granularity g = granularityOf(type);
-        named(atom, g);
-        out.put(atom, g);
-        return out;
-    }
-
     private Map<FactSubject, Granularity> kindsOfAtoms(Set<FactSubject> atoms) {
         Map<FactSubject, Granularity> out = new HashMap<>();
         for (FactSubject atom : atoms) {
@@ -1791,13 +1889,13 @@ final class Terms {
     /** An expression's canonical key: a location names itself, and everything else is read
      * structurally. */
     Term bodyKey(Core e, Denotations at) {
-        return termKey(e, at, Map.of(), 0, Leaf.SYMBOLIC);
+        return termKey(e, at, new HashMap<>(), 0, Leaf.SYMBOLIC);
     }
 
     /** The identity a fact about {@code e} is filed under: the same algebra, taking an atom of its
      * own where the grammar runs out rather than answering nothing. */
     private Term identityOf(Core e, Denotations at) {
-        return termKey(e, at, Map.of(), 0, Leaf.AN_EVALUATION);
+        return termKey(e, at, new HashMap<>(), 0, Leaf.AN_EVALUATION);
     }
 
     /**
@@ -1838,7 +1936,8 @@ final class Terms {
      * is right for what an arm binds and wrong for a reader standing where the call is — the same
      * arithmetic, asked before there is an arm.
      */
-    NumericMeaning numericMeaningOf(Core e, Type answered, Denotations at) {
+    NumericMeaning numericMeaningOf(Core standing, Type answered, Denotations at) {
+        Core e = Core.withoutStanding(standing);
         if (e instanceof Core.Read read) {
             return at.numericOf(read.binding());
         }
@@ -1851,8 +1950,13 @@ final class Terms {
         if (result != null && answersIn(result, answered)) {
             return computedBy(result, argsOf(e), answered);
         }
-        if (e instanceof Core.Binary b && b.op().answersANumber()) {
-            return theOneOf(new NumericMeaning.Operator(b.op(), b.left(), b.right()), b.type());
+        // An operator answers a number, and the domain carries the numbers on a carrier. Exact
+        // division answers one that is on none — a Rational is a number and no position holds one
+        // (ADR-0116) — so there is no atom for it to be about and no meaning to give. Asked of the
+        // carrier, which is what every other reader here asks, rather than of the operator: the rule
+        // is about what the operation answers with and not about which sign was written.
+        if (e instanceof Core.Binary b && b.op().answersANumber() && carriesANumber(b.type())) {
+            return new NumericMeaning.Operator(b.op(), b.left(), b.right());
         }
         return null;
     }
@@ -1878,33 +1982,20 @@ final class Terms {
      */
     NumericMeaning computedBy(NumericResult<DeclaredArgument> result, List<Core> args,
                               Type answered) {
-        return theOneOf(NumericMeanings.of(result.computes(), args), answered);
-    }
-
-    /** {@code meaning}, as the arithmetic it is where the language writes that arithmetic two ways.
-     * A divide of whole numbers is a truncating quotient however it was spelled, so the operator and
-     * the value case of {@code Int.divide} are one meaning and one recipe; over {@code Decimal} the
-     * operator rounds at a precision the run time sets, which is arithmetic of its own. */
-    private NumericMeaning theOneOf(NumericMeaning meaning, Type answered) {
-        if (meaning instanceof NumericMeaning.Operator(BinOp op, Core left, Core right)
-                && op == BinOp.DIV && granularityOf(answered) == Granularity.DISCRETE) {
-            return new NumericMeaning.TruncatingQuotient(left, right);
-        }
-        return meaning;
+        return NumericMeanings.of(result.computes(), args);
     }
 
     /**
      * What the value {@code meaning} computes is about, where a case of {@code scrutinee} opened it.
      *
-     * <p>Named by the arithmetic where the language writes that arithmetic another way, and by the
-     * case otherwise. A truncating quotient is the first: {@code a / b} is a spelling of the very
-     * value the {@code Int} case of {@code Int.divide(a, b)} carries, so the two are one term and a
-     * guard about either is about both — which is the whole of what naming a value says. An
-     * operation whose value case carries what an operator computes is the same, whichever operator
-     * it is: where the operation answers a sum as one case of a union, that case carries the very
-     * value {@code a + b} is. A remainder and a quotient rounded to a scale are the other: no
-     * operator writes them, so what they are is the value that case opens out of that call, and
-     * naming them by the call itself would file the union and the number it carries under one key.
+     * <p>Named by the arithmetic it is, or by the case it arrived at. An operation whose value case
+     * carries what an operator computes is the first: where the operation answers a sum as one case
+     * of a union, that case carries the very value {@code a + b} is. So is the truncating quotient,
+     * which is named by the divide it is — the {@code /} operator answers an exact quotient, and an
+     * exact quotient is on no carrier and makes no term at all (ADR-0116), so that identity is this
+     * quotient's alone. A remainder and a quotient rounded to a scale are the other: no arithmetic
+     * names them, so what they are is the value that case opens out of that call, and naming them by
+     * the call itself would file the union and the number it carries under one key.
      */
     FactSubject subjectOpenedAs(NumericMeaning meaning, Type carried, Core scrutinee,
                                 Denotations at) {
@@ -1929,6 +2020,10 @@ final class Terms {
      */
     private Term openedKey(NumericMeaning meaning, Type carried, Core scrutinee, Denotations at) {
         return switch (meaning) {
+            // The truncating quotient of two values, which is what the operation computes and what
+            // the arm's binding is. Spelled as a divide, and the exact quotient the `/` operator
+            // answers makes no term at all — a Rational is on no carrier, so nothing is named of one
+            // (ADR-0116) — so this identity is the truncating quotient's alone.
             case NumericMeaning.TruncatingQuotient(Core dividend, Core divisor) ->
                     written(BinOp.DIV, dividend, divisor, at);
             case NumericMeaning.Operator(BinOp op, Core left, Core right) ->
@@ -2034,7 +2129,7 @@ final class Terms {
 
     /** What to call an evaluation in a message: the kind of expression it is. */
     private static String shapeOf(Core e) {
-        return switch (e) {
+        return switch (Core.withoutStanding(e)) {
             case Core.Call _ -> "an answer";
             case Core.Apply _ -> "what a function value answered";
             default -> "a value";
@@ -2107,8 +2202,20 @@ final class Terms {
      */
     private Term termKey(Core raw, Denotations at, Map<BindingId, Term> bound, int depth,
                          Leaf leaf) {
+        long[] counting = COUNTING_WALKS;
+        if (counting != null) {
+            counting[0]++;
+        }
         return naming(raw, at, bound, depth, leaf).term();
     }
+
+    /** Where a test in this package counts the walks this reading started, and null everywhere else.
+     *  Beside {@link #FOLLOWED} and for the same reason: what a reading answers says nothing about
+     *  how many times it read the tree to answer it, so a reader that goes over an expression once
+     *  and a reader that goes over it once per name above it compile alike, and what separates them
+     *  has nowhere else to be read. Counted where a walk begins, which is every canonical key
+     *  whatever asked for it. */
+    static long[] COUNTING_WALKS;
 
     /**
      * What a walk over an expression does where the term grammar runs out.
@@ -2180,6 +2287,20 @@ final class Terms {
                     ValueName.Stdlib.namespace(t.kind().shown()),
                     List.of(interned.written(t.text()))));
             case Core.UnitValue u -> new Naming.Named(interned.unit(u.data()));
+            // A build of a value is named as the value is: what it comes to does not turn on where
+            // it is built, so it is named once, from the template, in the environment a template
+            // is read in.
+            case Core.MaterialisedValue m -> {
+                Core template = templates.bodyOf(m);
+                Map<Core, Naming> named = namedTemplates.computeIfAbsent(leaf,
+                        _ -> new IdentityHashMap<>());
+                Naming known = named.get(template);
+                if (known == null) {
+                    known = naming(template, insideATemplate, new HashMap<>(), 0, leaf);
+                    named.put(template, known);
+                }
+                yield known;
+            }
             case Core.Neg n -> over(List.of(n.operand()), at, bound, depth, leaf,
                     ps -> interned.negated(ps.get(0)));
             case Core.Binary b -> binary(b, at, bound, depth, leaf);
@@ -2192,10 +2313,17 @@ final class Terms {
             case Core.OptionSome s -> over(List.of(s.value()), at, bound, depth, leaf,
                     ps -> interned.some(ps.get(0)));
             case Core.OptionNone none -> new Naming.Named(interned.none(none.type()));
+            // A value is the value it is whatever type it stands as.
+            case Core.Widen w -> naming(w.value(), at, bound, depth, leaf);
             case Core.Block b -> {
-                Map<BindingId, Term> inner = binding(bound, b.params(), depth);
-                yield named(naming(b.body(), at, inner, depth + 1, leaf),
-                        body -> interned.closure(b.params().size(), body));
+                List<Core.Binder> params = b.params();
+                for (int i = 0; i < params.size(); i++) {
+                    bound.put(params.get(i).binding(), interned.bound(depth, i));
+                }
+                Naming result = named(naming(b.body(), at, bound, depth + 1, leaf),
+                        body -> interned.closure(params.size(), body));
+                params.forEach(p -> bound.remove(p.binding()));
+                yield result;
             }
             // A binding is named by what its body is named, read inside it. What a name means is the
             // environment's answer (ADR-0106), and {@link #inside} is where that is settled — so
@@ -2219,9 +2347,11 @@ final class Terms {
                 if (value instanceof Naming.Unnamed absent) {
                     yield absent;
                 }
-                Map<BindingId, Term> inner = new HashMap<>(bound);
-                inner.put(li.binder().binding(), value.term());
-                yield naming(li.body(), inside(li, at), inner, depth, leaf);
+                BindingId binder = li.binder().binding();
+                bound.put(binder, value.term());
+                Naming result = naming(li.body(), inside(li, at), bound, depth, leaf);
+                bound.remove(binder);
+                yield result;
             }
             // A construction is a pure function of its fields, and a closure that builds one is what a
             // mapping usually is. The fields are held in declaration order, so two sites writing them
@@ -2231,12 +2361,16 @@ final class Terms {
                     ps -> interned.built(nd.typeName(),
                             nd.values().stream().map(Core.FieldValue::field).toList(), ps));
             case Core.Match m -> {
-                Map<BindingId, Term> outer = bound;
                 List<Naming> answers = new ArrayList<>();
                 for (Core.Case arm : m.cases()) {
-                    Map<BindingId, Term> inner = arm.binder() == null ? outer
-                            : binding(outer, List.of(arm.binder()), depth);
-                    answers.add(naming(arm.body(), at, inner, depth + 1, leaf));
+                    if (arm.binder() == null) {
+                        answers.add(naming(arm.body(), at, bound, depth + 1, leaf));
+                        continue;
+                    }
+                    BindingId binder = arm.binder().binding();
+                    bound.put(binder, interned.bound(depth, 0));
+                    answers.add(naming(arm.body(), at, bound, depth + 1, leaf));
+                    bound.remove(binder);
                 }
                 Naming scrutinee = naming(m.scrutinee(), at, bound, depth, leaf);
                 yield joined(scrutinee, answers,
@@ -2246,9 +2380,11 @@ final class Terms {
             }
             case Core.IfConstructed ic -> {
                 Naming built = naming(ic.construct(), at, bound, depth, leaf);
-                Map<BindingId, Term> inner = binding(bound, List.of(ic.binder()), depth);
+                BindingId binder = ic.binder().binding();
+                bound.put(binder, interned.bound(depth, 0));
                 List<Naming> answers = new ArrayList<>();
-                answers.add(naming(ic.then(), at, inner, depth + 1, leaf));
+                answers.add(naming(ic.then(), at, bound, depth + 1, leaf));
+                bound.remove(binder);
                 for (Core.ElseArm arm : ic.els()) {
                     answers.add(naming(arm.body(), at, bound, depth, leaf));
                 }
@@ -2271,7 +2407,7 @@ final class Terms {
                 case Core.Reached reached -> switch (answersOf(reached.denotes())) {
                     case Naming.OfAName.AnswersNothing none ->
                             ranOut(raw, leaf, new Naming.Opaque(none.reason()));
-                    case Naming.OfAName.Answers ignored -> over(c.args(), at, bound, depth, leaf,
+                    case Naming.OfAName.Answers _ -> over(c.args(), at, bound, depth, leaf,
                             ps -> interned.called(reached.denotes(), ps));
                 };
                 // A walk this compiler minted for a shape the backend lowers as a whole. The reading
@@ -2390,20 +2526,10 @@ final class Terms {
         return new Naming.Named(made.apply(terms));
     }
 
-    /** {@code bound} with each of {@code binders} keyed by where it is bound rather than by which
-     * binding it is, so two expressions that differ only in what they bound are one term. */
-    Map<BindingId, Term> binding(Map<BindingId, Term> bound, List<Core.Binder> binders, int depth) {
-        Map<BindingId, Term> inner = new HashMap<>(bound);
-        for (int i = 0; i < binders.size(); i++) {
-            inner.put(binders.get(i).binding(), interned.bound(depth, i));
-        }
-        return inner;
-    }
-
     /** The binding at the head of a {@code x}/{@code x.a.b} chain, or {@code null} if {@code e} is not
      * one. */
     static BindingId rootBinding(Core e) {
-        return switch (e) {
+        return switch (Core.withoutStanding(e)) {
             case Core.Read r -> r.binding();
             case Core.FieldAccess fa -> rootBinding(fa.target());
             default -> null;
@@ -2418,7 +2544,7 @@ final class Terms {
     }
 
     private static void chainInto(Core e, List<String> out) {
-        if (e instanceof Core.FieldAccess fa) {
+        if (Core.withoutStanding(e) instanceof Core.FieldAccess fa) {
             chainInto(fa.target(), out);
             out.add(fa.field());
         }
@@ -2464,7 +2590,8 @@ final class Terms {
      * The reading beside this one does — what the term grammar can name runs out, and says so with
      * {@code null} — and the two are not the same question.
      */
-    private Term subjectKey(Core e, Denotations at) {
+    private Term subjectKey(Core standing, Denotations at) {
+        Core e = Core.withoutStanding(standing);
         return switch (e) {
             case Core.Read r -> {
                 FactSubject subject = at.subject(r.binding());
@@ -2490,7 +2617,7 @@ final class Terms {
      * than the chain is long (#826).
      */
     private Term keyOfNowhere(Core e, Denotations at) {
-        return switch (e) {
+        return switch (Core.withoutStanding(e)) {
             // What the walk recorded the term grammar names it by, and null where it names it by
             // nothing. A chain is asked of this only once it has been found not to be a place.
             case Core.Read r -> at.termOf(r.binding());
@@ -2598,11 +2725,12 @@ final class Terms {
 
     private final Map<BindingId, Followed> followed = new HashMap<>();
 
-    private Core writtenValue(Core e, Denotations at, Set<BindingId> seen) {
+    private Core writtenValue(Core standing, Denotations at, Set<BindingId> seen) {
         long[] counting = FOLLOWED;
         if (counting != null) {
             counting[0]++;
         }
+        Core e = Core.withoutStanding(standing);
         if (e instanceof Core.Read r) {
             Core given = at.valueOf(r.binding());
             if (given == null || given == e) {
@@ -2629,19 +2757,17 @@ final class Terms {
      * naming it at a construction site would ask for.
      */
     static boolean isWritten(Core e) {
-        return isWritten(e, Set.of());
+        return isWritten(e, new HashSet<>());
     }
 
     /** The same, where {@code written} names the bindings an expansion introduced for values that
      * were themselves written. A helper called on written arguments is a written value: what it
      * expands to binds each argument and reads it back, which is the source's own text moved. */
     static boolean isWritten(Core e, Set<BindingId> written) {
-        return switch (e) {
+        return switch (Core.withoutStanding(e)) {
             // A temporal is one of the literals the language has (spec
-            // §a-temporal-value-is-written-as-a-literal), so it is written wherever it stands. It
-            // was carried here as a call and answered `false` in this switch's default while
-            // `asWrittenValue` was writing it back out — one value, two answers about whether the
-            // source holds it.
+            // §a-temporal-value-is-written-as-a-literal), so it is written wherever it stands, as
+            // {@link #writtenLiteralOf} writes it back out.
             case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
                  Core.UnitValue _ -> true;
             case Core.Neg n -> isWritten(n.operand(), written);
@@ -2655,9 +2781,11 @@ final class Terms {
                 if (!isWritten(li.value(), written)) {
                     yield false;
                 }
-                Set<BindingId> inner = new HashSet<>(written);
-                inner.add(li.binder().binding());
-                yield isWritten(li.body(), inner);
+                BindingId binder = li.binder().binding();
+                written.add(binder);
+                boolean result = isWritten(li.body(), written);
+                written.remove(binder);
+                yield result;
             }
             default -> false;
         };
@@ -2666,12 +2794,21 @@ final class Terms {
     /** Whether {@code e} is a container built by an operation the preservation table covers, over an
      * argument that is itself named. */
     boolean builtByRule(Core e, Denotations at) {
-        if (!(e instanceof Core.PreservedCall call)) {
+        if (!(Core.withoutStanding(e) instanceof Core.PreservedCall call)) {
             return false;
         }
         DischargeRules.Source built = DischargeRules.builtFrom(call);
         return built != null && namedByRule(built.container(), at);
     }
+
+    /** What a name answered, and the environment it answered under — the environment because a
+     * binding entered after the answer is a name this one could reach that it could not before. */
+    private record Named(Denotations at, boolean named) {}
+
+    /** What each name followed came to, so that a name read twice is followed once. A value a name
+     * was given may read two more names, and each of those two more again, so a walk that asks the
+     * question afresh at each occurrence asks it as many times as the names multiply out to. */
+    private final Map<BindingId, Named> named = new HashMap<>();
 
     /**
      * Whether {@code e} names something without a guard having to have spoken about it: it is read all
@@ -2680,7 +2817,8 @@ final class Terms {
      * the check has no rule about is not, and neither is anything built from one: nothing follows from
      * naming it, and its construction is left to the run-time check.
      */
-    boolean namedByRule(Core e, Denotations at) {
+    boolean namedByRule(Core standing, Denotations at) {
+        Core e = Core.withoutStanding(standing);
         if (isAPlace(e, at)) {
             return true;
         }
@@ -2688,9 +2826,15 @@ final class Terms {
             // The name is the expression it was given, so the question is asked of that expression.
             // It was a flag recorded when the binding was entered, which is a second record of what
             // the initializer already answers.
+            Named had = named.get(r.binding());
+            if (had != null && had.at() == at) {
+                return had.named();
+            }
             Core given = at.valueOf(r.binding());
-            return computesAsWhatItWasGiven(r.binding(), at) && given != null && given != e
-                    && (affineOf(given, at) != null || namedByRule(given, at));
+            boolean answer = computesAsWhatItWasGiven(r.binding(), at) && given != null
+                    && given != e && (affineOf(given, at) != null || namedByRule(given, at));
+            named.put(r.binding(), new Named(at, answer));
+            return answer;
         }
         Core read = asOperator(e);
         if (read instanceof Core.PreservedCall call
@@ -2720,17 +2864,25 @@ final class Terms {
         // A closure is not part of what names the value: the tables are rules about how many elements
         // there are and where they came from, and how each one is made has no bearing on either.
         Core.forEachChild(read, child -> all[0] = all[0]
-                && (child instanceof Core.Block || namedByRule(child, at)));
+                && (Core.withoutStanding(child) instanceof Core.Block
+                        || namedByRule(child, at)));
         return all[0];
     }
 
     // --- what the two representations share ----------------------------------------------------
 
     /**
-     * {@code e} as the value it is written as, for the one reader that is defined over written values:
-     * the constant folder. A value written out is the same value in either representation, so this is
-     * a rendering and not a second tree — everything computed answers with nothing, and the fold then
-     * has nothing to fold.
+     * {@code e} as the literal the author would have written for it, or null where it is not one:
+     * a number, a text, a truth, a temporal, a case of an enumeration, and a number negated. What
+     * reads this reads a literal ({@link Carrier#literalOf(Hir.Expr)}), and anything else — a sum, an
+     * operation over values — is computed and answers with nothing.
+     *
+     * <p><b>A literal and nothing wider.</b> Each form has at most one part that is itself read, so
+     * this follows one way down and is as long as the chain of names it follows. Written as a
+     * rendering of any expression it built a tree for a sum of names nobody read, and a value that
+     * names another twice, over a chain of them, is a tree that doubles at each link. What a value
+     * comes to at compile time is {@link CoreConstantEval}'s, and a reader that wants the answer and
+     * not the literal asks {@link #folded}.
      *
      * <p><b>Read where it stands.</b> A helper call is expanded as a binding over the helper's body
      * (spec §invariant-discharge-representation), so a value an author wrote at a call stands under
@@ -2745,8 +2897,8 @@ final class Terms {
      * means: what a name <em>denotes</em> is {@link #inside}'s, and this is the written value's own
      * question.
      */
-    static Hir.Expr asWrittenValue(Core e, Denotations at) {
-        return asWrittenValue(e, at, Map.of());
+    static Hir.Expr writtenLiteralOf(Core e, Denotations at) {
+        return writtenLiteralOf(e, at, new HashMap<>());
     }
 
     /**
@@ -2768,52 +2920,47 @@ final class Terms {
                 ApplicationDerivationCause.ApplicationWrittenBack::new);
     }
 
-    /** {@code given} with {@code li}'s binder standing for what it was given. */
-    private static Map<BindingId, Core> withGiven(Map<BindingId, Core> given, Core.LetIn li) {
-        Map<BindingId, Core> out = new HashMap<>(given);
-        out.put(li.binder().binding(), li.value());
-        return out;
-    }
-
-    private static Hir.Expr asWrittenValue(Core e, Denotations at, Map<BindingId, Core> given) {
+    private static Hir.Expr writtenLiteralOf(Core e, Denotations at, Map<BindingId, Core> given) {
         // Written over nothing, every one of them. A value rendered back out of what was computed is
         // the value and not the characters any of it came from: the fold has already been over them,
         // and what it arrived at may be a number no line of the file spells.
-        return switch (e) {
+        return switch (Core.withoutStanding(e)) {
             // A binding is the value its body is, with the binder standing for what it was given.
-            // A binding is the value its body is, with the binder standing for what it was given.
-            case Core.LetIn li -> asWrittenValue(li.body(), at, withGiven(given, li));
+            case Core.LetIn li -> {
+                BindingId binder = li.binder().binding();
+                given.put(binder, li.value());
+                Hir.Expr result = writtenLiteralOf(li.body(), at, given);
+                given.remove(binder);
+                yield result;
+            }
             // And a name whose binding the clause's shape already consumed stands for what the
             // environment says it was given — which is the same rule, asked where the binding is no
             // longer in the tree ({@link ClauseExpr.Scoped}).
             case Core.Read r when given.containsKey(r.binding()) ->
-                    asWrittenValue(given.get(r.binding()), at, given);
+                    writtenLiteralOf(given.get(r.binding()), at, given);
             case Core.Read r when at.valueOf(r.binding()) != null ->
-                    asWrittenValue(at.valueOf(r.binding()), at, given);
+                    writtenLiteralOf(at.valueOf(r.binding()), at, given);
             case Core.Int i -> new Hir.IntLit(i.value(), i.pos(), null);
             case Core.Decimal d -> new Hir.DecimalLit(d.value(), d.pos(), null);
             case Core.Str s -> new Hir.StringLit(s.value(), s.pos(), null);
             case Core.Bool b -> new Hir.BoolLit(b.value(), b.pos(), null);
             case Core.Neg n -> {
-                Hir.Expr operand = asWrittenValue(n.operand(), at, given);
+                Hir.Expr operand = writtenLiteralOf(n.operand(), at, given);
                 yield operand == null ? null : new Hir.Neg(operand, n.pos(), null);
             }
-            case Core.Binary b -> {
-                Hir.Expr left = asWrittenValue(b.left(), at, given);
-                Hir.Expr right = asWrittenValue(b.right(), at, given);
-                yield left == null || right == null ? null
-                        : new Hir.Binary(b.op(), left, right, b.origin(), b.pos(), null);
-            }
-            case Core.PreservedCall call -> {
-                List<Hir.Expr> args = written(call.args(), at, given);
+            // A construction the library writes over one text is how a temporal is written where
+            // the representation keeps the call standing, and its text is its one part.
+            case Core.PreservedCall call when call.args().size() == 1 -> {
+                Hir.Expr text = writtenLiteralOf(call.args().getFirst(), at, given);
                 // The operation is named again here because the name the author wrote is gone by
                 // now, and the application they wrote is what made that necessary. Both occurrences
                 // are this writing's, and each is said by what it stands for.
-                yield args == null ? null
+                yield !(text instanceof Hir.StringLit) ? null
                         : Hir.Apply.synthetic(call.operation().name(), reachOf(call.operation()),
                                 ReferenceOrigin.composedOutOf(call.reference(), 0,
                                         ReferenceDerivationCause.ReferenceWrittenBack::new),
-                                writtenBackFrom(call.application()), args, call.pos(), null);
+                                writtenBackFrom(call.application()), List.of(text), call.pos(),
+                                null);
             }
             // A temporal is written as a literal with its text spelled out (spec
             // §a-temporal-value-is-written-as-a-literal). Rendered here for the same reason every
@@ -2847,20 +2994,6 @@ final class Terms {
         };
     }
 
-    /** Every argument as it was written, or null where any of them was computed. */
-    private static List<Hir.Expr> written(List<Core> args, Denotations at,
-                                          Map<BindingId, Core> given) {
-        List<Hir.Expr> out = new ArrayList<>();
-        for (Core arg : args) {
-            Hir.Expr each = asWrittenValue(arg, at, given);
-            if (each == null) {
-                return null;
-            }
-            out.add(each);
-        }
-        return out;
-    }
-
     // --- helpers -------------------------------------------------------------------------------
 
 
@@ -2872,11 +3005,13 @@ final class Terms {
     /** The block {@code e} is, following a name given one: a lambda handed to an operation the
      * representation keeps standing is never applied here, so it is bound to a name like any other
      * value and reaches the call as that name. */
-    static Core.Block blockOf(Core e, Denotations at) {
+    static Core.Block blockOf(Core standing, Denotations at) {
+        Core e = Core.withoutStanding(standing);
         if (e instanceof Core.Block b) {
             return b;
         }
-        return e instanceof Core.Read r && at.valueOf(r.binding()) instanceof Core.Block b ? b : null;
+        return e instanceof Core.Read r
+                && Core.withoutStanding(at.valueOf(r.binding())) instanceof Core.Block b ? b : null;
     }
 
 

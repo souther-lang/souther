@@ -11,9 +11,15 @@ import java.util.List;
  * A declaration the module carries a method for, because a call to it was left standing.
  *
  * <p>Most helpers are gone by the time a module is checked: the checker inlines a {@code let} at
- * the place it is used. What is left here is the one that cannot be inlined — a recursion — and a
- * body reaches it by a call like any other. A reader given only the behaviors would find that call
- * naming something it had never been handed.
+ * the place it is used. What is left here is what is emitted as a method of its own — a recursion,
+ * which cannot be inlined, and the methods compiled for a row's value and for the entry of a
+ * value — and a body reaches it by a call like any other. A reader given only the behaviors would
+ * find that call naming something it had never been handed. A value is not one of these: it runs
+ * in the one place its module builds it ({@link CheckedValue}), and lives past the call that reads
+ * it.
+ *
+ * <p>A parameter is the binder its body reads and the type the check settled for what arrives in
+ * it.
  *
  * <p>{@link #reachedAs} is the reference the calls in this module reach it by, which is the value
  * one of those calls carries. So a reader holding a call gets from it to this by asking what the

@@ -15,6 +15,14 @@ import java.util.Objects;
  * <p>Sealed, so the procedures that hold these to the library's declarations answer for a kind
  * added rather than passing over it.
  *
+ * <p><b>A kind is here because a reader in the compiler takes it as a proposition.</b> Whether the
+ * statement is that something holds or that it does not is beside the point; what earns a kind its
+ * place is that something below the binding reads its value as a statement about the operation and
+ * acts on it. That a question about an operation was considered and closed without a rule is not
+ * such a statement. Its reason may well be about the operation, but no reader here interprets the
+ * closing, so it belongs to the completeness check that asks the question and is not declared,
+ * bound or filed here.
+ *
  * <p><b>The authoring vocabulary, and nothing below the binding reads it.</b> An argument is named
  * here as {@link ArgumentRef}, a word; another operation as a {@link souther.compiler.types.ValueName},
  * a name. Neither says the library has such an operation or such an argument. What holds these to
@@ -301,15 +309,23 @@ public sealed interface OperationFact {
      * each would be true of the operations that share it and of no others, which is what a term
      * standing for one operation and answering for a kind of operation already was (#1027).
      *
-     * <p>The one value is the whole of what such a term can be about. A number taken of two
+     * <p>One value is the whole of what such a term can be <em>about</em>. A number taken of two
      * locations is not one of these: what it would be read off is a pair, and a term names one
      * path. An operation over several whose result the model can state says so as the form it
      * answers ({@link AnswersAFormOfItsArguments}) and is read into that form instead, which is why
      * the two cannot both be declared of one operation.
+     *
+     * <p><b>Being about one value is not taking only one.</b> An operation may be given values
+     * beside the one it measures, and those decide which number of it is taken: a divisor says
+     * which quotient. Such an argument is read as the constant it stands for and carried as part of
+     * which number this is ({@code semantics.TakenArguments}), so a rule about the quotient by two
+     * and one about the quotient by three are rules about two numbers of one place. An argument
+     * that reads as no constant leaves a taking nothing names — which number it would be is not
+     * settled, and a term built without it would be the quotient by whatever a reader assumed.
      */
-    record AnswersANumberTakenOfTheOneValueItIsGiven(TakenAs how) implements OperationFact {
+    record AnswersANumberTakenOfAValueItIsGiven(TakenAs how) implements OperationFact {
 
-        public AnswersANumberTakenOfTheOneValueItIsGiven {
+        public AnswersANumberTakenOfAValueItIsGiven {
             Objects.requireNonNull(how, "this one says what the number is taken as");
         }
     }
@@ -336,24 +352,4 @@ public sealed interface OperationFact {
      * building.
      */
     record EveryAnswerItCanGiveHasASourceValue() implements OperationFact {}
-
-    /**
-     * There is nothing to say of this operation under {@code subject}.
-     *
-     * <p>A decision and not a gap. An operation the library declares is in range of whatever its
-     * signature puts it in range of, and a silence there says two things at once — that nothing is
-     * true of it, and that nobody looked. {@code List.distinctBy} was credited by neither check for
-     * exactly that reason, with nothing said about the missing row.
-     *
-     * <p>So the absence is declared beside the presences, and the reason is written where it is
-     * declared. What the reason is about is the operation: a map's keys are not its values, a
-     * whole-minute count between two moments does not state their order, what {@code a + b} answers
-     * may be anywhere.
-     */
-    record SaysNothingOf(OperationSubject subject) implements OperationFact {
-
-        public SaysNothingOf {
-            Objects.requireNonNull(subject, "a silence is about something");
-        }
-    }
 }

@@ -3,13 +3,17 @@ package souther.compiler.check;
 import souther.compiler.types.BinOp;
 import souther.compiler.core.ConstructionProjection;
 import souther.compiler.core.Core;
+import souther.compiler.core.IntNegation;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
-import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -22,9 +26,9 @@ import java.util.Map;
  * first, and a rule the check enforced was one the measure reported as unread.
  *
  * <p><b>The grammar and the walk belong here.</b> Which nodes compose — a literal, a negation,
- * {@code +}, {@code -}, a scalar multiply, a binding, a construction of a newtype, and an
- * elimination standing against the introduction that wrote what it reads — is a fact about the
- * language. A caller supplies only the answers that depend on its
+ * {@code +}, {@code -}, a scalar multiply, a quotient by a constant, a binding, a construction of a
+ * newtype, and an elimination standing against the introduction that wrote what it reads — is a
+ * fact about the language. A caller supplies only the answers that depend on its
  * environment: what an otherwise-uncomposed value is called, what environment lies inside a binding,
  * and which source value a name denotes transparently.
  *
@@ -187,7 +191,32 @@ public final class AffineForms {
      * compose the moment its part did.
      */
     public static <A, E> Outcome<A, E> outcome(Core raw, E at, Reading<A, E> reading) {
-        return of(raw, at, reading, new java.util.HashSet<>());
+        return of(raw, at, reading, new Walk<>());
+    }
+
+    /**
+     * {@link #of(Core, Object, Reading)}, holding what each name came to in {@code answered}, which
+     * the caller keeps for as long as it reads with {@code reading}.
+     *
+     * <p>For a reading that asks itself something while it reads — the fact an operation states of
+     * its arguments, what a condition compares — so that a value it is part way through reading is
+     * read once and not once per question. What is held is keyed by the value and the environment
+     * it is read in ({@link BindingWalk}), so an answer is taken again only for the same question.
+     */
+    static <A, E> LinearForm<A> of(Core raw, E at, Reading<A, E> reading,
+                                   BindingWalk.Answers<Outcome<A, E>> answered) {
+        return of(raw, at, reading, new Walk<>(answered)) instanceof Outcome.Composed<A, E> composed
+                ? composed.form() : null;
+    }
+
+    /** One walk of one expression, reading each name it meets once ({@link BindingWalk}). */
+    private static final class Walk<A, E> extends BindingWalk<Outcome<A, E>> {
+
+        Walk() {}
+
+        Walk(BindingWalk.Answers<Outcome<A, E>> answered) {
+            super(answered);
+        }
     }
 
     /**
@@ -229,25 +258,24 @@ public final class AffineForms {
     /**
      * The same, through the names already being read through on the way here.
      *
-     * <p>Three stages, in this order. What the language composes is read first; then what a name
-     * denotes, which the environment answers and this reads; then what the caller calls the value.
-     * The middle one is not composition — whether a name may be read through is the environment's
-     * answer and not a rule of the grammar — and it is not a leaf either, since a leaf is what is
-     * left when nothing can be read. Folded into either neighbour, the boundary between what the
-     * language says and what a caller says stops being one a reader can see.
+     * <p>Four stages, in this order. What the language composes is read first; then what the whole
+     * expression comes to, where every part of it is written down; then what a name denotes, which
+     * the environment answers and this reads; then what the caller calls the value. The third is
+     * not composition — whether a name may be read through is the environment's answer and not a
+     * rule of the grammar — and it is not a leaf either, since a leaf is what is left when nothing
+     * can be read. Folded into either neighbour, the boundary between what the language says and
+     * what a caller says stops being one a reader can see.
+     *
+     * <p>The second stands where it does because what an expression comes to is a question about
+     * neither. It is not the grammar's, which reads arithmetic over positions and has no position
+     * here to read; and it is not the caller's, since a number every part of which is written down
+     * is that number whatever the caller would name. Asked before the grammar it would answer the
+     * same and re-read every written sub-expression the arms compose without it; asked after the
+     * environment it would be asked of expressions a name already answered for.
      */
     private static <A, E> Outcome<A, E> of(Core raw, E at, Reading<A, E> reading,
-                                           java.util.Set<BindingId> following) {
+                                           Walk<A, E> following) {
         Core e = Terms.asOperator(raw);
-        if (e instanceof Core.PreservedCall || e instanceof Core.Call) {
-            // A call that folds is the number it folds to. `String.length("1A")` is 2, and a clause
-            // about it is decided rather than owed — the run-time check is not what should answer a
-            // question the compiler has already computed.
-            BigDecimal folded = Terms.constantNumber(e, reading.symbols());
-            if (folded != null) {
-                return new Outcome.Composed<>(LinearForm.constant(folded));
-            }
-        }
         // Where the reading stopped inside what this walk does compose, kept while the questions
         // below are still asked. A name over an expression nothing reads is still a name the caller
         // may have an atom for, and taking the stop as the answer here would put the leaf question
@@ -256,6 +284,17 @@ public final class AffineForms {
         LinearForm<A> composed = composed(e, at, reading, following, stopped);
         if (composed != null) {
             return new Outcome.Composed<>(composed);
+        }
+        // An expression this composes nothing out of is still the number it folds to, where it
+        // folds to one. `String.length("1A")` is 2, and a clause about it is decided rather than
+        // owed — the run-time check is not what should answer a question the compiler has already
+        // computed. What is asked here is a written decimal or a whole number, which is every
+        // number a fold answers that the arms above do not: a fold comes to a fraction only through
+        // the operators, and each of those is arithmetic this composes.
+        BigDecimal folded = Terms.constantNumber(e, reading.symbols());
+        if (folded != null) {
+            return new Outcome.Composed<>(
+                    LinearForm.constant(ExactRatio.of(folded)));
         }
         Outcome<A, E> denoted = read(e, at, reading, following);
         if (denoted instanceof Outcome.Composed<A, E> composedName) {
@@ -286,7 +325,7 @@ public final class AffineForms {
     /** The form {@code e} came to, or null where the reading stopped inside it. For the parts of a
      *  composition, whose own stop is the whole one. */
     private static <A, E> LinearForm<A> formOf(Core e, E at, Reading<A, E> reading,
-                                               java.util.Set<BindingId> following,
+                                               Walk<A, E> following,
                                                Stop<A, E> stopped) {
         Outcome<A, E> read = of(e, at, reading, following);
         if (read instanceof Outcome.StoppedAt<A, E> here) {
@@ -317,27 +356,32 @@ public final class AffineForms {
      * they would have to change. Where every member was read and they came to different forms,
      * nothing stopped and this answers nothing, and the stop is reported at the name.
      */
-    private static <A, E> Outcome<A, E> read(Core e, E at, Reading<A, E> reading,
-                                             java.util.Set<BindingId> following) {
+    private static <A, E> Outcome<A, E> read(Core written, E at, Reading<A, E> reading,
+                                             Walk<A, E> following) {
+        Core e = Core.withoutStanding(written);
         if (!(e instanceof Core.Read r)) {
             return null;
         }
         ReadThrough<E> through = reading.readThrough(r, at);
         if (through != null) {
-            if (through.value() == e || !following.add(r.binding())) {
+            if (through.value() == e || !following.enter(r.binding())) {
                 return null;
             }
-            Outcome<A, E> form = of(through.value(), through.at(), reading, following);
-            following.remove(r.binding());
+            // Asked once per question. What a name comes to is the value it was given read in the
+            // environment it was given in, and a second occurrence of the name is that same
+            // question — so the walk holds the answer rather than composing the value again.
+            Outcome<A, E> form = following.readingOf(r.binding(), through.value(), through.at(),
+                    () -> of(through.value(), through.at(), reading, following));
+            following.leave(r.binding());
             return form;
         }
         java.util.List<ReadThrough<E>> alternatives = reading.alternativesOf(r, at);
-        if (alternatives == null || alternatives.isEmpty() || !following.add(r.binding())) {
+        if (alternatives == null || alternatives.isEmpty() || !following.enter(r.binding())) {
             return null;
         }
         Stop<A, E> stopped = new Stop<>();
         LinearForm<A> agreed = commonForm(membersOf(alternatives, reading), following, stopped);
-        following.remove(r.binding());
+        following.leave(r.binding());
         if (agreed != null) {
             return new Outcome.Composed<>(agreed);
         }
@@ -467,29 +511,31 @@ public final class AffineForms {
      * one value.
      */
     private static <A, E> java.util.List<Standing<A, E>> standing(
-            Core e, E at, Reading<A, E> reading, java.util.Set<BindingId> following) {
+            Core asPlaced, E at, Reading<A, E> reading, Walk<A, E> following) {
+        // What a value is does not turn on the type it stands as at its position.
+        Core e = Core.withoutStanding(asPlaced);
         return switch (e) {
             case Core.Read r -> {
                 ReadThrough<E> through = reading.readThrough(r, at);
                 if (through != null) {
-                    if (through.value() == e || !following.add(r.binding())) {
+                    if (through.value() == e || !following.enter(r.binding())) {
                         yield java.util.List.of(new Standing<>(e, at, reading));
                     }
                     java.util.List<Standing<A, E>> denoted =
                             standing(through.value(), through.at(), reading, following);
-                    following.remove(r.binding());
+                    following.leave(r.binding());
                     yield denoted;
                 }
                 java.util.List<ReadThrough<E>> alternatives = reading.alternativesOf(r, at);
                 if (alternatives == null || alternatives.isEmpty()
-                        || !following.add(r.binding())) {
+                        || !following.enter(r.binding())) {
                     yield java.util.List.of(new Standing<>(e, at, reading));
                 }
                 java.util.List<Standing<A, E>> each = new java.util.ArrayList<>();
                 for (Standing<A, E> one : membersOf(alternatives, reading)) {
                     each.addAll(standing(one.value(), one.at(), one.reading(), following));
                 }
-                following.remove(r.binding());
+                following.leave(r.binding());
                 yield each;
             }
             case Core.LetIn li -> standing(li.body(), reading.inside(li, at), reading, following);
@@ -534,12 +580,12 @@ public final class AffineForms {
      * nothing to compare.
      */
     private static <A, E> java.util.List<Standing<A, E>> eliminated(
-            Core e, E at, Reading<A, E> reading, java.util.Set<BindingId> following) {
-        return switch (e) {
+            Core e, E at, Reading<A, E> reading, Walk<A, E> following) {
+        return switch (Core.withoutStanding(e)) {
             case Core.FieldAccess fa -> {
                 java.util.List<Standing<A, E>> out = new java.util.ArrayList<>();
                 for (Standing<A, E> target : standing(fa.target(), at, reading, following)) {
-                    if (!(target.value() instanceof Core.Construct nd)) {
+                    if (!(Core.withoutStanding(target.value()) instanceof Core.Construct nd)) {
                         yield null;
                     }
                     Core written = ConstructionProjection.given(nd, fa.field());
@@ -555,7 +601,8 @@ public final class AffineForms {
             case Core.TupleGet get -> {
                 java.util.List<Standing<A, E>> out = new java.util.ArrayList<>();
                 for (Standing<A, E> tuple : standing(get.tuple(), at, reading, following)) {
-                    if (!(tuple.value() instanceof Core.Tuple written) || get.index() < 0
+                    if (!(Core.withoutStanding(tuple.value()) instanceof Core.Tuple written)
+                            || get.index() < 0
                             || get.index() >= written.elements().size()) {
                         yield null;
                     }
@@ -582,7 +629,7 @@ public final class AffineForms {
      * the values agree or this walk has nothing to say about the position.
      */
     private static <A, E> LinearForm<A> commonForm(java.util.List<Standing<A, E>> these,
-                                                   java.util.Set<BindingId> following,
+                                                   Walk<A, E> following,
                                                    Stop<A, E> stopped) {
         LinearForm<A> agreed = null;
         for (Standing<A, E> each : these) {
@@ -602,14 +649,18 @@ public final class AffineForms {
 
     /** {@code e} read as arithmetic over what its parts answer, or null where this has no rule for
      *  it or the rule it has does not compose. */
-    private static <A, E> LinearForm<A> composed(Core e, E at, Reading<A, E> reading,
-                                                 java.util.Set<BindingId> following,
+    private static <A, E> LinearForm<A> composed(Core asPlaced, E at, Reading<A, E> reading,
+                                                 Walk<A, E> following,
                                                  Stop<A, E> stopped) {
+        Core e = Core.withoutStanding(asPlaced);
         LinearForm<A> written = literal(e, reading);
         if (written != null) {
             return written;
         }
         return switch (e) {
+            // No number: the smallest Int negated is the run time's abort, and reading it as the
+            // form of the operand negated would put a number there that no run has.
+            case Core.Neg n when IntNegation.isTheLeastInt(n.operand()) -> null;
             case Core.Neg n -> Terms.negate(formOf(n.operand(), at, reading, following, stopped));
             case Core.Binary b when b.op() == BinOp.ADD ->
                     Terms.add(formOf(b.left(), at, reading, following, stopped),
@@ -617,11 +668,19 @@ public final class AffineForms {
             case Core.Binary b when b.op() == BinOp.SUB ->
                     Terms.add(formOf(b.left(), at, reading, following, stopped),
                             formOf(b.right(), at, reading, following, stopped), true);
-            // A scalar multiply by a constant (`Amount * 2`) is linear; `/` and a variable product
-            // are not — a divide truncates for `Int`, and a variable factor is non-linear — so those
-            // come back here as one value rather than as arithmetic over two.
+            // A scalar multiply by a constant (`Amount * 2`) is linear and a variable factor is
+            // not, so a product of two atoms comes back here as one value rather than as arithmetic
+            // over two.
             case Core.Binary b when b.op() == BinOp.MUL ->
                     Terms.scale(formOf(b.left(), at, reading, following, stopped),
+                            formOf(b.right(), at, reading, following, stopped));
+            // And a quotient by a constant is that scalar multiply by the reciprocal. The quotient
+            // is exact, so a third is what `x / 3` weighs its position by and not the nearest number
+            // either operand's type writes — which is why this is arithmetic over a position at all
+            // rather than a value whose fraction went somewhere the form could not say. Which
+            // divisors are constant, and why `1 / x` is none of them, is `Terms.overAConstant`'s.
+            case Core.Binary b when b.op() == BinOp.DIV ->
+                    Terms.overAConstant(formOf(b.left(), at, reading, following, stopped),
                             formOf(b.right(), at, reading, following, stopped));
             // An operation the library says answers arithmetic over what it was given is that
             // arithmetic here: `Decimal.fromInt(n)` is `n`, `Date.daysBetween(a, b)` is `b - a`,
@@ -713,7 +772,7 @@ public final class AffineForms {
             return null;
         }
         Place at = carrier.literalOf(e, reading.symbols());
-        return at == null ? null : LinearForm.constant(Count.number(at).at());
+        return at == null ? null : LinearForm.constant(Count.number(at).exactly());
     }
 
     /**
@@ -725,7 +784,7 @@ public final class AffineForms {
      * one rule with two readings, and neither is a case anybody wrote.
      */
     private static <A, E> LinearForm<A> answered(Core call, E at, Reading<A, E> reading,
-                                                 java.util.Set<BindingId> following,
+                                                 Walk<A, E> following,
                                                  Stop<A, E> stopped) {
         LinearForm<DeclaredArgument> says = formSaidOf(call);
         java.util.List<Core> args = Terms.argsOf(call);
@@ -735,7 +794,11 @@ public final class AffineForms {
         // met an expression an author would change — it has met this call.
         Stop<A, E> inside = new Stop<>();
         LinearForm<A> form = LinearForm.constant(says.constant());
-        for (Map.Entry<DeclaredArgument, BigDecimal> each : says.coefs().entrySet()) {
+        // Walked left to right over the call's arguments. A declared form holds which arguments the
+        // operation answers over and says nothing about which of them was written first, and where
+        // two of them cannot be carried it is the one the walk meets first that the stop is
+        // recorded against — so the walk is taken off the call rather than off the form.
+        for (Map.Entry<DeclaredArgument, ExactRatio> each : inArgumentOrder(says, call)) {
             // The call here may be the runnable tree's and not a kept one, so its argument count
             // is checked here rather than by a kept call's own constructor.
             int position = CallArguments.positionOf(each.getKey(), Terms.operationOf(call));
@@ -749,6 +812,23 @@ public final class AffineForms {
             form = form.plus(argument.times(each.getValue()));
         }
         return form;
+    }
+
+    /**
+     * What a declared form weighs, in the order the call writes those arguments down.
+     *
+     * <p>An argument the operation does not declare sorts last, where the walk meets it and stops
+     * at the call: what is not the operation's is not put in front of what is.
+     */
+    private static List<Map.Entry<DeclaredArgument, ExactRatio>> inArgumentOrder(
+            LinearForm<DeclaredArgument> says, Core call) {
+        ValueName operation = Terms.operationOf(call);
+        return says.coefs().entrySet().stream()
+                .sorted(Comparator.comparingInt(each -> {
+                    int position = CallArguments.positionOf(each.getKey(), operation);
+                    return position < 0 ? Integer.MAX_VALUE : position;
+                }))
+                .toList();
     }
 
     /**

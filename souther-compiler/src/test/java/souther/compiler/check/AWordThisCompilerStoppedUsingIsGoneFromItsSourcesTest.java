@@ -58,7 +58,11 @@ class AWordThisCompilerStoppedUsingIsGoneFromItsSourcesTest {
         for (Path source : REPOSITORY.mainJavaSources()) {
             String written = Files.readString(source, StandardCharsets.UTF_8);
             for (int at = 0; at < gone.size(); at++) {
-                if (gone.get(at).matcher(written).find()) {
+                // The pattern has to find its name's last segment, and asking for that as text is
+                // what most files are ruled out by; the pattern is for the ones that have it.
+                String name = GONE.get(at);
+                if (written.contains(name.substring(name.lastIndexOf('.') + 1))
+                        && gone.get(at).matcher(written).find()) {
                     found.add(source.getFileName() + " still says `" + GONE.get(at) + "`");
                 }
             }

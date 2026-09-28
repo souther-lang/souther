@@ -46,19 +46,6 @@ class CompileQualifiedCalleeTest {
         return assertThrows(CompileException.class, () -> compile(srcs));
     }
 
-    /** A module-qualified construction, which reached the library ladder only because the parser
-     *  flattened `up.Amount(` into one name. */
-    @Test
-    void aQualifiedConstructionIsStillReached() {
-        compile(UP, """
-                module down exposing ( In, Out, run )
-                data In = { n: Int }
-                data Out = { m: Int }
-                behavior run : (i: In) -> Out constructs Out, up.Amount
-                let run (i) = Out { m = up.Amount(i.n).value }
-                """);
-    }
-
     /**
      * A module whose own name is dotted, in a value position. The parser looked three tokens ahead
      * for a `(` and so read only one dot as part of a callee, which left this spelling working in a

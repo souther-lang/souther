@@ -2,8 +2,6 @@ package souther.compiler.numeric;
 
 import org.junit.jupiter.api.Test;
 
-
-import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -87,7 +85,7 @@ class TheClosureTheoremIsAskedOfPositionsTheRulesRelateTest {
 
     /** Every position bounded on its own, which is a system every certificate holds of. */
     private static NumericDomain<String> bounded(Map<String, Granularity> kinds) {
-        NumericDomain<String> domain = NumericDomain.top();
+        NumericDomain<String> domain = NumericDomain.top(CanonicalOrder.asTheyAreSpelled());
         for (String position : kinds.keySet()) {
             domain = domain.assume(
                     LinearForm.<String>atom(position), Rel.GE, kinds);
@@ -111,6 +109,6 @@ class TheClosureTheoremIsAskedOfPositionsTheRulesRelateTest {
     }
 
     private static LinearForm<String> num(long n) {
-        return LinearForm.constant(BigDecimal.valueOf(n));
+        return LinearForm.constant(ExactRatio.of(n));
     }
 }

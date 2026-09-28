@@ -51,6 +51,7 @@ public enum DiagnosticCode {
     E1024("a-name-held-as-a-value-is-a-value", "check.unknown.title"),
     E1025("a-standard-library-function-is-called-qualified", "check.unknown.title"),
     E1026("constructs-excludes-unit-data", "e1026.title"),
+    E1027("a-data-does-not-spread-itself", "check.data.invalid.title"),
     E1101("invariant-expression-is-bool", "e1101.title"),
     E1102("invariant-needs-a-value-to-constrain", "check.invariant.invalid.title"),
     E1103("invariant-clause-names-are-distinct", "check.invariant.invalid.title"),
@@ -107,6 +108,7 @@ public enum DiagnosticCode {
     E1507("a-reached-name-is-exposed-by-its-module", "check.module.title"),
     E1508("an-imported-name-denotes-one-thing", "check.module.title"),
     E1509("a-published-module-can-be-read-back", "check.module.title"),
+    E1510("a-published-module-agrees-with-what-it-was-built-against", "check.module.title"),
     E1602("depends-on-names-every-requirement", "e1602.title"),
     E1603("depends-on-names-no-more", "e1603.title"),
     E1604("composition-output-agrees-with-inference", "e1604.title"),
@@ -131,6 +133,7 @@ public enum DiagnosticCode {
     E1624("a-composition-carries-no-ensures", "check.pipe.title"),
     E1626("an-attached-files-values-are-for-its-rows", "check.example.title"),
     E1627("nothing-built-rests-on-an-unwritten-behavior", "check.module.title"),
+    E1628("a-published-helper-builds-only-what-its-reader-can-reach", "check.module.title"),
     E1701("composition-stages-type-route", "e1701.title"),
     E1702("a-stage-after-the-first-takes-one-input", "check.pipe.title"),
     E1703("a-pipeline-composes-behaviors", "check.pipe.title"),
@@ -143,7 +146,7 @@ public enum DiagnosticCode {
     E1806("an-argument-has-the-type-its-parameter-takes", "check.fn.title"),
     E1807("a-function-binding-has-one-type", "check.fn.title"),
     E1808("a-function-bindings-type-is-known", "check.fn.title"),
-    E1809("a-block-is-not-a-value", "check.block.title"),
+    E1809("a-function-value-has-a-type-where-it-is-written", "check.block.title"),
     E1810("an-annotation-on-a-function-binding-is-a-function-type", "check.fn.title"),
     E1811("a-helper-parameter-states-its-type", "check.helper.title"),
     E1812("a-helper-answers-what-it-declares", "check.helper.title"),
@@ -188,6 +191,9 @@ public enum DiagnosticCode {
     E1933("a-behavior-has-at-most-one-stand-in-table", "check.example.title"),
     E1934("every-row-has-its-answer-written", "check.example.title"),
     E1935("every-decision-rule-has-a-row", "check.example.title"),
+    E1936("every-combination-of-decisions-has-a-row", "check.example.title"),
+    E1937("every-combination-of-two-classes-has-a-row", "check.example.title"),
+    E1938("every-border-is-told-from-the-lines-beside-it", "check.example.title"),
 
     // --- totality, invariant discharge, attempted construction ---
     E2001("helper-carries-its-termination-guarantee", "check.totality.title"),
@@ -211,9 +217,6 @@ public enum DiagnosticCode {
     E2106("a-field-does-not-collide-with-an-object-method", "check.reserved.title"),
     E2107("source-structural-complexity-is-bounded", "e2107.title"),
     E2108("running-out-of-room-is-reported", "e2108.title"),
-
-    // --- the external representation ---
-    E2201("a-custom-codec-agrees-with-its-type", "check.codec.title"),
 
     // --- the text as written ---
     E2301("declaration-syntax", "parse.title"),
@@ -268,7 +271,7 @@ public enum DiagnosticCode {
     /** The rules that are reported without failing the build. */
     private static final java.util.Set<DiagnosticCode> WARNINGS =
             java.util.EnumSet.of(E1327, E1913, E1915, E1916, E1917, E1918, E1919, E1920, E1921,
-                    E1922, E1931, E1934, E1935, E2011);
+                    E1922, E1931, E1934, E1935, E1936, E1937, E1938, E2011);
 
     /** The catalog key of the header category this code is shown under. Shared across codes. */
     public String titleKey() {

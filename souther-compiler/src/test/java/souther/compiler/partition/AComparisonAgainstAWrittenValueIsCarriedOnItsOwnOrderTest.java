@@ -104,7 +104,7 @@ class AComparisonAgainstAWrittenValueIsCarriedOnItsOwnOrderTest {
             TakenConstraint.AwayFrom away = assertInstanceOf(TakenConstraint.AwayFrom.class,
                     taken(each.getKey(), each.getValue()),
                     each.getKey() + " comes out " + each.getValue() + " as a hole in the order");
-            assertEquals("t", away.at().key());
+            assertEquals("t", away.at().spelled());
         }
     }
 
@@ -205,7 +205,7 @@ class AComparisonAgainstAWrittenValueIsCarriedOnItsOwnOrderTest {
     private static String said(TakenConstraint taken) {
         TakenConstraint.Ordered bound = assertInstanceOf(TakenConstraint.Ordered.class, taken,
                 "a written value on an order that counts nothing is a bound on it");
-        return bound.term() + " " + bound.rel() + " " + bound.at().key();
+        return bound.term() + " " + bound.rel() + " " + bound.at().spelled();
     }
 
     /**
@@ -221,14 +221,16 @@ class AComparisonAgainstAWrittenValueIsCarriedOnItsOwnOrderTest {
                 taken(behavior, true), behavior + " is a bound on an order");
         SearchRegion narrowed = new WayToTheBorder(stating(behavior, true))
                 .narrowing(regionOf(behavior));
-        NumericDomain.Bounds runs = narrowed.runsBetween(bound.term());
+        NumericDomain.Bounds runs =
+                narrowed.projectionOf(bound.term()) instanceof NumericDomain.FormProjection.Within(
+                        NumericDomain.Bounds held) ? held : null;
         return "[" + end(runs == null ? null : runs.min()) + ", "
                 + end(runs == null ? null : runs.max()) + "]";
     }
 
     /** One end as the place it is at, or the word for no end. */
     private static String end(Endpoint at) {
-        return at == null ? "null" : at.at().key();
+        return at == null ? "null" : at.at().spelled();
     }
 
     /** What the body states coming out each way, which is one condition read twice and never two

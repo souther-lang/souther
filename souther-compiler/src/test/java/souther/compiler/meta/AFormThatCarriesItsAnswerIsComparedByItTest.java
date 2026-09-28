@@ -9,21 +9,19 @@ import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
+import souther.compiler.types.WrittenTypeMeaning;
 
-import java.lang.reflect.ParameterizedType;
-import java.lang.reflect.RecordComponent;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A form that carries both a spelling and what the front end settled it to be is compared by the
@@ -53,8 +51,8 @@ class AFormThatCarriesItsAnswerIsComparedByItTest {
 
     /**
      * A declaration's own name is its key and not a spelling to pass over, so the three declaration
-     * forms are not among the ones compared by an answer. They are held by
-     * {@code DeclarationAgreement.held}, which pairs them by name before comparing anything.
+     * forms are not among the ones compared by an answer. They are paired by name before anything
+     * of them is compared.
      */
     private static final Set<String> COMPARED_BY_NAME = Set.of(
             Hir.Data.class.getName(), Hir.SumData.class.getName(), Hir.UnitData.class.getName());
@@ -85,6 +83,22 @@ class AFormThatCarriesItsAnswerIsComparedByItTest {
                         + " with no arm is compared by how it was written");
     }
 
+    /**
+     * The control for the walk: it goes through a form of the grammar that is not a record.
+     *
+     * <p>What a written type comes to is held nowhere else, so reaching it says the walk went
+     * through the written type rather than stopping at it. Most of what a form holds is held by some
+     * other form too, and a walk that stopped would go on finding those by the other route and
+     * saying nothing — which is how this test went on passing while the set it was reading over got
+     * smaller.
+     */
+    @Test
+    void andTheWalkGoesThroughAFormOfTheGrammarThatIsNotARecord() {
+        assertTrue(reachable().contains(WrittenTypeMeaning.Settled.class),
+                "what a written type comes to is reached through the written type and nowhere"
+                        + " else, so a walk that stops at one never sees it");
+    }
+
     /** The control: the walk can tell a form that carries only a spelling from one that carries both. */
     @Test
     void andAFormCarryingOnlyASpellingIsNotAmongThem() {
@@ -95,22 +109,43 @@ class AFormThatCarriesItsAnswerIsComparedByItTest {
                 "and so is the field a value is read under");
     }
 
+    /**
+     * And what the comparison names as read by the answer is those and no others.
+     *
+     * <p>The two sides of one thing. Above says a form with the shape has an arm; this says the
+     * arms are for forms with the shape, so the naming beside the comparison cannot grow a form the
+     * comparison reads by how it was written — which would refuse a set of them for a reason that
+     * is not there.
+     */
+    @Test
+    void andTheArmsAreNamedForThoseAndNoOthers() {
+        for (Class<?> form : reachable()) {
+            assertEquals(carriesASpellingAndItsAnswer(form)
+                            && !COMPARED_BY_NAME.contains(form.getName()),
+                    DeclarationAgreement.readByTheAnswerBesideItsSpelling(form),
+                    form.getName() + " is read by the answer beside its spelling, or it is not, and"
+                            + " what the comparison does with it and what it is made of have to"
+                            + " say the same thing");
+        }
+    }
+
     /** Whether {@code form} holds a spelling and, beside it, what that spelling was settled to be. */
     private static boolean carriesASpellingAndItsAnswer(Class<?> form) {
-        if (!form.isRecord()) {
+        if (!StructuralParts.areHandedOver(form)) {
             return false;
         }
         boolean spelling = false;
         boolean answer = false;
-        for (RecordComponent part : form.getRecordComponents()) {
-            spelling |= part.getType() == WrittenName.class || part.getType() == String.class;
-            answer |= part.getType() == TypeSymbol.class || part.getType() == ValueName.class
-                    || part.getType() == BindingId.class || part.getType() == Type.class
+        for (StructuralParts.Part part : StructuralParts.of(form)) {
+            Class<?> held = part.held() instanceof Class<?> plain ? plain : null;
+            spelling |= held == WrittenName.class || held == String.class;
+            answer |= held == TypeSymbol.class || held == ValueName.class
+                    || held == BindingId.class || held == Type.class
                     // A use is settled to a reference, which carries the declaration it reaches.
                     // Read for the same reason `ValueName` is: what the front end put beside the
                     // spelling is the answer, whether the answer is the declaration or the
                     // reference that reached it.
-                    || part.getType() == ReachName.class;
+                    || held == ReachName.class;
         }
         return spelling && answer;
     }
@@ -128,31 +163,13 @@ class AFormThatCarriesItsAnswerIsComparedByItTest {
                 todo.addAll(List.of(type.getPermittedSubclasses()));
                 continue;
             }
-            if (!type.isRecord()) {
+            if (!StructuralParts.areHandedOver(type)) {
                 continue;
             }
-            for (RecordComponent part : type.getRecordComponents()) {
-                todo.addAll(held(part.getGenericType()));
+            for (StructuralParts.Part part : StructuralParts.of(type)) {
+                todo.addAll(TypesAPartIsDeclaredToHold.named(part.held()));
             }
         }
         return seen;
-    }
-
-    /** The types a component holds: itself, or what its container is of. */
-    private static List<Class<?>> held(java.lang.reflect.Type type) {
-        if (type instanceof Class<?> plain) {
-            return plain.isArray() ? List.of(plain.getComponentType()) : List.of(plain);
-        }
-        if (type instanceof ParameterizedType parameterized
-                && parameterized.getRawType() instanceof Class<?> raw
-                && (raw == List.class || raw == Set.class || raw == Optional.class
-                        || raw == Map.class)) {
-            List<Class<?>> of = new ArrayList<>();
-            for (java.lang.reflect.Type argument : parameterized.getActualTypeArguments()) {
-                of.addAll(held(argument));
-            }
-            return of;
-        }
-        return List.of();
     }
 }

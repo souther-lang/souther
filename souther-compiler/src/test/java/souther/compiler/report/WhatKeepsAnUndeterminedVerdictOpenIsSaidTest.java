@@ -126,11 +126,11 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
      */
     @Test
     void andItIsTheRuleAboutTheValueTheListWasMadeFrom() {
-        List<AdequacyOpening> open = measured().whatKeepsTheVerdictOpen();
+        List<AdequacyUncertainty> open = measured().whatKeepsTheVerdictOpen();
 
         assertTrue(open.stream()
-                        .filter(AdequacyOpening.ByWeakening.class::isInstance)
-                        .map(each -> ((AdequacyOpening.ByWeakening) each).cause())
+                        .filter(AdequacyUncertainty.ByWeakening.class::isInstance)
+                        .map(each -> ((AdequacyUncertainty.ByWeakening) each).cause())
                         .anyMatch(cause -> cause instanceof Weakening.ModelReadingIncomplete it
                                 && it.cause() instanceof ClosureGap.QuestionUnanswered asked
                                 && asked.question() instanceof StandingQuestion

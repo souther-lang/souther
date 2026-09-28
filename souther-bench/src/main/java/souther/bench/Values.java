@@ -36,7 +36,15 @@ final class Values {
     // more about that floor than about the curve.
     private static final int[] SIZES = {100, 200, 400, 800};
 
+    // Lower than the sizes above, and still doubling: a term exponential in the length of this shape
+    // would end the run at the first of them, so the sizes are what the shape can be asked at and
+    // say whether it is one.
+    private static final int[] DOUBLING_SIZES = {25, 50, 100, 200};
+
     static void measure(Report report) {
+        for (int values : DOUBLING_SIZES) {
+            line(report, values, "doubling chain", doublingChain(values));
+        }
         for (int values : SIZES) {
             line(report, values, "chain", chain(values, false));
             line(report, values, "chain bottom-up", chain(values, true));
@@ -70,6 +78,24 @@ final class Values {
             declarations.add("let v" + i + " = v" + (i - 1) + " + 1");
         }
         return module("chain", declarations, bottomUp, n - 1);
+    }
+
+    /**
+     * {@code n} values, each naming the one before it twice, and an invariant that states the last.
+     *
+     * <p>Written so that what the source holds is as long as the chain and what its references
+     * multiply out to is two to the power of it. A representation that puts a value's body where it
+     * is named is exponential in this and only in this, which no shape above shows: a chain names
+     * each value once.
+     */
+    static String doublingChain(int n) {
+        StringBuilder source = new StringBuilder("module doubling exposing ( D, f )\n\nlet v0 = true\n");
+        for (int i = 1; i < n; i++) {
+            source.append("let v").append(i).append(" = v").append(i - 1).append(" && v")
+                    .append(i - 1).append('\n');
+        }
+        return source.append("\ndata D = Int\n    invariant v").append(n - 1)
+                .append("\n\nbehavior f : (d: D) -> Int\nlet f (d) = 1\n").toString();
     }
 
     /** The same reaching with none of the names: each value calls a helper, and the helper is what

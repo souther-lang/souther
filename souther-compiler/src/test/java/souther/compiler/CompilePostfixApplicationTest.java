@@ -323,7 +323,8 @@ class CompilePostfixApplicationTest {
                 new souther.compiler.types.ApplicationOrigin.ComposedFixture(),
                 java.util.List.of(), at, null);
         Hir.Apply nameless = Hir.Apply.synthetic(new Hir.Block(java.util.List.of(),
-                new Hir.IntLit(1, at, null), souther.compiler.types.RuleOrigin.unwritten(), at, null),
+                new Hir.IntLit(1, at, null), souther.compiler.types.RuleOrigin.unwritten(), null,
+                at, null),
                 java.util.List.of(),
                 new souther.compiler.types.ApplicationOrigin.ComposedFixture(), at, null);
 

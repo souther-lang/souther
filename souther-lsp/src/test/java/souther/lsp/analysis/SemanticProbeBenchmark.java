@@ -147,7 +147,7 @@ class SemanticProbeBenchmark {
         Map<String, String> rest = new LinkedHashMap<>(byId);
         rest.remove(edited);
         String text = byId.get(edited) + halfWritten(round);
-        SemanticProbe.Reading reading = probe.of(rest, Set.of(), ModulePath.EMPTY, edited, text,
+        SemanticProbe.Reading reading = probe.of(rest, Set.of(), ModulesOnThePath.NONE, edited, text,
                 text.length(), Abandonment.NEVER);
         if (reading == null) {
             throw new IllegalStateException("the half-written line is one the probe finishes off");

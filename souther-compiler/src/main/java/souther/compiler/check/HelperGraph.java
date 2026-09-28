@@ -3,14 +3,15 @@ package souther.compiler.check;
 import souther.compiler.types.ReachName;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
-import java.util.SequencedSet;
 import java.util.Set;
 
 /**
@@ -20,16 +21,21 @@ import java.util.Set;
  * reaches one way calls what it reaches another, which is a fact about resolved references; where
  * the module puts the methods it emits for them is a different question and is nowhere in this.
  *
+ * <p>Calls and nothing else. A body also reaches the values it reads, and runs them; which is which is
+ * {@link HelperEdges}'s to say, and a read is not an edge here, because recursion is a cycle of calls.
+ *
  * <p>A function of the table it was built from and of nothing else. Two bodies of one module are
  * expanded against one table and so read one graph — before this each expansion built its own, which
  * meant walking every one of the standard library's bodies again for each, and eleven answers that
  * had to agree.
  *
  * <p>A helper recurses iff it can reach itself through helper calls; every member of a mutual cycle
- * is reached from itself, so all are marked. {@code recursive} is a {@link SequencedSet} because the
- * order is part of what it answers: a reader that reports one member of a cycle reports the one it
- * reaches first, and the order it reaches them in is the order they were declared. Said in the type
- * rather than in a comment, because a set that only promises membership may be copied into one whose
+ * is reached from itself, so all are marked. {@code recursive} is a {@link List} — not a set of any
+ * kind — because the order is part of what it answers: a reader that reports one member of a cycle
+ * reports the one it reaches first, and the order it reaches them in is the order they were declared.
+ * Said in the type rather than in a comment, because a {@code Set}'s {@code equals} answers about
+ * membership only — the very question issue #1835 asked of {@code RequiredRecursiveDefs}, whose
+ * changedAt this graph feeds. A set that only promises membership may also be copied into one whose
  * iteration order the JVM salts per run — which is how the same source came to name a different
  * helper on a different run. Both a module's own helpers and the shipped prelude ones
  * are walked: {@code List.foldFrom} is a recursive prelude helper and has to be left standing —
@@ -39,26 +45,28 @@ import java.util.Set;
  * <p>Built over the table as it stands. A table narrowed for an expansion ({@link HelperTable#hiding})
  * narrows what a call reaches and changes nothing here: a graph taken over the narrowed table would
  * find the very helper being expanded non-recursive.
+ *
+ * <p>{@link #recurses} is membership over the same list — a linear scan — because a module's
+ * recursive helpers are few; this reads a positional answer, it does not maintain a second index of
+ * one.
  */
 public record HelperGraph(Map<ReachName.Declaration, Set<ReachName.Declaration>> callsOf,
-                          SequencedSet<ReachName.Declaration> recursive) {
+                          List<ReachName.Declaration> recursive) {
 
     /** The graph of {@code table}: what each declaration in it calls, and which of them recurse. */
     public static HelperGraph of(HelperTable table) {
         Map<ReachName.Declaration, Set<ReachName.Declaration>> callsOf = new LinkedHashMap<>();
         for (Map.Entry<ReachName.Declaration, HelperEntry> e : table.reachable().entrySet()) {
-            Set<ReachName.Declaration> called = new LinkedHashSet<>();
-            HelperInliner.helperCallsIn(table.library(), e.getValue().definition().writtenBody(),
-                    table.reachable(), called);
-            callsOf.put(e.getKey(), called);
+            callsOf.put(e.getKey(), HelperEdges.in(table.library(),
+                    e.getValue().definition().writtenBody(), table.reachable()).calls());
         }
-        SequencedSet<ReachName.Declaration> recursive = new LinkedHashSet<>();
+        List<ReachName.Declaration> recursive = new ArrayList<>();
         for (ReachName.Declaration reference : table.reachable().keySet()) {
             if (reaches(callsOf, reference, reference, new HashSet<>())) {
                 recursive.add(reference);
             }
         }
-        return new HelperGraph(fixed(callsOf), Collections.unmodifiableSequencedSet(recursive));
+        return new HelperGraph(fixed(callsOf), List.copyOf(recursive));
     }
 
     /**
@@ -80,6 +88,33 @@ public record HelperGraph(Map<ReachName.Declaration, Set<ReachName.Declaration>>
      * expanded (spec §fn-declaration). */
     public boolean recurses(ReachName.Declaration reference) {
         return recursive.contains(reference);
+    }
+
+    /**
+     * The declarations on a call cycle with {@code reference}: those it reaches through calls that
+     * reach it back, itself among them. Empty where it does not recurse.
+     *
+     * <p>Membership is asked with the predicate {@link #of} decides {@code recursive} with, and
+     * {@code reference} is a member exactly when it reaches itself — which is that predicate asked
+     * of it. So a declaration {@link #recurses} holds is on the cycle this answers for it, and one it
+     * does not hold has no cycle, by the one computation and not by two that happen to agree. A
+     * reader that relies on this — a group proven total is a group of no graphs where it is empty —
+     * still holds it to that ({@link TotalityChecker}).
+     *
+     * <p>In the order the table holds them, which is the order they were declared. Worked out of the
+     * edges when asked rather than kept beside them: a graph's {@code equals} is what an answer built
+     * on it is compared by, and a second statement of the same edges would be a component that could
+     * only agree with them or be wrong.
+     */
+    public List<ReachName.Declaration> callCycleOf(ReachName.Declaration reference) {
+        List<ReachName.Declaration> cycle = new ArrayList<>();
+        for (ReachName.Declaration member : callsOf.keySet()) {
+            if (reaches(callsOf, reference, member, new HashSet<>())
+                    && reaches(callsOf, member, reference, new HashSet<>())) {
+                cycle.add(member);
+            }
+        }
+        return List.copyOf(cycle);
     }
 
     /** What {@code reference}'s body calls directly, or an empty set where it calls nothing this

@@ -107,7 +107,13 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
          * knows is the linking failed and that the rows behind it did not run.
          */
         LINKAGE_FAILED(true),
-        /** Nothing was observed from here, so what its rows cover is unknown. */
+        /**
+         * Nothing was observed from where this was written, so what it covers is unknown.
+         *
+         * <p>Said of a row where the rows a source holds are known, and of the source where they
+         * are not. Both are one thing happening — an evaluation of a source that came back with
+         * nothing — and they differ in how much of it the compiler can place.
+         */
         OBSERVATION_ABSENT(true),
         /**
          * The classes an arm-measuring evaluation needs were not made.
@@ -120,7 +126,43 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
          * <p>Its one producer takes this branch only where arm coverage was asked for, and returns
          * no rows with it. So the request and the empty result are both part of what this says.
          */
-        INSTRUMENTATION_ABSENT(true);
+        INSTRUMENTATION_ABSENT(true),
+        /**
+         * The implementation a row was to be run against was this compile's to make and is not in
+         * the image the row ran in.
+         *
+         * <p>What a reader of this knows is that the row was read and not decided, and that what
+         * stopped it is this compile rather than the model or a limit. A module whose bodies did not
+         * all come out is evaluated against the bodies that may be run; a row about a behavior
+         * reaching one that did not come out has nothing here to be applied to.
+         *
+         * <p>A row that was read, so it is not one of the codes that say no row was. The rows either
+         * side of it in one source were run and answered, and a reading that said none of them was
+         * would be giving this one's reason to all of them.
+         */
+        IMPLEMENTATION_NOT_MADE(false),
+        /**
+         * Every value a term reads arrived, and the number they come to has no representation this
+         * compiler holds, whatever room the host has.
+         *
+         * <p>Not {@link #VALUE_UNREADABLE}: the values were read back whole, and what stopped is a
+         * sum, a difference or a product of them standing far enough apart in scale for this host to
+         * hold. Apart from {@link #VALUE_ROOM_EXCEEDED} for the reason
+         * {@link souther.compiler.numeric.UnheldNumber} keeps the two apart everywhere else it
+         * travels: what a reader does next differs by which of them met the value, so a word that
+         * folded them into one would be undoing a distinction this compiler already worked out and
+         * is telling nobody.
+         */
+        VALUE_NOT_WORKED_OUT(false),
+        /**
+         * Every value a term reads arrived, and the number they come to is one this host had no room
+         * to hold.
+         *
+         * <p>Apart from {@link #VALUE_NOT_WORKED_OUT} for the same reason and told apart the same
+         * way: a value with no representation stays unheld on any host, and one this host had no
+         * room for is a value a host with more room could still hold.
+         */
+        VALUE_ROOM_EXCEEDED(false);
 
         private final boolean leftNoRowRead;
 
@@ -166,8 +208,15 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
                 // a row the evaluation had no answer for, a row nothing could establish an answerer
                 // for, classes that would not link or were never made, and a source nothing was
                 // observed from are all met again by a run that allows more.
+                // An implementation this compile owned and did not make is met again the same way:
+                // what decided it is which bodies came out, and no run allows more of that.
                 case VALUE_UNREADABLE, ROW_UNDECIDED, ANSWERER_NOT_ESTABLISHED, LINKAGE_FAILED,
-                     OBSERVATION_ABSENT, INSTRUMENTATION_ABSENT -> RunSensitivity.UNAFFECTED;
+                     OBSERVATION_ABSENT, INSTRUMENTATION_ABSENT, IMPLEMENTATION_NOT_MADE ->
+                        RunSensitivity.UNAFFECTED;
+                // The room that ran out, where it was room, is the host's and not a figure this
+                // compiler compared anything against; where no representation exists, no host has
+                // more of one to offer. Either way a wider run meets it again.
+                case VALUE_NOT_WORKED_OUT, VALUE_ROOM_EXCEEDED -> RunSensitivity.UNAFFECTED;
             };
         }
     }
@@ -232,6 +281,22 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
     public static Incompleteness ofRow(Code code, RowOutcome row) {
         return new Incompleteness(code, new Target.OfRow(RowRef.of(row)),
                 Optional.of(souther.compiler.diag.Citation.of(row.at())));
+    }
+
+    /**
+     * The same for a row nothing came back for, which has no outcome to read.
+     *
+     * <p>A row that was never run is the row as it is written and nothing else: what it names
+     * itself and where it is written, which is all an identity is made of. Taking the place once
+     * here keeps the pair together as the one above does — the identity and the citation are the
+     * row's, rather than two arguments a caller could pair wrongly — and it is the same
+     * {@link RowRef} the outcome of that row would have carried, so a row that was read and the
+     * same row where it was not are one row and not two.
+     */
+    public static Incompleteness ofRow(Code code, String behavior, RowIdentity identity,
+            SourcePos at) {
+        return new Incompleteness(code, new Target.OfRow(RowRef.of(behavior, at, identity)),
+                Optional.of(Citation.of(at)));
     }
 
     /** A position, which takes the behavior it sits in as well as the path. Both, because whose
@@ -315,11 +380,13 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
          * is, and whether a source holds one is a fact about the compilation that a source id does
          * not carry.
          *
-         * <p>A source answers yes, and that is a reading of the two places that write one. Both are
-         * a source that was not evaluated at all, where which behaviors it wrote rows for is
-         * exactly what could not be read — so every one of them is missing rows it may have held.
-         * A {@code SOURCE} whose contents were known would need the compilation to answer and would
-         * not belong here. Nothing writes one, and this is the claim to re-read if something does.
+         * <p>A source answers yes, and that is a reading of the one place that writes one: a source
+         * nothing was observed from and whose contents nothing could say, where which rows it holds
+         * is exactly what could not be read — so every behavior is missing rows it may have held. A
+         * {@code SOURCE} whose contents were known would need the compilation to answer and would
+         * not belong here; where they are known, the absence is written of each row it left unread,
+         * which answers for itself. This is the claim to re-read if a {@code SOURCE} starts being
+         * written for a source something can read.
          */
         public boolean countsAgainst(String behavior) {
             return behavior().map(behavior::equals).orElse(true);

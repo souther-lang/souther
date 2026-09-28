@@ -6,6 +6,7 @@ import souther.compiler.coverage.Numberings;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Symbols;
@@ -17,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
@@ -55,15 +57,14 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
 
     private static final Generator.ArmOwed ANOTHER_ARM = new Generator.ArmOwed(ANOTHER);
 
-    private static final Generator.UnresolvedCombination NOTHING_CAME_OF_IT =
-            new Generator.UnresolvedCombination(List.of("days=low"),
-                    Generator.UnresolvedCombination.Reason.NO_CANDIDATE_WAS_OFFERED);
+    private static final CameToNothing NOTHING_CAME_OF_IT =
+            CameToNothing.metNothing(new Generator.UnresolvedCombination(List.of("days=low"),
+                    Generator.UnresolvedCombination.Reason.NO_CANDIDATE_WAS_OFFERED));
 
     @Test
     void aClassTheRunDidNotAnswerForIsRefused() {
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> new FillResult(planOver(List.of(A_CLASS), List.of()), new LinkedHashMap<>(), List.of(),
-                        List.of(), Discharge.NOTHING));
+                () -> new Discharge(planOver(List.of(A_CLASS), List.of()), Map.of()));
 
         assertEquals(true, refused.getMessage().contains("days/low"), refused.getMessage());
     }
@@ -71,30 +72,46 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
     @Test
     void anArmTheRunDidNotAnswerForIsRefused() {
         assertThrows(IllegalStateException.class,
-                () -> new FillResult(planOver(List.of(), List.of(AN_ARM)), new LinkedHashMap<>(), List.of(),
-                        List.of(), Discharge.NOTHING));
+                () -> new Discharge(planOver(List.of(), List.of(AN_ARM)), Map.of()));
     }
 
     @Test
     void aClassTheRunAnsweredForAndNobodyAskedAboutIsRefused() {
         assertThrows(IllegalStateException.class,
-                () -> new FillResult(planOver(List.of(A_CLASS), List.of()), new LinkedHashMap<>(), List.of(),
-                        List.of(), new Discharge(
-                                Map.of(A_CLASS, new ClassDisposition.Unresolved(NOTHING_CAME_OF_IT),
-                                        ANOTHER_CLASS,
-                                        new ClassDisposition.Unresolved(NOTHING_CAME_OF_IT)),
-                                Map.of())));
+                () -> Discharge.of(planOver(List.of(A_CLASS), List.of()), List.of(
+                        new GenerationAnswer.Class(new GenerationObligation.Class(A_CLASS),
+                                new ClassDisposition.Unresolved(NOTHING_CAME_OF_IT)),
+                        new GenerationAnswer.Class(new GenerationObligation.Class(ANOTHER_CLASS),
+                                new ClassDisposition.Unresolved(NOTHING_CAME_OF_IT)))));
     }
 
     @Test
     void anArmTheRunAnsweredForAndNobodyAskedAboutIsRefused() {
         assertThrows(IllegalStateException.class,
-                () -> new FillResult(planOver(List.of(), List.of(AN_ARM)), new LinkedHashMap<>(), List.of(),
-                        List.of(), new Discharge(Map.of(),
-                                Map.of(AN_ARM, new ArmDisposition.Unresolved(
-                                                List.of(NOTHING_CAME_OF_IT)),
-                                        ANOTHER_ARM, new ArmDisposition.Unresolved(
-                                                List.of(NOTHING_CAME_OF_IT))))));
+                () -> Discharge.of(planOver(List.of(), List.of(AN_ARM)), List.of(
+                        new GenerationAnswer.Arm(new GenerationObligation.Arm(AN_ARM),
+                                new ArmDisposition.Unresolved(List.of(NOTHING_CAME_OF_IT))),
+                        new GenerationAnswer.Arm(new GenerationObligation.Arm(ANOTHER_ARM),
+                                new ArmDisposition.Unresolved(List.of(NOTHING_CAME_OF_IT))))));
+    }
+
+    /**
+     * Two answers to one obligation are refused rather than the second silently keeping the map.
+     *
+     * <p>{@link Discharge#of} is the one factory that turns a list of answers into the map
+     * {@link Discharge}'s constructor checks for totality against the plan — and an unchecked
+     * {@code putIfAbsent} would let a second answer to an obligation already answered pass
+     * unnoticed, silently keeping the first, with the constructor's own check finding the domain
+     * complete regardless of which one it kept.
+     */
+    @Test
+    void oneObligationAnsweredTwiceIsRefused() {
+        assertThrows(IllegalArgumentException.class,
+                () -> Discharge.of(planOver(List.of(A_CLASS), List.of()), List.of(
+                        new GenerationAnswer.Class(new GenerationObligation.Class(A_CLASS),
+                                new ClassDisposition.Unresolved(NOTHING_CAME_OF_IT)),
+                        new GenerationAnswer.Class(new GenerationObligation.Class(A_CLASS),
+                                new ClassDisposition.Built(new RowId(0))))));
     }
 
     /**
@@ -107,20 +124,64 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
      */
     @Test
     void aClassWithNothingUnderItIsNotAnAnswer() {
-        Map<ClassOfAPosition, ClassDisposition> nothing = new LinkedHashMap<>();
-        nothing.put(A_CLASS, null);
+        Map<GenerationObligation, GenerationAnswer> nothing = new LinkedHashMap<>();
+        nothing.put(new GenerationObligation.Class(A_CLASS), null);
 
         assertThrows(IllegalArgumentException.class,
-                () -> new Discharge(nothing, Map.of()),
+                () -> new Discharge(planOver(List.of(A_CLASS), List.of()), nothing),
                 "a class the run was asked about and did not answer for");
     }
 
     @Test
     void anArmWithNothingUnderItIsNotAnAnswer() {
-        Map<Generator.ArmOwed, ArmDisposition> nothing = new LinkedHashMap<>();
-        nothing.put(AN_ARM, null);
+        Map<GenerationObligation, GenerationAnswer> nothing = new LinkedHashMap<>();
+        nothing.put(new GenerationObligation.Arm(AN_ARM), null);
 
-        assertThrows(IllegalArgumentException.class, () -> new Discharge(Map.of(), nothing));
+        assertThrows(IllegalArgumentException.class,
+                () -> new Discharge(planOver(List.of(), List.of(AN_ARM)), nothing));
+    }
+
+    /**
+     * A reader holding one place an arm is recorded at is answered with what became of that arm.
+     *
+     * <p>Every place of a spliced arm answers the same, a place of another arm answers for that
+     * one, and a place the plan names under no arm answers nothing.
+     */
+    @Test
+    void aPlaceIsAnsweredForByTheArmThePlanHoldsThere() {
+        ArmProbe elsewhere = PLACES.get(0);
+        Generator.ArmOwed spliced = new Generator.ArmOwed(List.of(elsewhere, ARM));
+        ArmDisposition throughTheSplice = new ArmDisposition.Built(new RowId(0), ARM);
+        ArmDisposition throughTheOther = new ArmDisposition.Built(new RowId(1), ANOTHER);
+        Discharge discharge = Discharge.of(planOver(List.of(), List.of(spliced)), List.of(
+                new GenerationAnswer.Arm(new GenerationObligation.Arm(spliced), throughTheSplice)));
+        Discharge both = Discharge.of(planOver(List.of(), List.of(spliced, ANOTHER_ARM)), List.of(
+                new GenerationAnswer.Arm(new GenerationObligation.Arm(spliced), throughTheSplice),
+                new GenerationAnswer.Arm(new GenerationObligation.Arm(ANOTHER_ARM),
+                        throughTheOther)));
+
+        assertEquals(throughTheSplice, discharge.at(elsewhere), "at one splice");
+        assertEquals(throughTheSplice, discharge.at(ARM), "and at the other");
+        assertNull(discharge.at(ANOTHER), "a place this plan holds no arm at");
+        assertEquals(throughTheOther, both.at(ANOTHER), "a place of another arm answers for it");
+    }
+
+    /** Two arms of one plan recorded at one place would answer a reader at that place twice. */
+    @Test
+    void aPlaceTwoArmsOfOnePlanClaimIsRefused() {
+        Generator.ArmOwed spliced = new Generator.ArmOwed(List.of(ARM, ANOTHER));
+
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                () -> planOver(List.of(), List.of(spliced, ANOTHER_ARM)));
+
+        assertEquals(true, refused.getMessage().contains(ANOTHER.toString()),
+                refused.getMessage());
+    }
+
+    @Test
+    void anArmNamingOnePlaceTwiceIsRefused() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new Generator.ArmOwed(List.of(ARM, ARM)));
     }
 
     /** And the rows the answers point at, for the same reason: an id under nothing is not a row. */
@@ -128,32 +189,35 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
     void aRowIdWithNothingUnderItIsNotARow() {
         LinkedHashMap<RowId, ComposedRow> nothing = new LinkedHashMap<>();
         nothing.put(new RowId(0), null);
+        GenerationPlan plan = planOver(List.of(), List.of());
 
         assertThrows(IllegalArgumentException.class,
-                () -> new FillResult(planOver(List.of(), List.of()), nothing, List.of(), List.of(),
-                        Discharge.NOTHING));
+                () -> new FillResult(nothing, List.of(), List.of(),
+                        Discharge.nothingAskedOf(plan)));
     }
 
     @Test
     void anAnswerPointingAtARowTheOfferDoesNotHoldIsRefused() {
+        GenerationPlan plan = planOver(List.of(A_CLASS), List.of());
+
         assertThrows(IllegalStateException.class,
-                () -> new FillResult(planOver(List.of(A_CLASS), List.of()), new LinkedHashMap<>(), List.of(),
-                        List.of(), new Discharge(
-                                Map.of(A_CLASS, new ClassDisposition.Built(new RowId(0))),
-                                Map.of())));
+                () -> new FillResult(new LinkedHashMap<>(), List.of(), List.of(),
+                        Discharge.of(plan, List.of(new GenerationAnswer.Class(
+                                new GenerationObligation.Class(A_CLASS),
+                                new ClassDisposition.Built(new RowId(0)))))));
     }
 
     @Test
     void aRowNothingPointsAtIsRefused() {
         LinkedHashMap<RowId, ComposedRow> composed = new LinkedHashMap<>();
         composed.put(new RowId(0), new ComposedRow(List.of(FixtureTemplate.integer(1)), List.of()));
+        GenerationPlan plan = planOver(List.of(A_CLASS), List.of());
 
         assertThrows(IllegalStateException.class,
-                () -> new FillResult(planOver(List.of(A_CLASS), List.of()), composed, List.of(),
-                        List.of(), new Discharge(
-                                Map.of(A_CLASS,
-                                        new ClassDisposition.Unresolved(NOTHING_CAME_OF_IT)),
-                                Map.of())));
+                () -> new FillResult(composed, List.of(), List.of(),
+                        Discharge.of(plan, List.of(new GenerationAnswer.Class(
+                                new GenerationObligation.Class(A_CLASS),
+                                new ClassDisposition.Unresolved(NOTHING_CAME_OF_IT))))));
     }
 
     /** One answer per obligation and one row apiece, which is what a run that composed both looks
@@ -162,13 +226,46 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
     void aRunThatAnsweredForEverythingItWasAskedIsBuilt() {
         LinkedHashMap<RowId, ComposedRow> composed = new LinkedHashMap<>();
         composed.put(new RowId(0), new ComposedRow(List.of(FixtureTemplate.integer(1)), List.of()));
+        GenerationPlan plan = planOver(List.of(A_CLASS), List.of(AN_ARM));
 
-        FillResult filled = new FillResult(planOver(List.of(A_CLASS), List.of(AN_ARM)), composed,
-                List.of(), List.of(), new Discharge(
-                        Map.of(A_CLASS, new ClassDisposition.Built(new RowId(0))),
-                        Map.of(AN_ARM, new ArmDisposition.Built(new RowId(0), ARM))));
+        FillResult filled = new FillResult(composed, List.of(), List.of(),
+                Discharge.of(plan, List.of(
+                        new GenerationAnswer.Class(new GenerationObligation.Class(A_CLASS),
+                                new ClassDisposition.Built(new RowId(0))),
+                        new GenerationAnswer.Arm(new GenerationObligation.Arm(AN_ARM),
+                                new ArmDisposition.Built(new RowId(0), ARM)))));
 
         assertEquals(1, filled.rows().size(), "one line, offered for both");
+    }
+
+    /**
+     * And what each place a row was looked for came to is one answer per word.
+     *
+     * <p>The runs of one plan are folded through here, and two of them come back with one word
+     * having got different distances on the way to it. Held apart by whether the whole answer was
+     * equal, a reader would meet the same place twice with half the figures apiece — which is the
+     * law the value itself carries, held to where the list becomes the value that travels
+     * ({@link CameToNothing#joined}).
+     */
+    @Test
+    void whatEachPlaceCameToIsOneAnswerPerWord() {
+        CameToNothing stoppedAtOne = new CameToNothing(NOTHING_CAME_OF_IT.why(),
+                CompositionShortfall.of(List.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED)));
+        CameToNothing stoppedAtAnother = new CameToNothing(NOTHING_CAME_OF_IT.why(),
+                CompositionShortfall.of(List.of(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)));
+        GenerationPlan plan = planOver(List.of(A_CLASS), List.of());
+
+        FillResult filled = new FillResult(new LinkedHashMap<>(),
+                List.of(stoppedAtOne, stoppedAtAnother), List.of(),
+                Discharge.of(plan, List.of(new GenerationAnswer.Class(
+                        new GenerationObligation.Class(A_CLASS),
+                        new ClassDisposition.Unresolved(NOTHING_CAME_OF_IT)))));
+
+        assertEquals(List.of(new CameToNothing(NOTHING_CAME_OF_IT.why(),
+                        CompositionShortfall.of(List.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED,
+                                CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)))),
+                filled.unresolved(),
+                "one word, with what both searches met under it");
     }
 
     private static GenerationPlan planOver(List<ClassOfAPosition> classes,
@@ -184,9 +281,10 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
                 souther.compiler.inputs.InputDomain.of(
                         List.of(new souther.compiler.inputs.InputDomain.Parameter("days", null,
                                 Type.INT)),
-                        SYMBOLS, ReadAs.THE_COMPILATION_DOES).reading(SYMBOLS),
+                        RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES))
+                        .reading(SYMBOLS),
                 AxesATestWrote.asAMeasurement("fee", List.of(days)));
-        return new GenerationPlan(subject, classes, arms);
+        return GenerationPlan.of(subject, classes, arms, List.of(), List.of());
     }
 
     private static PartitionClass divided(String id, long value) {

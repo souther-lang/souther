@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Citation;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Sites;
 import souther.compiler.sites.WrittenCondition;
@@ -285,7 +286,10 @@ class AConditionOnTheWayIsNamedHereAndPlacedByWhoeverWroteItTest {
         Partitions.Partitioning divided = compilation.db()
                 .ask(new Adequacy.Divided(compilation.modules().get(0), behavior)).value();
         assertNotNull(divided, "the model under test is measured");
-        return List.copyOf(divided.reaching().byComparison().values());
+        Bodies.Elaborated checked = compilation.db()
+                .ask(new Bodies.Checked(compilation.modules().get(0))).value();
+        assertNotNull(checked, "the model under test compiles");
+        return ReachingAccounts.filedFor(divided.reaching(), checked.behaviorBodies().get(behavior));
     }
 
     private static Compilation compiledFrom(String source) {

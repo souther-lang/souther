@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.conformance.RepositoryModels;
@@ -9,6 +8,7 @@ import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
+import souther.test.ClosedWorldContract;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -39,7 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * corpora do not exercise, since what is being checked is a property of the readers rather than of
  * any one model.
  */
-@Tag("population")
+@ClosedWorldContract
 class ARuleWhoseReadingStoppedLeavesAQuestionTest {
 
     /** A comparison in a body that no reading takes apart. */

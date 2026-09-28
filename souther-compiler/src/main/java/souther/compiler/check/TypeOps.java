@@ -20,6 +20,8 @@ import souther.compiler.types.Type;
 import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.UnionMember;
+import souther.compiler.types.WrittenTypeMeaning;
 import souther.compiler.types.TypeSymbols;
 
 import java.util.ArrayList;
@@ -55,9 +57,11 @@ public final class TypeOps {
      *
      * <p>Ordering is not one of these. Both of these are answered {@code true} or {@code false} and
      * nothing more is wanted, while a reader that admits an ordered value goes on to ask what orders
-     * it — so the answer is a witness and lives in {@link Ordering}, and {@link #supportsOrdering}
-     * is that witness existing. Kept as a row here, the capability had one answer and the four
-     * places that emit a comparison each worked out the other for themselves (issue #856).
+     * it — so the answer is a witness and lives in {@link Ordering}, and a type is ordered where
+     * that witness exists. There is no boolean beside it: a reader that asked only whether a type is
+     * ordered would have thrown away what orders it. Kept as a row here, the capability had one
+     * answer and the four places that emit a comparison each worked out the other for themselves
+     * (issue #856).
      */
     public enum Requires { EQUALITY, EXTERNAL_FORM }
 
@@ -75,25 +79,40 @@ public final class TypeOps {
      * witness rather than a yes, and {@link Ordering} holds it. The {@code symbols} parameter is
      * what that row read and is threaded for a third question that needs it.
      *
-     * <p>{@code Raw} answers yes to equality because its value's own {@code equals} answers, and that
-     * is the only answer available: a Raw is an arbitrary Java object and the language promises
-     * nothing about it. It is the one place a capability is claimed that the representation does not
-     * guarantee.
-     *
      * <p>A variable, {@code Nothing}, {@code Never} and {@code Erroneous} stand for a type rather
      * than being one. They answer the way an unconstrained type does, so a generic core signature and
      * a module that already reported an error are not refused a second time for what they hold.
      */
     public static boolean answers(Type t, Requires required, Symbols symbols) {
         return switch (t) {
-            case Type.Prim _ -> switch (required) {
-                case EQUALITY, EXTERNAL_FORM -> true;
+            case Type.Prim p -> switch (required) {
+                case EQUALITY -> true;
+                // Read off the scalars a leaf codec exists for, so that a primitive added there is
+                // one a boundary can carry. Rational is the one that cannot: it is a value
+                // computation produces and consumes, and no representation of it is selected for
+                // JSON, for a Java boundary or for a fixture (ADR-0116).
+                case EXTERNAL_FORM -> LeafScalar.of(p) != null;
             };
             case Type.Ref _ -> switch (required) {
                 case EQUALITY, EXTERNAL_FORM -> true;
             };
-            case Type.Union _ -> switch (required) {
-                case EQUALITY, EXTERNAL_FORM -> true;
+            // A union's answer is its members', the way a collection's is its element's. Held as one
+            // unconditional yes while every primitive had an external form, it would say yes about
+            // `Rational | DivisionByZero` at a boundary that refuses it — a capability this states
+            // and `hasExternalForm` would not hold.
+            case Type.Union u -> switch (required) {
+                case EQUALITY -> true;
+                // Walked rather than streamed, as the tuple arm below is: this is asked of every field
+                // and every boundary position of every declaration, so the walk is the shape the rest
+                // of this table is in.
+                case EXTERNAL_FORM -> {
+                    for (TypeSymbol member : u.members()) {
+                        if (!memberAnswers(member, required, symbols)) {
+                            yield false;
+                        }
+                    }
+                    yield true;
+                }
             };
             case Type.ListOf l -> switch (required) {
                 case EQUALITY, EXTERNAL_FORM -> answers(l.element(), required, symbols);
@@ -127,6 +146,13 @@ public final class TypeOps {
         };
     }
 
+    /** What one of a union's members answers. A member that names a primitive is asked as that
+     *  primitive; one that names a declaration answers the way a {@link Type.Ref} does. */
+    private static boolean memberAnswers(TypeSymbol member, Requires required, Symbols symbols) {
+        Type.Prim named = member.primitiveKind();
+        return named == null || answers(named, required, symbols);
+    }
+
     /**
      * Whether values of this type can be compared for equality — what {@code ==} requires, and what
      * a {@code Set} requires of its element and a {@code Map} of its key (ADR-0009, ADR-0039).
@@ -136,18 +162,6 @@ public final class TypeOps {
         // the question is settled by the shape of the type alone. Asked while a module is being
         // resolved as well as after, which is what says it cannot need one.
         return answers(t, Requires.EQUALITY, null);
-    }
-
-    /** Whether values of this type have an ordering — what {@code sort} and a {@code sortBy} key
-     * require of what they order, and what {@code <} requires of two operands of one type. A
-     * single-value newtype is ordered by the value it wraps (ADR-0047), and an enumeration by the
-     * order its cases are declared in (ADR-0069), so a newtype over an enumeration is ordered by
-     * that enumeration. This is {@link Ordering#of} having an answer, and asking it any other way is
-     * a second definition of the same word. */
-    public static boolean supportsOrdering(Type t, NewtypeInners inners, Symbols symbols,
-                                           DeclarationKinds kinds,
-                                           PublishedDeclarations published) {
-        return Ordering.of(t, inners, symbols, kinds, published) != null;
     }
 
     /**
@@ -180,6 +194,14 @@ public final class TypeOps {
                 Type inKey = withoutExternalForm(m.key(), symbols);
                 yield inKey != null ? inKey : withoutExternalForm(m.value(), symbols);
             }
+            // The member that cannot cross, and not the union it stands in: an author whose output is
+            // `Rational | DivisionByZero` is told which half of it the boundary refuses.
+            case Type.Union u -> u.members().stream()
+                    .map(TypeSymbol::primitiveKind)
+                    .filter(p -> p != null && !answers(p, Requires.EXTERNAL_FORM, symbols))
+                    .findFirst()
+                    .map(p -> (Type) p)
+                    .orElse(t);
             default -> t;
         };
     }
@@ -207,6 +229,11 @@ public final class TypeOps {
     /**
      * The output type of a behavior return: a single case, or a union of two or more cases.
      *
+     * <p>The reading is the written type's own and was done when it was built. What is left here is
+     * to act on what it came to: a type, or a member no arm can name, which is a mistake an author
+     * owns and is reported at the type they wrote. So asking twice costs nothing and says the same
+     * thing twice, which is what a reader in a loop needs of it.
+     *
      * <p>An output with a member resting on a name that denotes nothing has no case set, and is the
      * type that absorbs — the same answer a single such case already gives, so one mistake has one
      * recovery wherever it is written. A check that would hold such an output against what is
@@ -214,91 +241,13 @@ public final class TypeOps {
      * then asks {@link #restsOnAnUnresolvedName} whether there is a case set to compare.
      */
     public static Type successType(Hir.RetType ret) {
-        List<Type> members = new ArrayList<>();
-        for (Hir.TypeTerm t : ret.cases()) {
-            members.add(resolveTerm(t));
-        }
-        if (members.size() == 1) {
-            return members.get(0);
-        }
-        // The two ways a member can fail to be one are different mistakes, and the author owns only
-        // one of them. A member that cannot be written in an arm is theirs and is reported where it
-        // stands, as the first such member always was. A member whose name denotes nothing was
-        // reported where that name was written, and what this reading finds there is that same
-        // mistake: the output has no case set at all, so it takes the type that absorbs and this
-        // says nothing further. Finding one does not end the reading, because a member the author
-        // does own may be written after it.
-        Set<TypeSymbol> names = new LinkedHashSet<>();
-        boolean unknown = false;
-        for (Type m : members) {
-            switch (memberName(m)) {
-                case MemberName.Named named -> names.add(named.name());
-                case MemberName.NoType _ -> unknown = true;
-                case MemberName.NotAMember _ -> throw CompileException.of(Diagnostic
-                                .at(ret.pos()).say(new TypeMessage.NotAUnionMember(Type.show(m))).build());
-            }
-        }
-        return unknown ? Type.ERRONEOUS : Type.union(names);
+        return switch (ret.meaning()) {
+            case WrittenTypeMeaning.Settled settled -> settled.type();
+            case WrittenTypeMeaning.NotAMember no -> throw CompileException.of(Diagnostic
+                    .at(no.at()).say(new TypeMessage.NotAUnionMember(Type.show(no.member()))).build());
+        };
     }
 
-    /**
-     * What a union member goes by, which is three answers and not two.
-     *
-     * <p>A member the compiler could not work out a type for and a member whose type cannot be one
-     * are not the same finding, and a reader that gets one answer for both reports the second
-     * sentence about the first: that a name denoting nothing is not the kind of thing an arm can
-     * name. Kept apart here so that a reader has to say which of the two it is acting on, and a
-     * reader added later cannot decide it by not noticing.
-     */
-    sealed interface MemberName {
-
-        /** The case name this member is written and dispatched under. */
-        record Named(TypeSymbol name) implements MemberName {}
-
-        /** A type no arm can name, so no union can carry it. */
-        record NotAMember() implements MemberName {}
-
-        /** A member resting on a name that denotes nothing, reported where that name was written. */
-        record NoType() implements MemberName {}
-    }
-
-    private static final MemberName NOT_A_MEMBER = new MemberName.NotAMember();
-    private static final MemberName NO_TYPE = new MemberName.NoType();
-
-    /**
-     * The case name a union member goes by: a data type's own name, or the name a primitive is
-     * written under in a match arm ({@code Int} in {@code Int | NoAnswer}).
-     *
-     * <p>A member has to be nominal and has to tell itself apart from the other members at run time,
-     * because that is what a {@code match} arm and a Java {@code switch} both dispatch on. A
-     * collection fails the second: its type argument is erased, so {@code List<Order>} and
-     * {@code List<Item>} are one runtime type and no arm could choose between them. An
-     * {@code Option} and a function fail it the same way. That they also have no arm form to write
-     * is the surface showing the same fact.
-     */
-    static MemberName memberName(Type m) {
-        // The type that absorbs stands where the compiler could not work one out. It is not a shape
-        // this question has an answer about, and reading it as one is how the name that denotes
-        // nothing came to be reported a second time as a member an arm could not name.
-        if (m instanceof Type.Erroneous) {
-            return NO_TYPE;
-        }
-        if (m instanceof Type.Ref r) {
-            return new MemberName.Named(r.name());
-        }
-        // Exhaustive over the primitives rather than a chain of comparisons, and reading the one
-        // spelling table rather than repeating it. A chain answers "not a member" for a primitive
-        // added later without asking anyone, and that answer is the truth about Raw and about
-        // nothing else.
-        if (m instanceof Type.Prim p) {
-            return switch (p) {
-                case INT, STRING, BOOL, DECIMAL, DATE, TIME, DATETIME, INSTANT ->
-                        new MemberName.Named(TypeSymbol.primitive(p.shown()));
-                case RAW -> NOT_A_MEMBER;
-            };
-        }
-        return NOT_A_MEMBER;
-    }
 
     /** Builds a Ref (one name) or Union (two or more) from a set of case names. */
     static Type caseSetType(Set<TypeSymbol> names) {
@@ -325,19 +274,10 @@ public final class TypeOps {
         if (t instanceof Type.Union u) {
             return u.members();
         }
-        return switch (memberName(t)) {
-            case MemberName.Named named -> Set.of(named.name());
-            case MemberName.NotAMember _, MemberName.NoType _ -> Set.of();
+        return switch (UnionMember.of(t)) {
+            case UnionMember.Named named -> Set.of(named.name());
+            case UnionMember.NotAMember _, UnionMember.NoType _ -> Set.of();
         };
-    }
-
-    /** Case names of a stage output, treating a {@code Raw} encoder output as the case {@code "Raw"}
-     * so it can be unioned with propagated error cases (spec §sequential-composition, §case-propagation). */
-    static Set<TypeSymbol> caseNamesOf(Type t) {
-        if (t == Type.RAW) {
-            return Set.of(TypeSymbol.primitive("Raw"));
-        }
-        return namesOf(t);
     }
 
     /** True when a value of {@code sub} is acceptable where {@code sup} is expected. */
@@ -410,7 +350,8 @@ public final class TypeOps {
      * What a sum's encoding adds to this case, or a behavior's answer to this member — read from the
      * declaration the name denotes (spec §encoder-derivation). A braced data lays its fields beside the
      * discriminator, a data with no contents is the discriminator alone, and a newtype or a primitive
-     * puts its standalone representation under {@code "value"}.
+     * puts its standalone representation under the discriminated form's contents key — a newtype over
+     * a record too, whose representation is an object.
      *
      * <p>The one place code generation classifies a case's representation. The encoder of a named
      * sum, the encoder of a behavior's anonymous answer, the decoder that hands a case what it wrote
@@ -485,8 +426,24 @@ public final class TypeOps {
                         return true;
                     }
                 }
-            } else if (b instanceof Hir.PipeBehavior pipe && erroneous(pipe.declaredOut())) {
-                return true;
+            } else if (b instanceof Hir.PipeBehavior pipe) {
+                switch (pipe.composition()) {
+                    case Hir.Composition.Stages written -> {
+                        if (erroneous(written.declaredOut())) {
+                            return true;
+                        }
+                    }
+                    case Hir.Composition.Elsewhere elsewhere -> {
+                        for (Hir.RetType takes : elsewhere.takes()) {
+                            if (erroneous(takes)) {
+                                return true;
+                            }
+                        }
+                        if (erroneous(elsewhere.answers())) {
+                            return true;
+                        }
+                    }
+                }
             }
         }
         for (Hir.FnDef fn : module.fns()) {
@@ -812,10 +769,11 @@ public final class TypeOps {
         switch (param) {
             case Type.Var v -> {
                 Type bound = bindings.get(v.name());
-                if (bound == null || bound instanceof Type.Nothing) {
-                    // first sight, or widen an empty-collection bottom to a concrete element: an
-                    // earlier `[]` / `Map.empty` argument bound NOTHING, and a later real element
-                    // fixes it (ADR-0028). Order-independent, so insert(k, v, Map.empty) infers V.
+                if (bound == null || BottomInfer.refines(bound, arg, published)) {
+                    // first sight, or a reading that says what an earlier one carrying the
+                    // empty-collection bottom did not (ADR-0028), at whatever depth: an earlier
+                    // `[]` / `Map.empty` / `(0, [])` argument bound the bottom, and a later reading
+                    // fixes it. Order-independent, so insert(k, v, Map.empty) infers V.
                     bindings.put(v.name(), arg);
                 } else if (arg instanceof Type.Nothing) {
                     // the empty bottom absorbs into the concrete binding already learned
@@ -1040,11 +998,9 @@ public final class TypeOps {
      */
     public static Map<String, BindingId> fieldBindings(TypeSymbol.AtModule declared,
                                                        Symbols symbols) {
-        Map<String, BindingId> bindings = new LinkedHashMap<>();
-        if (symbols.declaredNode(declared.key()) instanceof Hir.Data data) {
-            walkFields(data, declared, symbols, new LinkedHashSet<>(), bindings);
-        }
-        return bindings;
+        return symbols.declaredNode(declared.key()) instanceof Hir.Data data
+                ? FieldExpansion.bindings(expansionOf(declared, data, symbols))
+                : new LinkedHashMap<>();
     }
 
     /**
@@ -1061,43 +1017,6 @@ public final class TypeOps {
         Map<String, BindingId> bindings = new LinkedHashMap<>();
         walkWrittenFields(data, declared, symbols, new LinkedHashSet<>(), bindings);
         return bindings;
-    }
-
-    /**
-     * Every field {@code data} has, each with the binding the declaration that declares it gives it.
-     *
-     * <p>A field brought in by an include keeps the binding of the declaration it was written in,
-     * because the invariant that reads it was written there too and is carried in with it. So a
-     * declaration binds its own fields and the fields underneath, and an invariant reads the same
-     * binding wherever it is checked or emitted.
-     *
-     * <p>A walk of its own, not the one {@link #fieldTypes} makes, because it answers where that one
-     * cannot: a field has a name whether or not its type has been worked out. It therefore reaches
-     * the fields in an order of its own, which is why nothing reads one off the result. An include
-     * that names nothing is skipped, and a name an include repeats keeps the declaration's own —
-     * both are refused where the declaration is checked, and refusing them twice says nothing more.
-     */
-    private static void walkFields(Hir.Data data, TypeSymbol.AtModule declared, Symbols symbols,
-                                   Set<TypeSymbol> seen, Map<String, BindingId> out) {
-        BindingOwner owner = new BindingOwner.OfFields(declared);
-        int ordinal = 0;
-        for (Hir.Field field : data.fields()) {
-            out.putIfAbsent(field.name(), new BindingId(owner, ordinal++));
-        }
-        for (Hir.Name include : data.includes()) {
-            TypeSymbol source = switch (include) {
-                case Hir.Name.Denoting denoting -> denoting.type();
-                // Reported where it is written. A name nothing declares brings in no fields, and
-                // saying so again here would be a second report about the one mistake.
-                case Hir.Name.Unanswered _ -> null;
-            };
-            // An include names a data, which a module declares; what the language gives is
-            // no declaration to walk, and the lookup below already answered nothing for one.
-            if (source instanceof TypeSymbol.AtModule at && seen.add(at)
-                    && symbols.declaredNode(at) instanceof Hir.Data included) {
-                walkFields(included, at, symbols, seen, out);
-            }
-        }
     }
 
     /** The same walk over a declaration as it was written: an include is a spelling, and what it
@@ -1118,46 +1037,103 @@ public final class TypeOps {
         }
     }
 
-    /** Effective field name → type, in the order the declaration writes them: the data spread in
-     *  first, then the data's own. Which order that is, is what a reader is shown the fields in and
-     *  which one a row is built for first, so it is handed back as something that has one. */
-    public static java.util.SequencedMap<String, Type> fieldTypes(Hir.Data data, Symbols symbols) {
-        java.util.SequencedMap<String, Type> types = new LinkedHashMap<>();
-        // Which spread put each field here, so a collision names the group that supplied the earlier
-        // one. Reporting it against the taking data names a declaration that, where both fields came
-        // through spreads, holds no such field at all.
-        Map<String, String> suppliedBy = new LinkedHashMap<>();
-        for (Hir.Name inc : data.includes()) {
-            if (!(inc instanceof Hir.Name.Denoting names)) {
-                // Nothing declares it, which was reported where it is written. It brings in no
-                // fields, and complaining here that it is not a product data would be a second
-                // report about the one mistake.
-                continue;
-            }
-            TypeSymbol included = names.type();
-            if (!(symbols.declaredNode(included) instanceof Hir.Data id)) {
-                throw CompileException.of(Diagnostic.at(inc.name().reportedAt())
-                        .say(new DataMessage.SpreadIsNotAProductData(inc.written()))
-                        .build());
-            }
-            for (Map.Entry<String, Type> e : fieldTypes(id, symbols).entrySet()) {
-                if (types.put(e.getKey(), e.getValue()) != null) {
-                    throw CompileException.of(Diagnostic.at(inc.name().reportedAt())
-                            .say(new DataMessage.SpreadFieldCollision(
-                                    e.getKey(), inc.written(), suppliedBy.get(e.getKey())))
-                            .build());
+    /**
+     * Effective field name → type: what the data spreads in, and what it writes itself.
+     *
+     * <p>A mapping, read by name. Which order a value lays those fields out in is
+     * {@link #fieldLayout}, and a reader of that asks it — the two are read off one expansion and
+     * neither is read off the other, so nothing here answers where a field stands.
+     */
+    public static Map<String, Type> fieldTypes(Hir.Data data, Symbols symbols) {
+        return FieldExpansion.types(expansionOf(data.declares(), data, symbols), REFUSING);
+    }
+
+    /** The names {@link #fieldTypes} answers about, in the order a value lays them out: what each
+     *  spread brings in, spread by spread as they are written, and then the data's own. */
+    public static List<String> fieldLayout(Hir.Data data, Symbols symbols) {
+        return FieldExpansion.layout(expansionOf(data.declares(), data, symbols), REFUSING);
+    }
+
+    /**
+     * The first spread, at any depth of what {@code data} reaches, whose name declares nothing in
+     * {@code symbols} — or null where every spread reaches a declaration.
+     *
+     * <p>{@link #fieldTypes} and {@link #fieldLayout} take in no field from such a spread, which is
+     * right for a reader that only lists fields and wrong for one that answers what the declaration
+     * is: a declaration missing what one of its spreads brings is not the declaration the author
+     * wrote. The name was reported where it is written, or where what it names failed to come out,
+     * so this answers where it is and says nothing more.
+     */
+    static Hir.Name spreadNamingNothing(Hir.Data data, Symbols symbols) {
+        return spreadNamingNothing(expansionOf(data.declares(), data, symbols));
+    }
+
+    private static Hir.Name spreadNamingNothing(FieldExpansion.Of of) {
+        for (FieldExpansion.Include include : of.includes()) {
+            switch (include) {
+                case FieldExpansion.Include.NamesNothing nothing -> {
+                    return nothing.written();
                 }
-                suppliedBy.put(e.getKey(), "..." + inc.written());
+                case FieldExpansion.Include.Expanded expanded -> {
+                    Hir.Name deeper = spreadNamingNothing(expanded.target());
+                    if (deeper != null) {
+                        return deeper;
+                    }
+                }
+                case FieldExpansion.Include.BackEdge _, FieldExpansion.Include.NotAProduct _ -> { }
             }
         }
-        for (Hir.Field f : data.fields()) {
-            if (types.put(f.name(), fieldType(f)) != null) {
-                throw CompileException.of(Diagnostic.at(f.pos())
-                        .say(new DataMessage.FieldIsDeclaredMoreThanOnceIn(f.name(), data.name()))
-                        .build());
+        return null;
+    }
+
+    /** What a declaration reaches, read off {@code symbols}. */
+    private static FieldExpansion.Of expansionOf(TypeSymbol.AtModule declared, Hir.Data data,
+                                                 Symbols symbols) {
+        return FieldExpansion.of(declared, data, at -> symbols.declaredNode(at));
+    }
+
+    /**
+     * What the pass that holds a declaration to its rules says about one that does not hold
+     * together: a declaration reaching two fields under one name has no fields, and a spread of
+     * something a value is not made of is the author spreading the wrong thing.
+     */
+    private static final FieldExpansion.Refusing REFUSING = new FieldExpansion.Refusing() {
+        @Override
+        public void twice(String field, FieldExpansion.Of of, FieldExpansion.Supplier arriving,
+                          FieldExpansion.Supplier held) {
+            switch (arriving) {
+                case FieldExpansion.Supplier.Own(Hir.Field written) ->
+                        throw CompileException.of(Diagnostic.at(written.pos())
+                                .say(new DataMessage.FieldIsDeclaredMoreThanOnceIn(
+                                        field, of.declaration().name()))
+                                .build());
+                // Which two of this declaration's spreads brought them, and not which declaration
+                // wrote either: a field is taken in under the spread that supplied it.
+                case FieldExpansion.Supplier.Spread(Hir.Name written) ->
+                        throw CompileException.of(Diagnostic.at(written.name().reportedAt())
+                                .say(new DataMessage.SpreadFieldCollision(field, written.written(),
+                                        spelled(held)))
+                                .build());
             }
         }
-        return types;
+
+        @Override
+        public void notAProduct(FieldExpansion.Include.NotAProduct include) {
+            throw CompileException.of(Diagnostic.at(include.written().name().reportedAt())
+                    .say(new DataMessage.SpreadIsNotAProductData(include.written().written()))
+                    .build());
+        }
+    };
+
+    /** How a report names what already held a field: the spread that supplied it, as it is written. */
+    private static String spelled(FieldExpansion.Supplier held) {
+        return switch (held) {
+            case FieldExpansion.Supplier.Spread(Hir.Name written) -> "..." + written.written();
+            // What a declaration writes itself is taken in after everything it spreads, so a spread
+            // arriving meets a spread. A field of its own meeting one is the other report.
+            case FieldExpansion.Supplier.Own _ -> throw new IllegalStateException(
+                    "a spread was taken in after the declaration's own fields");
+        };
     }
 
     /**
@@ -1168,19 +1144,33 @@ public final class TypeOps {
      * belong to the declaring module's own check, which has already run.
      */
     public static Type fieldType(Hir.Data data, String field, Symbols symbols) {
+        return fieldType(data, field, symbols, new LinkedHashSet<>());
+    }
+
+    /** {@code onThePath} is what is being read above this, and what makes the walk finite. Nothing
+     *  is said about a spread onto it: what a field of a declaration holds is a question with no
+     *  answer on a graph the language refuses, and one where it does not arise on one it admits. */
+    private static Type fieldType(Hir.Data data, String field, Symbols symbols,
+                                  Set<TypeSymbol.AtModule> onThePath) {
         for (Hir.Field f : data.fields()) {
             if (f.name().equals(field)) {
                 return fieldType(f);
             }
         }
-        for (Hir.Name inc : data.includes()) {
-            Hir.Data included = spreadTarget(inc, symbols);
-            if (included != null) {
-                Type t = fieldType(included, field, symbols);
+        onThePath.add(data.declares());
+        try {
+            for (Hir.Name inc : data.includes()) {
+                Hir.Data included = spreadTarget(inc, symbols);
+                if (included == null || onThePath.contains(included.declares())) {
+                    continue;
+                }
+                Type t = fieldType(included, field, symbols, onThePath);
                 if (t != null) {
                     return t;
                 }
             }
+        } finally {
+            onThePath.remove(data.declares());
         }
         return null;
     }
@@ -1196,16 +1186,29 @@ public final class TypeOps {
 
     /** Whether a data has a field of that name, without resolving any type. */
     public static boolean hasField(Hir.Data data, String field, Symbols symbols) {
+        return hasField(data, field, symbols, new LinkedHashSet<>());
+    }
+
+    /** As {@link #fieldType(Hir.Data, String, Symbols, Set)}: the path is what makes it finite, and
+     *  a spread onto it is passed over without a word. */
+    private static boolean hasField(Hir.Data data, String field, Symbols symbols,
+                                    Set<TypeSymbol.AtModule> onThePath) {
         for (Hir.Field f : data.fields()) {
             if (f.name().equals(field)) {
                 return true;
             }
         }
-        for (Hir.Name inc : data.includes()) {
-            Hir.Data included = spreadTarget(inc, symbols);
-            if (included != null && hasField(included, field, symbols)) {
-                return true;
+        onThePath.add(data.declares());
+        try {
+            for (Hir.Name inc : data.includes()) {
+                Hir.Data included = spreadTarget(inc, symbols);
+                if (included != null && !onThePath.contains(included.declares())
+                        && hasField(included, field, symbols, onThePath)) {
+                    return true;
+                }
             }
+        } finally {
+            onThePath.remove(data.declares());
         }
         return false;
     }
@@ -1316,48 +1319,68 @@ public final class TypeOps {
     public static List<InvariantHeader> invariantHeadersGoverning(
             TypeSymbol.AtModule named, Symbols symbols) {
         List<InvariantHeader> headers = new ArrayList<>();
-        for (Hir.InvariantClause clause : settledClauses(named, symbols)) {
+        for (Hir.InvariantClause clause : clausesGoverning(named, symbols, new LinkedHashSet<>())) {
             headers.add(new InvariantHeader(clause.name(), clause.pos()));
         }
         return headers;
     }
 
     /**
-     * The rules that govern {@code named}, as they were settled: what the declaring module made of
-     * each clause once the helpers it names were expanded into it.
+     * The clauses that govern {@code named}, for a reader that wants only what every representation
+     * agrees on, which is why this takes any world. Private, and what a clause states is not read
+     * off it: the settled form a module runs is {@code Shapes.SettledInvariantsGoverning}, and the
+     * expanded one is {@link #expandedInvariants}.
      *
-     * <p>Not public, and there is one reader. What a clause states is owned by the representation it
-     * is read in — the settled form by the derived world, the expanded one by
-     * {@link ExpandedClauseLookup} — so a way of asking for it that anyone could reach is a way of
-     * asking for one representation and being answered in whichever the caller's world happened to
-     * be at.
-     *
-     * <p>Every declaration is read from {@code symbols}: the one asked about and every one a spread
-     * reaches. Handed a node beside the world, the declaration asked about would be at whichever
-     * stage the caller was holding and the ones under it at whichever stage the world reads.
+     * <p>A spread onto the path contributes nothing and there is nowhere here to say it was cut:
+     * what this hands back is the clauses and nothing beside them. That is left as it is rather than
+     * widened into a second answer — whether every rule that governs a declaration was reached is
+     * {@link ExpandedRules}'s to say and is said there, and a graph that makes this short is one the
+     * language refuses before either of them is read.
      */
-    static List<Hir.InvariantClause> settledClausesGoverning(
-            TypeSymbol.AtModule named, DerivedSymbols symbols) {
-        return settledClauses(named, symbols);
+    private static List<Hir.InvariantClause> clausesGoverning(
+            TypeSymbol.AtModule named, Symbols symbols, Set<TypeSymbol.AtModule> onThePath) {
+        List<Hir.InvariantClause> invs = new ArrayList<>();
+        for (Hir.Data data : governing(named, symbols, onThePath)) {
+            invs.addAll(data.invariants());
+        }
+        return invs;
     }
 
-    /** The same for a reader that wants only what every representation agrees on, which is why this
-     *  takes any world. Private, so the world a clause's body is read from stays said by the method
-     *  a caller names. */
-    private static List<Hir.InvariantClause> settledClauses(
-            TypeSymbol.AtModule named, Symbols symbols) {
+    /**
+     * Every declaration whose clauses govern {@code named}: what its spreads take in, first and in
+     * turn, and then itself.
+     *
+     * <p>What a construction of {@code named} checks is these declarations' clauses, so a spread of a
+     * declaration another module declares is a copy of that declaration's invariant in the classes
+     * that construct this one. The same walk as the clauses, so the two cannot come to disagree about
+     * which declarations are taken in.
+     */
+    public static List<TypeSymbol.AtModule> declarationsGoverning(TypeSymbol.AtModule named,
+                                                                  Symbols symbols) {
+        List<TypeSymbol.AtModule> out = new ArrayList<>();
+        for (Hir.Data data : governing(named, symbols, new LinkedHashSet<>())) {
+            out.add(data.declares());
+        }
+        return out;
+    }
+
+    private static List<Hir.Data> governing(TypeSymbol.AtModule named, Symbols symbols,
+                                            Set<TypeSymbol.AtModule> onThePath) {
         if (!(symbols.declaredNode(named) instanceof Hir.Data data)) {
             return List.of();
         }
-        List<Hir.InvariantClause> invs = new ArrayList<>();
+        onThePath.add(named);
+        List<Hir.Data> out = new ArrayList<>();
         for (Hir.Name inc : data.includes()) {
             if (inc.answered() instanceof Hir.Name.Denoting denoting
-                    && denoting.type() instanceof TypeSymbol.AtModule spread) {
-                invs.addAll(settledClauses(spread, symbols));
+                    && denoting.type() instanceof TypeSymbol.AtModule spread
+                    && !onThePath.contains(spread)) {
+                out.addAll(governing(spread, symbols, onThePath));
             }
         }
-        invs.addAll(data.invariants());
-        return invs;
+        onThePath.remove(named);
+        out.add(data);
+        return out;
     }
 
     /**
@@ -1375,7 +1398,7 @@ public final class TypeOps {
             throw new IllegalArgumentException(
                     "reading a declaration's clauses takes somewhere to read them from");
         }
-        return governedBy(named, symbols, form);
+        return governedBy(named, symbols, form, new LinkedHashSet<>());
     }
 
     /**
@@ -1453,18 +1476,26 @@ public final class TypeOps {
      * the world's. Only where nothing declares it at all are there no spreads to be short of.
      */
     private static ExpandedRules governedBy(
-            TypeSymbol.AtModule named, Symbols symbols, ExpandedClauseLookup form) {
+            TypeSymbol.AtModule named, Symbols symbols, ExpandedClauseLookup form,
+            Set<TypeSymbol.AtModule> onThePath) {
         ExpandedClauseResult stated = form.of(named.key());
         Hir.Def declared = symbols.declaredNode(named);
         ExpandedRules found = new ExpandedRules(List.of(),
                 declared != null || stated instanceof ExpandedClauseResult.NotDeclared);
         if (declared instanceof Hir.Data data) {
+            onThePath.add(named);
             for (Hir.Name inc : data.includes()) {
                 if (inc.answered() instanceof Hir.Name.Denoting denoting
                         && denoting.type() instanceof TypeSymbol.AtModule spread) {
-                    found = found.and(governedBy(spread, symbols, form));
+                    // A spread onto the path is rules not reached, and not rules there are none of.
+                    // Dropped quietly, what a ring leaves would be handed on as every rule that
+                    // governs the declaration.
+                    found = found.and(onThePath.contains(spread)
+                            ? new ExpandedRules(List.of(), false)
+                            : governedBy(spread, symbols, form, onThePath));
                 }
             }
+            onThePath.remove(named);
         }
         return found.and(rulesOf(named, stated));
     }
@@ -1587,9 +1618,9 @@ public final class TypeOps {
                 case TIME -> new MapKeyRepresentation.Time();
                 case DATETIME -> new MapKeyRepresentation.DateTime();
                 case INSTANT -> new MapKeyRepresentation.Instant();
-                // a key is addressed by the text it is written as, and a number, a flag and Raw have
+                // a key is addressed by the text it is written as, and a number and a flag have
                 // none a boundary could name one by
-                case INT, BOOL, DECIMAL, RAW -> null;
+                case INT, BOOL, DECIMAL, RATIONAL -> null;
             };
         }
         if (!(key instanceof Type.Ref r) || !unwrapping.add(r.name())) {
@@ -1671,12 +1702,10 @@ public final class TypeOps {
      * null when they are not both values of one. Either side may name it: {@code stage < Won}
      * carries the order on the left, and a case listed by two sums takes the one it is compared with.
      *
-     * <p>Which types this is asked of decides what it means, so it is not visible outside this
-     * package. Asked of the operands as written it is the nominal admissibility rule, and that is
+     * <p>Asked of the operands as written, which makes it the nominal admissibility rule, and that is
      * {@code BinaryElaborator}'s alone: two different newtypes over one enumeration must not meet
-     * here. Asked of what they open to it is how the comparison emits, and that is
-     * {@link Ordering#ofComparison}. The backend reaching past both and asking this itself is how
-     * the same type came to be ordered to one reader and not to another (issue #856).
+     * here. What it answers reaches the backend as the type the comparison reads its operands in,
+     * so no reader after the checker asks it again.
      */
     static TypeSymbol comparisonEnumeration(Type lt, Type rt, Symbols symbols,
                                             DeclarationKinds kinds,
@@ -1702,7 +1731,8 @@ public final class TypeOps {
         }
         return t instanceof Type.Ref ref && (ref.name().equals(enumeration)
                 || (enumeration instanceof TypeSymbol.AtModule at
-                    && published.of(at.key()) instanceof DeclarationMeaning.Sum _
+                    && published.of(at.key())
+                        instanceof PublishedDeclarationResult.Found(DeclarationMeaning.Sum _)
                     && AtomSpace.subjectAtoms(Type.ref(at), published).contains(ref.name())));
     }
 
@@ -1803,6 +1833,13 @@ public final class TypeOps {
      * than repeating it, and stops where a newtype's {@code value} is not declared.
      */
     public static NewtypeSpine newtypeSpine(Type t, NewtypeInners inners) {
+        // A type that is no name wears none, which is the answer most callers get: this walk is under
+        // `base`, and what asks for a base asks it of a primitive far more often than of a newtype.
+        // Reached through the loop below, those answers cost a list and a set to say that nothing was
+        // taken off.
+        if (!(t instanceof Type.Ref)) {
+            return new NewtypeSpine(List.of(), t);
+        }
         List<Layer> layers = new ArrayList<>();
         Set<TypeSymbol> worn = new LinkedHashSet<>();
         Type at = t;
@@ -1879,20 +1916,6 @@ public final class TypeOps {
         return inner == Type.INT || inner == Type.DECIMAL ? inner : null;
     }
 
-    /** The single-value numeric newtype a closed {@code +}/{@code -} over {@code lt} and {@code rt}
-     * yields — whichever operand is such a newtype — or {@code null} if neither is. Callers that have
-     * already passed the type checker's admissibility gate (codegen, the invariant analysis) use this
-     * to pick the result without re-deriving the rule. */
-    public static Type closedNewtypeArithResult(Type lt, Type rt, Symbols symbols) {
-        if (directNumericNewtypeBase(lt, symbols) != null) {
-            return lt;
-        }
-        if (directNumericNewtypeBase(rt, symbols) != null) {
-            return rt;
-        }
-        return null;
-    }
-
     public static Type primType(Hir.RawKind kind) {
         return switch (kind) {
             case TEXT -> Type.STRING;
@@ -1957,15 +1980,15 @@ public final class TypeOps {
             }
             return Type.tuple(elems);   // (A, B, ...) — a helper/stdlib signature only (ADR-0036)
         }
+        // The primitives, from the table that closes them and not from a list of their spellings. A
+        // list here was the fourth copy of that set, and a primitive added to the language was a type
+        // name that resolved to no type at all — which is not an error a reader of the resolved
+        // signature can tell from a name a module never declared.
+        Type.Prim primitive = Type.Prim.named(ref.name());
+        if (primitive != null) {
+            return primitive;
+        }
         return switch (ref.name()) {
-            case "Int" -> Type.INT;
-            case "String" -> Type.STRING;
-            case "Bool" -> Type.BOOL;
-            case "Decimal" -> Type.DECIMAL;
-            case "Date" -> Type.DATE;
-            case "Time" -> Type.TIME;
-            case "DateTime" -> Type.DATETIME;
-            case "Instant" -> Type.INSTANT;
             // 制約違反 is no longer a writable case: an invariant violation aborts (spec §algebraic-types,
             // §violation-destination).
             case "List" -> Type.list(typeArg(ref, "list", 4));

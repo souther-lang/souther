@@ -1,6 +1,9 @@
 package souther.compiler.partition;
 
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Towards;
+
+import java.util.Optional;
 
 /**
  * Where a rule parts one quantity's values: the last value on one side and the first on the other.
@@ -59,14 +62,63 @@ public record Seam(CutPosition at, Level below, Level above) {
             throw new IllegalArgumentException(
                     "this order has no place at " + cut + " for a line to be");
         }
-        boolean attains = space.attainable(cut);
+        // `.orNull()` and not the refusal Border carries up to a report: a Seam has no arm for
+        // "not worked out" yet, so a run the exact arithmetic could not read here still answers as
+        // an order with no room for the line does, until Seam itself is widened the same way.
+        boolean attains = Boolean.TRUE.equals(space.attainable(cut).orNull());
         Level below = attains && belongsTo == Towards.BELOW ? cut
                 : beside(space, cut, Towards.BELOW);
         Level above = attains && belongsTo == Towards.ABOVE ? cut
                 : beside(space, cut, Towards.ABOVE);
         return new Seam(
-                new CutPosition(cut, into == null ? java.math.BigDecimal.ONE : into.per()),
+                new CutPosition(cut,
+                        into == null ? ExactRatio.ONE : into.per()),
                 inUnitsOf(below, into), inUnitsOf(above, into));
+    }
+
+    /**
+     * Where a rule cutting {@code of} at {@code at} parts that quantity's values.
+     *
+     * <p>The one derivation of it, for the two things that need it: the reading that met the rule,
+     * and a later reader holding the line the reading drew. Written twice, a border's own account of
+     * where it parts the values would be free to differ from the one the rule was read to.
+     *
+     * <p>Found on the order the rule was written on, which is the order that knows which levels the
+     * written form attains — {@code 2 * n <= 9} cuts the even numbers and nine is not one of them,
+     * so the two sides part between eight and ten. Read back into the quantity's own units
+     * afterwards, which is exact: a level the written form attains is a multiple of how much of the
+     * quantity it wrote.
+     *
+     * @param claim what the rule states about the value it wrote. A rule that names a value parts
+     *              the quantity twice, under what it names and over it, and this is the lower of the
+     *              two — a place the values genuinely part, rather than a side chosen for a rule
+     *              that has none
+     */
+    public static Seam where(BorderQuantity of, Level at, souther.compiler.check.ComparisonClaim claim) {
+        Towards belongsTo = claim instanceof souther.compiler.check.ComparisonClaim.Cut order
+                ? order.valueBelongs() : Towards.ABOVE;
+        souther.compiler.numeric.LinearForm<souther.compiler.inputs.NumericTerm> direction =
+                of.direction();
+        ExactRatio per = QuantityKey.per(direction);
+        return of(of.levels(), at, belongsTo, new Scale(per, direction.coefs().size() == 1
+                ? of.carrierOf(direction.coefs().keySet().iterator().next()) : null));
+    }
+
+    /**
+     * Which side of this seam a value of the quantity falls on.
+     *
+     * <p>Every value is on one side or the other, including the one the line is at: what parts the
+     * values is a place between two of them, and the value at the line belongs to whichever side the
+     * rule put it on. Which side that is is read off the seam rather than off the rule — a seam
+     * names the last value below and the first above, and the line's own value is one of those two
+     * exactly where the quantity takes it.
+     */
+    public Towards sideOf(ExactRatio value) {
+        int where = at.compare(value);
+        if (where != 0) {
+            return where < 0 ? Towards.BELOW : Towards.ABOVE;
+        }
+        return below != null && at.compare(below) == 0 ? Towards.BELOW : Towards.ABOVE;
     }
 
     /**
@@ -81,13 +133,21 @@ public record Seam(CutPosition at, Level below, Level above) {
         // A rule that wrote the whole of the quantity wrote it in the quantity's own units, so
         // there is nothing to read back — including where the quantity has no numbers at all. A
         // rule holds two strings apart and writes the whole of what it cuts, and asking such a
-        // level for its number is what {@link Level#asACount} exists to refuse.
-        if (level == null || into == null || into.per().compareTo(java.math.BigDecimal.ONE) == 0) {
+        // level for its number is what {@link Level#asAnExactNumber} exists to refuse.
+        if (level == null || into == null
+                || into.per().equals(ExactRatio.ONE)) {
             return level;
         }
-        java.math.BigDecimal at = level.asACount().at().divide(into.per());
-        return into.onto() == null ? new Level.ACount(new souther.compiler.numeric.Count(at))
-                : new Level.OnACarrier(into.onto(), new souther.compiler.numeric.Count(at));
+        ExactRatio at = level.asAnExactNumber().dividedBy(into.per());
+        if (into.onto() == null) {
+            return new Level.OfTheQuantity(at);
+        }
+        // The carrier edge, crossed by a reader that has established it can be: a level the written
+        // form attains is a whole multiple of what that form wrote, so reading it back in the
+        // quantity's own units lands on a value the position holds. Both halves of that are asked,
+        // because a number can be a count and be no value of this order — a half is a count and no
+        // whole number is one.
+        return Level.OnACarrier.held(into.onto(), at);
     }
 
     /**
@@ -115,6 +175,23 @@ public record Seam(CutPosition at, Level below, Level above) {
         return (below == null ? "" : below.key()) + "|" + (above == null ? "" : above.key());
     }
 
+    /**
+     * This division's coordinates written out as text: the last value on one side and the first on
+     * the other.
+     *
+     * <p>The same three cases {@link #key()} has, because the two questions differ in the writing
+     * and not in what is read. Each end is spelled as a level is ({@link Level#spelled}), so a
+     * division of the days is two day counts and never two dates. An end the order names no value
+     * at is written as nothing, the way it is named as nothing.
+     */
+    public String spelled() {
+        if (below == null && above == null) {
+            return "@" + at.spelled();
+        }
+        return (below == null ? "" : below.spelled()) + "|"
+                + (above == null ? "" : above.spelled());
+    }
+
     /** The same division with every level written the one way, for an identity to be built from.
      *  What {@link #key()} answers, kept as the seam rather than as a word. */
     public Seam canonical() {
@@ -129,7 +206,8 @@ public record Seam(CutPosition at, Level below, Level above) {
      * @param per  how much of the quantity the form wrote ({@link QuantityKey#per})
      * @param onto the carrier the quantity's own values are ordered by, or null where it has none
      */
-    public record Scale(java.math.BigDecimal per, souther.compiler.check.Carrier onto) {}
+    public record Scale(ExactRatio per,
+                        souther.compiler.check.Carrier onto) {}
 
     /**
      * The same division of the quantity read the other way round.
@@ -156,8 +234,8 @@ public record Seam(CutPosition at, Level below, Level above) {
      * on, and each rule reads its rows through the form it was written as. Nothing here needs the
      * line to be a value of anything — it is a change of unit and not a change of order.
      */
-    Seam scaledBy(java.math.BigDecimal k) {
-        if (k.compareTo(java.math.BigDecimal.ONE) == 0) {
+    Seam scaledBy(ExactRatio k) {
+        if (k.equals(ExactRatio.ONE)) {
             return this;
         }
         return new Seam(at.times(k), scaled(below, k), scaled(above, k));
@@ -170,20 +248,20 @@ public record Seam(CutPosition at, Level below, Level above) {
      * times a decimal is not a decimal the position is written at. So what comes back is counted
      * rather than carried on a carrier, whichever of the two went in.
      */
-    private static Level scaled(Level level, java.math.BigDecimal k) {
+    private static Level scaled(Level level, ExactRatio k) {
         if (level == null) {
             return null;
         }
-        java.math.BigDecimal at = switch (level) {
-            case Level.ACount count -> count.at().at();
+        ExactRatio at = switch (level) {
+            case Level.OfTheQuantity counted -> counted.at();
             case Level.OnACarrier on -> on.at() instanceof souther.compiler.numeric.Count count
-                    ? count.at() : null;
+                    ? count.exactly() : null;
         };
         if (at == null) {
             throw new IllegalStateException(
                     "an order with no numbers was asked for a multiple of one: " + level);
         }
-        return new Level.ACount(new souther.compiler.numeric.Count(at.multiply(k)));
+        return new Level.OfTheQuantity(at.times(k));
     }
 
     /**
@@ -223,22 +301,23 @@ public record Seam(CutPosition at, Level below, Level above) {
      * one way. Null where the quantity has no numbers, which is never scaled and so always has a
      * value at its lines.
      *
+     * <p>Both numbers are the line's terms ({@link CutPosition#asARule}), each spelled
+     * ({@link ExactRatio#spelled}), so neither power is written out and the name is the one the
+     * position is compared as.
+     *
      * @param muchOf how the reader writes so much of the quantity, which is the quantity's own
      *               answer where the reader has one to ask
      */
-    public String asARuleAbout(java.util.function.Function<java.math.BigDecimal, String> muchOf,
-                               Towards side) {
-        java.math.BigDecimal[] rule = at.asARule();
+    public String asARuleAbout(
+            java.util.function.Function<ExactRatio, String> muchOf,
+            Towards side) {
+        ExactRatio.Terms rule = at.asARule();
         if (rule == null) {
             return null;
         }
-        String much = muchOf.apply(rule[0]);
-        return side == Towards.ABOVE ? plain(rule[1]) + " < " + much
-                : much + " <= " + plain(rule[1]);
-    }
-
-    private static String plain(java.math.BigDecimal number) {
-        return number.stripTrailingZeros().toPlainString();
+        String much = muchOf.apply(rule.per());
+        String comesTo = rule.comesTo().spelled();
+        return side == Towards.ABOVE ? comesTo + " < " + much : much + " <= " + comesTo;
     }
 
     /**
@@ -298,17 +377,6 @@ public record Seam(CutPosition at, Level below, Level above) {
     }
 
     /**
-     * One value of the quantity that this seam is at, for a reader putting several of them in the
-     * order their values are in.
-     *
-     * <p>Either end will do and neither is the seam: the two are one step apart on an order that
-     * steps, and where only one of them exists it is the one that says where the values part.
-     */
-    Level somewhere() {
-        return below != null ? below : above != null ? above : at.asALevelOfTheQuantity();
-    }
-
-    /**
      * The nearest value the quantity takes on one side of the cut.
      *
      * <p>The value beside the cut where the quantity takes the cut, and the first value it does take
@@ -317,7 +385,9 @@ public record Seam(CutPosition at, Level below, Level above) {
      * not one step from anything.
      */
     private static Level beside(LevelSpace space, Level cut, Towards towards) {
-        return (space.attainable(cut) ? space.neighbour(cut, towards)
-                : space.nearestAtOrBeyond(cut, towards)).orElse(null);
+        boolean attains = Boolean.TRUE.equals(space.attainable(cut).orNull());
+        Optional<Level> found = (attains ? space.neighbour(cut, towards)
+                : space.nearestAtOrBeyond(cut, towards)).orNull();
+        return found == null ? null : found.orElse(null);
     }
 }

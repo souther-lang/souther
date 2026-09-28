@@ -66,10 +66,17 @@ class AnEnvelopeIsClosedByTheCopyThatWasHandedTheCallableTest {
                         applicationIn(within, 0)));
     }
 
+    /** The chain a construct standing in {@code lineage} would carry, no build among it. */
+    private static OccurrenceLineage occurrenceOf(ExpansionLineage lineage) {
+        return lineage instanceof ExpansionLineage.Expansion copy
+                ? occurrenceOf(copy.within()).copiedInto(copy.expanded(), copy.at())
+                : OccurrenceLineage.ORIGINAL;
+    }
+
     /** Whether the model states a construct standing in {@code lineage}, and in which copy. */
     private static Optional<ExpansionLineage> statedIn(ExpansionLineage lineage) {
         return ModelOccurrence
-                .statedAt(new ConstructOccurrence(call(9), lineage))
+                .statedAt(new ConstructOccurrence(call(9), occurrenceOf(lineage)))
                 .map(ModelOccurrence::lineage);
     }
 

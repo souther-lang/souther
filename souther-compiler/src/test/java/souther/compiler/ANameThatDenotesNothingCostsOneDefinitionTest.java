@@ -77,19 +77,15 @@ class ANameThatDenotesNothingCostsOneDefinitionTest {
     void theLanguageServerIsAnsweredWithDiagnosticsForAFileBeingTyped() {
         // `diagnoseModules` is the server's path. A throw here is not a diagnostic it can show, and
         // it takes the dispatch loop with it.
-        assertEquals(List.of("name.no-value-of-that-name-in-scope"), messageKeys(IN_AN_ARM),
-                "the file being typed answers with the name that denotes nothing");
-        assertTrue(messageKeys(AS_THE_SPEC_WRITES_IT).contains("name.no-value-of-that-name-in-scope"),
-                "and so does the shape the specification is written in");
-    }
-
-    @Test
-    void theNameIsSaidOnceAndNothingIsAskedOfTheParameterBesideIt() {
-        // Everything that follows from the broken name is that one mistake seen from another angle.
-        // Telling the author to annotate `a` as well sends them at a parameter that is not the
+        //
+        // And only that name: everything that follows from it is that one mistake seen from another
+        // angle. Telling the author to annotate `a` as well sends them at a parameter that is not the
         // problem: fixing `Nope` is what settles it.
         assertEquals(List.of("name.no-value-of-that-name-in-scope"), messageKeys(IN_AN_ARM),
-                "the parameter beside the name is not reported as undetermined");
+                "the file being typed answers with the name that denotes nothing, and says nothing"
+                        + " of the parameter beside it");
+        assertTrue(messageKeys(AS_THE_SPEC_WRITES_IT).contains("name.no-value-of-that-name-in-scope"),
+                "and so does the shape the specification is written in");
     }
 
     @Test

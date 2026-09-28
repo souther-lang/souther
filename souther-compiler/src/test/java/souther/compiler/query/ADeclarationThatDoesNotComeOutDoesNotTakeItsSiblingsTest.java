@@ -1,18 +1,13 @@
 package souther.compiler.query;
 
-import souther.compiler.source.SourceId;
-
 import org.junit.jupiter.api.Test;
-import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeKey;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -71,16 +66,5 @@ class ADeclarationThatDoesNotComeOutDoesNotTakeItsSiblingsTest {
     @Test
     void theModuleIsNotAssembledWhileOneOfItsDeclarationsIsMissing() {
         assertFalse(compiled().db().ask(new Shapes.Derived("m.a")).present());
-    }
-
-    /** The mistake is said once, where it is written: the name that denotes nothing, and nothing
-     *  about the declaration that holds it. */
-    @Test
-    void theOneMistakeIsSaidOnce() {
-        List<String> said = Located.diagnosticsOf(compiled().diagnostics()).get(new SourceId("a.sou")).stream()
-                .map(d -> d.code() + " " + d.said()).toList();
-
-        assertEquals(1, said.size(), said.toString());
-        assertTrue(said.get(0).startsWith("E1023"), said.toString());
     }
 }

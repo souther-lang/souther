@@ -120,6 +120,20 @@ public sealed interface GeneratedClass {
     }
 
     /**
+     * The class a module's published values are read through: one public static method per value,
+     * taking nothing and answering with it.
+     *
+     * <p>Public, unlike the class its bodies live on, because it is the one place another module's
+     * code reaches into. What a value is built from stays where it is declared, so a type the
+     * declaring module does not expose is never named from outside it.
+     */
+    record Values(String module) implements GeneratedClass {
+        public Values {
+            Require.module(module);
+        }
+    }
+
+    /**
      * The stand-in an example builds for an injected behavior it has to answer for: a subclass of
      * that behavior's base, defined into the run rather than emitted with the module.
      *

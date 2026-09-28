@@ -1,7 +1,8 @@
 package souther.cli;
 
-import souther.compiler.Reserved;
+import souther.compiler.CanonicalNames;
 import souther.compiler.Compiler;
+import souther.compiler.ImplicitModuleName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.frontend.CstFrontend;
 
@@ -64,7 +65,7 @@ class ANameIsCanonicalWhereverItEntersTest {
     @Test
     void theTwoSpellingsAreDifferentStrings() {
         // The premise, so nothing below can pass by the two being equal already.
-        assertEquals(NFC, Reserved.name(NFD));
+        assertEquals(NFC, CanonicalNames.name(NFD));
         assertTrue(!NFD.equals(NFC));
     }
 
@@ -75,16 +76,16 @@ class ANameIsCanonicalWhereverItEntersTest {
     }
 
     @Test
-    void aModuleNameTheCliDerivesFromAFileStem() {
-        assertEquals(NFC, Runner.moduleName(Path.of(NFD + ".sou")));
-        assertEquals(NFC, Runner.moduleName(Path.of(NFC + ".sou")));
+    void aModuleNameDerivedFromAFileStem() {
+        assertEquals(NFC, ImplicitModuleName.ofFileName(NFD + ".sou"));
+        assertEquals(NFC, ImplicitModuleName.ofFileName(NFC + ".sou"));
     }
 
     @Test
     void aDecomposedStemIsNotRejectedAsUnusable() {
         // The stem is judged after canonicalizing, not before: a combining mark is not a letter, so
         // judging first made the same file `main` on a machine that delivers decomposed names.
-        assertTrue(!"main".equals(Runner.moduleName(Path.of(NFD + ".sou"))),
+        assertTrue(!"main".equals(ImplicitModuleName.ofFileName(NFD + ".sou")),
                 "a decomposed file name is the module its composed spelling would be");
     }
 

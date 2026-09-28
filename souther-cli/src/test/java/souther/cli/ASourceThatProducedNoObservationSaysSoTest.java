@@ -67,10 +67,22 @@ class ASourceThatProducedNoObservationSaysSoTest {
                 | (Draft { cost = Amount(0) }) -> Ok { n = 0 }
             """;
 
-    /** One behavior that checks and one that does not: something to report on, and a source with no
-     * observation to report about it. */
-    private static final String ONE_BEHAVIOR_DOES_NOT_CHECK = """
-            module example.partly
+    /**
+     * A module with a name denoting nothing: read, exampled, and not a module anything can be
+     * emitted for.
+     *
+     * <p>The source is read and its rows are known — the declarations came out, {@code take} has a
+     * body and a row is written for it — and the composition beside them names a stage that does
+     * not exist. A module holding one of those has no meaning to emit: a class emitted for it would
+     * carry a call to a behavior nothing declares. So nothing of it runs and the source produces no
+     * observation, which is what this test is about.
+     *
+     * <p>Its failure is a name and not a body. A body that does not check leaves the bodies that do
+     * check runnable, and a source holding one of those is observed — so a model short of that
+     * would no longer reach the state being written about here.
+     */
+    private static final String A_NAME_DENOTES_NOTHING = """
+            module example.nameless
 
             data Amount = Int
                 invariant value >= 0 && value <= 1000
@@ -83,10 +95,7 @@ class ASourceThatProducedNoObservationSaysSoTest {
 
             let take (request) = Ok { n = request.cost.value }
 
-            behavior other : (request: Draft) -> Ok
-                constructs Ok
-
-            let other (request) = Ok { n = request.cost.nope }
+            behavior onwards = take >-> nosuch
 
             example take
                 | (Draft { cost = Amount(7) }) -> Ok { n = 7 }
@@ -108,7 +117,8 @@ class ASourceThatProducedNoObservationSaysSoTest {
         Incompleteness.Fact only = gaps.get(0).fact();
         assertEquals(Incompleteness.Code.OBSERVATION_ABSENT, only.code(),
                 "the runtime is on this classpath; what happened is that a source was not read");
-        assertEquals(Incompleteness.Scope.SOURCE, only.scope());
+        assertEquals(Incompleteness.Scope.ROW, only.scope(),
+                "and the row it left unread is what the measure is short of");
     }
 
     /** And the word the schema allows is the word that is written. */
@@ -129,12 +139,12 @@ class ASourceThatProducedNoObservationSaysSoTest {
      */
     @Test
     void theHumanLineIsASentenceAndNotACodeName() throws Exception {
-        Streams ran = run(List.of(ONE_BEHAVIOR_DOES_NOT_CHECK));
+        Streams ran = run(List.of(A_NAME_DENOTES_NOTHING));
 
         assertFalse(ran.out().contains("observation_absent"),
                 "no code name reaches a person: " + ran.out());
         assertFalse(ran.out().contains("linkage_failed"), ran.out());
-        assertTrue(ran.out().contains("no rows were read from"),
+        assertTrue(ran.out().contains("nothing was observed for"),
                 "what happened, said as what happened: " + ran.out());
     }
 
@@ -148,7 +158,7 @@ class ASourceThatProducedNoObservationSaysSoTest {
      */
     @Test
     void generateSaysWhyItWroteNothing() throws Exception {
-        Streams ran = run(List.of(ONE_BEHAVIOR_DOES_NOT_CHECK), "--generate");
+        Streams ran = run(List.of(A_NAME_DENOTES_NOTHING), "--generate");
 
         assertTrue(ran.out().contains("generation stopped"),
                 "the reason is what there is to say: " + ran.out());
@@ -158,11 +168,11 @@ class ASourceThatProducedNoObservationSaysSoTest {
      * about to write in, which is no place for an enum's name either. */
     @Test
     void theGeneratedNoteReadsTheSameWayTheReportDoes() throws Exception {
-        Streams ran = run(List.of(ONE_BEHAVIOR_DOES_NOT_CHECK), "--generate");
+        Streams ran = run(List.of(A_NAME_DENOTES_NOTHING), "--generate");
 
         assertFalse(ran.out().contains("observation_absent"),
                 "one wording, written once: " + ran.out());
-        assertTrue(ran.out().contains("// generation stopped for `take`: no rows were read from"),
+        assertTrue(ran.out().contains("// generation stopped for `take`: nothing was observed for"),
                 ran.out());
     }
 

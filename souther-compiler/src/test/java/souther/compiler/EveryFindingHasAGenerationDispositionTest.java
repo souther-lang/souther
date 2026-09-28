@@ -4,6 +4,7 @@ import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.partition.GenerationOutcome;
@@ -907,12 +908,12 @@ class EveryFindingHasAGenerationDispositionTest {
     private static souther.compiler.partition.FillResult stopped(
             souther.compiler.partition.GenerationReason why) {
         souther.compiler.partition.GenerationPlan plan =
-                new souther.compiler.partition.GenerationPlan(nothingIsDivided(), List.of(),
-                        List.of());
+                souther.compiler.partition.GenerationPlan.of(nothingIsDivided(), List.of(),
+                        List.of(), List.of(), List.of());
         return why == null ? souther.compiler.partition.FillResult.nothingAskedOf(plan)
-                : new souther.compiler.partition.FillResult(plan, new java.util.LinkedHashMap<>(),
+                : new souther.compiler.partition.FillResult(new java.util.LinkedHashMap<>(),
                         List.of(), List.of(why),
-                        souther.compiler.partition.Discharge.NOTHING);
+                        souther.compiler.partition.Discharge.nothingAskedOf(plan));
     }
 
     /** The same at the boundaries, which nothing is owed at and which has no plan. */
@@ -927,8 +928,8 @@ class EveryFindingHasAGenerationDispositionTest {
         RuleReadingSource rules = RuleReadings.ofNoClauseFiled(
                 souther.compiler.check.Symbols.none(DefaultStdlib.get()));
         return souther.compiler.partition.MeasuredInput.of("pick",
-                souther.compiler.inputs.InputDomain.of(List.of(), rules,
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES).reading(rules),
+                souther.compiler.inputs.InputDomain.of(List.of(), RuleReadingContext.unshared(rules,
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES)).reading(rules),
                 souther.compiler.partition.AxesATestWrote.asAMeasurement("pick", List.of()));
     }
 

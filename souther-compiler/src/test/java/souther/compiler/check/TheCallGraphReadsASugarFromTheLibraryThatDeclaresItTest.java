@@ -75,10 +75,9 @@ class TheCallGraphReadsASugarFromTheLibraryThatDeclaresItTest {
     }
 
     private static Set<String> callsIn(Hir.Expr e) {
-        Set<ReachName.Declaration> out = new LinkedHashSet<>();
-        HelperInliner.helperCallsIn(DefaultStdlib.get(), e, libraryHelpers(), out);
         Set<String> rendered = new LinkedHashSet<>();
-        out.forEach(reference -> rendered.add(reference.rendered()));
+        HelperEdges.in(DefaultStdlib.get(), e, libraryHelpers()).calls()
+                .forEach(reference -> rendered.add(reference.rendered()));
         return rendered;
     }
 

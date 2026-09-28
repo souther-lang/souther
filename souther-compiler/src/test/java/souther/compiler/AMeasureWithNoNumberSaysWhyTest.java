@@ -11,6 +11,7 @@ import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.HowALineIsRead;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.Measure;
 import souther.compiler.query.Measurement;
@@ -94,8 +95,13 @@ class AMeasureWithNoNumberSaysWhyTest {
 
             behavior sift : (p: Pair) -> Res
                 constructs Res
+            // Both positions are told apart, so the space is over both of them: what this file is
+            // about is a measure with no rows to count, and a behavior whose space is empty would
+            // have no number missing to say why about.
             let sift (p) = match p.left with
-                | Yes -> Res { n = 1 }
+                | Yes -> match p.right with
+                    | Yes -> Res { n = 1 }
+                    | No -> Res { n = 2 }
                 | No -> Res { n = 0 }
             """;
 
@@ -253,11 +259,15 @@ class AMeasureWithNoNumberSaysWhyTest {
                     partition   axes 2   equivalence partitions 0/0   (2 not measured: no row names this behavior)
                     border      not applicable (the rules of this behavior draw no line)
                     branch      not measured (no row names this behavior)
-                    decision    rules 2   taken 0
+                    decision    rules 3   taken 0
                       ! no row takes a decision rule
-                          · it goes through `case Yes` (46:16)
+                          · it goes through `case Yes` (49:16)
+                          · it goes through `case Yes` (50:14)
                       ! no row takes a decision rule
-                          · it goes through `case No` (46:16)
+                          · it goes through `case Yes` (49:16)
+                          · it goes through `case No` (50:14)
+                      ! no row takes a decision rule
+                          · it goes through `case No` (49:16)
                   declarations   obligations 0/4
                       ? undecided whether a row is at the ON point value = 0 (invariant Amount #1) — no row names this behavior
                           · read as baseRate/r.cost: = 0
@@ -274,7 +284,7 @@ class AMeasureWithNoNumberSaysWhyTest {
 
                 7 behaviors: 6 implemented, 0 unimplemented, 1 injected; 0 rows waiting for a `let`.
                 adequacy: not satisfied
-                6 gaps marked `!`: what a strict build refuses over.
+                7 gaps marked `!`: what a strict build refuses over.
                 """, human());
     }
 
@@ -450,7 +460,8 @@ class AMeasureWithNoNumberSaysWhyTest {
                         .filter(p -> p.owed() != null).toList();
         assertFalse(lines.isEmpty(), "the invariant draws two");
         for (BorderAssessment.Point line : lines) {
-            assertEquals(ItemAssessment.Coverage.NotAsked.NO_ROWS, line.item().weakeningSource().why(),
+            assertEquals(ItemAssessment.Coverage.NotAsked.NO_ROWS,
+                    line.item().weakeningSource(line.border().border()).why(),
                     line.border().origin().saidWithoutAPlace() + " at " + line.asked());
         }
     }
@@ -547,9 +558,11 @@ class AMeasureWithNoNumberSaysWhyTest {
             if (line.owed() == null) {
                 continue;   // nothing was measured there and nothing was waiting on a row
             }
-            assertNotEquals(ItemAssessment.Coverage.NotAsked.NO_ROWS, line.item().weakeningSource().why(),
+            assertNotEquals(ItemAssessment.Coverage.NotAsked.NO_ROWS,
+                    line.item().weakeningSource(line.border().border()).why(),
                     line.border().origin().saidWithoutAPlace() + " at " + line.asked());
-            assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(line.item().weakeningSource()),
+            assertEquals(MeasurementStatus.PARTIAL,
+                    AdequacyReport.statusOf(line.item().weakeningSource(line.border().border())),
                     line.border().origin().saidWithoutAPlace() + " at " + line.asked());
         }
     }
@@ -673,7 +686,7 @@ class AMeasureWithNoNumberSaysWhyTest {
             BorderAssessment.pointsOf(lines().get(each.getKey())).stream()
                     .filter(p -> p.owed() != null)
                     .forEach(p -> measures.add(new Object[] {"line " + each.getKey(),
-                            p.item().weakeningSource()}));
+                            p.item().weakeningSource(p.border().border())}));
         }
         return measures;
     }
@@ -793,7 +806,8 @@ class AMeasureWithNoNumberSaysWhyTest {
             boundaryReadings() {
         Compilation compilation = compiled();
         return compilation.db()
-                .ask(new Adequacy.BoundaryReadings(compilation.modules().get(0))).value();
+                .ask(new Adequacy.BoundaryReadings(compilation.modules().get(0),
+                        HowALineIsRead.VALUES_COMPOSED)).value();
     }
 
     private static List<Adequacy.Finding> findings(String behavior, Adequacy.Kind kind) {

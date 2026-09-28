@@ -160,12 +160,16 @@ public final class RowFixtures {
      *
      * <p>An expectation written as a bare case name has none: it asserts which arm the behavior
      * answered with and nothing under it, so there is no value to compute and nothing to emit.
+     *
+     * <p>{@code placed} is {@link #placed}'s own answer, handed in rather than asked for here: a
+     * caller minting more than one family of definition from one module's rows and fakes — a row's
+     * operand, a fixture's value entry — asks {@link #placed} once and hands every miner the same
+     * list, for the reason its own doc states: two walks are two orders.
      */
-    public static Emitted emitted(CheckSurface surface, Symbols symbols,
-                                  Map<ValueName.Behavior, Sig> signatures) {
+    public static Emitted emitted(CheckSurface surface, DeclarationNewtypes newtypes,
+                                  List<Placed> placed) {
         Map<String, Hir.FnDef> out = new LinkedHashMap<>();
         Map<Hir.Expr, String> methods = new IdentityHashMap<>();
-        List<Placed> placed = placed(surface, signatures);
         for (int i = 0; i < placed.size(); i++) {
             Hir.Expr operand = placed.get(i).operand();
             RowPosition position = placed.get(i).position();
@@ -202,13 +206,13 @@ public final class RowFixtures {
                     surface.name(), List.of(), answers, new Hir.FnBody.Written(operand),
                     new Hir.Modifiers(true, true), new DefinitionRole.RowValue(position),
                     operand.pos());
-            out.put(name, Desugared.Fn.desugar(wrapped, symbols).read());
+            out.put(name, Desugared.Fn.desugar(wrapped, newtypes).read());
         }
         return new Emitted(out, methods);
     }
 
     private static Hir.RetType retTypeOf(Type type, souther.compiler.diag.SourcePos pos) {
-        return new Hir.RetType(List.of(Hir.TypeRef.of(type, pos)), pos);
+        return Hir.RetType.of(List.of(Hir.TypeRef.of(type, pos)), pos);
     }
 
     /** Whether an expression is a bare name standing for a declared type — the form an expectation

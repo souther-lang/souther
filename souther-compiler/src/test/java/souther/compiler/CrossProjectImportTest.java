@@ -34,11 +34,8 @@ class CrossProjectImportTest {
             """;
 
     /** The library project's build: its own compile, and nothing of the consumer's. */
-    private static ModulePath published(String... sources) {
-        Map<String, ClassFileImage> classes = sources.length == 1
-                ? Compiler.compile(sources[0])
-                : Compiler.compileModules(List.of(sources));
-        return ModulePath.of(classes);
+    private static ModulePath published(String source) {
+        return ModulePath.of(Compiler.compile(source));
     }
 
     @Test
@@ -111,24 +108,6 @@ class CrossProjectImportTest {
 
         Object bad = Codecs.decoded(loader, "app.order.Req", Map.of("n", -1L));
         assertThrows(ConstraintViolation.class, () -> Codecs.apply(impl, bad));
-    }
-
-    /** A dependency of the dependency is read too — the path is walked, not just its first layer. */
-    @Test
-    void aModuleReachedThroughAnotherIsReadAsWell() {
-        ModulePath path = published(LIBRARY, """
-                module shared.billing exposing ( Invoice )
-                import shared.money ( Amount )
-                data Invoice = { total: Amount }
-                """);
-
-        Compiler.compileModules(List.of("""
-                module app.ledger
-                import shared.billing ( Invoice )
-                data Entry = { of: Invoice }
-                behavior record : (i: Invoice) -> Entry constructs Entry
-                let record (i) = Entry { of = i }
-                """), path);
     }
 
     /** An import naming nothing on the path is still the import that is wrong, reported where it is

@@ -2,7 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import java.math.BigDecimal;
+import souther.compiler.numeric.ExactRatio;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -250,13 +250,14 @@ class ARuleAboutAnElementIsReadWhereTheyAllSupportOneFormTest {
 
     /** The quantity and where it is cut, in the order the positions are named in. */
     private static String said(AffineReading.OfAComparison.Cuts cuts) {
-        Map<String, BigDecimal> over = new LinkedHashMap<>();
+        Map<String, ExactRatio> over = new LinkedHashMap<>();
         AffineReading.ordered(cuts.read().form())
                 .forEach(each -> over.put(each.getKey().toString(), each.getValue()));
         return over.entrySet().stream()
-                .map(each -> each.getValue().compareTo(BigDecimal.ONE) == 0 ? each.getKey()
-                        : each.getValue() + "*" + each.getKey())
+                .map(each -> each.getValue().equals(ExactRatio.ONE)
+                        ? each.getKey()
+                        : each.getValue().spelled() + "*" + each.getKey())
                 .reduce((a, b) -> a + " + " + b).orElseThrow()
-                + " cut " + cuts.read().cut().stripTrailingZeros().toPlainString();
+                + " cut " + cuts.read().cut().spelled();
     }
 }

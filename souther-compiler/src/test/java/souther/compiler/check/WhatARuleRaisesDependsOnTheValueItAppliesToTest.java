@@ -88,8 +88,8 @@ class WhatARuleRaisesDependsOnTheValueItAppliesToTest {
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
         assertNotNull(symbols.declaredNode(named.key()), "no `" + type + "` declared");
         java.util.Collection<Required> raised = FieldDomains
-                .of(named, RuleReadings.of(compilation, module),
-                        ReadAs.THE_COMPILATION_DOES).required().values();
+                .of(named, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
+                        ReadAs.THE_COMPILATION_DOES)).required().values();
         assertEquals(1, raised.size(), type + " is held to one rule here");
         return raised.iterator().next();
     }

@@ -1,11 +1,14 @@
 package souther.compiler.query;
 
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.RunSensitivity;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionCapacity;
 import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
@@ -13,19 +16,22 @@ import java.util.List;
  * What of this compiler's left the point short of established, where a row can be written at it.
  *
  * <p>Not a reason a row cannot be written. Every case here is something of this compiler's own met
- * on the way to an answer — a figure it holds its work to, or a population it writes some of — so
- * what it licenses is that the question is open, and a reader that turned one of these into a
- * statement about the model would be reporting a policy as a property of what somebody wrote.
+ * on the way to an answer — a limit on what it kept of an observation, a figure it holds its work
+ * to, a population it writes some of, or a number it worked out and could not hold — so what it
+ * licenses is that the question is open, and a reader that turned one of these into a statement
+ * about the model would be reporting a policy as a property of what somebody wrote.
  *
- * <p><b>Which of the two is not a kind of gap.</b> A reader of a gap is being told the same thing
- * either way: nothing here settled the point. What differs is what would settle it — raising a
- * number, or somebody writing the rest of what this walks — and that is a vocabulary the gap
- * carries rather than a case it is.
+ * <p><b>Which of them it was is not a kind of gap.</b> A reader of a gap is being told the same
+ * thing whichever it was: nothing here settled the point. What differs is what would settle it —
+ * raising a number, somebody writing the rest of what this walks, a host with more room, or, for a
+ * number that has no representation at all, nothing — and that is a vocabulary the gap carries
+ * rather than a case it is.
  *
  * <p><b>Made where the establishing fell short, and never worked out afterwards.</b> The outcome a
- * search comes back with says that nothing came of it; which figure was reached, and which
- * population was walked in part, are known only where that happened, and a reader recovering either
- * from the outcome would be recovering it from something that has already lost it — one reason a
+ * search comes back with says that nothing came of it; which figure was reached, which population
+ * was walked in part and which number could not be held are known only where that happened, and a
+ * reader recovering any of them from the outcome would be recovering it from something that has
+ * already lost it — one reason a
  * search comes back with is written wherever a search can fall short, by files that fall short for
  * nothing like each other. So a producer that falls short hands this over, and one that has nothing
  * to hand over says so by there being no gap rather than by a gap nobody made.
@@ -67,8 +73,9 @@ public sealed interface EstablishmentGap {
     /**
      * Something of this compiler's is why no value composed for the point settles it.
      *
-     * <p>A figure it holds its work to, a population it writes some of, or both. Which of them it
-     * was is what each field says, and neither is read off the other's absence.
+     * <p>A figure it holds its work to, a population it writes some of, a number it could not
+     * hold, or more than one of them. Which it was is what each field says, and none is read off
+     * another's absence.
      *
      * <p><b>Not that the figure is why nothing was composed.</b> Where a search ran over a plan
      * short of the point, raising the figure may well leave every candidate refused as before —
@@ -104,12 +111,13 @@ public sealed interface EstablishmentGap {
      * the one a reader was told about would be whichever was met first.
      */
     record Composition(CanonicalSelection<CompositionBudget> budgets,
-                       CanonicalSelection<CompositionRepertoire> repertoires)
+                       CanonicalSelection<CompositionRepertoire> repertoires,
+                       CanonicalSelection<CompositionCapacity> capacities)
             implements EstablishmentGap {
 
         public Composition {
-            if (budgets == null || repertoires == null
-                    || (budgets.isEmpty() && repertoires.isEmpty())) {
+            if (budgets == null || repertoires == null || capacities == null
+                    || (budgets.isEmpty() && repertoires.isEmpty() && capacities.isEmpty())) {
                 throw new IllegalArgumentException(
                         "a point this compiler left open says what left it open");
             }
@@ -118,21 +126,48 @@ public sealed interface EstablishmentGap {
         /**
          * The gap what a composing met is, in the order a document says each of them.
          *
-         * <p>Two vocabularies and one gap. Both say the composing settled nothing, which is the one
-         * thing a reader of a gap is being told; what differs is what would close it, and that is
-         * why they are two fields and not a set. A figure is a number to raise and reaches what the
-         * search was holding; a population is one this compiler writes some of, and what reaches
-         * the rest is somebody writing the rest.
+         * <p>Three vocabularies and one gap. All say the composing settled nothing, which is the
+         * one thing a reader of a gap is being told; what differs is what would close it, and that
+         * is why they are three fields and not a set. A figure is a number to raise and reaches what
+         * the search was holding; a population is one this compiler writes some of, and what
+         * reaches the rest is somebody writing the rest; a number the search could not hold is
+         * reached by a host with more room or by nothing, and each one says which.
          */
         public static Composition of(Collection<CompositionBudget> budgets,
-                                     Collection<CompositionRepertoire> repertoires) {
+                                     Collection<CompositionRepertoire> repertoires,
+                                     Collection<CompositionCapacity> capacities) {
             return new Composition(PublicationOrders.COMPOSITION_BUDGETS.keep(budgets),
-                    PublicationOrders.COMPOSITION_REPERTOIRES.keep(repertoires));
+                    PublicationOrders.COMPOSITION_REPERTOIRES.keep(repertoires),
+                    PublicationOrders.COMPOSITION_CAPACITIES.keep(capacities));
         }
 
-        /** The gap the budgets a search met are, where it met no population it writes some of. */
+        /**
+         * Whether measuring again, allowing more, could close the gap: every part of it has to
+         * say so, as with the codes of an observation, and each part is asked rather than answered
+         * for.
+         *
+         * <p>So a gap of figures alone is one a wider run may close. One holding a population this
+         * compiler writes some of, or a number it could not hold, is not: raising a figure reaches
+         * neither, and a gap is closed by nothing short of all of it.
+         */
+        public RunSensitivity runSensitivity() {
+            List<RunSensitivity> parts = new ArrayList<>();
+            for (CompositionBudget each : budgets.written()) {
+                parts.add(each.runSensitivity());
+            }
+            for (CompositionRepertoire each : repertoires.written()) {
+                parts.add(each.runSensitivity());
+            }
+            for (CompositionCapacity each : capacities.written()) {
+                parts.add(each.runSensitivity());
+            }
+            return parts.contains(RunSensitivity.UNAFFECTED)
+                    ? RunSensitivity.UNAFFECTED : RunSensitivity.MAY_CHANGE;
+        }
+
+        /** The gap the budgets a search met are, where it met nothing else of this compiler's. */
         public static Composition of(Collection<CompositionBudget> budgets) {
-            return of(budgets, List.of());
+            return of(budgets, List.of(), List.of());
         }
     }
 }

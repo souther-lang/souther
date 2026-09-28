@@ -100,8 +100,11 @@ record ComparedLine(NumericTerm.FromOnePosition term, Place value,
         if (orders == null || orders.answered() == null || !orders.answered().counts()) {
             return null;
         }
-        Place value = Count.of(read.cut());
-        return new ComparedLine(term, value, orders, read.claim());
+        // The carrier edge for a line on one position: the threshold is a value of that position or
+        // it is none. A cut at a third is none, and this shape declines it — what such a rule cuts
+        // is the form it was written as, and a form holds its line exactly ({@link CutPosition}).
+        Place value = Count.at(read.cut());
+        return value == null ? null : new ComparedLine(term, value, orders, read.claim());
     }
 
 }

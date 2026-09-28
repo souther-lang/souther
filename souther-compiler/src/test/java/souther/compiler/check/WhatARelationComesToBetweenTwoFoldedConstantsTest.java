@@ -77,7 +77,13 @@ class WhatARelationComesToBetweenTwoFoldedConstantsTest {
             new Pair("2.0m and 1.0m", decimal("2.0"), decimal("1.0"), "above"),
             new Pair("\"a\" and \"b\"", "a", "b", "below"),
             new Pair("\"a\" and \"a\"", "a", "a", "at"),
-            new Pair("\"b\" and \"a\"", "b", "a", "above"));
+            new Pair("\"b\" and \"a\"", "b", "a", "above"),
+            // Text is ordered by scalar value: U+FFE5 is below U+20BB7, whose first UTF-16 unit
+            // D842 is below FFE5, so a fold comparing units would answer the other way.
+            new Pair("U+FFE5 and U+20BB7", "￥", new String(Character.toChars(0x20BB7)),
+                    "below"),
+            new Pair("U+20BB7 and U+FFE5", new String(Character.toChars(0x20BB7)), "￥",
+                    "above"));
 
     /** Pairs of no one ordered kind, which is where an equality answers alone. */
     private static final List<Pair> OF_NO_ORDERED_KIND = List.of(
@@ -125,7 +131,9 @@ class WhatARelationComesToBetweenTwoFoldedConstantsTest {
                 "2.0m and 1.0m: EQ = false, NE = true, one value = false",
                 "\"a\" and \"b\": EQ = false, NE = true, one value = false",
                 "\"a\" and \"a\": EQ = true, NE = false, one value = true",
-                "\"b\" and \"a\": EQ = false, NE = true, one value = false"),
+                "\"b\" and \"a\": EQ = false, NE = true, one value = false",
+                "U+FFE5 and U+20BB7: EQ = false, NE = true, one value = false",
+                "U+20BB7 and U+FFE5: EQ = false, NE = true, one value = false"),
                 bothWays());
     }
 

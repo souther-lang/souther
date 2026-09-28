@@ -81,4 +81,13 @@ public final class Sets {
     public static <T> Set<T> fromList(List<T> xs) {
         return PersistentHashSet.from(xs);
     }
+
+    /** Every element through {@code f}, deduplicating the result the way a set must — the
+     *  codegen-internal counterpart to {@link Lists#map} for a crossing's canonicalization
+     *  ({@code CanonicalizeAtCrossing}): two elements that canonicalize to the one value are one
+     *  member, same as {@link #fromList} already collapses two canonically equivalent decoded
+     *  strings into one. */
+    public static Set<Object> map(java.util.function.Function<Object, Object> f, Set<?> s) {
+        return fromList(Lists.map(f, toList(s)));
+    }
 }

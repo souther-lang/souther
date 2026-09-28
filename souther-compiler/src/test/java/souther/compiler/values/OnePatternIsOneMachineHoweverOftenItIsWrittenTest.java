@@ -28,7 +28,7 @@ class OnePatternIsOneMachineHoweverOftenItIsWrittenTest {
     private static AdmittedPlan matching(String regex) {
         PatternRead said = PatternParser.read(regex);
         return new AdmittedPlan.Pattern(PatternPlan.of(
-                assertInstanceOf(PatternRead.Read.class, said).syntax()));
+                assertInstanceOf(PatternRead.Read.class, said).meaning()));
     }
 
     /** Two rules writing one pattern, which is one thing to build. */

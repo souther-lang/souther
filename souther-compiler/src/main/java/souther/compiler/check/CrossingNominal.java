@@ -10,7 +10,7 @@ import java.util.Objects;
  * <p>The rule is the specification's: a named type that crosses MUST be one a model declares
  * (spec {@code [#a-boundary-carries-the-models-own-vocabulary]}). The language declares vocabulary of
  * its own — the case a division by zero answers with, the rounding mode a {@code Decimal} operation
- * takes, the reserved {@code Raw} — and those say what one of its operations can answer or take,
+ * takes — and those say what one of its operations can answer or take,
  * not what a model publishes.
  *
  * <p>What crosses is not only a behavior's boundary. A data field crosses, at any depth inside a
@@ -47,7 +47,7 @@ public final class CrossingNominal {
      * <p>What the language declares answers null throughout, and not only the cases that stand for
      * something. A primitive's name is not a declaration to admit: it is how a scalar sits in a
      * union ({@code Int | DivisionByZero}), and a position that can meet one admits it as the scalar
-     * it is — which is also where {@code Raw} is refused, having no scalar to be. {@code Some} and
+     * it is — which is also where {@code Rational} is refused, having no scalar to be. {@code Some} and
      * {@code None} stand for no primitive at all, and neither do the error cases beside them, so
      * admitting any of them would put this type's domain wider than the rule it is named for.
      *

@@ -32,12 +32,6 @@ public record SourceId(String value) {
         }
     }
 
-    /** The id for {@code value}, or none where the caller has no source to name — a position the
-     *  compiler synthesized, a module read off the module path. */
-    public static SourceId orNone(String value) {
-        return value == null ? null : new SourceId(value);
-    }
-
     @Override
     public String toString() {
         return value;

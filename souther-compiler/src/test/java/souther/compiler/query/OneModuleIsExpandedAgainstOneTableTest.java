@@ -6,6 +6,7 @@ import souther.compiler.check.HelperGraph;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.HelperTable;
 import souther.compiler.check.InliningPolicy;
+import souther.compiler.check.ValueAtAReference;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.BindingOwner;
 
@@ -89,7 +90,8 @@ class OneModuleIsExpandedAgainstOneTableTest {
     /** The names still written as spreads after {@code table} expands {@code fn}'s body. A value is
      * substituted where it is spread, so a name left here is one the expansion did not reach. */
     private static Set<String> spreadsLeftBy(HelperTable table, Hir.FnDef fn) {
-        HelperInliner inliner = HelperInliner.over(table, HelperGraph.of(table));
+        HelperInliner inliner = HelperInliner.over(table, HelperGraph.of(table),
+                ValueAtAReference.COPIED);
         Hir.Expr expanded = inliner.inline(fn.writtenBody(),
                 new BindingOwner.OfValue(table.module(), fn.name()));
         Set<String> left = new LinkedHashSet<>();

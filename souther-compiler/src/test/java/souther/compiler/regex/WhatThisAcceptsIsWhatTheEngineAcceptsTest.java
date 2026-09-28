@@ -11,17 +11,22 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A pattern this reads accepts the strings the engine accepts, and no others.
+ * A pattern of the language accepts the strings {@code java.util.regex} accepts for the same text.
  *
- * <p>What the subset promises is not that it is small but that it is exact. A reading that accepted
- * fewer strings than the rule would leave values a row may carry outside the set, and one that
- * accepted more would put values in it the model refuses — and neither shows up as a failure
- * anywhere, since both are still a set and every measure downstream would go on counting.
+ * <p>Not what defines the language: the specification states it and {@link PatternParser} reads
+ * it, and what the JVM runs is written from the meaning rather than from this text
+ * ({@code WhatTheJvmRunsIsWhatThePatternMeansTest}). What this holds is that the language, where it
+ * reads a pattern, reads it as that engine reads the same text — so a format written and tried
+ * against a Java tool means the same here, and a pattern the language has was not given a meaning
+ * of its own on the way. A reading that differed would be a surprise to exactly the author who
+ * checked their pattern somewhere.
  *
- * <p>So the answer is held against {@code java.util.regex} itself, over strings chosen to sit either
- * side of the constructs the subset reads. Not a list of pairs somebody thought of: every pattern is
- * asked about every string, so a string that ought to be refused by one pattern and accepted by
- * another is asked of both.
+ * <p>Over strings chosen to sit either side of the constructs the language has. Not a list of pairs
+ * somebody thought of: every pattern is asked about every string, so a string that ought to be
+ * refused by one pattern and accepted by another is asked of both.
+ *
+ * <p>Over {@code String}s, which hold no half of a surrogate pair. The engine can be handed text
+ * that does and would read the half as a symbol; no such text reaches a pattern here.
  */
 class WhatThisAcceptsIsWhatTheEngineAcceptsTest {
 
@@ -59,11 +64,9 @@ class WhatThisAcceptsIsWhatTheEngineAcceptsTest {
             "[^\\x{10330}]",
             "\\u00e9",
             // Two escapes spelling one symbol, which the engine reads as units before it reads
-            // symbols. Beside them the same character written whole and each half on its own, since
-            // what has to agree is which strings are in and a lone surrogate is a symbol.
+            // symbols. Beside them the same character written whole.
             "\\uD800\\uDC00",
             "[\\uD800\\uDC00]",
-            "\\uD800",
             "a\\uD800\\uDC00b",
             "(?:\\uD800\\uDC00)+",
             "[\\d-]{2}");
@@ -88,8 +91,8 @@ class WhatThisAcceptsIsWhatTheEngineAcceptsTest {
         out.add(new String(Character.toChars(0x10330)));
         out.add(new String(Character.toChars(0x10330)) + "a");
         out.add(new String(Character.toChars(0x10FFFF)));
-        out.add("\ud800");
-        out.add("\udc00");
+        out.add(String.valueOf((char) 0xE000));
+        out.add(String.valueOf((char) 0xD7FF));
         out.add("𐀀");
         out.add("a𐀀b");
         out.add("𐀀𐀀");
@@ -125,7 +128,7 @@ class WhatThisAcceptsIsWhatTheEngineAcceptsTest {
             if (!(said instanceof PatternRead.Read read)) {
                 continue;
             }
-            Automaton machine = Automaton.of(read.syntax(), plenty());
+            Automaton machine = Automaton.of(read.meaning(), plenty());
             assertNotNull(machine, regex);
             String one = machine.shortest();
             if (one == null) {
@@ -142,8 +145,8 @@ class WhatThisAcceptsIsWhatTheEngineAcceptsTest {
         List<String> apart = new ArrayList<>();
         for (String regex : PATTERNS) {
             PatternRead said = PatternParser.read(regex);
-            PatternSyntax syntax =
-                    assertInstanceOf(PatternRead.Read.class, said, regex).syntax();
+            PatternMeaning syntax =
+                    assertInstanceOf(PatternRead.Read.class, said, regex).meaning();
             Automaton machine = Automaton.of(syntax, plenty());
             assertNotNull(machine, regex + " is small enough to build");
 
@@ -187,8 +190,8 @@ class WhatThisAcceptsIsWhatTheEngineAcceptsTest {
      */
     @Test
     void aPatternPastWhatItWasAllowedIsNotBuilt() {
-        PatternSyntax big = assertInstanceOf(PatternRead.Read.class,
-                PatternParser.read("[0-9]{5000}")).syntax();
+        PatternMeaning big = assertInstanceOf(PatternRead.Read.class,
+                PatternParser.read("[0-9]{5000}")).meaning();
 
         org.junit.jupiter.api.Assertions.assertNull(Automaton.of(big, new Meter(100, 100)));
         assertNotNull(Automaton.of(big, plenty()), "and it is built where there is room");

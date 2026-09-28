@@ -40,8 +40,8 @@ class TheAlgebraOfLanguagesAgreesWithTheEngineTest {
             "abab", "aab", "z", " ", "\n", "9", "99", "999");
 
     private static Automaton machine(String regex) {
-        PatternSyntax syntax = assertInstanceOf(PatternRead.Read.class,
-                PatternParser.read(regex), regex).syntax();
+        PatternMeaning syntax = assertInstanceOf(PatternRead.Read.class,
+                PatternParser.read(regex), regex).meaning();
         Automaton made = Automaton.of(syntax, plenty());
         assertNotNull(made, regex);
         return made;

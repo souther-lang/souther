@@ -1,10 +1,10 @@
 package souther.compiler.inputs;
 
 import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.conformance.RepositoryModels;
@@ -12,6 +12,7 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
+import souther.test.ClosedWorldContract;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -36,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * and decides what a reader should be told about it. So a shorter list is a failure as much as a
  * longer one.
  */
-@Tag("population")
+@ClosedWorldContract
 class NoRuleIsPlacedWhereNothingAccountsForItTest {
 
     /**
@@ -247,8 +248,9 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
             RuleReadingSource rules = RuleReadings.of(compilation, module);
             for (DeclaredSig declared : sigs.values()) {
                 for (DeclaredSig.Input input : declared.inputs()) {
-                    out.add(PlacedRules.of(TermPath.of("p"), input.type(), rules,
-                            ReadAs.THE_COMPILATION_DOES));
+                    out.add(PlacedRules.of(TermPath.of("p"), input.type(),
+                            RuleReadingContext.of(rules, ReadAs.THE_COMPILATION_DOES,
+                                    RepositoryModels.knownTo(compilation))));
                 }
             }
         }
@@ -260,7 +262,8 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
                     compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
             RuleReadingSource rules = RuleReadings.of(compilation, module);
             for (DeclaredSig declared : sigs.values()) {
-                out.add(InputDomain.of(declared, rules, ReadAs.THE_COMPILATION_DOES));
+                out.add(InputDomain.of(declared, RuleReadingContext.of(rules,
+                        ReadAs.THE_COMPILATION_DOES, RepositoryModels.knownTo(compilation))));
             }
         }
     }

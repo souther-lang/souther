@@ -2,6 +2,7 @@ package souther.compiler.reading;
 
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.flow.ComparisonWays;
@@ -63,20 +64,17 @@ final class NumberWays implements ComparisonWays {
     }
 
     @Override
-    public ComparisonWays under(Core.Binder binder, Core value) {
-        return new NumberWays(numbers, quantities, reads.and(binder, value), symbols, newtypes);
-    }
-
-    @Override
-    public ComparisonWays insideArm(Core.Match match, Core.Case arm) {
-        return new NumberWays(numbers, quantities, reads.insideArm(match, arm, symbols, newtypes),
-                symbols, newtypes);
+    public ComparisonWays entering(ScopeStep step) {
+        InputReads inside = reads.entering(step, symbols, newtypes);
+        return inside == reads ? this
+                : new NumberWays(numbers, quantities, inside, symbols, newtypes);
     }
 
     @Override
     public boolean comesOut(Core e, boolean want, Function<Core.Read, Core> settledBy) {
         ComparedNumber said =
-                e instanceof Core.Binary binary ? numbers.of(binary, reads) : null;
+                Core.withoutStanding(e) instanceof Core.Binary binary
+                        ? numbers.of(binary, reads) : null;
         ComparedNumber.DrawnLine drawn = said == null ? null : said.line();
         return drawn == null
                 ? ComparisonWays.OF_THE_TREE.comesOut(e, want, settledBy)

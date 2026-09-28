@@ -133,8 +133,45 @@ public sealed interface ParseMessage extends Message {
     @Code(DiagnosticCode.E2305)
     record AFractionalLiteralNeedsTheMSuffix(String literal) implements ParseMessage, Reported {}
 
+    /**
+     * An integer literal whose magnitude no {@code Int} holds.
+     *
+     * <p>{@code written} is the digits as the author wrote them. The magnitude of the least
+     * {@code Int} is admitted only under a unary minus, so a bare {@code 9223372036854775808} is
+     * refused with the rest.
+     */
+    @Code(DiagnosticCode.E2305)
+    record AnIntegerLiteralIsOutsideInt(String written) implements ParseMessage, Reported {}
+
+    /**
+     * A decimal literal with more digits than any {@code Decimal} holds.
+     *
+     * <p>Not echoed: a literal this long is hundreds of millions of characters, and the caret
+     * already says which one it is.
+     */
+    @Code(DiagnosticCode.E2305)
+    record ADecimalLiteralHasMoreDigitsThanADecimalHolds() implements ParseMessage, Reported {}
+
     @Code(DiagnosticCode.E2305)
     record AStringLiteralIsNotClosed() implements ParseMessage, Reported {}
+
+    /**
+     * A literal whose text holds a surrogate that is not half of a pair beside the other half.
+     *
+     * <p>No escape writes one, so what put it there is whatever handed the compiler its source text.
+     * A {@code String} is a sequence of scalar values, and this is not one.
+     */
+    @Code(DiagnosticCode.E2305)
+    record AStringLiteralHoldsHalfASurrogatePair() implements ParseMessage, Reported {}
+
+    /**
+     * A literal whose canonical value is longer than a {@code String} holds.
+     *
+     * <p>Text from any door has to have a place as a {@code String}, and a literal is one of the
+     * doors.
+     */
+    @Code(DiagnosticCode.E2305)
+    record AStringLiteralIsLongerThanAStringHolds() implements ParseMessage, Reported {}
 
     /**
      * A backslash written before something the language does not read as an escape.

@@ -68,14 +68,18 @@ class AStepBetweenTwoRelationsIsOneWayUpAndManyWaysDownTest {
      * <p>Which is the other way round: the conjunction's relation read against one side's. What is
      * wanted there is every block of the side the coarse block covers, and that is
      * {@link Refinement#fineBlocksWithin} of a step made the way round it exists.
+     *
+     * <p>Every block held apart is named, which is why the sentence says them as a list of one
+     * here. A relation holds no order of its blocks, so a refusal that named the first one met
+     * would read two ways for one pair of relations.
      */
     @Test
     void aRelationThatIsNotACoarseningIsRefusedWhereItIsRead() {
         IllegalArgumentException refused =
                 assertThrows(IllegalArgumentException.class, () -> Refinement.of(COARSER, FINER));
 
-        assertEquals("positions held as one at [p, q, r] are held apart by the relation they are"
-                + " read against, which holds [p=[p, q], q=[p, q], r=r]", refused.getMessage());
+        assertEquals("positions held as one are held apart by the relation they are read against,"
+                + " which holds [[p, q, r] holds [p=[p, q], q=[p, q], r=r]]", refused.getMessage());
     }
 
     /**

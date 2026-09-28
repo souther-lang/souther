@@ -1,14 +1,17 @@
 package souther.compiler.program;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.abort.AbortSites;
 import souther.compiler.core.EnsuresEnforcement;
-import souther.compiler.types.Type;
+import souther.compiler.core.KernelContracts;
+import souther.compiler.types.LeafScalar;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -87,14 +90,22 @@ class ABehaviorIsCalledByTheBoundaryItsModuleHoldsTest {
         CheckedBehavior behavior = new CheckedBehavior(NAMED, held,
                 EnsuresEnforcement.NoContract.INSTANCE, List.of());
         return new CheckedProgram(
-                List.of(new CheckedModule("demo", List.of(behavior), List.of(), List.of())),
-                List.of(), List.of(), index, DefaultStdlib.get().kernelSignatures());
+                List.of(new CheckedModule("demo", List.of(behavior), List.of(), List.of(), List.of(),
+                        List.of(), Set.of(), Set.of())),
+                List.of(), List.of(), index,
+                KernelContracts.of(DefaultStdlib.get().kernelSignatures()),
+                AbortSites.of(List.of(),
+                        KernelContracts.of(DefaultStdlib.get().kernelSignatures()), List.of()));
     }
 
     /** One boundary, made afresh each time it is asked for: what tells two of these apart is that
      *  they are two, and not what either of them says. */
     private static BehaviorTarget target() {
-        return new BehaviorTarget(new CheckedSignature(List.of(Type.INT), Type.INT),
-                new CheckedImplementation.Injected());
+        return new BehaviorTarget(
+                CheckedSignature.declared(
+                        List.of(new CheckedSignature.Parameter("n",
+                                new CheckedBoundaryInput.Scalar(LeafScalar.INT))),
+                        new CheckedBoundaryOutput.Scalar(LeafScalar.INT)),
+                new CheckedImplementation.Injected(), List.of());
     }
 }

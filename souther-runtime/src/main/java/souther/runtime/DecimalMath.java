@@ -1,7 +1,8 @@
 package souther.runtime;
 
+import souther.exact.ExactDecimals;
+
 import java.math.BigDecimal;
-import java.math.MathContext;
 
 /**
  * Every Decimal operation the language has (spec §stdlib-decimal), and the one place
@@ -17,26 +18,30 @@ import java.math.MathContext;
  * itself. A scale is a Souther {@code Int}, which is 64 bits, and a {@code BigDecimal} takes an
  * {@code int}: the narrowing is {@link #scale}, and it is exact or it aborts, so no division runs at
  * a scale other than the one written. And every one of these operations is partial — a sum, a
- * difference, a product or a quotient whose scale leaves what a {@code BigDecimal} holds raises
- * {@code ArithmeticException} — so each catches that and reports it as {@link #outOfRange}, the way
- * an {@code Int} overflow is reported (spec §jvm-abort). Neither is a business result.
+ * difference, a product or a quotient can have no value a {@code Decimal} holds — and each reports
+ * that as {@link #outOfRange}, the way an {@code Int} overflow is reported (spec §jvm-abort).
+ * Neither is a business result.
+ *
+ * <p>Whether {@code BigDecimal} refuses an operation is not the same question as whether the
+ * language has an answer for it. So where the language's rule decides the result's scale from the
+ * operands, as it does for a product, the scale is worked out here and checked against the range
+ * before {@code BigDecimal} is asked; what {@code BigDecimal} still refuses is caught and reported
+ * the same way.
  */
 public final class DecimalMath {
 
     private DecimalMath() {}
 
-    /** The rounding of the {@code /} operator: F#/.NET System.Decimal precision, half away from zero. */
-    private static final MathContext DIVIDE = new MathContext(29, java.math.RoundingMode.HALF_UP);
-
     /**
-     * The abort a {@code BigDecimal} operation's refusal is reported as.
+     * The abort an operation with no value a {@code Decimal} holds is reported as.
      *
-     * <p>{@code BigDecimal} answers on a range and not on every pair: a result whose scale leaves
-     * the 32 bits a scale is kept in raises {@code ArithmeticException} — "Overflow", "Underflow",
-     * or "BigInteger would overflow supported range" — and that is every operation here, the sum and
-     * the product included. Left alone it arrives at a boundary as a {@code java.math} exception
-     * from a program that has no such type. It is the same kind of thing an {@code Int} overflow is
-     * ({@link IntMath}): a model bug rather than a business result, so it aborts.
+     * <p>An operation here answers on a range and not on every pair: a result whose scale leaves
+     * the 32 bits a scale is kept in, or whose digits the representation has no room for, is not a
+     * {@code Decimal}. {@code BigDecimal} refuses most of those with {@code ArithmeticException} —
+     * "Overflow", "Underflow", or "BigInteger would overflow supported range" — which left alone
+     * arrives at a boundary as a {@code java.math} exception from a program that has no such type.
+     * It is the same kind of thing an {@code Int} overflow is ({@link IntMath}): a model bug rather
+     * than a business result, so it aborts.
      *
      * <p>Each operation catches the exception itself and builds {@code what} in the {@code catch}.
      * The message names both operands through {@link #describe}, which walks their digits, and an
@@ -121,35 +126,26 @@ public final class DecimalMath {
         }
     }
 
-    /** {@code Decimal.multiply(a, b)}, and the {@code *} operator. A product's scale is the sum of
-     *  its factors' scales, so this is the operation that reaches the end of the range first. */
+    /**
+     * {@code Decimal.multiply(a, b)}, and the {@code *} operator. A product's scale is the sum of
+     * its factors' scales, so this is the operation that reaches the end of the range first.
+     *
+     * <p>That sum is worked out here, and a product whose scale no {@code Decimal} holds aborts
+     * before {@code BigDecimal} is asked for it, whatever the product's value is. Asked first,
+     * {@code BigDecimal} answers some such products instead of refusing them — a nought factor on the
+     * left is multiplied at a scale moved back into range, and the same factor on the right is
+     * refused — so {@code a * b} and {@code b * a} would differ. A refusal that still comes back is
+     * the representation having no room for the product's digits.
+     */
     public static BigDecimal multiply(BigDecimal a, BigDecimal b) {
+        long scale = (long) a.scale() + b.scale();
+        if (scale != (int) scale) {
+            throw outOfRange("the product of " + describe(a) + " and " + describe(b));
+        }
         try {
             return a.multiply(b);
         } catch (ArithmeticException _) {
             throw outOfRange("the product of " + describe(a) + " and " + describe(b));
-        }
-    }
-
-    /**
-     * The {@code /} operator on Decimal (spec §stdlib-decimal). A zero divisor aborts, like the
-     * other arithmetic operators — code that wants it as a case uses the {@code Decimal.divide}
-     * function below, which returns {@code Decimal | DivisionByZero}.
-     *
-     * <p>The quotient is rounded to a significant-digit precision matching F#/.NET
-     * {@code System.Decimal} (about 28–29 digits), rounding half away from zero (HALF_UP), so
-     * {@code 10m / 3m} is {@code 3.3333…} rather than aborting on a non-terminating result. When a
-     * specific scale and mode are part of the domain, {@code Decimal.divide(a, b, scale, mode)}
-     * states them explicitly.
-     */
-    public static BigDecimal divide(BigDecimal a, BigDecimal b) {
-        if (b.signum() == 0) {
-            throw new ConstraintViolation("division by zero: " + describe(a) + " / 0");
-        }
-        try {
-            return a.divide(b, DIVIDE);
-        } catch (ArithmeticException _) {
-            throw outOfRange("the quotient of " + describe(a) + " and " + describe(b));
         }
     }
 
@@ -247,5 +243,55 @@ public final class DecimalMath {
         } catch (ArithmeticException _) {
             throw outOfRange(describe(d) + " rounded to scale " + scale);
         }
+    }
+
+    /**
+     * {@code String.fromDecimal(d)}: {@code d} in plain notation (spec §stdlib-string).
+     *
+     * <p>Plain notation is as long as the scale is far from nought, whichever way — a scale of
+     * {@code -2000000000} is two billion integer zeros, and one of {@code 2000000000} is two billion
+     * fractional digits — so a {@code Decimal} a few bytes wide can have a text no {@code String}
+     * holds ({@link Strings#LONGEST_TEXT}). That text is an answer with no place, the same abort a
+     * {@code String.repeat} count no {@code String} could hold is. The length is worked out before
+     * the text is, because {@code toPlainString} answers such a value with
+     * {@code ArithmeticException} at the floor of the scale range and with {@code OutOfMemoryError}
+     * everywhere else past it.
+     */
+    public static String plainText(BigDecimal d) {
+        if (plainTextLength(d) > Strings.LONGEST_TEXT) {
+            throw new ConstraintViolation(
+                    "the plain notation of " + describe(d) + " is longer than a String holds");
+        }
+        return d.toPlainString();
+    }
+
+    /**
+     * How many chars {@code d.toPlainString()} is, in {@code long} because the answer can be past
+     * what an {@code int} counts: a sign, the digits, and either the integer zeros a negative scale
+     * stands for or a point with the leading fractional zeros a scale above the precision asks for.
+     * Nought is {@code "0"} at every scale up to zero, whatever the scale says.
+     */
+    static long plainTextLength(BigDecimal d) {
+        return ExactDecimals.plainNotationLength(d);
+    }
+
+    /**
+     * {@code text} as a {@code Decimal}, at the scale its fractional digits give it. {@code text} is
+     * decimal text (spec §string-decimal-text), which {@link Strings#toDecimal} has already decided;
+     * {@code BigDecimal(String)} on such text answers without an exponent to overflow and with a
+     * scale no longer than a {@code String} is, so it never refuses it.
+     */
+    static BigDecimal ofDecimalText(String text) {
+        return new BigDecimal(text);
+    }
+
+    /**
+     * The amount {@code d} is, carried by as few digits as a {@code BigDecimal} can carry it: one
+     * form for every value the language calls equal (spec §primitives), which is what a hash of an
+     * amount and a boundary's canonical number are both taken from. The form is
+     * {@link souther.exact.ExactDecimals#leastDigits}, which the compiler reads a number by as well.
+     */
+    static BigDecimal leastDigits(BigDecimal d) {
+        return ExactDecimals.leastDigits(d);
     }
 }
