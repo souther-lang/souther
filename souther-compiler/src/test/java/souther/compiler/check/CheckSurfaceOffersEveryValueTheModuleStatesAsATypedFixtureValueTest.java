@@ -161,11 +161,11 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
     /**
      * An own value calling an imported helper whose own body calls a second, unexposed helper of
      * the same module is a candidate too — {@code make} is never named in an import line, only
-     * reached through {@code of}'s own body, the way {@link Bodies#ImportedDefinitions}'s own
+     * reached through {@code of}'s own body, the way {@link Bodies.ImportedDefinitions}'s own
      * closure reaches a helper a published body calls in turn.
      *
      * <p>{@link Bodies#publishedByQualifiedName} closes {@code of}'s body against {@code
-     * example.lib}'s own expansion table the same way {@link Bodies#ImportedDefinitions} would —
+     * example.lib}'s own expansion table the same way {@link Bodies.ImportedDefinitions} would —
      * {@code Settled}/{@code Expanding} of {@code example.lib}, never of {@code example.calls} —
      * so {@code DeclaredTypeReading} reads past {@code make(g)} the same as it reads past a call
      * this module makes of its own helper.
