@@ -121,43 +121,67 @@ sealed interface CandidateDomain {
      */
     private static CandidateDomain stepping(AffinePreimage.Stepping on,
                                             NumericDomain.Bounds within) {
-        // Both are values of the position, which {@link AffinePreimage.Stepping} requires of every
-        // member it names. Asked here instead, this read the progression's own two numbers and
-        // called a set with witnesses in it empty: `1/3 + (2/3)k` is one, three and five, and none
-        // of those is what either of its numbers is written as.
-        BigDecimal from = on.from().asWrittenDecimal();
-        BigDecimal by = on.by().asWrittenDecimal();
-        BigDecimal least = stepsTo(within.min(), from, by, true);
-        BigDecimal most = stepsTo(within.max(), from, by, false);
-        if (least != null && most != null) {
-            if (least.compareTo(most) > 0) {
+        ExactRatio from = on.from();
+        ExactRatio by = on.by();
+        Multiplied least = stepsTo(within.min(), from, by, true);
+        if (least.unheld() != null) {
+            return new NotWorkedOut(least.unheld());
+        }
+        Multiplied most = stepsTo(within.max(), from, by, false);
+        if (most.unheld() != null) {
+            return new NotWorkedOut(most.unheld());
+        }
+        if (least.at() != null && most.at() != null) {
+            if (least.at().compareTo(most.at()) > 0) {
                 return new None();
             }
-            BigDecimal first = from.add(by.multiply(least));
-            return least.compareTo(most) == 0
-                    ? new One(new Count(first))
-                    : new Walking(first, by, from.add(by.multiply(most)));
+            Multiplied first = at(from, by, least.at());
+            if (first.unheld() != null) {
+                return new NotWorkedOut(first.unheld());
+            }
+            if (least.at().compareTo(most.at()) == 0) {
+                return new One(new Count(first.at().asWrittenDecimal()));
+            }
+            Multiplied last = at(from, by, most.at());
+            return last.unheld() != null
+                    ? new NotWorkedOut(last.unheld())
+                    : new Walking(first.at().asWrittenDecimal(), by.asWrittenDecimal(),
+                            last.at().asWrittenDecimal());
         }
-        BigDecimal start = least != null ? least : most != null ? most : BigDecimal.ZERO;
-        return new Outward(from.add(by.multiply(start)), by, within);
+        ExactRatio start = least.at() != null ? least.at() : most.at() != null ? most.at() : ExactRatio.ZERO;
+        Multiplied startingAt = at(from, by, start);
+        return startingAt.unheld() != null
+                ? new NotWorkedOut(startingAt.unheld())
+                : new Outward(startingAt.at().asWrittenDecimal(), by.asWrittenDecimal(), within);
     }
 
     /**
-     * How many steps from {@code from} an end of the run lies, rounded inward, or null where the run
-     * has no end that way.
+     * How many steps from {@code from} an end of the run lies, rounded inward, or which way the
+     * exact arithmetic could not hold it, or {@link #noEnd} where the run has no end that way.
      *
      * <p>The division is asked for a whole number and never for a quotient, so a step that does not
      * divide the distance is no reason to lose the end. An end the rules exclude that falls exactly
-     * on a step is one step further in.
+     * on a step is one step further in. Read off the written decimals rather than the ratios once
+     * the distance is in hand: a scale fixed at nought never asks the division for more room than a
+     * whole number takes, so it is the divisor being nought alone this could refuse, and {@code by}
+     * is never that.
      */
-    private static BigDecimal stepsTo(Endpoint end, BigDecimal from, BigDecimal by, boolean low) {
+    private static Multiplied stepsTo(Endpoint end, ExactRatio from, ExactRatio by, boolean low) {
         if (end == null || !(end.at() instanceof Count count)) {
-            return null;
+            return noEnd();
         }
-        BigDecimal away = count.at().subtract(from);
-        BigDecimal steps = away.divide(by, 0, low ? RoundingMode.CEILING : RoundingMode.FLOOR);
-        boolean onIt = from.add(by.multiply(steps)).compareTo(count.at()) == 0;
-        return end.inclusive() || !onIt ? steps : steps.add(BigDecimal.valueOf(low ? 1 : -1));
+        Multiplied away = switch (ExactRatio.of(count.at()).minus(from)) {
+            case ExactAnswer.Unheld<ExactRatio> unheld -> new Multiplied(null, unheld.why());
+            case ExactAnswer.Held<ExactRatio> apart -> new Multiplied(apart.value(), null);
+        };
+        if (away.unheld() != null) {
+            return away;
+        }
+        BigDecimal steps = away.at().asWrittenDecimal()
+                .divide(by.asWrittenDecimal(), 0, low ? RoundingMode.CEILING : RoundingMode.FLOOR);
+        boolean onIt = by.times(ExactRatio.of(steps)).compareTo(away.at()) == 0;
+        BigDecimal adjusted = end.inclusive() || !onIt ? steps : steps.add(BigDecimal.valueOf(low ? 1 : -1));
+        return new Multiplied(ExactRatio.of(adjusted), null);
     }
 
     /**
