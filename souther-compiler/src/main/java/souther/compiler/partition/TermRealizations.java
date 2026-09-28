@@ -12,6 +12,8 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Dates;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
@@ -1481,10 +1483,19 @@ final class TermRealizations {
             return null;
         }
         BigDecimal quotient = startOf(end, count.at());
-        return new Count(quotient.signum() < 0
-                ? quotient.multiply(size).subtract(size).add(BigDecimal.ONE)
-                : quotient.signum() == 0 ? size.negate().add(BigDecimal.ONE)
-                        : quotient.multiply(size));
+        ExactRatio s = ExactRatio.of(size);
+        ExactAnswer<ExactRatio> at;
+        if (quotient.signum() < 0) {
+            at = ExactRatio.of(quotient).times(s).minus(s);
+            if (at instanceof ExactAnswer.Held<ExactRatio> held) {
+                at = held.value().plus(ExactRatio.ONE);
+            }
+        } else if (quotient.signum() == 0) {
+            at = s.negated().plus(ExactRatio.ONE);
+        } else {
+            at = ExactAnswer.held(ExactRatio.of(quotient).times(s));
+        }
+        return placeAt(at);
     }
 
     /** The largest number whose quotient by {@code size} is at or below that end, read as exactly
@@ -1494,20 +1505,48 @@ final class TermRealizations {
             return null;
         }
         BigDecimal quotient = endOf(end, count.at());
-        return new Count(quotient.signum() > 0
-                ? quotient.multiply(size).add(size).subtract(BigDecimal.ONE)
-                : quotient.signum() == 0 ? size.subtract(BigDecimal.ONE)
-                        : quotient.multiply(size));
+        ExactRatio s = ExactRatio.of(size);
+        ExactAnswer<ExactRatio> at;
+        if (quotient.signum() > 0) {
+            at = ExactRatio.of(quotient).times(s).plus(s);
+            if (at instanceof ExactAnswer.Held<ExactRatio> held) {
+                at = held.value().minus(ExactRatio.ONE);
+            }
+        } else if (quotient.signum() == 0) {
+            at = s.minus(ExactRatio.ONE);
+        } else {
+            at = ExactAnswer.held(ExactRatio.of(quotient).times(s));
+        }
+        return placeAt(at);
     }
 
-    /** The one value whose quotient by that divisor is exactly that number. */
+    /** The number an exact ratio comes to, or null where the exact arithmetic could not hold it or
+     *  where what it holds is one no written decimal is. Read the way every end of a run of
+     *  quotients this file works out is read: an end too far out for the truth is work nobody asked
+     *  for, and a value neither of the two ways this holds a number is one no row can write either
+     *  way. */
+    private static Place placeAt(ExactAnswer<ExactRatio> at) {
+        if (!(at instanceof ExactAnswer.Held<ExactRatio> held)) {
+            return null;
+        }
+        BigDecimal written = held.value().asWrittenDecimal();
+        return written == null ? null : new Count(written);
+    }
+
+    /** The one value whose quotient by that divisor is exactly that number, or nothing composed
+     *  where the exact arithmetic could not hold the product. */
     private static Realization multipliedBack(BigDecimal by, Type sourceType, Carrier observed,
                                               Place answer, RuleReadingSource ruleSource) {
         if (!(answer instanceof Count wanted)) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        return writtenAt(new Count(wanted.at().multiply(by)), sourceType, observed, ruleSource);
+        BigDecimal at = wanted.exactly().times(ExactRatio.of(by)).asWrittenDecimal();
+        if (at == null) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        return writtenAt(new Count(at), sourceType, observed, ruleSource);
     }
 
     /**
