@@ -1,5 +1,6 @@
 package souther.compiler.numeric;
 
+import java.math.BigDecimal;
 import java.math.RoundingMode;
 
 
@@ -190,14 +191,19 @@ public final class Intervals {
             if (corner == null) {
                 continue;   // extended arithmetic gives this pair of ends no value
             }
-            if (corner.beyond() == direction) {
+            if (corner.beyond() == direction || corner.unheld() == direction) {
                 return null;
             }
-            if (corner.at() == null) {
+            // A corner the exact arithmetic could not hold at this scale is read the way one past
+            // every value the other way already is: it bounds nothing on this side, but where its
+            // sign is the direction not being asked for here it is at least as far as zero, which is
+            // the one point of it this can still state.
+            Count at = corner.unheld() == 0 ? corner.at() : Count.ZERO;
+            if (at == null) {
                 continue;   // past every value the other way, which bounds nothing on this side
             }
-            if (best == null || corner.at().compareTo(best) * direction > 0) {
-                best = corner.at();
+            if (best == null || at.compareTo(best) * direction > 0) {
+                best = at;
             }
         }
         return best == null ? null : Endpoint.inclusive(best);
@@ -292,20 +298,43 @@ public final class Intervals {
             if (beyond != 0) {
                 return new Ratio(null, beyond * divisor.at.signum());
             }
-            return new Ratio(Count.of(at.at().divide(divisor.at.at(), scale, towards)), 0);
+            // Divided in ratios rather than in the two decimals directly: a dividend and a divisor a
+            // rule's own arithmetic put far enough apart in scale can leave the rounded quotient with
+            // no representation at this scale, which a raw BigDecimal.divide would throw for instead
+            // of answering. The quotient's sign is never in question either way — neither operand is
+            // nought by this point — so an unheld corner still says which side of zero it falls on,
+            // the same as {@link #times} already answers for a product this cannot hold.
+            return switch (ExactRatio.of(at.at()).dividedBy(ExactRatio.of(divisor.at.at()))
+                    .asDecimal(towards, scale)) {
+                case ExactAnswer.Held<BigDecimal> held -> new Ratio(Count.of(held.value()), 0);
+                case ExactAnswer.Unheld<BigDecimal> _ ->
+                        Ratio.unheld(at.signum() * divisor.at.signum());
+            };
         }
     }
 
     /**
      * One corner of the box a dividend range and a divisor range make: what the two ends divide to,
-     * or which side it is past every value on.
+     * which side it is past every value on, or which side the exact arithmetic could not hold the
+     * rounded quotient on.
      *
      * <p>Without whether the quotient reaches it. Truncation sends a range of dividends onto one
      * quotient, so an end an operand does not reach says nothing about whether the quotient reaches
      * where it lands — and a bound that says it does is the looser of the two, which is the one to
      * state.
      */
-    private record Ratio(Count at, int beyond) {}
+    private record Ratio(Count at, int beyond, int unheld) {
+
+        Ratio(Count at, int beyond) {
+            this(at, beyond, 0);
+        }
+
+        /** A corner this could not hold, named by the side of zero its sign puts it on — read the
+         *  same way an end past every value already is, since neither bounds this side. */
+        static Ratio unheld(int sign) {
+            return new Ratio(null, 0, sign);
+        }
+    }
 
     /**
      * One corner of the box two ranges make: what the two ends multiply to, whether the product has

@@ -176,14 +176,6 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                     "Both factors scale nought (BigDecimal.valueOf(long) and a scale-nought"
                             + " constant); a product of two scale-nought values is scale nought."),
             new Permission(
-                    "souther/compiler/numeric/Intervals$End#over(Lsouther/compiler/numeric/"
-                            + "Intervals$End;IILjava/math/RoundingMode;)Lsouther/compiler/numeric/"
-                            + "Intervals$Ratio; divide(Ljava/math/BigDecimal;ILjava/math/"
-                            + "RoundingMode;)Ljava/math/BigDecimal;",
-                    Reason.REFUSAL_IMPOSSIBLE,
-                    "Two branches return early — divisor.at.signum() == 0, and beyond != 0 — before"
-                            + " this call, so the divisor is proven non-zero by the time it runs."),
-            new Permission(
                     "souther/compiler/observe/WaitShown#of(Ljava/time/Duration;)Ljava/lang/String;"
                             + " add(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
                     Reason.REFUSAL_IMPOSSIBLE,
