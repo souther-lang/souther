@@ -172,18 +172,21 @@ final class ContainersAddingUp {
                 new HowManyElements(makings, offered, left), left);
         List<FixtureTemplate> built = offered.built();
         if (!built.isEmpty()) {
-            return new TermRealizations.Realization.Built(built, left.refused(), left.notAllOf());
+            return new TermRealizations.Realization.Built(
+                    built, left.refused(), left.notAllOf(), left.unheld());
         }
-        // Nothing was composed, and what a reader may make of that is what these two say. A figure
-        // that refused a candidate is why nothing came of it and is somebody's to raise; a
-        // population this walks some of leaves an emptiness nothing established, and neither is the
-        // other. Where there is neither, what this looked at was everything it could have.
+        // Nothing was composed, and what a reader may make of that is what these three say. A
+        // figure that refused a candidate is why nothing came of it and is somebody's to raise; a
+        // population this walks some of leaves an emptiness nothing established; a number this
+        // could not hold leaves the same emptiness for a third reason, neither a figure nor a
+        // population. Where there is none of them, what this looked at was everything it could have.
         if (!left.refused().isEmpty()) {
-            return new TermRealizations.Realization.Stopped(left.refused(), left.notAllOf());
+            return new TermRealizations.Realization.Stopped(
+                    left.refused(), left.notAllOf(), left.unheld());
         }
-        if (!left.notAllOf().isEmpty()) {
+        if (!left.notAllOf().isEmpty() || !left.unheld().isEmpty()) {
             return new TermRealizations.Realization.Unexhausted(left.notAllOf(),
-                    ways.said(occurrences(target)));
+                    ways.said(occurrences(target)), left.unheld());
         }
         return new TermRealizations.Realization.None(
                 Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
@@ -206,6 +209,7 @@ final class ContainersAddingUp {
         private final Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
         private final Set<CompositionRepertoire> notAllOf =
                 EnumSet.noneOf(CompositionRepertoire.class);
+        private final Set<CompositionCapacity> unheld = new java.util.HashSet<>();
 
         /** A piece was in front of a walk and this figure left no room for it. */
         void refused(CompositionBudget figure) {
@@ -217,6 +221,13 @@ final class ContainersAddingUp {
             notAllOf.add(population);
         }
 
+        /** A number this walk needed could not be held, which is neither of the other two: no
+         *  figure stopped it and no population is somebody's to write the rest of — a host with
+         *  more room reaches it or nothing does. */
+        void unheld(CompositionCapacity capacity) {
+            unheld.add(capacity);
+        }
+
         /** The figures that refused a piece, which are the ones a composing was stopped by. */
         Set<CompositionBudget> refused() {
             return Set.copyOf(refused);
@@ -225,6 +236,11 @@ final class ContainersAddingUp {
         /** The populations an offer made under these walks holds some of and not all of. */
         Set<CompositionRepertoire> notAllOf() {
             return Set.copyOf(notAllOf);
+        }
+
+        /** The numbers a walk worked out and could not hold. */
+        Set<CompositionCapacity> unheld() {
+            return Set.copyOf(unheld);
         }
     }
 
@@ -406,12 +422,14 @@ final class ContainersAddingUp {
             for (Spread how : Spread.values()) {
                 switch (splitting(makings.total(), many, makings.ends(), how, makings.elements())) {
                     case Split.None _ -> { }
-                    // Recorded exactly as the arrangements this walk never showed to cover are:
-                    // a shape the exact arithmetic could not finish is one this compiler did not
-                    // rule out, so a caller reading only the counts and shapes offered would count
-                    // it among the ones tried and refused rather than among the ones left open.
-                    case Split.NotWorkedOut _ ->
-                            left.notAllOf(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD);
+                    // Its own vocabulary and not `notAllOf`: this compiler has a way of generating
+                    // every other arrangement of this shape and reached for it, and what stopped it
+                    // is the arithmetic rather than a shape this compiler cannot produce. Told apart
+                    // so that raising the figure `MORE_ROOM_COULD_ANSWER` names reaches this, where
+                    // `WAYS_A_TOTAL_IS_SPREAD` would tell a reader nobody can raise anything.
+                    case Split.NotWorkedOut(UnheldNumber why) ->
+                            left.unheld(new CompositionCapacity(
+                                    CompositionCapacity.Where.VALUES_A_TOTAL_IS_SPREAD_OVER, why));
                     case Split.Some(List<BigDecimal> values) -> {
                         // Every way down at this count, and the whole container by one of them.
                         // Which case an element is is a fact about the value, so a container whose

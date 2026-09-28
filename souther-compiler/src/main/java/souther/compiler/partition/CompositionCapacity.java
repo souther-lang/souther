@@ -44,7 +44,10 @@ public record CompositionCapacity(Where where, UnheldNumber why) {
         VALUES_OF_A_PROGRESSION_WALKED_TO,
 
         /** The next value a position is walked to on the way to a condition. */
-        VALUES_A_POSITION_ON_THE_WAY_IS_WALKED_TO
+        VALUES_A_POSITION_ON_THE_WAY_IS_WALKED_TO,
+
+        /** One element's share of a total a container is split across. */
+        VALUES_A_TOTAL_IS_SPREAD_OVER
     }
 
     /**

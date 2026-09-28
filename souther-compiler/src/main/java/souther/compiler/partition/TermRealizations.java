@@ -78,12 +78,14 @@ final class TermRealizations {
          * apart by, and it is not this.
          */
         record Built(List<FixtureTemplate> values, java.util.Set<CompositionBudget> heldBack,
-                     java.util.Set<CompositionRepertoire> notAllOf) implements Realization {
+                     java.util.Set<CompositionRepertoire> notAllOf,
+                     java.util.Set<CompositionCapacity> unheld) implements Realization {
 
             public Built {
                 values = List.copyOf(values);
                 heldBack = java.util.Set.copyOf(heldBack);
                 notAllOf = java.util.Set.copyOf(notAllOf);
+                unheld = java.util.Set.copyOf(unheld);
                 if (values.isEmpty()) {
                     throw new IllegalArgumentException(
                             "a realization that built nothing is one that built none, and says why");
@@ -91,7 +93,12 @@ final class TermRealizations {
             }
 
             Built(List<FixtureTemplate> values, java.util.Set<CompositionBudget> heldBack) {
-                this(values, heldBack, java.util.Set.of());
+                this(values, heldBack, java.util.Set.of(), java.util.Set.of());
+            }
+
+            Built(List<FixtureTemplate> values, java.util.Set<CompositionBudget> heldBack,
+                  java.util.Set<CompositionRepertoire> notAllOf) {
+                this(values, heldBack, notAllOf, java.util.Set.of());
             }
 
             static Built whole(List<FixtureTemplate> values) {
@@ -118,11 +125,13 @@ final class TermRealizations {
          * point it was composed for has a value at it either way.
          */
         record Stopped(java.util.Set<CompositionBudget> by,
-                       java.util.Set<CompositionRepertoire> notAllOf) implements Realization {
+                       java.util.Set<CompositionRepertoire> notAllOf,
+                       java.util.Set<CompositionCapacity> unheld) implements Realization {
 
             public Stopped {
                 by = java.util.Set.copyOf(by);
                 notAllOf = java.util.Set.copyOf(notAllOf);
+                unheld = java.util.Set.copyOf(unheld);
                 if (by.isEmpty()) {
                     throw new IllegalArgumentException(
                             "a composing this compiler stopped says which budget stopped it");
@@ -130,7 +139,12 @@ final class TermRealizations {
             }
 
             Stopped(java.util.Set<CompositionBudget> by) {
-                this(by, java.util.Set.of());
+                this(by, java.util.Set.of(), java.util.Set.of());
+            }
+
+            Stopped(java.util.Set<CompositionBudget> by,
+                    java.util.Set<CompositionRepertoire> notAllOf) {
+                this(by, notAllOf, java.util.Set.of());
             }
         }
 
@@ -154,15 +168,22 @@ final class TermRealizations {
          *
          * @param detail what this walk found, or null where it has nothing to add
          */
-        record Unexhausted(java.util.Set<CompositionRepertoire> notAllOf, String detail)
+        record Unexhausted(java.util.Set<CompositionRepertoire> notAllOf, String detail,
+                           java.util.Set<CompositionCapacity> unheld)
                 implements Realization {
 
             public Unexhausted {
                 notAllOf = java.util.Set.copyOf(notAllOf);
-                if (notAllOf.isEmpty()) {
+                unheld = java.util.Set.copyOf(unheld);
+                if (notAllOf.isEmpty() && unheld.isEmpty()) {
                     throw new IllegalArgumentException(
-                            "a walk that says it saw some of them says some of what");
+                            "a walk that says it saw some of them, or could not hold a number on"
+                                    + " the way, says which");
                 }
+            }
+
+            Unexhausted(java.util.Set<CompositionRepertoire> notAllOf, String detail) {
+                this(notAllOf, detail, java.util.Set.of());
             }
         }
 

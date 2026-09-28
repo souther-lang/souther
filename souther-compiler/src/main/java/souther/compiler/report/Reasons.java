@@ -216,6 +216,7 @@ final class Reasons {
                 case VALUES_OF_A_PROGRESSION_WALKED_TO -> "the next value of a progression";
                 case VALUES_A_POSITION_ON_THE_WAY_IS_WALKED_TO ->
                         "the next value of a position on the way";
+                case VALUES_A_TOTAL_IS_SPREAD_OVER -> "one element's share of a total";
             };
             out.add(what + switch (each.why()) {
                 case MORE_ROOM_COULD_ANSWER -> ", which this host had no room to work out";

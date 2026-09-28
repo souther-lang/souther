@@ -6193,6 +6193,20 @@ public final class Generator {
             };
         }
 
+        /** Numbers this edge worked out and could not hold, beside {@link #stoppedBy()} and
+         *  {@link #notAllOf()} and never folded into either — a host with more room reaches these
+         *  or nothing does, which is neither a figure nor a population this compiler writes some
+         *  of. */
+        java.util.Set<CompositionCapacity> unheld() {
+            return switch (came) {
+                case TermRealizations.Realization.Built built -> built.unheld();
+                case TermRealizations.Realization.Stopped stopped -> stopped.unheld();
+                case TermRealizations.Realization.Unexhausted some -> some.unheld();
+                case TermRealizations.Realization.NoNumberTheRulesAdmit _,
+                     TermRealizations.Realization.None _ -> java.util.Set.of();
+            };
+        }
+
         /**
          * What this edge found, beside the word, or null where it has nothing to add.
          *
@@ -6218,7 +6232,7 @@ public final class Generator {
          * figures somebody could raise apart from the populations nobody has written the rest of.
          */
         CompositionShortfall met() {
-            return CompositionShortfall.of(stoppedBy(), notAllOf());
+            return CompositionShortfall.of(stoppedBy(), notAllOf(), unheld());
         }
 
         /**
