@@ -357,15 +357,13 @@ public record Band(BandEnd lower, BandEnd upper) {
                 || over.below() != null || over.above() != null) {
             return null;
         }
-        ExactRatio below = under.at().asARule();
-        ExactRatio above = over.at().asARule();
-        // How much of the quantity each rule wrote, which is the denominator of where its line
-        // falls once the fraction is in lowest terms.
+        ExactRatio.Terms below = under.at().asARule();
+        ExactRatio.Terms above = over.at().asARule();
         if (below == null || above == null) {
             return null;
         }
-        ExactRatio much = below.denominatorAsRatio();
-        return much.equals(above.denominatorAsRatio()) ? much : null;
+        // How much of the quantity each rule wrote, in the terms each end is named in.
+        return below.per().equals(above.per()) ? below.per() : null;
     }
 
     /** Whether the line below this run keeps its own value, which decides whether the run starts

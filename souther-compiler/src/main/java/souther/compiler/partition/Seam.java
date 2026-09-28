@@ -301,23 +301,23 @@ public record Seam(CutPosition at, Level below, Level above) {
      * one way. Null where the quantity has no numbers, which is never scaled and so always has a
      * value at its lines.
      *
+     * <p>Both numbers are the line's terms ({@link CutPosition#asARule}), each spelled
+     * ({@link ExactRatio#spelled}), so neither power is written out and the name is the one the
+     * position is compared as.
+     *
      * @param muchOf how the reader writes so much of the quantity, which is the quantity's own
      *               answer where the reader has one to ask
      */
     public String asARuleAbout(
             java.util.function.Function<ExactRatio, String> muchOf,
             Towards side) {
-        ExactRatio rule = at.asARule();
+        ExactRatio.Terms rule = at.asARule();
         if (rule == null) {
             return null;
         }
-        // The denominator is how much of the quantity and the numerator is what it comes to, which
-        // is what a ratio in lowest terms holds: `3 * x <= 1` is the line at a third written as a
-        // rule, and the two numbers are the ones an author would write.
-        ExactRatio.Fraction both = rule.asFraction();
-        String much = muchOf.apply(ExactRatio.of(both.denominator()));
-        return side == Towards.ABOVE ? both.numerator() + " < " + much
-                : much + " <= " + both.numerator();
+        String much = muchOf.apply(rule.per());
+        String comesTo = rule.comesTo().spelled();
+        return side == Towards.ABOVE ? comesTo + " < " + much : much + " <= " + comesTo;
     }
 
     /**
