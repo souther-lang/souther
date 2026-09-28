@@ -422,10 +422,12 @@ public final class Generator {
              *
              * <p>Not that it stopped. A figure with no room for the candidate in front of it leaves
              * something untried, and so does a walk that ran to the end of a population this
-             * compiler writes some of — the second stopped nothing and there is no number in it, and
-             * a word saying a search halted would send a reader looking for one. What was left, and
-             * whether raising anything reaches it, is what travels beside this
-             * ({@link CompositionBudget}, {@link CompositionRepertoire}).
+             * compiler writes some of, and a walk that met a number it could not hold — the last two
+             * stopped nothing and there is no figure in them, and a word saying a search halted
+             * would send a reader looking for one. What was left, and whether raising anything or a
+             * host with more room reaches it, is what travels beside this
+             * ({@link CompositionBudget}, {@link CompositionRepertoire},
+             * {@link CompositionCapacity}).
              *
              * <p>What it licenses is one thing either way, which is why it is one word: nothing here
              * was shown about the model, so a reader may not act on it as they may act on
@@ -3067,8 +3069,9 @@ public final class Generator {
          * it differs, and that is what travels here.
          *
          * <p>A number the search could not hold is one of these as well. Nothing was refused and
-         * there is no number to raise; what reaches it is a wider run, and that travels here beside
-         * any population walked in part.
+         * there is no number to raise; what reaches it is a host with more room where room is what
+         * ran out, and nothing where the number has no representation at all — which of the two
+         * travels here beside any population walked in part.
          */
         record Unexhausted(UnresolvedCombination why, CompositionShortfall met,
                            CompositionAccount unrepresented)
@@ -3335,7 +3338,7 @@ public final class Generator {
                 // never ran are already saying the point is open on this compiler, and adding what
                 // an edge was short of would be a second account of the same emptiness.
                 //
-                // Which is true in both vocabularies and not only in the figures. What the edge was
+                // Which is true in every vocabulary and not only in the figures. What the edge was
                 // short of travels with the answer that is about it, and never onto one that was
                 // settled before the edge's offer was in question.
                 case Outcome.Built _, Outcome.Stopped _, Outcome.Unexhausted _,
@@ -5904,7 +5907,8 @@ public final class Generator {
          * and what closes it is not, which is why the populations travel rather than the word alone.
          *
          * <p>A number the search could not hold is here too, and for the same reason: nothing was
-         * refused and nothing is there to raise, and what reaches the rest is a wider run.
+         * refused and nothing is there to raise. What reaches it is a host with more room where
+         * room ran out, and nothing where no representation of the number exists.
          */
         record Unexhausted(CompositionShortfall met,
                            SequencedMap<TermPath, StringOfferShortfall> offered, String detail)
@@ -6162,7 +6166,7 @@ public final class Generator {
          * <p>Every vocabulary in one value because that is what an account of an attempt holds,
          * and none is read for another on the way in: {@link CompositionShortfall} keeps the
          * figures somebody could raise apart from the populations nobody has written the rest of
-         * and the numbers a wider run would hold.
+         * and the numbers only a host with more room, or nothing, would hold.
          */
         CompositionShortfall met() {
             return came.shortfall();
@@ -6211,10 +6215,9 @@ public final class Generator {
          * <p><b>Which arm it is decided here and nowhere else.</b> An edge is short of everything
          * there is in as many vocabularies as {@link CompositionShortfall} holds, and a caller
          * choosing the arm by asking one of them whether it is empty is a caller that has to be
-         * taught every vocabulary there will ever be — which is how the second of them, and then
-         * the third, came to be dropped at the places that asked about the first. Asked of the
-         * shortfall whole, a vocabulary added travels in it rather than being a silence at every
-         * caller.
+         * taught every vocabulary there will ever be, and silently drops the ones it was not.
+         * Asked of the shortfall whole, a vocabulary added travels in it rather than being a
+         * silence at every caller.
          *
          * <p>The figures first, because only they name something anybody could raise; the rest
          * travels with them all the same, since a stop does not make it untrue.

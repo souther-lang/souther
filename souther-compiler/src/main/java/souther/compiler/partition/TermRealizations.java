@@ -65,9 +65,9 @@ final class TermRealizations {
      * What building values that answer a number came to.
      *
      * <p>What was not built is one {@link CompositionShortfall} wherever it travels, and never its
-     * vocabularies taken apart. A caller that held the figures and the populations as two sets
-     * carried each of them on and had nowhere to put a third, so a vocabulary added beside them
-     * was dropped at every place that had been written for two.
+     * vocabularies taken apart. A caller holding a set per vocabulary carries on only the ones it
+     * names, and a vocabulary it does not name is left out without anything saying so; one value
+     * joined with {@link CompositionShortfall#and} carries every one.
      */
     sealed interface Realization {
 

@@ -20,18 +20,20 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The two places a number the exact arithmetic could not hold used to be misread once it was told
- * apart from a genuine refusal, each fixed for its own reason and both of the same shape: an
- * {@code Unheld} answer fell through into whatever the ordinary "no" already meant there.
+ * A number the exact arithmetic could not hold is never read as the ordinary "no" of the place that
+ * asked for it.
+ *
+ * <p>Both places here have a "no" that proves something — that no arrangement reaches a total, that
+ * a class holds no value — and an {@code Unheld} answer falling through into it would be that proof
+ * made out of nothing.
  */
 class ANumberTheExactArithmeticCouldNotHoldIsNeverReadAsADecidedAnswerTest {
 
     /**
-     * {@link ContainersAddingUp.Ends#reaches} wrote its last line as an {@code instanceof Held}
-     * pattern used directly as the method's boolean answer, so an {@code Unheld} distance — which
-     * does not match the pattern — silently became {@code false}: the one claim its own doc says an
-     * unheld distance must never support, since {@code false} is what proves no arrangement reaches
-     * the total.
+     * {@link ContainersAddingUp.Ends#reaches} answers {@code true} for a distance the exact
+     * arithmetic could not hold: {@code false} is what proves no arrangement reaches the total, and
+     * an unheld distance never supports that. A boolean read off whether the distance was held
+     * would answer {@code false} here.
      */
     @Test
     void anEndTheExactArithmeticCannotHoldTheDistanceToNeverProvesNoArrangementReachesIt() {
@@ -50,13 +52,12 @@ class ANumberTheExactArithmeticCouldNotHoldIsNeverReadAsADecidedAnswerTest {
     }
 
     /**
-     * {@link InputClassifications#decided} used to have no arm for {@link Membership.NotWorkedOut}
-     * beyond a thrown {@code IllegalStateException}, reachable from an ordinary rule bounding a
-     * count taken as a sum over a {@code List<Decimal>} spaced far enough apart in scale. It now
-     * answers {@link Classification.Unclassified} carrying its own code for each of the two ways
+     * {@link InputClassifications#decided} answers a {@link Membership.NotWorkedOut} with
+     * {@link Classification.Unclassified}, carrying its own code for each of the two ways
      * {@link UnheldNumber} tells apart — a host that could still answer with more room, and no
-     * representation existing at all — rather than a crash, and rather than folding the two into
-     * one word once {@code UnheldNumber}'s own distinction had already been worked out.
+     * representation existing at all. An ordinary rule bounding a count taken as a sum over a
+     * {@code List<Decimal>} spaced far enough apart in scale reaches it, so it is neither a crash
+     * nor one word for both.
      */
     @ParameterizedTest
     @EnumSource(UnheldNumber.class)

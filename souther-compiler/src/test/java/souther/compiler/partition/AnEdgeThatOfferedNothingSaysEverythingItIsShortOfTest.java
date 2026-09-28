@@ -19,11 +19,9 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
  *
  * <p><b>Put to the one place that decides it.</b> A caller that worked the arm out by asking one of
  * the vocabularies whether it was empty is a caller that has to be taught every vocabulary there
- * will ever be. The one that existed before a population was a vocabulary asked about figures
- * alone, and the one after it asked about figures and populations: an edge short only of a number
- * it could not hold came back as a search that simply found nothing. Nothing at the model's end saw
- * the difference, because the word is the same word either way — which is why this is asked here
- * rather than through a model.
+ * will ever be, and an edge short only in one it was not taught comes back as a search that simply
+ * found nothing. Nothing at the model's end sees the difference, because the word is the same word
+ * either way — which is why this is asked here rather than through a model.
  */
 class AnEdgeThatOfferedNothingSaysEverythingItIsShortOfTest {
 
@@ -67,7 +65,9 @@ class AnEdgeThatOfferedNothingSaysEverythingItIsShortOfTest {
     }
 
     /** No figure refused anything and every population was walked, but a number could not be
-     *  held: the point is open on a wider run, and says so. */
+     *  held: the point stays open, and says which number. This one has no representation at all,
+     *  so no host answers it, however much room it has; only a number the host ran out of room for
+     *  is one a host with more room may answer. */
     @Test
     void anEdgeShortOnlyOfANumberItCouldNotHoldSaysTheNumber() {
         CompositionShortfall met = CompositionShortfall.of(Set.of(), Set.of(),

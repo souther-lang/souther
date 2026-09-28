@@ -18,10 +18,10 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
  * never read as nothing having been there to build.
  *
  * <p>A search that tries several numbers and builds at none of them answers with what all of them
- * met. Kept as a figure and a population and nothing else, a candidate that was short only of a
- * number it could not hold contributed nothing to either, and the search came back as one that
- * composed nothing for a reason about the model — the confusion {@code ExactAnswer} exists to keep
- * a caller from making, at the one place several answers are joined into one.
+ * met, in every vocabulary. A join that kept only the figures and the populations would answer a
+ * candidate short only of a number it could not hold as a search that composed nothing for a reason
+ * about the model — the confusion {@code ExactAnswer} exists to keep a caller from making, at the
+ * one place several answers are joined into one.
  */
 class ANumberNoCandidateCouldHoldTravelsWithTheSearchesAnswerTest {
 
