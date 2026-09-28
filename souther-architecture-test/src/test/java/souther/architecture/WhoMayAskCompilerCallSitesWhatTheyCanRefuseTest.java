@@ -24,11 +24,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@link Reason#REFUSAL_IMPOSSIBLE} where a fact of the calling method's own body rules the refusal
  * out outright: a division whose divisor is never nought and whose operands' scales are both
  * bounded — a divisor that is never nought rules out only one of the two refusals a division has,
- * the other being the room the quotient's scale needs — a sum or difference of two operands that
- * share one scale or whose scales are both bounded, a value the same method has already proven
- * whole and in range. A sum is written at the finer of its two scales, so a nought written to two
- * billion places turns an addend of one into two billion digits: that a result's scale is a valid
- * {@code int} is no proof.
+ * the other being the room the quotient's scale needs — a sum, difference or product whose
+ * operands' scales and magnitudes the same method bounds, a value the same method has already
+ * proven whole and in range. Both halves are needed. A sum is written at the finer of its two
+ * scales, so a nought written to two billion places turns an addend of one into two billion
+ * digits: that a result's scale is a valid {@code int} is no proof. And two operands at one scale
+ * still add as two whole numbers, which the host holds only so many digits of: sharing a scale is
+ * no proof either.
  *
  * <p><b>The proof is the method's, never its callers'.</b> The scanner sees the call site and
  * nothing that reaches it, so a proof leaning on what a caller passes, what a declaration table
@@ -119,13 +121,14 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                     "try/catch(ArithmeticException) answers null, this method's own documented"
                             + " answer for a scale the run time could not be handed."),
             new Permission(
-                    "souther/compiler/frontend/AstBuilder#decimalWritten(Ljava/lang/String;)"
-                            + "Ljava/math/BigDecimal; <init>(Ljava/lang/String;)V",
-                    Reason.REFUSAL_IMPOSSIBLE,
+                    "souther/compiler/frontend/AstBuilder#decimalWritten(Ljava/lang/String;"
+                            + "Lsouther/compiler/diag/SourcePos;)Ljava/math/BigDecimal;"
+                            + " <init>(Ljava/lang/String;)V",
+                    Reason.REFUSAL_TRANSLATED,
                     "The method checks the text is digits with at most one point between two runs"
-                            + " of them before parsing, and a String of that shape is shorter than"
-                            + " Integer.MAX_VALUE, so its places fit an int scale and"
-                            + " BigDecimal(String) parses it."),
+                            + " of them, so its places fit an int scale; a text with more digits"
+                            + " than a whole number the host holds is caught and reported as"
+                            + " ADecimalLiteralHasMoreDigitsThanADecimalHolds."),
             new Permission(
                     "souther/compiler/inputs/Distinctions#whole(Ljava/math/BigDecimal;)Z"
                             + " longValueExact()J",
@@ -178,21 +181,6 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                     "Same bounded-scale value; toPlainString has no documented throw for a value at"
                             + " an ordinary scale."),
             new Permission(
-                    "souther/compiler/partition/CutPosition#justBeyond(Lsouther/compiler/numeric/"
-                            + "Towards;I)Lsouther/compiler/partition/CutPosition$JustBeyond;"
-                            + " add(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
-                    Reason.REFUSAL_IMPOSSIBLE,
-                    "past comes from ExactRatio#asDecimal, which builds it at exactly digits places,"
-                            + " and step is new BigDecimal(ONE, digits), at the same places for any"
-                            + " int digits — so the sum adds two unscaled values and builds no"
-                            + " digit to align them."),
-            new Permission(
-                    "souther/compiler/partition/CutPosition#justBeyond(Lsouther/compiler/numeric/"
-                            + "Towards;I)Lsouther/compiler/partition/CutPosition$JustBeyond;"
-                            + " subtract(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
-                    Reason.REFUSAL_IMPOSSIBLE,
-                    "Same equal-scale reasoning as the add above."),
-            new Permission(
                     "souther/compiler/partition/FixtureTemplate#decimal(Ljava/math/BigDecimal;)"
                             + "Lsouther/compiler/partition/FixtureTemplate; toPlainString()Ljava/"
                             + "lang/String;",
@@ -233,10 +221,11 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                             + "ExactRatio;Lsouther/compiler/inputs/SearchRegion;)Lsouther/compiler/"
                             + "partition/LevelRealizer$Reached; add(Ljava/math/BigDecimal;)Ljava/"
                             + "math/BigDecimal;",
-                    Reason.REFUSAL_IMPOSSIBLE,
-                    "first and by were aligned to one scale immediately before this loop runs, and"
-                            + " a same-scale sum can never leave the range a scale holds, whatever"
-                            + " that scale turned out to be."),
+                    Reason.REFUSAL_TRANSLATED,
+                    "first and by share a scale, so no step builds digits to align them; a step to"
+                            + " a value with more digits than the host holds is caught and the run"
+                            + " carried on in exact ratios from the value just tried, which records"
+                            + " the value it could not hold. No step is taken past last."),
             new Permission(
                     "souther/compiler/partition/TermRealizations#atThoseParts(Ljava/util/Map;"
                             + "Lsouther/compiler/types/Type;Lsouther/compiler/check/Carrier;"
@@ -245,8 +234,10 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                             + "Ljava/math/BigDecimal;",
                     Reason.REFUSAL_IMPOSSIBLE,
                     "seconds starts at BigDecimal.ZERO and admitted.get(0) comes from the private"
-                            + " wholeNumbers, which builds every candidate as new BigDecimal of a"
-                            + " BigInteger — so this add is always scale-nought-plus-scale-nought."),
+                            + " wholeNumbers over the window this method writes, 0 to many() - 1,"
+                            + " built as new BigDecimal of a BigInteger — so every term is scale"
+                            + " nought, each part at most 59 times at most 3600, and the sum at"
+                            + " most 86399."),
             new Permission(
                     "souther/compiler/partition/TermRealizations#atThoseParts(Ljava/util/Map;"
                             + "Lsouther/compiler/types/Type;Lsouther/compiler/check/Carrier;"
@@ -254,7 +245,8 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                             + "partition/TermRealizations$Realization; multiply(Ljava/math/"
                             + "BigDecimal;)Ljava/math/BigDecimal;",
                     Reason.REFUSAL_IMPOSSIBLE,
-                    "Both operands scale nought: a whole-number count times a fixed enum constant"
+                    "Both operands scale nought and small: a count from the window 0 to many() - 1"
+                            + " this method writes, times a fixed enum constant"
                             + " (each.getKey().seconds())."),
             new Permission(
                     "souther/compiler/partition/TermRealizations#whole(Lsouther/compiler/numeric/"

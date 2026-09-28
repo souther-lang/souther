@@ -143,6 +143,15 @@ public sealed interface ParseMessage extends Message {
     @Code(DiagnosticCode.E2305)
     record AnIntegerLiteralIsOutsideInt(String written) implements ParseMessage, Reported {}
 
+    /**
+     * A decimal literal with more digits than any {@code Decimal} holds.
+     *
+     * <p>Not echoed: a literal this long is hundreds of millions of characters, and the caret
+     * already says which one it is.
+     */
+    @Code(DiagnosticCode.E2305)
+    record ADecimalLiteralHasMoreDigitsThanADecimalHolds() implements ParseMessage, Reported {}
+
     @Code(DiagnosticCode.E2305)
     record AStringLiteralIsNotClosed() implements ParseMessage, Reported {}
 

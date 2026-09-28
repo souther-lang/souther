@@ -9,6 +9,7 @@ import souther.compiler.numeric.UnheldNumber;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.util.OptionalInt;
 
 /**
@@ -326,23 +327,32 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
         if (line == null) {
             return new JustBeyond.NoNumericPlace();
         }
-        return switch (line.asDecimal(towards == Towards.ABOVE
-                ? java.math.RoundingMode.CEILING : java.math.RoundingMode.FLOOR, digits)) {
-            case ExactAnswer.Unheld<BigDecimal> unheld -> new JustBeyond.NotWorkedOut(unheld.why());
-            case ExactAnswer.Held<BigDecimal> held -> {
-                BigDecimal past = held.value();
-                // Strictly past, which rounding gives only where the line is not itself a number of
-                // that many digits. A line the quantity does stand at rounds to itself, and the run
-                // beyond it does not hold it.
-                if (ExactRatio.of(past).compareTo(line) == 0) {
-                    // One of the last of those places, written at exactly that many of them —
-                    // the scale `past` came back at — so the step and `past` share a scale for
-                    // any `digits` either side of nought, and adding them builds no digit.
-                    BigDecimal step = new BigDecimal(BigInteger.ONE, digits);
-                    past = towards == Towards.ABOVE ? past.add(step) : past.subtract(step);
-                }
-                yield new JustBeyond.At(new Count(past));
+        RoundingMode away = towards == Towards.ABOVE ? RoundingMode.CEILING : RoundingMode.FLOOR;
+        BigDecimal rounded;
+        switch (line.asDecimal(away, digits)) {
+            case ExactAnswer.Held<BigDecimal> held -> rounded = held.value();
+            case ExactAnswer.Unheld<BigDecimal> unheld -> {
+                return new JustBeyond.NotWorkedOut(unheld.why());
             }
+        }
+        // Strictly past, which rounding gives only where the line is not itself a number of that
+        // many digits. A line the quantity does stand at rounds to itself, and the run beyond it
+        // does not hold it.
+        if (ExactRatio.of(rounded).compareTo(line) != 0) {
+            return new JustBeyond.At(new Count(rounded));
+        }
+        // One of the last of those places further on, added as numbers: the sum of the line and
+        // one step can be a number with more digits than the host holds, which is said rather than
+        // let a decimal sum throw over it.
+        ExactRatio step = ExactRatio.of(new BigDecimal(BigInteger.ONE, digits));
+        ExactAnswer<BigDecimal> past = switch (towards == Towards.ABOVE
+                ? line.plus(step) : line.minus(step)) {
+            case ExactAnswer.Held<ExactRatio> beyond -> beyond.value().asDecimal(away, digits);
+            case ExactAnswer.Unheld<ExactRatio> unheld -> ExactAnswer.unheld(unheld.why());
+        };
+        return switch (past) {
+            case ExactAnswer.Held<BigDecimal> at -> new JustBeyond.At(new Count(at.value()));
+            case ExactAnswer.Unheld<BigDecimal> unheld -> new JustBeyond.NotWorkedOut(unheld.why());
         };
     }
 

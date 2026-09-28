@@ -65,6 +65,9 @@ public final class AstBuilder {
     /** The magnitude of the least {@code Int}, one past the greatest: written only under a minus. */
     private static final BigInteger LEAST_INT_MAGNITUDE = GREATEST_INT.add(BigInteger.ONE);
 
+    /** How many digits the greatest {@code Int} is written in, which no {@code Int} has more of. */
+    private static final int GREATEST_INT_DIGITS = GREATEST_INT.toString().length();
+
     /** What this text is made of and where each of it sits — the one place a place is made from a
      *  text, so nothing below here counts its tokens again. */
     private final SourceLayout layout;
@@ -988,7 +991,7 @@ public final class AstBuilder {
         if (operand.kind() == SyntaxKind.LITERAL_EXPR) {
             SyntaxToken t = firstMeaningfulToken(operand);
             if (t.kind() == SyntaxKind.INT_LIT
-                    && new BigInteger(t.text()).equals(LEAST_INT_MAGNITUDE)) {
+                    && LEAST_INT_MAGNITUDE.equals(intMagnitude(t.text()))) {
                 return new Ast.IntLit(Long.MIN_VALUE, pos(n), region(n));
             }
         }
@@ -1004,13 +1007,13 @@ public final class AstBuilder {
         Region region = regionOf(t);
         return switch (t.kind()) {
             case INT_LIT -> {
-                BigInteger magnitude = new BigInteger(t.text());
-                if (magnitude.compareTo(GREATEST_INT) > 0) {
+                BigInteger magnitude = intMagnitude(t.text());
+                if (magnitude == null || magnitude.compareTo(GREATEST_INT) > 0) {
                     throw error(pos, new ParseMessage.AnIntegerLiteralIsOutsideInt(t.text()));
                 }
                 yield new Ast.IntLit(magnitude.longValueExact(), pos, region);
             }
-            case DECIMAL_LIT -> new Ast.DecimalLit(decimalWritten(t.text()), pos, region);
+            case DECIMAL_LIT -> new Ast.DecimalLit(decimalWritten(t.text(), pos), pos, region);
             case STRING_LIT -> new Ast.StringLit(stringValue(t), pos, region);
             case TRUE_KW -> new Ast.BoolLit(true, pos, region);
             case FALSE_KW -> new Ast.BoolLit(false, pos, region);
@@ -2154,15 +2157,30 @@ public final class AstBuilder {
     }
 
     /**
+     * The magnitude an integer literal's digits write, or null where they have more significant
+     * digits than the greatest {@code Int} — which is outside {@code Int} however many more there
+     * are, and is said without building a whole number of that many digits.
+     */
+    private static BigInteger intMagnitude(String digits) {
+        int first = 0;
+        while (first < digits.length() - 1 && digits.charAt(first) == '0') {
+            first++;
+        }
+        String significant = digits.substring(first);
+        return significant.length() > GREATEST_INT_DIGITS ? null : new BigInteger(significant);
+    }
+
+    /**
      * The number a decimal literal's token writes.
      *
      * <p>Digits, and a point between two runs of them where there is one — what the lexer emits a
      * decimal literal as, asked again here where the number is read so that nothing past this
      * line leans on another module's scanner. Of that shape, and shorter than a {@code String}
-     * can be, the text has fewer places than an {@code int} counts, so it is a decimal
-     * {@code BigDecimal} reads without refusing.
+     * can be, the text has fewer places than an {@code int} counts. What it can still have is more
+     * digits than a whole number the host holds, which no {@code Decimal} holds either, and that
+     * is said to the author rather than let the parse throw.
      */
-    private static BigDecimal decimalWritten(String raw) {
+    private BigDecimal decimalWritten(String raw, SourcePos pos) {
         String digits = stripDecimalSuffix(raw);
         int point = digits.indexOf('.');
         String whole = point < 0 ? digits : digits.substring(0, point);
@@ -2172,7 +2190,11 @@ public final class AstBuilder {
                     "a decimal literal's token is not digits with a point between two runs of them: "
                             + raw);
         }
-        return new BigDecimal(digits);
+        try {
+            return new BigDecimal(digits);
+        } catch (NumberFormatException | ArithmeticException tooManyDigits) {
+            throw error(pos, new ParseMessage.ADecimalLiteralHasMoreDigitsThanADecimalHolds());
+        }
     }
 
     private static boolean allDigits(String text) {
