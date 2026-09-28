@@ -15,10 +15,10 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Every nullary value this module declares whose body states a type one of this module's own
- * behaviors declares a parameter at, keyed by that type — the candidates a class-partitioning
- * search may offer as a baseline for a parameter of that type, before any row or fake ever names
- * one.
+ * Every nullary value this module declares or imports whose body states a type one of this
+ * module's own behaviors declares a parameter at, keyed by that type — the candidates a
+ * class-partitioning search may offer as a baseline for a parameter of that type, before any row
+ * or fake ever names one.
  *
  * <p>Narrowed to those types and not every type a nullary value happens to build: a candidate this
  * finds is minted a {@link FixtureValueEntries.Emitted fixture entry} whether or not a search ever
@@ -47,16 +47,21 @@ import java.util.Set;
  * a surface being assembled already holds — so this runs at assembly time and its answer is ready
  * before {@link FixtureValueEntries} mints anything.
  *
- * <p>Candidates themselves stay the module's own — {@code table} below is built with no imports —
- * but reading an own candidate's declared type still needs to read past a call the candidate's own
- * body makes of an imported helper, the way {@code let vip = of(Gold)} reads as {@code Customer}
- * whether {@code of} is this module's own or one it imports. {@code importedForEvidence} is that:
- * {@link Bodies#publishedByQualifiedName}'s answer, which reads each imported name directly off the
- * module that declares it rather than through {@link Bodies.ImportedDefinitions}'s published-body
- * closure — that closure needs {@code Shapes.ClausesTakenIn} of this module and would cycle back
- * into this same {@code CheckSurface}, the shape {@code DeclaredTypeReading}'s checked-world {@code
- * FieldTypes} already refuses. Widening the candidates themselves to what a module imports is a
- * different question, still open ({@code CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest.anImportedValueIsNotACandidateYet}).
+ * <p>Candidates are the module's own and every value its own import lines admit, both read off one
+ * table: {@code importedForEvidence} is handed to {@link HelperTable#of} as the table's own
+ * imported map, so an imported nullary value is reached under its {@link Hir.FnDef#takenOnAs()}
+ * exactly the way a name an own body actually calls would be. {@code importedForEvidence} is wider
+ * than the leaves an import line admits, though — {@link Bodies#publishedByQualifiedName} carries
+ * every further definition a leaf's own body reaches in turn, the way {@code Bodies.ImportedDefinitions}
+ * would, so that reading a candidate's declared type can read past a call the candidate's own body
+ * makes of an imported helper, the way {@code let vip = of(Gold)} reads as {@code Customer} whether
+ * {@code of} is this module's own or one it imports. A value only a leaf's own body reaches that
+ * way — {@code base}, where an import line admits only {@code listed} and {@code listed}'s own body
+ * spreads {@code base} — is not itself a candidate: {@code base} is {@code shared.people}'s to
+ * name, an import line here never having admitted it, so {@code importedLeaves} — {@link
+ * Bodies#importedLeaves}'s answer, the leaves an import line actually admits — is what narrows the
+ * candidate loop back down to the module's own plus those, while {@code importedForEvidence} still
+ * widens what {@link DeclaredTypeReading} may read a candidate's own body against.
  *
  * <p>{@link InliningPolicy#DISCHARGE} and not {@link InliningPolicy#FULL}: a candidate drawn from the
  * standard library is not a value this module's own search reasons about, and {@code FULL} is the
@@ -84,14 +89,14 @@ public final class TypedFixtureValues {
     }
 
     /**
-     * The candidates {@code module} states, keyed by the type each is declared to build, in the
-     * order {@link HelperTable#reachable} reaches them — one of {@code module}'s own {@code
-     * SpecBehavior}s' own declared input types, and no other.
+     * The candidates {@code module} states or imports, keyed by the type each is declared to
+     * build, in the order {@link HelperTable#reachable} reaches them — one of {@code module}'s own
+     * {@code SpecBehavior}s' own declared input types, and no other.
      */
     public static Map<TypeSymbol, List<ReachName.Declaration>> of(Hir.Module module,
-            Map<String, Hir.FnDef> importedForEvidence, Stdlib stdlib, Symbols symbols,
-            PublishedDeclarations published, DeclarationKinds kinds, NewtypeInners fieldWraps,
-            Map<ValueName.Behavior, Sig> behaviors) {
+            Map<String, Hir.FnDef> importedForEvidence, Set<ValueName.Helper> importedLeaves,
+            Stdlib stdlib, Symbols symbols, PublishedDeclarations published, DeclarationKinds kinds,
+            NewtypeInners fieldWraps, Map<ValueName.Behavior, Sig> behaviors) {
         Set<String> generated = new LinkedHashSet<>();
         for (Hir.BehaviorDef behavior : module.behaviors()) {
             if (behavior instanceof Hir.SpecBehavior spec) {
@@ -116,12 +121,14 @@ public final class TypedFixtureValues {
         if (relevant.isEmpty()) {
             return Map.of();
         }
-        // Own only: an imported value is not a candidate yet, whatever the search may read past to
-        // type one of this module's own.
-        HelperTable table = HelperTable.of(module, Map.of(), InliningPolicy.DISCHARGE, stdlib);
-        // Imported first, own after: a name this module both imports and declares reaches its own
-        // declaration, and the later put is the one DeclaredTypeReading reads.
-        Map<String, Hir.FnDef> readableBySpelling = new LinkedHashMap<>(importedForEvidence);
+        // Own and imported alike: importedForEvidence is exactly the closure of what this module's
+        // import lines admit, HelperTable.of's own imported branch reaches each under its
+        // takenOnAs() the same way it would for a name an own body actually calls — so handing it
+        // the table's imported map, rather than an empty one, is what makes an imported value a
+        // candidate too, with no second reading of what "imported" means built here.
+        HelperTable table = HelperTable.of(module, importedForEvidence, InliningPolicy.DISCHARGE,
+                stdlib);
+        Map<String, Hir.FnDef> readableBySpelling = new LinkedHashMap<>();
         for (HelperEntry entry : table.reachable().values()) {
             readableBySpelling.put(entry.address().text(), entry.definition());
         }
@@ -134,6 +141,13 @@ public final class TypedFixtureValues {
                 readableBySpelling, behaviors);
         Map<TypeSymbol, List<ReachName.Declaration>> out = new LinkedHashMap<>();
         for (HelperEntry entry : table.reachable().values()) {
+            // Own, or one of the leaves an import line here actually admits — never a further
+            // definition only carried in importedForEvidence so a call past it could be read
+            // (this class's own doc, `base`).
+            if (entry.reachedAs() instanceof ReachName.OfModule imported
+                    && !importedLeaves.contains(imported.denotes())) {
+                continue;
+            }
             Hir.FnDef definition = entry.definition();
             if (!definition.params().isEmpty()
                     || !(definition.body() instanceof Hir.FnBody.Written written)

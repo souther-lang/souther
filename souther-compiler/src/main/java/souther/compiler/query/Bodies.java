@@ -1814,6 +1814,26 @@ public final class Bodies {
     }
 
     /**
+     * The declaration each name this module's own import lines admit denotes — never what {@link
+     * #publishedByQualifiedName} carries beside it.
+     *
+     * <p>{@link #publishedByQualifiedName} closes a direct leaf's body over its own module, and what
+     * travels with it is every further definition that body names in turn — a value a leaf's body
+     * spreads, a recursive helper it calls. Those travel so a reader can type a call the leaf's own
+     * body makes, not because an import line admitted them: nothing here wrote {@code base} where it
+     * wrote {@code listed}, and a value only {@code listed}'s own body reaches is {@code
+     * shared.people}'s to name, never this module's. {@link TypedFixtureValues} reads this to keep
+     * its candidates to the leaves an import line actually admits, while still reading {@link
+     * #publishedByQualifiedName}'s wider table to type what a candidate's own body calls past.
+     */
+    public static Set<ValueName.Helper> importedLeaves(Db db, String module) {
+        Set<ValueName.Helper> out = new LinkedHashSet<>();
+        leaves(db, module).values()
+                .forEach(leave -> out.add(new ValueName.Helper(leave.module(), leave.name())));
+        return out;
+    }
+
+    /**
      * What the modules this one imports publish to it, each closed where it was written and named by
      * the module that declares it.
      *

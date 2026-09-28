@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -61,7 +62,8 @@ class WhereABehaviorGetsItsBodyIsPartOfWhatAnAssemblyAnswersTest {
         }
         return CheckSurface.assemble(surface.settling(), normalized, desugared,
                 DeclarationNewtypes.NONE, Map.of(), FakeTables.classify(surface.settling().module()),
-                bodies, Map.of(), DefaultStdlib.get(), ResolvedSymbols.none(DefaultStdlib.get()),
+                bodies, Map.of(), Set.of(), DefaultStdlib.get(),
+                ResolvedSymbols.none(DefaultStdlib.get()),
                 PublishedDeclarations.NONE, DeclarationKinds.NONE, NewtypeInners.NONE);
     }
 }

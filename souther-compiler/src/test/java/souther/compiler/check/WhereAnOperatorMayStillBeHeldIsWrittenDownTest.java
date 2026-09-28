@@ -324,8 +324,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "which operands a string joined by another is no shorter than"),
             new Held("souther.compiler.core.GrowingFold.appended",
                     "what a fold appends, which is what joining strings is"),
-            new Held("souther.compiler.examples.FixtureReader.fold",
-                    "what the operator computes of two numbers a fixture wrote"),
             new Held("souther.compiler.codegen.BodyGen.binary",
                     "which instructions the operator is emitted as, and — for the six it emits a"
                             + " comparison for — the recognition everything below it holds"),

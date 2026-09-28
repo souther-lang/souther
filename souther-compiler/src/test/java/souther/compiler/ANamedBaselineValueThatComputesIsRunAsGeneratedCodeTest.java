@@ -172,4 +172,59 @@ class ANamedBaselineValueThatComputesIsRunAsGeneratedCodeTest {
                                 row.inputs().stream().map(i -> i.text()).toList()))
                         .toList());
     }
+
+    private static final String LIB_WITH_AN_UNROWED_BASELINE = """
+            module lib exposing ( C, B, F, Amount, Cond, bump, baseline )
+
+            data C
+            data B
+            data F = C | B
+
+            data Amount = Decimal
+            data Cond = { f: F, amount: Amount }
+
+            let bump (x: Decimal) = x + 1.0m
+            let baseline = Cond { f = B, amount = Amount(bump(3.0m)) }
+            """;
+
+    private static final String IMPORTS_AN_UNROWED_BASELINE = """
+            module demo
+
+            import lib ( C, B, F, Amount, Cond, bump, baseline )
+
+            data Out = { n: Int }
+
+            behavior calc : (c: Cond) -> Out
+                constructs Out
+
+            let calc (c) = Out { n = 0 }
+            """;
+
+    /**
+     * The same shape as {@link #theSearchSpreadsAGeneratedRowOverAComputedBaselineNoRowEverNames},
+     * with {@code baseline} declared in a module {@code demo} imports rather than in {@code demo}
+     * itself, and no row anywhere — in either module — ever naming it. {@link TypedFixtureValues}
+     * reads {@code lib.baseline} as a candidate through {@code importedForEvidence}, so the search
+     * still offers it, and the fixture entry minted for it runs {@code bump} as generated code
+     * rather than through {@code FixtureReader.raw}'s interpreter, which has no case for a helper
+     * application at all.
+     */
+    @Test
+    void theSearchSpreadsAGeneratedRowOverAnImportedComputedBaselineNoRowEverNames() {
+        Compilation compilation = Compilation.ofSources(
+                List.of(LIB_WITH_AN_UNROWED_BASELINE, IMPORTS_AN_UNROWED_BASELINE),
+                souther.compiler.meta.ModulePath.EMPTY);
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        Map<String, Adequacy.Filling> all =
+                Adequacy.generatedOf(compilation.db(), "demo");
+        assertNotNull(all, "the model under test compiles");
+
+        List<Generator.GeneratedRow> rows = all.get("calc").composed().rows();
+        assertEquals(List.of("Cond { ...lib.baseline, f = C }", "lib.baseline"),
+                rows.stream()
+                        .map(row -> String.join(", ",
+                                row.inputs().stream().map(i -> i.text()).toList()))
+                        .toList());
+    }
 }
