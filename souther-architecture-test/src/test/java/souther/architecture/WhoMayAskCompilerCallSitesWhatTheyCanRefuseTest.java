@@ -21,8 +21,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * before the call) that turns the refusal into a meaning the caller's contract already names — an
  * {@code Optional.empty()}, a {@code null}, a {@code Cardinality.UNKNOWN}, or a documented exception
  * naming a broken internal invariant rather than the raw {@code java.math} one. A row is
- * {@link Reason#REFUSAL_IMPOSSIBLE} where a local fact rules the refusal out outright: a fixed
- * divisor that is never nought, two operands proven to share one scale, a value already proven
+ * {@link Reason#REFUSAL_IMPOSSIBLE} where a local fact rules the refusal out outright: a division
+ * whose divisor is never nought and whose operands' scales are both bounded — a divisor that is
+ * never nought rules out only one of the two refusals a division has, the other being the room the
+ * quotient's scale needs — two operands proven to share one scale, a value already proven
  * whole and in range by a choke point the same file enforces. Where the proof holds only because of
  * what one particular caller happens to pass — {@link souther.compiler.numeric.Dates#dateAt},
  * {@link souther.compiler.frontend.AstBuilder}'s decimal literal — the row's {@code why} says so,
@@ -336,13 +338,19 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                     "souther/compiler/semantics/OperationFacts#minutesAcrossEveryDateTime()J"
                             + " divideToIntegralValue(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
                     Reason.REFUSAL_IMPOSSIBLE,
-                    "Divisor is the literal constant BigDecimal.valueOf(60), never nought."),
+                    "Both operands are fixed and scale nought: the dividend is DateTimes.MAX minus"
+                            + " DateTimes.MIN, each Count.of(long) of LocalDateTime.MIN/MAX's epoch"
+                            + " second, and the divisor is BigDecimal.valueOf(60). That rules out"
+                            + " divideToIntegralValue's scale-difference refusal as well as its"
+                            + " zero-divisor one — a non-zero divisor alone would rule out only the"
+                            + " second."),
             new Permission(
                     "souther/compiler/semantics/OperationFacts#minutesAcrossEveryDateTime()J"
                             + " longValueExact()J",
                     Reason.REFUSAL_IMPOSSIBLE,
-                    "Operates on (DateTimes.MAX - DateTimes.MIN) / 60, fixed compile-time JDK"
-                            + " epoch-second constants roughly ±5e15 apart — well inside long."),
+                    "Operates on (DateTimes.MAX - DateTimes.MIN) / 60: LocalDateTime.MIN/MAX's epoch"
+                            + " seconds are about ±3.2e16, so the quotient is about 1.05e15 — well"
+                            + " inside long."),
             new Permission(
                     "souther/compiler/semantics/OperationFacts#minutesAcrossEveryDateTime()J"
                             + " subtract(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
