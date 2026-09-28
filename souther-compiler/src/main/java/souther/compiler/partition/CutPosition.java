@@ -8,6 +8,7 @@ import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.UnheldNumber;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.OptionalInt;
 
 /**
@@ -334,7 +335,10 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
                 // that many digits. A line the quantity does stand at rounds to itself, and the run
                 // beyond it does not hold it.
                 if (ExactRatio.of(past).compareTo(line) == 0) {
-                    BigDecimal step = BigDecimal.ONE.movePointLeft(digits);
+                    // One of the last of those places, written at exactly that many of them —
+                    // the scale `past` came back at — so the step and `past` share a scale for
+                    // any `digits` either side of nought, and adding them builds no digit.
+                    BigDecimal step = new BigDecimal(BigInteger.ONE, digits);
                     past = towards == Towards.ABOVE ? past.add(step) : past.subtract(step);
                 }
                 yield new JustBeyond.At(new Count(past));

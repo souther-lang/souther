@@ -1185,7 +1185,7 @@ final class TermRealizations {
     private static Tried wholeNumbers(NumericSet wanted, Carrier on, long from, long to,
                                       int many) {
         return wholeNumbers(wanted.extent(), at -> wanted.holds(at, on),
-                BigDecimal.valueOf(from), BigDecimal.valueOf(to), many);
+                BigInteger.valueOf(from), BigInteger.valueOf(to), many);
     }
 
     /**
@@ -1197,19 +1197,22 @@ final class TermRealizations {
      * {@link NumericSet#extent()} beside {@link NumericSet#holds}.
      */
     private static Tried wholeNumbers(NumericDomain.Bounds lies, Predicate<Place> holds,
-                                      BigDecimal from, BigDecimal to, int many) {
+                                      BigInteger from, BigInteger to, int many) {
         // Narrowed to where the set lies before a step is taken. The window is as wide as the kind
         // of number goes, and stepping through the part of it the set is nowhere near is a walk
         // over the kind rather than a choice between the numbers the rules admit.
-        BigDecimal first = startOf(lies.min(), from);
-        BigDecimal last = endOf(lies.max(), to);
+        //
+        // Walked as whole numbers and not as decimals. A whole number has no places, so no end a
+        // rule wrote to however many of them is one the step from it has to be written at.
+        BigInteger first = startOf(lies.min(), from);
+        BigInteger last = endOf(lies.max(), to);
         List<Place> out = new ArrayList<>();
         // One past what is handed over, so that a window holding exactly as many as the figure
         // allows is a window this walked to the end of. Stopped at the figure itself, a set of
         // exactly that many numbers comes back as a search that gave something up.
-        for (BigDecimal at = first; at.compareTo(last) <= 0 && out.size() <= many;
-                at = at.add(BigDecimal.ONE)) {
-            Count place = new Count(at);
+        for (BigInteger at = first; at.compareTo(last) <= 0 && out.size() <= many;
+                at = at.add(BigInteger.ONE)) {
+            Count place = new Count(new BigDecimal(at));
             if (holds.test(place)) {
                 out.add(place);
             }
@@ -1223,31 +1226,31 @@ final class TermRealizations {
     /** The first whole number at or above an end, or the window's own start where the set runs
      *  past it or the exact arithmetic could not hold the edge — the same answer either way, since
      *  a start this cannot narrow is one the walk is sound to leave as wide as the window itself. */
-    private static BigDecimal startOf(Endpoint end, BigDecimal from) {
+    private static BigInteger startOf(Endpoint end, BigInteger from) {
         if (end == null || !(end.at() instanceof Count count)) {
             return from;
         }
         if (!(count.exactly().ceiling() instanceof ExactAnswer.Held<BigInteger> held)) {
             return from;
         }
-        BigDecimal edge = new BigDecimal(held.value());
-        return from.max(!end.inclusive() && edge.compareTo(count.at()) == 0
-                ? edge.add(BigDecimal.ONE) : edge);
+        BigInteger edge = held.value();
+        return from.max(!end.inclusive() && ExactRatio.of(edge).compareTo(count.exactly()) == 0
+                ? edge.add(BigInteger.ONE) : edge);
     }
 
     /** The last whole number at or below an end, or the window's own end where the set runs past
      *  it or the exact arithmetic could not hold the edge, read the same way {@link #startOf}
      *  reads it. */
-    private static BigDecimal endOf(Endpoint end, BigDecimal to) {
+    private static BigInteger endOf(Endpoint end, BigInteger to) {
         if (end == null || !(end.at() instanceof Count count)) {
             return to;
         }
         if (!(count.exactly().floor() instanceof ExactAnswer.Held<BigInteger> held)) {
             return to;
         }
-        BigDecimal edge = new BigDecimal(held.value());
-        return to.min(!end.inclusive() && edge.compareTo(count.at()) == 0
-                ? edge.subtract(BigDecimal.ONE) : edge);
+        BigInteger edge = held.value();
+        return to.min(!end.inclusive() && ExactRatio.of(edge).compareTo(count.exactly()) == 0
+                ? edge.subtract(BigInteger.ONE) : edge);
     }
 
     /**
@@ -1381,10 +1384,15 @@ final class TermRealizations {
         OrderedInterval reaches = on.extent();
         NumericDomain.Bounds within =
                 lies.meet(new NumericDomain.Bounds(reaches.low(), reaches.high()));
+        // The window is the whole numbers the run's own ends round out to. Where an end rounds to
+        // no whole number the host holds, there is no window to step through, and the run is
+        // looked in the way one open at that end is.
         if (lies.min() != null && lies.max() != null
                 && within.min().at() instanceof Count low
-                && within.max().at() instanceof Count high) {
-            return wholeNumbers(within, holds, low.at(), high.at(),
+                && within.max().at() instanceof Count high
+                && low.exactly().floor() instanceof ExactAnswer.Held<BigInteger> from
+                && high.exactly().ceiling() instanceof ExactAnswer.Held<BigInteger> to) {
+            return wholeNumbers(within, holds, from.value(), to.value(),
                     CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum());
         }
         Place found = on.somethingInside(lies.min(), lies.max());
@@ -1412,8 +1420,14 @@ final class TermRealizations {
         for (Map.Entry<RealizationTarget, BigDecimal> each : by.entrySet()) {
             AskedAt of = asked.get(each.getKey());
             NumericSet wanted = of == null ? null : of.walking();
-            Place quotient = observed.onTheGrid(new Count(
-                    Arithmetic.ATruncatingQuotient.quotientOf(count.at(), each.getValue())));
+            // A candidate whose quotient the exact arithmetic could not hold is one this cannot say
+            // reads back into what was asked, so it is not offered: fewer rows, and never a row at
+            // a number nobody checked.
+            if (!(Arithmetic.ATruncatingQuotient.quotientOf(count.at(), each.getValue())
+                    instanceof ExactAnswer.Held<BigDecimal> read)) {
+                return false;
+            }
+            Place quotient = observed.onTheGrid(new Count(read.value()));
             if (wanted == null || quotient == null || !wanted.holds(quotient, observed)) {
                 return false;
             }
@@ -1509,10 +1523,11 @@ final class TermRealizations {
      * ({@link #startOf}), and the run of the place is then exactly what those quotients answer.
      */
     private static Place lowestWhoseQuotientIs(Endpoint end, BigDecimal size) {
-        if (!(end.at() instanceof Count count)) {
+        if (!(end.at() instanceof Count count)
+                || !(count.exactly().ceiling() instanceof ExactAnswer.Held<BigInteger> edge)) {
             return null;
         }
-        BigDecimal quotient = startOf(end, count.at());
+        BigInteger quotient = startOf(end, edge.value());
         ExactRatio s = ExactRatio.of(size);
         ExactAnswer<ExactRatio> at;
         if (quotient.signum() < 0) {
@@ -1531,10 +1546,11 @@ final class TermRealizations {
     /** The largest number whose quotient by {@code size} is at or below that end, read as exactly
      *  as the smallest is at the other. */
     private static Place highestWhoseQuotientIs(Endpoint end, BigDecimal size) {
-        if (!(end.at() instanceof Count count)) {
+        if (!(end.at() instanceof Count count)
+                || !(count.exactly().floor() instanceof ExactAnswer.Held<BigInteger> edge)) {
             return null;
         }
-        BigDecimal quotient = endOf(end, count.at());
+        BigInteger quotient = endOf(end, edge.value());
         ExactRatio s = ExactRatio.of(size);
         ExactAnswer<ExactRatio> at;
         if (quotient.signum() > 0) {

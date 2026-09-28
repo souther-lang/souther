@@ -116,18 +116,43 @@ public record Count(BigDecimal at) implements Place {
     }
 
     /**
-     * The count {@code steps} further along the order.
+     * The count {@code steps} further along the order, or null where no count is that number.
      *
      * <p>Whole steps only. What one step means is the carrier's — a day for a date, a second for a
      * date-time — and every caller stepping a count is stepping over a carrier that has a step at
      * all, which {@link Granularity} is what says.
+     *
+     * <p>Added as numbers and not as the decimals they are written as. A count is the number, and
+     * the places it was written to are no part of where a step lands: {@code 0E-2147483647} is
+     * nought, a whole number an order holds, and the count after it is one. Added as written
+     * decimals, the one step would first be written to the count's two billion places, which no
+     * host holds — the decimal refusing a number that has an answer.
+     *
+     * <p>Null is the one way a sum of two numbers has no answer: no whole number the host holds is
+     * it, so no count is it and no carrier's order has it — the same null {@link #at(ExactRatio)}
+     * answers, and never that this could not work it out.
      */
     public Count plus(long steps) {
-        return new Count(at.add(BigDecimal.valueOf(steps)));
+        return along(ExactRatio.of(steps));
     }
 
+    /** The count {@code steps} back along the order, or null where no count is that number. */
     public Count minus(long steps) {
-        return plus(-steps);
+        return along(ExactRatio.of(steps).negated());
+    }
+
+    private Count along(ExactRatio steps) {
+        return switch (exactly().plus(steps)) {
+            case ExactAnswer.Held<ExactRatio> held -> at(held.value());
+            case ExactAnswer.Unheld<ExactRatio> unheld -> switch (unheld.why()) {
+                case NO_REPRESENTATION_EXISTS -> null;
+                // An exact sum builds the answer's own digits and nothing more, so it is refused
+                // for there being no such whole number and never for a shortage of room.
+                case MORE_ROOM_COULD_ANSWER -> throw new IllegalStateException(
+                        "an exact sum was refused for room, which a sum never needs: " + at
+                                + " and " + steps);
+            };
+        };
     }
 
     /**

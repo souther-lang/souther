@@ -818,7 +818,10 @@ public sealed interface Carrier extends ValueOrder {
         java.math.RoundingMode into = lower ? java.math.RoundingMode.FLOOR
                 : java.math.RoundingMode.CEILING;
         Count step = count(end).rounded(into);
-        return Endpoint.inclusive(lower ? step.plus(1) : step.minus(1));
+        Count beside = lower ? step.plus(1) : step.minus(1);
+        // Where no count is the whole number beside it, the same whole numbers are the ones past
+        // `step` itself, which says it without a number nothing holds.
+        return beside == null ? Endpoint.exclusive(step) : Endpoint.inclusive(beside);
     }
 
     /** The count an end is at. Only reached from the arithmetic above, which every carrier that has
@@ -878,8 +881,14 @@ public sealed interface Carrier extends ValueOrder {
                         }
                     }
                 } else {
-                    stepped.add(count.plus(1));
-                    stepped.add(count.minus(1));
+                    Count above = count.plus(1);
+                    if (above != null) {
+                        stepped.add(above);
+                    }
+                    Count below = count.minus(1);
+                    if (below != null) {
+                        stepped.add(below);
+                    }
                 }
             }
         }
@@ -1482,7 +1491,11 @@ public sealed interface Carrier extends ValueOrder {
         if (!high.inclusive()) {
             last = last.minus(1);
         }
-        for (Count at = first; at.compareTo(last) <= 0; at = at.plus(1)) {
+        // A step no count is has no count past it either, so the places end there.
+        if (first == null || last == null) {
+            return out;
+        }
+        for (Count at = first; at != null && at.compareTo(last) <= 0; at = at.plus(1)) {
             if (out.size() == atMost) {
                 return null;
             }

@@ -13,6 +13,7 @@ import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.Objects;
 
 import souther.compiler.inputs.NumericTerm.Reading;
@@ -169,9 +170,13 @@ final class TermReading {
         // A quotient past the end of what a whole number holds is one no run answers: the smallest
         // of them over minus one is a number the operator aborts at rather than a number a row has.
         // Asked of the carrier, which is where what a whole number stops at is answered.
-        Place quotient = observed.onTheGrid(
-                new Count(Arithmetic.ATruncatingQuotient.quotientOf(count.at(), by)));
-        return quotient == null ? new Reading.NotNumber() : new Reading.Number(quotient);
+        return switch (Arithmetic.ATruncatingQuotient.quotientOf(count.at(), by)) {
+            case ExactAnswer.Unheld<BigDecimal> unheld -> new Reading.NotWorkedOut(unheld.why());
+            case ExactAnswer.Held<BigDecimal> held -> {
+                Place quotient = observed.onTheGrid(new Count(held.value()));
+                yield quotient == null ? new Reading.NotNumber() : new Reading.Number(quotient);
+            }
+        };
     }
 
     /**
@@ -282,10 +287,15 @@ final class TermReading {
         if (!(read instanceof Count count)) {
             return new Reading.NotNumber();
         }
-        java.math.BigDecimal seconds = count.at();
-        return new Reading.Number(Count.of(seconds
-                .divideToIntegralValue(java.math.BigDecimal.valueOf(part.seconds()))
-                .remainder(java.math.BigDecimal.valueOf(part.many()))));
+        // Divided as numbers: which hour, minute or second a count of seconds falls in is a fact
+        // about the number and not the places it came written to, and the whole number of this
+        // part's seconds in it is one the exact arithmetic says it could not hold rather than
+        // one a decimal division throws over.
+        return switch (count.exactly().dividedBy(ExactRatio.of(part.seconds())).truncated()) {
+            case ExactAnswer.Unheld<BigInteger> unheld -> new Reading.NotWorkedOut(unheld.why());
+            case ExactAnswer.Held<BigInteger> whole -> new Reading.Number(Count.of(new BigDecimal(
+                    whole.value().remainder(BigInteger.valueOf(part.many())))));
+        };
     }
 
     /**

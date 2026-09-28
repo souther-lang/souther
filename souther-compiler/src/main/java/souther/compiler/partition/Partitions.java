@@ -1916,7 +1916,7 @@ public final class Partitions {
             return from != null && index == 0 ? from : null;
         }
         Count stepped = Count.number(from).plus(index);
-        return holdsCount(range, stepped) ? stepped : null;
+        return stepped != null && holdsCount(range, stepped) ? stepped : null;
     }
 
     /**
@@ -2072,11 +2072,11 @@ public final class Partitions {
                     : carrier.somethingInside(Endpoint.exclusive(min.at()), max);
         }
         Count up = Count.number(from).plus(1);
-        if (holdsCount(range, up)) {
+        if (up != null && holdsCount(range, up)) {
             return up;
         }
         Count down = Count.number(from).minus(1);
-        return holdsCount(range, down) ? down : null;
+        return down != null && holdsCount(range, down) ? down : null;
     }
 
     /** Whether a range holds a count, with no range holding everything. */

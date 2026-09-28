@@ -1010,8 +1010,7 @@ public final class AstBuilder {
                 }
                 yield new Ast.IntLit(magnitude.longValueExact(), pos, region);
             }
-            case DECIMAL_LIT ->
-                    new Ast.DecimalLit(new BigDecimal(stripDecimalSuffix(t.text())), pos, region);
+            case DECIMAL_LIT -> new Ast.DecimalLit(decimalWritten(t.text()), pos, region);
             case STRING_LIT -> new Ast.StringLit(stringValue(t), pos, region);
             case TRUE_KW -> new Ast.BoolLit(true, pos, region);
             case FALSE_KW -> new Ast.BoolLit(false, pos, region);
@@ -2152,6 +2151,41 @@ public final class AstBuilder {
 
     private static String stripDecimalSuffix(String raw) {
         return raw.endsWith("m") ? raw.substring(0, raw.length() - 1) : raw;
+    }
+
+    /**
+     * The number a decimal literal's token writes.
+     *
+     * <p>Digits, and a point between two runs of them where there is one — what the lexer emits a
+     * decimal literal as, asked again here where the number is read so that nothing past this
+     * line leans on another module's scanner. Of that shape, and shorter than a {@code String}
+     * can be, the text has fewer places than an {@code int} counts, so it is a decimal
+     * {@code BigDecimal} reads without refusing.
+     */
+    private static BigDecimal decimalWritten(String raw) {
+        String digits = stripDecimalSuffix(raw);
+        int point = digits.indexOf('.');
+        String whole = point < 0 ? digits : digits.substring(0, point);
+        String fraction = point < 0 ? "0" : digits.substring(point + 1);
+        if (!allDigits(whole) || !allDigits(fraction)) {
+            throw new IllegalStateException(
+                    "a decimal literal's token is not digits with a point between two runs of them: "
+                            + raw);
+        }
+        return new BigDecimal(digits);
+    }
+
+    private static boolean allDigits(String text) {
+        if (text.isEmpty()) {
+            return false;
+        }
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c < '0' || c > '9') {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

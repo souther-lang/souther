@@ -21,18 +21,25 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * before the call) that turns the refusal into a meaning the caller's contract already names — an
  * {@code Optional.empty()}, a {@code null}, a {@code Cardinality.UNKNOWN}, or a documented exception
  * naming a broken internal invariant rather than the raw {@code java.math} one. A row is
- * {@link Reason#REFUSAL_IMPOSSIBLE} where a local fact rules the refusal out outright: a division
- * whose divisor is never nought and whose operands' scales are both bounded — a divisor that is
- * never nought rules out only one of the two refusals a division has, the other being the room the
- * quotient's scale needs — two operands proven to share one scale, a value already proven
- * whole and in range by a choke point the same file enforces. Where the proof holds only because of
- * what one particular caller happens to pass — {@link souther.compiler.numeric.Dates#dateAt},
- * {@link souther.compiler.frontend.AstBuilder}'s decimal literal — the row's {@code why} says so,
- * naming the caller the proof leans on. {@link Permission#call()} alone is checked against the
- * scanner's population; {@code reason} and {@code why} are for a reader and for the next person to
- * touch a row, not for the assertion — a string list would have let either drift from what the code
- * above it actually does, which is what named the misreading {@link Permission#call()} corrects
- * for {@code Arithmetic$ATruncatingQuotient#quotientOf}, below.
+ * {@link Reason#REFUSAL_IMPOSSIBLE} where a fact of the calling method's own body rules the refusal
+ * out outright: a division whose divisor is never nought and whose operands' scales are both
+ * bounded — a divisor that is never nought rules out only one of the two refusals a division has,
+ * the other being the room the quotient's scale needs — a sum or difference of two operands that
+ * share one scale or whose scales are both bounded, a value the same method has already proven
+ * whole and in range. A sum is written at the finer of its two scales, so a nought written to two
+ * billion places turns an addend of one into two billion digits: that a result's scale is a valid
+ * {@code int} is no proof.
+ *
+ * <p><b>The proof is the method's, never its callers'.</b> The scanner sees the call site and
+ * nothing that reaches it, so a proof leaning on what a caller passes, what a declaration table
+ * allows or what another module's scanner emits is one a new caller makes false with this
+ * population unchanged. Where a call has a precondition, the method checks it itself, or does the
+ * arithmetic as numbers and has no such call. The one reach a row may make is into a private
+ * helper of the same class, whose callers are all in the file.
+ *
+ * <p>{@link Permission#call()} alone is checked against the scanner's population; {@code reason}
+ * and {@code why} are for a reader and for the next person to touch a row, not for the assertion —
+ * a string list would have let either drift from what the code above it actually does.
  */
 class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
 
@@ -112,14 +119,13 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                     "try/catch(ArithmeticException) answers null, this method's own documented"
                             + " answer for a scale the run time could not be handed."),
             new Permission(
-                    "souther/compiler/frontend/AstBuilder$Reading#literal(Lsouther/compiler/cst/"
-                            + "SyntaxNode;)Lsouther/compiler/ast/Ast$Expr; <init>(Ljava/lang/"
-                            + "String;)V",
+                    "souther/compiler/frontend/AstBuilder#decimalWritten(Ljava/lang/String;)"
+                            + "Ljava/math/BigDecimal; <init>(Ljava/lang/String;)V",
                     Reason.REFUSAL_IMPOSSIBLE,
-                    "Single-caller-dependent on souther-syntax's own lexer grammar: a DECIMAL_LIT"
-                            + " token only ever matches digits(.digits)?, optionally suffixed m,"
-                            + " which stripDecimalSuffix leaves as exactly what BigDecimal(String)"
-                            + " always parses. Not provable from this file alone."),
+                    "The method checks the text is digits with at most one point between two runs"
+                            + " of them before parsing, and a String of that shape is shorter than"
+                            + " Integer.MAX_VALUE, so its places fit an int scale and"
+                            + " BigDecimal(String) parses it."),
             new Permission(
                     "souther/compiler/inputs/Distinctions#whole(Ljava/math/BigDecimal;)Z"
                             + " longValueExact()J",
@@ -127,42 +133,12 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                     "try/catch(ArithmeticException) answers false, this predicate's own documented"
                             + " answer for a value that is not a whole number this host holds."),
             new Permission(
-                    "souther/compiler/inputs/TermReading#partOfTime(Lsouther/compiler/semantics/"
-                            + "TakenAs$TimePart;Lsouther/compiler/observe/ObservedValue;Lsouther/"
-                            + "compiler/check/Carrier;)Lsouther/compiler/inputs/NumericTerm"
-                            + "$Reading; divideToIntegralValue(Ljava/math/BigDecimal;)Ljava/math/"
-                            + "BigDecimal;",
-                    Reason.REFUSAL_IMPOSSIBLE,
-                    "TakenAs.PartOfTime is only ever declared for Time's own operations"
-                            + " (OperationFacts: Time.hour/minute/second), so the dividend is a"
-                            + " Times-carrier count — scale 0, bounded 0..86399 by Times.MIN/MAX —"
-                            + " and the divisor is a fixed positive TimePart constant (3600/60/1)."
-                            + " divideToIntegralValue's own scale-difference bound, not only a"
-                            + " non-zero divisor, is what this rules out."),
-            new Permission(
-                    "souther/compiler/inputs/TermReading#partOfTime(Lsouther/compiler/semantics/"
-                            + "TakenAs$TimePart;Lsouther/compiler/observe/ObservedValue;Lsouther/"
-                            + "compiler/check/Carrier;)Lsouther/compiler/inputs/NumericTerm"
-                            + "$Reading; remainder(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
-                    Reason.REFUSAL_IMPOSSIBLE,
-                    "Same Times-bounded dividend as the divideToIntegralValue above, same fixed"
-                            + " positive divisor family (part.many())."),
-            new Permission(
-                    "souther/compiler/numeric/Count#plus(J)Lsouther/compiler/numeric/Count;"
-                            + " add(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
-                    Reason.REFUSAL_IMPOSSIBLE,
-                    "at.add(BigDecimal.valueOf(steps)): the addend is always scale nought, and a sum"
-                            + " with one side at scale nought needs no room past what the other"
-                            + " side's own scale — already a valid int — already fits, whatever that"
-                            + " scale is."),
-            new Permission(
                     "souther/compiler/numeric/Dates#dateAt(Lsouther/compiler/numeric/Place;)"
                             + "Ljava/time/LocalDate; longValueExact()J",
                     Reason.REFUSAL_IMPOSSIBLE,
-                    "Single-caller-dependent: no local guard here, but the one caller outside"
-                            + " Carrier, TermReading#partOfDate, checks observed.onTheGrid(count)"
-                            + " != null first, which proves Days' own wholeness and extent before"
-                            + " this runs."),
+                    "The method refuses a count that is not whole or lies outside LocalDate's"
+                            + " epoch days before this line, so the value is a whole number inside"
+                            + " long, whatever scale it was written at."),
             new Permission(
                     "souther/compiler/numeric/Instants#countAt(Ljava/time/Instant;)Lsouther/"
                             + "compiler/numeric/Count; add(Ljava/math/BigDecimal;)Ljava/math/"
@@ -206,16 +182,10 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                             + "Towards;I)Lsouther/compiler/partition/CutPosition$JustBeyond;"
                             + " add(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
                     Reason.REFUSAL_IMPOSSIBLE,
-                    "past comes from ExactRatio#asDecimal rounded to exactly digits places, and"
-                            + " step is ONE.movePointLeft(digits) — both share that same scale, so"
-                            + " the sum needs no room past a scale it already has, whatever it is."),
-            new Permission(
-                    "souther/compiler/partition/CutPosition#justBeyond(Lsouther/compiler/numeric/"
-                            + "Towards;I)Lsouther/compiler/partition/CutPosition$JustBeyond;"
-                            + " movePointLeft(I)Ljava/math/BigDecimal;",
-                    Reason.REFUSAL_IMPOSSIBLE,
-                    "ONE has scale nought, so moving it to scale digits needs digits itself to be a"
-                            + " valid int — which it already is, being one — for any sign of it."),
+                    "past comes from ExactRatio#asDecimal, which builds it at exactly digits places,"
+                            + " and step is new BigDecimal(ONE, digits), at the same places for any"
+                            + " int digits — so the sum adds two unscaled values and builds no"
+                            + " digit to align them."),
             new Permission(
                     "souther/compiler/partition/CutPosition#justBeyond(Lsouther/compiler/numeric/"
                             + "Towards;I)Lsouther/compiler/partition/CutPosition$JustBeyond;"
@@ -274,9 +244,9 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                             + "partition/TermRealizations$Realization; add(Ljava/math/BigDecimal;)"
                             + "Ljava/math/BigDecimal;",
                     Reason.REFUSAL_IMPOSSIBLE,
-                    "seconds starts at BigDecimal.ZERO and admitted.get(0) comes from wholeNumbers,"
-                            + " whose candidates are always scale nought — so this add is always"
-                            + " scale-nought-plus-scale-nought."),
+                    "seconds starts at BigDecimal.ZERO and admitted.get(0) comes from the private"
+                            + " wholeNumbers, which builds every candidate as new BigDecimal of a"
+                            + " BigInteger — so this add is always scale-nought-plus-scale-nought."),
             new Permission(
                     "souther/compiler/partition/TermRealizations#atThoseParts(Ljava/util/Map;"
                             + "Lsouther/compiler/types/Type;Lsouther/compiler/check/Carrier;"
@@ -287,20 +257,6 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                     "Both operands scale nought: a whole-number count times a fixed enum constant"
                             + " (each.getKey().seconds())."),
             new Permission(
-                    "souther/compiler/partition/TermRealizations#endOf(Lsouther/compiler/numeric/"
-                            + "Endpoint;Ljava/math/BigDecimal;)Ljava/math/BigDecimal;"
-                            + " subtract(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
-                    Reason.REFUSAL_IMPOSSIBLE,
-                    "edge comes from ExactRatio#floor, always a whole number (scale nought), minus"
-                            + " a scale-nought ONE."),
-            new Permission(
-                    "souther/compiler/partition/TermRealizations#startOf(Lsouther/compiler/"
-                            + "numeric/Endpoint;Ljava/math/BigDecimal;)Ljava/math/BigDecimal;"
-                            + " add(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
-                    Reason.REFUSAL_IMPOSSIBLE,
-                    "Mirror of endOf above: edge from ExactRatio#ceiling, scale nought, plus a"
-                            + " scale-nought ONE."),
-            new Permission(
                     "souther/compiler/partition/TermRealizations#whole(Lsouther/compiler/numeric/"
                             + "Place;)I intValueExact()I",
                     Reason.REFUSAL_TRANSLATED,
@@ -309,31 +265,10 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                             + " place that is not itself whole — rather than the raw java.math"
                             + " exception."),
             new Permission(
-                    "souther/compiler/partition/TermRealizations#wholeNumbers(Lsouther/compiler/"
-                            + "numeric/NumericDomain$Bounds;Ljava/util/function/Predicate;Ljava/"
-                            + "math/BigDecimal;Ljava/math/BigDecimal;I)Lsouther/compiler/partition/"
-                            + "TermRealizations$Tried; add(Ljava/math/BigDecimal;)Ljava/math/"
-                            + "BigDecimal;",
-                    Reason.REFUSAL_IMPOSSIBLE,
-                    "The accumulator starts at startOf/endOf's own scale-nought result and steps by"
-                            + " a scale-nought ONE every iteration, so the scale never moves."),
-            new Permission(
                     "souther/compiler/partition/ValueClasses#whole(Ljava/math/BigDecimal;)"
                             + "Lsouther/compiler/partition/FixtureTemplate; longValueExact()J",
                     Reason.REFUSAL_TRANSLATED,
                     "try/catch(ArithmeticException) answers null."),
-            new Permission(
-                    "souther/compiler/semantics/Arithmetic$ATruncatingQuotient#quotientOf(Ljava/"
-                            + "math/BigDecimal;Ljava/math/BigDecimal;)Ljava/math/BigDecimal;"
-                            + " divideToIntegralValue(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
-                    Reason.REFUSAL_IMPOSSIBLE,
-                    "by.signum() == 0 returns before this line, throwing its own"
-                            + " IllegalArgumentException early rather than catching this member's"
-                            + " own exception — so the actual call is guarded by a precondition, not"
-                            + " a translation around it. That guard alone rules out only one of"
-                            + " divideToIntegralValue's two throw conditions; the other is ruled out"
-                            + " by TakenAs.TheTruncatingQuotient.takenOf() only ever taking Int -> Int,"
-                            + " so both operands are scale-0, long-range-bounded Int values."),
             new Permission(
                     "souther/compiler/semantics/OperationFacts#minutesAcrossEveryDateTime()J"
                             + " divideToIntegralValue(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",

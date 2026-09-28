@@ -1,8 +1,11 @@
 package souther.compiler.semantics;
 
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.types.BinOp;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.List;
 
 /**
@@ -125,14 +128,23 @@ public sealed interface Arithmetic {
          * <p>Said of the arithmetic rather than of the account that takes it. Which numbers an
          * operation's answer names and which of its arguments is the divisor are the account's;
          * what the operator computes is written down once, here, where the operator is named.
+         *
+         * <p>Divided as numbers, so the answer is the whole number the operator computes whatever
+         * places either was written to. An observation is read as a count of whatever scale it
+         * came with, and a quotient of two decimals far apart in scale can be a whole number no
+         * host holds — which is said, with which way, rather than let the decimal division throw.
          */
-        public static BigDecimal quotientOf(BigDecimal value, BigDecimal by) {
+        public static ExactAnswer<BigDecimal> quotientOf(BigDecimal value, BigDecimal by) {
             if (by.signum() == 0) {
                 throw new IllegalArgumentException(
                         "a truncating quotient's divisor of nought is refused where the term is"
                                 + " made, and is never one this reads");
             }
-            return value.divideToIntegralValue(by);
+            return switch (ExactRatio.of(value).dividedBy(ExactRatio.of(by)).truncated()) {
+                case ExactAnswer.Held<BigInteger> held ->
+                        ExactAnswer.held(new BigDecimal(held.value()));
+                case ExactAnswer.Unheld<BigInteger> unheld -> ExactAnswer.unheld(unheld.why());
+            };
         }
     }
 
