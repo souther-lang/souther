@@ -364,6 +364,11 @@ public record Band(BandEnd lower, BandEnd upper) {
         if (below == null || above == null) {
             return null;
         }
+        // A line standing over more than a ratio holds is written against the quantity itself
+        // (Seam#asARuleAbout), so it has no multiple to share.
+        if (!below.hasItsDenominatorAsARatio() || !above.hasItsDenominatorAsARatio()) {
+            return null;
+        }
         ExactRatio much = below.denominatorAsRatio();
         return much.equals(above.denominatorAsRatio()) ? much : null;
     }

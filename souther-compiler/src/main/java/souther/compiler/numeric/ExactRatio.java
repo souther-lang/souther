@@ -48,8 +48,8 @@ import java.util.OptionalInt;
  * so what needs a negation is what refuses, and it refuses for the answer and not for the value.
  *
  * <p>The two numbers past the exponents are not the fraction the value is, and no caller should read
- * them as one. {@link #asFraction} is where a caller asks for that, and it costs what writing the
- * powers out costs.
+ * them as one. A reader asks {@link #spelled}, which names the number without writing the powers
+ * out; the fraction itself is for this package's own arithmetic, and costs what writing them costs.
  */
 public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominatorWithoutUnits,
         long twos, long fives) implements Comparable<ExactRatio> {
@@ -110,10 +110,13 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
     /**
      * This as the one fraction it is, with the powers of two and five written into the two numbers.
      *
-     * <p><b>The digits, and only for somewhere that needs the digits</b> — a number printed in a
-     * sentence, a whole number handed to something that counts in whole numbers. It costs what the
-     * exponents say, which is the cost this type is held the way it is to avoid, so reaching for it
-     * is reaching past the representation.
+     * <p><b>The digits, and only for an algorithm that needs the digits</b> — a whole number handed
+     * to something that counts in whole numbers. It costs what the exponents say, which is the cost
+     * this type is held the way it is to avoid, so reaching for it is reaching past the
+     * representation. Never for naming a number to a reader: {@link #spelled} does that, and does it
+     * for every value this holds.
+     *
+     * <p>Visible to this package alone, so that a reader elsewhere cannot reach the digits at all.
      *
      * <p>Everything a reasoning step asks of the two numbers is asked of this type instead:
      * {@link #numeratorMod} and {@link #denominatorMod} for a residue, {@link #numeratorAsRatio} and
@@ -121,7 +124,7 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
      * {@link #spread} for the part of the denominator no finite decimal divides. Each of those
      * answers from the factors and builds nothing.
      */
-    public Fraction asFraction() {
+    Fraction asFraction() {
         return new Fraction(
                 ExactArithmetic.written(numeratorWithoutUnits,
                         ExactArithmetic.aboveTheLine(twos), ExactArithmetic.aboveTheLine(fives)),
@@ -131,7 +134,7 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
 
     /** A ratio with its powers of two and five spelled out: two whole numbers in lowest terms, the
      *  second of them positive. */
-    public record Fraction(BigInteger numerator, BigInteger denominator) {}
+    record Fraction(BigInteger numerator, BigInteger denominator) {}
 
     /** The number above this ratio's line, as a ratio — so that a caller going on to compute with it
      *  is handed the factors rather than the digits. */
@@ -144,11 +147,23 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
      * What this ratio stands over, as a ratio.
      *
      * @throws ArithmeticException where an exponent is the least long, whose negation is no exponent
+     *         ({@link #hasItsDenominatorAsARatio} is false)
      */
     public ExactRatio denominatorAsRatio() {
         return new ExactRatio(denominatorWithoutUnits, BigInteger.ONE,
                 twos >= 0 ? 0 : ExactArithmetic.negated(twos),
                 fives >= 0 ? 0 : ExactArithmetic.negated(fives));
+    }
+
+    /**
+     * Whether what this ratio stands over is itself a ratio this type holds, which is whether
+     * {@link #denominatorAsRatio} answers.
+     *
+     * <p>False exactly where an exponent is the least long. The value is held; the power of two or
+     * five it stands over is one more than any exponent here reaches.
+     */
+    public boolean hasItsDenominatorAsARatio() {
+        return twos != Long.MIN_VALUE && fives != Long.MIN_VALUE;
     }
 
     /**
@@ -599,24 +614,106 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
      * representation, which is not a difference anybody asked for. A third has no decimal, and
      * saying {@code 1/3} is the honest answer where rounding one would not be.
      *
-     * <p>Apart from {@link #toString}, which is for a message about this compiler and says the plain
-     * shape of the number. This is for a sentence somebody reads about their own model.
+     * <p>Apart from {@link #key}, which names the value for telling two apart and is not read.
      *
      * <p>Past a thousand digits, in exponent notation rather than spelled out in full
      * ({@link ExactDecimals#spelledBounded}): a model's own decimals can be scaled far enough from
      * an ordinary one that the compact value behind them costs nothing to hold and everything to
-     * write out, and a report is not the place that cost is asked to be paid.
+     * write out, and a report is not the place that cost is asked to be paid. A decimal whose scale
+     * is past what a {@code BigDecimal} has is written the way one would be, {@code 1E-4294967296},
+     * so a number reads the same whichever of the two types carried it.
      *
-     * @throws ArithmeticException where neither form is one this host writes, which is a number
-     *         standing where no decimal and no pair of whole numbers reaches it
+     * <p>Where even that would spell the power out — a decimal with more twos than fives in it, or a
+     * third a long way from nought — the power left over is named rather than written:
+     * {@code 7 * 2^123 * 10^-4294967296}, {@code 1/3 * 10^-4294967296}. Ten is taken out first, so
+     * at most one of two and five is left over.
+     *
+     * <p>Total, and one spelling per value: it is written from the canonical parts, so two equal
+     * ratios spell alike and the length follows the digits of those parts and of the exponents,
+     * never the exponents' size.
      */
     public String spelled() {
-        BigDecimal written = asWrittenDecimal();
-        if (written != null) {
-            return ExactDecimals.spelledBounded(ExactDecimals.leastDigits(written));
+        if (isZero()) {
+            return "0";
         }
-        Fraction fraction = asFraction();
-        return fraction.numerator() + "/" + fraction.denominator();
+        // Held wider than a long: the exponents' difference can be past what one holds.
+        BigInteger tens = BigInteger.valueOf(Math.min(twos, fives));
+        BigInteger twosLeft = BigInteger.valueOf(twos).subtract(tens);
+        BigInteger fivesLeft = BigInteger.valueOf(fives).subtract(tens);
+        if (!terminates()) {
+            if (withinSpelling(numeratorWithoutUnits,
+                    ExactArithmetic.aboveTheLine(twos), ExactArithmetic.aboveTheLine(fives))
+                    && withinSpelling(denominatorWithoutUnits,
+                    ExactArithmetic.belowTheLine(twos), ExactArithmetic.belowTheLine(fives))) {
+                Fraction fraction = asFraction();
+                return fraction.numerator() + "/" + fraction.denominator();
+            }
+            return inFactors(tens, twosLeft, fivesLeft);
+        }
+        if (twosLeft.signum() == 0 && fivesLeft.signum() == 0) {
+            return inTens(numeratorWithoutUnits, tens);
+        }
+        if (withinSpelling(numeratorWithoutUnits, twosLeft, fivesLeft)) {
+            return inTens(ExactArithmetic.written(numeratorWithoutUnits, twosLeft, fivesLeft), tens);
+        }
+        return inFactors(tens, twosLeft, fivesLeft);
+    }
+
+    /**
+     * Whether {@code whole × 2^twos × 5^fives} is short enough to spell out, asked of the parts and
+     * without building it.
+     *
+     * <p>An upper bound on the digits: each part's share of the logarithm rounded up, and one more.
+     * A number it lets through can land a little under the bound, never over it.
+     */
+    private static boolean withinSpelling(BigInteger whole, BigInteger twos, BigInteger fives) {
+        BigInteger thousand = BigInteger.valueOf(1000);
+        BigInteger digits = BigInteger.valueOf(whole.bitLength()).multiply(BigInteger.valueOf(302))
+                .add(twos.multiply(BigInteger.valueOf(302)))
+                .add(fives.multiply(BigInteger.valueOf(699)))
+                .divide(thousand)
+                .add(BigInteger.TWO);
+        return digits.compareTo(BigInteger.valueOf(ExactDecimals.MAX_SPELT_OUT_DIGITS)) <= 0;
+    }
+
+    /**
+     * {@code digits × 10^tens}, as a {@code BigDecimal} of that value writes itself.
+     *
+     * <p>Through the decimal where the scale is one a decimal has, so that the two agree by
+     * construction. Past that the plain notation is longer than any bound, and the exponent notation
+     * is written here the way {@link BigDecimal#toString} writes it: the digits with a point after
+     * the first, and the power of ten that point stands for.
+     */
+    private static String inTens(BigInteger digits, BigInteger tens) {
+        BigInteger scale = tens.negate();
+        if (scale.bitLength() < Integer.SIZE) {
+            return ExactDecimals.spelledBounded(
+                    ExactDecimals.leastDigits(new BigDecimal(digits, scale.intValueExact())));
+        }
+        int precision = new BigDecimal(digits).precision();
+        BigInteger point = tens.add(BigInteger.valueOf(precision - 1L));
+        return new BigDecimal(digits, precision - 1) + "E" + (point.signum() < 0 ? "" : "+") + point;
+    }
+
+    /**
+     * This value with the powers named rather than written: the fraction held, then what is left of
+     * two or five once ten is taken out, then the tens.
+     */
+    private String inFactors(BigInteger tens, BigInteger twosLeft, BigInteger fivesLeft) {
+        StringBuilder said = new StringBuilder(numeratorWithoutUnits.toString());
+        if (!terminates()) {
+            said.append('/').append(denominatorWithoutUnits);
+        }
+        if (twosLeft.signum() != 0) {
+            said.append(" * 2^").append(twosLeft);
+        }
+        if (fivesLeft.signum() != 0) {
+            said.append(" * 5^").append(fivesLeft);
+        }
+        if (tens.signum() != 0) {
+            said.append(" * 10^").append(tens);
+        }
+        return said.toString();
     }
 
     /**
@@ -633,16 +730,14 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
     }
 
     /**
-     * The plain shape of the number, for a message about this compiler.
+     * The number as {@link #spelled} writes it.
      *
-     * <p>The fraction and not what is held, because the number is what a reader of such a message
-     * needs. Writing it is what writing a number costs, which for a value held compactly is more
-     * than holding it — so this is not somewhere to reach for on a path that has to stay cheap.
+     * <p>Reached without being asked for — a record holding one of these prints it, and so does an
+     * assertion that failed over one — so it is held to the same bound as a report and never writes
+     * the powers out.
      */
     @Override
     public String toString() {
-        Fraction fraction = asFraction();
-        return isWhole() ? fraction.numerator().toString()
-                : fraction.numerator() + "/" + fraction.denominator();
+        return spelled();
     }
 }

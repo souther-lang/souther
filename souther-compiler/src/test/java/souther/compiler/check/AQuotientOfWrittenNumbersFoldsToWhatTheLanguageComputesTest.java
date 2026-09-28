@@ -9,6 +9,7 @@ import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.numeric.ExactRatio;
 import souther.runtime.ConstraintViolation;
+import souther.runtime.Rational;
 import souther.runtime.RationalMath;
 
 import org.junit.jupiter.api.Test;
@@ -121,9 +122,9 @@ class AQuotientOfWrittenNumbersFoldsToWhatTheLanguageComputesTest {
      * what a whole-number divide comes to is {@code RationalMath.divideWholeNumbers}'s to say, and a
      * fold that answered something else would be a compile-time value for an expression the program
      * computes differently. The two hold the exact value in types of their own — one reasons in it and
-     * one carries it (ADR-0117) — and both spell a ratio the same way, which is what is compared.
-     * Both sides of every pair are read before anything is asserted, so a disagreement names the pair
-     * it is about.
+     * one carries it — and both hold it in one canonical form of the same four parts, which is what is
+     * compared. Both sides of every pair are read before anything is asserted, so a disagreement names
+     * the pair it is about.
      */
     @Test
     void theFoldAnswersWhereTheOperatorDoesAndDeclinesWhereItAborts() {
@@ -134,7 +135,8 @@ class AQuotientOfWrittenNumbersFoldsToWhatTheLanguageComputesTest {
         for (long[] pair : pairs) {
             String written = pair[0] + " / " + pair[1] + ": ";
             computed.add(written + run(pair[0], pair[1]));
-            folded.add(written + whole(pair[0], pair[1]).orElse("aborts"));
+            folded.add(written + whole(pair[0], pair[1])
+                    .<Object>map(each -> partsOf((ExactRatio) each)).orElse("aborts"));
         }
 
         assertEquals(computed, folded);
@@ -143,10 +145,19 @@ class AQuotientOfWrittenNumbersFoldsToWhatTheLanguageComputesTest {
     /** What the operator answers for these two, or the word for its aborting. */
     private static Object run(long dividend, long divisor) {
         try {
-            return RationalMath.divideWholeNumbers(dividend, divisor);
+            return partsOf(RationalMath.divideWholeNumbers(dividend, divisor));
         } catch (ConstraintViolation _) {
             return "aborts";
         }
+    }
+
+    private static List<Object> partsOf(ExactRatio ratio) {
+        return List.of(ratio.numeratorWithoutUnits(), ratio.denominatorWithoutUnits(), ratio.twos(),
+                ratio.fives());
+    }
+
+    private static List<Object> partsOf(Rational rational) {
+        return List.of(rational.numerator(), rational.denominator(), rational.twos(), rational.fives());
     }
 
     /**
@@ -171,9 +182,9 @@ class AQuotientOfWrittenNumbersFoldsToWhatTheLanguageComputesTest {
         Hir.Expr two = new Hir.DecimalLit(twoTenths, POS, null);
         Hir.Expr nought = new Hir.DecimalLit(new BigDecimal("0.0"), POS, null);
 
-        assertEquals(RationalMath.divide(RationalMath.fromDecimal(sevenTenths),
-                        RationalMath.fromDecimal(twoTenths)).toString(),
-                fold(BinOp.DIV, seven, two).orElseThrow().toString());
+        assertEquals(partsOf(RationalMath.divide(RationalMath.fromDecimal(sevenTenths),
+                        RationalMath.fromDecimal(twoTenths))),
+                partsOf((ExactRatio) fold(BinOp.DIV, seven, two).orElseThrow()));
         assertEquals(Optional.empty(), fold(BinOp.DIV, seven, nought));
         assertEquals(0, ((BigDecimal) fold(BinOp.MUL, seven, two).orElseThrow())
                 .compareTo(new BigDecimal("14")));

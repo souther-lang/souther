@@ -17,8 +17,11 @@ import java.util.OptionalInt;
  *
  * <p>Held as what the rule wrote and how much of the quantity it wrote it in, rather than as the
  * number that comes of dividing one by the other. {@code 3 * d <= 1} puts its line at a third, and
- * the pair says where that is in the numbers the rule was written with — which is what a report
- * names the class by, and what {@link Seam#asARuleAbout} writes back out.
+ * the pair says where that is in the numbers the rule was written with.
+ *
+ * <p>A report does not write the pair back. Two rules can draw one line in different numbers, and
+ * the class they part is named once, so {@link Seam#asARuleAbout} writes the line from where it
+ * falls ({@link #asARule}), reduced.
  *
  * <p>The exactness no longer rests on the pair. A level is an exact ratio wherever the quantity
  * counts to one, so dividing here loses nothing; what the pair keeps is the rule's own units, and
