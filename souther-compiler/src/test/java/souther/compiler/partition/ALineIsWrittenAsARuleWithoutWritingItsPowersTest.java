@@ -5,7 +5,6 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Towards;
 
 import java.math.BigInteger;
-import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -25,8 +24,14 @@ class ALineIsWrittenAsARuleWithoutWritingItsPowersTest {
 
     private static final long FAR = 1L << 32;
 
-    private static final Function<ExactRatio, String> MUCH =
-            by -> by.equals(ExactRatio.ONE) ? "x" : by.spelled() + " * x";
+    /** How the class labels write so much of the quantity. */
+    private static String much(ExactRatio by) {
+        return by.equals(ExactRatio.ONE) ? "x" : by.spelled() + " * x";
+    }
+
+    private static String ruleAbout(Seam line, Towards side) {
+        return line.asARuleAbout(ALineIsWrittenAsARuleWithoutWritingItsPowersTest::much, side);
+    }
 
     private static Seam lineAt(ExactRatio written, ExactRatio per) {
         return new Seam(new CutPosition(new Level.OfTheQuantity(written), per), null, null);
@@ -41,17 +46,16 @@ class ALineIsWrittenAsARuleWithoutWritingItsPowersTest {
         Seam third = lineAt(ExactRatio.of(1), ExactRatio.of(3));
         Seam twoSixths = lineAt(ExactRatio.of(2), ExactRatio.of(6));
 
-        assertEquals("3 * x <= 1", third.asARuleAbout(MUCH, Towards.BELOW));
-        assertEquals(third.asARuleAbout(MUCH, Towards.BELOW),
-                twoSixths.asARuleAbout(MUCH, Towards.BELOW));
+        assertEquals("3 * x <= 1", ruleAbout(third, Towards.BELOW));
+        assertEquals(ruleAbout(third, Towards.BELOW), ruleAbout(twoSixths, Towards.BELOW));
     }
 
     @Test
     void aLineAtAFineDecimalIsWrittenWithoutItsDigits() {
         Seam fine = lineAt(tenTo(-FAR), ExactRatio.ONE);
 
-        assertEquals("1E+4294967296 * x <= 1", fine.asARuleAbout(MUCH, Towards.BELOW));
-        assertEquals("1 < 1E+4294967296 * x", fine.asARuleAbout(MUCH, Towards.ABOVE));
+        assertEquals("1E+4294967296 * x <= 1", ruleAbout(fine, Towards.BELOW));
+        assertEquals("1 < 1E+4294967296 * x", ruleAbout(fine, Towards.ABOVE));
     }
 
     /** No ratio holds what this line stands over, so it has no multiple to be written with. */
@@ -59,8 +63,8 @@ class ALineIsWrittenAsARuleWithoutWritingItsPowersTest {
     void aLineOverMoreThanARatioHoldsIsWrittenAgainstTheQuantityItself() {
         Seam least = lineAt(tenTo(Long.MIN_VALUE), ExactRatio.ONE);
 
-        assertEquals("x <= 1E-9223372036854775808", least.asARuleAbout(MUCH, Towards.BELOW));
-        assertEquals("1E-9223372036854775808 < x", least.asARuleAbout(MUCH, Towards.ABOVE));
+        assertEquals("x <= 1E-9223372036854775808", ruleAbout(least, Towards.BELOW));
+        assertEquals("1E-9223372036854775808 < x", ruleAbout(least, Towards.ABOVE));
     }
 
     @Test
