@@ -219,10 +219,9 @@ final class ConstantAlgebra {
      * The quotient of two written numbers, or empty where this is not the one to answer it.
      *
      * <p>The quotient is exact, so what it folds to is a ratio and not a number of either operand's
-     * type (ADR-0116). There is no pair of whole numbers whose exact quotient is out of range and
-     * none whose fraction is dropped, so the two refusals the truncating quotient needed are gone
-     * with it; what is left is the divisor of nought, which the run time aborts on and which no value
-     * handed back would be about.
+     * type (ADR-0116). No fraction is dropped, so the refusal the truncating quotient needed for that is
+     * gone; what is left is the divisor of nought, which the run time aborts on and which no value
+     * handed back would be about, and a quotient whose exponents no ratio holds.
      *
      * <p>Two decimals go through the same reading, their quotient being exact as well. What the fold
      * answers is the ratio, so a written {@code 1.0m / 3.0m} comes to a third here and not to the
@@ -234,7 +233,10 @@ final class ConstantAlgebra {
         if (x == null || y == null || y.isZero()) {
             return Optional.empty();
         }
-        return Optional.of(x.dividedBy(y));
+        // A quotient whose exponents pass what a ratio holds is not folded, for the reason a sum
+        // that cannot be held is not: no value handed back would be the one the run time computes.
+        return x.dividedBy(y) instanceof ExactAnswer.Held<ExactRatio> held
+                ? Optional.of(held.value()) : Optional.empty();
     }
 
     /**
@@ -275,11 +277,12 @@ final class ConstantAlgebra {
             // sum and the difference carry an operational bound") is that the operation aborts there
             // rather than answering — never that it answers a different, rounded number. So the fold
             // answers nothing rather than embed a value the run time would not compute: a constant
-            // this cannot hold is not a reason to fold to one the model never asked for.
+            // this cannot hold is not a reason to fold to one the model never asked for. A product
+            // whose exponents pass what a ratio holds is answered the same way.
             ExactAnswer<ExactRatio> summed = switch (op) {
                 case ADD -> x.plus(y);
                 case SUB -> x.minus(y);
-                case MUL -> ExactAnswer.held(x.times(y));
+                case MUL -> x.times(y);
                 default -> throw new IllegalStateException();
             };
             return summed instanceof ExactAnswer.Held<ExactRatio> held

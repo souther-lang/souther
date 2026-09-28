@@ -83,9 +83,9 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
     @Test
     void arithmeticOverACompactDecimalLeavesItCompact() {
         ExactRatio wide = ExactRatio.of(A_MILLIONTH_OF_A_MILLIONTH);
-        isCompact(wide.times(ExactRatio.of(7)));
-        isCompact(wide.dividedBy(ExactRatio.of(7)));
-        isCompact(wide.times(wide));
+        isCompact(wide.times(ExactRatio.of(7)).orNull());
+        isCompact(wide.dividedBy(ExactRatio.of(7)).orNull());
+        isCompact(wide.times(wide).orNull());
         isCompact(wide.negated());
         isCompact(wide.abs());
     }
@@ -116,7 +116,8 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
         assertEquals(ExactRatio.of(BigInteger.valueOf(5), BigInteger.valueOf(6)), third.plus(half).orNull());
         assertEquals(ExactRatio.of(BigInteger.ONE, BigInteger.valueOf(6)),
                 ExactRatio.gcd(third, half));
-        assertEquals(ExactRatio.of(BigInteger.TWO, BigInteger.valueOf(3)), third.dividedBy(half));
+        assertEquals(ExactRatio.of(BigInteger.TWO, BigInteger.valueOf(3)),
+                third.dividedBy(half).orNull());
         assertEquals("1/3", third.spelled());
         assertEquals("0.5", half.spelled());
         assertNull(third.asWrittenDecimal());
@@ -259,7 +260,7 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
             assertTrue(under.compareTo(ExactRatio.ONE) < 0, () -> "under one by a hair of " + bits);
             assertTrue(over.compareTo(under) > 0);
             assertTrue(over.negated().compareTo(ExactRatio.ONE.negated()) < 0);
-            assertTrue(over.times(far).compareTo(far) > 0,
+            assertTrue(over.times(far).orNull().compareTo(far) > 0,
                     () -> "the same pair with its powers a billion apart, at " + bits);
         }
     }
@@ -501,12 +502,13 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
 
         ExactRatio at = ExactRatio.of(BigInteger.ONE, BigInteger.TWO);
         for (int i = 0; i < 62; i++) {
-            at = at.times(at);
+            at = at.times(at).orNull();
         }
         assertEquals(-(1L << 62), at.twos());
         ExactRatio reached = at;
-        assertEquals(Long.MIN_VALUE, reached.times(reached).twos());
-        assertThrows(ArithmeticException.class, () -> reached.times(reached).times(reached));
+        assertEquals(Long.MIN_VALUE, reached.times(reached).orNull().twos());
+        assertEquals(ExactAnswer.unheld(UnheldNumber.NO_REPRESENTATION_EXISTS),
+                reached.times(reached).flatMap(squared -> squared.times(reached)));
     }
 
     /** The fraction is still there for a caller whose question is about those two numbers, and it is

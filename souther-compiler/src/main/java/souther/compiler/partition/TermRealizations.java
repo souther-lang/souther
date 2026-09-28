@@ -1512,14 +1512,13 @@ final class TermRealizations {
         ExactRatio s = ExactRatio.of(size);
         ExactAnswer<ExactRatio> at;
         if (quotient.signum() < 0) {
-            at = ExactRatio.of(quotient).times(s).minus(s);
-            if (at instanceof ExactAnswer.Held<ExactRatio> held) {
-                at = held.value().plus(ExactRatio.ONE);
-            }
+            at = ExactRatio.of(quotient).times(s)
+                    .flatMap(scaled -> scaled.minus(s))
+                    .flatMap(below -> below.plus(ExactRatio.ONE));
         } else if (quotient.signum() == 0) {
             at = s.negated().plus(ExactRatio.ONE);
         } else {
-            at = ExactAnswer.held(ExactRatio.of(quotient).times(s));
+            at = ExactRatio.of(quotient).times(s);
         }
         return placeAt(at);
     }
@@ -1535,14 +1534,13 @@ final class TermRealizations {
         ExactRatio s = ExactRatio.of(size);
         ExactAnswer<ExactRatio> at;
         if (quotient.signum() > 0) {
-            at = ExactRatio.of(quotient).times(s).plus(s);
-            if (at instanceof ExactAnswer.Held<ExactRatio> held) {
-                at = held.value().minus(ExactRatio.ONE);
-            }
+            at = ExactRatio.of(quotient).times(s)
+                    .flatMap(scaled -> scaled.plus(s))
+                    .flatMap(above -> above.minus(ExactRatio.ONE));
         } else if (quotient.signum() == 0) {
             at = s.minus(ExactRatio.ONE);
         } else {
-            at = ExactAnswer.held(ExactRatio.of(quotient).times(s));
+            at = ExactRatio.of(quotient).times(s);
         }
         return placeAt(at);
     }
@@ -1568,7 +1566,8 @@ final class TermRealizations {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        BigDecimal at = wanted.exactly().times(ExactRatio.of(by)).asWrittenDecimal();
+        ExactRatio product = wanted.exactly().times(ExactRatio.of(by)).orNull();
+        BigDecimal at = product == null ? null : product.asWrittenDecimal();
         if (at == null) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);

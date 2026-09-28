@@ -136,6 +136,8 @@ public final class NumericDomain<A> {
             // Every value satisfies it, so there is nothing to keep.
             case AffineConstraint.Read.HoldsAlways<A> _ -> knowing;
             case AffineConstraint.Read.Stated<A> stated -> knowing.keeping(stated.constraint());
+            // A rule this cannot write narrows nothing, which is the sound answer with less.
+            case AffineConstraint.Read.NotWorkedOut<A> _ -> knowing;
         };
     }
 
@@ -450,6 +452,8 @@ public final class NumericDomain<A> {
             case AffineConstraint.Read.HoldsAlways<A> _ -> true;
             case AffineConstraint.Read.HoldsNever<A> _ -> false;
             case AffineConstraint.Read.Stated<A> stated -> proven(stated.constraint(), withRules);
+            // What could not be written is not proven, and not disproven either.
+            case AffineConstraint.Read.NotWorkedOut<A> _ -> false;
         };
     }
 
@@ -542,12 +546,16 @@ public final class NumericDomain<A> {
         // Canonicalised by the one thing that canonicalises, so a question and a rule that say the
         // same thing are put into the same words by the same code. Doing the division here instead
         // would be a second account of what one rule is — which is the thing being removed.
-        CanonicalForm.Scaled<A> scaled = CanonicalForm.of(coefs);
-        if (scaled == null) {
-            return new Asked<>(new Goal<>(Map.of(), constant), ExactRatio.ONE);
-        }
-        return new Asked<>(
-                new Goal<>(scaled.form().coefs(), constant.dividedBy(scaled.by())), scaled.by());
+        return switch (CanonicalForm.of(coefs)) {
+            case CanonicalForm.NoTerms<A> _ ->
+                    new Asked<>(new Goal<>(Map.of(), constant), ExactRatio.ONE);
+            case CanonicalForm.Unheld<A> _ -> null;
+            case CanonicalForm.Scaled<A> scaled -> switch (constant.dividedBy(scaled.by())) {
+                case ExactAnswer.Held<ExactRatio> held ->
+                        new Asked<>(new Goal<>(scaled.form().coefs(), held.value()), scaled.by());
+                case ExactAnswer.Unheld<ExactRatio> _ -> null;
+            };
+        };
     }
 
     /**
@@ -707,15 +715,26 @@ public final class NumericDomain<A> {
             return new Bounds(null, null);
         }
         Asked<A> asked = goalOf(f);
+        if (asked == null) {
+            // A form whose lowest terms have no representation is one nothing here can bound.
+            return new Bounds(null, null);
+        }
         ExactCut highest = highestProven(asked.goal(), true);
         ExactCut lowest = highestProven(asked.goal().negated(), true);
         // Back into the units the caller asked in. The question was answered about the form divided
         // through by what its weights share, and the caller wants the form it wrote.
         return new Bounds(
-                lowest == null ? null : written(new ExactCut(
-                        lowest.at().negated().times(asked.by()), lowest.inclusive()), false),
-                highest == null ? null : written(new ExactCut(
-                        highest.at().times(asked.by()), highest.inclusive()), true));
+                lowest == null ? null : written(
+                        backInto(lowest.at().negated(), asked.by(), lowest.inclusive()), false),
+                highest == null ? null : written(
+                        backInto(highest.at(), asked.by(), highest.inclusive()), true));
+    }
+
+    /** A cut scaled back by {@code by}, or {@code null} where the scaled value has no
+     *  representation — no end, which is what an unbounded end already means to every reader. */
+    private static ExactCut backInto(ExactRatio at, ExactRatio by, boolean inclusive) {
+        ExactRatio scaled = at.times(by).orNull();
+        return scaled == null ? null : new ExactCut(scaled, inclusive);
     }
 
     /**

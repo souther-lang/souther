@@ -785,7 +785,7 @@ public final class LevelRealizer {
             // this position's own value is fine enough. That is never a proof the rules leave
             // nothing here — the walk simply could not go on past this value — so it is the third
             // vocabulary and `INCOMPLETE`, and this value is neither taken nor refused.
-            ExactAnswer<ExactRatio> remaining = owed.minus(coef.times(ExactRatio.of(x)));
+            ExactAnswer<ExactRatio> remaining = coef.times(ExactRatio.of(x)).flatMap(owed::minus);
             if (remaining instanceof ExactAnswer.Unheld<ExactRatio> unheldRest) {
                 unheld.add(new CompositionCapacity(
                         CompositionCapacity.Where.VALUES_A_POSITION_ON_THE_WAY_IS_WALKED_TO,
@@ -1006,7 +1006,19 @@ public final class LevelRealizer {
          */
         private Reached solving(int i, ExactRatio owed, ExactRatio coef,
                                 NumericDomain.Bounds left) {
-            ExactRatio quotient = owed.dividedBy(coef);
+            // The quotient itself can be a value no ratio holds, where what is owed and what this
+            // position weighs stand at the two ends of the exponents. That is this walk meeting the
+            // arithmetic's own limit, the same as the value below being too fine to write.
+            ExactRatio quotient;
+            switch (owed.dividedBy(coef)) {
+                case ExactAnswer.Held<ExactRatio> held -> quotient = held.value();
+                case ExactAnswer.Unheld<ExactRatio> unheldQuotient -> {
+                    unheld.add(new CompositionCapacity(
+                            CompositionCapacity.Where.VALUES_A_POSITION_ON_THE_WAY_IS_WALKED_TO,
+                            unheldQuotient.why()));
+                    return Reached.INCOMPLETE;
+                }
+            }
             BigDecimal solved;
             if (carriers[i].spacing() == souther.compiler.numeric.Granularity.DISCRETE) {
                 if (!quotient.isWhole()) {
@@ -1137,8 +1149,11 @@ public final class LevelRealizer {
             if (oneApart == null || otherApart == null) {
                 return within;
             }
-            ExactRatio one = oneApart.dividedBy(coef);
-            ExactRatio other = otherApart.dividedBy(coef);
+            ExactRatio one = oneApart.dividedBy(coef).orNull();
+            ExactRatio other = otherApart.dividedBy(coef).orNull();
+            if (one == null || other == null) {
+                return within;
+            }
             ExactRatio low = one.compareTo(other) <= 0 ? one : other;
             ExactRatio high = one.compareTo(other) <= 0 ? other : one;
             Count lowWritten = written(low, java.math.RoundingMode.FLOOR);
@@ -1190,12 +1205,16 @@ public final class LevelRealizer {
                 if (low == null || high == null) {
                     return null;
                 }
-                ExactRatio one = coef.times(low);
-                ExactRatio other = coef.times(high);
+                ExactRatio one = coef.times(low).orNull();
+                ExactRatio other = coef.times(high).orNull();
+                if (one == null || other == null) {
+                    return null;
+                }
                 // A model's own ends can be far enough apart in scale, running, that the exact
-                // arithmetic cannot carry the sum this narrowing is built from. Nothing to say is
-                // already this method's own answer for an end nothing bounds, so an unheld sum reads
-                // the same way: `leaving` narrows by nothing rather than by a value this cannot hold.
+                // arithmetic cannot carry the product or the sum this narrowing is built from.
+                // Nothing to say is already this method's own answer for an end nothing bounds, so
+                // an unheld number reads the same way: `leaving` narrows by nothing rather than by
+                // a value this cannot hold.
                 least = least.plus(one.compareTo(other) <= 0 ? one : other).orNull();
                 most = most.plus(one.compareTo(other) <= 0 ? other : one).orNull();
                 if (least == null || most == null) {

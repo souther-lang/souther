@@ -166,9 +166,10 @@ sealed interface CandidateDomain {
      * <p>Divided in ratios throughout, and never narrowed to a written decimal first: a distance the
      * exact arithmetic held is not thereby one a decimal of any particular scale holds, and dividing
      * two such decimals directly is the same scale-difference hazard this file exists to keep out of
-     * a model's own sums. {@link ExactRatio#dividedBy} refuses only a divisor of nought, which
-     * {@code by} is never; {@link ExactRatio#floor}/{@link ExactRatio#ceiling} are where the
-     * quotient's own room to be held is actually asked.
+     * a model's own sums. {@link ExactRatio#dividedBy} refuses a divisor of nought, which
+     * {@code by} is never, and says which way a quotient could not be held; so does
+     * {@link ExactRatio#times}, and {@link ExactRatio#floor}/{@link ExactRatio#ceiling} say it of
+     * the whole number below or above one.
      */
     private static Multiplied stepsTo(Endpoint end, ExactRatio from, ExactRatio by, boolean low) {
         if (end == null || !(end.at() instanceof Count count)) {
@@ -181,13 +182,17 @@ sealed interface CandidateDomain {
         if (away.unheld() != null) {
             return away;
         }
-        ExactRatio quotient = away.at().dividedBy(by);
-        ExactAnswer<BigInteger> rounded = low ? quotient.ceiling() : quotient.floor();
+        ExactAnswer<BigInteger> rounded = away.at().dividedBy(by)
+                .flatMap(quotient -> low ? quotient.ceiling() : quotient.floor());
         if (!(rounded instanceof ExactAnswer.Held<BigInteger> heldSteps)) {
             return new Multiplied(null, ((ExactAnswer.Unheld<BigInteger>) rounded).why());
         }
         ExactRatio steps = ExactRatio.of(heldSteps.value());
-        boolean onIt = by.times(steps).compareTo(away.at()) == 0;
+        ExactAnswer<ExactRatio> reached = by.times(steps);
+        if (!(reached instanceof ExactAnswer.Held<ExactRatio> heldReached)) {
+            return Multiplied.of(reached);
+        }
+        boolean onIt = heldReached.value().compareTo(away.at()) == 0;
         if (end.inclusive() || !onIt) {
             return new Multiplied(steps, null);
         }
@@ -268,7 +273,16 @@ sealed interface CandidateDomain {
      *  bounds). An interface's members are public regardless, so this is one for the same reason
      *  every case of this sealed interface is — but it is not one of them, and no caller outside
      *  this file has a reason to name it. */
-    record Multiplied(ExactRatio at, UnheldNumber unheld) {}
+    record Multiplied(ExactRatio at, UnheldNumber unheld) {
+
+        /** What an answer of the arithmetic comes to here: its value, or which way it was unheld. */
+        static Multiplied of(ExactAnswer<ExactRatio> answer) {
+            return switch (answer) {
+                case ExactAnswer.Held<ExactRatio> held -> new Multiplied(held.value(), null);
+                case ExactAnswer.Unheld<ExactRatio> unheld -> new Multiplied(null, unheld.why());
+            };
+        }
+    }
 
     private static Multiplied noEnd() {
         return new Multiplied(null, null);
@@ -280,27 +294,21 @@ sealed interface CandidateDomain {
         if (end == null || !(end.at() instanceof Count count)) {
             return noEnd();
         }
-        return switch (ExactRatio.of(count.at()).minus(from)) {
-            case ExactAnswer.Unheld<ExactRatio> unheld -> new Multiplied(null, unheld.why());
-            case ExactAnswer.Held<ExactRatio> apart -> new Multiplied(apart.value().dividedBy(by), null);
-        };
+        return Multiplied.of(ExactRatio.of(count.at()).minus(from).flatMap(apart -> apart.dividedBy(by)));
     }
 
     /** The member at one multiplier, or which way the exact arithmetic could not hold it. Whole plus
      *  whole times a decimal is a decimal, so this is always a value a model writes once held. */
     private static Multiplied at(ExactRatio from, ExactRatio by, ExactRatio multiplier) {
-        return switch (from.plus(by.times(multiplier))) {
-            case ExactAnswer.Unheld<ExactRatio> unheld -> new Multiplied(null, unheld.why());
-            case ExactAnswer.Held<ExactRatio> at -> new Multiplied(at.value(), null);
-        };
+        return Multiplied.of(by.times(multiplier).flatMap(from::plus));
     }
 
     /** The whole number at or past one end of the multiplier's run, or which way the exact
      *  arithmetic could not hold it. A decimal and needs no places written out. */
     private static Multiplied wholeAt(ExactRatio end, boolean itsOwn, boolean upward) {
-        ExactAnswer<java.math.BigInteger> rounded = upward ? end.ceiling() : end.floor();
-        if (!(rounded instanceof ExactAnswer.Held<java.math.BigInteger> held)) {
-            return new Multiplied(null, ((ExactAnswer.Unheld<java.math.BigInteger>) rounded).why());
+        ExactAnswer<BigInteger> rounded = upward ? end.ceiling() : end.floor();
+        if (!(rounded instanceof ExactAnswer.Held<BigInteger> held)) {
+            return new Multiplied(null, ((ExactAnswer.Unheld<BigInteger>) rounded).why());
         }
         ExactRatio on = ExactRatio.of(held.value());
         if (itsOwn || on.compareTo(end) != 0) {
@@ -322,21 +330,27 @@ sealed interface CandidateDomain {
      * and the two are exact ratios.
      */
     private static Multiplied between(ExactRatio least, boolean leastIsItsOwn, ExactRatio most) {
-        if (most.minus(least) instanceof ExactAnswer.Unheld<ExactRatio> unheldApart) {
-            return new Multiplied(null, unheldApart.why());
+        ExactAnswer<ExactRatio> halfApart =
+                most.minus(least).flatMap(apart -> apart.dividedBy(ExactRatio.of(2)));
+        if (!(halfApart instanceof ExactAnswer.Held<ExactRatio> heldHalf)) {
+            return Multiplied.of(halfApart);
         }
-        ExactRatio apart = most.minus(least).orNull();
-        java.math.BigInteger places = java.math.BigInteger.ONE;
-        ExactRatio half = apart.dividedBy(ExactRatio.of(2));
-        while (ExactRatio.of(java.math.BigInteger.ONE, places).compareTo(half) > 0) {
-            places = places.multiply(java.math.BigInteger.TEN);
+        BigInteger places = BigInteger.ONE;
+        ExactRatio half = heldHalf.value();
+        while (ExactRatio.of(BigInteger.ONE, places).compareTo(half) > 0) {
+            places = places.multiply(BigInteger.TEN);
         }
-        ExactRatio step = ExactRatio.of(java.math.BigInteger.ONE, places);
-        ExactAnswer<java.math.BigInteger> ceiling = least.times(ExactRatio.of(places)).ceiling();
-        if (!(ceiling instanceof ExactAnswer.Held<java.math.BigInteger> held)) {
-            return new Multiplied(null, ((ExactAnswer.Unheld<java.math.BigInteger>) ceiling).why());
+        ExactRatio step = ExactRatio.of(BigInteger.ONE, places);
+        ExactAnswer<BigInteger> ceiling =
+                least.times(ExactRatio.of(places)).flatMap(ExactRatio::ceiling);
+        if (!(ceiling instanceof ExactAnswer.Held<BigInteger> held)) {
+            return new Multiplied(null, ((ExactAnswer.Unheld<BigInteger>) ceiling).why());
         }
-        ExactRatio on = ExactRatio.of(held.value()).times(step);
+        ExactAnswer<ExactRatio> onAnswer = ExactRatio.of(held.value()).times(step);
+        if (!(onAnswer instanceof ExactAnswer.Held<ExactRatio> heldOn)) {
+            return Multiplied.of(onAnswer);
+        }
+        ExactRatio on = heldOn.value();
         if (leastIsItsOwn || on.compareTo(least) != 0) {
             return new Multiplied(on, null);
         }

@@ -5,6 +5,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
@@ -18,6 +19,7 @@ import souther.compiler.partition.QuantityKey;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.TakenConstraint;
 import souther.compiler.partition.WayToTheBorder;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -592,9 +594,8 @@ public sealed interface AnotherLineTheRowsAllow {
         // what every caller here already reads a gap this way, never a claim the model has none.
         ExactRatio at = OrderedAffineBoundary.along(other.direction(), values).orNull();
         ExactRatio apart = at == null ? null : cut.minus(at).orNull();
-        ExactRatio crossing = apart == null ? null : apart.dividedBy(moves);
-        java.math.BigInteger truncated =
-                crossing == null ? null : crossing.truncated().orNull();
+        BigInteger truncated = apart == null ? null
+                : apart.dividedBy(moves).flatMap(ExactRatio::truncated).orNull();
         if (truncated == null) {
             return;
         }
@@ -604,7 +605,7 @@ public sealed interface AnotherLineTheRowsAllow {
             // question here as everywhere, and a number of steps worked out from the signs would be
             // a second answer to it, right until one of the four ways the signs can fall was
             // written down wrong.
-            ExactRatio movedAt = at.plus(steps.times(moves)).orNull();
+            ExactRatio movedAt = steps.times(moves).flatMap(at::plus).orNull();
             if (movedAt == null || kept == keeps(boundary.satisfiedOn(), cut, movedAt)) {
                 continue;
             }
@@ -752,7 +753,7 @@ public sealed interface AnotherLineTheRowsAllow {
             if (moved == null) {
                 return null;
             }
-            by = by.plus(moved.times(each.getValue())).orNull();
+            by = moved.times(each.getValue()).flatMap(by::plus).orNull();
             if (by == null) {
                 return null;
             }
@@ -794,10 +795,10 @@ public sealed interface AnotherLineTheRowsAllow {
      * names. Standing still is not among them: the rows already answer alike there, which is what
      * the threshold was chosen to make true.
      */
-    private static List<ExactRatio> stepsAround(java.math.BigInteger crossing) {
+    private static List<ExactRatio> stepsAround(BigInteger crossing) {
         List<ExactRatio> out = new ArrayList<>();
         for (int away = -2; away <= 2; away++) {
-            ExactRatio steps = ExactRatio.of(crossing.add(java.math.BigInteger.valueOf(away)));
+            ExactRatio steps = ExactRatio.of(crossing.add(BigInteger.valueOf(away)));
             if (steps.signum() != 0) {
                 out.add(steps);
             }
@@ -812,7 +813,7 @@ public sealed interface AnotherLineTheRowsAllow {
     private static ExactRatio weighing(QuantityKey of, Map<NumericTerm, ExactRatio> step) {
         ExactRatio at = ExactRatio.ZERO;
         for (Map.Entry<NumericTerm, ExactRatio> each : step.entrySet()) {
-            at = at.plus(weight(of, each.getKey()).times(each.getValue())).orNull();
+            at = weight(of, each.getKey()).times(each.getValue()).flatMap(at::plus).orNull();
             if (at == null) {
                 return null;
             }
@@ -838,8 +839,9 @@ public sealed interface AnotherLineTheRowsAllow {
                 // Where the two products are too far apart in scale for the exact arithmetic to
                 // hold their difference, this pair of positions is one this cannot turn a step from
                 // — tried the same as a pair whose turned weight comes to nothing.
-                ExactRatio turned = weight(other, terms.get(i)).times(ours)
-                        .minus(weight(other, terms.get(j)).times(mine)).orNull();
+                ExactAnswer<ExactRatio> onFirst = weight(other, terms.get(i)).times(ours);
+                ExactAnswer<ExactRatio> onSecond = weight(other, terms.get(j)).times(mine);
+                ExactRatio turned = onFirst.flatMap(first -> onSecond.flatMap(first::minus)).orNull();
                 if (turned == null || turned.signum() == 0 || !mine.isWhole() || !ours.isWhole()) {
                     continue;
                 }
@@ -864,7 +866,7 @@ public sealed interface AnotherLineTheRowsAllow {
             // A model's own decimals can put this row value and the step out of the exact
             // arithmetic's reach, which is the same as a place the carrier has no count for: this
             // input was not composed.
-            ExactRatio at = Count.number(each.getValue()).exactly().plus(by.times(steps)).orNull();
+            ExactRatio at = by.times(steps).flatMap(Count.number(each.getValue()).exactly()::plus).orNull();
             if (at == null) {
                 return null;
             }

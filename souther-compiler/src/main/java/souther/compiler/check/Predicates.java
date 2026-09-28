@@ -1362,9 +1362,14 @@ final class Predicates {
             if (answered == null) {
                 return null;
             }
-            LinearForm<FactSubject> instead = owed.form()
-                    .minus(LinearForm.atom(atom).times(coefficient))
-                    .plus(answered.times(coefficient));
+            LinearForm<FactSubject> removed = LinearForm.<FactSubject>atom(atom).times(coefficient);
+            LinearForm<FactSubject> put = answered.times(coefficient);
+            LinearForm<FactSubject> without = removed == null ? null : owed.form().minus(removed);
+            LinearForm<FactSubject> instead = without == null || put == null
+                    ? null : without.plus(put);
+            if (instead == null) {
+                return null;
+            }
             List<NumericConstraint> given = new ArrayList<>();
             Map<FactSubject, Granularity> kinds = new HashMap<>(terms.kindsOf(instead));
             // What the call answers here, said of the call itself: in this case the two are one

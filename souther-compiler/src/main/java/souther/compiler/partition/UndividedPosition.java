@@ -213,6 +213,16 @@ public record UndividedPosition(TermPath at, Why why) {
         /** The values the comparison is against are not ones a line can be drawn on here. */
         UNSUPPORTED_DOMAIN,
         /**
+         * The comparison is against values a line can be drawn on, and the number it falls at is one
+         * this compiler has no representation for.
+         *
+         * <p>Its own word beside {@link #UNSUPPORTED_DOMAIN}, which says the values carry no order
+         * to draw a line on. Here they do; a constant the rule is written with stands so near the
+         * end of the range of exponents that the place the line falls at, in the quantity's own
+         * units, is a number nothing here can name.
+         */
+        LINE_AT_A_NUMBER_NO_RATIO_HOLDS,
+        /**
          * The line reaches positions under the cases each side of it, and which of them go together
          * is not worked out.
          *

@@ -1,5 +1,6 @@
 package souther.compiler.numeric;
 
+import java.math.BigInteger;
 import java.util.Map;
 import java.util.function.Function;
 
@@ -137,7 +138,13 @@ public sealed interface AdditiveImage {
 
         @Override
         public boolean contains(ExactRatio value) {
-            return value.dividedBy(generator).isWhole();
+            return value.isWholeMultipleOf(generator);
+        }
+
+        /** Every value a position whose values fill holds: the answer with least said, for where
+         *  the arithmetic that would say more has no representation. */
+        private static AffinePreimage anyDecimal() {
+            return new AffinePreimage.Stepping(ExactRatio.ZERO, ExactRatio.ONE, Granularity.DENSE);
         }
 
         /**
@@ -158,62 +165,70 @@ public sealed interface AdditiveImage {
          * where the part of {@code L} that is neither two nor five divides {@code A + B·k}.
          */
         private AffinePreimage fillingPreimage(ExactRatio coefficient, ExactRatio target) {
-            ExactRatio from = target.dividedBy(coefficient);
-            ExactRatio by = generator.dividedBy(coefficient);
-            java.math.BigInteger modulus = from.spread().multiply(by.spread());
-            if (modulus.equals(java.math.BigInteger.ONE)) {
+            ExactRatio from = target.dividedBy(coefficient).orNull();
+            ExactRatio by = generator.dividedBy(coefficient).orNull();
+            if (from == null || by == null) {
+                return anyDecimal();
+            }
+            BigInteger modulus = from.spread().multiply(by.spread());
+            if (modulus.equals(BigInteger.ONE)) {
                 return new AffinePreimage.Stepping(from, by.abs(), Granularity.DENSE);
             }
             // Over the common denominator the two members are these, and a residue is all any step
             // below asks of them — so neither that denominator nor either member is written down.
-            java.math.BigInteger a = from.numeratorMod(modulus)
+            BigInteger a = from.numeratorMod(modulus)
                     .multiply(by.denominatorMod(modulus)).mod(modulus);
-            java.math.BigInteger b = by.numeratorMod(modulus)
+            BigInteger b = by.numeratorMod(modulus)
                     .multiply(from.denominatorMod(modulus)).mod(modulus);
-            java.math.BigInteger shared = b.gcd(modulus);
-            if (!a.mod(shared).equals(java.math.BigInteger.ZERO)) {
+            BigInteger shared = b.gcd(modulus);
+            if (!a.mod(shared).equals(BigInteger.ZERO)) {
                 return new AffinePreimage.None();   // no multiplier lands the member on a decimal
             }
-            java.math.BigInteger steps = modulus.divide(shared);
-            java.math.BigInteger at = a.negate().divide(shared).mod(steps)
+            BigInteger steps = modulus.divide(shared);
+            BigInteger at = a.negate().divide(shared).mod(steps)
                     .multiply(b.divide(shared).mod(steps).modInverse(steps))
                     .mod(steps);
-            // The move onto a member is itself a sum a model's decimals can put out of the exact
-            // arithmetic's reach, same as the one `Stepping`'s own constructor guards: where it
-            // cannot be held, the widest progression this spacing admits is the sound answer with
-            // less.
-            ExactRatio moved = from.plus(by.times(ExactRatio.of(at))).orNull();
-            return moved == null ? new AffinePreimage.Stepping(ExactRatio.ZERO, ExactRatio.ONE, Granularity.DENSE)
-                    : new AffinePreimage.Stepping(moved, by.times(ExactRatio.of(steps)).abs(), Granularity.DENSE);
+            // The move onto a member, and the distance between members, are a product and a sum a
+            // model's decimals can put out of the exact arithmetic's reach, same as the ones
+            // `Stepping`'s own constructor guards: where either cannot be held, the widest
+            // progression this spacing admits is the sound answer with less.
+            ExactRatio stride = by.times(ExactRatio.of(at)).orNull();
+            ExactRatio moved = stride == null ? null : from.plus(stride).orNull();
+            ExactRatio period = by.times(ExactRatio.of(steps)).orNull();
+            return moved == null || period == null ? anyDecimal()
+                    : new AffinePreimage.Stepping(moved, period.abs(), Granularity.DENSE);
         }
 
         @Override
         public ExactCut tightenUpper(ExactCut cut) {
-            ExactRatio steps = cut.at().dividedBy(generator);
             // Where the cut itself stands at a value whose digits are past what this host addresses,
             // moving it down onto a step costs the same arithmetic asking for it did, and can meet
             // the same want of room. The sound answer with less is the cut as it was handed over,
             // untightened: this image only ever narrows it further, so leaving it be still admits
-            // everything the rules admit, and a hair besides.
-            if (!(steps.floor() instanceof ExactAnswer.Held<java.math.BigInteger> held)) {
+            // everything the rules admit, and a hair besides. The quotient, the step and the value
+            // moved onto it are each such a place.
+            ExactRatio steps = cut.at().dividedBy(generator).orNull();
+            if (steps == null || !(steps.floor() instanceof ExactAnswer.Held<BigInteger> held)) {
                 return cut;
             }
-            java.math.BigInteger below = cut.inclusive() || !steps.isWhole()
+            BigInteger below = cut.inclusive() || !steps.isWhole()
                     ? held.value()
-                    : held.value().subtract(java.math.BigInteger.ONE);
-            return ExactCut.inclusive(generator.times(ExactRatio.of(below)));
+                    : held.value().subtract(BigInteger.ONE);
+            ExactRatio moved = generator.times(ExactRatio.of(below)).orNull();
+            return moved == null ? cut : ExactCut.inclusive(moved);
         }
 
         @Override
         public ExactCut tightenLower(ExactCut cut) {
-            ExactRatio steps = cut.at().dividedBy(generator);
-            if (!(steps.ceiling() instanceof ExactAnswer.Held<java.math.BigInteger> held)) {
+            ExactRatio steps = cut.at().dividedBy(generator).orNull();
+            if (steps == null || !(steps.ceiling() instanceof ExactAnswer.Held<BigInteger> held)) {
                 return cut;
             }
-            java.math.BigInteger above = cut.inclusive() || !steps.isWhole()
+            BigInteger above = cut.inclusive() || !steps.isWhole()
                     ? held.value()
-                    : held.value().add(java.math.BigInteger.ONE);
-            return ExactCut.inclusive(generator.times(ExactRatio.of(above)));
+                    : held.value().add(BigInteger.ONE);
+            ExactRatio moved = generator.times(ExactRatio.of(above)).orNull();
+            return moved == null ? cut : ExactCut.inclusive(moved);
         }
 
         /**
@@ -232,17 +247,21 @@ public sealed interface AdditiveImage {
                 return fillingPreimage(coefficient, target);
             }
             ExactRatio divisor = ExactRatio.gcd(coefficient, generator);
-            ExactRatio steps = target.dividedBy(divisor);
-            if (!steps.isWhole()) {
+            if (!target.isWholeMultipleOf(divisor)) {
                 return new AffinePreimage.None();
             }
-            java.math.BigInteger modulus =
-                    generator.dividedBy(divisor).asFraction().numerator();
-            if (modulus.equals(java.math.BigInteger.ONE)) {
+            ExactRatio steps = target.dividedBy(divisor).orNull();
+            ExactRatio over = generator.dividedBy(divisor).orNull();
+            ExactRatio weighed = coefficient.dividedBy(divisor).orNull();
+            if (steps == null || over == null || weighed == null) {
                 return new AffinePreimage.Stepping(ExactRatio.ZERO, ExactRatio.ONE, source);
             }
-            java.math.BigInteger weight = coefficient.dividedBy(divisor).numeratorMod(modulus);
-            java.math.BigInteger at = steps.numeratorMod(modulus)
+            BigInteger modulus = over.asFraction().numerator();
+            if (modulus.equals(BigInteger.ONE)) {
+                return new AffinePreimage.Stepping(ExactRatio.ZERO, ExactRatio.ONE, source);
+            }
+            BigInteger weight = weighed.numeratorMod(modulus);
+            BigInteger at = steps.numeratorMod(modulus)
                     .multiply(weight.modInverse(modulus))
                     .mod(modulus);
             return new AffinePreimage.Stepping(ExactRatio.of(at), ExactRatio.of(modulus), source);
@@ -278,7 +297,13 @@ public sealed interface AdditiveImage {
 
         @Override
         public boolean contains(ExactRatio value) {
-            return value.dividedBy(generator).fitsWrittenDecimal();
+            return value.isWrittenDecimalMultipleOf(generator);
+        }
+
+        /** Every finite decimal: the coset with least said, for where the arithmetic that would say
+         *  more has no representation. */
+        private static AffinePreimage anyDecimal() {
+            return new AffinePreimage.Filling(ExactRatio.ZERO, ExactRatio.ONE);
         }
 
         /**
@@ -301,10 +326,14 @@ public sealed interface AdditiveImage {
          * about the order the terms are walked in and not about the model.
          */
         private AffinePreimage steppingPreimage(ExactRatio coefficient, ExactRatio target) {
-            ExactRatio per = coefficient.dividedBy(generator);
-            ExactRatio owed = target.dividedBy(generator);
-            java.math.BigInteger modulus = per.spread();
-            if (modulus.equals(java.math.BigInteger.ONE)) {
+            ExactRatio per = coefficient.dividedBy(generator).orNull();
+            ExactRatio owed = target.dividedBy(generator).orNull();
+            if (per == null || owed == null) {
+                return new AffinePreimage.Stepping(ExactRatio.ZERO, ExactRatio.ONE,
+                        Granularity.DISCRETE);
+            }
+            BigInteger modulus = per.spread();
+            if (modulus.equals(BigInteger.ONE)) {
                 return owed.fitsWrittenDecimal()
                         ? new AffinePreimage.Stepping(ExactRatio.ZERO, ExactRatio.ONE,
                                 Granularity.DISCRETE)
@@ -312,14 +341,18 @@ public sealed interface AdditiveImage {
             }
             // `q·(t/g)` has to be a decimal before any `x` can be chosen: `p·x` is whole, so a
             // residue that is not one leaves nothing whatever `x` is.
-            ExactRatio reached = owed.times(per.denominatorAsRatio());
+            ExactRatio reached = owed.timesWhatItStandsOver(per).orNull();
+            if (reached == null) {
+                return new AffinePreimage.Stepping(ExactRatio.ZERO, ExactRatio.ONE,
+                        Granularity.DISCRETE);
+            }
             if (!reached.fitsWrittenDecimal()) {
                 return new AffinePreimage.None();
             }
             // Both denominators are made of twos and fives and the modulus carries neither, so each
             // inverts modulo it. The weight's numerator is prime to the modulus because the weight
             // is in lowest terms and the modulus divides its denominator.
-            java.math.BigInteger at = reached.numeratorMod(modulus)
+            BigInteger at = reached.numeratorMod(modulus)
                     .multiply(reached.denominatorMod(modulus).modInverse(modulus))
                     .multiply(per.numeratorMod(modulus).modInverse(modulus))
                     .mod(modulus);
@@ -363,17 +396,25 @@ public sealed interface AdditiveImage {
             if (source != Granularity.DENSE) {
                 return steppingPreimage(coefficient, target);
             }
-            ExactRatio per = coefficient.dividedBy(generator);
-            ExactRatio owed = target.dividedBy(generator);
-            java.math.BigInteger spread = per.spread();
-            if (!owed.times(ExactRatio.of(spread)).fitsWrittenDecimal()) {
+            ExactRatio per = coefficient.dividedBy(generator).orNull();
+            ExactRatio owed = target.dividedBy(generator).orNull();
+            if (per == null || owed == null) {
+                return anyDecimal();
+            }
+            BigInteger spread = per.spread();
+            ExactRatio spreadOut = owed.times(ExactRatio.of(spread)).orNull();
+            if (spreadOut == null) {
+                return anyDecimal();
+            }
+            if (!spreadOut.fitsWrittenDecimal()) {
                 return new AffinePreimage.None();
             }
-            java.math.BigInteger shift = spread.equals(java.math.BigInteger.ONE)
-                    ? java.math.BigInteger.ZERO
+            BigInteger shift = spread.equals(BigInteger.ONE)
+                    ? BigInteger.ZERO
                     : per.numeratorMod(spread).modInverse(spread);
-            ExactRatio at = owed.times(per.denominatorAsRatio()).times(ExactRatio.of(shift));
-            return new AffinePreimage.Filling(at, ExactRatio.of(spread));
+            ExactRatio reached = owed.timesWhatItStandsOver(per).orNull();
+            ExactRatio at = reached == null ? null : reached.times(ExactRatio.of(shift)).orNull();
+            return at == null ? anyDecimal() : new AffinePreimage.Filling(at, ExactRatio.of(spread));
         }
     }
 }

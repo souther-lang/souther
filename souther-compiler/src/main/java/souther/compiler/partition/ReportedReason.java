@@ -243,6 +243,11 @@ public final class ReportedReason {
                     UndividedPosition.Reason.RULES_NOT_READ_AT_ALL;
             case BlockReason.UnreadComparisonDomain _ ->
                     UndividedPosition.Reason.UNSUPPORTED_DOMAIN;
+            // Its own word, and not the one above. The values carry an order and the line is
+            // written; what has no place is the number it falls at, and a reader acts on the
+            // constants of the rule and not on the type of the position.
+            case BlockReason.LineAtANumberNoRatioHolds _ ->
+                    UndividedPosition.Reason.LINE_AT_A_NUMBER_NO_RATIO_HOLDS;
             // Its own word, and not the shape one below. Both sides of this line are read and
             // ordered and a line is drawn on them; what is missing is which positions the line runs
             // between, which is a question about the model and not about the form it was written in.

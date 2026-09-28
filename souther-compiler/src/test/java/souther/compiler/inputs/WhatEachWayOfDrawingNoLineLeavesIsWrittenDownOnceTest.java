@@ -74,6 +74,10 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // value rule in a form nothing read are met again however much a run is allowed.
         table.put("UnreadComparisonForm", "UNSUPPORTED_SYNTAX/UNAFFECTED");
         table.put("UnreadComparisonDomain", "UNSUPPORTED_DOMAIN/UNAFFECTED");
+        // A line that falls at a number no exact ratio holds. Its own word beside the one above:
+        // the values carry an order and the line is written, and what has no place is a constant of
+        // the rule. Nothing was compared against a figure, so a run allowed more meets it again.
+        table.put("LineAtANumberNoRatioHolds", "LINE_AT_A_NUMBER_NO_RATIO_HOLDS/UNAFFECTED");
         table.put("RuleAboutADerivedValue",
                 "RULE_ABOUT_A_DERIVED_VALUE/UNAFFECTED");
         // And a rule about an element of one of several sequences, which is the same two measures
@@ -401,6 +405,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         return List.of(
                 new BlockReason.UnreadComparisonForm(),
                 new BlockReason.UnreadComparisonDomain(),
+                new BlockReason.LineAtANumberNoRatioHolds(),
                 new BlockReason.RuleAboutADerivedValue(),
                 new BlockReason.RuleAboutAnElementOfSeveralSequences(),
                 new BlockReason.UnreadValueRule(),

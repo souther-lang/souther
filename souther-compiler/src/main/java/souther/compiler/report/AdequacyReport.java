@@ -2609,6 +2609,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case BEHAVIOR_DISTINCTIONS_TOO_COSTLY -> "read to the end, and what the behavior's rules"
                     + " about this position tell apart is more than this compiler will work out";
             case UNSUPPORTED_DOMAIN -> "compared against values no line can be drawn on here";
+            case LINE_AT_A_NUMBER_NO_RATIO_HOLDS -> "its line falls at a number this compiler has no"
+                    + " exact representation for";
             case UNRESOLVED_CASE_PAIRING -> "it reaches case-specific positions on both sides, and "
                     + "how those positions pair up is not worked out";
             case UNSUPPORTED_PARTITION_SHAPE ->

@@ -305,7 +305,7 @@ public final class Intervals {
             // nought by this point — so an unheld corner still says which side of zero it falls on,
             // the same as {@link #times} already answers for a product this cannot hold.
             return switch (ExactRatio.of(at.at()).dividedBy(ExactRatio.of(divisor.at.at()))
-                    .asDecimal(towards, scale)) {
+                    .flatMap(quotient -> quotient.asDecimal(towards, scale))) {
                 case ExactAnswer.Held<BigDecimal> held -> new Ratio(Count.of(held.value()), 0);
                 case ExactAnswer.Unheld<BigDecimal> _ ->
                         Ratio.unheld(at.signum() * divisor.at.signum());

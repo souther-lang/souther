@@ -280,6 +280,13 @@ sealed interface ComparisonAssessment {
                     ? aboutNoPosition(comparison, reads, read.newtypes())
                     : new Unread(atEachOf(over.over(),
                             new BlockReason.UnreadComparisonDomain()));
+            // And where the quantity was read, counts, and draws a line that falls at a number no
+            // exact ratio holds. The same coordinates as the case above and a reason of its own:
+            // what stopped it is a constant the rule is written with, and not the order beneath.
+            case Cutting.Read.NumberNoRatioHolds over -> over.over().isEmpty()
+                    ? aboutNoPosition(comparison, reads, read.newtypes())
+                    : new Unread(atEachOf(over.over(),
+                            new BlockReason.LineAtANumberNoRatioHolds()));
         };
     }
 

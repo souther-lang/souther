@@ -39,7 +39,42 @@ class TheLeastExponentIsAValueLikeAnyOtherTest {
     void aValueDividedByItselfIsOne() {
         ExactRatio at = atTheLeastTwos();
 
-        assertEquals(ExactRatio.ONE, at.dividedBy(at));
+        assertEquals(ExactAnswer.held(ExactRatio.ONE), at.dividedBy(at));
+    }
+
+    @Test
+    void aProductPastTheRangeSaysItHasNoRepresentation() {
+        ExactRatio at = atTheLeastTwos();
+
+        assertEquals(ExactAnswer.unheld(UnheldNumber.NO_REPRESENTATION_EXISTS), at.times(at));
+    }
+
+    @Test
+    void aQuotientPastTheRangeSaysItHasNoRepresentation() {
+        ExactRatio at = atTheLeastTwos();
+
+        assertEquals(ExactAnswer.unheld(UnheldNumber.NO_REPRESENTATION_EXISTS),
+                ExactRatio.ONE.dividedBy(at));
+    }
+
+    /** What it stands over has an exponent no long holds, and the product with it does. */
+    @Test
+    void aValueTimesWhatAnotherStandsOverIsHeldWhereThatDenominatorAloneIsNot() {
+        ExactRatio at = atTheLeastTwos();
+
+        assertEquals(ExactAnswer.held(ExactRatio.ONE), at.timesWhatItStandsOver(at));
+        assertEquals(ExactAnswer.unheld(UnheldNumber.NO_REPRESENTATION_EXISTS),
+                ExactRatio.ONE.timesWhatItStandsOver(at));
+    }
+
+    @Test
+    void wholenessAndDecimalnessAreAskedWithoutTheQuotientBeingHeld() {
+        ExactRatio at = atTheLeastTwos();
+
+        assertTrue(ExactRatio.ONE.isWholeMultipleOf(at));
+        assertTrue(ExactRatio.ONE.isWrittenDecimalMultipleOf(at));
+        assertFalse(at.isWholeMultipleOf(ExactRatio.ONE));
+        assertFalse(at.isWrittenDecimalMultipleOf(ExactRatio.ONE));
     }
 
     @Test
@@ -66,7 +101,6 @@ class TheLeastExponentIsAValueLikeAnyOtherTest {
     void whatWouldNeedItsNegationAsAnExponentRefuses() {
         ExactRatio at = atTheLeastTwos();
 
-        assertThrows(ArithmeticException.class, at::denominatorAsRatio);
         assertThrows(ArithmeticException.class, at::asFraction);
     }
 
@@ -81,7 +115,7 @@ class TheLeastExponentIsAValueLikeAnyOtherTest {
 
         assertEquals(new ExactRatio(BigInteger.ONE, BigInteger.ONE, Long.MAX_VALUE, 0), terms.per());
         assertEquals(new ExactRatio(BigInteger.ONE, BigInteger.ONE, -1, 0), terms.comesTo());
-        assertEquals(at, terms.comesTo().dividedBy(terms.per()));
+        assertEquals(ExactAnswer.held(at), terms.comesTo().dividedBy(terms.per()));
     }
 
     /** Anywhere else the terms are the lowest ones, both whole. */

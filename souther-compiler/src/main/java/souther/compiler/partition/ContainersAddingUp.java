@@ -688,7 +688,8 @@ final class ContainersAddingUp {
         // could not finish is not a shape this compiler has ruled out, and reading the two alike is
         // exactly the confusion {@link ExactAnswer} exists to keep a caller from making by accident.
         ExactRatio from = ends.from().exactly();
-        ExactAnswer<ExactRatio> started = ExactRatio.of(total).minus(from.times(ExactRatio.of(many)));
+        ExactAnswer<ExactRatio> started = from.times(ExactRatio.of(many))
+                .flatMap(counted -> ExactRatio.of(total).minus(counted));
         if (started instanceof ExactAnswer.Unheld<ExactRatio> unheldStart) {
             return new Split.NotWorkedOut(unheldStart.why());
         }
@@ -775,12 +776,13 @@ final class ContainersAddingUp {
                                                    Carrier elements) {
         ExactRatio by = ExactRatio.of(among);
         if (elements.spacing() == Granularity.DISCRETE) {
-            return switch (owed.dividedBy(by).truncated()) {
+            return switch (owed.dividedBy(by).flatMap(ExactRatio::truncated)) {
                 case ExactAnswer.Held<BigInteger> held -> ExactAnswer.held(ExactRatio.of(held.value()));
                 case ExactAnswer.Unheld<BigInteger> unheld -> ExactAnswer.unheld(unheld.why());
             };
         }
-        return switch (owed.dividedBy(by).asDecimal(RoundingMode.DOWN, scale)) {
+        return switch (owed.dividedBy(by)
+                .flatMap(quotient -> quotient.asDecimal(RoundingMode.DOWN, scale))) {
             case ExactAnswer.Held<BigDecimal> held -> ExactAnswer.held(ExactRatio.of(held.value()));
             case ExactAnswer.Unheld<BigDecimal> unheld -> ExactAnswer.unheld(unheld.why());
         };
@@ -1133,7 +1135,7 @@ final class ContainersAddingUp {
          */
         boolean reaches(BigDecimal total, int many) {
             ExactRatio manyTimes = ExactRatio.of(many);
-            if (!(ExactRatio.of(total).minus(from.exactly().times(manyTimes))
+            if (!(from.exactly().times(manyTimes).flatMap(counted -> ExactRatio.of(total).minus(counted))
                     instanceof ExactAnswer.Held<ExactRatio> heldOwed)) {
                 return true;
             }
@@ -1151,7 +1153,11 @@ final class ContainersAddingUp {
             return switch (end.exactly().minus(from.exactly())) {
                 case ExactAnswer.Unheld<ExactRatio> _ -> true;
                 case ExactAnswer.Held<ExactRatio> distance ->
-                        owed.abs().compareTo(distance.value().abs().times(manyTimes)) <= 0;
+                        switch (distance.value().abs().times(manyTimes)) {
+                            case ExactAnswer.Unheld<ExactRatio> _ -> true;
+                            case ExactAnswer.Held<ExactRatio> furthest ->
+                                    owed.abs().compareTo(furthest.value()) <= 0;
+                        };
             };
         }
 

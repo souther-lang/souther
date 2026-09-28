@@ -52,8 +52,8 @@ class AnExactRatioIsOneValueHoweverItArrivedTest {
         ExactRatio third = ratio(1, 3);
         assertEquals(ExactRatio.ONE, third.plus(third).orNull().plus(third).orNull(),
                 "three thirds are one, which is what rounding a third at any scale loses");
-        assertEquals(ratio(1, 9), third.times(third));
-        assertEquals(ExactRatio.ONE, third.dividedBy(third));
+        assertEquals(ratio(1, 9), third.times(third).orNull());
+        assertEquals(ExactRatio.ONE, third.dividedBy(third).orNull());
         assertEquals(ratio(-1, 3), third.negated());
     }
 
@@ -139,7 +139,7 @@ class AnExactRatioIsOneValueHoweverItArrivedTest {
         assertTrue(ratio(1, 3).compareTo(ratio(1, 2)) < 0);
         assertTrue(ratio(1, 3).compareTo(ratio(2, 6)) == 0);
         assertTrue(ratio(-1, 3).compareTo(ratio(1, 3)) < 0);
-        assertTrue(ExactRatio.of(10_000_000_000L).times(ExactRatio.of(10_000_000_000L))
+        assertTrue(ExactRatio.of(10_000_000_000L).times(ExactRatio.of(10_000_000_000L)).orNull()
                 .compareTo(ExactRatio.of(Long.MAX_VALUE)) > 0,
                 "and past where a long stops, since comparing cross-multiplies");
     }

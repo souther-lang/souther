@@ -36,11 +36,36 @@ public record QuantityKey(Map<NumericTerm, ExactRatio> direction) {
         direction = Map.copyOf(direction);
     }
 
-    /** The quantity {@code form} is a multiple of. */
+    /**
+     * The quantity {@code form} is a multiple of.
+     *
+     * <p>For a form {@link #tryOf} has already answered: a direction whose coefficients stand at both
+     * ends of the exponents a ratio holds has no smallest form, and a line drawn on such a form is
+     * refused where lines are drawn ({@code Cutting}), so nothing reaches this with one.
+     *
+     * @throws IllegalStateException where {@code form} is one {@link #tryOf} answers null for
+     */
     public static QuantityKey of(LinearForm<NumericTerm> form) {
+        QuantityKey held = tryOf(form);
+        if (held == null) {
+            throw new IllegalStateException(
+                    "a direction with no smallest form was taken as a quantity: " + form);
+        }
+        return held;
+    }
+
+    /** The quantity {@code form} is a multiple of, or {@code null} where a coefficient over what the
+     *  coefficients share has no representation. */
+    public static QuantityKey tryOf(LinearForm<NumericTerm> form) {
         ExactRatio per = per(form);
         Map<NumericTerm, ExactRatio> smallest = new LinkedHashMap<>();
-        form.coefs().forEach((term, coef) -> smallest.put(term, coef.dividedBy(per)));
+        for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
+            ExactRatio over = each.getValue().dividedBy(per).orNull();
+            if (over == null) {
+                return null;
+            }
+            smallest.put(each.getKey(), over);
+        }
         return new QuantityKey(smallest);
     }
 

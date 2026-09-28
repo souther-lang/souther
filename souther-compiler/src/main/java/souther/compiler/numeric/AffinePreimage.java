@@ -95,10 +95,12 @@ public sealed interface AffinePreimage {
         }
 
         private static ExactRatio normalized(ExactRatio from, ExactRatio by) {
-            if (!(from.dividedBy(by).floor() instanceof ExactAnswer.Held<java.math.BigInteger> held)) {
+            ExactRatio steps = from.dividedBy(by).orNull();
+            if (steps == null || !(steps.floor() instanceof ExactAnswer.Held<java.math.BigInteger> held)) {
                 return null;
             }
-            return from.minus(by.times(ExactRatio.of(held.value()))).orNull();
+            ExactRatio whole = by.times(ExactRatio.of(held.value())).orNull();
+            return whole == null ? null : from.minus(whole).orNull();
         }
     }
 

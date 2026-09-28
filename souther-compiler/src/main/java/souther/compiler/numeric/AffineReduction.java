@@ -202,6 +202,11 @@ public final class AffineReduction {
             case AffineConstraint.Read.HoldsAlways<A> _ -> {
                 return true;
             }
+            // A rule this cannot write leaves this position no narrower, and is never read as the
+            // rules leaving it nothing.
+            case AffineConstraint.Read.NotWorkedOut<A> _ -> {
+                return true;
+            }
             case AffineConstraint.Read.Stated<A> stated
                     when stated.constraint() instanceof AffineConstraint.HalfSpace<A> alone -> {
                 ExactCut cut = alone.bound();

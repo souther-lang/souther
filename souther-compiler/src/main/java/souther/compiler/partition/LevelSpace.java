@@ -384,14 +384,18 @@ public interface LevelSpace {
                 if (!strictly && reaches(at)) {
                     return new Extremum.At(new Level.OfTheQuantity(at));
                 }
-                ExactRatio steps = at.dividedBy(generator);
-                ExactAnswer<java.math.BigInteger> rounded =
-                        into == Towards.ABOVE ? steps.ceiling() : steps.floor();
-                if (!(rounded instanceof ExactAnswer.Held<java.math.BigInteger> held)) {
+                ExactAnswer<BigInteger> rounded = at.dividedBy(generator).flatMap(
+                        steps -> into == Towards.ABOVE ? steps.ceiling() : steps.floor());
+                if (!(rounded instanceof ExactAnswer.Held<BigInteger> held)) {
                     return new Extremum.NotWorkedOut(
-                            ((ExactAnswer.Unheld<java.math.BigInteger>) rounded).why());
+                            ((ExactAnswer.Unheld<BigInteger>) rounded).why());
                 }
-                ExactRatio on = generator.times(ExactRatio.of(held.value()));
+                ExactAnswer<ExactRatio> multiple = generator.times(ExactRatio.of(held.value()));
+                if (!(multiple instanceof ExactAnswer.Held<ExactRatio> heldMultiple)) {
+                    return new Extremum.NotWorkedOut(
+                            ((ExactAnswer.Unheld<ExactRatio>) multiple).why());
+                }
+                ExactRatio on = heldMultiple.value();
                 if (strictly && on.compareTo(at) == 0) {
                     ExactAnswer<ExactRatio> moved =
                             into == Towards.ABOVE ? on.plus(generator) : on.minus(generator);
@@ -494,15 +498,23 @@ public interface LevelSpace {
                     // reach is already answered with above.
                     return Witness.NONE;
                 }
-                ExactRatio step = generator.dividedBy(tenToThe(scale.getAsInt()));
-                ExactAnswer<java.math.BigInteger> steps = from == Towards.ABOVE
-                        ? low.dividedBy(step).floor() : high.dividedBy(step).ceiling();
-                if (!(steps instanceof ExactAnswer.Held<java.math.BigInteger> heldSteps)) {
+                ExactRatio step = generator.dividedBy(tenToThe(scale.getAsInt())).orNull();
+                if (step == null) {
                     return Witness.NONE;
                 }
-                ExactRatio on = from == Towards.ABOVE
+                ExactAnswer<BigInteger> steps = from == Towards.ABOVE
+                        ? low.dividedBy(step).flatMap(ExactRatio::floor)
+                        : high.dividedBy(step).flatMap(ExactRatio::ceiling);
+                if (!(steps instanceof ExactAnswer.Held<BigInteger> heldSteps)) {
+                    return Witness.NONE;
+                }
+                ExactRatio on = (from == Towards.ABOVE
                         ? step.times(ExactRatio.of(heldSteps.value().add(BigInteger.ONE)))
-                        : step.times(ExactRatio.of(heldSteps.value().subtract(BigInteger.ONE)));
+                        : step.times(ExactRatio.of(heldSteps.value().subtract(BigInteger.ONE))))
+                        .orNull();
+                if (on == null) {
+                    return Witness.NONE;
+                }
                 return (lowIn ? on.compareTo(low) >= 0 : on.compareTo(low) > 0)
                         && (highIn ? on.compareTo(high) <= 0 : on.compareTo(high) < 0)
                         ? new Witness.Found(new Level.OfTheQuantity(on))
@@ -533,8 +545,10 @@ public interface LevelSpace {
                 if (apart.compareTo(generator) > 0) {
                     return OptionalInt.of(0);
                 }
-                ExactRatio ratio = generator.dividedBy(apart);
-                if (!opensAt(ratio, Integer.MAX_VALUE)) {
+                ExactRatio ratio = generator.dividedBy(apart).orNull();
+                // A ratio no exponent holds is one no scale an int names is shown to open, which is
+                // the sound answer with less: the run is not called empty.
+                if (ratio == null || !opensAt(ratio, Integer.MAX_VALUE)) {
                     return OptionalInt.empty();
                 }
                 int under = 0;
@@ -806,17 +820,19 @@ public interface LevelSpace {
             if (at == null) {
                 at = ExactRatio.ZERO;
             }
-            ExactRatio steps = at.dividedBy(generator);
             // A model's own decimals can put this end far enough apart in scale from the generator,
             // or from the step this moves by, that the exact arithmetic gives out. `Witness.NONE` is
             // already what this method answers for a run it names nothing in, so that is the sound
             // answer with less here as well — never a claim the run holds nothing.
-            ExactAnswer<java.math.BigInteger> rounded =
-                    into == Towards.ABOVE ? steps.ceiling() : steps.floor();
-            if (!(rounded instanceof ExactAnswer.Held<java.math.BigInteger> held)) {
+            ExactAnswer<BigInteger> rounded = at.dividedBy(generator).flatMap(
+                    steps -> into == Towards.ABOVE ? steps.ceiling() : steps.floor());
+            if (!(rounded instanceof ExactAnswer.Held<BigInteger> held)) {
                 return Witness.NONE;
             }
-            ExactRatio on = generator.times(ExactRatio.of(held.value()));
+            ExactRatio on = generator.times(ExactRatio.of(held.value())).orNull();
+            if (on == null) {
+                return Witness.NONE;
+            }
             boolean strict = into == Towards.ABOVE ? !lowIn && low != null : !highIn && high != null;
             if (strict && on.compareTo(at) == 0) {
                 ExactRatio moved =

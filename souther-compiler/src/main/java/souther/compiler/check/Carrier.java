@@ -761,7 +761,8 @@ public sealed interface Carrier extends ValueOrder {
      *  as {@link #oneFrom}. Exact, since half a decimal is a decimal. */
     private static Count halfway(Count low, Count high) {
         ExactRatio summed = low.exactly().plus(high.exactly()).orNull();
-        return summed == null ? null : Count.at(summed.dividedBy(ExactRatio.of(2)));
+        ExactRatio half = summed == null ? null : summed.dividedBy(ExactRatio.of(2)).orNull();
+        return half == null ? null : Count.at(half);
     }
 
     /**

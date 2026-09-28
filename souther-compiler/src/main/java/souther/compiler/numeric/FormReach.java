@@ -235,7 +235,8 @@ final class FormReach<A> {
             // Where the difference and the constant are too far apart in scale for the exact
             // arithmetic to sum, this route bounds nothing this round rather than composing a value
             // it cannot hold.
-            ExactRatio at = held == null ? null : held.at().times(apart.by()).plus(constant).orNull();
+            ExactRatio at = held == null ? null
+                    : held.at().times(apart.by()).flatMap(scaled -> scaled.plus(constant)).orNull();
             if (at != null) {
                 best = ExactCut.tighterUpper(best, new ExactCut(at, held.inclusive()));
             }

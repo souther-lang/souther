@@ -220,6 +220,7 @@ public sealed interface BlockReason {
                 case RuleAboutAnElementOfSeveralSequences _ -> 9;
                 case EndLeftOpenByAChoice _ -> 10;
                 case ValueRuleLeftOpenByAChoice _ -> 11;
+                case LineAtANumberNoRatioHolds _ -> 12;
             };
         }
 
@@ -257,7 +258,7 @@ public sealed interface BlockReason {
                 case PatternTooCostly _, OrderedExtentTooCostly _,
                      UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
                      RuleAboutAnElementOfSeveralSequences _, UnreadValueRule _,
-                     ValueRuleLeftOpenByAChoice _,
+                     ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      ValueRuleRelatingTwoPositions _, CasePairingNotDetermined _ -> true;
             };
         }
@@ -282,7 +283,7 @@ public sealed interface BlockReason {
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
                      RuleAboutAnElementOfSeveralSequences _, UnreadValueRule _,
                      ValueRuleRelatingTwoPositions _, EndLeftOpenByAChoice _,
-                     ValueRuleLeftOpenByAChoice _,
+                     ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      CasePairingNotDetermined _ -> RunSensitivity.UNAFFECTED;
             };
         }
@@ -525,6 +526,20 @@ public sealed interface BlockReason {
     /** A comparison naming the position is against values no line is drawn on here — the carrier,
      *  asked of the carrier. */
     record UnreadComparisonDomain() implements RuleReadingStopped {}
+
+    /**
+     * A comparison naming the position was read to the end, and a number its line is read through
+     * has no representation here: a coefficient over what the coefficients share, or the place the
+     * line falls at in the quantity's own units, stands past the far end of the exponents an exact
+     * ratio holds.
+     *
+     * <p>Its own case and not {@link UnreadComparisonDomain}. The values carry an order and a line
+     * on them would be drawn; what is missing is a number to say where it falls, which is a fact
+     * about how the rule was written and about nothing the carrier holds. An author told the first
+     * would go looking at the type of the position, and it is the constants the rule is written
+     * with that reach the end of the range.
+     */
+    record LineAtANumberNoRatioHolds() implements RuleReadingStopped {}
 
     /**
      * A rule is written about a value that came from the position rather than about the position.

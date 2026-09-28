@@ -3,6 +3,7 @@ package souther.compiler.numeric;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.function.Function;
 
 /**
  * An affine form {@code const + Σ coef·atom} over whatever a caller names its atoms by.
@@ -113,13 +114,42 @@ public record LinearForm<A>(ExactRatio constant, Map<A, ExactRatio> coefs) {
         return out.append("}]").toString();
     }
 
-    /** This form scaled by a constant {@code k} (a scalar multiply). */
+    /**
+     * This form scaled by a constant {@code k} (a scalar multiply), or {@code null} where a number
+     * scaled has no representation — the same word {@link #plus} uses, for the same reason.
+     */
     public LinearForm<A> times(ExactRatio k) {
         if (k.isZero()) {
             return constant(ExactRatio.ZERO);
         }
-        Map<A, ExactRatio> m = new HashMap<>();
-        coefs.forEach((key, v) -> m.put(key, v.times(k)));
-        return new LinearForm<>(constant.times(k), m);
+        return scaledBy(coef -> coef.times(k), constant.times(k));
+    }
+
+    /**
+     * This form over a constant {@code k}, each number divided by it and not multiplied by its
+     * reciprocal — the reciprocal of a number at the least exponent has none, and its quotient by
+     * itself is one. {@code null} where a number divided has no representation.
+     *
+     * @throws ArithmeticException where {@code k} is zero
+     */
+    public LinearForm<A> dividedBy(ExactRatio k) {
+        return scaledBy(coef -> coef.dividedBy(k), constant.dividedBy(k));
+    }
+
+    private LinearForm<A> scaledBy(Function<ExactRatio, ExactAnswer<ExactRatio>> scale,
+                                   ExactAnswer<ExactRatio> constantScaled) {
+        ExactRatio scaledConstant = constantScaled.orNull();
+        if (scaledConstant == null) {
+            return null;
+        }
+        Map<A, ExactRatio> scaled = new HashMap<>();
+        for (Map.Entry<A, ExactRatio> each : coefs.entrySet()) {
+            ExactRatio coef = scale.apply(each.getValue()).orNull();
+            if (coef == null) {
+                return null;
+            }
+            scaled.put(each.getKey(), coef);
+        }
+        return new LinearForm<>(scaledConstant, scaled);
     }
 }

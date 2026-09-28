@@ -605,7 +605,7 @@ public sealed interface BorderQuantity {
                         // summed, can put the exact sum out of this arithmetic's reach — the same way
                         // a distance of two row values can (see the try/catch above). Held here as
                         // one more reason nothing could be said, rather than let it end the compile.
-                        switch (at.plus(Count.number(value).exactly().times(each.getValue()))) {
+                        switch (Count.number(value).exactly().times(each.getValue()).flatMap(at::plus)) {
                             case ExactAnswer.Held<ExactRatio> held -> at = held.value();
                             case ExactAnswer.Unheld<ExactRatio> unheld ->
                                     stopped.add(ReadingGap.of(unheld.why()));
