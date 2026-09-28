@@ -204,20 +204,6 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                     "Same bounded-scale value; toPlainString has no documented throw for a value at"
                             + " an ordinary scale."),
             new Permission(
-                    "souther/compiler/partition/ContainersAddingUp#shared(Ljava/math/BigDecimal;I"
-                            + "Lsouther/compiler/check/Carrier;)Ljava/math/BigDecimal;"
-                            + " divide(Ljava/math/BigDecimal;ILjava/math/RoundingMode;)Ljava/math/"
-                            + "BigDecimal;",
-                    Reason.REFUSAL_IMPOSSIBLE,
-                    "Divisor is BigDecimal.valueOf(among); the one caller passes many - i inside a"
-                            + " loop bounded 1..many, so among is never nought."),
-            new Permission(
-                    "souther/compiler/partition/ContainersAddingUp#shared(Ljava/math/BigDecimal;I"
-                            + "Lsouther/compiler/check/Carrier;)Ljava/math/BigDecimal;"
-                            + " divideToIntegralValue(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
-                    Reason.REFUSAL_IMPOSSIBLE,
-                    "Same divisor as the divide above, same non-zero guarantee."),
-            new Permission(
                     "souther/compiler/partition/CutPosition#justBeyond(Lsouther/compiler/numeric/"
                             + "Towards;I)Lsouther/compiler/partition/CutPosition$JustBeyond;"
                             + " add(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",

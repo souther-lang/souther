@@ -27,6 +27,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -693,14 +694,11 @@ final class ContainersAddingUp {
             if (how == Spread.MASSED) {
                 wanted = owed;
             } else {
-                BigDecimal owedWritten = owed.asWrittenDecimal();
-                if (owedWritten == null) {
-                    // A finite decimal's sum, difference and whole-number product are always finite
-                    // decimals once held, so a ratio built that way and still not one is the same
-                    // gap an unheld step is, not a shape this compiler has ruled out.
-                    return new Split.NotWorkedOut(UnheldNumber.NO_REPRESENTATION_EXISTS);
+                ExactAnswer<ExactRatio> sharedAnswer = shared(owed, many - i, elements);
+                if (sharedAnswer instanceof ExactAnswer.Unheld<ExactRatio> unheldShared) {
+                    return new Split.NotWorkedOut(unheldShared.why());
                 }
-                wanted = ExactRatio.of(shared(owedWritten, many - i, elements));
+                wanted = ((ExactAnswer.Held<ExactRatio>) sharedAnswer).value();
             }
             ExactAnswer<ExactRatio> addAnswer = toward(wanted, ends);
             if (addAnswer instanceof ExactAnswer.Unheld<ExactRatio> unheldAdd) {
@@ -737,7 +735,8 @@ final class ContainersAddingUp {
     }
 
     /**
-     * One element's share of what is still owed, over the elements still to be given one.
+     * One element's share of what is still owed, over the elements still to be given one, or which
+     * way the exact arithmetic could not hold it.
      *
      * <p>Toward nought, so the elements before the last take no more than their share and the last
      * takes what division left over. Which is what makes the shares add up without a remainder to
@@ -745,13 +744,34 @@ final class ContainersAddingUp {
      *
      * <p>An order that steps divides to a whole number of its counts; one that does not is divided
      * as far as the numbers being added were written, since a share finer than that is a value the
-     * total was never stated to a.
+     * total was never stated to. Divided in ratios throughout: {@code among} is a whole number and
+     * never nought, so the divisor never refuses, and what asks the exact arithmetic something it
+     * may refuse is only the room the quotient itself needs — which is
+     * {@link ExactRatio#truncated}/{@link ExactRatio#asDecimal}'s question and not
+     * {@code BigDecimal.divide}'s. A written decimal is read here only for the one thing a scale
+     * this rounds to needs from it — how many places {@code owed} itself was written to — never for
+     * a value the division runs on.
      */
-    private static BigDecimal shared(BigDecimal owed, int among, Carrier elements) {
-        BigDecimal by = BigDecimal.valueOf(among);
-        return elements.spacing() == Granularity.DISCRETE
-                ? owed.divideToIntegralValue(by)
-                : owed.divide(by, Math.max(owed.scale(), 1), RoundingMode.DOWN);
+    private static ExactAnswer<ExactRatio> shared(ExactRatio owed, int among, Carrier elements) {
+        ExactRatio by = ExactRatio.of(among);
+        if (elements.spacing() == Granularity.DISCRETE) {
+            return switch (owed.dividedBy(by).truncated()) {
+                case ExactAnswer.Held<BigInteger> held -> ExactAnswer.held(ExactRatio.of(held.value()));
+                case ExactAnswer.Unheld<BigInteger> unheld -> ExactAnswer.unheld(unheld.why());
+            };
+        }
+        BigDecimal owedWritten = owed.asWrittenDecimal();
+        if (owedWritten == null) {
+            // The same gap an unheld arithmetic step is, not a shape this compiler has ruled out: a
+            // finite decimal's sum, difference and whole-number product are always finite decimals
+            // once held.
+            return ExactAnswer.unheld(UnheldNumber.NO_REPRESENTATION_EXISTS);
+        }
+        int scale = Math.max(owedWritten.scale(), 1);
+        return switch (owed.dividedBy(by).asDecimal(RoundingMode.DOWN, scale)) {
+            case ExactAnswer.Held<BigDecimal> held -> ExactAnswer.held(ExactRatio.of(held.value()));
+            case ExactAnswer.Unheld<BigDecimal> unheld -> ExactAnswer.unheld(unheld.why());
+        };
     }
 
     /**
