@@ -810,9 +810,11 @@ public final class LevelRealizer {
                                 ExactRatio coef,
                                 souther.compiler.inputs.SearchRegion here) {
             Reached weakest = Reached.EXHAUSTED;
-            for (java.math.BigDecimal x = every.first();
-                    x.compareTo(every.last()) <= 0; x = x.add(every.by())) {
-                Reached reached = trying(i, x, owed, coef, here);
+            ExactRatio last = ExactRatio.of(every.last());
+            ExactRatio step = ExactRatio.of(every.by());
+            ExactRatio x = ExactRatio.of(every.first());
+            for (;;) {
+                Reached reached = trying(i, x.asWrittenDecimal(), owed, coef, here);
                 if (reached == Reached.FOUND) {
                     return Reached.FOUND;
                 }
@@ -822,8 +824,21 @@ public final class LevelRealizer {
                 if (!stepsLeft()) {
                     return Reached.INCOMPLETE;
                 }
+                if (x.compareTo(last) == 0) {
+                    return weakest;
+                }
+                // Worked out exactly and never asked of the two decimals directly: a run whose first
+                // and step are ordinary can still meet a next value the exact arithmetic could not
+                // hold, and stepping past that one is never a proof the run was walked to the end.
+                ExactAnswer<ExactRatio> next = x.plus(step);
+                if (next instanceof ExactAnswer.Unheld<ExactRatio> unheldNext) {
+                    unheld.add(new CompositionCapacity(
+                            CompositionCapacity.Where.VALUES_OF_A_PROGRESSION_WALKED_TO,
+                            unheldNext.why()));
+                    return Reached.INCOMPLETE;
+                }
+                x = next.orNull();
             }
-            return weakest;
         }
 
         /**

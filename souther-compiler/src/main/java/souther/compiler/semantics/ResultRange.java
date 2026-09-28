@@ -2,6 +2,8 @@ package souther.compiler.semantics;
 
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 
 import java.math.BigDecimal;
@@ -87,7 +89,18 @@ public final class ResultRange {
             return Count.of(row.offset());
         }
         Optional<BigDecimal> against = arguments.at(row.against());
-        return against.map(value -> Count.of(value.add(row.offset()))).orElse(null);
+        if (against.isEmpty()) {
+            return null;
+        }
+        // A call's argument, so the offset is added to a decimal of whatever scale a model wrote,
+        // and the two can stand far enough apart that the sum has no representation this host
+        // writes. Not a defect this cannot say where the end stands either way, so it is read as
+        // exactly the same null every other reason for that is.
+        if (!(ExactRatio.of(against.get()).plus(ExactRatio.of(row.offset()))
+                instanceof ExactAnswer.Held<ExactRatio> held)) {
+            return null;
+        }
+        return Count.of(held.value().asWrittenDecimal());
     }
 
     private ResultRange() {}
