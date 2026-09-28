@@ -131,28 +131,17 @@ public record Count(BigDecimal at) implements Place {
     }
 
     /**
-     * This count so many times over, for a run stepped by so many of its steps. The factor is a
-     * plain number rather than a count, since how many steps is no place on any order.
-     *
-     * <p>No sum or difference of two counts sits beside it. A number worked out of two coordinates
-     * is on no carrier's order until somebody puts it on one, and whether it lands there, and what
-     * it means where it does not, is the question of the reader holding it. So that arithmetic is
-     * {@link ExactRatio}'s, reached through {@link #exactly}, and the way back is {@link #at}.
-     */
-    public Count times(BigDecimal factor) {
-        return new Count(at.multiply(factor));
-    }
-
-    /**
      * The count this comes to {@code factor} times over, or null where no {@link BigDecimal} holds
      * the product.
      *
-     * <p>For a reader whose factors are ends of ranges and so of any scale. {@link #times} is for a
-     * step counted out, which is a whole number of steps and cannot leave the scale range.
+     * <p>For a reader whose factors are ends of ranges and so of any scale. A number worked out of
+     * two coordinates is on no carrier's order until somebody puts it on one, and whether it lands
+     * there, and what it means where it does not, is the question of the reader holding it.
      *
      * <p>A count is the number and not the places it was written to, so the product is asked of the
      * number ({@link ExactDecimals#product}) and never of the scale {@code BigDecimal.multiply}
-     * would build it at.
+     * would build it at, which is what lets this answer for a factor of any scale rather than
+     * throwing where the product runs past what a scale holds.
      *
      * <p>Null is no count to hold it, for either of the two reasons that has: no decimal is the
      * number, or this host has no room for its digits. They are different answers about a number and
