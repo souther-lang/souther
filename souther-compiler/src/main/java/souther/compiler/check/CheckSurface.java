@@ -123,13 +123,11 @@ public final class CheckSurface implements Assembly {
      *
      * @throws IllegalArgumentException where an answer is for a part other than the one it stands in
      *     for
-     * @param importedDefinitions what this module's imports publish to it, for {@link
-     *     TypedFixtureValues#of} to read a candidate's declared type against beyond this module's
-     *     own — {@code Shapes.CheckSurface} currently hands this {@code Map.of()}, since {@code
-     *     Bodies.ImportedDefinitions} of the same module cycles back into this same assembly (its
-     *     own closure needs {@code Shapes.ClausesTakenIn}); kept as a parameter so a caller with a
-     *     cycle-safe source can widen what a candidate is read against without another signature
-     *     change
+     * @param importedForEvidence what a name this module imports bare denotes, read off the module
+     *     that declares it ({@code Bodies.publishedByQualifiedName}) — for {@link TypedFixtureValues#of}
+     *     to read past a call an own candidate's body makes of an imported helper. Not what makes a
+     *     candidate a candidate: those stay this module's own, and this is only the wider table
+     *     {@code DeclaredTypeReading} reads one against
      * @param stdlib               the library, so {@link TypedFixtureValues#of} can leave it out of
      *     the candidates it discovers
      * @param symbols    what the names a candidate's body wears denote
@@ -144,7 +142,7 @@ public final class CheckSurface implements Assembly {
                                         Map<ValueName.Behavior, Sig> signatures,
                                         FakeTables declared,
                                         BehaviorBodies bodies,
-                                        Map<String, Hir.FnDef> importedDefinitions,
+                                        Map<String, Hir.FnDef> importedForEvidence,
                                         Stdlib stdlib,
                                         Symbols symbols,
                                         PublishedDeclarations published,
@@ -215,7 +213,7 @@ public final class CheckSurface implements Assembly {
         // FixtureValueEntries mints entries for below, rather than finding one only later and
         // falling back to interpreting its body.
         Map<TypeSymbol, List<ReachName.Declaration>> typedFixtureValues = TypedFixtureValues.of(
-                written.module(), importedDefinitions, stdlib, symbols, published, kinds, fieldWraps,
+                written.module(), importedForEvidence, stdlib, symbols, published, kinds, fieldWraps,
                 signatures);
         // Every operand a row or a fake writes, walked once: RowFixtures.emitted mints a method for
         // each and FixtureValueEntries reads the same list for the names among them, rather than

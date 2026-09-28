@@ -96,6 +96,56 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
                 candidatesOf(CALLED, "example.member"));
     }
 
+    private static final String HELPER_LIB = """
+            module example.lib exposing ( Grade, Customer, Gold, of )
+
+            data Bronze
+            data Gold
+            data Grade = Bronze | Gold
+            data Customer = { grade: Grade }
+
+            let of (g: Grade) = Customer { grade = g }
+            """;
+
+    private static final String CALLED_AN_IMPORTED_HELPER = """
+            module example.calls
+
+            import example.lib ( Grade, Customer, Gold, of )
+
+            data Accepted = { at: String }
+
+            behavior admit : (customer: Customer) -> Accepted
+                constructs Accepted
+
+            let admit (customer) = Accepted { at = "now" }
+
+            let vip = of(Gold)
+            """;
+
+    /**
+     * An own value's body applying an imported helper is a candidate too — read through {@code
+     * importedForEvidence} and not lost the way {@code values.get(callee.name())} would lose it
+     * without an entry for {@code of} at all.
+     *
+     * <p>{@code vip} is {@code example.calls}' own — the same as {@link
+     * #andSoIsOneWrittenAsACallOfSomethingThatConstructsOne}, except the value it calls is declared
+     * in {@code example.lib} and not here. Nothing about being a candidate turns on where the
+     * declaration that decides {@code vip}'s type lives, only on where {@code vip} itself does.
+     */
+    @Test
+    void anOwnValueCallingAnImportedHelperIsACandidate() {
+        Compilation compilation = Compilation.ofSources(
+                List.of(HELPER_LIB, CALLED_AN_IMPORTED_HELPER), ModulePath.EMPTY);
+        compilation.answerEverything();
+        CheckSurface surface = compilation.db()
+                .ask(new Shapes.CheckSurface("example.calls")).value();
+        assertNotNull(surface, "the module under test does not get as far as being assembled");
+
+        assertEquals(List.of(new ReachName.Own(new ValueName.Helper("example.calls", "vip"))),
+                surface.typedFixtureValues().getOrDefault(customerType(compilation,
+                        "example.calls"), List.of()));
+    }
+
     /**
      * An imported value is not a candidate yet — {@link TypedFixtureValues#of} is handed no
      * imports to read.

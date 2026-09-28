@@ -47,12 +47,16 @@ import java.util.Set;
  * a surface being assembled already holds — so this runs at assembly time and its answer is ready
  * before {@link FixtureValueEntries} mints anything.
  *
- * <p>{@code importedDefinitions} is the same shape as {@link Bodies.ImportedDefinitions}'s answer,
- * but {@code Shapes.CheckSurface} currently hands this {@code Map.of()} rather than asking that key:
- * it too is downstream of this same {@code CheckSurface} (its own closure needs {@code
- * Shapes.ClausesTakenIn}), the identical cycle by a route one step longer. So today every candidate
- * this finds is the module's own; widening it to what a module imports needs a source for that
- * table which does not run through this assembly, not a change here.
+ * <p>Candidates themselves stay the module's own — {@code table} below is built with no imports —
+ * but reading an own candidate's declared type still needs to read past a call the candidate's own
+ * body makes of an imported helper, the way {@code let vip = of(Gold)} reads as {@code Customer}
+ * whether {@code of} is this module's own or one it imports. {@code importedForEvidence} is that:
+ * {@link Bodies#publishedByQualifiedName}'s answer, which reads each imported name directly off the
+ * module that declares it rather than through {@link Bodies.ImportedDefinitions}'s published-body
+ * closure — that closure needs {@code Shapes.ClausesTakenIn} of this module and would cycle back
+ * into this same {@code CheckSurface}, the shape {@code DeclaredTypeReading}'s checked-world {@code
+ * FieldTypes} already refuses. Widening the candidates themselves to what a module imports is a
+ * different question, still open ({@code CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest.anImportedValueIsNotACandidateYet}).
  *
  * <p>{@link InliningPolicy#DISCHARGE} and not {@link InliningPolicy#FULL}: a candidate drawn from the
  * standard library is not a value this module's own search reasons about, and {@code FULL} is the
@@ -85,7 +89,7 @@ public final class TypedFixtureValues {
      * SpecBehavior}s' own declared input types, and no other.
      */
     public static Map<TypeSymbol, List<ReachName.Declaration>> of(Hir.Module module,
-            Map<String, Hir.FnDef> importedDefinitions, Stdlib stdlib, Symbols symbols,
+            Map<String, Hir.FnDef> importedForEvidence, Stdlib stdlib, Symbols symbols,
             PublishedDeclarations published, DeclarationKinds kinds, NewtypeInners fieldWraps,
             Map<ValueName.Behavior, Sig> behaviors) {
         Set<String> generated = new LinkedHashSet<>();
@@ -112,9 +116,12 @@ public final class TypedFixtureValues {
         if (relevant.isEmpty()) {
             return Map.of();
         }
-        HelperTable table = HelperTable.of(module, importedDefinitions, InliningPolicy.DISCHARGE,
-                stdlib);
-        Map<String, Hir.FnDef> readableBySpelling = new LinkedHashMap<>();
+        // Own only: an imported value is not a candidate yet, whatever the search may read past to
+        // type one of this module's own.
+        HelperTable table = HelperTable.of(module, Map.of(), InliningPolicy.DISCHARGE, stdlib);
+        // Imported first, own after: a name this module both imports and declares reaches its own
+        // declaration, and the later put is the one DeclaredTypeReading reads.
+        Map<String, Hir.FnDef> readableBySpelling = new LinkedHashMap<>(importedForEvidence);
         for (HelperEntry entry : table.reachable().values()) {
             readableBySpelling.put(entry.address().text(), entry.definition());
         }
