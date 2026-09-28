@@ -1,6 +1,6 @@
 package souther.compiler.numeric;
 
-import java.math.RoundingMode;
+import java.math.BigInteger;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -46,12 +46,22 @@ public final class Times {
         }
     }
 
-    /** The time of day {@code count} counts to, written the way a model writes one. A count
+    /**
+     * The time of day {@code count} counts to, written the way a model writes one. A count
      * carrying a fraction is floored rather than written as a time no model could have named, which
-     * is the answer {@link DateTimes#written} gives for the same reason. */
+     * is the answer {@link DateTimes#written} gives for the same reason.
+     *
+     * @throws IllegalStateException where the exact arithmetic could not hold the floor of
+     *         {@code count}, the same as {@link DateTimes#written} throws for its own count
+     */
     public static String written(Place count) {
-        return written(LocalTime.ofSecondOfDay(Count.number(count).at()
-                .setScale(0, RoundingMode.FLOOR).longValueExact()));
+        if (!(Count.number(count).exactly().floor()
+                instanceof ExactAnswer.Held<BigInteger> held)) {
+            throw new IllegalStateException(
+                    "a count read or written as a time of day is one the exact arithmetic can hold"
+                            + " the floor of, and this was not: " + count);
+        }
+        return written(LocalTime.ofSecondOfDay(held.value().longValueExact()));
     }
 
     /** The same text, for a caller holding the value rather than the count. Every place a time of

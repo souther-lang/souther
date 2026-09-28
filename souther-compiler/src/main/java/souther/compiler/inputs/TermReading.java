@@ -3,6 +3,8 @@ package souther.compiler.inputs;
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Dates;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.semantics.Arithmetic;
@@ -223,7 +225,7 @@ final class TermReading {
         if (elements == null) {
             return new Reading.NotNumber();
         }
-        java.math.BigDecimal total = java.math.BigDecimal.ZERO;
+        ExactRatio total = ExactRatio.ZERO;
         for (ObservedValue each : values) {
             Membership.Incomplete unread = Membership.unread(each);
             if (unread != null) {
@@ -238,9 +240,18 @@ final class TermReading {
             if (!(read instanceof Count count)) {
                 return new Reading.NotNumber();
             }
-            total = total.add(count.at());
+            // A container may hold a model's own decimals, spaced as widely apart in scale as any
+            // two of them this compiler ever adds — the same hazard `check.ConstantAlgebra` guards
+            // against when a rule adds two of them. Held in a ratio and read as no number of this
+            // term where the exact arithmetic could not hold the sum, rather than let one this wide
+            // throw.
+            if (!(total.plus(count.exactly()) instanceof ExactAnswer.Held<ExactRatio> held)) {
+                return new Reading.NotNumber();
+            }
+            total = held.value();
         }
-        return new Reading.Number(new Count(total));
+        BigDecimal written = total.asWrittenDecimal();
+        return written == null ? new Reading.NotNumber() : new Reading.Number(new Count(written));
     }
 
     /**

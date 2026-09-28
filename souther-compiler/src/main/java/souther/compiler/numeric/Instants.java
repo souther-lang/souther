@@ -2,7 +2,6 @@ package souther.compiler.numeric;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 
@@ -22,6 +21,7 @@ import java.time.format.DateTimeParseException;
 public final class Instants {
 
     private static final BigDecimal PER_SECOND = BigDecimal.valueOf(1_000_000_000L);
+    private static final BigInteger PER_SECOND_NANOS = BigInteger.valueOf(1_000_000_000L);
 
     /** The first and last counts a moment can be written as. */
     public static final Count MIN = countAt(Instant.MIN);
@@ -53,11 +53,18 @@ public final class Instants {
      * division goes does not matter: below the epoch it leaves a negative count of nanoseconds
      * within the second, and {@code ofEpochSecond} normalises that onto the second before — the
      * same moment a division towards the count below would have named.
+     *
+     * @throws IllegalStateException where the exact arithmetic could not hold the floor of
+     *         {@code count}, the same as {@link DateTimes#written} throws for its own count
      */
     public static String written(Place count) {
-        BigInteger nanos = Count.number(count).at()
-                .setScale(0, RoundingMode.FLOOR).toBigIntegerExact();
-        BigInteger[] parts = nanos.divideAndRemainder(PER_SECOND.toBigIntegerExact());
+        if (!(Count.number(count).exactly().floor()
+                instanceof ExactAnswer.Held<BigInteger> held)) {
+            throw new IllegalStateException(
+                    "a count read or written as a moment is one the exact arithmetic can hold the"
+                            + " floor of, and this was not: " + count);
+        }
+        BigInteger[] parts = held.value().divideAndRemainder(PER_SECOND_NANOS);
         return Instant.ofEpochSecond(parts[0].longValueExact(), parts[1].longValueExact())
                 .toString();
     }

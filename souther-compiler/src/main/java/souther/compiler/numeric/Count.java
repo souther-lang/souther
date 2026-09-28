@@ -173,9 +173,27 @@ public record Count(BigDecimal at) implements Place {
         return new Count(at.negate());
     }
 
-    /** This count moved onto a whole one, which is what a discrete carrier's order is made of. */
+    /**
+     * This count moved onto a whole one, which is what a discrete carrier's order is made of.
+     *
+     * @param towards {@code FLOOR} or {@code CEILING}, the two directions a caller ever asks this
+     *                for; read exactly, so that rounding a count never trips over the same
+     *                scale-overflow a plain {@code setScale} could
+     */
     public Count rounded(java.math.RoundingMode towards) {
-        return new Count(at.setScale(0, towards));
+        ExactAnswer<java.math.BigInteger> rounded = switch (towards) {
+            case FLOOR -> exactly().floor();
+            case CEILING -> exactly().ceiling();
+            default -> throw new IllegalArgumentException(
+                    "a count is rounded toward the floor or the ceiling of its order, and asked no"
+                            + " other way: " + towards);
+        };
+        if (!(rounded instanceof ExactAnswer.Held<java.math.BigInteger> held)) {
+            throw new IllegalStateException(
+                    "the exact arithmetic could not hold the whole number this count rounds to: "
+                            + at);
+        }
+        return new Count(new BigDecimal(held.value()));
     }
 
     /** Whether this counts to a place on an order that steps: a count with a fraction in it is

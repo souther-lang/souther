@@ -25,6 +25,7 @@ import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -1199,23 +1200,31 @@ final class TermRealizations {
     }
 
     /** The first whole number at or above an end, or the window's own start where the set runs
-     *  past it. */
+     *  past it or the exact arithmetic could not hold the edge — the same answer either way, since
+     *  a start this cannot narrow is one the walk is sound to leave as wide as the window itself. */
     private static BigDecimal startOf(Endpoint end, BigDecimal from) {
         if (end == null || !(end.at() instanceof Count count)) {
             return from;
         }
-        BigDecimal edge = count.at().setScale(0, java.math.RoundingMode.CEILING);
+        if (!(count.exactly().ceiling() instanceof ExactAnswer.Held<BigInteger> held)) {
+            return from;
+        }
+        BigDecimal edge = new BigDecimal(held.value());
         return from.max(!end.inclusive() && edge.compareTo(count.at()) == 0
                 ? edge.add(BigDecimal.ONE) : edge);
     }
 
     /** The last whole number at or below an end, or the window's own end where the set runs past
-     *  it. */
+     *  it or the exact arithmetic could not hold the edge, read the same way {@link #startOf}
+     *  reads it. */
     private static BigDecimal endOf(Endpoint end, BigDecimal to) {
         if (end == null || !(end.at() instanceof Count count)) {
             return to;
         }
-        BigDecimal edge = count.at().setScale(0, java.math.RoundingMode.FLOOR);
+        if (!(count.exactly().floor() instanceof ExactAnswer.Held<BigInteger> held)) {
+            return to;
+        }
+        BigDecimal edge = new BigDecimal(held.value());
         return to.min(!end.inclusive() && edge.compareTo(count.at()) == 0
                 ? edge.subtract(BigDecimal.ONE) : edge);
     }
