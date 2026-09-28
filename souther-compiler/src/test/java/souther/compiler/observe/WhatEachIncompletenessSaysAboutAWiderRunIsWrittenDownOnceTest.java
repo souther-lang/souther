@@ -49,9 +49,10 @@ class WhatEachIncompletenessSaysAboutAWiderRunIsWrittenDownOnceTest {
         table.put("INSTRUMENTATION_ABSENT", "UNAFFECTED");
         // What decided it is which of the module's bodies came out, and no run allows more of that.
         table.put("IMPLEMENTATION_NOT_MADE", "UNAFFECTED");
-        // The room that ran out, where it was room, is the host's; where no representation exists,
-        // no host has more of one. A run allowed more meets either again.
+        // No representation exists, so no host has one to offer.
         table.put("VALUE_NOT_WORKED_OUT", "UNAFFECTED");
+        // The room that ran out is the host's, and a host is not an allowance.
+        table.put("VALUE_ROOM_EXCEEDED", "UNAFFECTED");
         return table;
     }
 

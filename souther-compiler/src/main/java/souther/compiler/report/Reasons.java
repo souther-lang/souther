@@ -123,9 +123,12 @@ final class Reasons {
                     "the observation at `%s` was stopped by a limit, so which class it is in is"
                             + " unknown", subject);
             case VALUE_NOT_WORKED_OUT -> String.format(
-                    "a row's value at `%s` was read, and the number it comes to is one the exact"
-                            + " arithmetic could not hold, so which class it is in is unknown",
-                    subject);
+                    "a row's value at `%s` was read, and the number it comes to has no"
+                            + " representation this compiler holds, so which class it is in is"
+                            + " unknown", subject);
+            case VALUE_ROOM_EXCEEDED -> String.format(
+                    "a row's value at `%s` was read, and this host had no room to work out the"
+                            + " number it comes to, so which class it is in is unknown", subject);
         };
     }
 

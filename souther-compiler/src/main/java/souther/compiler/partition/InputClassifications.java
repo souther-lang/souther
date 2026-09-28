@@ -176,9 +176,12 @@ public final class InputClassifications {
                 case Membership.NoMatch _ -> code = null;
                 // A count's own sum meeting a number the exact arithmetic could not hold is a
                 // different gap from an observation's, but it is the same fact for this measure:
-                // the class could not be settled. Read through Incompleteness.Code.VALUE_NOT_WORKED_OUT,
-                // built for exactly this, rather than left with no word at all.
-                case Membership.NotWorkedOut _ -> code = Incompleteness.Code.VALUE_NOT_WORKED_OUT;
+                // the class could not be settled. Read through the two codes built for exactly
+                // this, which of the two travelling with UnheldNumber.
+                case Membership.NotWorkedOut why -> code = switch (why.why()) {
+                    case NO_REPRESENTATION_EXISTS -> Incompleteness.Code.VALUE_NOT_WORKED_OUT;
+                    case MORE_ROOM_COULD_ANSWER -> Incompleteness.Code.VALUE_ROOM_EXCEEDED;
+                };
             }
             if (code == null) {
                 continue;
