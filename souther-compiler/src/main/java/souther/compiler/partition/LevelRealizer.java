@@ -16,6 +16,7 @@ import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.regex.Meter;
 import souther.compiler.values.ValueSet;
+import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -772,7 +773,7 @@ public final class LevelRealizer {
          * reported as every value having been tried. Nothing being left is proved by the rules, so
          * stepping past it takes nothing out of a walk that reaches the end.
          */
-        private Reached trying(int i, java.math.BigDecimal x, ExactRatio owed,
+        private Reached trying(int i, BigDecimal x, ExactRatio owed,
                                ExactRatio coef, souther.compiler.inputs.SearchRegion here) {
             souther.compiler.inputs.SearchRegion next =
                     narrowing(here, terms.get(i).getKey().term(), x);
@@ -809,6 +810,64 @@ public final class LevelRealizer {
         private Reached walking(int i, CandidateDomain.Walking every, ExactRatio owed,
                                 ExactRatio coef,
                                 souther.compiler.inputs.SearchRegion here) {
+            // Aligned once, to the wider of the two scales, rather than let every step of what may
+            // be a run a hundred thousand wide rescale `by` against `x` on its own: once `first` and
+            // `by` share a scale, every further `add` between them holds it, and a same-scale add
+            // never leaves the range a scale holds regardless of what that scale is. The exact walk
+            // below is still what a scale this host cannot align in one decimal falls back to — this
+            // is a faster route to the values that arithmetic already proves reachable, not a wider
+            // one.
+            BigDecimal first = every.first();
+            BigDecimal by = every.by();
+            int aligned = Math.max(first.scale(), by.scale());
+            BigDecimal alignedFirst;
+            BigDecimal alignedBy;
+            try {
+                alignedFirst = first.setScale(aligned);
+                alignedBy = by.setScale(aligned);
+            } catch (ArithmeticException cannotAlign) {
+                return walkingExactly(i, every, owed, coef, here);
+            }
+            return walkingAtOneScale(i, alignedFirst, alignedBy, every.last(), owed, coef, here);
+        }
+
+        /**
+         * {@code every}, walked at the one scale {@code first} and {@code by} were aligned to.
+         *
+         * <p>Every step is a same-scale sum, which is the one shape of {@code add} this compiler
+         * never has to ask the exact arithmetic about: two decimals sharing a scale can never leave
+         * the range a scale holds, whatever that scale is and however large the run.
+         */
+        private Reached walkingAtOneScale(int i, BigDecimal first, BigDecimal by, BigDecimal last,
+                                          ExactRatio owed, ExactRatio coef,
+                                          souther.compiler.inputs.SearchRegion here) {
+            Reached weakest = Reached.EXHAUSTED;
+            for (BigDecimal x = first; x.compareTo(last) <= 0; x = x.add(by)) {
+                Reached reached = trying(i, x, owed, coef, here);
+                if (reached == Reached.FOUND) {
+                    return Reached.FOUND;
+                }
+                if (reached == Reached.INCOMPLETE) {
+                    weakest = Reached.INCOMPLETE;
+                }
+                if (!stepsLeft()) {
+                    return Reached.INCOMPLETE;
+                }
+            }
+            return weakest;
+        }
+
+        /**
+         * {@code every}, walked in exact ratios: what a run this host cannot align {@code first}
+         * and {@code by} to one scale for falls back to.
+         *
+         * <p>Worked out exactly and never asked of the two decimals directly: a run whose first and
+         * step are ordinary can still meet a next value the exact arithmetic could not hold, and
+         * stepping past that one is never a proof the run was walked to the end.
+         */
+        private Reached walkingExactly(int i, CandidateDomain.Walking every, ExactRatio owed,
+                                       ExactRatio coef,
+                                       souther.compiler.inputs.SearchRegion here) {
             Reached weakest = Reached.EXHAUSTED;
             ExactRatio last = ExactRatio.of(every.last());
             ExactRatio step = ExactRatio.of(every.by());
@@ -827,9 +886,6 @@ public final class LevelRealizer {
                 if (x.compareTo(last) == 0) {
                     return weakest;
                 }
-                // Worked out exactly and never asked of the two decimals directly: a run whose first
-                // and step are ordinary can still meet a next value the exact arithmetic could not
-                // hold, and stepping past that one is never a proof the run was walked to the end.
                 ExactAnswer<ExactRatio> next = x.plus(step);
                 if (next instanceof ExactAnswer.Unheld<ExactRatio> unheldNext) {
                     unheld.add(new CompositionCapacity(
@@ -917,7 +973,7 @@ public final class LevelRealizer {
         private Reached solving(int i, ExactRatio owed, ExactRatio coef,
                                 NumericDomain.Bounds left) {
             ExactRatio quotient = owed.dividedBy(coef);
-            java.math.BigDecimal solved;
+            BigDecimal solved;
             if (carriers[i].spacing() == souther.compiler.numeric.Granularity.DISCRETE) {
                 if (!quotient.isWhole()) {
                     return Reached.EXHAUSTED;
@@ -928,7 +984,7 @@ public final class LevelRealizer {
                 // limit — `INCOMPLETE`, with the third vocabulary saying which value it was.
                 switch (quotient.truncated()) {
                     case ExactAnswer.Held<java.math.BigInteger> held ->
-                            solved = new java.math.BigDecimal(held.value());
+                            solved = new BigDecimal(held.value());
                     case ExactAnswer.Unheld<java.math.BigInteger> unheldQuotient -> {
                         unheld.add(new CompositionCapacity(
                                 CompositionCapacity.Where.VALUES_A_POSITION_ON_THE_WAY_IS_WALKED_TO,
@@ -985,7 +1041,7 @@ public final class LevelRealizer {
          */
         private souther.compiler.inputs.SearchRegion narrowing(
                 souther.compiler.inputs.SearchRegion here, NumericTerm term,
-                java.math.BigDecimal at) {
+                BigDecimal at) {
             if (asked >= HOW_OFTEN_THE_RULES_ARE_ASKED_AGAIN) {
                 return here;
             }
@@ -1080,7 +1136,7 @@ public final class LevelRealizer {
             if (exactly != null) {
                 return exactly;
             }
-            java.math.BigDecimal outward =
+            BigDecimal outward =
                     at.asDecimal(towards, DIGITS_A_DERIVED_END_KEEPS).orNull();
             return outward == null ? null : new Count(outward);
         }

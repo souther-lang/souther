@@ -84,6 +84,14 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
      * {@code OperationFacts#minutesAcrossEveryDateTime} divides and reads back a difference of two
      * fixed {@code DateTimes} constants a JDK epoch-second range away from overflowing anything —
      * every number in it is fixed at compile time and inspectable by hand.
+     *
+     * <p>{@code LevelRealizer$Search#walking} aligns a run's first value and its step to one scale
+     * before walking it, so the loop that may try a run a hundred thousand wide does a same-scale
+     * sum at every step rather than ask the exact arithmetic about one; catching the align itself is
+     * what translates a scale this host cannot hold into the exact walk
+     * ({@code walkingExactly}) that already answers soundly for it.
+     * {@code LevelRealizer$Search#walkingAtOneScale}'s own {@code add} is exactly that same-scale
+     * sum, which can never leave the range a scale holds whatever the scale aligning settled on.
      */
     private static final List<String> MAY_BE_REFUSED = List.of(
             "souther/compiler/check/Carrier#valueOf(Lsouther/compiler/numeric/Place;)Lsouther/"
@@ -163,6 +171,21 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
             "souther/compiler/partition/FixtureTemplate#on(Lsouther/compiler/check/Carrier;"
                     + "Lsouther/compiler/numeric/Place;Lsouther/compiler/types/TypeReachName"
                     + "$Naming;)Lsouther/compiler/partition/FixtureTemplate; longValueExact()J",
+            "souther/compiler/partition/LevelRealizer$Search#walking(ILsouther/compiler/"
+                    + "partition/CandidateDomain$Walking;Lsouther/compiler/numeric/ExactRatio;"
+                    + "Lsouther/compiler/numeric/ExactRatio;Lsouther/compiler/inputs/"
+                    + "SearchRegion;)Lsouther/compiler/partition/LevelRealizer$Reached; "
+                    + "setScale(I)Ljava/math/BigDecimal;",
+            "souther/compiler/partition/LevelRealizer$Search#walking(ILsouther/compiler/"
+                    + "partition/CandidateDomain$Walking;Lsouther/compiler/numeric/ExactRatio;"
+                    + "Lsouther/compiler/numeric/ExactRatio;Lsouther/compiler/inputs/"
+                    + "SearchRegion;)Lsouther/compiler/partition/LevelRealizer$Reached; "
+                    + "setScale(I)Ljava/math/BigDecimal; #2",
+            "souther/compiler/partition/LevelRealizer$Search#walkingAtOneScale(ILjava/math/"
+                    + "BigDecimal;Ljava/math/BigDecimal;Ljava/math/BigDecimal;Lsouther/compiler/"
+                    + "numeric/ExactRatio;Lsouther/compiler/numeric/ExactRatio;Lsouther/compiler/"
+                    + "inputs/SearchRegion;)Lsouther/compiler/partition/LevelRealizer$Reached; "
+                    + "add(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
             "souther/compiler/partition/TermRealizations#atThoseParts(Ljava/util/Map;Lsouther/"
                     + "compiler/types/Type;Lsouther/compiler/check/Carrier;Lsouther/compiler/"
                     + "check/RuleReadingSource;)Lsouther/compiler/partition/TermRealizations"
