@@ -1,6 +1,9 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.stdlib.Stdlib;
+import souther.compiler.types.ReachName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -61,6 +64,10 @@ public final class CheckSurface implements Assembly {
     /** Which method every value a fixture may call by name runs as, by the value's own declaration —
      *  {@link FixtureValueEntries#emitted}'s correspondence, mint and reuse alike. */
     private final Map<ValueName.Helper, String> fixtureValueMethods;
+    /** Every nullary value this module declares whose body states a type one of this module's own
+     *  behaviors declares a parameter at, keyed by that type — {@link TypedFixtureValues#of}'s
+     *  answer, read once here and never recomputed by a search reading it later. */
+    private final Map<TypeSymbol, List<ReachName.Declaration>> typedFixtureValues;
     /** Where each behavior gets its body, as the module was classified. Not in the tree: a tree
      *  read off the path has no {@code let} to say, so two surfaces whose trees are the same can
      *  still disagree about this. */
@@ -72,7 +79,9 @@ public final class CheckSurface implements Assembly {
                          List<Desugared.Fn> fns, List<Desugared.Fn> desugaredFrom,
                          List<Hir.Example> examples, FakeTables fakes,
                          List<Hir.FnDef> mintedDefs, Map<Hir.Expr, String> operandMethods,
-                         Map<ValueName.Helper, String> fixtureValueMethods, BehaviorBodies bodies) {
+                         Map<ValueName.Helper, String> fixtureValueMethods,
+                         Map<TypeSymbol, List<ReachName.Declaration>> typedFixtureValues,
+                         BehaviorBodies bodies) {
         this.settling = settling;
         this.declarations = List.copyOf(declarations);
         this.fns = List.copyOf(fns);
@@ -82,6 +91,7 @@ public final class CheckSurface implements Assembly {
         this.mintedDefs = List.copyOf(mintedDefs);
         this.operandMethods = operandMethods;
         this.fixtureValueMethods = fixtureValueMethods;
+        this.typedFixtureValues = typedFixtureValues;
         this.bodies = bodies;
     }
 
@@ -113,6 +123,17 @@ public final class CheckSurface implements Assembly {
      *
      * @throws IllegalArgumentException where an answer is for a part other than the one it stands in
      *     for
+     * @param importedForEvidence what a name this module imports bare denotes, read off the module
+     *     that declares it ({@code Bodies.publishedByQualifiedName}) — for {@link TypedFixtureValues#of}
+     *     to read past a call an own candidate's body makes of an imported helper. Not what makes a
+     *     candidate a candidate: those stay this module's own, and this is only the wider table
+     *     {@code DeclaredTypeReading} reads one against
+     * @param stdlib               the library, so {@link TypedFixtureValues#of} can leave it out of
+     *     the candidates it discovers
+     * @param symbols    what the names a candidate's body wears denote
+     * @param published  what a declaration a candidate reaches states of itself
+     * @param kinds      which form each of those declarations was written in
+     * @param fieldWraps what a newtype a candidate's body builds wraps
      */
     public static CheckSurface assemble(InvariantSettled settling,
                                         Map<String, Normalized.Def> normalized,
@@ -120,7 +141,13 @@ public final class CheckSurface implements Assembly {
                                         DeclarationNewtypes newtypes,
                                         Map<ValueName.Behavior, Sig> signatures,
                                         FakeTables declared,
-                                        BehaviorBodies bodies) {
+                                        BehaviorBodies bodies,
+                                        Map<String, Hir.FnDef> importedForEvidence,
+                                        Stdlib stdlib,
+                                        Symbols symbols,
+                                        PublishedDeclarations published,
+                                        DeclarationKinds kinds,
+                                        NewtypeInners fieldWraps) {
         Hir.Module settled = settling.module();
         // The same check for the table: a module's classification under the name of another would
         // answer about behaviors this surface does not declare.
@@ -180,7 +207,14 @@ public final class CheckSurface implements Assembly {
         // read, and writing a name out does not touch either.
         FakeTables fakes = FakeTables.namesWrittenOut(declared, self);
         CheckSurface written = new CheckSurface(settling, declarations, fns, desugaredFrom, examples, fakes,
-                List.of(), Map.of(), Map.of(), bodies);
+                List.of(), Map.of(), Map.of(), Map.of(), bodies);
+        // Every value this module reaches whose body states a type, discovered before any row or
+        // fake names one: a search offering one as a baseline reads the same candidates
+        // FixtureValueEntries mints entries for below, rather than finding one only later and
+        // falling back to interpreting its body.
+        Map<TypeSymbol, List<ReachName.Declaration>> typedFixtureValues = TypedFixtureValues.of(
+                written.module(), importedForEvidence, stdlib, symbols, published, kinds, fieldWraps,
+                signatures);
         // Every operand a row or a fake writes, walked once: RowFixtures.emitted mints a method for
         // each and FixtureValueEntries reads the same list for the names among them, rather than
         // each asking RowFixtures.placed for its own copy.
@@ -193,12 +227,16 @@ public final class CheckSurface implements Assembly {
         // family, emitted for the same reason, and kept apart from the rows in that no row runs it.
         Map<String, Hir.FnDef> entries = ValueEntries.emitted(written, newtypes);
         // And what a fixture reads a named value through, whether or not the module publishes it —
-        // reusing the entry above where one already exists rather than minting a second.
+        // reusing the entry above where one already exists rather than minting a second — and
+        // whether a row named it bare or TypedFixtureValues discovered it by type.
         FixtureValueEntries.Emitted fixtureEntries =
-                FixtureValueEntries.emitted(written, newtypes, placed);
+                FixtureValueEntries.emitted(written, newtypes, placed, typedFixtureValues);
         // fixtureEntries.methods(), not fixtureEntries.defs(): a value already published needs no
         // new definition, but its method still has to be carried past `written`, whose table is
         // empty — checking `defs()` here would silently drop that correspondence.
+        // fixtureEntries.methods() carries a candidate TypedFixtureValues discovered even where it
+        // mints no new definition (the module already publishes it), so this is empty only where
+        // typedFixtureValues is too.
         if (rows.defs().isEmpty() && entries.isEmpty() && fixtureEntries.methods().isEmpty()) {
             return written;
         }
@@ -206,7 +244,7 @@ public final class CheckSurface implements Assembly {
         minted.addAll(entries.values());
         minted.addAll(fixtureEntries.defs().values());
         return new CheckSurface(settling, declarations, fns, desugaredFrom, examples, fakes,
-                minted, rows.methods(), fixtureEntries.methods(), bodies);
+                minted, rows.methods(), fixtureEntries.methods(), typedFixtureValues, bodies);
     }
 
     /** What the module is called. */
@@ -293,6 +331,14 @@ public final class CheckSurface implements Assembly {
         return fixtureValueMethods;
     }
 
+    /** Every nullary value this module declares whose body states a type one of this module's own
+     *  behaviors declares a parameter at, keyed by that type — what a search may offer as a
+     *  baseline for a parameter of that type, before any row or fake ever names one ({@link
+     *  TypedFixtureValues#of}). */
+    public Map<TypeSymbol, List<ReachName.Declaration>> typedFixtureValues() {
+        return typedFixtureValues;
+    }
+
     /** Which module each imported name was written out to. */
     public Map<String, String> importedFrom() {
         Map<String, String> from = new LinkedHashMap<>();
@@ -342,7 +388,8 @@ public final class CheckSurface implements Assembly {
     public boolean equals(Object o) {
         return o instanceof CheckSurface other && module().equals(other.module())
                 && mintedDefs.equals(other.mintedDefs) && desugaredFrom.equals(other.desugaredFrom)
-                && bodies.equals(other.bodies);
+                && bodies.equals(other.bodies)
+                && typedFixtureValues.equals(other.typedFixtureValues);
     }
 
     @Override

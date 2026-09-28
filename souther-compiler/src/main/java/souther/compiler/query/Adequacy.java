@@ -4284,16 +4284,7 @@ public final class Adequacy {
             // that answer says the model holds nothing to cover, and read for this one it turned a
             // compile that stopped into a module with no work in it (issue #996).
             Answer<Map<String, PartitionEvidence>> coverage = db.ask(new Coverage(name));
-            // What the module states of a parameter's type is read off its definitions and the
-            // behaviors a body of it can name, and both are answers that can be absent. Absence and
-            // not an empty table, for the reason above: read as a table with nothing in it, a module
-            // whose signatures could not be worked out became a module that states no value of any
-            // type, and every row it is offered was composed as though the author had written none.
-            Answer<Map<String, Hir.FnDef>> definitions =
-                    db.ask(new Bodies.ModuleDefinitions(name));
-            Answer<Map<ValueName.Behavior, Sig>> reachable = db.ask(new Bodies.Reachable(name));
-            if (!prepared.present() || !scope.present() || !sigs.present() || !coverage.present()
-                    || !definitions.present() || !reachable.present()) {
+            if (!prepared.present() || !scope.present() || !sigs.present() || !coverage.present()) {
                 return Answer.absent();
             }
             souther.compiler.query.Bodies.Elaborated checked =
@@ -4309,7 +4300,6 @@ public final class Adequacy {
             // What the guards above each place leave, asked once for the module and read by
             // every measure below — the same reason the reading of the input is.
             db.ask(new PathReached(name));
-            Symbols symbols = scope.value();
 
             // And what each behavior states about its answer, which draws lines of its own.
             db.ask(new Bodies.StatedContracts(name));
@@ -4382,16 +4372,7 @@ public final class Adequacy {
             souther.compiler.partition.FillResult composed;
             try {
                 composed = rowsFor(spec, sig, meetings, asked,
-                        baselines(name, spec, sig, definitions.value(), reachable.value(),
-                                prepared.value(), symbols, Shapes.publishedDeclarations(db),
-                                Shapes.declarationKinds(db),
-                                // What the declarations of this module denote, and not what a check
-                                // settled about them: a generation is a measurement of a module
-                                // that need not have been accepted — this same answer is worked out
-                                // where a body did not check — and a declaration the check said
-                                // nothing about is a value this cannot reach rather than a fault.
-                                new souther.compiler.check.ResolvedFieldTypes(
-                                        symbols, Shapes.newtypeInners(db))),
+                        baselines(spec, sig, prepared.value()),
                         numbering,
                         observed,
                         constructing(db, name),
@@ -5070,12 +5051,8 @@ public final class Adequacy {
          * same reading a written row naming it goes through — so nothing here holds a copy of it to
          * disagree with.
          */
-        private static List<Generator.Baseline> baselines(
-                String module, Hir.SpecBehavior spec, Sig sig, Map<String, Hir.FnDef> values,
-                Map<ValueName.Behavior, Sig> behaviors,
-                CheckSurface prepared, Symbols symbols, PublishedDeclarations published,
-                DeclarationKinds kinds,
-                souther.compiler.observe.FieldTypes fields) {
+        private static List<Generator.Baseline> baselines(Hir.SpecBehavior spec, Sig sig,
+                CheckSurface prepared) {
             List<Generator.Baseline> out = new ArrayList<>();
             // What the author has already written, first and whole. A row of theirs names a set of
             // values that go together, which is more than this can say of one value chosen per
@@ -5092,11 +5069,11 @@ public final class Adequacy {
                     }
                 }
             }
-            // Then every value the module states of a parameter's own type, in the order it states
-            // them, one origin per turn. Narrowed to the only value of a type, a module that states
-            // a second one lost the spread from every row of every behavior taking it.
-            out.addAll(named(module, spec, sig, values, behaviors, symbols, published, kinds,
-                    fields));
+            // Then every value the module states of a parameter's own type, in the order
+            // TypedFixtureValues reached them, one origin per turn. Narrowed to the only value of a
+            // type, a module that states a second one lost the spread from every row of every
+            // behavior taking it.
+            out.addAll(named(spec, sig, prepared.typedFixtureValues()));
             return List.copyOf(out);
         }
 
@@ -5147,39 +5124,15 @@ public final class Adequacy {
          * <p>A whole tuple is still an origin where the author wrote one: a row of theirs naming a
          * value at each position is a set of values they reached for together, and that is read
          * from the rows rather than assembled ({@link #namesIn}).
+         *
+         * <p>What a value is declared to be is not read here: {@code typedFixtureValues} is {@link
+         * souther.compiler.check.TypedFixtureValues#of}'s own answer, read once when {@link
+         * CheckSurface} was assembled and carried on it — a second reading of a definition's type
+         * here would be a second answer about what a row may name, differing from the reading that
+         * built the fixture entry a search's own name reads through at whatever either forgot.
          */
-        static List<Generator.Baseline> named(String module, Hir.SpecBehavior spec, Sig sig,
-                                                      Map<String, Hir.FnDef> values,
-                                                      Map<ValueName.Behavior, Sig> behaviors,
-                                                      Symbols symbols,
-                                                      PublishedDeclarations published,
-                                                      DeclarationKinds kinds,
-                                                      souther.compiler.observe.FieldTypes fields) {
-            // What a value is declared to be, asked of the one walk that answers it. A second
-            // reading of a definition's type here would be a second answer about what a row may
-            // name, differing from the reading that builds the row at whatever either forgot.
-            // Refusing where a declaration does not read, because this is downstream of a check:
-            // one that does not read was refused there, so meeting one here is this compiler being
-            // wrong rather than a module being written.
-            souther.compiler.check.DeclaredTypeReading evidence =
-                    new souther.compiler.check.DeclaredTypeReading(
-                            new souther.compiler.check.DeclarationFacts(
-                                    new souther.compiler.check.FieldRead(symbols, published, kinds,
-                                            souther.compiler.check.NewtypeInners.asWritten(symbols),
-                                            fields,
-                                            souther.compiler.check.FieldRead.Unreadable.REFUSED),
-                                    souther.compiler.check.DeclarationNewtypes.asWritten(symbols)),
-                            values, behaviors);
-            Map<TypeSymbol, List<String>> stated = new LinkedHashMap<>();
-            for (Map.Entry<String, Hir.FnDef> each : values.entrySet()) {
-                if (!each.getValue().params().isEmpty()
-                        || !(each.getValue().body() instanceof Hir.FnBody.Written written)
-                        || !(evidence.declaredTypeOf(written.expr())
-                                instanceof souther.compiler.types.Type.Ref(TypeSymbol of))) {
-                    continue;
-                }
-                stated.computeIfAbsent(of, _ -> new ArrayList<>()).add(each.getKey());
-            }
+        static List<Generator.Baseline> named(Hir.SpecBehavior spec, Sig sig,
+                Map<TypeSymbol, List<ReachName.Declaration>> typedFixtureValues) {
             List<Hir.Param> takes = spec.params();
             List<Generator.Baseline> out = new ArrayList<>();
             for (int p = 0; p < takes.size() && p < sig.inputTypes().size(); p++) {
@@ -5187,15 +5140,10 @@ public final class Adequacy {
                         TypeSymbol of))) {
                     continue;
                 }
-                for (String value : stated.getOrDefault(of, List.of())) {
-                    // Own, and module rather than the value's own declaring module: `values`' keys
-                    // are already the qualified spelling for an import, same as `namesIn` used to
-                    // rebuild. Carried over rather than fixed — this reading names a value no row
-                    // ever wrote, so there is no fixture entry for it to be reached through either
-                    // way, and it still answers by reading the value's own body.
+                for (ReachName.Declaration value
+                        : typedFixtureValues.getOrDefault(of, List.of())) {
                     Generator.Baseline origin = Generator.Baseline.stating(takes.get(p).name(),
-                            new Generator.Baseline.Named(
-                                    new ReachName.Own(new ValueName.Helper(module, value))));
+                            new Generator.Baseline.Named(value));
                     if (!out.contains(origin)) {
                         out.add(origin);
                     }

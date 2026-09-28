@@ -1779,6 +1779,41 @@ public final class Bodies {
     }
 
     /**
+     * What a name this module imports denotes, closed over every helper its own body reaches in
+     * turn — {@link ImportedDefinitions}'s own closure, over this module's direct leaves alone and
+     * none of what {@link Shapes.ClausesTakenIn} of this module would add.
+     *
+     * <p>{@link ImportedDefinitions} closes a leaf's published body the same way and is the answer
+     * this would be if it could be asked for from inside this module's own {@link
+     * Shapes.CheckSurface} — its {@code standingIn}, built from {@code ClausesTakenIn(name)} of
+     * this same module, is what cycles back into that assembly, not the closing itself: {@link
+     * Settled} and {@link Expanding} below are both asked of the module that {@link #leaves}
+     * already says declares a name, never of this one. So this is that same closure with the
+     * standing-clause modules left out of the set closed over — the leaves a direct import line admits,
+     * each closed against the table its own declaring module expands its own body against, exactly
+     * {@link ImportedDefinitions}'s {@code bodiesOf}/{@code carriedClosure} step and no other.
+     * {@code check.DeclaredTypeReading.declaredTypeOf} reads a call as deep as this closure goes —
+     * as deep as {@link ImportedDefinitions} itself would have read it for the same name.
+     */
+    public static Map<String, Hir.FnDef> publishedByQualifiedName(Db db, String module) {
+        Map<String, List<PublishedHelper>> byModule = new LinkedHashMap<>();
+        leaves(db, module).values().forEach(leave -> byModule
+                .computeIfAbsent(leave.module(), k -> new ArrayList<>()).add(leave));
+        Map<String, Hir.FnDef> out = new LinkedHashMap<>();
+        for (Map.Entry<String, List<PublishedHelper>> declaring : byModule.entrySet()) {
+            Answer<Hir.Module> from = db.ask(new Settled(declaring.getKey()));
+            Answer<Expanding.Of> against =
+                    db.ask(new Expanding(declaring.getKey(), InliningPolicy.FULL));
+            if (!from.present() || !against.present()) {
+                continue;
+            }
+            carriedClosure(from.value(), bodiesOf(from.value(), declaring.getValue()),
+                    against.value()).forEach(out::putIfAbsent);
+        }
+        return out;
+    }
+
+    /**
      * What the modules this one imports publish to it, each closed where it was written and named by
      * the module that declares it.
      *

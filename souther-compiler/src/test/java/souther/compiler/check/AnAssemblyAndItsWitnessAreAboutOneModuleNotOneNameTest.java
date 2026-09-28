@@ -100,7 +100,9 @@ class AnAssemblyAndItsWitnessAreAboutOneModuleNotOneNameTest {
         }
         CheckSurface read = CheckSurface.assemble(settling, elsewhere, itsOwn,
                 DeclarationNewtypes.NONE,
-                Map.of(), FakeTables.classify(settling.module()), itsOwnAssembly.bodies());
+                Map.of(), FakeTables.classify(settling.module()), itsOwnAssembly.bodies(),
+                Map.of(), DefaultStdlib.get(), ResolvedSymbols.none(DefaultStdlib.get()),
+                PublishedDeclarations.NONE, DeclarationKinds.NONE, NewtypeInners.NONE);
         assertNotNull(read, "the assembly is made, so the refusal below is about the pairing");
 
         assertThrows(IllegalArgumentException.class, () -> Prepared.prepare(declarations, read),
@@ -138,7 +140,9 @@ class AnAssemblyAndItsWitnessAreAboutOneModuleNotOneNameTest {
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> CheckSurface.assemble(settling, normalized, underTheWrongName,
                         DeclarationNewtypes.NONE,
-                        Map.of(), FakeTables.classify(settling.module()), itsOwn.bodies()),
+                        Map.of(), FakeTables.classify(settling.module()), itsOwn.bodies(),
+                        Map.of(), DefaultStdlib.get(), ResolvedSymbols.none(DefaultStdlib.get()),
+                        PublishedDeclarations.NONE, DeclarationKinds.NONE, NewtypeInners.NONE),
                 "an answer for one definition stood in for another, and the name they were looked"
                         + " up by is the same shape");
         assertTrue(refused.getMessage().contains("first"), refused.getMessage());
@@ -178,7 +182,9 @@ class AnAssemblyAndItsWitnessAreAboutOneModuleNotOneNameTest {
 
         CheckSurface assembled = CheckSurface.assemble(settling, normalized, read,
                 DeclarationNewtypes.NONE,
-                Map.of(), FakeTables.classify(settling.module()), itsOwn.bodies());
+                Map.of(), FakeTables.classify(settling.module()), itsOwn.bodies(),
+                Map.of(), DefaultStdlib.get(), ResolvedSymbols.none(DefaultStdlib.get()),
+                PublishedDeclarations.NONE, DeclarationKinds.NONE, NewtypeInners.NONE);
         assertNotNull(assembled, "the assembly is made, so the refusal below is about the pairing");
         assertNotEquals(declarations.fns(), assembled.desugaredFrom(),
                 "the two readings are two sets of definitions, or this says nothing");

@@ -230,7 +230,7 @@ class WhetherADeclarationWearsOneValueWasSettledWhenItWasIndexedTest {
             }
         }
 
-        assertEquals(List.of("NeutralForm.java", "Adequacy.java"), calls,
+        assertEquals(List.of("TypedFixtureValues.java", "NeutralForm.java"), calls,
                 "the walks that still build this out of a scope rather than being handed the"
                         + " compilation's answer");
     }

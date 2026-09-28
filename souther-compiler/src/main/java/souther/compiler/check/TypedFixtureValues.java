@@ -1,0 +1,148 @@
+package souther.compiler.check;
+
+import souther.compiler.ast.Hir;
+import souther.compiler.stdlib.Stdlib;
+import souther.compiler.types.ReachName;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.ValueName;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * Every nullary value this module declares whose body states a type one of this module's own
+ * behaviors declares a parameter at, keyed by that type — the candidates a class-partitioning
+ * search may offer as a baseline for a parameter of that type, before any row or fake ever names
+ * one.
+ *
+ * <p>Narrowed to those types and not every type a nullary value happens to build: a candidate this
+ * finds is minted a {@link FixtureValueEntries.Emitted fixture entry} whether or not a search ever
+ * reaches for it, and {@link LoweringRole#valuesWithAnEntry} reads that entry as a reason to type the
+ * value at the entry rather than at each place it is copied in — a value of a type nothing here
+ * takes or answers has no reason to trade the wider typing for that, and offering it as a candidate
+ * that answers no parameter would be exactly that trade for nothing.
+ *
+ * <p>Own {@link Hir.SpecBehavior}s and their input types, not {@code behaviors}' whole domain and
+ * not output types either. {@code behaviors} is {@code Bodies.Reachable} — this module's own and
+ * every one it borrows — because reading a candidate's body needs the wider table to type a call
+ * the body makes of a borrowed behavior; but a borrowed behavior's own parameter is a fact about the
+ * module that declares it, not this one, and offering a candidate for it is a claim this module
+ * never makes. Nor is a {@link Hir.PipeBehavior}'s: {@code Adequacy.Generated.compute} only ever
+ * generates rows for a {@code SpecBehavior} — {@code specOf} answers null for anything else and
+ * generation stops there, its own comment saying why: {@code "A composition's inputs are its first
+ * stage's and are divided there"}. Nor is a behavior's answer: {@code Adequacy.Generated.named}, the
+ * search this hoists, has only ever read {@code sig.inputTypes()} — never {@code outputType()} — so
+ * keeping this to a {@code SpecBehavior}'s input types is carrying that search's own domain forward
+ * exactly rather than widening it along the way.
+ *
+ * <p>Read over {@link HelperTable#reachable} and not {@link Bodies.ModuleDefinitions}: that answer
+ * is downstream of this module's own {@code CheckSurface} and asking it here would be the cycle
+ * {@code Shapes.CheckSurface} already refuses. {@link HelperTable} needs none of that for the
+ * module's own declarations — its own materials, {@code declared}/{@code takenOn}, are exactly what
+ * a surface being assembled already holds — so this runs at assembly time and its answer is ready
+ * before {@link FixtureValueEntries} mints anything.
+ *
+ * <p>Candidates themselves stay the module's own — {@code table} below is built with no imports —
+ * but reading an own candidate's declared type still needs to read past a call the candidate's own
+ * body makes of an imported helper, the way {@code let vip = of(Gold)} reads as {@code Customer}
+ * whether {@code of} is this module's own or one it imports. {@code importedForEvidence} is that:
+ * {@link Bodies#publishedByQualifiedName}'s answer, which reads each imported name directly off the
+ * module that declares it rather than through {@link Bodies.ImportedDefinitions}'s published-body
+ * closure — that closure needs {@code Shapes.ClausesTakenIn} of this module and would cycle back
+ * into this same {@code CheckSurface}, the shape {@code DeclaredTypeReading}'s checked-world {@code
+ * FieldTypes} already refuses. Widening the candidates themselves to what a module imports is a
+ * different question, still open ({@code CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest.anImportedValueIsNotACandidateYet}).
+ *
+ * <p>{@link InliningPolicy#DISCHARGE} and not {@link InliningPolicy#FULL}: a candidate drawn from the
+ * standard library is not a value this module's own search reasons about, and {@code FULL} is the
+ * policy that pulls the library in.
+ *
+ * <p>What each candidate is declared to be is read by {@link DeclaredTypeReading}, the one walk every
+ * other consumer of a declared type reads through — never a second, narrower one built here. Its
+ * {@code values} table is keyed by spelling, so the definitions {@link HelperEntry} carries are
+ * projected onto {@link HelperEntry#address()}'s text once, for that table alone; the candidate
+ * itself is held by {@link HelperEntry#reachedAs()}, which is the reference a search composes a row
+ * against and the reference {@link FixtureValueEntries} mints an entry under. The two are not
+ * interchangeable ({@link HelperEntry}'s own doc): an imported value's address and the name a call
+ * reaches it by are different strings, and asking one for what the other answers is the rediscovery
+ * this exists to stop.
+ *
+ * <p>{@link FieldRead.Unreadable#MAKES_NOTHING_READABLE} and not {@code REFUSED}: this runs inside
+ * {@link CheckSurface#assemble}, which is best-effort over a module that need not have checked yet
+ * ({@code ResolvedFieldTypes} is the same choice, for the same reason). A candidate whose field is
+ * not yet readable states nothing rather than raising — raising here would make discovering a
+ * baseline nothing asked for the reason a whole module's surface goes missing.
+ */
+public final class TypedFixtureValues {
+
+    private TypedFixtureValues() {
+    }
+
+    /**
+     * The candidates {@code module} states, keyed by the type each is declared to build, in the
+     * order {@link HelperTable#reachable} reaches them — one of {@code module}'s own {@code
+     * SpecBehavior}s' own declared input types, and no other.
+     */
+    public static Map<TypeSymbol, List<ReachName.Declaration>> of(Hir.Module module,
+            Map<String, Hir.FnDef> importedForEvidence, Stdlib stdlib, Symbols symbols,
+            PublishedDeclarations published, DeclarationKinds kinds, NewtypeInners fieldWraps,
+            Map<ValueName.Behavior, Sig> behaviors) {
+        Set<String> generated = new LinkedHashSet<>();
+        for (Hir.BehaviorDef behavior : module.behaviors()) {
+            if (behavior instanceof Hir.SpecBehavior spec) {
+                generated.add(spec.name());
+            }
+        }
+        Set<TypeSymbol> relevant = new LinkedHashSet<>();
+        for (Map.Entry<ValueName.Behavior, Sig> each : behaviors.entrySet()) {
+            if (!each.getKey().module().equals(module.name())
+                    || !generated.contains(each.getKey().name())) {
+                // Borrowed rather than declared, its parameter is a fact about its own module; a
+                // composition's rather than a SpecBehavior's, its input is its first stage's and
+                // divided there — Adequacy.Generated never generates a row against it directly.
+                continue;
+            }
+            for (Type type : each.getValue().inputTypes()) {
+                if (type instanceof Type.Ref(TypeSymbol of)) {
+                    relevant.add(of);
+                }
+            }
+        }
+        if (relevant.isEmpty()) {
+            return Map.of();
+        }
+        // Own only: an imported value is not a candidate yet, whatever the search may read past to
+        // type one of this module's own.
+        HelperTable table = HelperTable.of(module, Map.of(), InliningPolicy.DISCHARGE, stdlib);
+        // Imported first, own after: a name this module both imports and declares reaches its own
+        // declaration, and the later put is the one DeclaredTypeReading reads.
+        Map<String, Hir.FnDef> readableBySpelling = new LinkedHashMap<>(importedForEvidence);
+        for (HelperEntry entry : table.reachable().values()) {
+            readableBySpelling.put(entry.address().text(), entry.definition());
+        }
+        DeclaredTypeReading evidence = new DeclaredTypeReading(
+                new DeclarationFacts(
+                        new FieldRead(symbols, published, kinds,
+                                new ResolvedFieldTypes(symbols, fieldWraps),
+                                FieldRead.Unreadable.MAKES_NOTHING_READABLE),
+                        DeclarationNewtypes.asWritten(symbols)),
+                readableBySpelling, behaviors);
+        Map<TypeSymbol, List<ReachName.Declaration>> out = new LinkedHashMap<>();
+        for (HelperEntry entry : table.reachable().values()) {
+            Hir.FnDef definition = entry.definition();
+            if (!definition.params().isEmpty()
+                    || !(definition.body() instanceof Hir.FnBody.Written written)
+                    || !(evidence.declaredTypeOf(written.expr()) instanceof Type.Ref(TypeSymbol of))
+                    || !relevant.contains(of)) {
+                continue;
+            }
+            out.computeIfAbsent(of, _ -> new ArrayList<>()).add(entry.reachedAs());
+        }
+        return out;
+    }
+}

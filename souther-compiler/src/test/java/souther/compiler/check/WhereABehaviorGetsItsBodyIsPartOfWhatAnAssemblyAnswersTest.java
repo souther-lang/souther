@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
 
@@ -60,6 +61,7 @@ class WhereABehaviorGetsItsBodyIsPartOfWhatAnAssemblyAnswersTest {
         }
         return CheckSurface.assemble(surface.settling(), normalized, desugared,
                 DeclarationNewtypes.NONE, Map.of(), FakeTables.classify(surface.settling().module()),
-                bodies);
+                bodies, Map.of(), DefaultStdlib.get(), ResolvedSymbols.none(DefaultStdlib.get()),
+                PublishedDeclarations.NONE, DeclarationKinds.NONE, NewtypeInners.NONE);
     }
 }
