@@ -1,6 +1,8 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import souther.compiler.inputs.Membership;
 import souther.compiler.numeric.ExactRatio;
@@ -51,14 +53,16 @@ class ANumberTheExactArithmeticCouldNotHoldIsNeverReadAsADecidedAnswerTest {
      * {@link InputClassifications#decided} used to have no arm for {@link Membership.NotWorkedOut}
      * beyond a thrown {@code IllegalStateException}, reachable from an ordinary rule bounding a
      * count taken as a sum over a {@code List<Decimal>} spaced far enough apart in scale. It now
-     * answers {@link Classification.Unclassified} carrying
-     * {@link Incompleteness.Code#VALUE_NOT_WORKED_OUT}, the same as any other class this measure
-     * could not settle — not a crash, and not read as a class the value holds or does not.
+     * answers {@link Classification.Unclassified} carrying its own code for each of the two ways
+     * {@link UnheldNumber} tells apart — a host that could still answer with more room, and no
+     * representation existing at all — rather than a crash, and rather than folding the two into
+     * one word once {@code UnheldNumber}'s own distinction had already been worked out.
      */
-    @Test
-    void aClassAskedACountItCouldNotWorkOutIsUndeterminedRatherThanACrashOrADecidedAnswer() {
+    @ParameterizedTest
+    @EnumSource(UnheldNumber.class)
+    void aClassAskedACountItCouldNotWorkOutIsUndeterminedRatherThanACrashOrADecidedAnswer(
+            UnheldNumber why) {
         AxisId axis = new AxisId("overDecimals", "List.sum(ds)");
-        UnheldNumber why = UnheldNumber.NO_REPRESENTATION_EXISTS;
 
         Classification at = InputClassifications.decided(axis, List.of("over", "under"),
                 List.of(new Membership.NotWorkedOut(why), new Membership.NotWorkedOut(why)),
@@ -67,8 +71,12 @@ class ANumberTheExactArithmeticCouldNotHoldIsNeverReadAsADecidedAnswerTest {
         assertTrue(at instanceof Classification.Unclassified,
                 "a count the exact arithmetic could not work out settles no class, and is not"
                         + " read as one that definitely holds none either");
-        assertEquals(Incompleteness.Code.VALUE_NOT_WORKED_OUT,
-                ((Classification.Unclassified) at).reason().code(),
-                "the coverage word for this is its own, not an observation code and not silence");
+        Incompleteness.Code expected = switch (why) {
+            case NO_REPRESENTATION_EXISTS -> Incompleteness.Code.VALUE_NOT_WORKED_OUT;
+            case MORE_ROOM_COULD_ANSWER -> Incompleteness.Code.VALUE_ROOM_EXCEEDED;
+        };
+        assertEquals(expected, ((Classification.Unclassified) at).reason().code(),
+                "the coverage word keeps which of the two ways the arithmetic went unheld, the"
+                        + " same distinction UnheldNumber's own contract says a reader is told");
     }
 }

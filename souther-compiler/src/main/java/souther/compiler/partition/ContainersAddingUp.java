@@ -688,13 +688,19 @@ final class ContainersAddingUp {
             return new Split.NotWorkedOut(unheldStart.why());
         }
         ExactRatio owed = ((ExactAnswer.Held<ExactRatio>) started).value();
+        // How many places a share is rounded to, asked once of what this decomposition's own
+        // numbers were written to and held constant through the walk — not read back off `owed`
+        // at each step, which would ask a canonical value for a precision it no longer carries. A
+        // total or an end written to two places puts every share at two places or finer, the same
+        // width {@code total.subtract(...)} would have carried through raw decimal arithmetic.
+        int levelScale = levelSharingScale(total, ends);
         List<BigDecimal> split = new ArrayList<>();
         for (int i = 0; i < many; i++) {
             ExactRatio wanted;
             if (how == Spread.MASSED) {
                 wanted = owed;
             } else {
-                ExactAnswer<ExactRatio> sharedAnswer = shared(owed, many - i, elements);
+                ExactAnswer<ExactRatio> sharedAnswer = shared(owed, levelScale, many - i, elements);
                 if (sharedAnswer instanceof ExactAnswer.Unheld<ExactRatio> unheldShared) {
                     return new Split.NotWorkedOut(unheldShared.why());
                 }
@@ -735,6 +741,36 @@ final class ContainersAddingUp {
     }
 
     /**
+     * How many places a dense order's share is rounded to: the most any of a decomposition's own
+     * numbers were written to, or one place where none needed that many.
+     *
+     * <p>Asked once, of {@code total} and of the ends, rather than read back off an exact quotient
+     * as it is worked out. An exact ratio holds a value and not the places a decimal wrote it at —
+     * {@code 1.00} and {@code 1} are one ratio — so a scale read off one after it is canonical is a
+     * finer count on a later element than an earlier one shared no differently, not the width the
+     * numbers this decomposition is stated in front of an author actually carry.
+     */
+    private static int levelSharingScale(BigDecimal total, Ends ends) {
+        int scale = total.scale();
+        scale = Math.max(scale, sharedScaleOf(ends.from()));
+        if (ends.upTo() != null) {
+            scale = Math.max(scale, sharedScaleOf(ends.upTo()));
+        }
+        if (ends.downTo() != null) {
+            scale = Math.max(scale, sharedScaleOf(ends.downTo()));
+        }
+        return Math.max(scale, 1);
+    }
+
+    /** The scale a ratio taking part in a decomposition was written at, or nought where it is not
+     *  one a decimal holds — which the decomposition's own arithmetic answers for elsewhere, and is
+     *  never this method's to refuse over. */
+    private static int sharedScaleOf(ExactRatio value) {
+        BigDecimal written = value.asWrittenDecimal();
+        return written == null ? 0 : written.scale();
+    }
+
+    /**
      * One element's share of what is still owed, over the elements still to be given one, or which
      * way the exact arithmetic could not hold it.
      *
@@ -743,16 +779,17 @@ final class ContainersAddingUp {
      * place: the last element is given whatever is still owed, whatever the division came to.
      *
      * <p>An order that steps divides to a whole number of its counts; one that does not is divided
-     * as far as the numbers being added were written, since a share finer than that is a value the
-     * total was never stated to. Divided in ratios throughout: {@code among} is a whole number and
-     * never nought, so the divisor never refuses, and what asks the exact arithmetic something it
-     * may refuse is only the room the quotient itself needs — which is
-     * {@link ExactRatio#truncated}/{@link ExactRatio#asDecimal}'s question and not
-     * {@code BigDecimal.divide}'s. A written decimal is read here only for the one thing a scale
-     * this rounds to needs from it — how many places {@code owed} itself was written to — never for
-     * a value the division runs on.
+     * to {@code scale} places, {@link #levelSharingScale} asked once for the whole decomposition
+     * rather than read back off {@code owed} here — a share finer than that is a value the total was
+     * never stated to, and one coarser than the numbers the total and the ends were themselves
+     * written at is a share the decomposition never asked for either. Divided in ratios throughout:
+     * {@code among} is a whole number and never nought, so the divisor never refuses, and what asks
+     * the exact arithmetic something it may refuse is only the room the quotient itself needs —
+     * which is {@link ExactRatio#truncated}/{@link ExactRatio#asDecimal}'s question and not
+     * {@code BigDecimal.divide}'s.
      */
-    private static ExactAnswer<ExactRatio> shared(ExactRatio owed, int among, Carrier elements) {
+    private static ExactAnswer<ExactRatio> shared(ExactRatio owed, int scale, int among,
+                                                   Carrier elements) {
         ExactRatio by = ExactRatio.of(among);
         if (elements.spacing() == Granularity.DISCRETE) {
             return switch (owed.dividedBy(by).truncated()) {
@@ -760,14 +797,6 @@ final class ContainersAddingUp {
                 case ExactAnswer.Unheld<BigInteger> unheld -> ExactAnswer.unheld(unheld.why());
             };
         }
-        BigDecimal owedWritten = owed.asWrittenDecimal();
-        if (owedWritten == null) {
-            // The same gap an unheld arithmetic step is, not a shape this compiler has ruled out: a
-            // finite decimal's sum, difference and whole-number product are always finite decimals
-            // once held.
-            return ExactAnswer.unheld(UnheldNumber.NO_REPRESENTATION_EXISTS);
-        }
-        int scale = Math.max(owedWritten.scale(), 1);
         return switch (owed.dividedBy(by).asDecimal(RoundingMode.DOWN, scale)) {
             case ExactAnswer.Held<BigDecimal> held -> ExactAnswer.held(ExactRatio.of(held.value()));
             case ExactAnswer.Unheld<BigDecimal> unheld -> ExactAnswer.unheld(unheld.why());

@@ -131,16 +131,20 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                             + "$Reading; divideToIntegralValue(Ljava/math/BigDecimal;)Ljava/math/"
                             + "BigDecimal;",
                     Reason.REFUSAL_IMPOSSIBLE,
-                    "Divisor is BigDecimal.valueOf(part.seconds()), a fixed positive TimePart enum"
-                            + " constant (3600/60/1) — never nought, the one throw this member has."),
+                    "TakenAs.PartOfTime is only ever declared for Time's own operations"
+                            + " (OperationFacts: Time.hour/minute/second), so the dividend is a"
+                            + " Times-carrier count — scale 0, bounded 0..86399 by Times.MIN/MAX —"
+                            + " and the divisor is a fixed positive TimePart constant (3600/60/1)."
+                            + " divideToIntegralValue's own scale-difference bound, not only a"
+                            + " non-zero divisor, is what this rules out."),
             new Permission(
                     "souther/compiler/inputs/TermReading#partOfTime(Lsouther/compiler/semantics/"
                             + "TakenAs$TimePart;Lsouther/compiler/observe/ObservedValue;Lsouther/"
                             + "compiler/check/Carrier;)Lsouther/compiler/inputs/NumericTerm"
                             + "$Reading; remainder(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
                     Reason.REFUSAL_IMPOSSIBLE,
-                    "Same divisor family as the divideToIntegralValue above, BigDecimal.valueOf"
-                            + "(part.many()) — a fixed positive enum constant."),
+                    "Same Times-bounded dividend as the divideToIntegralValue above, same fixed"
+                            + " positive divisor family (part.many())."),
             new Permission(
                     "souther/compiler/numeric/Count#plus(J)Lsouther/compiler/numeric/Count;"
                             + " add(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
@@ -332,7 +336,10 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                     "by.signum() == 0 returns before this line, throwing its own"
                             + " IllegalArgumentException early rather than catching this member's"
                             + " own exception — so the actual call is guarded by a precondition, not"
-                            + " a translation around it."),
+                            + " a translation around it. That guard alone rules out only one of"
+                            + " divideToIntegralValue's two throw conditions; the other is ruled out"
+                            + " by TakenAs.TheTruncatingQuotient.takenOf() only ever taking Int -> Int,"
+                            + " so both operands are scale-0, long-range-bounded Int values."),
             new Permission(
                     "souther/compiler/semantics/OperationFacts#minutesAcrossEveryDateTime()J"
                             + " divideToIntegralValue(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
