@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.core.IntNegation;
+import souther.exact.ExactDecimals;
 
 import java.math.BigDecimal;
 
@@ -31,7 +32,7 @@ public final class NumericLiterals {
      */
     public static BigDecimal wholeLiteralOf(Hir.Expr e) {
         BigDecimal read = literalOf(e);
-        return read == null || read.stripTrailingZeros().scale() > 0 ? null : read;
+        return read == null || ExactDecimals.leastDigits(read).scale() > 0 ? null : read;
     }
 
     /** A numeric literal, negation included. A bare integer counts against a decimal, since a
@@ -51,12 +52,12 @@ public final class NumericLiterals {
      *
      * <p>{@code 5.0m} and {@code 5.00m} are one constraint, so they have to reach a range as one
      * number: two spellings of an end would be two lines through a position, both holding the same
-     * values, and one boundary owed twice under one printed figure. Trailing zeros left of the point
-     * are put back, so a hundred is written as one.
+     * values, and one boundary owed twice under one printed figure. {@link ExactDecimals#leastDigits}
+     * is the one place that canonicalization is done, so a literal and a value built at run time
+     * reach the same form for the same number rather than each keeping its own rule for it.
      */
     private static BigDecimal normalized(BigDecimal value) {
-        BigDecimal bare = value.stripTrailingZeros();
-        return bare.scale() < 0 ? bare.setScale(0) : bare;
+        return ExactDecimals.leastDigits(value);
     }
 
     private static BigDecimal negated(BigDecimal value) {

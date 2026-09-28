@@ -164,6 +164,7 @@ public final class InputClassifications {
         Incompleteness.Code incomplete = null;
         boolean disagreed = false;
         for (int i = 0; i < answers.size(); i++) {
+            Incompleteness.Code code;
             switch (answers.get(i)) {
                 case Membership.Match _ -> {
                     // A class that holds the value settles it, whatever the ones beside it could not
@@ -171,14 +172,24 @@ public final class InputClassifications {
                     // something else could not read it is what is left when there is no answer.
                     return Classification.in(ids.get(i));
                 }
-                case Membership.Incomplete why -> {
-                    if (incomplete == null) {
-                        incomplete = why.code();
-                    } else if (incomplete != why.code()) {
-                        disagreed = true;
-                    }
-                }
-                case Membership.NoMatch _ -> { }
+                case Membership.Incomplete why -> code = why.code();
+                case Membership.NoMatch _ -> code = null;
+                // A count's own sum meeting a number the exact arithmetic could not hold is a
+                // different gap from an observation's, but it is the same fact for this measure:
+                // the class could not be settled. Read through the two codes built for exactly
+                // this, which of the two travelling with UnheldNumber.
+                case Membership.NotWorkedOut why -> code = switch (why.why()) {
+                    case NO_REPRESENTATION_EXISTS -> Incompleteness.Code.VALUE_NOT_WORKED_OUT;
+                    case MORE_ROOM_COULD_ANSWER -> Incompleteness.Code.VALUE_ROOM_EXCEEDED;
+                };
+            }
+            if (code == null) {
+                continue;
+            }
+            if (incomplete == null) {
+                incomplete = code;
+            } else if (incomplete != code) {
+                disagreed = true;
             }
         }
         // Two readings of one value that disagree about whether it is there. Held to rather than

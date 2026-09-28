@@ -613,7 +613,7 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
     public String spelled() {
         BigDecimal written = asWrittenDecimal();
         if (written != null) {
-            return ExactDecimals.spelledBounded(written.stripTrailingZeros());
+            return ExactDecimals.spelledBounded(ExactDecimals.leastDigits(written));
         }
         Fraction fraction = asFraction();
         return fraction.numerator() + "/" + fraction.denominator();

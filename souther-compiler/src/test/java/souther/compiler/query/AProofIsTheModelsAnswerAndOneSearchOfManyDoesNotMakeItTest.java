@@ -63,7 +63,7 @@ class AProofIsTheModelsAnswerAndOneSearchOfManyDoesNotMakeItTest {
                 knowledge(SearchOutcomes.of(proof()).plus(SearchOutcomes.of(stopped())));
 
         assertEquals(WritabilityKnowledge.Prevented.by(EstablishmentGap.Composition.of(
-                        EnumSet.of(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS), List.of())),
+                        EnumSet.of(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS))),
                 knowledge,
                 "one search proved its own region empty and the other was stopped, so what the"
                         + " point is owed is the figure that would have to give");

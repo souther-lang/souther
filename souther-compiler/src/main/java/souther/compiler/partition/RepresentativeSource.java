@@ -5,7 +5,6 @@ import souther.compiler.types.TypeReachName;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 /**
  * How a value standing for one equivalence class is arrived at: take these values, compose one this
@@ -84,25 +83,20 @@ public sealed interface RepresentativeSource {
      *
      * <p>Apart from {@link NothingProducible}, and the difference is what a reader may say about the
      * model. That one is a search that looked everywhere it was going to look; this one stopped — at
-     * a figure of this compiler's, or short of a population it writes some of — so the class may
-     * hold values and this did not reach one.
+     * a figure of this compiler's, short of a population it writes some of, or at a number it could
+     * not hold — so the class may hold values and this did not reach one.
      *
      * <p>Run together, the sentence an author reads says nothing writes a value in a range whose
      * values this compiler simply did not walk to. Which is the same mistake as reporting a
      * compiler's own shortfall in words about the model, one layer up from where it was fixed.
      *
-     * @param heldBack which figures of this compiler's stopped it, each a number somebody can raise
-     *                 to have the search go on
-     * @param notAllOf what it wrote some of rather than all of, which no figure reaches
-     * @param why      what to tell a reader, in words that are about this compiler
+     * @param met what of this compiler's the search met, in every vocabulary it has
+     * @param why what to tell a reader, in words that are about this compiler
      */
-    record NotArrivedAt(Set<CompositionBudget> heldBack, Set<CompositionRepertoire> notAllOf,
-                        String why) implements RepresentativeSource {
+    record NotArrivedAt(CompositionShortfall met, String why) implements RepresentativeSource {
 
         public NotArrivedAt {
-            heldBack = Set.copyOf(heldBack);
-            notAllOf = Set.copyOf(notAllOf);
-            if (heldBack.isEmpty() && notAllOf.isEmpty()) {
+            if (met.nothing()) {
                 // Nothing stopped it and it reached nothing, which is a search that looked
                 // everywhere — and that is the other case, which says so.
                 throw new IllegalArgumentException(

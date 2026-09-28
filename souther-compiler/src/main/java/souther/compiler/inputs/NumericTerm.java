@@ -7,6 +7,7 @@ import souther.compiler.check.NumericAnswers;
 import souther.compiler.check.Symbols;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.semantics.ResultRange;
@@ -472,5 +473,25 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
          * and calling it unreadable would report a partition that does not fit its position as a row
          * nobody could read. */
         record NotNumber() implements Reading {}
+
+        /**
+         * Every value the term reads arrived, and the number they come to is one the exact
+         * arithmetic could not hold.
+         *
+         * <p>Not {@link NotNumber}: the values are there and are numbers, and what stopped is this
+         * compiler working out how far apart they stand — the same fact {@link Missing} cannot carry
+         * either, since nothing here is an observation that came back short. A reader that folded
+         * this into either would tell a caller the term definitely is not a number of the value, or
+         * that a value was there and unread, neither of which is what happened.
+         */
+        record NotWorkedOut(UnheldNumber why) implements Reading {
+
+            public NotWorkedOut {
+                if (why == null) {
+                    throw new IllegalArgumentException(
+                            "a number not worked out says why it was not");
+                }
+            }
+        }
     }
 }

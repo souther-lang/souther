@@ -2,15 +2,7 @@ package souther.architecture;
 
 import org.junit.jupiter.api.Test;
 
-import java.lang.classfile.ClassModel;
-import java.lang.classfile.CodeElement;
-import java.lang.classfile.CodeModel;
-import java.lang.classfile.MethodModel;
-import java.lang.classfile.instruction.InvokeInstruction;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
-import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -26,34 +18,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * leave 32 bits, which a sum's, taken from the larger of its operands', cannot. And a plain notation
  * longer than a {@code String} raises an error. Where that reaches a program it reaches it as a
  * {@code java.math} exception from a program that has no such type, and not as the abort the
- * operation's contract names. The methods that
- * answer on every value — its sign, scale, precision and digits, a comparison, a negation — are not
- * a question here.
+ * operation's contract names. The methods that answer on every value ({@link
+ * BigDecimalCalls#ANSWERS_ON_EVERY_VALUE}) are not a question here.
  *
- * <p>A row names the method making the call and the member it calls, by name and descriptor,
- * because the reason is that call's and not its class's: a class holding one call site whose
- * refusal cannot happen may still gain one whose refusal can.
+ * <p>{@link BigDecimalCalls} walks the population and names each call by its caller and the member
+ * it calls; the compiler's own call sites are audited by a check of its own, not this one, since
+ * a rule about what this repository publishes and a rule about a second module are about two
+ * populations.
  */
 class WhoMayAskBigDecimalWhatItCanRefuseTest {
 
     private static final CompiledOutputs COMPILED = CompiledOutputs.ofWhatThisRepositoryPublishes();
-
-    private static final String BIG_DECIMAL = "java/math/BigDecimal";
-
-    /** The members that answer on every {@code BigDecimal}, by name and descriptor. */
-    private static final Set<String> ANSWERS_ON_EVERY_VALUE = Set.of(
-            "compareTo(Ljava/math/BigDecimal;)I",
-            "equals(Ljava/lang/Object;)Z",
-            "hashCode()I",
-            "signum()I",
-            "scale()I",
-            "precision()I",
-            "unscaledValue()Ljava/math/BigInteger;",
-            "negate()Ljava/math/BigDecimal;",
-            "valueOf(J)Ljava/math/BigDecimal;",
-            "valueOf(JI)Ljava/math/BigDecimal;",
-            "<init>(Ljava/math/BigInteger;)V",
-            "<init>(Ljava/math/BigInteger;I)V");
 
     /**
      * The call sites that ask for something that can be refused.
@@ -69,26 +44,38 @@ class WhoMayAskBigDecimalWhatItCanRefuseTest {
      * reports the refusal itself. {@code Representations.canonicalNumber} rescales to zero only after
      * counting the digits that asks for and finding them few. {@code ExactDecimals.spelledBounded}
      * counts the same way and calls {@code toPlainString} only where the count stays under the same
-     * limit, and calls {@code toString} instead where it does not — which cannot be refused, since
-     * what it writes is bounded by the significant digits an amount carries and not by how far its
-     * scale sits from them.
+     * limit, and calls {@code toString} instead where it does not — total on every value regardless
+     * ({@link BigDecimalCalls#ANSWERS_ON_EVERY_VALUE}), so there is nothing there to explain.
      */
     private static final List<String> MAY_BE_REFUSED = List.of(
-            "souther/exact/ExactDecimals#leastDigits stripTrailingZeros()Ljava/math/BigDecimal;",
-            "souther/exact/ExactDecimals#spelledBounded toPlainString()Ljava/lang/String;",
-            "souther/exact/ExactDecimals#spelledBounded toString()Ljava/lang/String;",
-            "souther/runtime/DecimalMath#add add(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
-            "souther/runtime/DecimalMath#divide"
+            "souther/exact/ExactDecimals#leastDigits(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;"
+                    + " stripTrailingZeros()Ljava/math/BigDecimal;",
+            "souther/exact/ExactDecimals#spelledBounded(Ljava/math/BigDecimal;)Ljava/lang/String;"
+                    + " toPlainString()Ljava/lang/String;",
+            "souther/runtime/DecimalMath#add(Ljava/math/BigDecimal;Ljava/math/BigDecimal;)"
+                    + "Ljava/math/BigDecimal; add(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
+            "souther/runtime/DecimalMath#divide(Ljava/math/BigDecimal;Ljava/math/BigDecimal;JL"
+                    + "souther/runtime/RoundingMode;)Ljava/lang/Object;"
                     + " divide(Ljava/math/BigDecimal;ILjava/math/RoundingMode;)Ljava/math/BigDecimal;",
-            "souther/runtime/DecimalMath#multiply multiply(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
-            "souther/runtime/DecimalMath#ofDecimalText <init>(Ljava/lang/String;)V",
-            "souther/runtime/DecimalMath#plainText toPlainString()Ljava/lang/String;",
-            "souther/runtime/DecimalMath#round setScale(ILjava/math/RoundingMode;)Ljava/math/BigDecimal;",
-            "souther/runtime/DecimalMath#subtract subtract(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
-            "souther/runtime/DecimalMath#toInt longValueExact()J",
-            "souther/runtime/DecimalMath#toInt setScale(ILjava/math/RoundingMode;)Ljava/math/BigDecimal;",
-            "souther/runtime/RationalMath#toInt longValueExact()J",
-            "souther/runtime/Representations#canonicalNumber setScale(I)Ljava/math/BigDecimal;");
+            "souther/runtime/DecimalMath#multiply(Ljava/math/BigDecimal;Ljava/math/BigDecimal;)"
+                    + "Ljava/math/BigDecimal; multiply(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
+            "souther/runtime/DecimalMath#ofDecimalText(Ljava/lang/String;)Ljava/math/BigDecimal;"
+                    + " <init>(Ljava/lang/String;)V",
+            "souther/runtime/DecimalMath#plainText(Ljava/math/BigDecimal;)Ljava/lang/String;"
+                    + " toPlainString()Ljava/lang/String;",
+            "souther/runtime/DecimalMath#round(JLsouther/runtime/RoundingMode;Ljava/math/BigDecimal;)"
+                    + "Ljava/math/BigDecimal; setScale(ILjava/math/RoundingMode;)"
+                    + "Ljava/math/BigDecimal;",
+            "souther/runtime/DecimalMath#subtract(Ljava/math/BigDecimal;Ljava/math/BigDecimal;)"
+                    + "Ljava/math/BigDecimal; subtract(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
+            "souther/runtime/DecimalMath#toInt(Lsouther/runtime/RoundingMode;Ljava/math/BigDecimal;)J"
+                    + " longValueExact()J",
+            "souther/runtime/DecimalMath#toInt(Lsouther/runtime/RoundingMode;Ljava/math/BigDecimal;)J"
+                    + " setScale(ILjava/math/RoundingMode;)Ljava/math/BigDecimal;",
+            "souther/runtime/RationalMath#toInt(Lsouther/runtime/RoundingMode;Lsouther/runtime/Rational;)J"
+                    + " longValueExact()J",
+            "souther/runtime/Representations#canonicalNumber(Ljava/math/BigDecimal;)"
+                    + "Ljava/math/BigDecimal; setScale(I)Ljava/math/BigDecimal;");
 
     @Test
     void everyRunTimeCallThatCanBeRefusedIsWrittenDownHere() {
@@ -102,28 +89,14 @@ class WhoMayAskBigDecimalWhatItCanRefuseTest {
     @Test
     void theWalkFindsDecimalMath() {
         assertTrue(askingWhatCanBeRefused().stream()
-                        .anyMatch(row -> row.startsWith("souther/runtime/DecimalMath#add ")),
+                        .anyMatch(row -> row.startsWith("souther/runtime/DecimalMath#add(")),
                 "every Decimal sum is in DecimalMath, so a walk not finding it is finding nothing");
     }
 
     private static List<String> askingWhatCanBeRefused() {
-        Set<String> out = new TreeSet<>();
-        for (ClassModel each : COMPILED.classesOf(COMPILED.module("souther-runtime"))) {
-            for (MethodModel method : each.methods()) {
-                for (CodeModel code : method.code().stream().toList()) {
-                    for (CodeElement element : code) {
-                        if (element instanceof InvokeInstruction invoke
-                                && invoke.owner().asInternalName().equals(BIG_DECIMAL)) {
-                            String member = invoke.name().stringValue() + invoke.type().stringValue();
-                            if (!ANSWERS_ON_EVERY_VALUE.contains(member)) {
-                                out.add(each.thisClass().asInternalName() + "#"
-                                        + method.methodName().stringValue() + " " + member);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        return new ArrayList<>(out);
+        return BigDecimalCalls.in(COMPILED.classesOf(COMPILED.module("souther-runtime"))).stream()
+                .map(BigDecimalCalls.Call::row)
+                .sorted()
+                .toList();
     }
 }

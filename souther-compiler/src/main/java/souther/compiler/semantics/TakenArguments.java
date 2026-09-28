@@ -41,7 +41,7 @@ public record TakenArguments(Map<Integer, BigDecimal> byPosition) {
                 throw new IllegalArgumentException(
                         "an argument reads as a number at a place, and neither half is absent");
             }
-            normalized.put(position, read.stripTrailingZeros());
+            normalized.put(position, ExactDecimals.leastDigits(read));
         });
         // Kept in the order the arguments stand in, because one of these is written out wherever
         // such a number is named and a name a reader looks up has to be the same name twice.

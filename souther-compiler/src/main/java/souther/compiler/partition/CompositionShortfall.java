@@ -8,14 +8,20 @@ import java.util.Set;
 /**
  * What of this compiler's a search that composed nothing met on the way.
  *
- * <p>A figure it holds its work to, a population it writes some of, or both. Nothing here is about
- * the model: a reader handed one of these is being told that the question is open because this
- * compiler did not go all the way, which is never what somebody wrote.
+ * <p>A figure it holds its work to, a population it writes some of, a number it worked out and
+ * could not hold, or more than one of them. Nothing here is about the model: a reader handed one of
+ * these is being told that the question is open because this compiler did not go all the way,
+ * which is never what somebody wrote.
  *
- * <p><b>Which of the two is not a case.</b> What a reader concludes is the same either way, and
- * what differs is what would close it — raising a number, or somebody writing the rest of what this
- * walks. So both vocabularies are carried under their own names, and a search that met one of them
- * says so by the other being empty rather than by being a different shape.
+ * <p><b>Which of them it was is not a case.</b> What a reader concludes is the same whichever it
+ * was, and what differs is what would close it — raising a number, somebody writing the rest of
+ * what this walks, a host with more room, or, for a number no representation holds, nothing. So
+ * every vocabulary is carried under its own name, and a search that met some of them says so by
+ * the others being empty rather than by being a different shape.
+ *
+ * <p><b>One value wherever it travels.</b> A carrier that took the vocabularies apart into a set
+ * each would have to be taught every vocabulary there will ever be, and one it was not taught would
+ * be left out without a word; joined with {@link #and}, every one of them travels together.
  *
  * <p><b>Beside the word a search comes back with and never inside it.</b> The word is read off the
  * figures wherever a figure is what stopped the search ({@link
@@ -30,8 +36,9 @@ import java.util.Set;
  * @param figures     numbers of this compiler's that stopped it, each one somebody can raise to
  *                    have the search go on
  * @param populations what it writes some of rather than all of, which no figure reaches
- * @param unheld      numbers it worked out and could not hold, which a wider run reaches or
- *                    nothing does
+ * @param unheld      numbers it worked out and could not hold, which a host with more room
+ *                    reaches where it is room that ran out, and nothing reaches where no
+ *                    representation of the number exists
  */
 public record CompositionShortfall(Set<CompositionBudget> figures,
                                    Set<CompositionRepertoire> populations,
@@ -47,21 +54,17 @@ public record CompositionShortfall(Set<CompositionBudget> figures,
         unheld = Set.copyOf(unheld);
     }
 
-    /** One that met these figures and nothing it knows it walked part of. */
+    /** One that met these figures and nothing else. */
     public static CompositionShortfall of(Collection<CompositionBudget> figures) {
-        return of(figures, Set.of());
+        return of(figures, Set.of(), Set.of());
     }
 
-    /** One that met what a walk ran to the end of, and no figure. */
+    /** One that met what a walk ran to the end of, and nothing else. */
     public static CompositionShortfall writing(Collection<CompositionRepertoire> populations) {
-        return of(Set.of(), populations);
+        return of(Set.of(), populations, Set.of());
     }
 
-    public static CompositionShortfall of(Collection<CompositionBudget> figures,
-                                          Collection<CompositionRepertoire> populations) {
-        return of(figures, populations, Set.of());
-    }
-
+    /** Every vocabulary, named: there is no shorter spelling of this that leaves one out. */
     public static CompositionShortfall of(Collection<CompositionBudget> figures,
                                           Collection<CompositionRepertoire> populations,
                                           Collection<CompositionCapacity> unheld) {

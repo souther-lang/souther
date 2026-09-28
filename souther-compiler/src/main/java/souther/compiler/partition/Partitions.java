@@ -55,6 +55,7 @@ import java.util.List;
 import java.util.function.Supplier;
 import java.util.Map;
 import java.util.SequencedMap;
+import java.util.Set;
 
 /**
  * The equivalence classes a model already states, read off the types a behavior takes.
@@ -1172,8 +1173,8 @@ public final class Partitions {
             // No number was named beside the ones singled out, which is this compiler naming one
             // place in a run and not the order having none left.
             return PartitionClass.of(id, label, holding(orders, is),
-                    new RepresentativeSource.NotArrivedAt(java.util.Set.of(),
-                            java.util.Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED),
+                    new RepresentativeSource.NotArrivedAt(CompositionShortfall.writing(
+                            Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED)),
                             "nothing here composed " + what
                                     + ", which does not make one unwritable"));
         }
@@ -1916,7 +1917,7 @@ public final class Partitions {
             return from != null && index == 0 ? from : null;
         }
         Count stepped = Count.number(from).plus(index);
-        return holdsCount(range, stepped) ? stepped : null;
+        return stepped != null && holdsCount(range, stepped) ? stepped : null;
     }
 
     /**
@@ -2072,11 +2073,11 @@ public final class Partitions {
                     : carrier.somethingInside(Endpoint.exclusive(min.at()), max);
         }
         Count up = Count.number(from).plus(1);
-        if (holdsCount(range, up)) {
+        if (up != null && holdsCount(range, up)) {
             return up;
         }
         Count down = Count.number(from).minus(1);
-        return holdsCount(range, down) ? down : null;
+        return down != null && holdsCount(range, down) ? down : null;
     }
 
     /** Whether a range holds a count, with no range holding everything. */

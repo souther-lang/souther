@@ -12,6 +12,8 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Dates;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
@@ -23,6 +25,7 @@ import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -58,8 +61,26 @@ import java.util.function.Supplier;
  */
 final class TermRealizations {
 
-    /** What building values that answer a number came to. */
+    /**
+     * What building values that answer a number came to.
+     *
+     * <p>What was not built is one {@link CompositionShortfall} wherever it travels, and never its
+     * vocabularies taken apart. A caller holding a set per vocabulary carries on only the ones it
+     * names, and a vocabulary it does not name is left out without anything saying so; one value
+     * joined with {@link CompositionShortfall#and} carries every one.
+     */
     sealed interface Realization {
+
+        /** What of this compiler's this came to without, and {@link CompositionShortfall#NONE}
+         *  where it is not a shortfall of this compiler's at all. */
+        default CompositionShortfall shortfall() {
+            return switch (this) {
+                case Built built -> built.rest();
+                case Stopped stopped -> stopped.met();
+                case Unexhausted some -> some.met();
+                case NoNumberTheRulesAdmit _, None _ -> CompositionShortfall.NONE;
+            };
+        }
 
         /**
          * Values that answer it, and what was not built.
@@ -74,25 +95,18 @@ final class TermRealizations {
          * two alike. Which of them a figure came to be here by is what {@link Stopped} is told
          * apart by, and it is not this.
          */
-        record Built(List<FixtureTemplate> values, java.util.Set<CompositionBudget> heldBack,
-                     java.util.Set<CompositionRepertoire> notAllOf) implements Realization {
+        record Built(List<FixtureTemplate> values, CompositionShortfall rest) implements Realization {
 
             public Built {
                 values = List.copyOf(values);
-                heldBack = java.util.Set.copyOf(heldBack);
-                notAllOf = java.util.Set.copyOf(notAllOf);
                 if (values.isEmpty()) {
                     throw new IllegalArgumentException(
                             "a realization that built nothing is one that built none, and says why");
                 }
             }
 
-            Built(List<FixtureTemplate> values, java.util.Set<CompositionBudget> heldBack) {
-                this(values, heldBack, java.util.Set.of());
-            }
-
             static Built whole(List<FixtureTemplate> values) {
-                return new Built(values, java.util.Set.of());
+                return new Built(values, CompositionShortfall.NONE);
             }
         }
 
@@ -107,27 +121,20 @@ final class TermRealizations {
          * <p><b>So a figure is here only where a candidate was in front of the walk and this figure
          * left no room for it.</b> Raise it and that candidate gets tried — which is what makes the
          * word one an author can act on. A population this compiler walks some of stopped nothing
-         * and is never a figure: it travels beside them ({@code notAllOf}) where a figure was met as
+         * and is never a figure: it travels beside them in {@code met} where a figure was met as
          * well, and where none was it is {@link Unexhausted} rather than anything here.
          *
          * <p>Never where a value was built. A budget that cut an offering short after something was
-         * composed is {@link Built#heldBack()}: what it stopped is the rest of the offer, and the
+         * composed is in {@link Built#rest()}: what it stopped is the rest of the offer, and the
          * point it was composed for has a value at it either way.
          */
-        record Stopped(java.util.Set<CompositionBudget> by,
-                       java.util.Set<CompositionRepertoire> notAllOf) implements Realization {
+        record Stopped(CompositionShortfall met) implements Realization {
 
             public Stopped {
-                by = java.util.Set.copyOf(by);
-                notAllOf = java.util.Set.copyOf(notAllOf);
-                if (by.isEmpty()) {
+                if (met.figures().isEmpty()) {
                     throw new IllegalArgumentException(
                             "a composing this compiler stopped says which budget stopped it");
                 }
-            }
-
-            Stopped(java.util.Set<CompositionBudget> by) {
-                this(by, java.util.Set.of());
             }
         }
 
@@ -149,16 +156,18 @@ final class TermRealizations {
          * somebody's to raise and reaches what the search was holding; what reaches the rest of one
          * of these is somebody writing the rest, which is not work an author of a model can do.
          *
+         * <p>What it met is a population walked in part, a number it could not hold, or both, and
+         * never a figure: a figure met makes it {@link Stopped}.
+         *
          * @param detail what this walk found, or null where it has nothing to add
          */
-        record Unexhausted(java.util.Set<CompositionRepertoire> notAllOf, String detail)
-                implements Realization {
+        record Unexhausted(CompositionShortfall met, String detail) implements Realization {
 
             public Unexhausted {
-                notAllOf = java.util.Set.copyOf(notAllOf);
-                if (notAllOf.isEmpty()) {
+                if (!met.figures().isEmpty() || met.nothing()) {
                     throw new IllegalArgumentException(
-                            "a walk that says it saw some of them says some of what");
+                            "a walk that says it saw some of them, or could not hold a number on"
+                                    + " the way, says which, and names no figure: " + met);
                 }
             }
         }
@@ -566,8 +575,9 @@ final class TermRealizations {
                     NumericDomain.Bounds quotients =
                             quotientsAsked(demands.get(each.getKey()).walking());
                     if (quotients == null) {
-                        return new Realization.Unexhausted(Set.of(CompositionRepertoire
-                                .VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS), null);
+                        return new Realization.Unexhausted(CompositionShortfall.writing(Set.of(
+                                CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS)),
+                                null);
                     }
                     // And what the rules leave the quotient room for, which is about the way to
                     // the point rather than about this demand. A region that leaves the number
@@ -786,7 +796,7 @@ final class TermRealizations {
             // Which population, and no detail beside it: nothing was walked here, so there is
             // nothing this found to tell a reader.
             case JointRealization.Missing(CompositionRepertoire notAllOf) ->
-                    new Realization.Unexhausted(Set.of(notAllOf), null);
+                    new Realization.Unexhausted(CompositionShortfall.writing(Set.of(notAllOf)), null);
             case JointRealization.Supported(JointBuilder builder) ->
                     builder.from(sourceType, demands, measuring, within, reading);
         };
@@ -978,10 +988,13 @@ final class TermRealizations {
      * the one place a walk becomes something said about the model is here, and what it is said of
      * is what the search was for.
      */
-    private static Realization firstThatBuilds(boolean walkedTheWholeQuestion, Tried tried,
-                                               Function<Place, Realization> of) {
-        Set<CompositionBudget> met = new java.util.LinkedHashSet<>();
-        Set<CompositionRepertoire> some = new java.util.LinkedHashSet<>();
+    static Realization firstThatBuilds(boolean walkedTheWholeQuestion, Tried tried,
+                                       Function<Place, Realization> of) {
+        // Everything every number that built nothing came to without, taken as one shortfall so
+        // that no vocabulary of it is left behind here. The rules leaving no number at one of the
+        // numbers handed over says nothing about the next: this walk is over the numbers, and that
+        // one was a value's answer, whose shortfall is none.
+        CompositionShortfall met = CompositionShortfall.NONE;
         Realization last = null;
         for (Place number : tried.numbers()) {
             Realization made = of.apply(number);
@@ -989,31 +1002,23 @@ final class TermRealizations {
                 return built;
             }
             last = made;
-            switch (made) {
-                case Realization.Stopped stopped -> {
-                    met.addAll(stopped.by());
-                    some.addAll(stopped.notAllOf());
-                }
-                case Realization.Unexhausted walked -> some.addAll(walked.notAllOf());
-                // The rules leaving no number at one of the numbers handed over says nothing about
-                // the next: this walk is over the numbers, and that one was a value's answer.
-                case Realization.NoNumberTheRulesAdmit _, Realization.None _,
-                     Realization.Built _ -> { }
-            }
+            met = met.and(made.shortfall());
         }
         // Why there were no more to try, said by whatever handed them over. Worked out here, this
         // would be the one place that knows what every account's numbers are and how it walks them,
         // which is what handing the reason over is for.
-        switch (tried.rest()) {
-            case Remainder.Exhausted _ -> { }
-            case Remainder.StoppedAt(CompositionBudget figure) -> met.add(figure);
-            case Remainder.SomeOf(Set<CompositionRepertoire> written) -> some.addAll(written);
+        met = met.and(switch (tried.rest()) {
+            case Remainder.Exhausted _ -> CompositionShortfall.NONE;
+            case Remainder.StoppedAt(CompositionBudget figure) ->
+                    CompositionShortfall.of(Set.of(figure));
+            case Remainder.SomeOf(Set<CompositionRepertoire> written) ->
+                    CompositionShortfall.writing(written);
+        });
+        if (!met.figures().isEmpty()) {
+            return new Realization.Stopped(met);
         }
-        if (!met.isEmpty()) {
-            return new Realization.Stopped(met, some);
-        }
-        if (!some.isEmpty()) {
-            return new Realization.Unexhausted(some,
+        if (!met.nothing()) {
+            return new Realization.Unexhausted(met,
                     last instanceof Realization.Unexhausted walked ? walked.detail() : null);
         }
         // Nothing was handed over, nothing was held back, and the numbers there were to hand over
@@ -1100,7 +1105,7 @@ final class TermRealizations {
      * @param rest    why there are no more, which is what tells a set with no value in it from a
      *                search that stopped short of one
      */
-    private record Tried(List<Place> numbers, Remainder rest) {
+    record Tried(List<Place> numbers, Remainder rest) {
 
         static Tried allOf(List<Place> numbers) {
             return new Tried(numbers, new Remainder.Exhausted());
@@ -1127,7 +1132,7 @@ final class TermRealizations {
      * why it stopped and a set of candidates that does not would leave the word a reader gets
      * standing on a guess.
      */
-    private sealed interface Remainder {
+    sealed interface Remainder {
 
         /** There are no more: the numbers handed over are every one the set has in the window its
          *  account can be asked for. */
@@ -1161,7 +1166,7 @@ final class TermRealizations {
     private static Tried wholeNumbers(NumericSet wanted, Carrier on, long from, long to,
                                       int many) {
         return wholeNumbers(wanted.extent(), at -> wanted.holds(at, on),
-                BigDecimal.valueOf(from), BigDecimal.valueOf(to), many);
+                BigInteger.valueOf(from), BigInteger.valueOf(to), many);
     }
 
     /**
@@ -1173,19 +1178,22 @@ final class TermRealizations {
      * {@link NumericSet#extent()} beside {@link NumericSet#holds}.
      */
     private static Tried wholeNumbers(NumericDomain.Bounds lies, Predicate<Place> holds,
-                                      BigDecimal from, BigDecimal to, int many) {
+                                      BigInteger from, BigInteger to, int many) {
         // Narrowed to where the set lies before a step is taken. The window is as wide as the kind
         // of number goes, and stepping through the part of it the set is nowhere near is a walk
         // over the kind rather than a choice between the numbers the rules admit.
-        BigDecimal first = startOf(lies.min(), from);
-        BigDecimal last = endOf(lies.max(), to);
+        //
+        // Walked as whole numbers and not as decimals. A whole number has no places, so no end a
+        // rule wrote to however many of them is one the step from it has to be written at.
+        BigInteger first = startOf(lies.min(), from);
+        BigInteger last = endOf(lies.max(), to);
         List<Place> out = new ArrayList<>();
         // One past what is handed over, so that a window holding exactly as many as the figure
         // allows is a window this walked to the end of. Stopped at the figure itself, a set of
         // exactly that many numbers comes back as a search that gave something up.
-        for (BigDecimal at = first; at.compareTo(last) <= 0 && out.size() <= many;
-                at = at.add(BigDecimal.ONE)) {
-            Count place = new Count(at);
+        for (BigInteger at = first; at.compareTo(last) <= 0 && out.size() <= many;
+                at = at.add(BigInteger.ONE)) {
+            Count place = new Count(new BigDecimal(at));
             if (holds.test(place)) {
                 out.add(place);
             }
@@ -1197,25 +1205,33 @@ final class TermRealizations {
     }
 
     /** The first whole number at or above an end, or the window's own start where the set runs
-     *  past it. */
-    private static BigDecimal startOf(Endpoint end, BigDecimal from) {
+     *  past it or the exact arithmetic could not hold the edge — the same answer either way, since
+     *  a start this cannot narrow is one the walk is sound to leave as wide as the window itself. */
+    private static BigInteger startOf(Endpoint end, BigInteger from) {
         if (end == null || !(end.at() instanceof Count count)) {
             return from;
         }
-        BigDecimal edge = count.at().setScale(0, java.math.RoundingMode.CEILING);
-        return from.max(!end.inclusive() && edge.compareTo(count.at()) == 0
-                ? edge.add(BigDecimal.ONE) : edge);
+        if (!(count.exactly().ceiling() instanceof ExactAnswer.Held<BigInteger> held)) {
+            return from;
+        }
+        BigInteger edge = held.value();
+        return from.max(!end.inclusive() && ExactRatio.of(edge).compareTo(count.exactly()) == 0
+                ? edge.add(BigInteger.ONE) : edge);
     }
 
     /** The last whole number at or below an end, or the window's own end where the set runs past
-     *  it. */
-    private static BigDecimal endOf(Endpoint end, BigDecimal to) {
+     *  it or the exact arithmetic could not hold the edge, read the same way {@link #startOf}
+     *  reads it. */
+    private static BigInteger endOf(Endpoint end, BigInteger to) {
         if (end == null || !(end.at() instanceof Count count)) {
             return to;
         }
-        BigDecimal edge = count.at().setScale(0, java.math.RoundingMode.FLOOR);
-        return to.min(!end.inclusive() && edge.compareTo(count.at()) == 0
-                ? edge.subtract(BigDecimal.ONE) : edge);
+        if (!(count.exactly().floor() instanceof ExactAnswer.Held<BigInteger> held)) {
+            return to;
+        }
+        BigInteger edge = held.value();
+        return to.min(!end.inclusive() && ExactRatio.of(edge).compareTo(count.exactly()) == 0
+                ? edge.subtract(BigInteger.ONE) : edge);
     }
 
     /**
@@ -1349,10 +1365,15 @@ final class TermRealizations {
         OrderedInterval reaches = on.extent();
         NumericDomain.Bounds within =
                 lies.meet(new NumericDomain.Bounds(reaches.low(), reaches.high()));
+        // The window is the whole numbers the run's own ends round out to. Where an end rounds to
+        // no whole number the host holds, there is no window to step through, and the run is
+        // looked in the way one open at that end is.
         if (lies.min() != null && lies.max() != null
                 && within.min().at() instanceof Count low
-                && within.max().at() instanceof Count high) {
-            return wholeNumbers(within, holds, low.at(), high.at(),
+                && within.max().at() instanceof Count high
+                && low.exactly().floor() instanceof ExactAnswer.Held<BigInteger> from
+                && high.exactly().ceiling() instanceof ExactAnswer.Held<BigInteger> to) {
+            return wholeNumbers(within, holds, from.value(), to.value(),
                     CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum());
         }
         Place found = on.somethingInside(lies.min(), lies.max());
@@ -1380,8 +1401,14 @@ final class TermRealizations {
         for (Map.Entry<RealizationTarget, BigDecimal> each : by.entrySet()) {
             AskedAt of = asked.get(each.getKey());
             NumericSet wanted = of == null ? null : of.walking();
-            Place quotient = observed.onTheGrid(new Count(
-                    Arithmetic.ATruncatingQuotient.quotientOf(count.at(), each.getValue())));
+            // A candidate whose quotient the exact arithmetic could not hold is one this cannot say
+            // reads back into what was asked, so it is not offered: fewer rows, and never a row at
+            // a number nobody checked.
+            if (!(Arithmetic.ATruncatingQuotient.quotientOf(count.at(), each.getValue())
+                    instanceof ExactAnswer.Held<BigDecimal> read)) {
+                return false;
+            }
+            Place quotient = observed.onTheGrid(new Count(read.value()));
             if (wanted == null || quotient == null || !wanted.holds(quotient, observed)) {
                 return false;
             }
@@ -1477,37 +1504,76 @@ final class TermRealizations {
      * ({@link #startOf}), and the run of the place is then exactly what those quotients answer.
      */
     private static Place lowestWhoseQuotientIs(Endpoint end, BigDecimal size) {
-        if (!(end.at() instanceof Count count)) {
+        if (!(end.at() instanceof Count count)
+                || !(count.exactly().ceiling() instanceof ExactAnswer.Held<BigInteger> edge)) {
             return null;
         }
-        BigDecimal quotient = startOf(end, count.at());
-        return new Count(quotient.signum() < 0
-                ? quotient.multiply(size).subtract(size).add(BigDecimal.ONE)
-                : quotient.signum() == 0 ? size.negate().add(BigDecimal.ONE)
-                        : quotient.multiply(size));
+        BigInteger quotient = startOf(end, edge.value());
+        ExactRatio s = ExactRatio.of(size);
+        ExactAnswer<ExactRatio> at;
+        if (quotient.signum() < 0) {
+            at = ExactRatio.of(quotient).times(s).minus(s);
+            if (at instanceof ExactAnswer.Held<ExactRatio> held) {
+                at = held.value().plus(ExactRatio.ONE);
+            }
+        } else if (quotient.signum() == 0) {
+            at = s.negated().plus(ExactRatio.ONE);
+        } else {
+            at = ExactAnswer.held(ExactRatio.of(quotient).times(s));
+        }
+        return placeAt(at);
     }
 
     /** The largest number whose quotient by {@code size} is at or below that end, read as exactly
      *  as the smallest is at the other. */
     private static Place highestWhoseQuotientIs(Endpoint end, BigDecimal size) {
-        if (!(end.at() instanceof Count count)) {
+        if (!(end.at() instanceof Count count)
+                || !(count.exactly().floor() instanceof ExactAnswer.Held<BigInteger> edge)) {
             return null;
         }
-        BigDecimal quotient = endOf(end, count.at());
-        return new Count(quotient.signum() > 0
-                ? quotient.multiply(size).add(size).subtract(BigDecimal.ONE)
-                : quotient.signum() == 0 ? size.subtract(BigDecimal.ONE)
-                        : quotient.multiply(size));
+        BigInteger quotient = endOf(end, edge.value());
+        ExactRatio s = ExactRatio.of(size);
+        ExactAnswer<ExactRatio> at;
+        if (quotient.signum() > 0) {
+            at = ExactRatio.of(quotient).times(s).plus(s);
+            if (at instanceof ExactAnswer.Held<ExactRatio> held) {
+                at = held.value().minus(ExactRatio.ONE);
+            }
+        } else if (quotient.signum() == 0) {
+            at = s.minus(ExactRatio.ONE);
+        } else {
+            at = ExactAnswer.held(ExactRatio.of(quotient).times(s));
+        }
+        return placeAt(at);
     }
 
-    /** The one value whose quotient by that divisor is exactly that number. */
+    /** The number an exact ratio comes to, or null where the exact arithmetic could not hold it or
+     *  where what it holds is one no written decimal is. Read the way every end of a run of
+     *  quotients this file works out is read: an end too far out for the truth is work nobody asked
+     *  for, and a value neither of the two ways this holds a number is one no row can write either
+     *  way. */
+    private static Place placeAt(ExactAnswer<ExactRatio> at) {
+        if (!(at instanceof ExactAnswer.Held<ExactRatio> held)) {
+            return null;
+        }
+        BigDecimal written = held.value().asWrittenDecimal();
+        return written == null ? null : new Count(written);
+    }
+
+    /** The one value whose quotient by that divisor is exactly that number, or nothing composed
+     *  where the exact arithmetic could not hold the product. */
     private static Realization multipliedBack(BigDecimal by, Type sourceType, Carrier observed,
                                               Place answer, RuleReadingSource ruleSource) {
         if (!(answer instanceof Count wanted)) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        return writtenAt(new Count(wanted.at().multiply(by)), sourceType, observed, ruleSource);
+        BigDecimal at = wanted.exactly().times(ExactRatio.of(by)).asWrittenDecimal();
+        if (at == null) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        return writtenAt(new Count(at), sourceType, observed, ruleSource);
     }
 
     /**
@@ -1605,13 +1671,13 @@ final class TermRealizations {
             return built.heldBack().isEmpty()
                     ? new Realization.None(
                             Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
-                    : new Realization.Stopped(built.heldBack());
+                    : new Realization.Stopped(CompositionShortfall.of(built.heldBack()));
         }
         List<FixtureTemplate> out = new ArrayList<>();
         for (FixtureTemplate each : built.values()) {
             out.add(RepresentativeSource.under(worn.names(), each));
         }
-        return new Realization.Built(out, built.heldBack());
+        return new Realization.Built(out, CompositionShortfall.of(built.heldBack()));
     }
 
     /**
@@ -1715,8 +1781,8 @@ final class TermRealizations {
             return found.everyOne()
                     ? new Realization.None(
                             Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
-                    : new Realization.Stopped(
-                            Set.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED));
+                    : new Realization.Stopped(CompositionShortfall.of(
+                            Set.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED)));
         }
         FixtureTemplate standing = WornNames.under(
                 TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(), ruleSource.published()).wrappers(),
@@ -1819,8 +1885,17 @@ final class TermRealizations {
                 : wholeNumbers(wanted, observed, 1, asFarAs, asFarAs).numbers();
     }
 
+    /** {@code at} as a whole number, which every {@link #wholeNumbers} search this is asked of hands
+     *  back — asked anyway, since the day this reaches an {@code at} that is not one, the answer
+     *  it gives is that search's contract broken, and not a {@code java.math} refusal. */
     private static int whole(Place at) {
-        return ((Count) at).at().intValueExact();
+        try {
+            return ((Count) at).at().intValueExact();
+        } catch (ArithmeticException notWhole) {
+            throw new IllegalStateException(
+                    "a place a whole-number search produced is not itself a whole number: " + at,
+                    notWhole);
+        }
     }
 
     /**

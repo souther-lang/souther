@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 
@@ -94,6 +95,8 @@ sealed interface WhatATermRead {
             case NumericTerm.Reading.Missing(Incompleteness.Code code) ->
                     new CameToNothing(ReadingGap.of(code));
             case NumericTerm.Reading.NotNumber _ -> new NoNumberOfTheValue();
+            case NumericTerm.Reading.NotWorkedOut(UnheldNumber why) ->
+                    new CameToNothing(ReadingGap.of(why));
         };
     }
 }

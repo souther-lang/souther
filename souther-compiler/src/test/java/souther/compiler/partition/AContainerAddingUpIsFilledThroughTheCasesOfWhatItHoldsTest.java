@@ -126,9 +126,9 @@ class AContainerAddingUpIsFilledThroughTheCasesOfWhatItHoldsTest {
                 TermRealizations.Realization.Built.class, realizing(MANY_CASES),
                 "the cases that were tried compose containers");
 
-        assertTrue(made.heldBack().contains(CompositionBudget.WAYS_DOWN_TO_A_TOTAL_TRIED),
+        assertTrue(made.rest().figures().contains(CompositionBudget.WAYS_DOWN_TO_A_TOTAL_TRIED),
                 () -> "more cases than this tries, and it says which figure stopped it: "
-                        + made.heldBack());
+                        + made.rest());
         assertFalse(made.values().isEmpty(),
                 "and the ways it did try composed containers");
     }
@@ -150,7 +150,7 @@ class AContainerAddingUpIsFilledThroughTheCasesOfWhatItHoldsTest {
                         CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS),
                 assertInstanceOf(TermRealizations.Realization.Stopped.class, came,
                         "no way down was kept, so there is no container and no reason of the"
-                                + " model's").by(),
+                                + " model's").met().figures(),
                 "and both figures are said: the ways this tried, and what each of them was planned"
                         + " no further than");
     }

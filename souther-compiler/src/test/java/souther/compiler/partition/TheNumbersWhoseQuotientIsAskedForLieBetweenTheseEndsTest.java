@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.semantics.Arithmetic;
@@ -14,6 +15,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * The ends a solving looks between are exactly the numbers whose quotient is one of those asked
@@ -68,7 +70,7 @@ class TheNumbersWhoseQuotientIsAskedForLieBetweenTheseEndsTest {
             BigDecimal by = new BigDecimal(divisor);
             for (int at = -FAR; at <= FAR; at++) {
                 BigDecimal value = BigDecimal.valueOf(at);
-                BigDecimal quotient = Arithmetic.ATruncatingQuotient.quotientOf(value, by);
+                BigDecimal quotient = quotientOf(value, by);
                 NumericDomain.Bounds lies = TermRealizations.numbersWhoseQuotientLiesIn(
                         exactly(quotient), by);
                 checked++;
@@ -98,8 +100,7 @@ class TheNumbersWhoseQuotientIsAskedForLieBetweenTheseEndsTest {
         for (String divisor : DIVISORS) {
             long by = Long.parseLong(divisor);
             for (long at = -FAR; at <= FAR; at++) {
-                BigDecimal read = Arithmetic.ATruncatingQuotient.quotientOf(
-                        BigDecimal.valueOf(at), BigDecimal.valueOf(by));
+                BigDecimal read = quotientOf(BigDecimal.valueOf(at), BigDecimal.valueOf(by));
                 long run = souther.runtime.IntMath.divideExact(at, by);
                 if (read.compareTo(BigDecimal.valueOf(run)) != 0) {
                     apart.add(at + " / " + by + " is " + read + " here and " + run + " at run time");
@@ -204,10 +205,9 @@ class TheNumbersWhoseQuotientIsAskedForLieBetweenTheseEndsTest {
     /** What to say where dividing {@code at} lands somewhere other than {@code expected} says. */
     private static List<String> readsBack(BigDecimal at, BigDecimal by,
                                           NumericDomain.Bounds asked, boolean expected) {
-        boolean answers = holds(asked, Arithmetic.ATruncatingQuotient.quotientOf(at, by));
+        boolean answers = holds(asked, quotientOf(at, by));
         return answers == expected ? List.of()
-                : List.of(at + " / " + by + " is "
-                        + Arithmetic.ATruncatingQuotient.quotientOf(at, by) + ", and " + asked
+                : List.of(at + " / " + by + " is " + quotientOf(at, by) + ", and " + asked
                         + (expected ? " was asked for and the end does not hold it"
                                 : " was not asked for and the end holds it"));
     }
@@ -251,13 +251,23 @@ class TheNumbersWhoseQuotientIsAskedForLieBetweenTheseEndsTest {
         List<String> outside = new ArrayList<>();
         for (int at = -FAR; at <= FAR; at++) {
             BigDecimal value = BigDecimal.valueOf(at);
-            if (holds(quotients, Arithmetic.ATruncatingQuotient.quotientOf(value, by))
+            if (holds(quotients, quotientOf(value, by))
                     && !holds(lies, value)) {
                 outside.add(at + " / " + by + " is one of " + quotients
                         + ", which is asked for by " + lies);
             }
         }
         return outside;
+    }
+
+    /** The operator's quotient of two of the whole numbers this test divides, every one of which
+     *  the exact arithmetic holds. */
+    private static BigDecimal quotientOf(BigDecimal value, BigDecimal by) {
+        if (!(Arithmetic.ATruncatingQuotient.quotientOf(value, by)
+                instanceof ExactAnswer.Held<BigDecimal> held)) {
+            return fail(value + " / " + by + " is a quotient of two whole numbers this host holds");
+        }
+        return held.value();
     }
 
     /** That one number and no other, as the ends a caller of the arithmetic hands over. */

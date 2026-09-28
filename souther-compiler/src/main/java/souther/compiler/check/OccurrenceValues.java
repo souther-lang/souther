@@ -1,6 +1,8 @@
 package souther.compiler.check;
 
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.TypeSymbol;
@@ -86,7 +88,15 @@ public final class OccurrenceValues {
         if (least == null || most == null) {
             return Cardinality.UNKNOWN;
         }
-        BigDecimal span = most.subtract(least).add(BigDecimal.ONE);
+        // A count of values is a fact about how many there are, and never about whether this host
+        // has room to hold the two ends apart — an end near either edge of the scale a model may
+        // write is a rule as countable as any other, so a span the exact arithmetic could not hold
+        // is left as unknown rather than let a difference or a sum of two decimals throw.
+        if (!(ExactRatio.of(most).minus(ExactRatio.of(least)) instanceof ExactAnswer.Held<ExactRatio> apart)
+                || !(apart.value().plus(ExactRatio.ONE) instanceof ExactAnswer.Held<ExactRatio> held)) {
+            return Cardinality.UNKNOWN;
+        }
+        BigDecimal span = held.value().asWrittenDecimal();
         if (span.signum() <= 0) {
             return Cardinality.none(new Emptiness.EmptyNumericInterval());
         }

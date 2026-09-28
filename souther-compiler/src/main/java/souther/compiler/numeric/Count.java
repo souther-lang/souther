@@ -116,43 +116,57 @@ public record Count(BigDecimal at) implements Place {
     }
 
     /**
-     * The count {@code steps} further along the order.
+     * The count {@code steps} further along the order, or null where no count is that number.
      *
      * <p>Whole steps only. What one step means is the carrier's — a day for a date, a second for a
      * date-time — and every caller stepping a count is stepping over a carrier that has a step at
      * all, which {@link Granularity} is what says.
+     *
+     * <p>Added as numbers and not as the decimals they are written as. A count is the number, and
+     * the places it was written to are no part of where a step lands: {@code 0E-2147483647} is
+     * nought, a whole number an order holds, and the count after it is one. Added as written
+     * decimals, the one step would first be written to the count's two billion places, which no
+     * host holds — the decimal refusing a number that has an answer.
+     *
+     * <p>Null is the one way a sum of two numbers has no answer: no whole number the host holds is
+     * it, so no count is it and no carrier's order has it — the same null {@link #at(ExactRatio)}
+     * answers, and never that this could not work it out.
      */
     public Count plus(long steps) {
-        return new Count(at.add(BigDecimal.valueOf(steps)));
+        return along(ExactRatio.of(steps));
     }
 
+    /** The count {@code steps} back along the order, or null where no count is that number. */
     public Count minus(long steps) {
-        return plus(-steps);
+        return along(ExactRatio.of(steps).negated());
     }
 
-    /**
-     * This count so many times over, for a run stepped by so many of its steps. The factor is a
-     * plain number rather than a count, since how many steps is no place on any order.
-     *
-     * <p>No sum or difference of two counts sits beside it. A number worked out of two coordinates
-     * is on no carrier's order until somebody puts it on one, and whether it lands there, and what
-     * it means where it does not, is the question of the reader holding it. So that arithmetic is
-     * {@link ExactRatio}'s, reached through {@link #exactly}, and the way back is {@link #at}.
-     */
-    public Count times(BigDecimal factor) {
-        return new Count(at.multiply(factor));
+    private Count along(ExactRatio steps) {
+        return switch (exactly().plus(steps)) {
+            case ExactAnswer.Held<ExactRatio> held -> at(held.value());
+            case ExactAnswer.Unheld<ExactRatio> unheld -> switch (unheld.why()) {
+                case NO_REPRESENTATION_EXISTS -> null;
+                // An exact sum builds the answer's own digits and nothing more, so it is refused
+                // for there being no such whole number and never for a shortage of room.
+                case MORE_ROOM_COULD_ANSWER -> throw new IllegalStateException(
+                        "an exact sum was refused for room, which a sum never needs: " + at
+                                + " and " + steps);
+            };
+        };
     }
 
     /**
      * The count this comes to {@code factor} times over, or null where no {@link BigDecimal} holds
      * the product.
      *
-     * <p>For a reader whose factors are ends of ranges and so of any scale. {@link #times} is for a
-     * step counted out, which is a whole number of steps and cannot leave the scale range.
+     * <p>For a reader whose factors are ends of ranges and so of any scale. A number worked out of
+     * two coordinates is on no carrier's order until somebody puts it on one, and whether it lands
+     * there, and what it means where it does not, is the question of the reader holding it.
      *
      * <p>A count is the number and not the places it was written to, so the product is asked of the
      * number ({@link ExactDecimals#product}) and never of the scale {@code BigDecimal.multiply}
-     * would build it at.
+     * would build it at, which is what lets this answer for a factor of any scale rather than
+     * throwing where the product runs past what a scale holds.
      *
      * <p>Null is no count to hold it, for either of the two reasons that has: no decimal is the
      * number, or this host has no room for its digits. They are different answers about a number and
@@ -173,9 +187,27 @@ public record Count(BigDecimal at) implements Place {
         return new Count(at.negate());
     }
 
-    /** This count moved onto a whole one, which is what a discrete carrier's order is made of. */
+    /**
+     * This count moved onto a whole one, which is what a discrete carrier's order is made of.
+     *
+     * @param towards {@code FLOOR} or {@code CEILING}, the two directions a caller ever asks this
+     *                for; read exactly, so that rounding a count never trips over the same
+     *                scale-overflow a plain {@code setScale} could
+     */
     public Count rounded(java.math.RoundingMode towards) {
-        return new Count(at.setScale(0, towards));
+        ExactAnswer<java.math.BigInteger> rounded = switch (towards) {
+            case FLOOR -> exactly().floor();
+            case CEILING -> exactly().ceiling();
+            default -> throw new IllegalArgumentException(
+                    "a count is rounded toward the floor or the ceiling of its order, and asked no"
+                            + " other way: " + towards);
+        };
+        if (!(rounded instanceof ExactAnswer.Held<java.math.BigInteger> held)) {
+            throw new IllegalStateException(
+                    "the exact arithmetic could not hold the whole number this count rounds to: "
+                            + at);
+        }
+        return new Count(new BigDecimal(held.value()));
     }
 
     /** Whether this counts to a place on an order that steps: a count with a fraction in it is

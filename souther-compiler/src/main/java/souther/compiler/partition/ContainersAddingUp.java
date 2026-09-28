@@ -17,18 +17,23 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -151,7 +156,8 @@ final class ContainersAddingUp {
                     ? new TermRealizations.Realization.None(
                             Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                             ways.said(occurrences(target)))
-                    : new TermRealizations.Realization.Stopped(ways.cutBy());
+                    : new TermRealizations.Realization.Stopped(
+                            CompositionShortfall.of(ways.cutBy()));
         }
         WhatWasLeft left = new WhatWasLeft();
         // What the planning gave up at, which is a way that was there to try and was not. A way down
@@ -169,18 +175,19 @@ final class ContainersAddingUp {
                 new HowManyElements(makings, offered, left), left);
         List<FixtureTemplate> built = offered.built();
         if (!built.isEmpty()) {
-            return new TermRealizations.Realization.Built(built, left.refused(), left.notAllOf());
+            return new TermRealizations.Realization.Built(built, left.shortfall());
         }
-        // Nothing was composed, and what a reader may make of that is what these two say. A figure
-        // that refused a candidate is why nothing came of it and is somebody's to raise; a
-        // population this walks some of leaves an emptiness nothing established, and neither is the
-        // other. Where there is neither, what this looked at was everything it could have.
-        if (!left.refused().isEmpty()) {
-            return new TermRealizations.Realization.Stopped(left.refused(), left.notAllOf());
+        // Nothing was composed, and what a reader may make of that is what these three say. A
+        // figure that refused a candidate is why nothing came of it and is somebody's to raise; a
+        // population this walks some of leaves an emptiness nothing established; a number this
+        // could not hold leaves the same emptiness for a third reason, neither a figure nor a
+        // population. Where there is none of them, what this looked at was everything it could have.
+        CompositionShortfall met = left.shortfall();
+        if (!met.figures().isEmpty()) {
+            return new TermRealizations.Realization.Stopped(met);
         }
-        if (!left.notAllOf().isEmpty()) {
-            return new TermRealizations.Realization.Unexhausted(left.notAllOf(),
-                    ways.said(occurrences(target)));
+        if (!met.nothing()) {
+            return new TermRealizations.Realization.Unexhausted(met, ways.said(occurrences(target)));
         }
         return new TermRealizations.Realization.None(
                 Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
@@ -203,6 +210,7 @@ final class ContainersAddingUp {
         private final Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
         private final Set<CompositionRepertoire> notAllOf =
                 EnumSet.noneOf(CompositionRepertoire.class);
+        private final Set<CompositionCapacity> unheld = new HashSet<>();
 
         /** A piece was in front of a walk and this figure left no room for it. */
         void refused(CompositionBudget figure) {
@@ -214,6 +222,13 @@ final class ContainersAddingUp {
             notAllOf.add(population);
         }
 
+        /** A number this walk needed could not be held, which is neither of the other two: no
+         *  figure stopped it and no population is somebody's to write the rest of — a host with
+         *  more room reaches it or nothing does. */
+        void unheld(CompositionCapacity capacity) {
+            unheld.add(capacity);
+        }
+
         /** The figures that refused a piece, which are the ones a composing was stopped by. */
         Set<CompositionBudget> refused() {
             return Set.copyOf(refused);
@@ -222,6 +237,16 @@ final class ContainersAddingUp {
         /** The populations an offer made under these walks holds some of and not all of. */
         Set<CompositionRepertoire> notAllOf() {
             return Set.copyOf(notAllOf);
+        }
+
+        /** The numbers a walk worked out and could not hold. */
+        Set<CompositionCapacity> unheld() {
+            return Set.copyOf(unheld);
+        }
+
+        /** All of it, as the one shortfall a realization carries on. */
+        CompositionShortfall shortfall() {
+            return CompositionShortfall.of(refused, notAllOf, unheld);
         }
     }
 
@@ -401,20 +426,28 @@ final class ContainersAddingUp {
                 left.notAllOf(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD);
             }
             for (Spread how : Spread.values()) {
-                List<BigDecimal> split = splitting(makings.total(), many, makings.ends(), how,
-                        makings.elements());
-                if (split == null) {
-                    continue;
-                }
-                // Every way down at this count, and the whole container by one of them. Which case
-                // an element is is a fact about the value, so a container whose elements are of
-                // several would be offering a shape nothing asked for; what the walk owes is to
-                // offer each case and to say the rest were never made.
-                //
-                // An offer with no room for another container has none at any count, so this is the
-                // end of the counts as well and not only of the shapes.
-                if (asFarAs(containers(split), offered, left) == Traversal.STOPPED) {
-                    return Taken.AND_DONE;
+                switch (splitting(makings.total(), many, makings.ends(), how, makings.elements())) {
+                    case Split.None _ -> { }
+                    // Its own vocabulary and not `notAllOf`: this compiler has a way of generating
+                    // every other arrangement of this shape and reached for it, and what stopped it
+                    // is the arithmetic rather than a shape this compiler cannot produce. Told apart
+                    // so that raising the figure `MORE_ROOM_COULD_ANSWER` names reaches this, where
+                    // `WAYS_A_TOTAL_IS_SPREAD` would tell a reader nobody can raise anything.
+                    case Split.NotWorkedOut(UnheldNumber why) ->
+                            left.unheld(new CompositionCapacity(
+                                    CompositionCapacity.Where.VALUES_A_TOTAL_IS_SPREAD_OVER, why));
+                    case Split.Some(List<BigDecimal> values) -> {
+                        // Every way down at this count, and the whole container by one of them.
+                        // Which case an element is is a fact about the value, so a container whose
+                        // elements are of several would be offering a shape nothing asked for; what
+                        // the walk owes is to offer each case and to say the rest were never made.
+                        //
+                        // An offer with no room for another container has none at any count, so
+                        // this is the end of the counts as well and not only of the shapes.
+                        if (asFarAs(containers(values), offered, left) == Traversal.STOPPED) {
+                            return Taken.AND_DONE;
+                        }
+                    }
                 }
             }
             return Taken.AND_MORE;
@@ -593,7 +626,7 @@ final class ContainersAddingUp {
      * more of a decomposition than the other. What is not here is a search: these are two of the
      * many, and what the walk owes is to say that the rest were never made.
      */
-    private enum Spread {
+    enum Spread {
 
         /** The whole difference on as few elements as will carry it, the rest where they started. */
         MASSED,
@@ -603,8 +636,30 @@ final class ContainersAddingUp {
     }
 
     /**
-     * The numbers {@code many} elements hold for the container to come to {@code total}, or null
-     * where this shape reaches none.
+     * What sharing a total out over {@code many} elements one {@link Spread} came to.
+     *
+     * <p>Three, and not a nullable list: a shape that reaches no decomposition and a shape the
+     * exact arithmetic could not work out are different facts, and a walk reading them alike would
+     * call an arithmetic gap a proof that no arrangement exists — which is the one thing
+     * {@link ExactAnswer} exists to keep a caller from doing by accident.
+     */
+    sealed interface Split {
+
+        /** This shape reaches no decomposition. Not that none exists — another shape or another
+         *  count may — and the walk that asked says so. */
+        record None() implements Split {}
+
+        /** Every value along the way arrived, and one of them is a number the exact arithmetic
+         *  could not hold. Never read as {@link None}: this shape's existence is undecided, not
+         *  refused. */
+        record NotWorkedOut(UnheldNumber why) implements Split {}
+
+        record Some(List<BigDecimal> values) implements Split {}
+    }
+
+    /**
+     * The numbers {@code many} elements hold for the container to come to {@code total}, by one
+     * {@link Spread}.
      *
      * <p>Every element starts where {@link Ends#from} puts it and moves by its share of what is
      * still owed. <b>Either way along the order</b>: a total below where the elements start is
@@ -622,65 +677,142 @@ final class ContainersAddingUp {
      * <p>Null where this shape reaches no decomposition. Which is not that none exists — another
      * shape or another count may — and the walk that asked says so.
      */
-    private static List<BigDecimal> splitting(BigDecimal total, int many, Ends ends, Spread how,
-                                              Carrier elements) {
+    static Split splitting(BigDecimal total, int many, Ends ends, Spread how,
+                           Carrier elements) {
         if (many == 0) {
-            return total.signum() == 0 ? List.of() : null;
+            return total.signum() == 0 ? new Split.Some(List.of()) : new Split.None();
         }
-        BigDecimal owed = total.subtract(ends.from().multiply(BigDecimal.valueOf(many)));
+        // Held in ratios throughout the sharing out, and narrowed to a written decimal only where an
+        // element's own value is built. Every step below that can go unheld says so as
+        // {@link Split.NotWorkedOut} rather than {@link Split.None}: a shape the exact arithmetic
+        // could not finish is not a shape this compiler has ruled out, and reading the two alike is
+        // exactly the confusion {@link ExactAnswer} exists to keep a caller from making by accident.
+        ExactRatio from = ends.from().exactly();
+        ExactAnswer<ExactRatio> started = ExactRatio.of(total).minus(from.times(ExactRatio.of(many)));
+        if (started instanceof ExactAnswer.Unheld<ExactRatio> unheldStart) {
+            return new Split.NotWorkedOut(unheldStart.why());
+        }
+        ExactRatio owed = ((ExactAnswer.Held<ExactRatio>) started).value();
+        // How many places a dense share is rounded to: the most the numbers taking part in the
+        // sharing were written to, and at least one. Read off the written numbers themselves — the
+        // total and the counts the ends hold — and never off `owed`, which as an exact ratio holds
+        // the number and not the places. It starts at the total and the start, and an end joins it
+        // only where the loop below actually moves a share to that end: an end nothing reaches
+        // takes no part in the sharing, so its places are not the sharing's.
+        int scale = Math.max(Math.max(total.scale(), ends.from().at().scale()), 1);
         List<BigDecimal> split = new ArrayList<>();
         for (int i = 0; i < many; i++) {
-            BigDecimal wanted = how == Spread.MASSED ? owed : shared(owed, many - i, elements);
-            BigDecimal add = toward(wanted, ends);
-            BigDecimal at = ends.from().add(add);
+            ExactRatio wanted;
+            if (how == Spread.MASSED) {
+                wanted = owed;
+            } else {
+                ExactAnswer<ExactRatio> sharedAnswer = shared(owed, scale, many - i, elements);
+                if (sharedAnswer instanceof ExactAnswer.Unheld<ExactRatio> unheldShared) {
+                    return new Split.NotWorkedOut(unheldShared.why());
+                }
+                wanted = ((ExactAnswer.Held<ExactRatio>) sharedAnswer).value();
+            }
+            ExactAnswer<ExactRatio> addAnswer = toward(wanted, ends);
+            if (addAnswer instanceof ExactAnswer.Unheld<ExactRatio> unheldAdd) {
+                return new Split.NotWorkedOut(unheldAdd.why());
+            }
+            ExactRatio add = ((ExactAnswer.Held<ExactRatio>) addAnswer).value();
+            // Moved to the end it was heading for exactly where `add` is not the share it asked
+            // for, and only then is that end one of the numbers the sharing is made of. Never null
+            // here: an end that names no value never holds a share back.
+            if (add.compareTo(wanted) != 0) {
+                Count reached = wanted.signum() >= 0 ? ends.upTo() : ends.downTo();
+                scale = Math.max(scale, reached.at().scale());
+            }
+            ExactAnswer<ExactRatio> atAnswer = from.plus(add);
+            if (atAnswer instanceof ExactAnswer.Unheld<ExactRatio> unheldAt) {
+                return new Split.NotWorkedOut(unheldAt.why());
+            }
+            BigDecimal at = ((ExactAnswer.Held<ExactRatio>) atAnswer).value().asWrittenDecimal();
+            if (at == null) {
+                return new Split.NotWorkedOut(UnheldNumber.NO_REPRESENTATION_EXISTS);
+            }
             // Put back to the rules and to the carrier, which are the two things a number has to be
             // to be a value here. Where an element starts and how far it may be moved are worked out
             // from the ends and are this reader's arithmetic; whether what came of them is a value
             // is not, and a decomposition that reads its own workings back would be sound only for
-            // as long as the workings are.
+            // as long as the workings are. This is the one place a proof of {@link Split.None} is
+            // actually earned: every number above held, and the rules or the carrier still refuse it.
             if (!ends.runs().admits(Count.of(at))
                     || !(elements.onTheGrid(Count.of(at)) instanceof Count on)
                     || on.at().compareTo(at) != 0) {
-                return null;
+                return new Split.None();
             }
             split.add(at);
-            owed = owed.subtract(add);
+            ExactAnswer<ExactRatio> nextOwed = owed.minus(add);
+            if (nextOwed instanceof ExactAnswer.Unheld<ExactRatio> unheldNext) {
+                return new Split.NotWorkedOut(unheldNext.why());
+            }
+            owed = ((ExactAnswer.Held<ExactRatio>) nextOwed).value();
         }
-        return owed.signum() == 0 ? List.copyOf(split) : null;
+        return owed.isZero() ? new Split.Some(List.copyOf(split)) : new Split.None();
     }
 
     /**
-     * One element's share of what is still owed, over the elements still to be given one.
+     * One element's share of what is still owed, over the elements still to be given one, or which
+     * way the exact arithmetic could not hold it.
      *
      * <p>Toward nought, so the elements before the last take no more than their share and the last
      * takes what division left over. Which is what makes the shares add up without a remainder to
      * place: the last element is given whatever is still owed, whatever the division came to.
      *
      * <p>An order that steps divides to a whole number of its counts; one that does not is divided
-     * as far as the numbers being added were written, since a share finer than that is a value the
-     * total was never stated to a.
+     * to {@code scale} places, which {@link #splitting} tracks across the whole walk rather than
+     * reading back off {@code owed} here — a share finer than that is a value the total was
+     * never stated to, and one coarser than the numbers the total and the ends were themselves
+     * written at is a share the decomposition never asked for either. Divided in ratios throughout:
+     * {@code among} is a whole number and never nought, so the divisor never refuses, and what asks
+     * the exact arithmetic something it may refuse is only the room the quotient itself needs —
+     * which is {@link ExactRatio#truncated}/{@link ExactRatio#asDecimal}'s question and not
+     * {@code BigDecimal.divide}'s.
      */
-    private static BigDecimal shared(BigDecimal owed, int among, Carrier elements) {
-        BigDecimal by = BigDecimal.valueOf(among);
-        return elements.spacing() == Granularity.DISCRETE
-                ? owed.divideToIntegralValue(by)
-                : owed.divide(by, Math.max(owed.scale(), 1), RoundingMode.DOWN);
+    private static ExactAnswer<ExactRatio> shared(ExactRatio owed, int scale, int among,
+                                                   Carrier elements) {
+        ExactRatio by = ExactRatio.of(among);
+        if (elements.spacing() == Granularity.DISCRETE) {
+            return switch (owed.dividedBy(by).truncated()) {
+                case ExactAnswer.Held<BigInteger> held -> ExactAnswer.held(ExactRatio.of(held.value()));
+                case ExactAnswer.Unheld<BigInteger> unheld -> ExactAnswer.unheld(unheld.why());
+            };
+        }
+        return switch (owed.dividedBy(by).asDecimal(RoundingMode.DOWN, scale)) {
+            case ExactAnswer.Held<BigDecimal> held -> ExactAnswer.held(ExactRatio.of(held.value()));
+            case ExactAnswer.Unheld<BigDecimal> unheld -> ExactAnswer.unheld(unheld.why());
+        };
     }
 
     /**
-     * As much of {@code wanted} as one element may move, in the direction it is asking to move.
+     * As much of {@code wanted} as one element may move, in the direction it is asking to move, or
+     * which way the exact arithmetic could not hold the distance to the end it is moving toward.
      *
      * <p>The end an element is moving toward is the one that bounds it, and the other says nothing
      * about the move. Bounded by whichever end happened to be named, an element moving down was held
      * to how far it could go up.
      */
-    private static BigDecimal toward(BigDecimal wanted, Ends ends) {
+    private static ExactAnswer<ExactRatio> toward(ExactRatio wanted, Ends ends) {
         if (wanted.signum() >= 0) {
-            return ends.upTo() == null ? wanted
-                    : wanted.min(ends.upTo().subtract(ends.from()));
+            if (ends.upTo() == null) {
+                return ExactAnswer.held(wanted);
+            }
+            return switch (ends.upTo().exactly().minus(ends.from().exactly())) {
+                case ExactAnswer.Unheld<ExactRatio> unheld -> unheld;
+                case ExactAnswer.Held<ExactRatio> held ->
+                        ExactAnswer.held(wanted.compareTo(held.value()) <= 0 ? wanted : held.value());
+            };
         }
-        return ends.downTo() == null ? wanted
-                : wanted.max(ends.downTo().subtract(ends.from()));
+        if (ends.downTo() == null) {
+            return ExactAnswer.held(wanted);
+        }
+        return switch (ends.downTo().exactly().minus(ends.from().exactly())) {
+            case ExactAnswer.Unheld<ExactRatio> unheld -> unheld;
+            case ExactAnswer.Held<ExactRatio> held ->
+                    ExactAnswer.held(wanted.compareTo(held.value()) >= 0 ? wanted : held.value());
+        };
     }
 
     /**
@@ -966,12 +1098,19 @@ final class ContainersAddingUp {
      * held to the distance to the top while moving down is one that walks out of the range and is
      * caught by it — which is a decomposition lost for a reason about this reader.
      *
+     * <p>Held as the counts the carrier and the rules name, not as exact ratios. A count is the
+     * number and the places it was written to, and a level share is rounded to the places the
+     * numbers taking part in it were written to — a start written {@code 0.00} shares a total out
+     * to two places where one written {@code 0} would not. An exact ratio holds only the number,
+     * so once an end has become one there is nothing left to ask for its places. Every sum and
+     * difference of the ends is still worked out exactly, through {@link Count#exactly}, which
+     * loses nothing.
+     *
      * @param downTo null where nothing floors an element, or where the floor is a value the order
      *               has no value beside
      * @param upTo   the same at the other end
      */
-    record Ends(BigDecimal from, BigDecimal downTo, BigDecimal upTo,
-                NumericDomain.Bounds runs) {
+    record Ends(Count from, Count downTo, Count upTo, NumericDomain.Bounds runs) {
 
         /**
          * Whether {@code many} elements standing on these ends can come to {@code total} at all.
@@ -987,16 +1126,33 @@ final class ContainersAddingUp {
          * whether there is nothing to reach, so admitting a total the carrier turns out to refuse
          * costs a claim of completeness nobody had to make, and denying one it admits would be a
          * claim of completeness nothing showed.
+         *
+         * <p>True as well where the exact arithmetic could not hold a distance this needed: the
+         * claim this makes when it answers false is that nothing further is worth trying, and that
+         * is the one direction an unheld difference must never be read as.
          */
         boolean reaches(BigDecimal total, int many) {
-            BigDecimal owed = total.subtract(from.multiply(BigDecimal.valueOf(many)));
-            if (owed.signum() == 0) {
+            ExactRatio manyTimes = ExactRatio.of(many);
+            if (!(ExactRatio.of(total).minus(from.exactly().times(manyTimes))
+                    instanceof ExactAnswer.Held<ExactRatio> heldOwed)) {
                 return true;
             }
-            BigDecimal end = owed.signum() > 0 ? upTo : downTo;
-            return end == null
-                    || owed.abs().compareTo(
-                            end.subtract(from).abs().multiply(BigDecimal.valueOf(many))) <= 0;
+            ExactRatio owed = heldOwed.value();
+            if (owed.isZero()) {
+                return true;
+            }
+            Count end = owed.signum() > 0 ? upTo : downTo;
+            if (end == null) {
+                return true;
+            }
+            // True as well where the exact arithmetic could not hold this distance, for the same
+            // reason as every other one above: false is the claim that nothing further is worth
+            // trying, and an unheld distance never establishes that.
+            return switch (end.exactly().minus(from.exactly())) {
+                case ExactAnswer.Unheld<ExactRatio> _ -> true;
+                case ExactAnswer.Held<ExactRatio> distance ->
+                        owed.abs().compareTo(distance.value().abs().times(manyTimes)) <= 0;
+            };
         }
 
         static Ends of(NumericDomain.Bounds runs, Carrier elements) {
@@ -1006,7 +1162,7 @@ final class ContainersAddingUp {
             if (!(elements.somethingInside(runs.min(), runs.max()) instanceof Count from)) {
                 return null;
             }
-            return new Ends(from.at(), inward(runs.min(), elements, true),
+            return new Ends(from, inward(runs.min(), elements, true),
                     inward(runs.max(), elements, false), runs);
         }
 
@@ -1017,17 +1173,17 @@ final class ContainersAddingUp {
          * is the carrier's to name — asked of {@link BoundaryDomain}, which is where that question
          * has its answer and where a carrier with no smallest step says it has none.
          */
-        private static BigDecimal inward(Endpoint end, Carrier elements, boolean upward) {
+        private static Count inward(Endpoint end, Carrier elements, boolean upward) {
             if (end == null || !(end.at() instanceof Count at)) {
                 return null;
             }
             if (end.inclusive()) {
-                return at.at();
+                return at;
             }
             BoundaryDomain beside = BoundaryDomain.on(elements);
             Optional<Place> next =
                     upward ? beside.successor(at) : beside.predecessor(at);
-            return next.orElse(null) instanceof Count on ? on.at() : null;
+            return next.orElse(null) instanceof Count on ? on : null;
         }
     }
 

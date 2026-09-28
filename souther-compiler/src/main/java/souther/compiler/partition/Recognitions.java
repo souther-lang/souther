@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.inputs.Membership;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.values.Value;
 
@@ -132,6 +133,8 @@ public final class Recognitions {
                     count.is().holds(number.value(), count.carrier()));
             case NumericTerm.Reading.Missing missing -> new Membership.Incomplete(missing.code());
             case NumericTerm.Reading.NotNumber _ -> Membership.NO_MATCH;
+            case NumericTerm.Reading.NotWorkedOut(UnheldNumber why) ->
+                    new Membership.NotWorkedOut(why);
         };
     }
 

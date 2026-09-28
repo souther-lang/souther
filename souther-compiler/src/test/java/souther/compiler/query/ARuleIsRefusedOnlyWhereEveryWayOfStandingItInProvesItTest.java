@@ -3,6 +3,7 @@ package souther.compiler.query;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionShortfall;
 import souther.compiler.partition.Generator;
 
 import java.util.EnumSet;
@@ -126,7 +127,8 @@ class ARuleIsRefusedOnlyWhereEveryWayOfStandingItInProvesItTest {
         return new Generator.BoundaryAttempt.Stopped(new Generator.UnresolvedCombination(
                 List.of("a rule of the decision"),
                 Generator.UnresolvedCombination.Reason.wordFor(Set.of(budget))),
-                EnumSet.of(budget), Set.of(), NOTHING_LEFT_OUT);
+                CompositionShortfall.of(EnumSet.of(budget)),
+                NOTHING_LEFT_OUT);
     }
 
     /** These searches are about what a rule's answer is made of and not about what was left out. */

@@ -16,19 +16,22 @@ import java.util.List;
  * What of this compiler's left the point short of established, where a row can be written at it.
  *
  * <p>Not a reason a row cannot be written. Every case here is something of this compiler's own met
- * on the way to an answer — a figure it holds its work to, or a population it writes some of — so
- * what it licenses is that the question is open, and a reader that turned one of these into a
- * statement about the model would be reporting a policy as a property of what somebody wrote.
+ * on the way to an answer — a limit on what it kept of an observation, a figure it holds its work
+ * to, a population it writes some of, or a number it worked out and could not hold — so what it
+ * licenses is that the question is open, and a reader that turned one of these into a statement
+ * about the model would be reporting a policy as a property of what somebody wrote.
  *
- * <p><b>Which of the two is not a kind of gap.</b> A reader of a gap is being told the same thing
- * either way: nothing here settled the point. What differs is what would settle it — raising a
- * number, or somebody writing the rest of what this walks — and that is a vocabulary the gap
- * carries rather than a case it is.
+ * <p><b>Which of them it was is not a kind of gap.</b> A reader of a gap is being told the same
+ * thing whichever it was: nothing here settled the point. What differs is what would settle it —
+ * raising a number, somebody writing the rest of what this walks, a host with more room, or, for a
+ * number that has no representation at all, nothing — and that is a vocabulary the gap carries
+ * rather than a case it is.
  *
  * <p><b>Made where the establishing fell short, and never worked out afterwards.</b> The outcome a
- * search comes back with says that nothing came of it; which figure was reached, and which
- * population was walked in part, are known only where that happened, and a reader recovering either
- * from the outcome would be recovering it from something that has already lost it — one reason a
+ * search comes back with says that nothing came of it; which figure was reached, which population
+ * was walked in part and which number could not be held are known only where that happened, and a
+ * reader recovering any of them from the outcome would be recovering it from something that has
+ * already lost it — one reason a
  * search comes back with is written wherever a search can fall short, by files that fall short for
  * nothing like each other. So a producer that falls short hands this over, and one that has nothing
  * to hand over says so by there being no gap rather than by a gap nobody made.
@@ -70,8 +73,9 @@ public sealed interface EstablishmentGap {
     /**
      * Something of this compiler's is why no value composed for the point settles it.
      *
-     * <p>A figure it holds its work to, a population it writes some of, or both. Which of them it
-     * was is what each field says, and neither is read off the other's absence.
+     * <p>A figure it holds its work to, a population it writes some of, a number it could not
+     * hold, or more than one of them. Which it was is what each field says, and none is read off
+     * another's absence.
      *
      * <p><b>Not that the figure is why nothing was composed.</b> Where a search ran over a plan
      * short of the point, raising the figure may well leave every candidate refused as before —
@@ -137,12 +141,6 @@ public sealed interface EstablishmentGap {
                     PublicationOrders.COMPOSITION_CAPACITIES.keep(capacities));
         }
 
-        /** The same, where the search held every number it worked out. */
-        public static Composition of(Collection<CompositionBudget> budgets,
-                                     Collection<CompositionRepertoire> repertoires) {
-            return of(budgets, repertoires, List.of());
-        }
-
         /**
          * Whether measuring again, allowing more, could close the gap: every part of it has to
          * say so, as with the codes of an observation, and each part is asked rather than answered
@@ -167,9 +165,9 @@ public sealed interface EstablishmentGap {
                     ? RunSensitivity.UNAFFECTED : RunSensitivity.MAY_CHANGE;
         }
 
-        /** The gap the budgets a search met are, where it met no population it writes some of. */
+        /** The gap the budgets a search met are, where it met nothing else of this compiler's. */
         public static Composition of(Collection<CompositionBudget> budgets) {
-            return of(budgets, List.of());
+            return of(budgets, List.of(), List.of());
         }
     }
 }

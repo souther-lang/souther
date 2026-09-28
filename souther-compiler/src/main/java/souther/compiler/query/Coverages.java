@@ -1823,9 +1823,9 @@ final class Coverages {
             // declined to work on left the count as one the model admits no row at.
             case souther.compiler.partition.Generator.BoundaryAttempt.Stopped left ->
                     new ItemAssessment.Attempt.Stopped(left.why(), within, left.unrepresented(),
-                            PublicationOrders.COMPOSITION_BUDGETS.keep(left.by()),
-                            PublicationOrders.COMPOSITION_REPERTOIRES.keep(left.notAllOf()),
-                            NO_CAPACITIES);
+                            PublicationOrders.COMPOSITION_BUDGETS.keep(left.met().figures()),
+                            PublicationOrders.COMPOSITION_REPERTOIRES.keep(left.met().populations()),
+                            PublicationOrders.COMPOSITION_CAPACITIES.keep(left.met().unheld()));
             // A search that ran to the end of what this compiler writes, where that is not the end
             // of what there is to write. It leaves the point open the way the one above does and
             // names nothing anybody could raise, which is why it arrives as its own arm and its
@@ -1833,8 +1833,8 @@ final class Coverages {
             case souther.compiler.partition.Generator.BoundaryAttempt.Unexhausted left ->
                     new ItemAssessment.Attempt.Unexhausted(left.why(), within,
                             left.unrepresented(),
-                            PublicationOrders.COMPOSITION_REPERTOIRES.keep(left.writes()),
-                            NO_CAPACITIES);
+                            PublicationOrders.COMPOSITION_REPERTOIRES.keep(left.met().populations()),
+                            PublicationOrders.COMPOSITION_CAPACITIES.keep(left.met().unheld()));
             // A search that ran to the end of what it was handed, where what it was handed was
             // short of the point. It names a figure like the one above and its word is its own, so
             // the two are carried side by side rather than one being read off the other.

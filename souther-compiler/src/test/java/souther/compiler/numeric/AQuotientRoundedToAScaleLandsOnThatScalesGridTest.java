@@ -100,6 +100,27 @@ class AQuotientRoundedToAScaleLandsOnThatScalesGridTest {
         assertEquals("5.00", high(q));
     }
 
+    /**
+     * A quotient the exact arithmetic cannot hold at the scale asked for bounds nothing on its own
+     * side of nought and nought on the other.
+     *
+     * <p>A dividend of {@code 1E+2147483647} over three, at two places, is a number with more
+     * digits than any whole number the host holds. The divisor is not nought, which rules out only
+     * one of the two ways a division can refuse. {@code BigDecimal.divide} at that scale does not
+     * throw for the other either: it answers {@code 0.00} and {@code 0.01}, a bound on a quotient
+     * past every value the host writes. What this can say is the sign, and that is what is claimed.
+     */
+    @Test
+    void aQuotientTheExactArithmeticCannotHoldClaimsOnlyItsSign() {
+        NumericDomain.Bounds above = Intervals.roundedQuotient(at("1E+2147483647"), at("3"), 2);
+        assertNull(high(above), "nothing bounds a positive quotient this cannot hold from above");
+        assertEquals(0, new BigDecimal(low(above)).signum(), "and it is at least nought");
+
+        NumericDomain.Bounds below = Intervals.roundedQuotient(at("-1E+2147483647"), at("3"), 2);
+        assertNull(low(below), "nothing bounds a negative one from below");
+        assertEquals(0, new BigDecimal(high(below)).signum(), "and it is at most nought");
+    }
+
     /** A dividend running past every value leaves that end unbounded. */
     @Test
     void aDividendPastEveryValueLeavesThatEndUnbounded() {

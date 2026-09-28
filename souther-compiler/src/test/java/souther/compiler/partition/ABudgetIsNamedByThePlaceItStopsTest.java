@@ -106,7 +106,7 @@ class ABudgetIsNamedByThePlaceItStopsTest {
                 TermRealizations.Realization.Built.class, made,
                 () -> "a container of ones reaches a small total: " + made);
         assertFalse(built.values().isEmpty(), "and a row can be written from it");
-        assertFalse(built.heldBack().isEmpty(),
+        assertFalse(built.rest().figures().isEmpty(),
                 "the walk offered some of the decompositions and says which figures stopped the"
                         + " rest, which is not the same news as nothing having been composed");
     }

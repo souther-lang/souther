@@ -140,7 +140,29 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
          * side of it in one source were run and answered, and a reading that said none of them was
          * would be giving this one's reason to all of them.
          */
-        IMPLEMENTATION_NOT_MADE(false);
+        IMPLEMENTATION_NOT_MADE(false),
+        /**
+         * Every value a term reads arrived, and the number they come to has no representation this
+         * compiler holds, whatever room the host has.
+         *
+         * <p>Not {@link #VALUE_UNREADABLE}: the values were read back whole, and what stopped is a
+         * sum, a difference or a product of them standing far enough apart in scale for this host to
+         * hold. Apart from {@link #VALUE_ROOM_EXCEEDED} for the reason
+         * {@link souther.compiler.numeric.UnheldNumber} keeps the two apart everywhere else it
+         * travels: what a reader does next differs by which of them met the value, so a word that
+         * folded them into one would be undoing a distinction this compiler already worked out and
+         * is telling nobody.
+         */
+        VALUE_NOT_WORKED_OUT(false),
+        /**
+         * Every value a term reads arrived, and the number they come to is one this host had no room
+         * to hold.
+         *
+         * <p>Apart from {@link #VALUE_NOT_WORKED_OUT} for the same reason and told apart the same
+         * way: a value with no representation stays unheld on any host, and one this host had no
+         * room for is a value a host with more room could still hold.
+         */
+        VALUE_ROOM_EXCEEDED(false);
 
         private final boolean leftNoRowRead;
 
@@ -191,6 +213,10 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
                 case VALUE_UNREADABLE, ROW_UNDECIDED, ANSWERER_NOT_ESTABLISHED, LINKAGE_FAILED,
                      OBSERVATION_ABSENT, INSTRUMENTATION_ABSENT, IMPLEMENTATION_NOT_MADE ->
                         RunSensitivity.UNAFFECTED;
+                // The room that ran out, where it was room, is the host's and not a figure this
+                // compiler compared anything against; where no representation exists, no host has
+                // more of one to offer. Either way a wider run meets it again.
+                case VALUE_NOT_WORKED_OUT, VALUE_ROOM_EXCEEDED -> RunSensitivity.UNAFFECTED;
             };
         }
     }
