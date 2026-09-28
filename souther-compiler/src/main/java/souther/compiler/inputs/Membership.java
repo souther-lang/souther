@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 
@@ -25,6 +26,18 @@ public sealed interface Membership {
 
     /** There was no value to hold, and this is what stopped there being one. */
     record Incomplete(Incompleteness.Code code) implements Membership {}
+
+    /**
+     * A value arrived and the number a class asks about it is one the exact arithmetic could not
+     * hold.
+     *
+     * <p>Not {@link Incomplete}: nothing here is an observation that came back short, and
+     * {@link Incompleteness.Code} is what one met, not this. Not {@link NoMatch} either — the class
+     * asked a question the value has a real answer to, and this is that the answer could not be
+     * worked out rather than that it was worked out and refused. Read as either, a class that could
+     * not tell would come back sounding like one that could.
+     */
+    record NotWorkedOut(UnheldNumber why) implements Membership {}
 
     Membership MATCH = new Match();
 

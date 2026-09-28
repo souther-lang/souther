@@ -6,6 +6,7 @@ import souther.compiler.numeric.Dates;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.TakenArguments;
@@ -242,16 +243,20 @@ final class TermReading {
             }
             // A container may hold a model's own decimals, spaced as widely apart in scale as any
             // two of them this compiler ever adds — the same hazard `check.ConstantAlgebra` guards
-            // against when a rule adds two of them. Held in a ratio and read as no number of this
-            // term where the exact arithmetic could not hold the sum, rather than let one this wide
-            // throw.
-            if (!(total.plus(count.exactly()) instanceof ExactAnswer.Held<ExactRatio> held)) {
-                return new Reading.NotNumber();
+            // against when a rule adds two of them. The values are numbers and the sum is a number
+            // of them; what a sum this wide meets is the exact arithmetic's own limit and not a
+            // question about whether this term is one, so it is read as `NotWorkedOut` rather than
+            // let throw or folded into a sentence that says the values are not numbers at all.
+            ExactAnswer<ExactRatio> summed = total.plus(count.exactly());
+            if (summed instanceof ExactAnswer.Unheld<ExactRatio> unheld) {
+                return new Reading.NotWorkedOut(unheld.why());
             }
-            total = held.value();
+            total = ((ExactAnswer.Held<ExactRatio>) summed).value();
         }
         BigDecimal written = total.asWrittenDecimal();
-        return written == null ? new Reading.NotNumber() : new Reading.Number(new Count(written));
+        return written == null
+                ? new Reading.NotWorkedOut(UnheldNumber.NO_REPRESENTATION_EXISTS)
+                : new Reading.Number(new Count(written));
     }
 
     /**

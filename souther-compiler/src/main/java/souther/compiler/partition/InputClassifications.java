@@ -179,6 +179,16 @@ public final class InputClassifications {
                     }
                 }
                 case Membership.NoMatch _ -> { }
+                // Neither an observation gap nor a decided negative, and this measure has no third
+                // word for it: `Incompleteness.Code` is closed over what an observation met, and a
+                // count's own sum meeting a number the exact arithmetic could not hold is not that.
+                // Translated into an explicit statement of the gap rather than folded into a code
+                // that would misname why the coverage here is unknown, until the adequacy report
+                // has its own vocabulary for an arithmetic-scale limit beside an observation one.
+                case Membership.NotWorkedOut why -> throw new IllegalStateException(
+                        "a class of " + at + " asked a count whose sum the exact arithmetic could"
+                                + " not hold (" + why.why() + "), and this measure has no coverage"
+                                + " word for that yet");
             }
         }
         // Two readings of one value that disagree about whether it is there. Held to rather than

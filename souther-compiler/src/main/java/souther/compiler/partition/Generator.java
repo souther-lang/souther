@@ -22,6 +22,7 @@ import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.types.ReachName;
@@ -3957,6 +3958,7 @@ public final class Generator {
                 // rebuilt to move the number says nothing about how the number is read back, and a
                 // way of writing one added later is not a reading of its own.
                 Set<Incompleteness.Code> unread = EnumSet.noneOf(Incompleteness.Code.class);
+                Set<UnheldNumber> notWorkedOut = EnumSet.noneOf(UnheldNumber.class);
                 boolean stands = switch (target.term()) {
                     case NumericTerm.FromOnePosition _ -> {
                         boolean any = false;
@@ -3967,6 +3969,8 @@ public final class Generator {
                                 case NumericTerm.Reading.Missing missing ->
                                         unread.add(missing.code());
                                 case NumericTerm.Reading.NotNumber _ -> { }
+                                case NumericTerm.Reading.NotWorkedOut(UnheldNumber why) ->
+                                        notWorkedOut.add(why);
                             }
                         }
                         yield any;
@@ -3979,10 +3983,22 @@ public final class Generator {
                             yield false;
                         }
                         case NumericTerm.Reading.NotNumber _ -> false;
+                        case NumericTerm.Reading.NotWorkedOut(UnheldNumber why) -> {
+                            notWorkedOut.add(why);
+                            yield false;
+                        }
                     };
                 };
                 if (stands) {
                     yield new RealizationReadback.AtRequestedPlace();
+                }
+                // Asked before the observation gap and before the definite negative below: a number
+                // the exact arithmetic could not hold is neither an observation that came back short
+                // nor a value proven to stand elsewhere, and reading it as either would tell a reader
+                // more than this compiler worked out.
+                if (!notWorkedOut.isEmpty()) {
+                    yield new RealizationReadback.CouldNotTell(
+                            new ReadbackGap.NotWorkedOut(notWorkedOut));
                 }
                 if (!unread.isEmpty()) {
                     yield new RealizationReadback.CouldNotTell(
@@ -4037,6 +4053,10 @@ public final class Generator {
 
         /** The observation of the value did not come back whole. */
         record Observation(Set<Incompleteness.Code> causes) implements ReadbackGap {}
+
+        /** Every value the term read arrived, and the number one of them comes to is one the exact
+         *  arithmetic could not hold. */
+        record NotWorkedOut(Set<UnheldNumber> causes) implements ReadbackGap {}
     }
 
     /**
