@@ -61,8 +61,26 @@ import java.util.function.Supplier;
  */
 final class TermRealizations {
 
-    /** What building values that answer a number came to. */
+    /**
+     * What building values that answer a number came to.
+     *
+     * <p>What was not built is one {@link CompositionShortfall} wherever it travels, and never its
+     * vocabularies taken apart. A caller that held the figures and the populations as two sets
+     * carried each of them on and had nowhere to put a third, so a vocabulary added beside them
+     * was dropped at every place that had been written for two.
+     */
     sealed interface Realization {
+
+        /** What of this compiler's this came to without, and {@link CompositionShortfall#NONE}
+         *  where it is not a shortfall of this compiler's at all. */
+        default CompositionShortfall shortfall() {
+            return switch (this) {
+                case Built built -> built.rest();
+                case Stopped stopped -> stopped.met();
+                case Unexhausted some -> some.met();
+                case NoNumberTheRulesAdmit _, None _ -> CompositionShortfall.NONE;
+            };
+        }
 
         /**
          * Values that answer it, and what was not built.
@@ -77,32 +95,18 @@ final class TermRealizations {
          * two alike. Which of them a figure came to be here by is what {@link Stopped} is told
          * apart by, and it is not this.
          */
-        record Built(List<FixtureTemplate> values, java.util.Set<CompositionBudget> heldBack,
-                     java.util.Set<CompositionRepertoire> notAllOf,
-                     java.util.Set<CompositionCapacity> unheld) implements Realization {
+        record Built(List<FixtureTemplate> values, CompositionShortfall rest) implements Realization {
 
             public Built {
                 values = List.copyOf(values);
-                heldBack = java.util.Set.copyOf(heldBack);
-                notAllOf = java.util.Set.copyOf(notAllOf);
-                unheld = java.util.Set.copyOf(unheld);
                 if (values.isEmpty()) {
                     throw new IllegalArgumentException(
                             "a realization that built nothing is one that built none, and says why");
                 }
             }
 
-            Built(List<FixtureTemplate> values, java.util.Set<CompositionBudget> heldBack) {
-                this(values, heldBack, java.util.Set.of(), java.util.Set.of());
-            }
-
-            Built(List<FixtureTemplate> values, java.util.Set<CompositionBudget> heldBack,
-                  java.util.Set<CompositionRepertoire> notAllOf) {
-                this(values, heldBack, notAllOf, java.util.Set.of());
-            }
-
             static Built whole(List<FixtureTemplate> values) {
-                return new Built(values, java.util.Set.of());
+                return new Built(values, CompositionShortfall.NONE);
             }
         }
 
@@ -124,27 +128,13 @@ final class TermRealizations {
          * composed is {@link Built#heldBack()}: what it stopped is the rest of the offer, and the
          * point it was composed for has a value at it either way.
          */
-        record Stopped(java.util.Set<CompositionBudget> by,
-                       java.util.Set<CompositionRepertoire> notAllOf,
-                       java.util.Set<CompositionCapacity> unheld) implements Realization {
+        record Stopped(CompositionShortfall met) implements Realization {
 
             public Stopped {
-                by = java.util.Set.copyOf(by);
-                notAllOf = java.util.Set.copyOf(notAllOf);
-                unheld = java.util.Set.copyOf(unheld);
-                if (by.isEmpty()) {
+                if (met.figures().isEmpty()) {
                     throw new IllegalArgumentException(
                             "a composing this compiler stopped says which budget stopped it");
                 }
-            }
-
-            Stopped(java.util.Set<CompositionBudget> by) {
-                this(by, java.util.Set.of(), java.util.Set.of());
-            }
-
-            Stopped(java.util.Set<CompositionBudget> by,
-                    java.util.Set<CompositionRepertoire> notAllOf) {
-                this(by, notAllOf, java.util.Set.of());
             }
         }
 
@@ -166,24 +156,19 @@ final class TermRealizations {
          * somebody's to raise and reaches what the search was holding; what reaches the rest of one
          * of these is somebody writing the rest, which is not work an author of a model can do.
          *
+         * <p>What it met is a population walked in part, a number it could not hold, or both, and
+         * never a figure: a figure met makes it {@link Stopped}.
+         *
          * @param detail what this walk found, or null where it has nothing to add
          */
-        record Unexhausted(java.util.Set<CompositionRepertoire> notAllOf, String detail,
-                           java.util.Set<CompositionCapacity> unheld)
-                implements Realization {
+        record Unexhausted(CompositionShortfall met, String detail) implements Realization {
 
             public Unexhausted {
-                notAllOf = java.util.Set.copyOf(notAllOf);
-                unheld = java.util.Set.copyOf(unheld);
-                if (notAllOf.isEmpty() && unheld.isEmpty()) {
+                if (!met.figures().isEmpty() || met.nothing()) {
                     throw new IllegalArgumentException(
                             "a walk that says it saw some of them, or could not hold a number on"
-                                    + " the way, says which");
+                                    + " the way, says which, and names no figure: " + met);
                 }
-            }
-
-            Unexhausted(java.util.Set<CompositionRepertoire> notAllOf, String detail) {
-                this(notAllOf, detail, java.util.Set.of());
             }
         }
 
@@ -590,8 +575,9 @@ final class TermRealizations {
                     NumericDomain.Bounds quotients =
                             quotientsAsked(demands.get(each.getKey()).walking());
                     if (quotients == null) {
-                        return new Realization.Unexhausted(Set.of(CompositionRepertoire
-                                .VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS), null);
+                        return new Realization.Unexhausted(CompositionShortfall.writing(Set.of(
+                                CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS)),
+                                null);
                     }
                     // And what the rules leave the quotient room for, which is about the way to
                     // the point rather than about this demand. A region that leaves the number
@@ -810,7 +796,7 @@ final class TermRealizations {
             // Which population, and no detail beside it: nothing was walked here, so there is
             // nothing this found to tell a reader.
             case JointRealization.Missing(CompositionRepertoire notAllOf) ->
-                    new Realization.Unexhausted(Set.of(notAllOf), null);
+                    new Realization.Unexhausted(CompositionShortfall.writing(Set.of(notAllOf)), null);
             case JointRealization.Supported(JointBuilder builder) ->
                     builder.from(sourceType, demands, measuring, within, reading);
         };
@@ -1002,10 +988,13 @@ final class TermRealizations {
      * the one place a walk becomes something said about the model is here, and what it is said of
      * is what the search was for.
      */
-    private static Realization firstThatBuilds(boolean walkedTheWholeQuestion, Tried tried,
-                                               Function<Place, Realization> of) {
-        Set<CompositionBudget> met = new java.util.LinkedHashSet<>();
-        Set<CompositionRepertoire> some = new java.util.LinkedHashSet<>();
+    static Realization firstThatBuilds(boolean walkedTheWholeQuestion, Tried tried,
+                                       Function<Place, Realization> of) {
+        // Everything every number that built nothing came to without, taken as one shortfall so
+        // that no vocabulary of it is left behind here. The rules leaving no number at one of the
+        // numbers handed over says nothing about the next: this walk is over the numbers, and that
+        // one was a value's answer, whose shortfall is none.
+        CompositionShortfall met = CompositionShortfall.NONE;
         Realization last = null;
         for (Place number : tried.numbers()) {
             Realization made = of.apply(number);
@@ -1013,31 +1002,23 @@ final class TermRealizations {
                 return built;
             }
             last = made;
-            switch (made) {
-                case Realization.Stopped stopped -> {
-                    met.addAll(stopped.by());
-                    some.addAll(stopped.notAllOf());
-                }
-                case Realization.Unexhausted walked -> some.addAll(walked.notAllOf());
-                // The rules leaving no number at one of the numbers handed over says nothing about
-                // the next: this walk is over the numbers, and that one was a value's answer.
-                case Realization.NoNumberTheRulesAdmit _, Realization.None _,
-                     Realization.Built _ -> { }
-            }
+            met = met.and(made.shortfall());
         }
         // Why there were no more to try, said by whatever handed them over. Worked out here, this
         // would be the one place that knows what every account's numbers are and how it walks them,
         // which is what handing the reason over is for.
-        switch (tried.rest()) {
-            case Remainder.Exhausted _ -> { }
-            case Remainder.StoppedAt(CompositionBudget figure) -> met.add(figure);
-            case Remainder.SomeOf(Set<CompositionRepertoire> written) -> some.addAll(written);
+        met = met.and(switch (tried.rest()) {
+            case Remainder.Exhausted _ -> CompositionShortfall.NONE;
+            case Remainder.StoppedAt(CompositionBudget figure) ->
+                    CompositionShortfall.of(Set.of(figure));
+            case Remainder.SomeOf(Set<CompositionRepertoire> written) ->
+                    CompositionShortfall.writing(written);
+        });
+        if (!met.figures().isEmpty()) {
+            return new Realization.Stopped(met);
         }
-        if (!met.isEmpty()) {
-            return new Realization.Stopped(met, some);
-        }
-        if (!some.isEmpty()) {
-            return new Realization.Unexhausted(some,
+        if (!met.nothing()) {
+            return new Realization.Unexhausted(met,
                     last instanceof Realization.Unexhausted walked ? walked.detail() : null);
         }
         // Nothing was handed over, nothing was held back, and the numbers there were to hand over
@@ -1124,7 +1105,7 @@ final class TermRealizations {
      * @param rest    why there are no more, which is what tells a set with no value in it from a
      *                search that stopped short of one
      */
-    private record Tried(List<Place> numbers, Remainder rest) {
+    record Tried(List<Place> numbers, Remainder rest) {
 
         static Tried allOf(List<Place> numbers) {
             return new Tried(numbers, new Remainder.Exhausted());
@@ -1151,7 +1132,7 @@ final class TermRealizations {
      * why it stopped and a set of candidates that does not would leave the word a reader gets
      * standing on a guess.
      */
-    private sealed interface Remainder {
+    sealed interface Remainder {
 
         /** There are no more: the numbers handed over are every one the set has in the window its
          *  account can be asked for. */
@@ -1690,13 +1671,13 @@ final class TermRealizations {
             return built.heldBack().isEmpty()
                     ? new Realization.None(
                             Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
-                    : new Realization.Stopped(built.heldBack());
+                    : new Realization.Stopped(CompositionShortfall.of(built.heldBack()));
         }
         List<FixtureTemplate> out = new ArrayList<>();
         for (FixtureTemplate each : built.values()) {
             out.add(RepresentativeSource.under(worn.names(), each));
         }
-        return new Realization.Built(out, built.heldBack());
+        return new Realization.Built(out, CompositionShortfall.of(built.heldBack()));
     }
 
     /**
@@ -1800,8 +1781,8 @@ final class TermRealizations {
             return found.everyOne()
                     ? new Realization.None(
                             Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
-                    : new Realization.Stopped(
-                            Set.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED));
+                    : new Realization.Stopped(CompositionShortfall.of(
+                            Set.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED)));
         }
         FixtureTemplate standing = WornNames.under(
                 TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(), ruleSource.published()).wrappers(),

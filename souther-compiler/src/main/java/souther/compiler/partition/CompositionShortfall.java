@@ -47,21 +47,17 @@ public record CompositionShortfall(Set<CompositionBudget> figures,
         unheld = Set.copyOf(unheld);
     }
 
-    /** One that met these figures and nothing it knows it walked part of. */
+    /** One that met these figures and nothing else. */
     public static CompositionShortfall of(Collection<CompositionBudget> figures) {
-        return of(figures, Set.of());
+        return of(figures, Set.of(), Set.of());
     }
 
-    /** One that met what a walk ran to the end of, and no figure. */
+    /** One that met what a walk ran to the end of, and nothing else. */
     public static CompositionShortfall writing(Collection<CompositionRepertoire> populations) {
-        return of(Set.of(), populations);
+        return of(Set.of(), populations, Set.of());
     }
 
-    public static CompositionShortfall of(Collection<CompositionBudget> figures,
-                                          Collection<CompositionRepertoire> populations) {
-        return of(figures, populations, Set.of());
-    }
-
+    /** Every vocabulary, named: there is no shorter spelling of this that leaves one out. */
     public static CompositionShortfall of(Collection<CompositionBudget> figures,
                                           Collection<CompositionRepertoire> populations,
                                           Collection<CompositionCapacity> unheld) {

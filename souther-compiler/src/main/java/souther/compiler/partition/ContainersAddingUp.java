@@ -33,6 +33,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -155,7 +156,8 @@ final class ContainersAddingUp {
                     ? new TermRealizations.Realization.None(
                             Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                             ways.said(occurrences(target)))
-                    : new TermRealizations.Realization.Stopped(ways.cutBy());
+                    : new TermRealizations.Realization.Stopped(
+                            CompositionShortfall.of(ways.cutBy()));
         }
         WhatWasLeft left = new WhatWasLeft();
         // What the planning gave up at, which is a way that was there to try and was not. A way down
@@ -173,21 +175,19 @@ final class ContainersAddingUp {
                 new HowManyElements(makings, offered, left), left);
         List<FixtureTemplate> built = offered.built();
         if (!built.isEmpty()) {
-            return new TermRealizations.Realization.Built(
-                    built, left.refused(), left.notAllOf(), left.unheld());
+            return new TermRealizations.Realization.Built(built, left.shortfall());
         }
         // Nothing was composed, and what a reader may make of that is what these three say. A
         // figure that refused a candidate is why nothing came of it and is somebody's to raise; a
         // population this walks some of leaves an emptiness nothing established; a number this
         // could not hold leaves the same emptiness for a third reason, neither a figure nor a
         // population. Where there is none of them, what this looked at was everything it could have.
-        if (!left.refused().isEmpty()) {
-            return new TermRealizations.Realization.Stopped(
-                    left.refused(), left.notAllOf(), left.unheld());
+        CompositionShortfall met = left.shortfall();
+        if (!met.figures().isEmpty()) {
+            return new TermRealizations.Realization.Stopped(met);
         }
-        if (!left.notAllOf().isEmpty() || !left.unheld().isEmpty()) {
-            return new TermRealizations.Realization.Unexhausted(left.notAllOf(),
-                    ways.said(occurrences(target)), left.unheld());
+        if (!met.nothing()) {
+            return new TermRealizations.Realization.Unexhausted(met, ways.said(occurrences(target)));
         }
         return new TermRealizations.Realization.None(
                 Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
@@ -210,7 +210,7 @@ final class ContainersAddingUp {
         private final Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
         private final Set<CompositionRepertoire> notAllOf =
                 EnumSet.noneOf(CompositionRepertoire.class);
-        private final Set<CompositionCapacity> unheld = new java.util.HashSet<>();
+        private final Set<CompositionCapacity> unheld = new HashSet<>();
 
         /** A piece was in front of a walk and this figure left no room for it. */
         void refused(CompositionBudget figure) {
@@ -242,6 +242,11 @@ final class ContainersAddingUp {
         /** The numbers a walk worked out and could not hold. */
         Set<CompositionCapacity> unheld() {
             return Set.copyOf(unheld);
+        }
+
+        /** All of it, as the one shortfall a realization carries on. */
+        CompositionShortfall shortfall() {
+            return CompositionShortfall.of(refused, notAllOf, unheld);
         }
     }
 

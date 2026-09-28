@@ -72,8 +72,8 @@ class NamesPutOnARecipeInTwoStepsAreTheNamesPutOnInOneTest {
             new RepresentativeSource.NothingProducible("nothing writes one");
 
     private static final RepresentativeSource NOT_ARRIVED_AT =
-            new RepresentativeSource.NotArrivedAt(Set.of(),
-                    Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED), "stopped");
+            new RepresentativeSource.NotArrivedAt(CompositionShortfall.writing(
+                    Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED)), "stopped");
 
     @Test
     void noNamesLeaveAValueAsItIs() {
@@ -114,6 +114,6 @@ class NamesPutOnARecipeInTwoStepsAreTheNamesPutOnInOneTest {
     @Test
     void aClassNothingReachedSaysWhatStoppedTheReaching() {
         assertThrows(IllegalArgumentException.class,
-                () -> new RepresentativeSource.NotArrivedAt(Set.of(), Set.of(), "stopped"));
+                () -> new RepresentativeSource.NotArrivedAt(CompositionShortfall.NONE, "stopped"));
     }
 }

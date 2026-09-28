@@ -13,7 +13,6 @@ import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Turning the lines a model draws through one numeric position into the ranges between them.
@@ -263,13 +262,11 @@ final class Intervals {
             case TermRealizations.Realization.NoNumberTheRulesAdmit _,
                  TermRealizations.Realization.None _ ->
                     new RepresentativeSource.NothingProducible("nothing here writes " + what);
-            case TermRealizations.Realization.Stopped stopped -> new RepresentativeSource.NotArrivedAt(
-                    stopped.by(), stopped.notAllOf(),
-                    "nothing here composed " + what + ", which does not make one unwritable");
-            case TermRealizations.Realization.Unexhausted some ->
-                    new RepresentativeSource.NotArrivedAt(Set.of(), some.notAllOf(),
-                            "nothing here composed " + what
-                                    + ", which does not make one unwritable");
+            // Everything the search met, whichever of its vocabularies that was in: a number this
+            // could not hold leaves the class unreached as surely as a figure does.
+            case TermRealizations.Realization.Stopped _, TermRealizations.Realization.Unexhausted _ ->
+                    new RepresentativeSource.NotArrivedAt(made.shortfall(),
+                            "nothing here composed " + what + ", which does not make one unwritable");
         };
     }
 
