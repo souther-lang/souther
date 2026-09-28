@@ -621,7 +621,7 @@ final class ContainersAddingUp {
      * more of a decomposition than the other. What is not here is a search: these are two of the
      * many, and what the walk owes is to say that the rest were never made.
      */
-    private enum Spread {
+    enum Spread {
 
         /** The whole difference on as few elements as will carry it, the rest where they started. */
         MASSED,
@@ -638,7 +638,7 @@ final class ContainersAddingUp {
      * call an arithmetic gap a proof that no arrangement exists — which is the one thing
      * {@link ExactAnswer} exists to keep a caller from doing by accident.
      */
-    private sealed interface Split {
+    sealed interface Split {
 
         /** This shape reaches no decomposition. Not that none exists — another shape or another
          *  count may — and the walk that asked says so. */
@@ -672,8 +672,8 @@ final class ContainersAddingUp {
      * <p>Null where this shape reaches no decomposition. Which is not that none exists — another
      * shape or another count may — and the walk that asked says so.
      */
-    private static Split splitting(BigDecimal total, int many, Ends ends, Spread how,
-                                   Carrier elements) {
+    static Split splitting(BigDecimal total, int many, Ends ends, Spread how,
+                           Carrier elements) {
         if (many == 0) {
             return total.signum() == 0 ? new Split.Some(List.of()) : new Split.None();
         }
@@ -688,19 +688,21 @@ final class ContainersAddingUp {
             return new Split.NotWorkedOut(unheldStart.why());
         }
         ExactRatio owed = ((ExactAnswer.Held<ExactRatio>) started).value();
-        // How many places a share is rounded to, asked once of what this decomposition's own
-        // numbers were written to and held constant through the walk — not read back off `owed`
-        // at each step, which would ask a canonical value for a precision it no longer carries. A
-        // total or an end written to two places puts every share at two places or finer, the same
-        // width {@code total.subtract(...)} would have carried through raw decimal arithmetic.
-        int levelScale = levelSharingScale(total, ends);
+        // How many places a dense share is rounded to, starting from what this decomposition's own
+        // total and starting point were written to — not read back off `owed` at each step, which
+        // would ask a canonical value for a precision it no longer carries once a subtraction lands
+        // on a round number. Widened, never narrowed, exactly where the loop below actually clips a
+        // share to an end: that is the one place the old chain of raw decimal subtracts widened it
+        // too, by folding the end's own scale in through the subtraction that read it. An end never
+        // clipped to never widens this, the same as it never entered that chain at all.
+        int scale = Math.max(total.scale(), Math.max(sharedScaleOf(ends.from()), 1));
         List<BigDecimal> split = new ArrayList<>();
         for (int i = 0; i < many; i++) {
             ExactRatio wanted;
             if (how == Spread.MASSED) {
                 wanted = owed;
             } else {
-                ExactAnswer<ExactRatio> sharedAnswer = shared(owed, levelScale, many - i, elements);
+                ExactAnswer<ExactRatio> sharedAnswer = shared(owed, scale, many - i, elements);
                 if (sharedAnswer instanceof ExactAnswer.Unheld<ExactRatio> unheldShared) {
                     return new Split.NotWorkedOut(unheldShared.why());
                 }
@@ -711,6 +713,14 @@ final class ContainersAddingUp {
                 return new Split.NotWorkedOut(unheldAdd.why());
             }
             ExactRatio add = ((ExactAnswer.Held<ExactRatio>) addAnswer).value();
+            // Clipped to the end it moved toward exactly where `add` is not the share it asked for,
+            // which is the one place a decimal this decomposition did not itself state — the end's
+            // own — enters the width a share is rounded to from here on.
+            if (add.compareTo(wanted) != 0) {
+                ExactRatio boundary = wanted.signum() >= 0 ? ends.upTo() : ends.downTo();
+                int boundaryScale = boundary == null ? 0 : sharedScaleOf(boundary);
+                scale = Math.max(scale, Math.max(boundaryScale, sharedScaleOf(ends.from())));
+            }
             ExactAnswer<ExactRatio> atAnswer = ends.from().plus(add);
             if (atAnswer instanceof ExactAnswer.Unheld<ExactRatio> unheldAt) {
                 return new Split.NotWorkedOut(unheldAt.why());
@@ -740,28 +750,6 @@ final class ContainersAddingUp {
         return owed.isZero() ? new Split.Some(List.copyOf(split)) : new Split.None();
     }
 
-    /**
-     * How many places a dense order's share is rounded to: the most any of a decomposition's own
-     * numbers were written to, or one place where none needed that many.
-     *
-     * <p>Asked once, of {@code total} and of the ends, rather than read back off an exact quotient
-     * as it is worked out. An exact ratio holds a value and not the places a decimal wrote it at —
-     * {@code 1.00} and {@code 1} are one ratio — so a scale read off one after it is canonical is a
-     * finer count on a later element than an earlier one shared no differently, not the width the
-     * numbers this decomposition is stated in front of an author actually carry.
-     */
-    private static int levelSharingScale(BigDecimal total, Ends ends) {
-        int scale = total.scale();
-        scale = Math.max(scale, sharedScaleOf(ends.from()));
-        if (ends.upTo() != null) {
-            scale = Math.max(scale, sharedScaleOf(ends.upTo()));
-        }
-        if (ends.downTo() != null) {
-            scale = Math.max(scale, sharedScaleOf(ends.downTo()));
-        }
-        return Math.max(scale, 1);
-    }
-
     /** The scale a ratio taking part in a decomposition was written at, or nought where it is not
      *  one a decimal holds — which the decomposition's own arithmetic answers for elsewhere, and is
      *  never this method's to refuse over. */
@@ -779,8 +767,8 @@ final class ContainersAddingUp {
      * place: the last element is given whatever is still owed, whatever the division came to.
      *
      * <p>An order that steps divides to a whole number of its counts; one that does not is divided
-     * to {@code scale} places, {@link #levelSharingScale} asked once for the whole decomposition
-     * rather than read back off {@code owed} here — a share finer than that is a value the total was
+     * to {@code scale} places, which {@link #splitting} tracks across the whole walk rather than
+     * reading back off {@code owed} here — a share finer than that is a value the total was
      * never stated to, and one coarser than the numbers the total and the ends were themselves
      * written at is a share the decomposition never asked for either. Divided in ratios throughout:
      * {@code among} is a whole number and never nought, so the divisor never refuses, and what asks
