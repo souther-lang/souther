@@ -1,6 +1,7 @@
 package souther.compiler.semantics;
 
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.Type;
@@ -8,6 +9,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * What is true of the language's own operations, as somebody wrote it down.
@@ -66,19 +68,19 @@ public final class OperationFacts {
             // its carrier's, so a difference of two of them is a number of days while neither is a
             // number — which is the whole of why these can be said at all.
             about("Decimal", "fromInt", answers(form(at(0), 1))),
-            about("Date", "daysBetween", answers(form(at(0), -1).plus(form(at(1), 1)))),
-            about("Date", "addDays", answers(form(at(0), 1).plus(form(at(1), 1)))),
+            about("Date", "daysBetween", answers(forms(at(0), -1, at(1), 1))),
+            about("Date", "addDays", answers(forms(at(0), 1, at(1), 1))),
             // The same over the second the date-times count, which is the epoch second a local
             // value stands at: a day is eighty-six thousand four hundred of them, exactly, because
             // the value carries no zone for anything to shift it by.
-            about("DateTime", "addMinutes", answers(form(at(0), 60).plus(form(at(1), 1)))),
-            about("DateTime", "addHours", answers(form(at(0), 3600).plus(form(at(1), 1)))),
-            about("DateTime", "addDays", answers(form(at(0), 86400).plus(form(at(1), 1)))),
+            about("DateTime", "addMinutes", answers(forms(at(0), 60, at(1), 1))),
+            about("DateTime", "addHours", answers(forms(at(0), 3600, at(1), 1))),
+            about("DateTime", "addDays", answers(forms(at(0), 86400, at(1), 1))),
             // And the one that puts two counts together: a date counts days from the epoch and a
             // time counts seconds into its day, so the date-time they make counts the first at a
             // day's worth of seconds and the second as it stands.
             about("DateTime", "fromDateAndTime",
-                    answers(form(at(0), 86400).plus(form(at(1), 1)))),
+                    answers(forms(at(0), 86400, at(1), 1))),
 
             // The operations whose result is a number taken of the one value they are given, and
             // what each takes of it. The arm is the whole of what is said here: where the number
@@ -456,14 +458,19 @@ public final class OperationFacts {
     }
 
     /** {@code times} of what one argument is counted as. */
-    private static souther.compiler.numeric.LinearForm<ArgumentRef> form(
-            ArgumentRef argument, long times) {
-        return souther.compiler.numeric.LinearForm.<ArgumentRef>atom(argument)
-                .times(ExactRatio.of(times));
+    private static LinearForm<ArgumentRef> form(ArgumentRef argument, long times) {
+        return LinearForm.weighing(argument, ExactRatio.of(times));
     }
 
-    private static OperationFact answers(
-            souther.compiler.numeric.LinearForm<ArgumentRef> form) {
+    /** {@code first} of one argument and {@code second} of another, which are two arguments and so
+     *  two atoms of the form. */
+    private static LinearForm<ArgumentRef> forms(ArgumentRef one, long first,
+                                                 ArgumentRef other, long second) {
+        return new LinearForm<>(ExactRatio.ZERO,
+                Map.of(one, ExactRatio.of(first), other, ExactRatio.of(second)));
+    }
+
+    private static OperationFact answers(LinearForm<ArgumentRef> form) {
         return new OperationFact.AnswersAFormOfItsArguments(form);
     }
 

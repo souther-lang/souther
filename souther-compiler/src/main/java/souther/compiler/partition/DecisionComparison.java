@@ -57,8 +57,10 @@ record DecisionComparison(InputDomain inputs, RuleReadingSource rules, DecisionS
                 left = form;
                 continue;
             }
-            LinearForm<DecisionAtom> whole = left.minus(form);
-            if (whole.coefs().isEmpty()
+            // A difference no ratio holds is a comparison that is not read as a decision, the same
+            // as a side that is no form.
+            LinearForm<DecisionAtom> whole = left.minus(form).orNull();
+            if (whole == null || whole.coefs().isEmpty()
                     || whole.coefs().keySet().stream()
                             .noneMatch(DecisionAtom.OfAnAnswer.class::isInstance)) {
                 return null;

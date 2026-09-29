@@ -156,7 +156,7 @@ public record OrderedAffineBoundary(BorderQuantity of, Seam seam, Towards satisf
                         + " of its positions, and holds none at " + each.getKey());
             }
             ExactAnswer<ExactRatio> summed =
-                    at.plus(Count.number(held).exactly().times(each.getValue()));
+                    Count.number(held).exactly().times(each.getValue()).flatMap(at::plus);
             if (summed instanceof ExactAnswer.Unheld<ExactRatio> unheld) {
                 return ExactAnswer.unheld(unheld.why());
             }

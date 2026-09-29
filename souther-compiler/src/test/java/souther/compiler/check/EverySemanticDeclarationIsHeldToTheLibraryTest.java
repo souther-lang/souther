@@ -7,6 +7,7 @@ import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.OperationFact;
 import souther.compiler.semantics.OperationFacts;
 import souther.compiler.semantics.ResultBound;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.ValueName;
 
@@ -247,10 +248,8 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
         gained.add(new OperationFacts.Declared(
                 ValueName.Stdlib.operation("Int", "add"),
                 new OperationFact.AnswersAFormOfItsArguments(
-                        souther.compiler.numeric.LinearForm.<ArgumentRef>atom(
-                                new ArgumentRef.At(0)).plus(
-                                souther.compiler.numeric.LinearForm.atom(
-                                        new ArgumentRef.At(1))))));
+                        LinearForm.<ArgumentRef>sumOfAtoms(
+                                new ArgumentRef.At(0), new ArgumentRef.At(1)))));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> OperationFactBinder.bindAll(DefaultStdlib.get(), gained));

@@ -58,9 +58,11 @@ public record Reach(ExactCut least, ExactCut most) {
             // that the exact arithmetic cannot hold it. Unheld here is the same answer as a position
             // with nothing for this direction: the sum runs unbounded that way rather than at a value
             // nothing composed.
-            least = least == null || low == null ? null : least.plus(weight.times(low.at())).orNull();
+            least = least == null || low == null ? null
+                    : weight.times(low.at()).flatMap(least::plus).orNull();
             leastReached &= low != null && low.inclusive();
-            most = most == null || high == null ? null : most.plus(weight.times(high.at())).orNull();
+            most = most == null || high == null ? null
+                    : weight.times(high.at()).flatMap(most::plus).orNull();
             mostReached &= high != null && high.inclusive();
         }
         return new Reach(least == null ? null : new ExactCut(least, leastReached),

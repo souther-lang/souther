@@ -19,6 +19,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -825,9 +826,13 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
             // a row in. A border reads rows through the form it was written as, so a run handed to
             // it in another scale would be held against numbers of a different size.
             ExactRatio per = each.cuts().per();
+            // A line beside this one that stands at a number no ratio holds in this rule's units is
+            // left out: the run between two lines is then read to the next one this can place, which
+            // is wider than the truth and so admits every row the truth admits.
             List<Parting> beside =
                     byQuantity.getOrDefault(each.cuts().quantity().key(), List.of())
-                            .stream().map(parting -> parting.scaledBy(per)).toList();
+                            .stream().map(parting -> parting.scaledBy(per))
+                            .filter(Objects::nonNull).toList();
             // One line drawn, one border. Which lines there are was settled by whoever read the
             // rules — a comparison whose line the quantity does not reach is no line, and says so
             // there ({@code ComparisonAssessment.OutsideTheDomain}) — so nothing here decides it

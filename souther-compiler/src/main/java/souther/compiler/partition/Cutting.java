@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.ComparisonClaim;
+import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
@@ -11,6 +12,8 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Towards;
+
+import java.util.List;
 
 /**
  * What one comparison cuts, and where — the one place that decides it.
@@ -127,6 +130,44 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 over = java.util.List.copyOf(over);
             }
         }
+
+        /**
+         * The rule states a line, and a number that line is read through has no representation
+         * here: the coefficients over what they share, or the place the line falls at in the
+         * quantity's own units, stand past the far end of the exponents a ratio holds.
+         *
+         * <p>Its own answer beside {@link NoOrderToCountOn}. Nothing about the quantity's order
+         * fell short — it counts, and the rule is read to the end — so the order is not what a
+         * reader is told about, and a line placed at a number this compiler cannot name is not one
+         * it can be said to have drawn.
+         *
+         * @param over the coordinates of the quantity, which is where a reader is sent
+         */
+        record NumberNoRatioHolds(List<FilingCoordinate> over) implements Read {
+
+            public NumberNoRatioHolds {
+                over = List.copyOf(over);
+            }
+        }
+    }
+
+    /**
+     * Whether every number this line is read through is one an exact ratio holds.
+     *
+     * <p>Asked once, where the line is drawn, so that what reads a line afterwards is never handed
+     * one it has no number for: the quantity's own coefficients, the place the line falls at, and the
+     * values either side of it are all divided by how much of the quantity the rule wrote, and any
+     * of those divisions can pass the exponents a ratio holds when the rule is written at their ends.
+     */
+    boolean numbersAreHeld() {
+        return QuantityKey.tryOf(of.direction()) != null && Seam.where(of, at, claim) != null;
+    }
+
+    /** The line, or the refusal to place it when a number it is read through has no representation. */
+    private static Read cutsOrRefused(Cutting cutting) {
+        return cutting.numbersAreHeld()
+                ? new Read.Cuts(cutting)
+                : new Read.NumberNoRatioHolds(AffineReading.filedAt(cutting.of().terms()));
     }
 
     /**
@@ -150,6 +191,12 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             // being wrong about the rule.
             case AffineReading.OfAComparison.CutsNothing over ->
                     new Read.CutsNothing(over.read());
+            // Read from end to end, each side as a form, and the difference of the two is a number
+            // no ratio holds. The rule states a line and the line has no place here — the same
+            // answer a line placed at such a number gets, and for the same reason: nothing about
+            // the order fell short.
+            case AffineReading.OfAComparison.NotHeld notHeld ->
+                    new Read.NumberNoRatioHolds(AffineReading.filedAt(notHeld.read()));
             // The quantity is what the arithmetic says it is, and the realization is the only thing
             // left to try. Read the other way round, a spelling that produced a line took the
             // comparison before the canonical form was consulted at all.
@@ -220,12 +267,12 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         // first came to be reported as the last one's absence.
         ComparedLine line = ComparedLine.fromTheForm(read, quantities);
         if (line != null) {
-            return new Read.Cuts(realizedAt(atAPosition(behavior, line, quantities),
+            return cutsOrRefused(realizedAt(atAPosition(behavior, line, quantities),
                     "a line on one position", read));
         }
         ComparedTerms pair = ComparedTerms.fromTheForm(read, quantities);
         if (pair != null) {
-            return new Read.Cuts(realizedAt(apart(behavior, pair, read.claim(), quantities),
+            return cutsOrRefused(realizedAt(apart(behavior, pair, read.claim(), quantities),
                     "a distance between two positions", read));
         }
         // And what the general form needs, asked once and here. Not before the two above: they
@@ -237,7 +284,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return new Read.NoOrderToCountOn(
                     AffineReading.filedAt(read.form().coefs().keySet()));
         }
-        return new Read.Cuts(overAForm(behavior, read, on, quantities));
+        return cutsOrRefused(overAForm(behavior, read, on, quantities));
     }
 
     /**
@@ -287,7 +334,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     comparison.claim(), quantities);
         }
         if (drawn != null) {
-            return new Read.Cuts(drawn);
+            return cutsOrRefused(drawn);
         }
         return new Read.Stopped(GuardThresholds.whatEachPlaceIsLeftWith(
                 comparison, canonical, read, reads, answering));

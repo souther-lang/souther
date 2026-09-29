@@ -1,5 +1,7 @@
 package souther.compiler.numeric;
 
+import java.math.BigInteger;
+
 /**
  * Which values of one position leave a residue some {@link AdditiveImage} reaches.
  *
@@ -95,10 +97,12 @@ public sealed interface AffinePreimage {
         }
 
         private static ExactRatio normalized(ExactRatio from, ExactRatio by) {
-            if (!(from.dividedBy(by).floor() instanceof ExactAnswer.Held<java.math.BigInteger> held)) {
+            ExactRatio steps = from.dividedBy(by).orNull();
+            if (steps == null || !(steps.floor() instanceof ExactAnswer.Held<BigInteger> held)) {
                 return null;
             }
-            return from.minus(by.times(ExactRatio.of(held.value()))).orNull();
+            ExactRatio whole = by.times(ExactRatio.of(held.value())).orNull();
+            return whole == null ? null : from.minus(whole).orNull();
         }
     }
 
@@ -145,10 +149,19 @@ public sealed interface AffinePreimage {
                         "a member of a coset of the finite decimals is one, and a coset written from"
                                 + " a value that is not has no member that is: " + from);
             }
-            java.math.BigInteger modulus = by.asFraction().numerator();
-            from = ExactRatio.of(from.numeratorMod(modulus)
-                    .multiply(from.denominatorMod(modulus).modInverse(modulus))
-                    .mod(modulus));
+            // A generator whose digits the host holds no place for cannot name the member below it,
+            // and so cannot say two members are one. The coset of every finite decimal holds every
+            // member, which is the sound answer with less, and it is one value however it was
+            // reached.
+            if (by.wholeNumber() instanceof ExactAnswer.Held<BigInteger> held) {
+                BigInteger modulus = held.value();
+                from = ExactRatio.of(from.numeratorMod(modulus)
+                        .multiply(from.denominatorMod(modulus).modInverse(modulus))
+                        .mod(modulus));
+            } else {
+                from = ExactRatio.ZERO;
+                by = ExactRatio.ONE;
+            }
         }
     }
 }

@@ -28,9 +28,9 @@ class AFormOverRulesThatAdmitNothingIsAtNoValueTest {
 
     /** {@code cx·x + cy·y + k}, which is how a rule over two positions is written. */
     private static LinearForm<String> form(long cx, long cy, long k) {
-        return LinearForm.<String>constant(ExactRatio.of(k))
-                .plus(LinearForm.<String>atom(X).times(ExactRatio.of(cx)))
-                .plus(LinearForm.<String>atom(Y).times(ExactRatio.of(cy)));
+        return SmallForm.small(LinearForm.<String>constant(ExactRatio.of(k)))
+                .plus(LinearForm.weighing(X, ExactRatio.of(cx)))
+                .plus(LinearForm.weighing(Y, ExactRatio.of(cy))).form();
     }
 
     private static Map<String, Granularity> whole() {

@@ -2,6 +2,7 @@ package souther.compiler.numeric;
 
 import souther.exact.ExactFailure;
 
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -66,6 +67,29 @@ public sealed interface ExactAnswer<T> {
      *  a reader about it may not be able to spare. */
     default T orNull() {
         return this instanceof Held<T> held ? held.value() : null;
+    }
+
+    /** What {@code next} makes of this value, or this way the number was unheld where there is no
+     *  value to make anything of. Which way it was unheld is the first one's, since the second was
+     *  never asked. */
+    default <R> ExactAnswer<R> flatMap(Function<? super T, ExactAnswer<R>> next) {
+        return switch (this) {
+            case Held<T> held -> next.apply(held.value());
+            case Unheld<T> unheld -> unheld(unheld.why());
+        };
+    }
+
+    /** This value, or an {@link IllegalStateException} saying {@code because} and which way it was
+     *  unheld.
+     *
+     *  <p>For a caller whose number was asked for earlier, at the one place that can refuse it, so
+     *  that reaching an unheld answer here is a defect of that place and not a property of the
+     *  model. Never for a number a model's own constants can put past the range. */
+    default T orFail(String because) {
+        return switch (this) {
+            case Held<T> held -> held.value();
+            case Unheld<T> unheld -> throw new IllegalStateException(because + ": " + unheld.why());
+        };
     }
 
     /** Whether this is a value and not a way the arithmetic left the number unheld. */

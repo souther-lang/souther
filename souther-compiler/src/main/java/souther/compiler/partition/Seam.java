@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Towards;
 
@@ -51,6 +52,11 @@ public record Seam(CutPosition at, Level below, Level above) {
      * which levels the written form attains — and then read back in the quantity's own units. Exact
      * both ways: a level the written form attains is a multiple of what it wrote, so nothing rounds,
      * and where it attains no level there is nothing to read back.
+     *
+     * @return the seam, or {@code null} where a number it holds has no representation once read
+     *         back in the quantity's own units. Only a rule that wrote a multiple ({@code into}
+     *         given) can come to that; the seam of a rule that wrote the whole of the quantity is
+     *         never null
      */
     public static Seam of(LevelSpace space, Level cut, Towards belongsTo, Scale into) {
         // Whether the order has a place there at all, which is not whether the quantity takes the
@@ -70,6 +76,14 @@ public record Seam(CutPosition at, Level below, Level above) {
                 : beside(space, cut, Towards.BELOW);
         Level above = attains && belongsTo == Towards.ABOVE ? cut
                 : beside(space, cut, Towards.ABOVE);
+        // Every number this reads back is asked before any is built. The line and the two values
+        // beside it are divided by how much of the quantity the rule wrote, and a rule written at
+        // one end of the exponents a ratio holds can put any of them past the other. That is a line
+        // with no place here, said as null and not as a seam holding a number it cannot name.
+        if (!CutPosition.holdsWhereItFalls(cut, into == null ? ExactRatio.ONE : into.per())
+                || !canBeReadBack(below, into) || !canBeReadBack(above, into)) {
+            return null;
+        }
         return new Seam(
                 new CutPosition(cut,
                         into == null ? ExactRatio.ONE : into.per()),
@@ -93,6 +107,8 @@ public record Seam(CutPosition at, Level below, Level above) {
      *              the quantity twice, under what it names and over it, and this is the lower of the
      *              two — a place the values genuinely part, rather than a side chosen for a rule
      *              that has none
+     * @return the seam, or {@code null} on the same count as {@link #of(LevelSpace, Level, Towards,
+     *         Scale)}
      */
     public static Seam where(BorderQuantity of, Level at, souther.compiler.check.ComparisonClaim claim) {
         Towards belongsTo = claim instanceof souther.compiler.check.ComparisonClaim.Cut order
@@ -129,6 +145,11 @@ public record Seam(CutPosition at, Level below, Level above) {
      * kept the form's shape would read the same and write differently — which is the split that had
      * a day count printed as the number a model wrote.
      */
+    private static boolean canBeReadBack(Level level, Scale into) {
+        return level == null || into == null || into.per().equals(ExactRatio.ONE)
+                || level.asAnExactNumber().dividedBy(into.per()).isHeld();
+    }
+
     private static Level inUnitsOf(Level level, Scale into) {
         // A rule that wrote the whole of the quantity wrote it in the quantity's own units, so
         // there is nothing to read back — including where the quantity has no numbers at all. A
@@ -138,7 +159,8 @@ public record Seam(CutPosition at, Level below, Level above) {
                 || into.per().equals(ExactRatio.ONE)) {
             return level;
         }
-        ExactRatio at = level.asAnExactNumber().dividedBy(into.per());
+        ExactRatio at = level.asAnExactNumber().dividedBy(into.per())
+                .orFail("a level read back where its number has no representation");
         if (into.onto() == null) {
             return new Level.OfTheQuantity(at);
         }
@@ -233,12 +255,35 @@ public record Seam(CutPosition at, Level below, Level above) {
      * is held in the quantity's own units, because that is the only order every rule about it is
      * on, and each rule reads its rows through the form it was written as. Nothing here needs the
      * line to be a value of anything — it is a change of unit and not a change of order.
+     *
+     * @return the seam, or {@code null} where a number it holds has no representation in the smaller
+     *         units
      */
     Seam scaledBy(ExactRatio k) {
         if (k.equals(ExactRatio.ONE)) {
             return this;
         }
-        return new Seam(at.times(k), scaled(below, k), scaled(above, k));
+        CutPosition line = at.times(k);
+        if (line == null || !canBeScaled(below, k) || !canBeScaled(above, k)) {
+            return null;
+        }
+        return new Seam(line, scaled(below, k), scaled(above, k));
+    }
+
+    private static boolean canBeScaled(Level level, ExactRatio k) {
+        if (level == null) {
+            return true;
+        }
+        ExactRatio at = numberOf(level);
+        // An order with no numbers is what `scaled` stops on, and said there.
+        return at == null || at.times(k).isHeld();
+    }
+
+    private static ExactRatio numberOf(Level level) {
+        return switch (level) {
+            case Level.OfTheQuantity counted -> counted.at();
+            case Level.OnACarrier on -> on.at() instanceof Count count ? count.exactly() : null;
+        };
     }
 
     /**
@@ -252,16 +297,13 @@ public record Seam(CutPosition at, Level below, Level above) {
         if (level == null) {
             return null;
         }
-        ExactRatio at = switch (level) {
-            case Level.OfTheQuantity counted -> counted.at();
-            case Level.OnACarrier on -> on.at() instanceof souther.compiler.numeric.Count count
-                    ? count.exactly() : null;
-        };
+        ExactRatio at = numberOf(level);
         if (at == null) {
             throw new IllegalStateException(
                     "an order with no numbers was asked for a multiple of one: " + level);
         }
-        return new Level.OfTheQuantity(at.times(k));
+        return new Level.OfTheQuantity(
+                at.times(k).orFail("a value scaled where its number has no representation"));
     }
 
     /**

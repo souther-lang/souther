@@ -140,7 +140,8 @@ public sealed interface Arithmetic {
                         "a truncating quotient's divisor of nought is refused where the term is"
                                 + " made, and is never one this reads");
             }
-            return switch (ExactRatio.of(value).dividedBy(ExactRatio.of(by)).truncated()) {
+            return switch (ExactRatio.of(value).dividedBy(ExactRatio.of(by))
+                    .flatMap(ExactRatio::truncated)) {
                 case ExactAnswer.Held<BigInteger> held ->
                         ExactAnswer.held(new BigDecimal(held.value()));
                 case ExactAnswer.Unheld<BigInteger> unheld -> ExactAnswer.unheld(unheld.why());

@@ -136,7 +136,7 @@ class ARegionShownToHoldNothingIsNotWalkedTest {
     @Test
     void aFormTheRulesLeaveNowhereSettlesTheItemThoughItsPositionsStand() {
         Standing standing = new BorderQuantity.OverAForm("decide",
-                LinearForm.atom((NumericTerm) WIDE).plus(LinearForm.atom((NumericTerm) NOWHERE)),
+                LinearForm.sumOfAtoms((NumericTerm) WIDE, (NumericTerm) NOWHERE),
                 Map.of(WIDE, WHOLE,
                         NOWHERE, TermOrdersFixtures.itself(NOWHERE, new Carrier.Whole())))
                 .standingAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(4)));
@@ -162,7 +162,7 @@ class ARegionShownToHoldNothingIsNotWalkedTest {
     @Test
     void aPositionLeftNothingByAFixingEndsThatBranchAndNotTheSearch() {
         Standing standing = new BorderQuantity.OverAForm("decide",
-                LinearForm.atom((NumericTerm) WIDE).plus(LinearForm.atom((NumericTerm) NOWHERE)),
+                LinearForm.sumOfAtoms((NumericTerm) WIDE, (NumericTerm) NOWHERE),
                 Map.of(WIDE, WHOLE, NOWHERE, TermOrdersFixtures.itself(NOWHERE, new Carrier.Whole())))
                 .standingAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(4)));
 

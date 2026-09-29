@@ -48,7 +48,7 @@ public sealed interface AffineConstraint<A> {
             case Equality<A> at -> java.util.List.of(
                     new HalfSpace<>(at.form(), ExactCut.inclusive(at.at())),
                     new HalfSpace<>(at.form().negated(), ExactCut.inclusive(at.at().negated())));
-            case Disequality<A> hole -> java.util.List.of();
+            case Disequality<A> _ -> java.util.List.of();
         };
     }
 
@@ -192,7 +192,8 @@ public sealed interface AffineConstraint<A> {
     /**
      * What an assertion comes to once it has been read.
      *
-     * <p>Three answers because a comparison need not be a constraint at all. A comparison of two
+     * <p>Four answers because a comparison need not be a constraint at all, and need not be one this
+     * arithmetic can write. A comparison of two
      * constants settles itself; so does one whose threshold is a value its sum cannot reach. Handing
      * back a constraint that says nothing, or one that says everything, would leave every reader
      * downstream to notice — and a reader that failed to notice would be holding a rule it could not
@@ -208,6 +209,14 @@ public sealed interface AffineConstraint<A> {
 
         /** No value satisfies it. */
         record HoldsNever<A>() implements Read<A> {}
+
+        /**
+         * The assertion states a constraint that this arithmetic cannot write down: the threshold
+         * or a coefficient in lowest terms has no representation. Not a constraint that holds
+         * always and not one that holds never, which is what a form with nothing in it says — a
+         * reader that takes nothing from it has the sound answer with less.
+         */
+        record NotWorkedOut<A>(UnheldNumber why) implements Read<A> {}
     }
 
     /**
@@ -219,14 +228,22 @@ public sealed interface AffineConstraint<A> {
      */
     static <A> Read<A> of(Map<A, ExactRatio> coefs, ExactRatio constant, Rel rel,
                           Function<A, Granularity> spacing) {
-        CanonicalForm.Scaled<A> scaled = CanonicalForm.of(coefs);
-        if (scaled == null) {
-            return settledByConstantAlone(constant, rel);
-        }
-        // `Σ c·x + k rel 0` is `Σ c·x rel -k`, and dividing both by what the coefficients share
-        // leaves which side of the threshold a value falls on, since what they share is positive.
-        ExactRatio threshold = constant.negated().dividedBy(scaled.by());
-        CanonicalForm<A> form = scaled.form();
+        return switch (CanonicalForm.of(coefs)) {
+            case CanonicalForm.NoTerms<A> _ -> settledByConstantAlone(constant, rel);
+            case CanonicalForm.Unheld<A> unheld -> new Read.NotWorkedOut<>(unheld.why());
+            // `Σ c·x + k rel 0` is `Σ c·x rel -k`, and dividing both by what the coefficients share
+            // leaves which side of the threshold a value falls on, since what they share is
+            // positive.
+            case CanonicalForm.Scaled<A> scaled -> switch (constant.negated().dividedBy(scaled.by())) {
+                case ExactAnswer.Held<ExactRatio> threshold ->
+                        readAt(scaled.form(), threshold.value(), rel, spacing);
+                case ExactAnswer.Unheld<ExactRatio> unheld -> new Read.NotWorkedOut<>(unheld.why());
+            };
+        };
+    }
+
+    private static <A> Read<A> readAt(CanonicalForm<A> form, ExactRatio threshold, Rel rel,
+                                      Function<A, Granularity> spacing) {
         AdditiveImage reaches = form.imageOver(spacing);
         return switch (rel) {
             case LE -> below(form, reaches, ExactCut.inclusive(threshold));

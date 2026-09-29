@@ -136,7 +136,7 @@ class AHoleARuleLeavesIsNotInTheRunAProjectionComesBackAsTest {
     private static OnTheWay.TakenIn overAForm(NumericTerm.FromOnePosition one,
                                               NumericTerm.FromOnePosition other) {
         return new OnTheWay.TakenIn(WHERE, new TakenConstraint.Affine(
-                LinearForm.<NumericTerm>atom(one).plus(LinearForm.<NumericTerm>atom(other)),
+                LinearForm.<NumericTerm>sumOfAtoms(one, other),
                 Rel.GE));
     }
 

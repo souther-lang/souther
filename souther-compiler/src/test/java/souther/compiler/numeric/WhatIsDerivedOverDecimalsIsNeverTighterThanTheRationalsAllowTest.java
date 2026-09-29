@@ -103,13 +103,16 @@ class WhatIsDerivedOverDecimalsIsNeverTighterThanTheRationalsAllowTest {
                 Map<String, ExactRatio> coefs = new LinkedHashMap<>();
                 for (String each : namedIn(List.of(upper, lower))) {
                     ExactRatio combined = upper.weightOf(each).dividedBy(up)
-                            .plus(lower.weightOf(each).dividedBy(down)).orNull();
+                            .flatMap(first -> lower.weightOf(each).dividedBy(down).flatMap(first::plus))
+                            .orNull();
                     if (!combined.isZero()) {
                         coefs.put(each, combined);
                     }
                 }
                 without.add(new Row(coefs,
-                        upper.at().dividedBy(up).plus(lower.at().dividedBy(down)).orNull(),
+                        upper.at().dividedBy(up)
+                                .flatMap(first -> lower.at().dividedBy(down).flatMap(first::plus))
+                                .orNull(),
                         upper.strict() || lower.strict()));
             }
         }
@@ -137,7 +140,7 @@ class WhatIsDerivedOverDecimalsIsNeverTighterThanTheRationalsAllowTest {
             if (weight.isZero()) {
                 continue;   // a row with nothing left in it says whether the system holds, not where
             }
-            ExactCut cut = new ExactCut(row.at().dividedBy(weight.abs()), !row.strict());
+            ExactCut cut = new ExactCut(row.at().dividedBy(weight.abs()).orNull(), !row.strict());
             if (weight.signum() > 0) {
                 most = ExactCut.tighterUpper(most, cut);
             } else {

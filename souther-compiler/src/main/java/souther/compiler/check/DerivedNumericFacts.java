@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.Intervals;
@@ -870,11 +871,12 @@ final class DerivedNumericFacts {
         // product — from a range this rule has just derived, which is the reading that tightens
         // under its own answers.
         BigDecimal by = theOneValueOf(divisor);
-        if (by != null) {
-            facts.addAll(leftOver(
-                    quotient.numerator().minus(LinearForm.<FactSubject>atom(atom)
-                            .times(ExactRatio.of(by))),
-                    divisor, numerator));
+        // A relation whose form no ratio holds is a relation not stated, and the quotient keeps
+        // the range it was given above.
+        if (by != null && quotient.numerator().minus(
+                LinearForm.weighing(atom, ExactRatio.of(by)))
+                instanceof ExactAnswer.Held<LinearForm<FactSubject>> left) {
+            facts.addAll(leftOver(left.value(), divisor, numerator));
         }
         return new Says.These(List.copyOf(facts));
     }
@@ -937,8 +939,16 @@ final class DerivedNumericFacts {
         if (written != null) {
             ExactRatio magnitude =
                     ExactRatio.of(written);
-            facts.add(new NumericConstraint(left.minus(LinearForm.constant(magnitude)), Rel.LT));
-            facts.add(new NumericConstraint(left.plus(LinearForm.constant(magnitude)), Rel.GT));
+            // Each half stands alone: one whose form no ratio holds is left unstated, and the
+            // other is still true of the remainder.
+            if (left.minus(LinearForm.constant(magnitude))
+                    instanceof ExactAnswer.Held<LinearForm<FactSubject>> below) {
+                facts.add(new NumericConstraint(below.value(), Rel.LT));
+            }
+            if (left.plus(LinearForm.constant(magnitude))
+                    instanceof ExactAnswer.Held<LinearForm<FactSubject>> above) {
+                facts.add(new NumericConstraint(above.value(), Rel.GT));
+            }
         }
         return facts;
     }

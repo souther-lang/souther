@@ -40,6 +40,19 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
         }
     }
 
+    /**
+     * Whether a line written at {@code written} over {@code per} of the quantity falls at a number an
+     * exact ratio holds.
+     *
+     * <p>Asked before a position is built, because every reading of one takes the number it falls at
+     * ({@link #exactly}) and a position whose number has no representation has nothing to answer
+     * with. An order with no numbers is never divided, so it is always held.
+     */
+    static boolean holdsWhereItFalls(Level written, ExactRatio per) {
+        ExactRatio at = numberOf(written);
+        return at == null || at.dividedBy(per).isHeld();
+    }
+
     /** A line at a level of the quantity itself, which is what a rule that wrote the whole of it
      *  draws. */
     public static CutPosition at(Level written) {
@@ -55,7 +68,8 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
      */
     public ExactRatio exactly() {
         ExactRatio at = numberOf(written);
-        return at == null ? null : at.dividedBy(per);
+        return at == null ? null
+                : at.dividedBy(per).orFail("a position built where its number has no representation");
     }
 
     /**
@@ -160,6 +174,8 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
      * <p>A line at a place is at {@code k} times that number where the unit is a {@code k}th of the
      * one it was said in: what a quantity's own level is, the form that wrote {@code k} of it calls
      * {@code k} times as much.
+     *
+     * @return the position, or {@code null} where the number it comes to has no representation
      */
     public CutPosition times(ExactRatio k) {
         ExactRatio at = numberOf(written);
@@ -170,9 +186,11 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
         // number the rule carried, in the units the rule carried it in. Left in, the position was
         // right and the reading of it was not — a line the form does stand at went on answering
         // that the quantity has no value there, and the run above it could not say where it starts.
-        return k.equals(per)
-                ? new CutPosition(new Level.OfTheQuantity(at), ExactRatio.ONE)
-                : new CutPosition(new Level.OfTheQuantity(at.times(k)), per);
+        if (k.equals(per)) {
+            return new CutPosition(new Level.OfTheQuantity(at), ExactRatio.ONE);
+        }
+        ExactRatio scaled = at.times(k).orNull();
+        return scaled == null ? null : new CutPosition(new Level.OfTheQuantity(scaled), per);
     }
 
     /**

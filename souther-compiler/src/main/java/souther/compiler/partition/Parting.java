@@ -62,9 +62,11 @@ public record Parting(Seam geometry, List<AuthoredLine> alternatives) {
     }
 
     /** The same place said in units {@code per} times smaller, which is what a rule that wrote a
-     *  multiple of the quantity divides in the quantity's own terms. */
+     *  multiple of the quantity divides in the quantity's own terms. Null where the place in those
+     *  units has no representation. */
     public Parting scaledBy(ExactRatio per) {
-        return new Parting(geometry.scaledBy(per), alternatives);
+        Seam scaled = geometry.scaledBy(per);
+        return scaled == null ? null : new Parting(scaled, alternatives);
     }
 
     /** What makes two of these one place, which is the quantity's answer and not the model's. */

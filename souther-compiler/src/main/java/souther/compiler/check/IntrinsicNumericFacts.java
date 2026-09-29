@@ -4,6 +4,7 @@ import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.semantics.ResultBound;
 import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.core.Core;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
@@ -104,7 +105,7 @@ final class IntrinsicNumericFacts {
                                  Denotations at, Terms terms, List<NumericConstraint> out) {
         FactSubject there = terms.sizeAtomFor(size, source, at);
         if (there != null && !there.equals(atom)) {
-            out.add(new NumericConstraint(LinearForm.atom(atom).minus(LinearForm.atom(there)), rel));
+            out.add(new NumericConstraint(LinearForm.difference(atom, there), rel));
         }
     }
 
@@ -156,8 +157,10 @@ final class IntrinsicNumericFacts {
             LinearForm<FactSubject> stands = bound.against() == null
                     ? LinearForm.constant(offset)
                     : addTo(against.apply(bound.against()), offset);
-            if (stands != null) {
-                out.add(new NumericConstraint(LinearForm.atom(atom).minus(stands), bound.rel()));
+            // A bound whose form no ratio holds is a bound not stated.
+            if (stands != null && LinearForm.atom(atom).minus(stands)
+                    instanceof ExactAnswer.Held<LinearForm<FactSubject>> held) {
+                out.add(new NumericConstraint(held.value(), bound.rel()));
             }
         }
     }
@@ -191,11 +194,11 @@ final class IntrinsicNumericFacts {
             return;
         }
         LinearForm<FactSubject> amount = terms.affineOf(CallArguments.of(shift.amount(), moved), at);
-        if (amount != null) {
-            out.add(new NumericConstraint(
-                    LinearForm.atom(atom).minus(
-                            amount.times(ExactRatio.of(shift.per()))),
-                    Rel.EQ));
+        // A shift whose form no ratio holds is a relation not stated.
+        if (amount != null && amount.times(ExactRatio.of(shift.per()))
+                .flatMap(shifted -> LinearForm.atom(atom).minus(shifted))
+                instanceof ExactAnswer.Held<LinearForm<FactSubject>> held) {
+            out.add(new NumericConstraint(held.value(), Rel.EQ));
         }
     }
 
@@ -206,10 +209,11 @@ final class IntrinsicNumericFacts {
         return one != null && one.equals(terms.bodyKey(b, at));
     }
 
-    /** {@code form} with {@code offset} added, or null where the form could not be read. */
+    /** {@code form} with {@code offset} added, or null where the form could not be read or the sum
+     *  has no representation. */
     private static LinearForm<FactSubject> addTo(LinearForm<FactSubject> form,
                                                  ExactRatio offset) {
-        return form == null ? null : form.plus(LinearForm.constant(offset));
+        return form == null ? null : form.plus(LinearForm.constant(offset)).orNull();
     }
 
     /**

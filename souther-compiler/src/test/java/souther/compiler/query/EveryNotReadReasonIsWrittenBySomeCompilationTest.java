@@ -107,6 +107,16 @@ class EveryNotReadReasonIsWrittenBySomeCompilationTest {
         return new Witness(source, new Allowance.AsACompilationDoes());
     }
 
+    /** {@code t0 = 0.1m} and each {@code tN} the square of the one before it, so that the scale
+     *  doubles at each step. */
+    private static String squaringsOfATenth(int times) {
+        StringBuilder lets = new StringBuilder("let t0 = 0.1m\n");
+        for (int i = 1; i <= times; i++) {
+            lets.append("let t").append(i).append(" = sq(t").append(i - 1).append(")\n");
+        }
+        return lets.toString();
+    }
+
     /**
      * A model read under an allowance said down, which is how the two words for something costing
      * more than this compiler spends are reached.
@@ -216,6 +226,21 @@ class EveryNotReadReasonIsWrittenBySomeCompilationTest {
                 behavior f : (a: Bool, b: Bool) -> Answer
                 let f (a, b) = if a == b then Yes else No
                 """.formatted(ANSWER)));
+        // A line that falls at a number no exact ratio holds. A tenth squared sixty-three times is
+        // the least exponent a ratio has, and a rule weighing a position by it puts the line at a
+        // number past the other end. The values carry an order and the rule is written to the end,
+        // so this is not the word above.
+        out.put(UndividedPosition.Reason.LINE_AT_A_NUMBER_NO_RATIO_HOLDS, of("""
+                module m
+                %s
+                let sq (x: Decimal): Decimal = x * x
+                %s
+                data A = Decimal
+                data H = { a: A }
+
+                behavior f : (h: H) -> Answer
+                let f (h) = if t63 * h.a.value <= 1.0m then Yes else No
+                """.formatted(ANSWER, squaringsOfATenth(63))));
         // Each name of the line stands at a position under every case of the sum, and which of
         // those pair off is what nothing worked out. The record both cases spread is what puts one
         // name at more than one position while leaving the field writable without a match.

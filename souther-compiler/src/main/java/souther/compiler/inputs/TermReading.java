@@ -291,7 +291,8 @@ final class TermReading {
         // about the number and not the places it came written to, and the whole number of this
         // part's seconds in it is one the exact arithmetic says it could not hold rather than
         // one a decimal division throws over.
-        return switch (count.exactly().dividedBy(ExactRatio.of(part.seconds())).truncated()) {
+        return switch (count.exactly().dividedBy(ExactRatio.of(part.seconds()))
+                .flatMap(ExactRatio::truncated)) {
             case ExactAnswer.Unheld<BigInteger> unheld -> new Reading.NotWorkedOut(unheld.why());
             case ExactAnswer.Held<BigInteger> whole -> new Reading.Number(Count.of(new BigDecimal(
                     whole.value().remainder(BigInteger.valueOf(part.many())))));

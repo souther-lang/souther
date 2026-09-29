@@ -682,9 +682,7 @@ final class ReadQuantities implements Quantities {
                 souther.compiler.numeric.Granularity spaced =
                         spacingOf(rules.numbers(), counted, atom);
                 return spaced == null ? rules : rules.taking(
-                        LinearForm.<InputAtom>atom(atom)
-                                .minus(LinearForm.constant(
-                                        ExactRatio.ONE)),
+                        LinearForm.<InputAtom>atomMinusConstant(atom, ExactRatio.ONE),
                         Rel.GE, Map.of(atom, spaced));
             }
         }

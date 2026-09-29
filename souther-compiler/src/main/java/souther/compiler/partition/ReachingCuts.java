@@ -237,7 +237,13 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison)
                 // The form with the threshold moved into it, since what a domain is told is
                 // `f rel 0`.
                 LinearForm<NumericTerm> against =
-                        affine.form().minus(LinearForm.constant(affine.cut()));
+                        affine.form().minus(LinearForm.constant(affine.cut())).orNull();
+                // A form no ratio holds once the threshold is moved into it is a comparison this
+                // cannot state to a region, which is a comparison not represented as a cut.
+                if (against == null) {
+                    yield new OnTheWay.Declined(comparison.occurrence(), at,
+                            new OnTheWay.Why.ComparisonNotRepresentedAsACut());
+                }
                 Rel met = holding ? states : states.denied();
                 // And whether a region can carry it, asked of a region rather than decided from
                 // the shape of the form. That a reading reached the end of a comparison is a fact
@@ -258,6 +264,12 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison)
             case AffineReading.OfAComparison.CutsNothing _ ->
                     new OnTheWay.Declined(comparison.occurrence(), at,
                             new OnTheWay.Why.ComparisonStatesNoQuantity());
+            // Read from end to end and the difference of the two sides has no number to state to a
+            // region. Nothing is narrowed by it, and nothing was left unread — so it is not asked
+            // again as written, which is a reading of a spelling and would say nothing more.
+            case AffineReading.OfAComparison.NotHeld _ ->
+                    new OnTheWay.Declined(comparison.occurrence(), at,
+                            new OnTheWay.Why.ComparisonNotRepresentedAsACut());
             // The arithmetic stopped, which is what a written value on an order that counts nothing
             // does. Asked as written, and declined only where that reading comes to nothing either.
             case AffineReading.OfAComparison.Stopped _ -> {

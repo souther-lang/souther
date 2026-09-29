@@ -16,10 +16,12 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.PathResolution;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 
 import java.util.Map;
+import java.util.Set;
 
 /**
  * A comparison read as one statement: {@code Σ coef·position REL threshold}.
@@ -87,6 +89,27 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             }
         }
 
+        /**
+         * Read to the end, each side as a form, and the difference of the two has no representation.
+         *
+         * <p>Its own answer beside {@link CutsNothing} and {@link Stopped}. Nothing cancelled, so
+         * the quantity is not empty; the reading did not stop on an expression it could not read,
+         * so the rule is a form it reads.
+         * What is missing is a number to say what the difference is, and a reader told either of the
+         * others would be told something about the rule that is not so. A rule the model wrote in
+         * good faith — a coefficient at one end of the range weighed against one at the other —
+         * arrives here.
+         *
+         * <p>{@code read} is every number of the input this reading named on the way, for the same
+         * reason {@link CutsNothing} carries it.
+         */
+        record NotHeld(Set<NumericTerm> read) implements OfAComparison {
+
+            public NotHeld {
+                read = Set.copyOf(read);
+            }
+        }
+
         /** The reading stopped, at this expression and in the environment it was being read in. */
         record Stopped(Core node, InputReads at) implements OfAComparison {
 
@@ -97,7 +120,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         }
     }
 
-    /** The same, saying which of the three it is. */
+    /** The same, saying which of the four it is. */
     static OfAComparison read(StatedComparison comparison, InputDomain inputs, InputReads reads,
                               RuleReadingSource ruleSource) {
         // What this reading names as it goes, kept so that a reading which ran to the end can say
@@ -114,8 +137,17 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             if (left == null) {
                 left = ((AffineForms.Outcome.Composed<NumericTerm, InputReads>) read).form();
             } else {
-                LinearForm<NumericTerm> whole = left.minus(
-                        ((AffineForms.Outcome.Composed<NumericTerm, InputReads>) read).form());
+                // Each side was read as a form, and the difference of the two is what the rule is
+                // about. Two forms held one by one can have a difference no ratio holds — a
+                // coefficient at one end of the exponents against one at the other — and that is a
+                // reading that ran to the end and could not write down what it found, which is
+                // neither a rule with no line nor a form the arithmetic did not read.
+                if (!(left.minus(
+                        ((AffineForms.Outcome.Composed<NumericTerm, InputReads>) read).form())
+                        instanceof ExactAnswer.Held<LinearForm<NumericTerm>> difference)) {
+                    return new OfAComparison.NotHeld(named);
+                }
+                LinearForm<NumericTerm> whole = difference.value();
                 if (whole.coefs().isEmpty()) {
                     return new OfAComparison.CutsNothing(named);
                 }

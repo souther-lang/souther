@@ -11,6 +11,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.SmallForm;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.query.Scopes;
@@ -278,8 +279,8 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
         ConstraintState<String> nowhere = ConstraintState.top(CanonicalOrder.asTheyAreSpelled())
                 .taking(LinearForm.<String>atom("x"), Rel.GE,
                         Map.of("x", souther.compiler.numeric.Granularity.DISCRETE))
-                .taking(LinearForm.<String>constant(ExactRatio.of(-1))
-                                .minus(LinearForm.atom("x")), Rel.GE,
+                .taking(SmallForm.small(LinearForm.<String>constant(ExactRatio.of(-1)))
+                                .minus(LinearForm.atom("x")).form(), Rel.GE,
                         Map.of("x", souther.compiler.numeric.Granularity.DISCRETE));
         assertTrue(nowhere.numbers().isBottom(), "x is at nought or above and below minus one");
         assertEquals(Map.of(), nowhere.confinement().carriers(), "and no position is read at all");

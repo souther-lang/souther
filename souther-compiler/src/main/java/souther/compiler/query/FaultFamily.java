@@ -152,7 +152,12 @@ public record FaultFamily(QuantityKey wrote, Set<NumericTerm> weighed) {
                 coefs.put(each.getKey(), moved);
             }
         }
-        return new Weighed(coefs.isEmpty() ? null
-                : QuantityKey.of(new LinearForm<>(ExactRatio.ZERO, coefs)), true);
+        if (coefs.isEmpty()) {
+            return new Weighed(null, true);
+        }
+        QuantityKey key = QuantityKey.tryOf(new LinearForm<>(ExactRatio.ZERO, coefs));
+        // A direction with no smallest form is a weighing this cannot name, the same as a weight
+        // the sum of which has no representation.
+        return key == null ? new Weighed(null, false) : new Weighed(key, true);
     }
 }

@@ -191,8 +191,8 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
     @Test
     void aCutIsHandedOverAsTheAccountHoldsIt() {
         TakenConstraint shifted = new TakenConstraint.Affine(
-                LinearForm.<NumericTerm>atom(new NumericTerm.ValueOf(TermPath.of("x")))
-                        .minus(LinearForm.constant(ExactRatio.of(17))), Rel.LE);
+                LinearForm.<NumericTerm>atomMinusConstant(
+                        new NumericTerm.ValueOf(TermPath.of("x")), ExactRatio.of(17)), Rel.LE);
         Recording region = new Recording();
 
         new WayToTheBorder(List.of(new OnTheWay.TakenIn(somewhere(1), shifted))).narrowing(region);

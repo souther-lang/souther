@@ -118,8 +118,7 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
     @Test
     void aFormStoppedAtTwoOfItsTermsSaysBoth() {
         BorderQuantity.OverAForm both = new BorderQuantity.OverAForm("decide",
-                LinearForm.atom((NumericTerm) TOTAL)
-                        .plus(LinearForm.atom((NumericTerm) OTHER_TOTAL)),
+                LinearForm.sumOfAtoms((NumericTerm) TOTAL, (NumericTerm) OTHER_TOTAL),
                 Map.of(TOTAL, ON_THE_TOTAL, OTHER_TOTAL, ON_THE_OTHER));
 
         BorderQuantity.Stands met = stands(both, AT_A_HUNDRED,

@@ -154,7 +154,7 @@ class APositionARowWroteNothingAtAnswersForTheRowTest {
         on.put(first, ordersOf(first));
         on.put(second, ordersOf(second));
         return new BorderQuantity.OverAForm("decide",
-                LinearForm.atom((NumericTerm) first).plus(LinearForm.atom((NumericTerm) second)),
+                LinearForm.sumOfAtoms((NumericTerm) first, (NumericTerm) second),
                 on);
     }
 
