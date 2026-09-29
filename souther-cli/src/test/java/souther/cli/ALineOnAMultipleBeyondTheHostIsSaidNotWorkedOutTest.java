@@ -69,8 +69,10 @@ class ALineOnAMultipleBeyondTheHostIsSaidNotWorkedOutTest {
         String said = reported("");
 
         assertFalse(said.contains("internal compiler error"), () -> "the run completes:\n" + said);
-        assertTrue(said.contains("no exact representation"),
-                () -> "and says the line could not be worked out:\n" + said);
+        assertTrue(said.contains(THE_SIDE),
+                () -> "and says the side of the line was not worked out:\n" + said);
+        assertFalse(said.contains(THE_LINE),
+                () -> "and not that the line has no place:\n" + said);
     }
 
     @Test
@@ -82,7 +84,14 @@ class ALineOnAMultipleBeyondTheHostIsSaidNotWorkedOutTest {
                 """);
 
         assertFalse(said.contains("internal compiler error"), () -> "the run completes:\n" + said);
-        assertTrue(said.contains("no exact representation"),
-                () -> "and says the line could not be worked out:\n" + said);
+        assertTrue(said.contains(THE_SIDE),
+                () -> "and says the side of the line was not worked out:\n" + said);
+        assertFalse(said.contains(THE_LINE),
+                () -> "and not that the line has no place:\n" + said);
     }
+
+    private static final String THE_SIDE = "a value beside it is one this compiler could not write out";
+
+    private static final String THE_LINE = "its line falls at a number this compiler has no exact"
+            + " representation for";
 }

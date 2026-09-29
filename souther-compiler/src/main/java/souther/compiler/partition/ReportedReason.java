@@ -248,15 +248,12 @@ public final class ReportedReason {
             // constants of the rule and not on the type of the position.
             case BlockReason.LineAtANumberNoRatioHolds _ ->
                     UndividedPosition.Reason.LINE_AT_A_NUMBER_NO_RATIO_HOLDS;
-            // The line is placed and what stands beside it was not written down. Which of the two
-            // words it earns is the arithmetic's: the host had no room to write a count out, which
-            // is a limit of this compiler on the values, or the number has no representation on the
-            // carrier at all, which is the constants the rule is written with.
-            case BlockReason.LineSideNotWorkedOut side -> switch (side.why()) {
-                case MORE_ROOM_COULD_ANSWER -> UndividedPosition.Reason.EXACT_VALUES_TOO_COSTLY;
-                case NO_REPRESENTATION_EXISTS ->
-                        UndividedPosition.Reason.LINE_AT_A_NUMBER_NO_RATIO_HOLDS;
-            };
+            // Its own word, and not the one above. The line is placed and what stands beside it was
+            // not written down, whichever way the arithmetic left it unheld: the host had no room for
+            // a count, or the number has no representation on the carrier. Said as the line having
+            // no place, an author would be sent to the constants of a rule whose line is fine.
+            case BlockReason.LineSideNotWorkedOut _ ->
+                    UndividedPosition.Reason.LINE_SIDE_NOT_WORKED_OUT;
             // Its own word, and not the shape one below. Both sides of this line are read and
             // ordered and a line is drawn on them; what is missing is which positions the line runs
             // between, which is a question about the model and not about the form it was written in.

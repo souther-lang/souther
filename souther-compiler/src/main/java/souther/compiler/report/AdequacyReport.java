@@ -2611,6 +2611,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case UNSUPPORTED_DOMAIN -> "compared against values no line can be drawn on here";
             case LINE_AT_A_NUMBER_NO_RATIO_HOLDS -> "its line falls at a number this compiler has no"
                     + " exact representation for";
+            case LINE_SIDE_NOT_WORKED_OUT -> "its line is placed, and a value beside it is one this"
+                    + " compiler could not write out";
             case UNRESOLVED_CASE_PAIRING -> "it reaches case-specific positions on both sides, and "
                     + "how those positions pair up is not worked out";
             case UNSUPPORTED_PARTITION_SHAPE ->

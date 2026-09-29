@@ -241,6 +241,21 @@ class EveryNotReadReasonIsWrittenBySomeCompilationTest {
                 behavior f : (h: H) -> Answer
                 let f (h) = if t63 * h.a.value <= 1.0m then Yes else No
                 """.formatted(ANSWER, squaringsOfATenth(63))));
+        // A line that is placed, with a value beside it that was not worked out. One squaring fewer
+        // puts the line at a number a ratio holds and the whole number beside it past what the host
+        // builds the digits of. The rule is written to the end and its line has a place, so this is
+        // not the word above.
+        out.put(UndividedPosition.Reason.LINE_SIDE_NOT_WORKED_OUT, of("""
+                module m
+                %s
+                let sq (x: Decimal): Decimal = x * x
+                %s
+                data A = Decimal
+                data H = { a: A }
+
+                behavior f : (h: H) -> Answer
+                let f (h) = if t62 * h.a.value <= 1.0m then Yes else No
+                """.formatted(ANSWER, squaringsOfATenth(62))));
         // Each name of the line stands at a position under every case of the sum, and which of
         // those pair off is what nothing worked out. The record both cases spread is what puts one
         // name at more than one position while leaving the field writable without a match.

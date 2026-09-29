@@ -74,6 +74,49 @@ class WhoMayAskAnExactNumberForItsDigitsTest {
                         + " the numbers whose spelling is short");
     }
 
+    /**
+     * The member that writes the digits and throws is private, and one method reaches it.
+     *
+     * <p>Held apart from the names above, which only say what once existed: a new member that
+     * hands the throwing writer to a reader under another name would be the same defect back, and
+     * this is what stops it. The total member is the only way in, and its answer is what a reader
+     * reads.
+     */
+    @Test
+    void theWriterThatThrowsIsPrivateAndOnlyTheTotalMemberReachesIt() {
+        String ratio = "souther/compiler/numeric/ExactRatio";
+        TreeSet<String> reaching = new TreeSet<>();
+        boolean isPrivate = false;
+        boolean found = false;
+        for (ClassModel owner : COMPILED.classesOf(COMPILED.module("souther-compiler"))) {
+            for (MethodModel method : owner.methods()) {
+                if (owner.thisClass().asInternalName().equals(ratio)
+                        && method.methodName().stringValue().equals("written")
+                        && method.methodTypeSymbol().parameterCount() == 0) {
+                    found = true;
+                    isPrivate = method.flags().has(java.lang.reflect.AccessFlag.PRIVATE);
+                }
+                for (CodeModel code : method.code().stream().toList()) {
+                    for (CodeElement element : code) {
+                        if (element instanceof InvokeInstruction invoke
+                                && invoke.owner().asInternalName().equals(ratio)
+                                && invoke.name().stringValue().equals("written")
+                                && invoke.typeSymbol().parameterCount() == 0) {
+                            String from = method.methodName().stringValue();
+                            reaching.add(owner.thisClass().asInternalName() + "#"
+                                    + (from.startsWith("lambda$writtenDecimal$")
+                                            ? "writtenDecimal" : from));
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue(found, "the writer is in ExactRatio, so a walk not finding it finds nothing");
+        assertTrue(isPrivate, "a writer a reader can name is a way to ask for digits that throws");
+        assertEquals(List.of(ratio + "#writtenDecimal"), List.copyOf(reaching),
+                "the writer that throws is reached from the total member alone");
+    }
+
     /** And the walk sees a call at all, so an empty answer above would mean something. */
     @Test
     void theWalkFindsTheCallInTheTotalMember() {

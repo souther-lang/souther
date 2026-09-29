@@ -95,9 +95,16 @@ public sealed interface ExactAnswer<T> {
      *  that reaching an unheld answer here is a defect of that place and not a property of the
      *  model. Never for a number a model's own constants can put past the range. */
     default T orFail(String because) {
+        return orFail(() -> because);
+    }
+
+    /** The same, with the reason worked out only where it is needed. For a caller whose reason
+     *  names the number, which is text nobody should pay for at every call that is held. */
+    default T orFail(Supplier<String> because) {
         return switch (this) {
             case Held<T> held -> held.value();
-            case Unheld<T> unheld -> throw new IllegalStateException(because + ": " + unheld.why());
+            case Unheld<T> unheld ->
+                    throw new IllegalStateException(because.get() + ": " + unheld.why());
         };
     }
 
