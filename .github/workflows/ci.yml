@@ -28,7 +28,9 @@ jobs:
   # filter names. The filters are exhaustive by construction: `rest` is everything outside the
   # compiler's test package, `compiler-a` is the packages listed, and `compiler-b` is the
   # compiler's package less those. A test class added anywhere lands in exactly one of the three,
-  # and a package added under the compiler lands in `compiler-b`.
+  # and a package added under the compiler lands in `compiler-b`. Naming tests replaces the
+  # classes surefire takes by default, so `rest` leaves out `*IT` again: those run after
+  # packaging, in failsafe, which the filter does not reach.
   build:
     if: github.event_name != 'schedule'
     name: build (${{ matrix.shard.name }})
@@ -39,7 +41,7 @@ jobs:
         shard:
           - name: rest
             modules: ''
-            tests: '!souther/compiler/**'
+            tests: '!souther/compiler/**,!**/*IT'
           - name: compiler-a
             modules: '-pl souther-compiler -am'
             tests: 'souther/compiler/partition/**,souther/compiler/check/**,souther/compiler/doc/**,souther/compiler/fmt/**,souther/compiler/inputs/**'
