@@ -47,7 +47,6 @@
         <connection>scm:git:https://github.com/souther-lang/souther.git</connection>
         <developerConnection>scm:git:git@github.com:souther-lang/souther.git</developerConnection>
         <url>https://github.com/souther-lang/souther</url>
-        <tag>HEAD</tag>
     </scm>
 
     <properties>
@@ -345,10 +344,41 @@
                     </compilerArgs>
                 </configuration>
             </plugin>
-            <!-- Implementation-Version in every jar's manifest. A compiled Souther module records
-                 the compiler that produced it, and this is where that string comes from: Maven
-                 fills it from the project version, so the root pom stays the one place the version
-                 is written. -->
+            <!-- The commit being built, read from git by the build rather than passed in. Only the
+                 full id is taken: branch, user and time would differ between two builds of the
+                 same commit. -->
+            <plugin>
+                <groupId>io.github.git-commit-id</groupId>
+                <artifactId>git-commit-id-maven-plugin</artifactId>
+                <version>9.0.1</version>
+                <executions>
+                    <execution>
+                        <id>read-revision</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>revision</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <skipPoms>false</skipPoms>
+                    <runOnlyOnce>true</runOnlyOnce>
+                    <injectAllReactorProjects>true</injectAllReactorProjects>
+                    <failOnNoGitDirectory>false</failOnNoGitDirectory>
+                    <generateGitPropertiesFile>false</generateGitPropertiesFile>
+                    <commitIdGenerationMode>full</commitIdGenerationMode>
+                    <includeOnlyProperties>
+                        <includeOnlyProperty>^git\.commit\.id\.full$</includeOnlyProperty>
+                        <includeOnlyProperty>^git\.tags$</includeOnlyProperty>
+                    </includeOnlyProperties>
+                </configuration>
+            </plugin>
+            <!-- Implementation-Version and Implementation-Revision in every jar's manifest. A
+                 compiled Souther module records the compiler that produced it, and the version
+                 string comes from here: Maven fills it from the project version, so the root pom
+                 stays the one place the version is written. The revision is the commit the jar was
+                 built from, so a consumer that resolved the jar can place it against a commit
+                 without going through a tag. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
@@ -358,6 +388,9 @@
                         <manifest>
                             <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
                         </manifest>
+                        <manifestEntries>
+                            <Implementation-Revision>${git.commit.id.full}</Implementation-Revision>
+                        </manifestEntries>
                     </archive>
                 </configuration>
             </plugin>
@@ -622,6 +655,57 @@
             <id>release</id>
             <build>
                 <plugins>
+                    <!-- A release is a clean checkout of the commit tagged for its version. The
+                         revision written into the manifest names a commit, which describes the
+                         jar only if nothing uncommitted went into it. Whether the tree is clean is
+                         asked of git in the tree being built: the git-commit-id plugin's own
+                         `git.dirty` ignores untracked files and, in a linked worktree, answers for
+                         the main checkout. -->
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>3.5.1</version>
+                        <inherited>false</inherited>
+                        <executions>
+                            <execution>
+                                <id>require-clean-checkout</id>
+                                <phase>initialize</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>${project.basedir}/bin/require-clean-checkout.sh</executable>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>io.github.git-commit-id</groupId>
+                        <artifactId>git-commit-id-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>validate-release-source</id>
+                                <phase>initialize</phase>
+                                <goals>
+                                    <goal>validateRevision</goal>
+                                </goals>
+                                <configuration>
+                                    <validationProperties>
+                                        <validationProperty>
+                                            <name>revision is a commit</name>
+                                            <value>${git.commit.id.full}</value>
+                                            <shouldMatchTo>^[0-9a-f]{40}$</shouldMatchTo>
+                                        </validationProperty>
+                                        <validationProperty>
+                                            <name>HEAD is tagged for this version</name>
+                                            <value>${git.tags}</value>
+                                            <shouldMatchTo>(^|,)v${project.version}(,|$)</shouldMatchTo>
+                                        </validationProperty>
+                                    </validationProperties>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-source-plugin</artifactId>
