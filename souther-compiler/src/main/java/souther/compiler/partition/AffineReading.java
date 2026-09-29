@@ -93,7 +93,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * Read to the end, each side as a form, and the difference of the two has no representation.
          *
          * <p>Its own answer beside {@link CutsNothing} and {@link Stopped}. Nothing cancelled, so
-         * the quantity is not empty; the arithmetic did not stop, so the rule is a form it reads.
+         * the quantity is not empty; the reading did not stop on an expression it could not read,
+         * so the rule is a form it reads.
          * What is missing is a number to say what the difference is, and a reader told either of the
          * others would be told something about the rule that is not so. A rule the model wrote in
          * good faith — a coefficient at one end of the range weighed against one at the other —

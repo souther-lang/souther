@@ -188,10 +188,6 @@ class WhatCertifiesARangeIsMoreThanTheRangesThemselvesTest {
         };
     }
 
-    private static LinearForm<String> atom(String a) {
-        return LinearForm.atom(a);
-    }
-
     private static LinearForm<String> num(long n) {
         return LinearForm.constant(ExactRatio.of(n));
     }
