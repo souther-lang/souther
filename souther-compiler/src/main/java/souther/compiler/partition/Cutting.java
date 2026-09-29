@@ -508,13 +508,12 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * one coordinate says the rule cuts that position, and whether the position has a value where
      * the line falls is asked of the order it sits on.
      */
-    ExactAnswer<Optional<Place>> singledValue() {
+    ExactAnswer<Optional<Place>> singledValue(Seam parts) {
         // On the order the position it divides is written on. A quantity used to answer with one
         // order for everything under it; a form may now be over positions written back differently,
         // and the value named here is a value of one of them.
         NumericTerm divides = dividedPosition();
-        return seam().flatMap(parts ->
-                parts.at().asAValueOf(divides == null ? null : of.carrierOf(divides)));
+        return parts.at().asAValueOf(divides == null ? null : of.carrierOf(divides));
     }
 
     /**
@@ -525,17 +524,15 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * four and five, and nine halved is not a whole number at all. Which of the two the classes meet
      * at is which side the threshold's own value belongs to, and that is the rule's to say.
      */
-    ExactAnswer<Optional<Place>> dividedValue() {
+    Optional<Place> dividedValue(Seam parts) {
         ComparisonClaim.Cut order = ordering();
         if (order == null) {
             throw new IllegalStateException("which value a rule divides at, asked of one that names"
                     + " a value and divides at neither side of it: " + at);
         }
-        return seam().map(seam -> {
-            Level side = order.valueBelongs() == Towards.BELOW ? seam.below() : seam.above();
-            return side instanceof Level.OnACarrier on
-                    ? Optional.<Place>of(on.at()) : Optional.<Place>empty();
-        });
+        Level side = order.valueBelongs() == Towards.BELOW ? parts.below() : parts.above();
+        return side instanceof Level.OnACarrier on
+                ? Optional.<Place>of(on.at()) : Optional.<Place>empty();
     }
 
     /**

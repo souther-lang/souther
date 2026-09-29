@@ -184,11 +184,14 @@ public sealed interface Level {
     default Place asAPlace() {
         return switch (this) {
             case OnACarrier on -> on.at();
-            case OfTheQuantity(ExactRatio at) -> Count.written(at)
-                    .orFail("a level of the quantity was asked for its place, and the host has no"
-                            + " room to write the count of " + at)
-                    .orElseThrow(() -> new IllegalStateException(
-                            "no count on any carrier's order is this number: " + at));
+            case OfTheQuantity(ExactRatio at) -> switch (Count.written(at)) {
+                case ExactAnswer.Held<Optional<Count>> written -> written.value()
+                        .orElseThrow(() -> new IllegalStateException(
+                                "no count on any carrier's order is this number: " + at));
+                case ExactAnswer.Unheld<Optional<Count>> unheld -> throw new IllegalStateException(
+                        "a level of the quantity was asked for its place, and the host has no room"
+                                + " to write the count of " + at + ": " + unheld.why());
+            };
         };
     }
 

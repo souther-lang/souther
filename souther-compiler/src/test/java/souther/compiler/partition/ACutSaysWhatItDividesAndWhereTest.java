@@ -104,7 +104,8 @@ class ACutSaysWhatItDividesAndWhereTest {
 
         assertEquals(term("n"), names.dividedPosition(),
                 "twice a position is that position, whatever the rule says about it");
-        assertEquals(ExactAnswer.held(Optional.empty()), names.singledValue(),
+        assertEquals(ExactAnswer.held(Optional.empty()),
+                names.singledValue(names.seam().orFail("a seam worked out")),
                 "and no whole number is nine halved, so this names none of them");
     }
 
@@ -116,7 +117,8 @@ class ACutSaysWhatItDividesAndWhereTest {
                 new Level.OfTheQuantity(ExactRatio.of(8)),
                 new ComparisonClaim.Singled(true), null);
 
-        assertEquals("4", names.singledValue().orFail("a value worked out").orElseThrow().spelled(),
+        assertEquals("4", names.singledValue(names.seam().orFail("a seam worked out"))
+                        .orFail("a value worked out").orElseThrow().spelled(),
                 "eight halved is four");
     }
 

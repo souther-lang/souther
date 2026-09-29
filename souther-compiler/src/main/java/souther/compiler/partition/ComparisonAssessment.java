@@ -429,8 +429,9 @@ sealed interface ComparisonAssessment {
             // much of it as a pretty-printer got.
             return new AcrossPositions(cutting, at, kind);
         }
-        ExactAnswer<Optional<Place>> value =
-                cutting.singles() ? cutting.singledValue() : cutting.dividedValue();
+        Seam seam = ((ExactAnswer.Held<Seam>) parted).value();
+        ExactAnswer<Optional<Place>> value = cutting.singles() ? cutting.singledValue(seam)
+                : ExactAnswer.held(cutting.dividedValue(seam));
         return switch (value) {
             case ExactAnswer.Unheld<Optional<Place>> unheld ->
                     sideNotWorkedOut(cutting, unheld.why());
