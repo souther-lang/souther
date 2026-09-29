@@ -47,9 +47,9 @@ more, and both existed only because develop had been made to claim a number it w
 
    The build reads the commit from git and writes it into every jar's manifest as
    `Implementation-Revision`, so a consumer that resolved `souther-compiler` can read the commit
-   from the jar without going through the tag. `-Prelease` fails unless the checkout is clean, the
-   commit is a full object id, and `v<version>` points at it. Run it in an ordinary clone; git's
-   linked worktrees are not reported as dirty by the plugin.
+   from the jar without going through the tag. `-Prelease` fails unless the checkout is clean
+   (`bin/require-clean-checkout.sh`: no modified or untracked file, and no ignored file under a
+   `src` directory), the commit is a full object id, and `v<version>` points at it.
 
    A `v*` tag is protected by a repository ruleset that forbids updating and deleting it, with no
    bypass. A tag pushed for the wrong commit is not moved: the next version is released instead.

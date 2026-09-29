@@ -369,7 +369,6 @@
                     <commitIdGenerationMode>full</commitIdGenerationMode>
                     <includeOnlyProperties>
                         <includeOnlyProperty>^git\.commit\.id\.full$</includeOnlyProperty>
-                        <includeOnlyProperty>^git\.dirty$</includeOnlyProperty>
                         <includeOnlyProperty>^git\.tags$</includeOnlyProperty>
                     </includeOnlyProperties>
                 </configuration>
@@ -658,7 +657,28 @@
                 <plugins>
                     <!-- A release is a clean checkout of the commit tagged for its version. The
                          revision written into the manifest names a commit, which describes the
-                         jar only if nothing uncommitted went into it. -->
+                         jar only if nothing uncommitted went into it. Whether the tree is clean is
+                         asked of git in the tree being built: the git-commit-id plugin's own
+                         `git.dirty` ignores untracked files and, in a linked worktree, answers for
+                         the main checkout. -->
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>3.5.1</version>
+                        <inherited>false</inherited>
+                        <executions>
+                            <execution>
+                                <id>require-clean-checkout</id>
+                                <phase>initialize</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>${project.basedir}/bin/require-clean-checkout.sh</executable>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
                     <plugin>
                         <groupId>io.github.git-commit-id</groupId>
                         <artifactId>git-commit-id-maven-plugin</artifactId>
@@ -675,11 +695,6 @@
                                             <name>revision is a commit</name>
                                             <value>${git.commit.id.full}</value>
                                             <shouldMatchTo>^[0-9a-f]{40}$</shouldMatchTo>
-                                        </validationProperty>
-                                        <validationProperty>
-                                            <name>working tree is clean</name>
-                                            <value>${git.dirty}</value>
-                                            <shouldMatchTo>^false$</shouldMatchTo>
                                         </validationProperty>
                                         <validationProperty>
                                             <name>HEAD is tagged for this version</name>
