@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
-# Fail unless the checkout this is run in holds exactly what HEAD holds, as far as a build can see it:
-# no modified, staged, deleted or untracked file, and no ignored file under a src directory, which
-# Maven compiles or packages the same as a tracked one. `-Prelease` runs it, because the commit the
-# build writes into every jar's manifest describes the jar only if nothing else went into it.
+# Fail unless the working tree contains exactly the files and contents recorded by HEAD: no modified,
+# staged, deleted or untracked file, and no ignored one either. `-Prelease` runs it, because the commit
+# the build writes into every jar's manifest describes the jar only if nothing else went into it.
+#
+# Ignored files are refused too, whatever they are. A `target` left by an earlier build, a file under
+# `syntax` that a pom copies into a jar, or anything a plugin reads that a later change to the build
+# adds would each get through a check that named the places the build reads. The way to satisfy this is
+# a fresh clone of the tag.
 #
 # The tree that is asked is the one the script is in, so a linked worktree answers for itself.
 set -euo pipefail
@@ -10,12 +14,10 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 
-changed="$(git status --porcelain)"
-ignored="$(git ls-files --others --ignored --exclude-standard | grep -E '(^|/)src/' || true)"
+state="$(git status --porcelain --ignored)"
 
-if [ -n "$changed$ignored" ]; then
-  echo "This is not a clean checkout of $(git rev-parse HEAD):" >&2
-  [ -z "$changed" ] || echo "$changed" >&2
-  [ -z "$ignored" ] || sed 's/^/ignored  /' <<<"$ignored" >&2
+if [ -n "$state" ]; then
+  echo "This is not an exact checkout of $(git rev-parse HEAD):" >&2
+  echo "$state" >&2
   exit 1
 fi

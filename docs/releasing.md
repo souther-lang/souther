@@ -41,15 +41,19 @@ more, and both existed only because develop had been made to claim a number it w
 5. Publish to Maven Central from the tag:
 
    ```sh
-   git switch --detach v<version>
+   git clone --branch v<version> git@github.com:souther-lang/souther.git souther-v<version>
+   cd souther-v<version>
    mvn -Prelease deploy
    ```
 
+   From a fresh clone, because the release build refuses a tree that holds anything HEAD does not,
+   an ignored `target` from an earlier build included.
+
    The build reads the commit from git and writes it into every jar's manifest as
    `Implementation-Revision`, so a consumer that resolved `souther-compiler` can read the commit
-   from the jar without going through the tag. `-Prelease` fails unless the checkout is clean
-   (`bin/require-clean-checkout.sh`: no modified or untracked file, and no ignored file under a
-   `src` directory), the commit is a full object id, and `v<version>` points at it.
+   from the jar without going through the tag. `-Prelease` fails unless the working tree is exactly
+   what HEAD records (`bin/require-clean-checkout.sh`, ignored files included), the commit is a full
+   object id, and `v<version>` points at it.
 
    A `v*` tag is protected by a repository ruleset that forbids updating and deleting it, with no
    bypass. A tag pushed for the wrong commit is not moved: the next version is released instead.
