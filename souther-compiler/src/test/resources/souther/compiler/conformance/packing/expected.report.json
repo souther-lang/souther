@@ -112,10 +112,7 @@
           "stops" : {
             "kind" : "at_the_domain",
             "at" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
+              "kind" : "a_count",
               "at" : "20"
             },
             "per" : "1",
@@ -243,10 +240,7 @@
           "stops" : {
             "kind" : "at_the_domain",
             "at" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
+              "kind" : "a_count",
               "at" : "0"
             },
             "per" : "1",
@@ -383,10 +377,7 @@
           "stops" : {
             "kind" : "at_the_domain",
             "at" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
+              "kind" : "a_count",
               "at" : "20"
             },
             "per" : "1",
@@ -514,10 +505,7 @@
           "stops" : {
             "kind" : "at_the_domain",
             "at" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
+              "kind" : "a_count",
               "at" : "0"
             },
             "per" : "1",
@@ -661,10 +649,7 @@
           "stops" : {
             "kind" : "at_the_domain",
             "at" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
+              "kind" : "a_count",
               "at" : "24"
             },
             "per" : "1",
@@ -806,10 +791,7 @@
           "stops" : {
             "kind" : "at_the_domain",
             "at" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "whole"
-              },
+              "kind" : "a_count",
               "at" : "0"
             },
             "per" : "1",

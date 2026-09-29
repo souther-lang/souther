@@ -32,6 +32,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Function;
@@ -1554,8 +1555,13 @@ final class TermRealizations {
         if (!(at instanceof ExactAnswer.Held<ExactRatio> held)) {
             return null;
         }
-        BigDecimal written = held.value().asWrittenDecimal();
-        return written == null ? null : new Count(written);
+        // And no more composed where the host has no room to write the number out: an end too far
+        // out for the truth is the same work nobody asked for.
+        return switch (held.value().writtenDecimal()) {
+            case ExactAnswer.Held<Optional<BigDecimal>> written ->
+                    written.value().map(Count::new).orElse(null);
+            case ExactAnswer.Unheld<Optional<BigDecimal>> _ -> null;
+        };
     }
 
     /** The one value whose quotient by that divisor is exactly that number, or nothing composed
@@ -1566,8 +1572,13 @@ final class TermRealizations {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        ExactRatio product = wanted.exactly().times(ExactRatio.of(by)).orNull();
-        BigDecimal at = product == null ? null : product.asWrittenDecimal();
+        // Nothing composed where the product is one the host has no room to write out, as where the
+        // arithmetic could not hold it or no decimal is it.
+        BigDecimal at = switch (wanted.exactly().times(ExactRatio.of(by))
+                .flatMap(ExactRatio::writtenDecimal)) {
+            case ExactAnswer.Held<Optional<BigDecimal>> written -> written.value().orElse(null);
+            case ExactAnswer.Unheld<Optional<BigDecimal>> _ -> null;
+        };
         if (at == null) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);

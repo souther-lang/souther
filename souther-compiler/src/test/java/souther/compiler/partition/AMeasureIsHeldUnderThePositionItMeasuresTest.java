@@ -133,7 +133,7 @@ class AMeasureIsHeldUnderThePositionItMeasuresTest {
         Axis partsOnly = new Axis(reading.id(), reading.term(), List.of(),
                 List.of(), List.of(),
                 List.of(Parting.by(
-                        Seam.of(LevelSpace.onACarrier(whole),
+                        HeldSeams.of(LevelSpace.onACarrier(whole),
                                 new Level.OnACarrier(whole, Count.of(java.math.BigDecimal.TEN)),
                                 Towards.BELOW),
                         WhatTheRulesTogetherLeaveAQuantityTest.aLine(1))),

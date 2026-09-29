@@ -87,7 +87,7 @@ class ABoundaryBesideALineStandsAtAValueThePositionAdmitsTest {
     private static Criterion.Within run(Towards away) {
         LevelSpace space = LevelSpace.onACarrier(TEXT);
         Level line = new Level.OnACarrier(TEXT, Text.of("spring"));
-        Seam parted = Seam.of(space, line, away.opposite());
+        Seam parted = HeldSeams.of(space, line, away.opposite());
         Band band = away == Towards.BELOW
                 ? new Band(Band.endAt(null, null, Towards.ABOVE),
                         Band.endAt(parted, null, Towards.BELOW))
@@ -122,7 +122,7 @@ class ABoundaryBesideALineStandsAtAValueThePositionAdmitsTest {
         // A distance and not a place: what a pair is held at is how far apart the two stand, which
         // is a count of the order they share.
         Level apart = Level.OfTheQuantity.of(1);
-        Seam parted = Seam.of(
+        Seam parted = HeldSeams.of(
                 LevelSpace.steppingBy(ExactRatio.ONE), apart,
                 Towards.ABOVE);
         return new Criterion.Within(

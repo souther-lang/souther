@@ -12,6 +12,7 @@ import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
 import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -52,21 +53,22 @@ public record OrderedAffineBoundary(BorderQuantity of, Seam seam, Towards satisf
     }
 
     /**
-     * How {@code border} reads as one inequality, or null where its rule names a value rather than
-     * ordering the values around it.
+     * How {@code border} reads as one inequality, empty where its rule names a value rather than
+     * ordering the values around it, and unheld where the values beside its line were not worked
+     * out.
      *
      * <p>Derived from the border and held nowhere, so there is no second copy to disagree with the
      * one the rule was read to. Where the values part is asked of the one derivation of it
      * ({@link Seam#where}), which is what the reading that met the rule asked.
      */
-    public static OrderedAffineBoundary of(Border border) {
+    public static ExactAnswer<Optional<OrderedAffineBoundary>> of(Border border) {
         ComparisonClaim claim = border.origin().lineFacts().claim();
         BorderQuantity of = border.cut().of();
         if (!(claim instanceof ComparisonClaim.Cut order) || !weighable(of)) {
-            return null;
+            return ExactAnswer.held(Optional.empty());
         }
-        return new OrderedAffineBoundary(of, Seam.where(of, border.cut().at(), claim),
-                order.satisfyingSide());
+        return Seam.where(of, border.cut().at(), claim).map(seam ->
+                Optional.of(new OrderedAffineBoundary(of, seam, order.satisfyingSide())));
     }
 
     /**

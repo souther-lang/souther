@@ -10,12 +10,15 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.FilingCoordinate;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.reach.ComparisonArrival;
 import souther.compiler.types.BindingId;
 
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Optional;
 import java.util.SequencedMap;
 
 /**
@@ -343,7 +346,7 @@ sealed interface ComparisonAssessment {
             boolean reaches = switch (arrival) {
                 case ComparisonArrival.NothingArrives _ -> false;
                 case ComparisonArrival.Values values ->
-                        Border.reaches(cutting.at(), cutting.seam(), cutting.claim(),
+                        Border.reaches(cutting.at(), cutting::seam, cutting.claim(),
                                 drawnByAnInvariant, cutting.withinGiven(values));
                 case ComparisonArrival.NoProjection _ -> true;
             };
@@ -399,22 +402,48 @@ sealed interface ComparisonAssessment {
         if (empty.isPresent()) {
             return new NoFeasibleInput(empty.get(), cutting);
         }
+        // The line is placed, and what stands beside it is asked here, once. A rule that could not
+        // be told where the values part is neither a rule drawing nowhere nor one drawing
+        // somewhere: it is one whose sides were not worked out, and it is said so at the position
+        // rather than read as less. Every reader of the line below holds the seam this asked for.
+        ExactAnswer<Seam> parted = cutting.seam();
+        if (parted instanceof ExactAnswer.Unheld<Seam> unheld) {
+            return sideNotWorkedOut(cutting, unheld.why());
+        }
         // The line and not one of its points. A rule drawing where the quantity never reaches
         // divides the position into nothing, and a reader told that the rule went unread would go
         // looking for a limit of this compiler that is not there.
-        if (!Border.reaches(cutting.at(), cutting.seam(), cutting.claim(), drawnByAnInvariant,
+        if (!Border.reaches(cutting.at(), () -> parted, cutting.claim(), drawnByAnInvariant,
                 cutting.within())) {
             return new OutsideTheDomain(cutting);
         }
+        ExactAnswer<Places> places = places(cutting);
+        if (places instanceof ExactAnswer.Unheld<Places> unheld) {
+            return sideNotWorkedOut(cutting, unheld.why());
+        }
+        Places kind = ((ExactAnswer.Held<Places>) places).value();
         NumericTerm.FromOnePosition divided = cutting.dividedPosition();
         if (divided == null) {
             // Named by the comparison that drew it, which is the one thing about such a place this
             // compiler can always say exactly. It is on no position, and writing it out would be as
             // much of it as a pretty-printer got.
-            return new AcrossPositions(cutting, at, places(cutting));
+            return new AcrossPositions(cutting, at, kind);
         }
-        Place value = cutting.singles() ? cutting.singledValue() : cutting.dividedValue();
-        return new AtAPosition(cutting, divided, value, places(cutting));
+        Seam seam = ((ExactAnswer.Held<Seam>) parted).value();
+        ExactAnswer<Optional<Place>> value = cutting.singles() ? cutting.singledValue(seam)
+                : ExactAnswer.held(cutting.dividedValue(seam));
+        return switch (value) {
+            case ExactAnswer.Unheld<Optional<Place>> unheld ->
+                    sideNotWorkedOut(cutting, unheld.why());
+            case ExactAnswer.Held<Optional<Place>> held ->
+                    new AtAPosition(cutting, divided, held.value().orElse(null), kind);
+        };
+    }
+
+    /** A rule whose line is placed and whose sides were not worked out, said at every place the
+     *  quantity is filed at. */
+    private static ComparisonAssessment sideNotWorkedOut(Cutting cutting, UnheldNumber why) {
+        return new Unread(atEachOf(cutting.over(), new BlockReason.LineSideNotWorkedOut(why)));
     }
 
     /**
@@ -428,11 +457,12 @@ sealed interface ComparisonAssessment {
      * several positions has none at all — so {@code a + b == 10}, which takes ten, came back naming
      * no value the quantity holds, alongside {@code 2 * a + 2 * b == 9}, which does not.
      */
-    private static Places places(Cutting cutting) {
+    private static ExactAnswer<Places> places(Cutting cutting) {
         if (!cutting.singles()) {
-            return Places.ACROSS_THE_VALUE;
+            return ExactAnswer.held(Places.ACROSS_THE_VALUE);
         }
-        return cutting.takesTheValueItNames() ? Places.AT_THE_VALUE : Places.AT_NO_VALUE;
+        return cutting.takesTheValueItNames().map(takes ->
+                takes ? Places.AT_THE_VALUE : Places.AT_NO_VALUE);
     }
 
     /**

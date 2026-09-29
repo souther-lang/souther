@@ -9,7 +9,10 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.Place;
+
+import java.util.Optional;
 
 /**
  * What one comparison says about a position, whoever wrote the comparison.
@@ -103,8 +106,16 @@ record ComparedLine(NumericTerm.FromOnePosition term, Place value,
         // The carrier edge for a line on one position: the threshold is a value of that position or
         // it is none. A cut at a third is none, and this shape declines it — what such a rule cuts
         // is the form it was written as, and a form holds its line exactly ({@link CutPosition}).
-        Place value = Count.at(read.cut());
-        return value == null ? null : new ComparedLine(term, value, orders, read.claim());
+        //
+        // And the same where the host has no room to write the count out: the line is the rule's
+        // and is held exactly by the form, which needs no digits, so the shape that does declines it
+        // for that as for a third.
+        return switch (Count.written(read.cut())) {
+            case ExactAnswer.Held<Optional<Count>> held -> held.value()
+                    .map(value -> new ComparedLine(term, value, orders, read.claim()))
+                    .orElse(null);
+            case ExactAnswer.Unheld<Optional<Count>> _ -> null;
+        };
     }
 
 }

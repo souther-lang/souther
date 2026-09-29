@@ -202,7 +202,7 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
      *  asks for. */
     private static Criterion above(Level line) {
         LevelSpace space = LevelSpace.steppingBy(ExactRatio.ONE);
-        Seam parted = Seam.of(space, line, Towards.BELOW);
+        Seam parted = HeldSeams.of(space, line, Towards.BELOW);
         return new Criterion.Within(
                 new Band(Band.endAt(parted, null, Towards.ABOVE),
                         Band.endAt(null, null, Towards.BELOW)),

@@ -11,6 +11,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Towards;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.OnTheWay;
@@ -28,6 +29,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -293,6 +295,23 @@ public sealed interface AnotherLineTheRowsAllow {
          * did not finish.
          */
         record AFaultFamilyMemberWasNotComposed() implements Unsettled {}
+
+        /**
+         * The values beside this line were not worked out, so there is no inequality to hold
+         * against the lines beside it.
+         *
+         * <p>Not {@link NoStrategyForIt}, which is a rule that names a value and orders nothing: this
+         * rule orders the values, and what stopped the reading is the exact arithmetic on the numbers
+         * beside its line.
+         *
+         * @param why which of the two ways the number was not held
+         */
+        record TheLineWasNotWorkedOut(UnheldNumber why) implements Unsettled {
+
+            public TheLineWasNotWorkedOut {
+                Objects.requireNonNull(why, "a line not worked out says why");
+            }
+        }
     }
 
     /** Which shape of border this compiler holds against no line beside it. */
@@ -404,11 +423,17 @@ public sealed interface AnotherLineTheRowsAllow {
         // orders nothing — so it has no side to keep a row on and nothing here holds it against its
         // neighbours. A strategy nobody wrote, and not a question the model does not raise: the
         // second would settle a verdict on something nobody established.
-        OrderedAffineBoundary boundary = OrderedAffineBoundary.of(border);
-        if (boundary == null) {
+        ExactAnswer<Optional<OrderedAffineBoundary>> drawn = OrderedAffineBoundary.of(border);
+        if (drawn instanceof ExactAnswer.Unheld<Optional<OrderedAffineBoundary>> unheld) {
+            return new CouldNotTell(new Unsettled.TheLineWasNotWorkedOut(unheld.why()));
+        }
+        Optional<OrderedAffineBoundary> held =
+                ((ExactAnswer.Held<Optional<OrderedAffineBoundary>>) drawn).value();
+        if (held.isEmpty()) {
             return new CouldNotTell(
                     new Unsettled.NoStrategyForIt(Strategy.A_RULE_THAT_NAMES_A_VALUE));
         }
+        OrderedAffineBoundary boundary = held.get();
         // The rows read here and not before. Reading them is a walk of its own over every row, and
         // every question above is about the line alone — so a border with no line beside it, which
         // is every bound on a position, pays nothing for being asked.
@@ -873,8 +898,13 @@ public sealed interface AnotherLineTheRowsAllow {
             Carrier carrier = boundary.of().carrierOf(each.getKey());
             // Where the step lands is a value of the position or it is nowhere, which is the same
             // edge a row is written at: a place the carrier has no count for is no place at all.
-            Count count = Count.at(at);
-            Place there = carrier == null || count == null ? null : carrier.onTheGrid(count);
+            // A count the host has no room to write out is the same: this input was not composed.
+            Place there = switch (Count.written(at)) {
+                case ExactAnswer.Held<Optional<Count>> written -> carrier == null
+                        || written.value().isEmpty() ? null
+                        : carrier.onTheGrid(written.value().get());
+                case ExactAnswer.Unheld<Optional<Count>> _ -> null;
+            };
             if (there == null) {
                 return null;
             }

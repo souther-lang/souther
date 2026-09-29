@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -764,9 +765,17 @@ public final class NumericDomain<A> {
         if (cut == null) {
             return null;
         }
-        BigDecimal exactly = cut.at().asWrittenDecimal();
-        if (exactly != null) {
-            return new Endpoint(new Count(exactly), cut.inclusive());
+        // A decimal the host has no room to write out is an end this cannot hand over, and the sound
+        // answer with less is no end here for the reason below. It is not the answer that no decimal
+        // is this number, which would send it to the rounding: that one is about the number, and
+        // this is about the run.
+        ExactAnswer<Optional<BigDecimal>> exactly = cut.at().writtenDecimal();
+        if (exactly instanceof ExactAnswer.Unheld<Optional<BigDecimal>>) {
+            return null;
+        }
+        Optional<BigDecimal> written = ((ExactAnswer.Held<Optional<BigDecimal>>) exactly).value();
+        if (written.isPresent()) {
+            return new Endpoint(new Count(written.get()), cut.inclusive());
         }
         // Rounded outward, so that what is handed over admits everything the rules admit and a hair
         // besides. Where the exact arithmetic cannot hold that rounding either — an end this compiler

@@ -7,6 +7,7 @@ import souther.compiler.check.ComparisonClaim;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Towards;
@@ -14,6 +15,7 @@ import souther.compiler.numeric.Towards;
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -74,8 +76,9 @@ class ACutSaysWhatItDividesAndWhereTest {
     /** And it parts the values in the place the position's own numbers say, not the form's. */
     @Test
     void andPartsTheValuesWhereThePositionsOwnNumbersSayItDoes() {
-        assertEquals("10|11", onThePosition("10").seam().spelled());
-        assertEquals("20|21", overAMultiple("2", "40").seam().spelled(),
+        assertEquals("10|11", onThePosition("10").seam().orFail("a seam worked out").spelled());
+        assertEquals("20|21",
+                overAMultiple("2", "40").seam().orFail("a seam worked out").spelled(),
                 "forty of a doubled position is twenty of it");
     }
 
@@ -101,7 +104,8 @@ class ACutSaysWhatItDividesAndWhereTest {
 
         assertEquals(term("n"), names.dividedPosition(),
                 "twice a position is that position, whatever the rule says about it");
-        assertEquals(null, names.singledValue(),
+        assertEquals(ExactAnswer.held(Optional.empty()),
+                names.singledValue(names.seam().orFail("a seam worked out")),
                 "and no whole number is nine halved, so this names none of them");
     }
 
@@ -113,7 +117,9 @@ class ACutSaysWhatItDividesAndWhereTest {
                 new Level.OfTheQuantity(ExactRatio.of(8)),
                 new ComparisonClaim.Singled(true), null);
 
-        assertEquals("4", names.singledValue().spelled(), "eight halved is four");
+        assertEquals("4", names.singledValue(names.seam().orFail("a seam worked out"))
+                        .orFail("a value worked out").orElseThrow().spelled(),
+                "eight halved is four");
     }
 
     /**
@@ -130,6 +136,6 @@ class ACutSaysWhatItDividesAndWhereTest {
                 new Level.OfTheQuantity(ExactRatio.of(9)),
                 new ComparisonClaim.Cut(Towards.BELOW, true), null);
 
-        assertEquals("4|5", closed.seam().spelled());
+        assertEquals("4|5", closed.seam().orFail("a seam worked out").spelled());
     }
 }

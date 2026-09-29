@@ -35,11 +35,13 @@ import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.regex.Language;
 import souther.compiler.regex.Meter;
 import souther.compiler.regex.PatternPlan;
@@ -1300,7 +1302,8 @@ public final class Partitions {
         // Every place the rules part this position's values: the ones its cuts stand at, and the
         // ones no cut stands at because the position holds no value there. A border built from the
         // cuts alone read its two sides past exactly the lines that were left out.
-        List<Parting> parted = new ArrayList<>(axis.parted());
+        List<Parting> known = new ArrayList<>(axis.parted());
+        UnheldNumber notWorkedOut = null;
         for (Cut cut : axis.cuts()) {
             BoundaryTarget where = BoundaryTarget.at(
                     new BorderQuantity.OfACoordinate(axis.id().behavior(), axis.term(), orders),
@@ -1308,10 +1311,21 @@ public final class Partitions {
             for (LineOrigin origin : cut.origins()) {
                 // Every rule that drew a line here, as it was read. Which of them fall in one place
                 // is the arrangement's answer, and telling them apart here kept the first and lost
-                // the rest — so a run bounded by two rules knew about one of them.
-                parted.addAll(Border.partedBy(where, origin));
+                // the rest — so a run bounded by two rules knew about one of them. A place that was
+                // not worked out is kept as that, since every border on this position is read off
+                // an arrangement it is missing a place of.
+                switch (Border.partedBy(where, origin)) {
+                    case ExactAnswer.Held<List<Parting>> held -> known.addAll(held.value());
+                    case ExactAnswer.Unheld<List<Parting>> unheld -> {
+                        if (notWorkedOut == null) {
+                            notWorkedOut = unheld.why();
+                        }
+                    }
+                }
             }
         }
+        ExactAnswer<List<Parting>> parted = notWorkedOut == null ? ExactAnswer.held(known)
+                : ExactAnswer.unheld(notWorkedOut);
         for (Cut cut : axis.cuts()) {
             // The level is on the cut's carrier, which is the one the rule was read on. What the
             // quantity is measured on is the reading's answer and not read off the line: a line

@@ -78,6 +78,11 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // the values carry an order and the line is written, and what has no place is a constant of
         // the rule. Nothing was compared against a figure, so a run allowed more meets it again.
         table.put("LineAtANumberNoRatioHolds", "LINE_AT_A_NUMBER_NO_RATIO_HOLDS/UNAFFECTED");
+        // A line that is placed, with a value beside it that was not worked out. Its own word beside
+        // the one above, which says the line has no place: an author told that one looks at the
+        // constants of a rule whose line is fine. Nothing was compared against a figure, so a run
+        // allowed more meets it again.
+        table.put("LineSideNotWorkedOut", "LINE_SIDE_NOT_WORKED_OUT/UNAFFECTED");
         table.put("RuleAboutADerivedValue",
                 "RULE_ABOUT_A_DERIVED_VALUE/UNAFFECTED");
         // And a rule about an element of one of several sequences, which is the same two measures
@@ -345,6 +350,23 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
     }
 
     /**
+     * A side is one word whichever way the arithmetic left it unheld, and it is not the word for a
+     * line that has no place.
+     *
+     * <p>The two ways are the run's and the number's, and a reader is told neither: what the
+     * document says is that the line is placed and the value beside it was not worked out. Sent to
+     * the word for a line with no place, that would be a sentence about a constant of the rule.
+     */
+    @Test
+    void aSideIsOneWordWhicheverWayTheArithmeticLeftItUnheldAndIsNotALineWithNoPlace() {
+        for (souther.compiler.numeric.UnheldNumber why
+                : souther.compiler.numeric.UnheldNumber.values()) {
+            assertEquals(UndividedPosition.Reason.LINE_SIDE_NOT_WORKED_OUT,
+                    ReportedReason.of(new BlockReason.LineSideNotWorkedOut(why)), why.name());
+        }
+    }
+
+    /**
      * Every member of the seal is in the lists above.
      *
      * <p>The lists are written out rather than found by reflection, because what this test is about
@@ -406,6 +428,8 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.UnreadComparisonForm(),
                 new BlockReason.UnreadComparisonDomain(),
                 new BlockReason.LineAtANumberNoRatioHolds(),
+                new BlockReason.LineSideNotWorkedOut(
+                        souther.compiler.numeric.UnheldNumber.NO_REPRESENTATION_EXISTS),
                 new BlockReason.RuleAboutADerivedValue(),
                 new BlockReason.RuleAboutAnElementOfSeveralSequences(),
                 new BlockReason.UnreadValueRule(),

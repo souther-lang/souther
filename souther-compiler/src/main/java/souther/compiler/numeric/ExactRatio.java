@@ -8,6 +8,7 @@ import souther.exact.ExactParts;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
+import java.util.Optional;
 import java.util.OptionalInt;
 
 /**
@@ -606,7 +607,7 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
     }
 
     /**
-     * This as a decimal a model could write, or {@code null} where the caller cannot have one.
+     * This as a decimal a model could write, with the three ways it can come to none kept apart.
      *
      * <p>A ratio terminates exactly where its denominator is made of the factors ten is made of,
      * which here is where nothing is left below the line once both of them are held as exponents. A
@@ -614,21 +615,27 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
      * caller asking has to know whether it was handed the value or an approximation of it, and a
      * number that came back cannot be asked which it was.
      *
-     * <p><b>And {@code null} for a value past the scale a decimal has</b>, which is the other way a
-     * value is not one: both are rules of the language, both are settled by
-     * {@link #fitsWrittenDecimal}, and a reader branching on the null is answering the question it
-     * thinks it is.
+     * <p>A held empty answer says no decimal is this value: a third, or a value past the scale a
+     * decimal has, which is the other way a value is not one and is settled by
+     * {@link #fitsWrittenDecimal}. Both are facts about the number.
      *
-     * <p><b>What does not come back as {@code null} is a shortage of room.</b> A value this says is
+     * <p>An unheld answer says the host had no room to write the decimal out: a value this says is
      * a decimal, written at a scale this language has, whose digits are more than a whole number
-     * this host addresses, leaves as a failure of the run. Handed back as a {@code null} it would
-     * have become the answer that no decimal is this value — and then a coset would have said it
-     * holds nothing, a bound that no value stands at it, and a search that a position has nowhere to
-     * go. What a machine ran out of is not what a set contains.
+     * this host addresses. That is a fact about the run and says nothing about which values exist.
+     * Handed back as an empty answer it would become the answer that no decimal is this value — and
+     * then a coset would have said it holds nothing, a bound that no value stands at it, and a
+     * search that a position has nowhere to go. What a machine ran out of is not what a set
+     * contains.
      *
-     * @throws ArithmeticException where the digits are past what a whole number here holds
+     * <p>The only way to ask a number for its digits: there is no member that throws for want of
+     * room, so a reader that reads the difference off the type has no failure to catch and none can
+     * turn it into an absence by accident.
      */
-    public BigDecimal asWrittenDecimal() {
+    public ExactAnswer<Optional<BigDecimal>> writtenDecimal() {
+        return ExactAnswer.of(() -> Optional.ofNullable(written()));
+    }
+
+    private BigDecimal written() {
         if (isZero()) {
             return BigDecimal.ZERO;
         }

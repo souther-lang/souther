@@ -73,21 +73,21 @@ class AnExactRatioIsOneValueHoweverItArrivedTest {
 
     @Test
     void aRatioThatTerminatesComesBackAsTheDecimalItIs() {
-        assertEquals(new BigDecimal("0.5"), ratio(1, 2).asWrittenDecimal());
-        assertEquals(new BigDecimal("0.125"), ratio(1, 8).asWrittenDecimal());
-        assertEquals(new BigDecimal("0.12"), ratio(3, 25).asWrittenDecimal());
-        assertEquals(new BigDecimal("7"), ExactRatio.of(7).asWrittenDecimal());
-        assertEquals(new BigDecimal("-0.05"), ratio(-1, 20).asWrittenDecimal());
+        assertEquals(new BigDecimal("0.5"), WrittenDecimals.of(ratio(1, 2)));
+        assertEquals(new BigDecimal("0.125"), WrittenDecimals.of(ratio(1, 8)));
+        assertEquals(new BigDecimal("0.12"), WrittenDecimals.of(ratio(3, 25)));
+        assertEquals(new BigDecimal("7"), WrittenDecimals.of(ExactRatio.of(7)));
+        assertEquals(new BigDecimal("-0.05"), WrittenDecimals.of(ratio(-1, 20)));
     }
 
     /** The whole reason this type exists: a third is not a decimal, and saying so is the answer
      *  rather than handing back a rounded one that a later reader cannot tell from an exact one. */
     @Test
     void aRatioThatDoesNotTerminateSaysSoRatherThanRounding() {
-        assertNull(ratio(1, 3).asWrittenDecimal());
-        assertNull(ratio(2, 7).asWrittenDecimal());
-        assertNull(ratio(1, 30).asWrittenDecimal());
-        assertNotNull(ratio(1, 40).asWrittenDecimal(), "forty is twos and a five");
+        assertNull(WrittenDecimals.of(ratio(1, 3)));
+        assertNull(WrittenDecimals.of(ratio(2, 7)));
+        assertNull(WrittenDecimals.of(ratio(1, 30)));
+        assertNotNull(WrittenDecimals.of(ratio(1, 40)), "forty is twos and a five");
     }
 
     @Test

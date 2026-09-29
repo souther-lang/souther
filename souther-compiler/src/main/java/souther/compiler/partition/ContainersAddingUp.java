@@ -729,7 +729,13 @@ final class ContainersAddingUp {
             if (atAnswer instanceof ExactAnswer.Unheld<ExactRatio> unheldAt) {
                 return new Split.NotWorkedOut(unheldAt.why());
             }
-            BigDecimal at = ((ExactAnswer.Held<ExactRatio>) atAnswer).value().asWrittenDecimal();
+            ExactAnswer<Optional<BigDecimal>> written =
+                    ((ExactAnswer.Held<ExactRatio>) atAnswer).value().writtenDecimal();
+            if (written instanceof ExactAnswer.Unheld<Optional<BigDecimal>> unheldWritten) {
+                return new Split.NotWorkedOut(unheldWritten.why());
+            }
+            BigDecimal at = ((ExactAnswer.Held<Optional<BigDecimal>>) written).value()
+                    .orElse(null);
             if (at == null) {
                 return new Split.NotWorkedOut(UnheldNumber.NO_REPRESENTATION_EXISTS);
             }

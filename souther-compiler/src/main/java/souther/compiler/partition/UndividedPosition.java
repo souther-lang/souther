@@ -223,6 +223,17 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         LINE_AT_A_NUMBER_NO_RATIO_HOLDS,
         /**
+         * The comparison is against values a line can be drawn on, the line is placed, and a value
+         * beside it is one this compiler could not work out.
+         *
+         * <p>Its own word beside {@link #LINE_AT_A_NUMBER_NO_RATIO_HOLDS}, which says the line has no
+         * place. Here it has one, and what could not be written down is what the order holds on
+         * either side of it — the host had no room for the count, or the number has no representation
+         * on the position's carrier. Told the first, an author looks for a constant at the end of the
+         * range, and the line is fine.
+         */
+        LINE_SIDE_NOT_WORKED_OUT,
+        /**
          * The line reaches positions under the cases each side of it, and which of them go together
          * is not worked out.
          *

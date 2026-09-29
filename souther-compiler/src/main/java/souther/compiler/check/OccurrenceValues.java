@@ -8,6 +8,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.TypeSymbol;
 
 import java.math.BigDecimal;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -96,7 +97,13 @@ public final class OccurrenceValues {
                 || !(apart.value().plus(ExactRatio.ONE) instanceof ExactAnswer.Held<ExactRatio> held)) {
             return Cardinality.UNKNOWN;
         }
-        BigDecimal span = held.value().asWrittenDecimal();
+        // A whole number, so a decimal it is; and one the host may have no room to write out, which
+        // is a span this cannot count for the same reason as the two above.
+        if (!(held.value().writtenDecimal() instanceof ExactAnswer.Held<Optional<BigDecimal>> written)
+                || written.value().isEmpty()) {
+            return Cardinality.UNKNOWN;
+        }
+        BigDecimal span = written.value().get();
         if (span.signum() <= 0) {
             return Cardinality.none(new Emptiness.EmptyNumericInterval());
         }

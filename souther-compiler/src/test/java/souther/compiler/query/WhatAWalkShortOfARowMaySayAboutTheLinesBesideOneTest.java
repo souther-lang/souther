@@ -163,7 +163,8 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
     @Test
     void theLineItNamesAnswersAlikeAtEveryRowAndDiffersAtTheInputItNames() {
         Border border = TheLinesBesideABorder.aLineOverTwoPositions();
-        OrderedAffineBoundary drawn = OrderedAffineBoundary.of(border);
+        OrderedAffineBoundary drawn = OrderedAffineBoundary.of(border)
+                .orFail("a line worked out").orElseThrow();
         AnotherLineTheRowsAllow.OneDoes named = assertInstanceOf(
                 AnotherLineTheRowsAllow.OneDoes.class, of(ALIKE_UNDER_BOTH, everyOne()));
 

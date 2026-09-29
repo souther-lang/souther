@@ -19,8 +19,8 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
  * One line a rule drew, and what a row is owed at each of the points it has.
@@ -552,10 +552,27 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      */
     public static Border at(BoundaryTarget target, LineOrigin origin, NumericDomain.Bounds within,
                             List<Parting> parted, NarrowedBounds narrowed) {
+        return at(target, origin, within, ExactAnswer.held(parted), narrowed);
+    }
+
+    /**
+     * The same, where the places the other rules part this quantity may include one that was not
+     * worked out.
+     *
+     * <p>A place that was not worked out is not a place with nothing at it: the runs of the
+     * arrangement lie between the places, so with one missing none of them is known to be the run
+     * it looks like. Every point read off the arrangement is then answered as not worked out, and
+     * the points at the line, which the order alone answers, are asked as they always are.
+     *
+     * @param parted every place the rules part this quantity's values, or the way one of them was
+     *               not worked out
+     */
+    public static Border at(BoundaryTarget target, LineOrigin origin, NumericDomain.Bounds within,
+                            ExactAnswer<List<Parting>> parted, NarrowedBounds narrowed) {
         NumericDomain.Bounds reach = within == null ? new NumericDomain.Bounds(null, null) : within;
         LevelSpace space = target.levels();
         Level cut = target.at();
-        if (!reaches(cut, seamOf(space, cut, origin), origin.lineFacts().claim(),
+        if (!reaches(cut, () -> seamOf(space, cut, origin), origin.lineFacts().claim(),
                 drawnByAnInvariant(origin), within)) {
             // Asked and answered by whoever holds the rule. Reaching here is that reader and this
             // one disagreeing about one line, which is not a state a model can put them in.
@@ -563,18 +580,21 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                     "a border built on a line the quantity does not reach: " + target.left()
                             + " at " + target.right());
         }
-        List<Parting> mine = partedBy(target, origin);
-        List<Parting> all = new ArrayList<>(parted);
         // Handed over as candidates rather than told apart here. Whether this line is one the
         // others already hold is a question about where the values part, and the arrangement is
         // what answers it — asked here as well, this reading kept whichever of two lines at one
         // place it met first and the other went unsaid.
-        all.addAll(mine);
-        QuantityArrangement arrangement = QuantityArrangement.of(space, all,
-                DomainEnds.leaving(space, cut, reach, narrowed));
+        ExactAnswer<Arranged> arranged = parted.flatMap(others ->
+                partedBy(target, origin).map(mine -> {
+                    List<Parting> all = new ArrayList<>(others);
+                    all.addAll(mine);
+                    return new Arranged(QuantityArrangement.of(space, all,
+                            DomainEnds.leaving(space, cut, reach, narrowed)), mine);
+                }));
         Map<DomainPoint, PointAnswer> demands = new LinkedHashMap<>();
         if (drawnByAnInvariant(origin)) {
-            aBound(demands, origin, target.of(), cut, space, reach, arrangement);
+            aBound(demands, origin, target.of(), cut, space, reach,
+                    arranged.map(Arranged::arrangement));
             return new Border(target, origin, demands);
         }
         againstTheLine(demands, origin, cut, space, reach);
@@ -589,12 +609,22 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         // run — this border's run above and the next border's run below — both started at the same
         // end of it.
         for (Towards side : Towards.values()) {
-            demands.put(new DomainPoint.InTheRegion(side),
-                    runOf(space, runBeside(arrangement, mine, side),
-                            levelAgainstTheLineOn(demands, origin, side), side));
+            demands.put(new DomainPoint.InTheRegion(side), switch (arranged) {
+                // Not the run the rules leave nothing in: one of the places the values part was not
+                // worked out, so no run beside this line is known to be the one it looks like.
+                case ExactAnswer.Unheld<Arranged> unheld ->
+                        new PointAnswer.NotWorkedOut(unheld.why());
+                case ExactAnswer.Held<Arranged> held ->
+                        runOf(space, runBeside(held.value().arrangement(), held.value().mine(), side),
+                                levelAgainstTheLineOn(demands, origin, side), side);
+            });
         }
         return new Border(target, origin, demands);
     }
+
+    /** The arrangement of every place the rules part a quantity, and the places this line's own
+     *  rule parts it at. */
+    private record Arranged(QuantityArrangement arrangement, List<Parting> mine) {}
 
     /**
      * The point at the line, and the nearest value on each side of it whose class differs.
@@ -691,11 +721,11 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * the top of a range there is none: {@code value /= 100} under {@code value <= 100} would draw
      * no line at all, and a rule of the model would go unmeasured.
      *
-     * @param parts where the rule parts the values, of a rule that ordered them. Null where it
-     *              names a value instead, which parts them at no one place
+     * @param parts where the rule parts the values, of a rule that ordered them. Asked only of
+     *              such a rule: one that names a value parts them at no one place
      * @param claim what the rule placed on the values, which is what says which question this is
      */
-    public static boolean reaches(Level cut, Seam parts,
+    public static boolean reaches(Level cut, Supplier<ExactAnswer<Seam>> parts,
                                   ComparisonClaim claim,
                                   boolean drawnByAnInvariant, NumericDomain.Bounds within) {
         if (within == null) {
@@ -705,7 +735,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
             case ComparisonClaim.Singled _ -> admits(within, cut);
             case ComparisonClaim.Cut order -> {
                 Towards kept = order.satisfyingSide();
-                yield standsAt(within, cut, parts, kept)
+                yield standsAt(within, cut, parts.get(), kept)
                         // A line with two sides owes a point against the line on each of them, so
                         // the line's own value is enough for it to be one somebody can write a row
                         // against: the side a rule is satisfied on may hold nothing while a row at
@@ -734,10 +764,18 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * the values part to within one step of the quantity either way, and a caller with no place to
      * ask about has nothing better to ask about than that.
      */
-    private static boolean standsAt(NumericDomain.Bounds within, Level cut, Seam parts,
-                                    Towards side) {
-        Level leaves = parts.leaving(side);
-        return admits(within, leaves == null ? cut : leaves);
+    private static boolean standsAt(NumericDomain.Bounds within, Level cut,
+                                    ExactAnswer<Seam> parts, Towards side) {
+        return switch (parts) {
+            // A line is dropped for a proof that the quantity does not reach it, and a place that
+            // was not worked out is no such proof: the line stays, and the border on it says which
+            // of its points were not worked out.
+            case ExactAnswer.Unheld<Seam> _ -> true;
+            case ExactAnswer.Held<Seam> held -> {
+                Level leaves = held.value().leaving(side);
+                yield admits(within, leaves == null ? cut : leaves);
+            }
+        };
     }
 
     /**
@@ -808,6 +846,9 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         // `a + 2b > 20` run the same way — and the numbers they carry are not comparable until both
         // are read as what they are a multiple of.
         java.util.Map<String, List<Parting>> byQuantity = new LinkedHashMap<>();
+        // A quantity one of whose lines has a place that was not worked out. Kept as the way it
+        // was not, so that every border on the quantity can say so.
+        java.util.Map<String, UnheldNumber> notWorkedOut = new LinkedHashMap<>();
         alsoParted.forEach((key, parted) ->
                 byQuantity.computeIfAbsent(key, _ -> new ArrayList<>()).addAll(parted));
         for (LineDrawn each : drawn) {
@@ -817,8 +858,14 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
             // Every line as it was read. Two of them at one place are one place with two lines
             // against it, which the arrangement says and this does not: told apart here, whichever
             // was read first stood for the other and the second line was not written down anywhere.
-            byQuantity.computeIfAbsent(each.cuts().quantity().key(), _ -> new ArrayList<>())
-                    .add(Parting.by(each.cuts().seam(), each.by().authoredLine()));
+            String quantity = each.cuts().quantity().key();
+            switch (each.cuts().seam()) {
+                case ExactAnswer.Held<Seam> held -> byQuantity
+                        .computeIfAbsent(quantity, _ -> new ArrayList<>())
+                        .add(Parting.by(held.value(), each.by().authoredLine()));
+                case ExactAnswer.Unheld<Seam> unheld ->
+                        notWorkedOut.putIfAbsent(quantity, unheld.why());
+            }
         }
         List<Border> out = new ArrayList<>();
         for (LineDrawn each : drawn) {
@@ -826,13 +873,13 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
             // a row in. A border reads rows through the form it was written as, so a run handed to
             // it in another scale would be held against numbers of a different size.
             ExactRatio per = each.cuts().per();
-            // A line beside this one that stands at a number no ratio holds in this rule's units is
-            // left out: the run between two lines is then read to the next one this can place, which
-            // is wider than the truth and so admits every row the truth admits.
-            List<Parting> beside =
-                    byQuantity.getOrDefault(each.cuts().quantity().key(), List.of())
-                            .stream().map(parting -> parting.scaledBy(per))
-                            .filter(Objects::nonNull).toList();
+            // A line beside this one whose place in this rule's units was not worked out leaves the
+            // arrangement unknown, and not wider than it was: the run between two lines is read to
+            // the next one this can place only if it is known that no line lies between, and here
+            // that is the one thing not known.
+            ExactAnswer<List<Parting>> beside = inTheUnitsOf(per,
+                    byQuantity.getOrDefault(each.cuts().quantity().key(), List.of()),
+                    notWorkedOut.get(each.cuts().quantity().key()));
             // One line drawn, one border. Which lines there are was settled by whoever read the
             // rules — a comparison whose line the quantity does not reach is no line, and says so
             // there ({@code ComparisonAssessment.OutsideTheDomain}) — so nothing here decides it
@@ -843,12 +890,37 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
             // this reading lost — the account is asked of the lines and not of how many times the
             // loop went round.
             read.found(each.cuts().target(), each.by());
-            Border made = at(each.cuts().target(), each.by(), each.cuts().within(), beside);
+            Border made = at(each.cuts().target(), each.by(), each.cuts().within(), beside,
+                    NarrowedBounds.NOTHING);
             if (out.stream().noneMatch(had -> had.sameReadingAs(made))) {
                 out.add(read.drew(made));
             }
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * {@code parted} said in units {@code per} times smaller, or the way one of the places was not
+     * worked out there.
+     *
+     * @param notWorkedOut the way a place of this quantity was not worked out before it was read in
+     *                     any units, or null where none was
+     */
+    private static ExactAnswer<List<Parting>> inTheUnitsOf(ExactRatio per, List<Parting> parted,
+                                                          UnheldNumber notWorkedOut) {
+        if (notWorkedOut != null) {
+            return ExactAnswer.unheld(notWorkedOut);
+        }
+        List<Parting> scaled = new ArrayList<>();
+        for (Parting each : parted) {
+            switch (each.scaledBy(per)) {
+                case ExactAnswer.Held<Parting> held -> scaled.add(held.value());
+                case ExactAnswer.Unheld<Parting> unheld -> {
+                    return ExactAnswer.unheld(unheld.why());
+                }
+            }
+        }
+        return ExactAnswer.held(List.copyOf(scaled));
     }
 
     /**
@@ -862,24 +934,24 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * the place: two rules can part the values at one number, and each of them is one an author
      * could move without touching the other.
      */
-    public static List<Parting> partedBy(BoundaryTarget target, LineOrigin origin) {
+    public static ExactAnswer<List<Parting>> partedBy(BoundaryTarget target, LineOrigin origin) {
         LevelSpace space = target.levels();
         Level cut = target.at();
         if (drawnByAnInvariant(origin)) {
             // A bound is where the quantity stops rather than a place its values part: nothing
             // outside one can be constructed, so there is no run on the far side.
-            return List.of();
+            return ExactAnswer.held(List.of());
         }
         return switch (origin.lineFacts().claim()) {
-            case ComparisonClaim.Cut order -> List.of(Parting.by(Seam.of(space, cut,
-                    order.valueBelongs()),
-                    origin.authoredLine()));
+            case ComparisonClaim.Cut order -> Seam.of(space, cut, order.valueBelongs()).map(seam ->
+                    List.of(Parting.by(seam, origin.authoredLine())));
             // The place under the value and the place over it, with the value between them. Which
             // of the two bounds which side is the arrangement's answer and not this one's: a run
             // is on a side of the line by what stops it, and that is a fact about the runs.
-            case ComparisonClaim.Singled _ -> List.of(
-                    Parting.by(Seam.of(space, cut, Towards.ABOVE), origin.authoredLine()),
-                    Parting.by(Seam.of(space, cut, Towards.BELOW), origin.authoredLine()));
+            case ComparisonClaim.Singled _ -> Seam.of(space, cut, Towards.ABOVE).flatMap(above ->
+                    Seam.of(space, cut, Towards.BELOW).map(below -> List.of(
+                            Parting.by(above, origin.authoredLine()),
+                            Parting.by(below, origin.authoredLine()))));
         };
     }
 
@@ -1004,7 +1076,8 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      */
     private static void aBound(Map<DomainPoint, PointAnswer> demands, LineOrigin origin,
                                BorderQuantity of, Level cut, LevelSpace space,
-                               NumericDomain.Bounds within, QuantityArrangement arrangement) {
+                               NumericDomain.Bounds within,
+                               ExactAnswer<QuantityArrangement> arrangement) {
         Towards kept = satisfyingSide(origin);
         boolean holdsHere = holdsAtTheValue(origin);
         // Asked of a bound on a position and of nothing else. A position's range ends where its own
@@ -1032,8 +1105,12 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         // starts past the cut: looked up by the cut, the run a bound leaves was no run of the
         // arrangement at all and the row away from its line came back refused.
         Level against = against(on) != null ? against(on) : cut;
-        demands.put(new DomainPoint.InTheRegion(kept),
-                runOf(space, arrangement.endmost(kept), against, kept));
+        demands.put(new DomainPoint.InTheRegion(kept), switch (arrangement) {
+            case ExactAnswer.Unheld<QuantityArrangement> unheld ->
+                    new PointAnswer.NotWorkedOut(unheld.why());
+            case ExactAnswer.Held<QuantityArrangement> held ->
+                    runOf(space, held.value().endmost(kept), against, kept);
+        });
         demands.put(new DomainPoint.InTheRegion(kept.opposite()),
                 new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT));
     }
@@ -1092,7 +1169,12 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         // — and the range this is held against stops there too. Held against the number instead,
         // the two agree wherever a rule admits its threshold and are one count apart wherever it
         // does not, which is half the operators an author can write.
-        Level leaves = Seam.of(space, cut, valueBelongs(origin)).leaving(kept);
+        // Held against what the seam leaves, which is a comparison only a seam that was worked out
+        // can make: there is nothing to hold the end against where it was not.
+        if (!(Seam.of(space, cut, valueBelongs(origin)) instanceof ExactAnswer.Held<Seam> parted)) {
+            return;
+        }
+        Level leaves = parted.value().leaving(kept);
         if (end == null || !end.at().sameAs(leaves.asAPlace())) {
             throw new IllegalStateException(
                     "a bound whose line is not where what it leaves stops: "
@@ -1161,16 +1243,18 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
     }
 
     /**
-     * Where this rule parts the quantity's values, or null where it parts them at no one place.
+     * Where this rule parts the quantity's values, of a rule that orders them.
      *
      * <p>A seam is an order's: the last value on one side and the first on the other. A rule that
      * names a value has the values beside it on both sides of what it distinguishes, so there is no
      * one place to put a seam at — and whoever asks about such a line asks about the value itself.
      */
-    private static Seam seamOf(LevelSpace space, Level cut, LineOrigin origin) {
+    private static ExactAnswer<Seam> seamOf(LevelSpace space, Level cut, LineOrigin origin) {
         if (!(origin.lineFacts().claim()
                 instanceof ComparisonClaim.Cut order)) {
-            return null;
+            throw new IllegalStateException(
+                    "where a rule parts the values, asked of one that names a value: "
+                            + origin.saidWithoutAPlace());
         }
         return Seam.of(space, cut, order.valueBelongs());
     }

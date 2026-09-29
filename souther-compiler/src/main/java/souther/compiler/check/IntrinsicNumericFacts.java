@@ -13,6 +13,7 @@ import souther.compiler.types.ValueName;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Function;
 
 /**
@@ -226,7 +227,15 @@ final class IntrinsicNumericFacts {
      */
     private static BigDecimal constantOf(Core e, Denotations at, Terms terms) {
         LinearForm<FactSubject> form = terms.affineOf(e, at);
-        return form == null || !form.coefs().isEmpty() ? null
-                : form.constant().asWrittenDecimal();
+        if (form == null || !form.coefs().isEmpty()) {
+            return null;
+        }
+        // Nothing where the host has no room to write the constant out, as where no decimal is it:
+        // a bound this hands over is a written constant or no fact, and no fact is the fact a
+        // library's own arithmetic can always be given.
+        return switch (form.constant().writtenDecimal()) {
+            case ExactAnswer.Held<Optional<BigDecimal>> held -> held.value().orElse(null);
+            case ExactAnswer.Unheld<Optional<BigDecimal>> _ -> null;
+        };
     }
 }

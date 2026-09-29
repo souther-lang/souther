@@ -189,7 +189,7 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
                 "and one line, one name");
         assertEquals(ExactRatio.of(wide).key(), counted.key(),
                 "a number the quantity counts to is named by the ratio's own name");
-        assertTrue(Seam.of(LevelSpace.onACarrier(DECIMALS), line, Towards.BELOW)
+        assertTrue(HeldSeams.of(LevelSpace.onACarrier(DECIMALS), line, Towards.BELOW)
                         .key().length() < 128,
                 "and the division that line makes is named from the same parts");
 
@@ -281,7 +281,7 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
         assertEquals("2026-01-01", day.written(), "and what an author reads is the date");
         assertEquals(days.written(Count.of(20454)), day.written(),
                 "which is what the carrier says of that place");
-        assertEquals("20454|20455", Seam.of(LevelSpace.onACarrier(days), day, Towards.BELOW)
+        assertEquals("20454|20455", HeldSeams.of(LevelSpace.onACarrier(days), day, Towards.BELOW)
                         .spelled(),
                 "and the division of the days is spelled from the counts either side of it");
         assertEquals("7", Level.OfTheQuantity.of(7).written(),
