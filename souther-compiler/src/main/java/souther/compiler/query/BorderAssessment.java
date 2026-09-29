@@ -147,6 +147,10 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
                     WeakeningSet.of(new Weakening.ABorderNotHeldAgainstTheLinesBesideIt(border,
                             Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why
                                     .ARITHMETIC_COULD_NOT_HOLD_A_FAMILY_MEMBER));
+            // What the border's own points already say: the exact arithmetic gave out on the
+            // numbers beside its line, so where a row is owed there is undecided.
+            case AnotherLineTheRowsAllow.Unsettled.TheLineWasNotWorkedOut(var not) ->
+                    WeakeningSet.of(new Weakening.ItemsPlaceNotWorkedOut(border, not));
         };
     }
 

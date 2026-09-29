@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 
 import java.util.ArrayList;
@@ -62,11 +63,10 @@ public record Parting(Seam geometry, List<AuthoredLine> alternatives) {
     }
 
     /** The same place said in units {@code per} times smaller, which is what a rule that wrote a
-     *  multiple of the quantity divides in the quantity's own terms. Null where the place in those
-     *  units has no representation. */
-    public Parting scaledBy(ExactRatio per) {
-        Seam scaled = geometry.scaledBy(per);
-        return scaled == null ? null : new Parting(scaled, alternatives);
+     *  multiple of the quantity divides in the quantity's own terms. Unheld where a number the place
+     *  holds was not held in those units. */
+    public ExactAnswer<Parting> scaledBy(ExactRatio per) {
+        return geometry.scaledBy(per).map(scaled -> new Parting(scaled, alternatives));
     }
 
     /** What makes two of these one place, which is the quantity's answer and not the model's. */

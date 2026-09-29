@@ -513,7 +513,10 @@ public record Settlements(List<ObligationIdentity> requested,
                     for (ARowTellingTheLinesApart.AtOneReading one : at.toldApart().each()) {
                         besides.computeIfAbsent(item, _ -> new ArrayList<>())
                                 .add(new ALineBesideOne(subject.at(one.reading()),
-                                        OrderedAffineBoundary.of(one.reading()), named, one));
+                                        OrderedAffineBoundary.of(one.reading())
+                                                .orFail("a line the rows allow beside one whose"
+                                                        + " values were not worked out")
+                                                .orElse(null), named, one));
                     }
                 }
             }

@@ -8,12 +8,14 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.TermOrders;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Towards;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * What one comparison cuts, and where — the one place that decides it.
@@ -152,20 +154,23 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
-     * Whether every number this line is read through is one an exact ratio holds.
+     * Whether the line itself can be placed: the quantity's own coefficients and the place the line
+     * falls at, in the quantity's own units, are numbers an exact ratio holds.
      *
      * <p>Asked once, where the line is drawn, so that what reads a line afterwards is never handed
-     * one it has no number for: the quantity's own coefficients, the place the line falls at, and the
-     * values either side of it are all divided by how much of the quantity the rule wrote, and any
-     * of those divisions can pass the exponents a ratio holds when the rule is written at their ends.
+     * one it has no place for. Both are divided by how much of the quantity the rule wrote, and
+     * either division can pass the exponents a ratio holds when the rule is written at their ends.
+     *
+     * <p>Only the line. The values beside it are a separate question ({@link #seam}), because a line
+     * that is placed is a line the rule drew whether or not the values beside it were worked out.
      */
-    boolean numbersAreHeld() {
-        return QuantityKey.tryOf(of.direction()) != null && Seam.where(of, at, claim) != null;
+    boolean lineIsPlaced() {
+        return QuantityKey.tryOf(of.direction()) != null && CutPosition.holdsWhereItFalls(at, per());
     }
 
-    /** The line, or the refusal to place it when a number it is read through has no representation. */
+    /** The line, or the refusal to place it when the number it falls at has no representation. */
     private static Read cutsOrRefused(Cutting cutting) {
-        return cutting.numbersAreHeld()
+        return cutting.lineIsPlaced()
                 ? new Read.Cuts(cutting)
                 : new Read.NumberNoRatioHolds(AffineReading.filedAt(cutting.of().terms()));
     }
@@ -453,8 +458,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * written form attains — {@code 2 * n <= 9} cuts the even numbers and nine is not one of them,
      * so the two sides part between eight and ten. Read back afterwards, which is exact: a level the
      * written form attains is a multiple of how much of the quantity it wrote.
+     *
+     * <p>Unheld where a value beside the line was not worked out — the exact arithmetic ran out of
+     * room for it, or it has no representation. The line is still the rule's, so this is asked of a
+     * line that {@link #lineIsPlaced} has already answered for, and the caller says what a side it
+     * could not work out means to its own question.
      */
-    Seam seam() {
+    ExactAnswer<Seam> seam() {
         return Seam.where(of, at, claim);
     }
 
@@ -498,12 +508,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * one coordinate says the rule cuts that position, and whether the position has a value where
      * the line falls is asked of the order it sits on.
      */
-    Place singledValue() {
+    ExactAnswer<Optional<Place>> singledValue() {
         // On the order the position it divides is written on. A quantity used to answer with one
         // order for everything under it; a form may now be over positions written back differently,
         // and the value named here is a value of one of them.
         NumericTerm divides = dividedPosition();
-        return seam().at().asAValueOf(divides == null ? null : of.carrierOf(divides));
+        return seam().flatMap(parts ->
+                parts.at().asAValueOf(divides == null ? null : of.carrierOf(divides)));
     }
 
     /**
@@ -514,15 +525,17 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * four and five, and nine halved is not a whole number at all. Which of the two the classes meet
      * at is which side the threshold's own value belongs to, and that is the rule's to say.
      */
-    Place dividedValue() {
+    ExactAnswer<Optional<Place>> dividedValue() {
         ComparisonClaim.Cut order = ordering();
         if (order == null) {
             throw new IllegalStateException("which value a rule divides at, asked of one that names"
                     + " a value and divides at neither side of it: " + at);
         }
-        Seam seam = seam();
-        Level side = order.valueBelongs() == Towards.BELOW ? seam.below() : seam.above();
-        return side instanceof Level.OnACarrier on ? on.at() : null;
+        return seam().map(seam -> {
+            Level side = order.valueBelongs() == Towards.BELOW ? seam.below() : seam.above();
+            return side instanceof Level.OnACarrier on
+                    ? Optional.<Place>of(on.at()) : Optional.<Place>empty();
+        });
     }
 
     /**
@@ -539,10 +552,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * position at all, so every rule singling one out on such a quantity came back naming nothing —
      * which is true of {@code 2 * a + 2 * b == 9} and false of {@code a + b == 10}.
      */
-    boolean takesTheValueItNames() {
-        // `.orNull()` and not the refusal further up the chain answers with: this is a boolean
-        // question with nowhere yet to carry "not worked out" to.
-        return Boolean.TRUE.equals(of.levels().attainable(at).orNull());
+    ExactAnswer<Boolean> takesTheValueItNames() {
+        return of.levels().attainable(at);
     }
 
     /**

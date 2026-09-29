@@ -63,8 +63,13 @@ record ComparisonGeometry(List<RuleEvidence> evidence, List<LineDrawn> between) 
                             new GuardThresholds.Guards.Singled(at.position(), at.value(), origin)));
                 }
             }
+            // The seam is one the assessment asked for and held: a line whose sides were not worked
+            // out is assessed as unread and never reaches here as a line on a position.
             case ComparisonClaim.Cut order -> evidence.add(new RuleEvidence.Divides(
-                    new Threshold(at.position(), at.cutting().seam(), order.valueBelongs(), origin)));
+                    new Threshold(at.position(),
+                            at.cutting().seam().orFail("a line on a position was assessed"
+                                    + " with the values beside it not worked out"),
+                            order.valueBelongs(), origin)));
         }
         // And the line itself, where the position has no value beside it for a row to be owed at.
         List<LineDrawn> between = at.value() == null && at.drawsABorder()

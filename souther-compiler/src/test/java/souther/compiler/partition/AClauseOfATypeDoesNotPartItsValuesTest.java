@@ -26,6 +26,7 @@ import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.EndSide;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Towards;
 import souther.compiler.types.TypeKey;
@@ -145,7 +146,7 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
     /** A bound is where what it leaves stops, and stops nothing else. */
     @Test
     void aBoundPartsNothing() {
-        assertEquals(List.of(), Border.partedBy(aLineAt(100), aBound()),
+        assertEquals(ExactAnswer.held(List.of()), Border.partedBy(aLineAt(100), aBound()),
                 "nothing is outside a bound, so there is no run on the far side to be beside");
     }
 
@@ -153,7 +154,7 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
     @Test
     void aBoundADeclarationTookInPartsNothingEither() {
         Endpoint at = Endpoint.inclusive(Count.of(100));
-        assertEquals(List.of(), Border.partedBy(aLineAt(100),
+        assertEquals(ExactAnswer.held(List.of()), Border.partedBy(aLineAt(100),
                         LineOrigin.NarrowedOrigin.of(aBound(), at, aDeclarationHolding(at))),
                 "taking an end in moves where the position stops, which is not dividing it");
     }

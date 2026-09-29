@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 
@@ -45,7 +46,7 @@ public sealed interface Level {
          * holds one.
          *
          * <p><b>Both halves of what a value of a carrier is.</b> A number becomes one by being a
-         * count at all ({@link Count#number(ExactRatio)}) and by being a count this order stands at
+         * count at all ({@link Count#written(ExactRatio)}) and by being a count this order stands at
          * ({@link Carrier#onTheGrid}) — halfway between two adjacent moments is a count and is no
          * date-time. Asking only the first builds a level saying it is a value of an order that has
          * nothing there, which is what this record's own account says it is not.
@@ -65,18 +66,25 @@ public sealed interface Level {
          *
          * <p>For a number this compiler worked out. A place the carrier itself handed over has
          * already been answered for by the carrier, and the constructor takes those as they are.
+         *
+         * <p><b>Unheld where the host had no room to write the count out.</b> That is a fact about
+         * the run and not about the number, so it is not one of the two refusals above: the caller
+         * says what a level it could not write means to its own question.
          */
-        public static OnACarrier held(Carrier of, ExactRatio number) {
-            Count count = Count.number(number);
-            Place value = of.onTheGrid(count);
-            if (value != null) {
-                return new OnACarrier(of, value);
-            }
-            if (of.extent().admits(count)) {
-                throw new IllegalStateException(
-                        "this order stands at no value there: " + of + " at " + number);
-            }
-            return new OnACarrier(of, count);
+        public static ExactAnswer<OnACarrier> held(Carrier of, ExactRatio number) {
+            return Count.written(number).flatMap(written -> {
+                Count count = written.orElseThrow(() -> new IllegalStateException(
+                        "no count on any carrier's order is this number: " + number));
+                Place value = of.onTheGrid(count);
+                if (value != null) {
+                    return ExactAnswer.held(new OnACarrier(of, value));
+                }
+                if (of.extent().admits(count)) {
+                    throw new IllegalStateException(
+                            "this order stands at no value there: " + of + " at " + number);
+                }
+                return ExactAnswer.held(new OnACarrier(of, count));
+            });
         }
 
         @Override

@@ -8,6 +8,7 @@ import souther.exact.ExactParts;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
+import java.util.Optional;
 import java.util.OptionalInt;
 
 /**
@@ -629,6 +630,22 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
      * @throws ArithmeticException where the digits are past what a whole number here holds
      */
     public BigDecimal asWrittenDecimal() {
+        return written();
+    }
+
+    /**
+     * This as a decimal a model could write, with the three ways it can come to none kept apart.
+     *
+     * <p>A held empty answer says no decimal is this value, which is a fact about the number. An
+     * unheld one says the host had no room to write the decimal out, which is a fact about the run
+     * and says nothing about which values exist. A caller that reads the difference off the type
+     * has no need to catch a failure, and none can turn it into an absence by accident.
+     */
+    public ExactAnswer<Optional<BigDecimal>> writtenDecimal() {
+        return ExactAnswer.of(() -> Optional.ofNullable(written()));
+    }
+
+    private BigDecimal written() {
         if (isZero()) {
             return BigDecimal.ZERO;
         }

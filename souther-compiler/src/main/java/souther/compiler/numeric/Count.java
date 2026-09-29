@@ -4,6 +4,7 @@ import souther.exact.ExactDecimals;
 import souther.exact.ExactFailure;
 
 import java.math.BigDecimal;
+import java.util.Optional;
 
 /**
  * The number a value counts to on its carrier's order, and never a number a model writes.
@@ -83,6 +84,21 @@ public record Count(BigDecimal at) implements Place {
     public static Count at(ExactRatio number) {
         BigDecimal written = number.asWrittenDecimal();
         return written == null ? null : new Count(written);
+    }
+
+    /**
+     * The count an exact number is, with a number no count is and a number the host had no room to
+     * write out told apart.
+     *
+     * <p>Three answers, and {@link #at} has two of them: it answers null for a third and throws for
+     * the machine running out of room. A reader whose own sound answer is not to throw, because the
+     * number came from a model's constants and not from a premise this compiler established, asks
+     * here. A held empty answer is a fact about the number; an unheld one is a fact about the run,
+     * and the reader chooses what it means for its own question.
+     */
+    public static ExactAnswer<Optional<Count>> written(ExactRatio number) {
+        return number.writtenDecimal().flatMap(decimal ->
+                ExactAnswer.held(decimal.map(Count::new)));
     }
 
     /**

@@ -1,13 +1,14 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.UnheldNumber;
 
 import java.math.BigInteger;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -44,16 +45,18 @@ class APositionAtANumberNoRatioHoldsIsRefusedNotBuiltTest {
     void aPositionScaledPastTheLeastExponentIsRefused() {
         CutPosition line = CutPosition.at(at(twoTo(Long.MIN_VALUE)));
 
-        assertNull(line.times(twoTo(-1)));
-        assertNotNull(line.times(twoTo(1)));
+        assertEquals(ExactAnswer.unheld(UnheldNumber.NO_REPRESENTATION_EXISTS),
+                line.times(twoTo(-1)));
+        assertTrue(line.times(twoTo(1)).isHeld());
     }
 
     @Test
     void aSeamScaledPastTheLeastExponentIsRefused() {
         Seam seam = new Seam(CutPosition.at(at(twoTo(Long.MIN_VALUE))), null, null);
 
-        assertNull(seam.scaledBy(twoTo(-1)));
-        assertNotNull(seam.scaledBy(twoTo(1)));
+        assertEquals(ExactAnswer.unheld(UnheldNumber.NO_REPRESENTATION_EXISTS),
+                seam.scaledBy(twoTo(-1)));
+        assertTrue(seam.scaledBy(twoTo(1)).isHeld());
     }
 
     @Test
@@ -62,7 +65,8 @@ class APositionAtANumberNoRatioHoldsIsRefusedNotBuiltTest {
                 new Seam(CutPosition.at(at(twoTo(Long.MIN_VALUE))), null, null),
                 WhatTheRulesTogetherLeaveAQuantityTest.aLine(0));
 
-        assertNull(parting.scaledBy(twoTo(-1)));
-        assertNotNull(parting.scaledBy(twoTo(1)));
+        assertEquals(ExactAnswer.unheld(UnheldNumber.NO_REPRESENTATION_EXISTS),
+                parting.scaledBy(twoTo(-1)));
+        assertTrue(parting.scaledBy(twoTo(1)).isHeld());
     }
 }

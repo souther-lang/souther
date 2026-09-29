@@ -19,14 +19,17 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.EndSide;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Towards;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
 import java.util.List;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -60,7 +63,7 @@ class OneBorderReadTwiceIsOneReadingTest {
     void arunOwedToMoreThingsIsAnotherReading() {
         Border rulesOnly = bound(List.of());
         Border andALine = bound(List.of(Parting.by(
-                Seam.of(space(), at(1000), Towards.BELOW), aComparison())));
+                HeldSeams.of(space(), at(1000), Towards.BELOW), aComparison())));
 
         assertTrue(rulesOnly.demand(PointRole.IN).sameAs(andALine.demand(PointRole.IN)),
                 "the run holds the same values either way");
@@ -124,7 +127,7 @@ class OneBorderReadTwiceIsOneReadingTest {
     @Test
     void theOrderWhatStopsARunWasFoundInIsNoPartOfTheReading() {
         Border one = bound(List.of(Parting.by(
-                Seam.of(space(), at(1000), Towards.BELOW), aComparison())));
+                HeldSeams.of(space(), at(1000), Towards.BELOW), aComparison())));
         Border other = reversed(one);
 
         assertNotEquals(one.answer(PointRole.IN).bases(), other.answer(PointRole.IN).bases(),
@@ -160,6 +163,29 @@ class OneBorderReadTwiceIsOneReadingTest {
                                 new NumericDomain.Bounds(Endpoint.inclusive(Count.of(100)),
                                         Endpoint.inclusive(Count.of(1000))))),
                 "the same rule met at another position is another reading of it");
+    }
+
+    /**
+     * A place another rule parts the quantity at that was not worked out leaves the run not worked
+     * out, and not wider.
+     *
+     * <p>The runs of an arrangement lie between its places, so with one missing none of them is
+     * known to be the run it looks like. Left out, the run would read to the next place that is
+     * known and a row written in it would be owed to a line it may not be inside.
+     */
+    @Test
+    void aPlaceThatWasNotWorkedOutLeavesTheRunNotWorkedOut() {
+        UnheldNumber why = UnheldNumber.MORE_ROOM_COULD_ANSWER;
+
+        Border border = Border.at(aLineAt("w.a", 100), aBound(),
+                new NumericDomain.Bounds(Endpoint.inclusive(Count.of(100)),
+                        Endpoint.inclusive(Count.of(1000))),
+                ExactAnswer.unheld(why), NarrowedBounds.NOTHING);
+
+        assertEquals(new PointAnswer.NotWorkedOut(why), border.answer(PointRole.IN),
+                "the run beside the line is one of the runs that lie between the places");
+        assertTrue(border.answer(PointRole.ON) instanceof PointAnswer.AtLine,
+                "and the point at the line, which the order alone answers, is asked as it always is");
     }
 
     /** A bound at a hundred, leaving everything up to a thousand, told about {@code parted}. */

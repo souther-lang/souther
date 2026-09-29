@@ -92,7 +92,7 @@ class AnAccountEstablishesItsDenominatorBeforeItCountsTest {
 
     private static RuleEvidence dividing(String at) {
         return new RuleEvidence.Divides(new Threshold(AT,
-                Seam.of(LevelSpace.onACarrier(new Carrier.Whole()),
+                HeldSeams.of(LevelSpace.onACarrier(new Carrier.Whole()),
                         new Level.OnACarrier(new Carrier.Whole(),
                                 new Count(new java.math.BigDecimal(at))),
                         Towards.BELOW),

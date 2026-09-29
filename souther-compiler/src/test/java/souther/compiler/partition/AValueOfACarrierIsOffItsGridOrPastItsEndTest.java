@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 
 import java.math.BigDecimal;
@@ -36,7 +37,7 @@ class AValueOfACarrierIsOffItsGridOrPastItsEndTest {
     /** A number the order stands at is the level, and the place is the count it is. */
     @Test
     void aNumberTheOrderStandsAtIsTheLevel() {
-        assertEquals(new Level.OnACarrier(WHOLE, Count.of(4)),
+        assertEquals(ExactAnswer.held(new Level.OnACarrier(WHOLE, Count.of(4))),
                 Level.OnACarrier.held(WHOLE, ExactRatio.of(4)));
     }
 
@@ -68,7 +69,7 @@ class AValueOfACarrierIsOffItsGridOrPastItsEndTest {
         ExactRatio pastTheEnd = ExactRatio.of(BigInteger.valueOf(Long.MAX_VALUE)
                 .add(BigInteger.ONE));
 
-        assertEquals(new Level.OnACarrier(WHOLE, Count.at(pastTheEnd)),
+        assertEquals(ExactAnswer.held(new Level.OnACarrier(WHOLE, Count.at(pastTheEnd))),
                 Level.OnACarrier.held(WHOLE, pastTheEnd));
     }
 }

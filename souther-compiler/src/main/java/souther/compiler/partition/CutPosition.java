@@ -10,6 +10,7 @@ import souther.compiler.numeric.UnheldNumber;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
+import java.util.Optional;
 import java.util.OptionalInt;
 
 /**
@@ -49,8 +50,21 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
      * with. An order with no numbers is never divided, so it is always held.
      */
     static boolean holdsWhereItFalls(Level written, ExactRatio per) {
+        return placed(written, per).isHeld();
+    }
+
+    /**
+     * The position a line written at {@code written} over {@code per} of the quantity is, or the way
+     * the number it falls at was not held.
+     *
+     * <p>The one way to build a position from a number this compiler worked out: a position whose
+     * number has no representation has nothing to answer with, so it is not built.
+     */
+    static ExactAnswer<CutPosition> placed(Level written, ExactRatio per) {
         ExactRatio at = numberOf(written);
-        return at == null || at.dividedBy(per).isHeld();
+        CutPosition line = new CutPosition(written, per);
+        return at == null ? ExactAnswer.held(line)
+                : at.dividedBy(per).flatMap(_ -> ExactAnswer.held(line));
     }
 
     /** A line at a level of the quantity itself, which is what a rule that wrote the whole of it
@@ -113,11 +127,16 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
 
     /**
      * This line in the one representation {@link #key()} names: the line in its terms
-     * ({@link #asARule}), and the place in the form the order holds it.
+     * ({@link #asARule}).
      *
      * <p>So that a value holding a position and compared as a value answers what {@link #key()}
      * would. A third and two sixths come back the same, and so do a line at {@code 0} and one at
      * {@code 0.00}. The terms answer for every line a ratio holds, so this does too.
+     *
+     * <p>Total: the place is put back on the carrier the rule was written on where the host has room
+     * to write the count, and is the number the terms come to where it has not. Which of the two it
+     * is follows from the terms and the carrier alone, so two lines at one place are one identity
+     * either way, and a line whose digits the host cannot write is still a line that has one.
      *
      * <p>An order with no numbers has no fraction to reduce, and its place is its own value.
      */
@@ -130,6 +149,23 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
     }
 
     /**
+     * What the line's terms say it comes to, put back on whatever order the line was written on.
+     *
+     * <p>A whole number wherever the terms are in lowest terms, so a carrier's order has a count at
+     * it wherever it has counts at all — and the number itself where the host has no room to write
+     * that count out.
+     */
+    private static Level reduced(Level written, ExactRatio to) {
+        return switch (written) {
+            case Level.OfTheQuantity _ -> new Level.OfTheQuantity(to);
+            case Level.OnACarrier on -> switch (Level.OnACarrier.held(on.of(), to)) {
+                case ExactAnswer.Held<Level.OnACarrier> held -> held.value();
+                case ExactAnswer.Unheld<Level.OnACarrier> _ -> new Level.OfTheQuantity(to);
+            };
+        };
+    }
+
+    /**
      * The same line on the quantity read the other way round.
      *
      * <p>The place negates and the share does not. How much of the quantity the rule wrote is a
@@ -139,19 +175,6 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
      */
     public CutPosition reflected() {
         return new CutPosition(written.negated(), per);
-    }
-
-    /**
-     * What the line's terms say it comes to, put back on whatever order the line was written on.
-     *
-     * <p>A whole number wherever the terms are in lowest terms, so a carrier's order has a count at
-     * it wherever it has counts at all.
-     */
-    private static Level reduced(Level written, ExactRatio to) {
-        return switch (written) {
-            case Level.OfTheQuantity _ -> new Level.OfTheQuantity(to);
-            case Level.OnACarrier on -> Level.OnACarrier.held(on.of(), to);
-        };
     }
 
     /**
@@ -175,27 +198,26 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
      * one it was said in: what a quantity's own level is, the form that wrote {@code k} of it calls
      * {@code k} times as much.
      *
-     * @return the position, or {@code null} where the number it comes to has no representation
+     * @return the position, or the way the number it comes to was not held
      */
-    public CutPosition times(ExactRatio k) {
+    public ExactAnswer<CutPosition> times(ExactRatio k) {
         ExactRatio at = numberOf(written);
         if (at == null || k.equals(ExactRatio.ONE)) {
-            return this;
+            return ExactAnswer.held(this);
         }
         // Scaled by exactly the share the rule wrote, the share divides out: the line is at the
         // number the rule carried, in the units the rule carried it in. Left in, the position was
         // right and the reading of it was not — a line the form does stand at went on answering
         // that the quantity has no value there, and the run above it could not say where it starts.
         if (k.equals(per)) {
-            return new CutPosition(new Level.OfTheQuantity(at), ExactRatio.ONE);
+            return ExactAnswer.held(new CutPosition(new Level.OfTheQuantity(at), ExactRatio.ONE));
         }
-        ExactRatio scaled = at.times(k).orNull();
-        return scaled == null ? null : new CutPosition(new Level.OfTheQuantity(scaled), per);
+        return at.times(k).flatMap(scaled -> placed(new Level.OfTheQuantity(scaled), per));
     }
 
     /**
-     * This line as a value of the position the quantity is a multiple of, or null where the
-     * position holds none there.
+     * This line as a value of the position the quantity is a multiple of, empty where the position
+     * holds none there, and unheld where the host had no room to write the count out.
      *
      * <p>Apart from {@link #asALevelOfTheQuantity}, which asks about the order the rule wrote the
      * line on. This asks about the position underneath it, and the two differ exactly where a rule
@@ -206,18 +228,19 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
      * ({@link Count#at}). A third is no count at all, and a count the carrier's own values step past
      * is no value of it either.
      */
-    public souther.compiler.numeric.Place asAValueOf(souther.compiler.check.Carrier carrier) {
+    public ExactAnswer<Optional<Place>> asAValueOf(souther.compiler.check.Carrier carrier) {
         if (carrier == null) {
-            return null;
+            return ExactAnswer.held(Optional.empty());
         }
         ExactRatio at = exactly();
         // An order with no numbers is never scaled — a rule holding two strings apart writes the
         // whole of what it cuts — so its line is its own value and there is nothing to divide.
         if (at == null) {
-            return per.equals(ExactRatio.ONE) ? written.asAPlace() : null;
+            return ExactAnswer.held(per.equals(ExactRatio.ONE)
+                    ? Optional.of(written.asAPlace()) : Optional.empty());
         }
-        Count count = Count.at(at);
-        return count == null ? null : carrier.onTheGrid(count);
+        return Count.written(at).flatMap(count -> ExactAnswer.held(
+                count.map(carrier::onTheGrid)));
     }
 
     /**

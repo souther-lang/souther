@@ -16,7 +16,9 @@ import souther.compiler.publish.PublicationOrders;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.PathReachability;
 import souther.compiler.check.RuleReadingContext;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.Place;
+import souther.compiler.partition.OrderedAffineBoundary;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ComparisonEmissionSite;
 import souther.compiler.coverage.CoverageSites;
@@ -51,6 +53,7 @@ import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -895,11 +898,16 @@ final class Coverages {
             List<Border> lines, Border but) {
         List<souther.compiler.partition.OrderedAffineBoundary> out = new ArrayList<>();
         for (Border each : lines) {
-            souther.compiler.partition.OrderedAffineBoundary read =
-                    each.sameReadingAs(but) ? null
-                            : souther.compiler.partition.OrderedAffineBoundary.of(each);
-            if (read != null) {
-                out.add(read);
+            if (each.sameReadingAs(but)) {
+                continue;
+            }
+            // A rule that names a value orders nothing, and a line whose values beside it were not
+            // worked out has no inequality to offer: either leaves this list a line shorter, which
+            // is the preference it is. Each of the two lines is told what it lacked by its own
+            // border, so nothing is said here.
+            ExactAnswer<Optional<OrderedAffineBoundary>> drawn = OrderedAffineBoundary.of(each);
+            if (drawn instanceof ExactAnswer.Held<Optional<OrderedAffineBoundary>> held) {
+                held.value().ifPresent(out::add);
             }
         }
         return out;

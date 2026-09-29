@@ -78,6 +78,10 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // the values carry an order and the line is written, and what has no place is a constant of
         // the rule. Nothing was compared against a figure, so a run allowed more meets it again.
         table.put("LineAtANumberNoRatioHolds", "LINE_AT_A_NUMBER_NO_RATIO_HOLDS/UNAFFECTED");
+        // A line that is placed, with a value beside it that was not worked out. The word is the
+        // arithmetic's: a number with no representation is the constants of the rule, and the row is
+        // for that one — the host running out of room is asked apart, below.
+        table.put("LineSideNotWorkedOut", "LINE_AT_A_NUMBER_NO_RATIO_HOLDS/UNAFFECTED");
         table.put("RuleAboutADerivedValue",
                 "RULE_ABOUT_A_DERIVED_VALUE/UNAFFECTED");
         // And a rule about an element of one of several sequences, which is the same two measures
@@ -344,6 +348,15 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         }
     }
 
+    /** A value beside a line that the host had no room to write out is the values being wider than
+     *  the rules leave them because working them out was too much, and a document says so. */
+    @Test
+    void aSideTheHostHadNoRoomForIsCalledWhatAnAnswerTooLargeIsCalled() {
+        assertEquals(UndividedPosition.Reason.EXACT_VALUES_TOO_COSTLY,
+                ReportedReason.of(new BlockReason.LineSideNotWorkedOut(
+                        souther.compiler.numeric.UnheldNumber.MORE_ROOM_COULD_ANSWER)));
+    }
+
     /**
      * Every member of the seal is in the lists above.
      *
@@ -406,6 +419,8 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.UnreadComparisonForm(),
                 new BlockReason.UnreadComparisonDomain(),
                 new BlockReason.LineAtANumberNoRatioHolds(),
+                new BlockReason.LineSideNotWorkedOut(
+                        souther.compiler.numeric.UnheldNumber.NO_REPRESENTATION_EXISTS),
                 new BlockReason.RuleAboutADerivedValue(),
                 new BlockReason.RuleAboutAnElementOfSeveralSequences(),
                 new BlockReason.UnreadValueRule(),

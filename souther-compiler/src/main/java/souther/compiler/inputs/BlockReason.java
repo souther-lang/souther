@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.regex.Meter;
 
@@ -221,6 +222,7 @@ public sealed interface BlockReason {
                 case EndLeftOpenByAChoice _ -> 10;
                 case ValueRuleLeftOpenByAChoice _ -> 11;
                 case LineAtANumberNoRatioHolds _ -> 12;
+                case LineSideNotWorkedOut _ -> 13;
             };
         }
 
@@ -259,6 +261,7 @@ public sealed interface BlockReason {
                      UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
                      RuleAboutAnElementOfSeveralSequences _, UnreadValueRule _,
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
+                     LineSideNotWorkedOut _,
                      ValueRuleRelatingTwoPositions _, CasePairingNotDetermined _ -> true;
             };
         }
@@ -284,6 +287,7 @@ public sealed interface BlockReason {
                      RuleAboutAnElementOfSeveralSequences _, UnreadValueRule _,
                      ValueRuleRelatingTwoPositions _, EndLeftOpenByAChoice _,
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
+                     LineSideNotWorkedOut _,
                      CasePairingNotDetermined _ -> RunSensitivity.UNAFFECTED;
             };
         }
@@ -540,6 +544,27 @@ public sealed interface BlockReason {
      * with that reach the end of the range.
      */
     record LineAtANumberNoRatioHolds() implements RuleReadingStopped {}
+
+    /**
+     * A comparison naming the position was read to the end, its line is placed, and a value beside
+     * the line — or whether the quantity takes the value the line names — was not worked out.
+     *
+     * <p>Its own case beside {@link LineAtANumberNoRatioHolds}. That one says the line has no place
+     * here; this one says the line does and what the order has beside it could not be written down,
+     * because the exact arithmetic had no room for the number or the number has no representation
+     * on the position's carrier. Told the first, an author looks for a constant at the end of the
+     * range, and the line is fine.
+     *
+     * @param why which of the two ways the number was not held
+     */
+    record LineSideNotWorkedOut(UnheldNumber why) implements RuleReadingStopped {
+
+        public LineSideNotWorkedOut {
+            if (why == null) {
+                throw new IllegalArgumentException("a side not worked out says why");
+            }
+        }
+    }
 
     /**
      * A rule is written about a value that came from the position rather than about the position.

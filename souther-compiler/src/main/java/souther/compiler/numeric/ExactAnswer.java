@@ -69,6 +69,15 @@ public sealed interface ExactAnswer<T> {
         return this instanceof Held<T> held ? held.value() : null;
     }
 
+    /** This value as {@code change} makes it, or this way the number was unheld where there is no
+     *  value to change. */
+    default <R> ExactAnswer<R> map(Function<? super T, ? extends R> change) {
+        return switch (this) {
+            case Held<T> held -> ExactAnswer.<R>held(change.apply(held.value()));
+            case Unheld<T> unheld -> ExactAnswer.<R>unheld(unheld.why());
+        };
+    }
+
     /** What {@code next} makes of this value, or this way the number was unheld where there is no
      *  value to make anything of. Which way it was unheld is the first one's, since the second was
      *  never asked. */

@@ -67,9 +67,15 @@ class WhoMayAskAnExactNumberForItsDigitsOrForAnAnswerItMustHoldTest {
                         // The coefficients of a form a library declares, which no model writes.
                         "check/OperationFactBinder.java",
                         // A line is refused where lines are drawn (Cutting), so what reads one
-                        // afterwards divides and scales numbers already shown to be held.
+                        // afterwards divides numbers already shown to be held. Its seam is asked
+                        // where the comparison is assessed, and a line whose sides were not worked
+                        // out is assessed as unread and never reaches the geometry as a line on a
+                        // position.
+                        "partition/ComparisonGeometry.java",
                         "partition/CutPosition.java",
-                        "partition/Seam.java"),
+                        // A line beside a border is named only for a boundary the search drew,
+                        // which is drawn only from a seam that was worked out.
+                        "query/Settlements.java"),
                 callersOf(AN_ANSWER_TAKEN_AS_HELD, "numeric/ExactAnswer.java"));
     }
 

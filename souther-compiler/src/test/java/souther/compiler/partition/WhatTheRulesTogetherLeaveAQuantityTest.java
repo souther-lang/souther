@@ -42,12 +42,12 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
 
     /** Where {@code n <= t} parts the whole numbers. */
     private static Seam upTo(String t) {
-        return Seam.of(NUMBERS, at(t), Towards.BELOW);
+        return HeldSeams.of(NUMBERS, at(t), Towards.BELOW);
     }
 
     /** Where {@code n < t} parts them, which is the same place as {@code n <= t - 1}. */
     private static Seam under(String t) {
-        return Seam.of(NUMBERS, at(t), Towards.ABOVE);
+        return HeldSeams.of(NUMBERS, at(t), Towards.ABOVE);
     }
 
     /** How the runs read, as the two seams each of them lies between. */
@@ -199,7 +199,7 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
         ExactRatio three = ExactRatio.of(3);
         souther.compiler.check.Carrier dense = new souther.compiler.check.Carrier.Dense();
         LevelSpace decimals = LevelSpace.onACarrier(dense);
-        Seam third = Seam.of(
+        Seam third = HeldSeams.of(
                 LevelSpace.overFiniteDecimals(LevelSpace.generatorOverFiniteDecimals(three)),
                 Level.OfTheQuantity.of(1), Towards.BELOW,
                 new Seam.Scale(three, dense));
@@ -229,8 +229,8 @@ class WhatTheRulesTogetherLeaveAQuantityTest {
         souther.compiler.check.Carrier of = new souther.compiler.check.Carrier.Dense();
         LevelSpace decimals = LevelSpace.onACarrier(of);
         Level half = new Level.OnACarrier(of, new Count(new java.math.BigDecimal("0.5")));
-        Seam keeps = Seam.of(decimals, half, Towards.BELOW);
-        Seam givesAway = Seam.of(decimals, half, Towards.ABOVE);
+        Seam keeps = HeldSeams.of(decimals, half, Towards.BELOW);
+        Seam givesAway = HeldSeams.of(decimals, half, Towards.ABOVE);
 
         for (List<Seam> order : List.of(List.of(keeps, givesAway), List.of(givesAway, keeps))) {
             assertEquals(List.of("|", "0.5|0.5", "|"),

@@ -68,7 +68,7 @@ class WhereARulePartsTheValuesIsNotTheNumberItWroteTest {
     @Test
     void anOrderThatStepsPartsOneCountInFromARefusedThreshold() {
         for (Row row : ON_AN_ORDER_THAT_STEPS) {
-            Seam parts = Seam.of(row.space(), at(row.carrier(), row.wrote()), row.belongsTo());
+            Seam parts = HeldSeams.of(row.space(), at(row.carrier(), row.wrote()), row.belongsTo());
 
             assertEquals(at(row.carrier(), row.below()), parts.below(),
                     () -> row.rule() + ": the last value below");
@@ -86,8 +86,8 @@ class WhereARulePartsTheValuesIsNotTheNumberItWroteTest {
      */
     @Test
     void twoOperatorsOverOneNumberAreTwoDivisions() {
-        Seam admits = Seam.of(STEPS, at(Carrier.WHOLE, 0), Towards.BELOW);
-        Seam refuses = Seam.of(STEPS, at(Carrier.WHOLE, 0), Towards.ABOVE);
+        Seam admits = HeldSeams.of(STEPS, at(Carrier.WHOLE, 0), Towards.BELOW);
+        Seam refuses = HeldSeams.of(STEPS, at(Carrier.WHOLE, 0), Towards.ABOVE);
 
         assertNotEquals(admits.below(), refuses.below(),
                 "one keeps the zero and the other does not, over one written number");
@@ -105,7 +105,7 @@ class WhereARulePartsTheValuesIsNotTheNumberItWroteTest {
      */
     @Test
     void anOrderThatFillsNamesNoValueBesideTheLine() {
-        Seam parts = Seam.of(FILLS, at(Carrier.DENSE, 0), Towards.BELOW);
+        Seam parts = HeldSeams.of(FILLS, at(Carrier.DENSE, 0), Towards.BELOW);
 
         assertEquals(at(Carrier.DENSE, 0), parts.below(), "the value it keeps is its own");
         assertNull(parts.above(), "and there is no first value above it to name");
@@ -121,7 +121,7 @@ class WhereARulePartsTheValuesIsNotTheNumberItWroteTest {
      */
     @Test
     void theNumberTheRuleWroteIsKeptBesideWhereTheValuesPart() {
-        Seam parts = Seam.of(STEPS, at(Carrier.WHOLE, 0), Towards.ABOVE);
+        Seam parts = HeldSeams.of(STEPS, at(Carrier.WHOLE, 0), Towards.ABOVE);
 
         assertEquals(at(Carrier.WHOLE, 0), parts.at().written(),
                 "the line is still at the number the rule wrote");

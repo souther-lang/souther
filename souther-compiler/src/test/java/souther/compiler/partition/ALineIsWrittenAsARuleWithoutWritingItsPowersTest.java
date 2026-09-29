@@ -79,7 +79,7 @@ class ALineIsWrittenAsARuleWithoutWritingItsPowersTest {
     @Test
     void anArrangementOverALineAtTheLeastExponentIsBuiltAndItsRunsNamed() {
         Carrier dense = new Carrier.Dense();
-        Seam least = Seam.of(
+        Seam least = HeldSeams.of(
                 LevelSpace.overFiniteDecimals(LevelSpace.generatorOverFiniteDecimals(ExactRatio.ONE)),
                 new Level.OfTheQuantity(tenTo(Long.MIN_VALUE)), Towards.BELOW,
                 new Seam.Scale(ExactRatio.ONE, dense));
