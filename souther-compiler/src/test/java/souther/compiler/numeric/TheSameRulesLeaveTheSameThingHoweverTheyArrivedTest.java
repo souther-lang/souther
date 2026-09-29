@@ -46,7 +46,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
     }
 
     private static LinearForm<String> scaled(String a, long k) {
-        return LinearForm.<String>atom(a).times(ExactRatio.of(k));
+        return LinearForm.weighing(a, ExactRatio.of(k));
     }
 
     private static Map<String, Granularity> whole(String... atoms) {
@@ -88,7 +88,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
         Map<String, Granularity> kinds = whole("x");
         NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("x"), Rel.NE, kinds)
-                .assume(atom("x").minus(num(5)), Rel.LE, kinds)
+                .assume(LinearForm.atomMinusConstant("x", ExactRatio.of(5)), Rel.LE, kinds)
                 .assume(atom("x"), Rel.GE, kinds);
         assertEquals(Endpoint.inclusive(new Count(BigDecimal.ONE)), d.boundsOf("x").min());
     }
@@ -123,14 +123,14 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
                 .assume(atom("straw").minus(num(1000)), Rel.LE, kinds)
                 .assume(atom("choco"), Rel.GE, kinds)
                 .assume(atom("choco").minus(num(6)), Rel.LE, kinds)
-                .assume(scaled("straw", 300).plus(scaled("choco", 600)).minus(num(4800)),
+                .assume(SmallForm.small(scaled("straw", 300)).plus(scaled("choco", 600)).minus(num(4800)).form(),
                         Rel.LE, kinds);
 
         assertEquals(Endpoint.inclusive(new Count(BigDecimal.valueOf(16))),
                 d.boundsOf("straw").max(), "choco is never below nought");
-        assertTrue(d.entails(atom("straw").minus(num(16)), Rel.LE),
+        assertTrue(d.entails(LinearForm.atomMinusConstant("straw", ExactRatio.of(16)), Rel.LE),
                 "and the proof says what the range says");
-        assertTrue(d.provenByTheBoxAndItsDifferences(atom("straw").minus(num(16)), Rel.LE),
+        assertTrue(d.provenByTheBoxAndItsDifferences(LinearForm.atomMinusConstant("straw", ExactRatio.of(16)), Rel.LE),
                 "including what is handed over on its own");
     }
 
@@ -142,7 +142,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
         NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("a").minus(num(20)), Rel.GE, kinds)
                 .assume(atom("b").minus(num(20)), Rel.GE, kinds)
-                .assume(scaled("a", 300).plus(scaled("b", 600)).minus(num(4800)), Rel.LE, kinds);
+                .assume(SmallForm.small(scaled("a", 300)).plus(scaled("b", 600)).minus(num(4800)).form(), Rel.LE, kinds);
         assertTrue(d.isBottom());
         assertTrue(d.boundsOf("a").saysNothing(), "and hands over no range at all");
     }
@@ -173,14 +173,14 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
         Map<String, Granularity> kinds = whole("x", "y");
         NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("x"), Rel.GE, kinds)
-                .assume(atom("x").minus(num(5)), Rel.LE, kinds)
+                .assume(LinearForm.atomMinusConstant("x", ExactRatio.of(5)), Rel.LE, kinds)
                 .assume(atom("y"), Rel.GE, kinds)
                 .assume(atom("y").minus(num(5)), Rel.LE, kinds)
-                .assume(atom("x").plus(atom("y")).minus(num(5)), Rel.LE, kinds);
+                .assume(SmallForm.small(LinearForm.sumOfAtoms("x", "y")).minus(num(5)).form(), Rel.LE, kinds);
 
-        assertTrue(d.entails(atom("x").plus(atom("y")).minus(num(5)), Rel.LE));
+        assertTrue(d.entails(SmallForm.small(LinearForm.sumOfAtoms("x", "y")).minus(num(5)).form(), Rel.LE));
         assertEquals(Endpoint.inclusive(new Count(BigDecimal.valueOf(5))),
-                d.boundsOf(atom("x").plus(atom("y"))).max(),
+                d.boundsOf(LinearForm.sumOfAtoms("x", "y")).max(),
                 "and the range says the same five the proof does");
     }
 
@@ -197,13 +197,13 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
     void aQuestionScaledUpIsTheSameQuestion() {
         Map<String, Granularity> kinds = whole("a", "b");
         NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
-                .assume(atom("a").minus(atom("b")).minus(num(2)), Rel.LE, kinds);
+                .assume(SmallForm.small(LinearForm.difference("a", "b")).minus(num(2)).form(), Rel.LE, kinds);
 
-        assertEquals(d.entails(atom("a").minus(atom("b")).minus(num(2)), Rel.LE),
-                d.entails(scaled("a", 2).minus(scaled("b", 2)).minus(num(4)), Rel.LE));
-        assertEquals(d.provenByTheBoxAndItsDifferences(atom("a").minus(atom("b")).minus(num(2)), Rel.LE),
-                d.provenByTheBoxAndItsDifferences(scaled("a", 2).minus(scaled("b", 2)).minus(num(4)), Rel.LE));
-        assertTrue(d.entails(scaled("a", 2).minus(scaled("b", 2)).minus(num(4)), Rel.LE));
+        assertEquals(d.entails(SmallForm.small(LinearForm.difference("a", "b")).minus(num(2)).form(), Rel.LE),
+                d.entails(SmallForm.small(scaled("a", 2)).minus(scaled("b", 2)).minus(num(4)).form(), Rel.LE));
+        assertEquals(d.provenByTheBoxAndItsDifferences(SmallForm.small(LinearForm.difference("a", "b")).minus(num(2)).form(), Rel.LE),
+                d.provenByTheBoxAndItsDifferences(SmallForm.small(scaled("a", 2)).minus(scaled("b", 2)).minus(num(4)).form(), Rel.LE));
+        assertTrue(d.entails(SmallForm.small(scaled("a", 2)).minus(scaled("b", 2)).minus(num(4)).form(), Rel.LE));
     }
 
     /** And a bound asked about a form scaled up comes back scaled up: {@code 2a - 2b} runs twice as
@@ -212,12 +212,12 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
     void aBoundOnAScaledFormIsScaledToMatch() {
         Map<String, Granularity> kinds = whole("a", "b");
         NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
-                .assume(atom("a").minus(atom("b")).plus(num(2)), Rel.LE, kinds);
+                .assume(SmallForm.small(LinearForm.difference("a", "b")).plus(num(2)).form(), Rel.LE, kinds);
 
         assertEquals(Endpoint.inclusive(new Count(BigDecimal.valueOf(-2))),
-                d.boundsOf(atom("a").minus(atom("b"))).max());
+                d.boundsOf(LinearForm.difference("a", "b")).max());
         assertEquals(Endpoint.inclusive(new Count(BigDecimal.valueOf(-4))),
-                d.boundsOf(scaled("a", 2).minus(scaled("b", 2))).max());
+                d.boundsOf(SmallForm.small(scaled("a", 2)).minus(scaled("b", 2)).form()).max());
     }
 
     /**
@@ -237,9 +237,9 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
         NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("x").minus(num(3)), Rel.LE, kinds);
 
-        assertTrue(d.refutes(atom("x").minus(num(5)), Rel.EQ), "x is at most three");
-        assertFalse(d.entails(atom("x").minus(num(5)), Rel.EQ), "and was never discharged either");
-        assertFalse(d.refutes(atom("x").minus(num(2)), Rel.EQ), "where two is a value it can take");
+        assertTrue(d.refutes(LinearForm.atomMinusConstant("x", ExactRatio.of(5)), Rel.EQ), "x is at most three");
+        assertFalse(d.entails(LinearForm.atomMinusConstant("x", ExactRatio.of(5)), Rel.EQ), "and was never discharged either");
+        assertFalse(d.refutes(LinearForm.atomMinusConstant("x", ExactRatio.of(2)), Rel.EQ), "where two is a value it can take");
     }
 
     /** A question about a position this was never told of is one it proves nothing about, rather
@@ -250,8 +250,8 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
         NumericDomain<String> d = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
                 .assume(atom("x").minus(num(3)), Rel.LE, kinds);
 
-        assertFalse(d.entails(atom("elsewhere").minus(num(5)), Rel.LE));
-        assertFalse(d.refutes(atom("elsewhere").minus(num(5)), Rel.LE));
+        assertFalse(d.entails(LinearForm.atomMinusConstant("elsewhere", ExactRatio.of(5)), Rel.LE));
+        assertFalse(d.refutes(LinearForm.atomMinusConstant("elsewhere", ExactRatio.of(5)), Rel.LE));
         assertTrue(d.boundsOf(atom("elsewhere")).saysNothing());
     }
 
@@ -305,7 +305,8 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
 
             // The same questions, scaled up, are the same questions.
             for (Written each : rules) {
-                LinearForm<String> doubledForm = each.form().times(ExactRatio.of(3));
+                LinearForm<String> doubledForm =
+                        SmallForm.small(each.form()).times(ExactRatio.of(3)).form();
                 assertEquals(asWritten.entails(each.form(), each.rel()),
                         asWritten.entails(doubledForm, each.rel()),
                         () -> "scaling the question moved what is proven: " + rules);
@@ -344,7 +345,7 @@ class TheSameRulesLeaveTheSameThingHoweverTheyArrivedTest {
             for (String position : positions) {
                 int weight = dice.nextInt(5) - 2;
                 if (weight != 0) {
-                    form = form.plus(scaled(position, weight));
+                    form = SmallForm.small(form).plus(scaled(position, weight)).form();
                 }
             }
             if (form.coefs().isEmpty()) {

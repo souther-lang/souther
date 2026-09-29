@@ -54,9 +54,9 @@ class OneRuleIsOneWayHoweverTheWalkMetItsConditionsTest {
     /** One comparison of {@code head} against {@code against}, coming out {@code held}. */
     private static DecisionPath.Consulted compared(String head, int against, boolean held) {
         LinearForm<DecisionAtom> form =
-                LinearForm.<DecisionAtom>constant(ExactRatio.of(-against))
-                        .plus(LinearForm.atom(new DecisionAtom.OfTheInput(
-                                new NumericTerm.ValueOf(TermPath.of(head)))));
+                LinearForm.<DecisionAtom>atomMinusConstant(
+                        new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(TermPath.of(head))),
+                        ExactRatio.of(against));
         DecisionCondition.AComparison column = new DecisionCondition.AComparison(form, Rel.GT);
         return new DecisionPath.Consulted(new DecidedCondition.Compared(column, held),
                 new ShownBy.NothingIsRecorded(column),

@@ -53,7 +53,7 @@ class WhatCertifiesARangeIsMoreThanTheRangesThemselvesTest {
 
         // And the rule comes back proven all the same, off the closed relation between them.
         assertTrue(domain.provenByTheBoxAndItsDifferences(
-                atom("a").minus(atom("b")).minus(num(2)), Rel.LE));
+                SmallForm.small(LinearForm.difference("a", "b")).minus(num(2)).form(), Rel.LE));
 
         // Which is sound, and the points say so: what each position is left is exactly its range.
         assertEquals(carriedAt("a", aDifference()), admittedAt(domain, "a"));
@@ -74,7 +74,8 @@ class WhatCertifiesARangeIsMoreThanTheRangesThemselvesTest {
     void aHoleIsHeldByNothingAndLeavesAValueNoPointCarries() {
         NumericDomain<String> domain = domainOf(aHole());
 
-        assertFalse(domain.provenByTheBoxAndItsDifferences(atom("a").minus(num(3)), Rel.NE),
+        assertFalse(domain.provenByTheBoxAndItsDifferences(
+                LinearForm.atomMinusConstant("a", ExactRatio.of(3)), Rel.NE),
                 "a range cannot say a value in the middle of it is out");
 
         assertNotEquals(carriedAt("a", aHole()), admittedAt(domain, "a"));
@@ -131,7 +132,8 @@ class WhatCertifiesARangeIsMoreThanTheRangesThemselvesTest {
     private static LinearForm<String> formOf(Written written) {
         LinearForm<String> form = LinearForm.constant(ExactRatio.of(written.constant()));
         for (Map.Entry<String, Long> each : written.coefs().entrySet()) {
-            form = form.plus(atom(each.getKey()).times(ExactRatio.of(each.getValue())));
+            form = SmallForm.small(form)
+                    .plus(LinearForm.weighing(each.getKey(), ExactRatio.of(each.getValue()))).form();
         }
         return form;
     }

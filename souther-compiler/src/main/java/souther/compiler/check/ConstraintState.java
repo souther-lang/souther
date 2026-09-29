@@ -442,8 +442,7 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
                                            souther.compiler.numeric.Count at,
                                            souther.compiler.numeric.Granularity spacing) {
         return state.taking(
-                LinearForm.<A>atom(atom)
-                        .minus(LinearForm.<A>constant(at.exactly())),
+                LinearForm.<A>atomMinusConstant(atom, at.exactly()),
                 Rel.EQ, java.util.Map.of(atom, spacing));
     }
 }

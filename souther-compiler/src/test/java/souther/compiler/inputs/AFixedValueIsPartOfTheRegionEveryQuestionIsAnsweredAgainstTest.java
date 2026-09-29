@@ -145,8 +145,7 @@ class AFixedValueIsPartOfTheRegionEveryQuestionIsAnsweredAgainstTest {
 
     /** The form {@code one - other}. */
     private static LinearForm<NumericTerm> minus(String one, String other) {
-        return LinearForm.<NumericTerm>atom(term(one))
-                .minus(LinearForm.<NumericTerm>atom(term(other)));
+        return LinearForm.<NumericTerm>difference(term(one), term(other));
     }
 
     /**

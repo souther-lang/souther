@@ -180,8 +180,7 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
     @Test
     void aBoundAtACompactDecimalIsHandedBackAsCompactlyAsItArrived() {
         NumericDomain<String> domain = NumericDomain.top(CanonicalOrder.asTheyAreSpelled())
-                .assume(LinearForm.<String>atom("a").minus(
-                                LinearForm.constant(ExactRatio.of(A_MILLIONTH_OF_A_MILLIONTH))),
+                .assume(LinearForm.atomMinusConstant("a", ExactRatio.of(A_MILLIONTH_OF_A_MILLIONTH)),
                         Rel.LE, Map.of("a", Granularity.DENSE));
         Endpoint most = domain.boundsOf("a").max();
         assertNotNull(most);

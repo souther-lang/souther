@@ -11,6 +11,7 @@ import souther.compiler.check.Combinators.Handed;
 import souther.compiler.check.PathEngine.Entered;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
@@ -2600,6 +2601,11 @@ public final class InvariantChecker {
             // reading further would say — the same answer as a number with no name at all.
             case CanonicalForm.Over over -> over.numbers().size() == 1
                     ? statedOn(over.numbers().iterator().next()) : ELSEWHERE;
+            // Both sides read, and the difference has no number. What the clause states is a line
+            // somewhere over the numbers it names, and where is what writing the difference down
+            // would say — the same answer as a form over several, and for the same reason: nothing
+            // was established about where the values stop.
+            case CanonicalForm.NoRatioHolds _ -> ELSEWHERE;
         };
     }
 
@@ -3449,6 +3455,14 @@ public final class InvariantChecker {
                 implements CanonicalForm {}
 
         /**
+         * Each side was read as a form, and the difference of the two has no representation.
+         *
+         * <p>Its own arm beside {@link CutsNothing} and {@link NotRead}: no position was cancelled
+         * and no reading stopped, and what is missing is a number.
+         */
+        record NoRatioHolds(StatedComparison comparison) implements CanonicalForm {}
+
+        /**
          * The canonical form is over these numbers.
          *
          * <p>One arm for one and for several. How many there are is what an answer turns on — a
@@ -3519,6 +3533,7 @@ public final class InvariantChecker {
             case CanonicalForm.NotRead it -> new UnreadComparison.Quantity.NotRead<>(
                     placesIn(it.stoppedAt(), it.under(), byName, answering).origin());
             case CanonicalForm.CutsNothing _ -> new UnreadComparison.Quantity.CutsNothing<>();
+            case CanonicalForm.NoRatioHolds _ -> new UnreadComparison.Quantity.NoRatioHolds<>();
             case CanonicalForm.Over it -> it.positions().size() == 1
                     ? new UnreadComparison.Quantity.OverOne<>(it.positions().iterator().next())
                     : new UnreadComparison.Quantity.OverSeveral<>(it.positions());
@@ -3553,10 +3568,15 @@ public final class InvariantChecker {
                 return new CanonicalForm.NotRead(recognised, stopped.node(), stopped.at());
             }
         }
-        LinearForm<FactSubject> whole =
-                ((AffineForms.Outcome.Composed<FactSubject, Denotations>) left).form()
-                        .minus(((AffineForms.Outcome.Composed<FactSubject, Denotations>) right)
-                                .form());
+        // Each side is a form, and the difference of the two can be one no ratio holds. That is a
+        // reading that ran to the end and cannot write down what it found, which the clause is
+        // told as such and not as one that cuts nothing or one nothing read.
+        if (!(((AffineForms.Outcome.Composed<FactSubject, Denotations>) left).form()
+                .minus(((AffineForms.Outcome.Composed<FactSubject, Denotations>) right).form())
+                instanceof ExactAnswer.Held<LinearForm<FactSubject>> difference)) {
+            return new CanonicalForm.NoRatioHolds(recognised);
+        }
+        LinearForm<FactSubject> whole = difference.value();
         // The numbers the form is left over, counted as numbers. A path carries more than one — a
         // string has its own order and its length — so a form over two numbers of one name is over
         // two things, and counting the names would call it one.

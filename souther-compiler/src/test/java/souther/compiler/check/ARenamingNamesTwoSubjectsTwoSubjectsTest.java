@@ -148,8 +148,7 @@ class ARenamingNamesTwoSubjectsTwoSubjectsTest {
                                 Map.<FactSubject, Carrier>of())
                                 .resolve(AsACompilationAllows.forAdmittedValues()),
                         AsACompilationAllows.forAdmittedValues())
-                .taking(LinearForm.<FactSubject>atom(ONLY_IN_NUMBERS)
-                                .minus(LinearForm.<FactSubject>constant(ExactRatio.of(3))),
+                .taking(LinearForm.atomMinusConstant(ONLY_IN_NUMBERS, ExactRatio.of(3)),
                         Rel.LE, Map.of(ONLY_IN_NUMBERS, souther.compiler.numeric.Granularity.DISCRETE));
     }
 }

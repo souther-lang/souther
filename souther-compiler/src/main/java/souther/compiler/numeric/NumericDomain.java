@@ -115,6 +115,21 @@ public final class NumericDomain<A> {
     // --- assume: take in one more rule ------------------------------------------------------------
 
     /**
+     * The domain with {@code f rel 0} taken in, where {@code f} was held.
+     *
+     * <p>A form this arithmetic could not hold is a rule it cannot write, which narrows nothing: the
+     * sound answer with less, and the one {@link AffineConstraint.Read.NotWorkedOut} gives for a
+     * rule whose lowest terms are not held.
+     *
+     * @param atomKinds see {@link #assume(LinearForm, Rel, Map)}
+     */
+    public NumericDomain<A> assume(ExactAnswer<LinearForm<A>> f, Rel rel,
+                                   Map<A, Granularity> atomKinds) {
+        return f instanceof ExactAnswer.Held<LinearForm<A>> held
+                ? assume(held.value(), rel, atomKinds) : this;
+    }
+
+    /**
      * The domain with {@code f rel 0} taken in.
      *
      * @param atomKinds how the values of each atom of {@code f} are spaced. Required rather than
@@ -163,16 +178,15 @@ public final class NumericDomain<A> {
      * differently. Two of them had.
      */
     public NumericDomain<A> assuming(A atom, Bounds bounds, Map<A, Granularity> atomKinds) {
-        LinearForm<A> form = LinearForm.atom(atom);
         NumericDomain<A> out = this;
         if (bounds.min() != null) {
             out = out.assume(
-                    form.minus(LinearForm.constant(Count.number(bounds.min().at()).exactly())),
+                    LinearForm.atomMinusConstant(atom, Count.number(bounds.min().at()).exactly()),
                     bounds.min().inclusive() ? Rel.GE : Rel.GT, atomKinds);
         }
         if (bounds.max() != null) {
             out = out.assume(
-                    form.minus(LinearForm.constant(Count.number(bounds.max().at()).exactly())),
+                    LinearForm.atomMinusConstant(atom, Count.number(bounds.max().at()).exactly()),
                     bounds.max().inclusive() ? Rel.LE : Rel.LT, atomKinds);
         }
         return out;

@@ -244,6 +244,7 @@ class ARuleAboutAnElementIsReadWhereTheyAllSupportOneFormTest {
                 read.rules())) {
             case AffineReading.OfAComparison.Stopped _ -> "stopped";
             case AffineReading.OfAComparison.CutsNothing _ -> "cuts nothing";
+            case AffineReading.OfAComparison.NotHeld _ -> "not held";
             case AffineReading.OfAComparison.Cuts cuts -> said(cuts);
         };
     }

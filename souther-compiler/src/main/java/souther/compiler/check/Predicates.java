@@ -795,7 +795,7 @@ final class Predicates {
         // that is not in the relation is not something the relation depends on — turning a clause
         // away for a value it does not actually rest on would report nothing about a value the
         // author was never asked about.
-        LinearForm<FactSubject> between = la == null || ra == null ? null : la.minus(ra);
+        LinearForm<FactSubject> between = Terms.add(la, ra, true);
         if (between != null && discharge.takesIn(between)) {
             numeric = new NumericConstraint(between, stated.relationUnder(positive));
             // The same clause read as the cases of whatever chooses inside it. Both readings are
@@ -1126,8 +1126,10 @@ final class Predicates {
         boolean shapeRead = !known.isEmpty();
         LinearForm<FactSubject> la = terms.affineOf(stated.left(), at);
         LinearForm<FactSubject> ra = terms.affineOf(stated.right(), at);
-        if (la != null && ra != null) {
-            LinearForm<FactSubject> compared = la.minus(ra);
+        // A difference no ratio holds is not taken in, the same as a side that is no form: what the
+        // path knows stays what it was, which is the sound answer with less.
+        LinearForm<FactSubject> compared = Terms.add(la, ra, true);
+        if (compared != null) {
             out = out.taking(compared, stated.relationUnder(positive), Known.Held.ON_THE_PATH,
                     terms.kindsOf(compared));
             taken = true;
@@ -1324,11 +1326,12 @@ final class Predicates {
                                     boolean positive) {
         LinearForm<FactSubject> la = terms.affineOf(stated.left(), at);
         LinearForm<FactSubject> ra = terms.affineOf(stated.right(), at);
-        if (la == null || ra == null) {
+        LinearForm<FactSubject> between = Terms.add(la, ra, true);
+        if (between == null) {
             return false;
         }
         Piecewise cases = piecewiseOf(
-                new NumericConstraint(la.minus(ra), stated.relationUnder(positive)),
+                new NumericConstraint(between, stated.relationUnder(positive)),
                 stated.left(), stated.right(), at);
         return cases != null && cases.refutedBy(k.numbers());
     }
@@ -1362,11 +1365,13 @@ final class Predicates {
             if (answered == null) {
                 return null;
             }
-            LinearForm<FactSubject> removed = LinearForm.<FactSubject>atom(atom).times(coefficient);
-            LinearForm<FactSubject> put = answered.times(coefficient);
-            LinearForm<FactSubject> without = removed == null ? null : owed.form().minus(removed);
-            LinearForm<FactSubject> instead = without == null || put == null
-                    ? null : without.plus(put);
+            // The rule with the atom taken out and what this arm answers put in its place. A form
+            // no ratio holds is a reading this does not make, and the clause keeps the reading it
+            // has without the cases.
+            LinearForm<FactSubject> instead = owed.form()
+                    .minus(LinearForm.weighing(atom, coefficient))
+                    .flatMap(without -> answered.times(coefficient).flatMap(without::plus))
+                    .orNull();
             if (instead == null) {
                 return null;
             }
@@ -1378,7 +1383,10 @@ final class Predicates {
             // reading and to no other — a recipe over the arms answers about the value itself and
             // has nothing to tie back — which is why what is shared with that reader stops at the
             // arms and what they settle.
-            LinearForm<FactSubject> answeredHere = LinearForm.atom(atom).minus(answered);
+            LinearForm<FactSubject> answeredHere = LinearForm.atom(atom).minus(answered).orNull();
+            if (answeredHere == null) {
+                return null;
+            }
             given.add(new NumericConstraint(answeredHere, Rel.EQ));
             kinds.putAll(terms.kindsOf(answeredHere));
             for (NumericConstraint stands : Conditions.settledBy(terms, arm.decidedBy(), at)) {

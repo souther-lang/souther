@@ -67,7 +67,7 @@ final class RunReach {
             LinearForm.atom(Atom.ACCUMULATOR);
 
     private static final LinearForm<Atom> CARRIED =
-            ACCUMULATOR.plus(LinearForm.atom(Atom.ELEMENT));
+            LinearForm.sumOfAtoms(Atom.ACCUMULATOR, Atom.ELEMENT);
 
     /**
      * What the step answers, given a reading that has the accumulator and the element in it.

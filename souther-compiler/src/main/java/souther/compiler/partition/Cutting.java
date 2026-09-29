@@ -191,6 +191,12 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             // being wrong about the rule.
             case AffineReading.OfAComparison.CutsNothing over ->
                     new Read.CutsNothing(over.read());
+            // Read from end to end, each side as a form, and the difference of the two is a number
+            // no ratio holds. The rule states a line and the line has no place here — the same
+            // answer a line placed at such a number gets, and for the same reason: nothing about
+            // the order fell short.
+            case AffineReading.OfAComparison.NotHeld notHeld ->
+                    new Read.NumberNoRatioHolds(AffineReading.filedAt(notHeld.read()));
             // The quantity is what the arithmetic says it is, and the realization is the only thing
             // left to try. Read the other way round, a spelling that produced a line took the
             // comparison before the canonical form was consulted at all.

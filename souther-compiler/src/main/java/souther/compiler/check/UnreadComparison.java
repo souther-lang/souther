@@ -124,6 +124,18 @@ public final class UnreadComparison {
         record CutsNothing<K>() implements Read<K> {}
 
         /**
+         * The arithmetic read both sides as forms, and the difference of the two has no
+         * representation: two coefficients held one by one and standing at the two ends of the
+         * exponents a ratio holds.
+         *
+         * <p>Its own answer beside {@link CutsNothing} and {@link NotRead}. Nothing cancelled, so
+         * the quantity is not empty and it is not a fact about the rule that it cuts nothing;
+         * nothing was left unread, so the reading did not stop. What is missing is a number, and the
+         * places the comparison names are the ones it is filed at, as for a rule that cuts nothing.
+         */
+        record NoRatioHolds<K>() implements Read<K> {}
+
+        /**
          * The arithmetic read no form here, and what it was looking at when it stopped.
          *
          * <p>The expression, because the walk that stopped is the only thing that knows which one it
@@ -164,6 +176,9 @@ public final class UnreadComparison {
     public static <K> List<K> filedAt(Quantity.Read<K> read, List<K> met) {
         return switch (read) {
             case Quantity.CutsNothing<K> _ -> List.copyOf(met);
+            // Every place the comparison names, for the reason a rule that cuts nothing is: the
+            // difference that would say which of them the rule is about is the number no ratio holds.
+            case Quantity.NoRatioHolds<K> _ -> List.copyOf(met);
             case Quantity.OverOne<K> one -> over(met, Set.of(one.position()));
             case Quantity.OverSeveral<K> several -> over(met, several.positions());
         };
@@ -236,6 +251,10 @@ public final class UnreadComparison {
             // Read to the end and there is no quantity. Nothing about how it was written adds to
             // that: no reading fell short, so no question about what could not be read arises.
             case Quantity.CutsNothing<K> _ -> new BlockReason.ComparisonCuttingNothing();
+            // Read to the end and the difference has no number: a reading that fell short of
+            // writing down what it found, which is a fact about how the rule was written and about
+            // nothing the carrier holds.
+            case Quantity.NoRatioHolds<K> _ -> new BlockReason.LineAtANumberNoRatioHolds();
             case Quantity.OverSeveral<K> _ -> new BlockReason.ComparisonBetweenPositions();
             // A line on one position that the caller's own reading placed nowhere: that reading
             // stopped, and what it stopped on is the position. The carrier says which limit — a

@@ -120,8 +120,10 @@ final class Conditions {
         for (Choice.ArgumentRelation one : relations) {
             LinearForm<FactSubject> left = terms.affineOf(one.left(), at);
             LinearForm<FactSubject> right = terms.affineOf(one.right(), at);
-            if (left != null && right != null) {
-                out.add(new NumericConstraint(left.minus(right), one.rel()));
+            // A difference no ratio holds states no relation, the same as a side that is no form.
+            LinearForm<FactSubject> between = Terms.add(left, right, true);
+            if (between != null) {
+                out.add(new NumericConstraint(between, one.rel()));
             }
         }
     }
@@ -173,9 +175,9 @@ final class Conditions {
                             .inReadingOrder()) {
                 LinearForm<FactSubject> left = terms.affineOf(stated.left(), at);
                 LinearForm<FactSubject> right = terms.affineOf(stated.right(), at);
-                if (left != null && right != null) {
-                    out.add(new NumericConstraint(left.minus(right),
-                            stated.relationUnder(positive)));
+                LinearForm<FactSubject> between = Terms.add(left, right, true);
+                if (between != null) {
+                    out.add(new NumericConstraint(between, stated.relationUnder(positive)));
                 }
             }
             return out;

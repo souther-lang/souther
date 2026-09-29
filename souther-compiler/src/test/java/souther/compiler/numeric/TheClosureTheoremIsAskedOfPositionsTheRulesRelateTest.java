@@ -103,9 +103,7 @@ class TheClosureTheoremIsAskedOfPositionsTheRulesRelateTest {
 
     /** {@code above - below <= 2}, which the difference bounds hold in full. */
     private static LinearForm<String> difference(String above, String below) {
-        return LinearForm.<String>atom(above)
-                .minus(LinearForm.<String>atom(below))
-                .minus(num(2));
+        return SmallForm.small(LinearForm.difference(above, below)).minus(num(2)).form();
     }
 
     private static LinearForm<String> num(long n) {

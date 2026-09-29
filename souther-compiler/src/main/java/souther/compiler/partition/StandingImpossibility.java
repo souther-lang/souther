@@ -130,8 +130,7 @@ final class StandingImpossibility {
             case Standing.OfOneCoordinate one ->
                     new Asked(LinearForm.atom(one.term()), one.where(), one.of());
             case Standing.OfTwoOnOneCarrier two -> two.of().counts()
-                    ? new Asked(LinearForm.<NumericTerm>atom(two.on())
-                            .minus(LinearForm.atom(two.against())), two.where(), null)
+                    ? new Asked(LinearForm.difference(two.on(), two.against()), two.where(), null)
                     : null;
             // A form is arithmetic over positions that add up, so its levels are numbers of its own
             // and the carriers its terms are written back on are no part of what it comes to.

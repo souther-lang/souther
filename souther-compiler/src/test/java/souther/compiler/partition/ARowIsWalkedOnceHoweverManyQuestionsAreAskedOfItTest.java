@@ -119,8 +119,7 @@ class ARowIsWalkedOnceHoweverManyQuestionsAreAskedOfItTest {
         on.put(ONE_SIDE, ordersOf(ONE_SIDE));
         on.put(THE_OTHER, ordersOf(THE_OTHER));
         return new BorderQuantity.OverAForm("decide",
-                LinearForm.atom((NumericTerm) ONE_SIDE)
-                        .plus(LinearForm.atom((NumericTerm) THE_OTHER)),
+                LinearForm.sumOfAtoms((NumericTerm) ONE_SIDE, (NumericTerm) THE_OTHER),
                 on);
     }
 

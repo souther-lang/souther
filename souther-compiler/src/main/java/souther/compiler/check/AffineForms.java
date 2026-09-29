@@ -809,8 +809,8 @@ public final class AffineForms {
             if (argument == null) {
                 return stoppedAtTheCall(call, at, stopped);
             }
-            LinearForm<A> weighed = argument.times(each.getValue());
-            form = weighed == null ? null : form.plus(weighed);
+            LinearForm<A> weighed = argument.times(each.getValue()).orNull();
+            form = weighed == null ? null : form.plus(weighed).orNull();
             if (form == null) {
                 // A number of the declared form has no representation here: an expression this
                 // does not compose, the same as one that is not affine.

@@ -786,15 +786,16 @@ final class Terms {
     }
 
     /** A linear form scaled by a constant, when one side is a bare constant (a scalar multiply); null
-     * when neither side is constant (a non-linear product). */
+     * when neither side is constant (a non-linear product), or when a number scaled has no
+     * representation — no form this reasons with, which is what null says at this boundary. */
     static <A> LinearForm<A> scale(LinearForm<A> a, LinearForm<A> b) {
         if (a == null || b == null) {
             return null;
         }
         if (a.coefs().isEmpty()) {
-            return b.times(a.constant());
+            return b.times(a.constant()).orNull();
         }
-        return b.coefs().isEmpty() ? a.times(b.constant()) : null;
+        return b.coefs().isEmpty() ? a.times(b.constant()).orNull() : null;
     }
 
     /**
@@ -823,7 +824,7 @@ final class Terms {
         if (a == null || b == null || !b.coefs().isEmpty() || b.constant().isZero()) {
             return null;
         }
-        return a.dividedBy(b.constant());
+        return a.dividedBy(b.constant()).orNull();
     }
 
     /** A node the affine walk composes nothing out of, as a form: a numeric atom, what a name was
@@ -933,11 +934,20 @@ final class Terms {
         return f == null ? null : f.negate();
     }
 
+    /**
+     * The sum or the difference of two forms, or null where either is no form or a number of the
+     * result has no representation.
+     *
+     * <p>Null is the one word this boundary has, and it is enough for what stands on it: a fact
+     * about a comparison is stated from a form, and a comparison with no form states none. The
+     * reading of a comparison that has to tell the two apart, because it answers a reader with which
+     * one it was, asks {@link LinearForm#minus} itself.
+     */
     static <A> LinearForm<A> add(LinearForm<A> a, LinearForm<A> b, boolean subtract) {
         if (a == null || b == null) {
             return null;
         }
-        return subtract ? a.minus(b) : a.plus(b);
+        return (subtract ? a.minus(b) : a.plus(b)).orNull();
     }
 
     /**
@@ -1239,7 +1249,7 @@ final class Terms {
                                               FactSubject accumulator, FactSubject element,
                                               Granularity spacing) {
         return switch (combine) {
-            case ADD -> LinearForm.atom(accumulator).plus(LinearForm.atom(element));
+            case ADD -> LinearForm.sumOfAtoms(accumulator, element);
             case MULTIPLY -> {
                 FactSubject product = named(FactSubject.of(interned.operator(
                         BinOp.MUL, accumulator.identity(), element.identity())), spacing);

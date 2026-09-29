@@ -256,7 +256,13 @@ public sealed interface AdditiveImage {
             if (steps == null || over == null || weighed == null) {
                 return new AffinePreimage.Stepping(ExactRatio.ZERO, ExactRatio.ONE, source);
             }
-            BigInteger modulus = over.asFraction().numerator();
+            // A generator whose digits the host holds no place for is a modulus nothing here can
+            // take a residue against, and every residue is then possible: the widest progression
+            // is the sound answer with less.
+            if (!(over.wholeNumber() instanceof ExactAnswer.Held<BigInteger> heldModulus)) {
+                return new AffinePreimage.Stepping(ExactRatio.ZERO, ExactRatio.ONE, source);
+            }
+            BigInteger modulus = heldModulus.value();
             if (modulus.equals(BigInteger.ONE)) {
                 return new AffinePreimage.Stepping(ExactRatio.ZERO, ExactRatio.ONE, source);
             }

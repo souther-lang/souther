@@ -307,7 +307,7 @@ public sealed interface BorderQuantity {
         /** Their difference, which is what standing apart is. */
         @Override
         public LinearForm<NumericTerm> direction() {
-            return LinearForm.<NumericTerm>atom(on.term()).minus(LinearForm.atom(against.term()));
+            return LinearForm.difference(on.term(), against.term());
         }
 
         /**
@@ -412,7 +412,7 @@ public sealed interface BorderQuantity {
                 return new Standing.OfTwoOnOneCarrier(onTerm(), againstTerm(), onCarrier(), where);
             }
             return new Standing.OfAForm(
-                    LinearForm.<NumericTerm>atom(on.term()).minus(LinearForm.atom(against.term())),
+                    LinearForm.difference(on.term(), against.term()),
                     Map.of(on.term(), on.answered(), against.term(), against.answered()),
                     levels(), where);
         }
@@ -923,7 +923,12 @@ public sealed interface BorderQuantity {
      */
     default String left(ExactRatio times) {
         if (this instanceof OverAForm form && !times.equals(ExactRatio.ONE)) {
-            return new OverAForm(form.behavior(), form.form().times(times), form.on()).left();
+            LinearForm<NumericTerm> scaled = form.form().times(times).orNull();
+            // A form whose numbers no ratio holds once scaled has no coefficients to write out, and
+            // is named the way any other quantity is: by how many of it.
+            if (scaled != null) {
+                return new OverAForm(form.behavior(), scaled, form.on()).left();
+            }
         }
         return times(times, left());
     }

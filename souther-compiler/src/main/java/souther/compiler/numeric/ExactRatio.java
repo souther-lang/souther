@@ -118,6 +118,10 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
      * for every value this holds.
      *
      * <p>Visible to this package alone, so that a reader elsewhere cannot reach the digits at all.
+     * And inside it only for a caller that has already asked whether the digits are few
+     * ({@link #spelled}): it throws where the host holds no number that large, which no reasoning
+     * step can be handed. A step that needs a whole number's digits asks {@link #wholeNumber},
+     * which says so instead.
      *
      * <p>Everything a reasoning step asks of the two numbers is asked of this type instead:
      * {@link #numeratorMod} and {@link #denominatorMod} for a residue, {@link #numeratorAsRatio} for
@@ -137,6 +141,27 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
     /** A ratio with its powers of two and five spelled out: two whole numbers in lowest terms, the
      *  second of them positive. */
     record Fraction(BigInteger numerator, BigInteger denominator) {}
+
+    /**
+     * The digits of this whole number, or which way the host could not hold them.
+     *
+     * <p>For a step that counts in whole numbers and is handed a modulus or a period that is one:
+     * the residue of a value modulo it is a question of the value's bits, and the modulus has to be
+     * a number to be asked. A number of billions of digits is one a host holds no place for, and
+     * that is an answer this gives; the step widens what it says, as every other step does where an
+     * exact number is unheld. It is not one that throws, which is what would stop the compile over a
+     * modulus the model never wrote down.
+     *
+     * @throws IllegalArgumentException where this is not a whole number, which is a caller's mistake
+     *         and not a value this can hold
+     */
+    ExactAnswer<BigInteger> wholeNumber() {
+        if (!isWhole()) {
+            throw new IllegalArgumentException("not a whole number: " + this);
+        }
+        return ExactAnswer.of(() -> ExactArithmetic.written(numeratorWithoutUnits,
+                ExactArithmetic.aboveTheLine(twos), ExactArithmetic.aboveTheLine(fives)));
+    }
 
     /** The number above this ratio's line, as a ratio — so that a caller going on to compute with it
      *  is handed the factors rather than the digits. */

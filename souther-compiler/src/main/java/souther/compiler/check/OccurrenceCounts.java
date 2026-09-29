@@ -112,8 +112,7 @@ public final class OccurrenceCounts {
         if (counted == null) {
             return true;   // nothing counts what is there, so no rule here is about how much it holds
         }
-        LinearForm<FactSubject> from = LinearForm.atom(counted)
-                .minus(LinearForm.constant(ExactRatio.of(count)));
+        LinearForm<FactSubject> from = LinearForm.atomMinusConstant(counted, ExactRatio.of(count));
         return !seeded.numbers()
                 .assume(from, against, Map.of(counted, Granularity.DISCRETE))
                 .isBottom();

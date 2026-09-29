@@ -42,35 +42,79 @@ public record LinearForm<A>(ExactRatio constant, Map<A, ExactRatio> coefs) {
     }
 
     /**
-     * The sum, or {@code null} where the exact arithmetic could not hold it.
+     * {@code weight · a}, for a weight the caller has in hand.
+     *
+     * <p>Built and not multiplied: an atom is one of nothing else, so scaling it is naming the
+     * weight, and there is no arithmetic in it for a number to have no representation in.
+     */
+    public static <A> LinearForm<A> weighing(A a, ExactRatio weight) {
+        return weight.isZero() ? constant(ExactRatio.ZERO) : new LinearForm<>(ExactRatio.ZERO, Map.of(a, weight));
+    }
+
+    /**
+     * {@code a - b}.
+     *
+     * <p>Built and not subtracted, for the reason {@link #weighing} gives: the weights are one and
+     * minus one, and an atom against itself is nothing. No number is added to another, so this is
+     * total where {@link #minus} answers.
+     */
+    public static <A> LinearForm<A> difference(A a, A b) {
+        if (a.equals(b)) {
+            return constant(ExactRatio.ZERO);
+        }
+        return new LinearForm<>(ExactRatio.ZERO, Map.of(a, ExactRatio.ONE, b, ExactRatio.ONE.negated()));
+    }
+
+    /**
+     * {@code a + b}, built like {@link #difference}. An atom with itself is twice it.
+     */
+    public static <A> LinearForm<A> sumOfAtoms(A a, A b) {
+        if (a.equals(b)) {
+            return weighing(a, ExactRatio.of(2));
+        }
+        return new LinearForm<>(ExactRatio.ZERO, Map.of(a, ExactRatio.ONE, b, ExactRatio.ONE));
+    }
+
+    /**
+     * {@code a - c}, for a constant the caller has in hand.
+     *
+     * <p>Built like {@link #weighing}: a form with nothing but an atom in it has nought for its
+     * constant, and nought minus {@code c} is {@code c} negated, which no number is far enough
+     * from.
+     */
+    public static <A> LinearForm<A> atomMinusConstant(A a, ExactRatio c) {
+        return new LinearForm<>(c.negated(), Map.of(a, ExactRatio.ONE));
+    }
+
+    /**
+     * The sum, or which way the exact arithmetic could not hold it.
      *
      * <p>A model's own decimals can put a constant or a coefficient of one side far enough apart in
-     * scale from the other that the exact sum has no representation. Answered {@code null} rather
-     * than thrown, which is the word this whole file already uses for an expression that is not a
-     * linear form — {@link check.Terms#add} passes it straight through, the same as it does for
-     * either side not being one in the first place. Where every term named is a constant, that is
-     * this compiler declining to fold one, and the model's own arithmetic aborts wherever it runs.
+     * scale from the other that the exact sum has no representation. That is an answer of this and
+     * not an absence: a reader that has no word for it says so with {@link ExactAnswer#orNull}, which
+     * reads as this being no form the reader can reason with, and a reader that has one (the
+     * reading of a comparison) says which. Where every term named is a constant, that is this
+     * compiler declining to fold one, and the model's own arithmetic aborts wherever it runs.
      */
-    public LinearForm<A> plus(LinearForm<A> o) {
+    public ExactAnswer<LinearForm<A>> plus(LinearForm<A> o) {
         Map<A, ExactRatio> m = new HashMap<>(coefs);
-        boolean[] everyTermWasComposed = {true};
-        o.coefs.forEach((k, v) -> m.merge(k, v, (a, b) -> {
-            ExactAnswer<ExactRatio> sum = a.plus(b);
-            if (sum instanceof ExactAnswer.Held<ExactRatio> held) {
-                return held.value();
+        for (Map.Entry<A, ExactRatio> each : o.coefs.entrySet()) {
+            ExactRatio mine = m.get(each.getKey());
+            if (mine == null) {
+                m.put(each.getKey(), each.getValue());
+                continue;
             }
-            everyTermWasComposed[0] = false;
-            return a;
-        }));
-        if (!everyTermWasComposed[0]) {
-            return null;
+            switch (mine.plus(each.getValue())) {
+                case ExactAnswer.Held<ExactRatio> held -> m.put(each.getKey(), held.value());
+                case ExactAnswer.Unheld<ExactRatio> unheld -> {
+                    return ExactAnswer.unheld(unheld.why());
+                }
+            }
         }
-        ExactRatio summedConstant = constant.plus(o.constant).orNull();
-        if (summedConstant == null) {
-            return null;
-        }
-        m.values().removeIf(ExactRatio::isZero);
-        return new LinearForm<>(summedConstant, m);
+        return constant.plus(o.constant).flatMap(summed -> {
+            m.values().removeIf(ExactRatio::isZero);
+            return ExactAnswer.held(new LinearForm<>(summed, m));
+        });
     }
 
     public LinearForm<A> negate() {
@@ -79,9 +123,9 @@ public record LinearForm<A>(ExactRatio constant, Map<A, ExactRatio> coefs) {
         return new LinearForm<>(constant.negated(), m);
     }
 
-    /** The difference, or {@code null} where the exact arithmetic could not hold it — see
-     *  {@link #plus}, which a difference is the sum of the negation of. */
-    public LinearForm<A> minus(LinearForm<A> o) {
+    /** The difference, or which way the exact arithmetic could not hold it — see {@link #plus},
+     *  which a difference is the sum of the negation of. */
+    public ExactAnswer<LinearForm<A>> minus(LinearForm<A> o) {
         return plus(o.negate());
     }
 
@@ -115,12 +159,12 @@ public record LinearForm<A>(ExactRatio constant, Map<A, ExactRatio> coefs) {
     }
 
     /**
-     * This form scaled by a constant {@code k} (a scalar multiply), or {@code null} where a number
-     * scaled has no representation — the same word {@link #plus} uses, for the same reason.
+     * This form scaled by a constant {@code k} (a scalar multiply), or which way a number scaled has
+     * no representation — the same answer {@link #plus} gives, for the same reason.
      */
-    public LinearForm<A> times(ExactRatio k) {
+    public ExactAnswer<LinearForm<A>> times(ExactRatio k) {
         if (k.isZero()) {
-            return constant(ExactRatio.ZERO);
+            return ExactAnswer.held(constant(ExactRatio.ZERO));
         }
         return scaledBy(coef -> coef.times(k), constant.times(k));
     }
@@ -128,28 +172,25 @@ public record LinearForm<A>(ExactRatio constant, Map<A, ExactRatio> coefs) {
     /**
      * This form over a constant {@code k}, each number divided by it and not multiplied by its
      * reciprocal — the reciprocal of a number at the least exponent has none, and its quotient by
-     * itself is one. {@code null} where a number divided has no representation.
+     * itself is one. Or which way a number divided has no representation.
      *
      * @throws ArithmeticException where {@code k} is zero
      */
-    public LinearForm<A> dividedBy(ExactRatio k) {
+    public ExactAnswer<LinearForm<A>> dividedBy(ExactRatio k) {
         return scaledBy(coef -> coef.dividedBy(k), constant.dividedBy(k));
     }
 
-    private LinearForm<A> scaledBy(Function<ExactRatio, ExactAnswer<ExactRatio>> scale,
-                                   ExactAnswer<ExactRatio> constantScaled) {
-        ExactRatio scaledConstant = constantScaled.orNull();
-        if (scaledConstant == null) {
-            return null;
-        }
+    private ExactAnswer<LinearForm<A>> scaledBy(
+            Function<ExactRatio, ExactAnswer<ExactRatio>> scale, ExactAnswer<ExactRatio> constantScaled) {
         Map<A, ExactRatio> scaled = new HashMap<>();
         for (Map.Entry<A, ExactRatio> each : coefs.entrySet()) {
-            ExactRatio coef = scale.apply(each.getValue()).orNull();
-            if (coef == null) {
-                return null;
+            switch (scale.apply(each.getValue())) {
+                case ExactAnswer.Held<ExactRatio> held -> scaled.put(each.getKey(), held.value());
+                case ExactAnswer.Unheld<ExactRatio> unheld -> {
+                    return ExactAnswer.unheld(unheld.why());
+                }
             }
-            scaled.put(each.getKey(), coef);
         }
-        return new LinearForm<>(scaledConstant, scaled);
+        return constantScaled.flatMap(held -> ExactAnswer.held(new LinearForm<>(held, scaled)));
     }
 }
