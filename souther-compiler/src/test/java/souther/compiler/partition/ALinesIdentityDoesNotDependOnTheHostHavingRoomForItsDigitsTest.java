@@ -42,7 +42,7 @@ class ALinesIdentityDoesNotDependOnTheHostHavingRoomForItsDigitsTest {
         CutPosition identity = assertDoesNotThrow(far::canonical);
 
         assertInstanceOf(Level.OfTheQuantity.class, identity.written(),
-                "and the identity is the number itself where there is no count to put it on");
+                "and the identity is the number, as it is for every other line");
     }
 
     @Test
@@ -54,10 +54,17 @@ class ALinesIdentityDoesNotDependOnTheHostHavingRoomForItsDigitsTest {
         assertEquals(once.canonical(), twice.canonical());
     }
 
+    /** The identity is where the line falls, so the carrier a rule happened to be written on, or
+     *  none, is no part of it. */
     @Test
-    void aLineTheHostCanWriteKeepsTheCarrierItWasWrittenOn() {
-        CutPosition near = written(4, ExactRatio.of(2));
+    void theSameLineIsOneIdentityWhateverItWasWrittenOn() {
+        CutPosition onACarrier = written(4, ExactRatio.of(2));
+        CutPosition asANumber = new CutPosition(new Level.OfTheQuantity(ExactRatio.of(4)),
+                ExactRatio.of(2));
 
-        assertInstanceOf(Level.OnACarrier.class, near.canonical().written());
+        assertEquals(onACarrier.exactly(), asANumber.exactly(), "the two fall at one place");
+        assertEquals(onACarrier.canonical(), asANumber.canonical());
+        assertInstanceOf(Level.OfTheQuantity.class, onACarrier.canonical().written(),
+                "and it is the number, which the host having room for its digits does not change");
     }
 }

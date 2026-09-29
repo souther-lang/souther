@@ -133,10 +133,12 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
      * would. A third and two sixths come back the same, and so do a line at {@code 0} and one at
      * {@code 0.00}. The terms answer for every line a ratio holds, so this does too.
      *
-     * <p>Total: the place is put back on the carrier the rule was written on where the host has room
-     * to write the count, and is the number the terms come to where it has not. Which of the two it
-     * is follows from the terms and the carrier alone, so two lines at one place are one identity
-     * either way, and a line whose digits the host cannot write is still a line that has one.
+     * <p>A function of the line's meaning and of nothing the host can hold: the place is the number
+     * the terms come to, whichever order the rule was written on and however many digits that
+     * number has. Which carrier a rule was written on is the quantity's and is no part of where a
+     * line falls, and two lines compared by this are on one quantity. A representation that depended
+     * on whether the host could write the count would make the identity of one line change with the
+     * host.
      *
      * <p>An order with no numbers has no fraction to reduce, and its place is its own value.
      */
@@ -145,24 +147,7 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
         if (rule == null) {
             return new CutPosition(written.canonical(), per);
         }
-        return new CutPosition(reduced(written, rule.comesTo()), rule.per());
-    }
-
-    /**
-     * What the line's terms say it comes to, put back on whatever order the line was written on.
-     *
-     * <p>A whole number wherever the terms are in lowest terms, so a carrier's order has a count at
-     * it wherever it has counts at all — and the number itself where the host has no room to write
-     * that count out.
-     */
-    private static Level reduced(Level written, ExactRatio to) {
-        return switch (written) {
-            case Level.OfTheQuantity _ -> new Level.OfTheQuantity(to);
-            case Level.OnACarrier on -> switch (Level.OnACarrier.held(on.of(), to)) {
-                case ExactAnswer.Held<Level.OnACarrier> held -> held.value();
-                case ExactAnswer.Unheld<Level.OnACarrier> _ -> new Level.OfTheQuantity(to);
-            };
-        };
+        return new CutPosition(new Level.OfTheQuantity(rule.comesTo()), rule.per());
     }
 
     /**

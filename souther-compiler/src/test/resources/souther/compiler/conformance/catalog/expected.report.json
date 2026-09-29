@@ -465,10 +465,7 @@
           "stops" : {
             "kind" : "at_the_domain",
             "at" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "dense"
-              },
+              "kind" : "a_count",
               "at" : "1"
             },
             "per" : "1",
@@ -537,10 +534,7 @@
           "stops" : {
             "kind" : "at_the_domain",
             "at" : {
-              "kind" : "on_a_carrier",
-              "carrier" : {
-                "kind" : "dense"
-              },
+              "kind" : "a_count",
               "at" : "0"
             },
             "per" : "1",
@@ -4746,10 +4740,7 @@
             "stops" : {
               "kind" : "at_the_domain",
               "at" : {
-                "kind" : "on_a_carrier",
-                "carrier" : {
-                  "kind" : "whole"
-                },
+                "kind" : "a_count",
                 "at" : "1"
               },
               "per" : "1",
@@ -4989,10 +4980,7 @@
             "stops" : {
               "kind" : "at_the_domain",
               "at" : {
-                "kind" : "on_a_carrier",
-                "carrier" : {
-                  "kind" : "whole"
-                },
+                "kind" : "a_count",
                 "at" : "0"
               },
               "per" : "1",
@@ -5058,10 +5046,7 @@
             "stops" : {
               "kind" : "at_the_domain",
               "at" : {
-                "kind" : "on_a_carrier",
-                "carrier" : {
-                  "kind" : "whole"
-                },
+                "kind" : "a_count",
                 "at" : "23"
               },
               "per" : "1",
@@ -6273,10 +6258,7 @@
             "stops" : {
               "kind" : "at_the_domain",
               "at" : {
-                "kind" : "on_a_carrier",
-                "carrier" : {
-                  "kind" : "whole"
-                },
+                "kind" : "a_count",
                 "at" : "0"
               },
               "per" : "1",
@@ -6342,10 +6324,7 @@
             "stops" : {
               "kind" : "at_the_domain",
               "at" : {
-                "kind" : "on_a_carrier",
-                "carrier" : {
-                  "kind" : "whole"
-                },
+                "kind" : "a_count",
                 "at" : "23"
               },
               "per" : "1",
