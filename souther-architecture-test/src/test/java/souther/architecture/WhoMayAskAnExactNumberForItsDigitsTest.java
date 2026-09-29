@@ -67,11 +67,22 @@ class WhoMayAskAnExactNumberForItsDigitsTest {
     }
 
     @Test
-    void theArithmeticThatThrowsForWantOfRoomIsReachedFromExactRatioOnly() {
-        assertEquals(List.of("souther/compiler/numeric/ExactRatio"), callingTheArithmetic(),
+    void theArithmeticThatThrowsForWantOfRoomIsReachedFromFourMethodsOfExactRatioOnly() {
+        String ratio = "souther/compiler/numeric/ExactRatio";
+        assertEquals(List.of(
+                        // Held to the numbers whose spelling is short, which is asked first.
+                        ratio + "#asFraction",
+                        ratio + "#spelled",
+                        // A whole number, which the arithmetic answers or refuses as an answer.
+                        ratio + "#wholeNumber",
+                        // The private writer, which only the total member reaches (below).
+                        ratio + "#written"),
+                callingTheArithmetic(),
                 "digits are written out by ExactArithmetic#written, which throws where the host has"
-                        + " no room; ExactRatio is where that is turned into an answer, or held to"
-                        + " the numbers whose spelling is short");
+                        + " no room, and a method of ExactRatio that reaches it is either held to"
+                        + " short spellings or answers with what it holds; a new one that hands the"
+                        + " digits to a reader under any name is the partial member back, and is"
+                        + " added here only with the case for it");
     }
 
     /**
@@ -133,7 +144,13 @@ class WhoMayAskAnExactNumberForItsDigitsTest {
                         if (element instanceof InvokeInstruction invoke
                                 && invoke.owner().asInternalName().equals(THE_ARITHMETIC)
                                 && invoke.name().stringValue().equals("written")) {
-                            rows.add(owner.thisClass().asInternalName());
+                            String from = method.methodName().stringValue();
+                            // A lambda is its method's own code, whatever javac numbers it.
+                            java.util.regex.Matcher lambda =
+                                    java.util.regex.Pattern.compile("lambda\\$(.+)\\$\\d+")
+                                            .matcher(from);
+                            rows.add(owner.thisClass().asInternalName() + "#"
+                                    + (lambda.matches() ? lambda.group(1) : from));
                         }
                     }
                 }
